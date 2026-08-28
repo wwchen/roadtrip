@@ -1,0 +1,410 @@
+<title>Roadtrip Build Timeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Schibsted+Grotesk:wght@400..700&family=DM+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --page:#faf9f5; --card:#fff; --tint:#f3f1ea; --sunk:#edeae1;
+  --ink:#141413; --ink-2:#4a4842; --ink-3:#847f74; --ink-4:#a9a49a;
+  --line:#e4e1d8; --line-2:#d3cfc4; --rule:#c9c4b7;
+  --c-100:#fdeae2; --c-300:#f2b096; --c-600:#d24b1e; --c-900:#7c2d10;
+  /* lanes — position and label carry identity; hue is restrained */
+  --lane-design:#d24b1e;
+  --lane-front:#2f2c26;
+  --lane-back:#4a5f78;
+  --lane-plat:#a9a094;
+  --ok:#3f7d43; --warn:#8a5a12; --warn-bg:#faf0d8;
+  --r:10px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#171614; --card:#201f1c; --tint:#242320; --sunk:#2b2a26;
+  --ink:#f0eee8; --ink-2:#c2beb4; --ink-3:#8d897e; --ink-4:#6d695f;
+  --line:#33312c; --line-2:#454239; --rule:#514d43;
+  --c-100:#3a221a; --c-300:#8c412a; --c-600:#e8683a; --c-900:#f5a888;
+  --lane-design:#e8683a;
+  --lane-front:#d8d4cb;
+  --lane-back:#7d97b5;
+  --lane-plat:#6b645b;
+  --ok:#8ec48f; --warn:#dbb264; --warn-bg:#332b1a;
+}}
+:root[data-theme="dark"]{
+  --page:#171614; --card:#201f1c; --tint:#242320; --sunk:#2b2a26;
+  --ink:#f0eee8; --ink-2:#c2beb4; --ink-3:#8d897e; --ink-4:#6d695f;
+  --line:#33312c; --line-2:#454239; --rule:#514d43;
+  --c-100:#3a221a; --c-300:#8c412a; --c-600:#e8683a; --c-900:#f5a888;
+  --lane-design:#e8683a;
+  --lane-front:#d8d4cb;
+  --lane-back:#7d97b5;
+  --lane-plat:#6b645b;
+  --ok:#8ec48f; --warn:#dbb264; --warn-bg:#332b1a;
+}
+*{box-sizing:border-box}
+body{background:var(--page);color:var(--ink);margin:0;padding:0 20px 100px;
+  font-family:'Schibsted Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;line-height:1.6;}
+main{max-width:960px;margin:0 auto;}
+h1,h2,h3,h4{font-family:'Bricolage Grotesque','Schibsted Grotesk',sans-serif;line-height:1.13;text-wrap:balance;margin:0;}
+h1{font-size:clamp(30px,5vw,46px);font-weight:800;letter-spacing:-.02em;}
+h2{font-size:clamp(21px,2.8vw,26px);font-weight:700;margin-bottom:6px;}
+h3{font-size:16.5px;font-weight:700;}
+p{margin:0 0 13px;max-width:70ch;}
+a{color:var(--c-600);text-underline-offset:2px;}
+a:focus-visible{outline:2px solid var(--c-600);outline-offset:2px;border-radius:3px;}
+.mono{font-family:'DM Mono',ui-monospace,Menlo,monospace;}
+.eyebrow{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);}
+header.doc{padding:58px 0 30px;border-bottom:2px solid var(--ink);}
+.lede{font-size:17px;color:var(--ink-2);max-width:62ch;margin-top:14px;}
+section{padding:40px 0 8px;border-bottom:1px solid var(--line);}
+section:last-of-type{border-bottom:none;}
+.sechead{display:flex;gap:13px;align-items:baseline;margin-bottom:6px;}
+.sechead .n{font-family:'DM Mono',monospace;font-size:12px;color:var(--c-600);}
+.kicker{color:var(--ink-2);max-width:66ch;margin:0 0 24px;}
+
+/* summary tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px;margin:24px 0 8px;}
+.tile{background:var(--tint);border-radius:var(--r);padding:15px 16px 13px;}
+.tile .n{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:26px;line-height:1.05;font-variant-numeric:tabular-nums;}
+.tile .l{font-size:12.5px;color:var(--ink-2);margin-top:4px;line-height:1.35;}
+
+/* lane key */
+.key{display:flex;flex-wrap:wrap;gap:6px 18px;margin:20px 0 6px;font-size:12.5px;color:var(--ink-2);}
+.key span{display:flex;align-items:center;gap:6px;}
+.sw{width:11px;height:11px;border-radius:3px;flex-shrink:0;display:inline-block;}
+.sw.d{background:var(--lane-design)}.sw.f{background:var(--lane-front)}
+.sw.b{background:var(--lane-back)}.sw.p{background:var(--lane-plat)}
+
+/* era timeline */
+.era{display:grid;grid-template-columns:190px 1fr;gap:0 22px;padding:20px 0;border-bottom:1px solid var(--line);}
+@media(max-width:760px){.era{grid-template-columns:1fr;gap:12px;}}
+.era:last-child{border-bottom:none;}
+.era .when{padding-top:2px;}
+.era .when .dates{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink-3);letter-spacing:.04em;}
+.era .when h3{margin:3px 0 7px;}
+.era .when .cnt{font-family:'DM Mono',monospace;font-size:11.5px;color:var(--ink-3);}
+.pill{display:inline-block;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.06em;padding:2px 8px;border-radius:99px;text-transform:uppercase;}
+.pill.pre{background:var(--sunk);color:var(--ink-2);}
+.pill.m0{background:var(--ink);color:var(--page);}
+.pill.m1{background:var(--c-100);color:var(--c-900);}
+.pill.next{background:var(--c-600);color:#fff;}
+.bar{display:flex;height:22px;border-radius:4px;overflow:hidden;margin:0 0 12px;background:var(--tint);}
+.bar i{display:block;height:100%;}
+.bar .d{background:var(--lane-design)}.bar .f{background:var(--lane-front)}
+.bar .b{background:var(--lane-back)}.bar .p{background:var(--lane-plat)}
+.era .what{font-size:14px;color:var(--ink-2);margin:0 0 10px;max-width:64ch;}
+.era .what b{color:var(--ink);font-weight:600;}
+.prs{display:flex;flex-wrap:wrap;gap:5px;}
+.pr{font-family:'DM Mono',monospace;font-size:10.5px;padding:2px 7px;border-radius:4px;background:var(--tint);color:var(--ink-2);
+  text-decoration:none;border:1px solid transparent;white-space:nowrap;}
+.pr:hover{border-color:var(--line-2);background:var(--card);}
+.pr.design{background:var(--c-100);color:var(--c-900);}
+
+/* tables */
+.tablewrap{overflow-x:auto;margin:20px 0;}
+table{border-collapse:collapse;width:100%;font-size:13.4px;min-width:560px;}
+th{text-align:left;font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:500;padding:0 13px 8px 0;border-bottom:1px solid var(--rule);white-space:nowrap;}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums;}
+td{padding:9px 13px 9px 0;border-bottom:1px solid var(--line);vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+td.mono{font-family:'DM Mono',monospace;font-size:12px;white-space:nowrap;}
+
+/* next queue */
+.queue{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:22px 0 6px;}
+@media(max-width:760px){.queue{grid-template-columns:1fr;}}
+.col{border:1px solid var(--line);border-radius:var(--r);padding:16px 18px 12px;background:var(--card);}
+.col h3{margin-bottom:3px;}
+.col .who{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink-3);margin-bottom:12px;display:block;}
+.item{padding:9px 0;border-bottom:1px solid var(--line);}
+.item:last-child{border-bottom:none;}
+.item .t{font-size:13.8px;font-weight:600;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;}
+.item .m{font-size:12.4px;color:var(--ink-3);margin-top:2px;line-height:1.4;}
+.flag{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:99px;white-space:nowrap;}
+.flag.block{background:var(--c-600);color:#fff;}
+.flag.first{background:var(--c-100);color:var(--c-900);}
+.flag.then{background:var(--tint);color:var(--ink-3);}
+.note{background:var(--tint);border-radius:var(--r);padding:14px 18px;margin:18px 0;font-size:14px;color:var(--ink-2);max-width:74ch;}
+.note strong{color:var(--ink);}
+.note.warn{background:var(--warn-bg);color:var(--warn);} .note.warn strong{color:var(--warn);}
+ul.list{margin:0 0 14px;padding-left:19px;} ul.list li{margin-bottom:7px;max-width:66ch;}
+ul.list li::marker{color:var(--ink-4);}
+footer{max-width:960px;margin:46px auto 0;color:var(--ink-3);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px;}
+</style>
+
+<main>
+<nav class="docs" aria-label="Milestones">
+  <a class="doc" href="https://claude.ai/code/artifact/064368ac-3804-499d-8816-c913e2fabf04"><b>Vision</b><i>The point of view</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/f65da110-5a18-4154-bf04-2e8bd1c2a194"><b>M0</b><i>Reskin</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/d173de8a-1332-456a-8438-3d3e7caa8031"><b>M1</b><i>The park surface</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/8833520f-385d-4caa-bbff-b640aa1cdc47"><b>M2</b><i>Assistant &amp; MCP</i></a>
+</nav>
+<nav class="docs2" aria-label="Research and sprints">
+  <a class="doc" href="https://claude.ai/code/artifact/9ff9ab0e-2bdd-46f5-b3fa-bed1c15448b2"><b>Personas</b><i>Who we build for</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/c2e87639-7b74-4f7d-96de-3ca5e942f63f"><b>Research</b><i>Market &amp; rivals</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/2740e8f3-a408-437c-95b3-be0652083eff"><b>Crazy 8s</b><i>Date window</i></a>
+  <span class="doc doc--here" aria-current="page"><b>Timeline</b><i>What ships when</i></span>
+</nav>
+
+<header class="doc">
+  <span class="eyebrow">Roadtrip · Engineering &amp; design</span>
+  <h1>What we've built, and what's next</h1>
+  <p class="lede">Every human pull request from 17 June to 27 August 2026, sorted into four lanes and six eras, mapped onto the milestones. Read it to see where effort actually went — and why design is only now at the front of the queue.</p>
+</header>
+
+<section>
+  <div class="sechead"><span class="n">01</span><h2>The shape of ten weeks</h2></div>
+  <div class="tiles">
+    <div class="tile"><div class="n">338</div><div class="l">human PRs opened, 17 Jun – 27 Aug (Dependabot excluded)</div></div>
+    <div class="tile"><div class="n">317 / 21</div><div class="l">Will / Lew. Engineering built the substrate; design arrives last</div></div>
+    <div class="tile"><div class="n">214</div><div class="l">backend PRs — 63% of everything, nearly all before August</div></div>
+    <div class="tile"><div class="n">8</div><div class="l">open right now, four of them stale by two weeks or more</div></div>
+  </div>
+  <div class="key">
+    <span><i class="sw d"></i>Design</span>
+    <span><i class="sw f"></i>Frontend</span>
+    <span><i class="sw b"></i>Backend</span>
+    <span><i class="sw p"></i>Platform &amp; CI</span>
+  </div>
+  <p class="note"><strong>The one-sentence read.</strong> The moat was built first and at enormous volume — 218 backend PRs in the first five weeks — then the platform was hardened, then the frontend was migrated to React so it could be reskinned once, and only in the last fortnight has design led the queue. M1a is the first milestone where all four lanes move together.</p>
+</section>
+
+<section>
+  <div class="sechead"><span class="n">02</span><h2>The timeline</h2></div>
+  <p class="kicker">Bar width is PR volume within the era; segments are lanes. Note how the bars shrink — the early eras were high-churn agent-assisted stacks, the recent ones are deliberate and small.</p>
+
+  <div class="era">
+    <div class="when">
+      <span class="dates">17 JUN – 5 JUL</span>
+      <h3>The availability engine</h3>
+      <span class="pill pre">pre-milestone</span>
+      <div class="cnt" style="margin-top:6px">101 PRs · 72 backend</div>
+    </div>
+    <div>
+      <div class="bar">
+        <i class="b" style="width:71.3%"></i><i class="p" style="width:23.8%"></i><i class="f" style="width:4.9%"></i>
+      </div>
+      <p class="what">The thing the Vision calls <b>the moat</b>. Provider adapters for Recreation.gov, ReserveAmerica, ReserveCalifornia and Aspira; the availability cube; pollers with coalescing, backoff and a vendor governor; watches as a set; Slack alerting on cube edges; and a Grafana stack to watch all of it. Availability latency went from 15s to 0.2s in a single PR.</p>
+      <div class="prs">
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/323">#323 pollers + coalescing</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/328">#328 watch = set</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/329">#329 availability cube</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/334">#334 Slack alerts</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/342">#342 15s → 0.2s</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="era">
+    <div class="when">
+      <span class="dates">6 JUL – 21 JUL</span>
+      <h3>Canonical catalog &amp; watches</h3>
+      <span class="pill pre">pre-milestone</span>
+      <div class="cnt" style="margin-top:6px">117 PRs · 104 backend</div>
+    </div>
+    <div>
+      <div class="bar">
+        <i class="b" style="width:88.9%"></i><i class="f" style="width:6.0%"></i><i class="p" style="width:5.1%"></i>
+      </div>
+      <p class="what">The busiest fortnight in the project. A seven-PR stack replaced per-vendor tables with a <b>canonical campground and campsite catalog</b>; <em>Reservable</em> was renamed <em>Campsite</em> throughout; Campflare joined as a provider; email alerts, editable watches and the first <code>/watches</code> page landed; the backend moved to Koin DI and a new folder layout. This is where the data model M1 depends on was actually decided.</p>
+      <div class="prs">
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/393">#393–399 canonical catalog stack</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/403">#403 Campflare provider</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/453">#453 Resend email alerts</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/455">#455 editable watches</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/472">#472 /watches page</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="era">
+    <div class="when">
+      <span class="dates">22 JUL – 4 AUG</span>
+      <h3>Accounts, secrets, sandboxes</h3>
+      <span class="pill pre">pre-milestone</span>
+      <div class="cnt" style="margin-top:6px">47 PRs · first design PRs</div>
+    </div>
+    <div>
+      <div class="bar">
+        <i class="b" style="width:48.9%"></i><i class="p" style="width:44.7%"></i><i class="d" style="width:4.3%"></i><i class="f" style="width:2.1%"></i>
+      </div>
+      <p class="what">Two RFCs (0009 auth, 0010 authorization) turned a single-user app into a multi-user one: identity persistence, OIDC, sessions, route access declarations, then a wholesale <b>migration from Auth0 to Clerk</b>. Secrets moved to SOPS + age with a generated registry enforced at boot, and on-demand PR sandboxes appeared. <b>Lew's first two PRs land here</b> — the sign-in sheet, and the colour-token pass that made Roadtrip themeable.</p>
+      <div class="prs">
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/492">#492 RFC 0009 auth</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/496">#496 RFC 0010 authz</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/537">#537 Auth0 → Clerk</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/533">#533 sandbox deploys</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/539">#539 user-scoped watches</a>
+        <a class="pr design" href="https://github.com/wwchen/roadtrip/pull/540">#540 colour tokens · Lew</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="era">
+    <div class="when">
+      <span class="dates">5 AUG – 13 AUG</span>
+      <h3>The React migration</h3>
+      <span class="pill pre">M0's unblocker</span>
+      <div class="cnt" style="margin-top:6px">49 PRs · 20 frontend</div>
+    </div>
+    <div>
+      <div class="bar">
+        <i class="f" style="width:40.8%"></i><i class="p" style="width:32.7%"></i><i class="b" style="width:22.4%"></i><i class="d" style="width:4.1%"></i>
+      </div>
+      <p class="what">A strangler migration in six phases — foundation, availability dashboard, map and MapLibre, POI drawer, availability grid, topbar and routes — ending with <b>deleting the vanilla frontend entirely</b>. Then the version jumps it unlocked: React 19, Vite 8, MapLibre 6, Storybook, and LDS consumed from npm. Without this, every M0 screen would have been built twice.</p>
+      <div class="prs">
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/568">#568 Phase 0–1</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/576">#576 availability grid</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/580">#580 delete the vanilla</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/618">#618 React 19</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/605">#605 LDS from npm</a>
+        <a class="pr design" href="https://github.com/wwchen/roadtrip/pull/601">#601 roadtrip-zion theme · Lew</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="era">
+    <div class="when">
+      <span class="dates">14 AUG – 20 AUG</span>
+      <h3>M0 · the reskin</h3>
+      <span class="pill m0">M0</span>
+      <div class="cnt" style="margin-top:6px">12 PRs · Lew leads 7–5</div>
+    </div>
+    <div>
+      <div class="bar">
+        <i class="d" style="width:50%"></i><i class="p" style="width:41.7%"></i><i class="f" style="width:8.3%"></i>
+      </div>
+      <p class="what"><b>The first era design leads.</b> Every existing screen repainted in the design system: settings became a side rail with its own Appearance section, the drawer tiles below the search panel, every icon redrawn from Open Icons, every corner back on the radius scale, sign-in moved to a top-right pill, the layers panel regrouped by purpose, the error and empty-state family restyled, and every POI type given the same page. Will's lane in the same week was entirely deploy-host firefighting.</p>
+      <div class="prs">
+        <a class="pr design" href="https://github.com/wwchen/roadtrip/pull/643">#643 Open Icons</a>
+        <a class="pr design" href="https://github.com/wwchen/roadtrip/pull/644">#644 radius scale</a>
+        <a class="pr design" href="https://github.com/wwchen/roadtrip/pull/647">#647 sign-in pill · M0 1a</a>
+        <a class="pr design" href="https://github.com/wwchen/roadtrip/pull/649">#649 error &amp; empty · M0-6</a>
+        <a class="pr design" href="https://github.com/wwchen/roadtrip/pull/650">#650 POI pages · M0 4a–4d</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/654">#654 deploy recovery</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="era">
+    <div class="when">
+      <span class="dates">21 AUG – 27 AUG</span>
+      <h3>M1a groundwork</h3>
+      <span class="pill m1">M1a</span>
+      <div class="cnt" style="margin-top:6px">12 PRs · all four lanes</div>
+    </div>
+    <div>
+      <div class="bar">
+        <i class="d" style="width:33.3%"></i><i class="f" style="width:33.3%"></i><i class="b" style="width:33.4%"></i>
+      </div>
+      <p class="what"><b>The first evenly-balanced week in the project.</b> Will corrected four Aspira defects — inverted availability codes, loop deep-links — then shipped the bulk availability endpoint that a park-wide date control needs. Lew gave the park page a body, showed a park's campgrounds against the same nights, and made alert emails manage-or-stop links. That last one is Slice 4 starting early, exactly as the M1 doc recommends.</p>
+      <div class="prs">
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/656">#656 Aspira codes</a>
+        <a class="pr" href="https://github.com/wwchen/roadtrip/pull/660">#660 bulk availability</a>
+        <a class="pr design" href="https://github.com/wwchen/roadtrip/pull/666">#666 campgrounds vs nights</a>
+        <a class="pr design" href="https://github.com/wwchen/roadtrip/pull/667">#667 park page body</a>
+        <a class="pr design" href="https://github.com/wwchen/roadtrip/pull/672">#672 alert email links</a>
+        <a class="pr design" href="https://github.com/wwchen/roadtrip/pull/664">#664 LDS 1.1.1</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sechead"><span class="n">03</span><h2>Where the effort went</h2></div>
+  <p class="kicker">The same six eras as numbers, so the inversion is unambiguous.</p>
+  <div class="tablewrap">
+    <table>
+      <tr><th>Era</th><th>Milestone</th><th class="num">Design</th><th class="num">Front</th><th class="num">Back</th><th class="num">Platform</th><th class="num">Total</th></tr>
+      <tr><td>The availability engine</td><td class="mono">—</td><td class="num">0</td><td class="num">5</td><td class="num">72</td><td class="num">24</td><td class="num">101</td></tr>
+      <tr><td>Canonical catalog &amp; watches</td><td class="mono">—</td><td class="num">0</td><td class="num">7</td><td class="num">104</td><td class="num">6</td><td class="num">117</td></tr>
+      <tr><td>Accounts, secrets, sandboxes</td><td class="mono">—</td><td class="num">2</td><td class="num">1</td><td class="num">23</td><td class="num">21</td><td class="num">47</td></tr>
+      <tr><td>The React migration</td><td class="mono">M0 unblocker</td><td class="num">2</td><td class="num">20</td><td class="num">11</td><td class="num">16</td><td class="num">49</td></tr>
+      <tr><td>M0 · the reskin</td><td class="mono">M0</td><td class="num">6</td><td class="num">1</td><td class="num">0</td><td class="num">5</td><td class="num">12</td></tr>
+      <tr><td>M1a groundwork</td><td class="mono">M1a</td><td class="num">4</td><td class="num">4</td><td class="num">4</td><td class="num">0</td><td class="num">12</td></tr>
+    </table>
+  </div>
+  <ul class="list">
+    <li><strong>Backend front-loading was deliberate and it paid.</strong> 176 of 218 backend PRs landed before August. That is why M1a's asks are mostly small additions to finished systems rather than new subsystems.</li>
+    <li><strong>Two closed PRs mark the milestone boundary.</strong> <a href="https://github.com/wwchen/roadtrip/pull/639">#639</a> (a park atlas) and <a href="https://github.com/wwchen/roadtrip/pull/641">#641</a> (trip templates) were opened 13 Aug and both closed unmerged the next day — real M1b work built ahead of the M1a surface it needed. The M1 document was written the day after, and exists because of them.</li>
+    <li><strong>Volume is not velocity.</strong> The 117-PR week produced one data model; the 12-PR week produced four user-visible changes. The recent eras are smaller because the work is now shaped by a spec rather than by refactoring.</li>
+  </ul>
+</section>
+
+<section>
+  <div class="sechead"><span class="n">04</span><h2>In flight right now</h2></div>
+  <p class="kicker">Eight open PRs. Four are current work; four have been open long enough to need a decision.</p>
+  <div class="tablewrap">
+    <table>
+      <tr><th>PR</th><th>Author</th><th class="num">Age</th><th>Lane</th><th>What it is</th></tr>
+      <tr><td class="mono"><a href="https://github.com/wwchen/roadtrip/pull/676">#676</a></td><td>Lew</td><td class="num">0d</td><td>Design</td><td>Make the basemap a cartography, and brightness the theme's business</td></tr>
+      <tr><td class="mono"><a href="https://github.com/wwchen/roadtrip/pull/674">#674</a></td><td>Will</td><td class="num">1d</td><td>Frontend</td><td>CARTO basemaps API key support — pairs directly with #676</td></tr>
+      <tr><td class="mono"><a href="https://github.com/wwchen/roadtrip/pull/670">#670</a></td><td>Lew</td><td class="num">3d</td><td>Frontend</td><td>Treat a searched-for region as an area, not a pin — <strong>the frontend half of the destination index</strong></td></tr>
+      <tr><td class="mono"><a href="https://github.com/wwchen/roadtrip/pull/669">#669</a></td><td>Lew</td><td class="num">3d</td><td>Frontend</td><td>Read a gym's hours from the tags they actually arrive in</td></tr>
+      <tr><td class="mono"><a href="https://github.com/wwchen/roadtrip/pull/574">#574</a></td><td>Will</td><td class="num">18d</td><td>Platform</td><td>Auto-update active PR sandboxes</td></tr>
+      <tr><td class="mono"><a href="https://github.com/wwchen/roadtrip/pull/567">#567</a></td><td>Lew</td><td class="num">21d</td><td>Docs</td><td>Roadtrip-product skill with user research doc</td></tr>
+      <tr><td class="mono"><a href="https://github.com/wwchen/roadtrip/pull/531">#531</a></td><td>Lew</td><td class="num">27d</td><td>Platform</td><td>Replace <code>init</code> with <code>enroll</code> for machine onboarding</td></tr>
+      <tr><td class="mono"><a href="https://github.com/wwchen/roadtrip/pull/481">#481</a></td><td>Will</td><td class="num">41d</td><td>Platform</td><td>Grafana agent skills and agent-skills overview doc</td></tr>
+    </table>
+  </div>
+  <div class="note warn"><strong>Worth a decision, not a nudge.</strong> #481, #531, #567 and #574 have been open 18–41 days across two people. None blocks M1a. Merge them, close them, or convert them to issues — a standing queue of stale PRs makes the real queue harder to read.</div>
+  <div class="note"><strong>#670 is more important than it looks.</strong> "Treat a searched-for region as an area, not a pin" is the frontend expression of M1a-1 — the destination index. It should land against the shape Will's index will return, or it gets rewritten. Worth a five-minute alignment before it merges.</div>
+</section>
+
+<section>
+  <div class="sechead"><span class="n">05</span><h2>What's next</h2></div>
+  <p class="kicker">The M1a queue from the milestone document, by owner, in the order the doc argues for. Slice 4 — alerts without an ID — can ship first and beside M0, because nothing else depends on it.</p>
+
+  <div class="queue">
+    <div class="col">
+      <h3>Will · build</h3>
+      <span class="who">engineering DRI</span>
+      <div class="item"><div class="t">Turn on availability retention <span class="flag block">blocking</span></div><div class="m">The only task that gets more expensive every day. Cannot be backfilled; gates "chances of getting in" permanently. Adjacent to the freshness work already in #660.</div></div>
+      <div class="item"><div class="t">Destination index, tiers 2 &amp; 3 <span class="flag first">first</span></div><div class="m">Fixes the front door — typing "Acadia" currently returns a parish in Louisiana. Salvage what's useful from the closed #639. Pairs with Lew's open #670.</div></div>
+      <div class="item"><div class="t">GET park availability calendar <span class="flag first">first</span></div><div class="m">Powers the date control. Aggregates what #660's bulk endpoint already returns — pitch it as that series' next step, not a new workstream.</div></div>
+      <div class="item"><div class="t">Real routes, window in the URL <span class="flag first">first</span></div><div class="m">Shareable links; the contract M1b later assembles a trip from.</div></div>
+      <div class="item"><div class="t">Per-site-per-night grain <span class="flag then">then</span></div><div class="m">Powers the site grid at Blackwoods' real 281 sites.</div></div>
+      <div class="item"><div class="t">Stamp availability last-checked <span class="flag then">then</span></div><div class="m">Half-built already — <code>freshAtOrAfter</code> exists; it just needs surfacing in the DTOs.</div></div>
+      <div class="item"><div class="t">Normalise amenities across operators <span class="flag then">then</span></div><div class="m">The expensive half of filters, and the natural continuation of the Aspira series while operator context is warm.</div></div>
+      <div class="item"><div class="t">Drive times · season &amp; closures <span class="flag then">then</span></div><div class="m">Follows the Matrix-vs-estimates decision. <code>MapboxDirections</code> and <code>RouteCache</code> already exist.</div></div>
+    </div>
+
+    <div class="col">
+      <h3>Lew · design</h3>
+      <span class="who">design DRI</span>
+      <div class="item"><div class="t">Region: grouping, filter, or page? <span class="flag block">blocking</span></div><div class="m">Answer in the Olympic mock, not in code. The whole information architecture rests on it.</div></div>
+      <div class="item"><div class="t">One template, or more? <span class="flag block">blocking</span></div><div class="m">Decided alongside the above — does one destination template flex by density?</div></div>
+      <div class="item"><div class="t">Slice 4 · alerts without an ID <span class="flag first">can go first</span></div><div class="m">M1a-11, -12, -15. Backend is finished; this is a form redesign. Biggest perceived-quality jump in the list, and #672 already started it.</div></div>
+      <div class="item"><div class="t">M1a-9 · the date window <span class="flag first">first</span></div><div class="m">The highest-value control in the product. Eight explorations already sketched; the two-segment bar plus a weekend shelf is the recommendation.</div></div>
+      <div class="item"><div class="t">M1a-1/2 · search &amp; the fallback <span class="flag first">first</span></div><div class="m">The front door and its labelled dead end. Pairs with Will's index.</div></div>
+      <div class="item"><div class="t">M1a-3/4/16 · destination pages <span class="flag first">first</span></div><div class="m">Area desktop, area phone, and Olympic as the stress test that answers the region question.</div></div>
+      <div class="item"><div class="t">M1a-6/7 · campground detail <span class="flag then">then</span></div><div class="m">Must survive 281 sites, and must never dead-end when nothing is bookable.</div></div>
+      <div class="item"><div class="t">M1a-10/17/8 · freshness, filters, places <span class="flag then">then</span></div><div class="m">Freshness as a system rather than a screen; filters that show what they removed; the thin place page first.</div></div>
+    </div>
+  </div>
+
+  <div class="note"><strong>How the two lanes thread.</strong> Four of Will's eight items extend systems he shipped in the last fortnight — retention and freshness ride #660's poller work, normalisation continues the Aspira series, the calendar endpoint aggregates the bulk endpoint. Only the destination index is a genuinely new track, and it deserves its own week rather than being interleaved. On Lew's side, Slice 4 is the one item with no backend dependency at all, which is why it can start today regardless of everything above it.</div>
+</section>
+</main>
+
+<footer>Generated from the wwchen/roadtrip pull-request history, 17 Jun – 27 Aug 2026. Dependabot excluded; 400 PRs read, 338 human. Lane assignment is derived from conventional-commit scopes and may misfile the occasional cross-cutting PR. Sits beside the Vision, M0, M1 and M2 documents.</footer>
+
+<style id="docset-nav">
+.docs,.docs2{display:grid;gap:8px;}
+.docs{grid-template-columns:repeat(4,1fr);margin:0 0 8px;}
+.docs2{grid-template-columns:repeat(4,1fr);margin:0 0 28px;}
+@media (max-width:720px){.docs,.docs2{grid-template-columns:repeat(2,1fr);}}
+.docs .doc,.docs2 .doc{display:grid;gap:2px;text-decoration:none;
+  padding:10px 13px;border-radius:10px;
+  border:1px solid var(--border-subdued,var(--line-2,#d3cfc4));
+  background:var(--surface-base,var(--card,#fff));}
+.docs2 .doc{padding:8px 12px;background:transparent;border-style:dashed;box-shadow:none;}
+.docs .doc:hover,.docs2 .doc:hover{background:var(--surface-sunken,var(--tint,#f3f1ea));}
+.docs .doc b,.docs2 .doc b{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;
+  font-size:14px;color:var(--gray-900,var(--ink,#141413));}
+.docs2 .doc b{font-size:13px;}
+.docs .doc i,.docs2 .doc i{font-style:normal;font-size:11px;
+  color:var(--gray-600,var(--ink-3,#847f74));letter-spacing:.01em;}
+.docs .doc--here,.docs2 .doc--here{border-style:solid;
+  background:var(--gray-900,var(--ink,#141413));
+  border-color:var(--gray-900,var(--ink,#141413));}
+.docs .doc--here b,.docs2 .doc--here b{color:var(--surface-page,var(--page,#faf9f5));}
+.docs .doc--here i,.docs2 .doc--here i{color:var(--gray-400,var(--ink-4,#a9a49a));}
+</style>

@@ -1,3 +1,26 @@
+> **ARCHIVED — superseded 27 August 2026. Do not apply this as product guidance.**
+>
+> This is the original product thesis, kept as a record of a decision rather than as
+> instructions. It argues the wedge is **EV charging permission at campsites** and
+> proposes four per-vehicle ratings on every campsite.
+>
+> The Vision has since rejected that framing. Value 1, *"Serve the trip, not the
+> vehicle,"* states plainly: *"Roadtrip started as EV-aware routing. Most road trippers
+> do not drive electric, and EV-only caps the market before anything else is proven.
+> Range and chargers survive as constraints a trip can carry. They stopped being the
+> product."* M1a lists EV range under out-of-scope.
+>
+> **What survived, and where it now lives:** the trust model (§6) and the honesty rules
+> it implies are now the Vision's values; the booking-window and connectivity constraints
+> (§4) are in `product-context.md`; the cancellation-alert competitors (§5) are in the
+> Market & rivals doc; the discovery/MCP argument (§10) became milestone M2.
+>
+> Read `../SKILL.md` and `product-context.md` for current guidance. This file is here so
+> nobody re-derives the EV thesis from scratch and so the reasoning behind dropping it
+> stays legible.
+
+---
+
 # Roadtrip — User Research Reference
 
 **Purpose:** A portable, stable description of who Roadtrip is for and what problems it solves. Paste this into any new chat before asking for feature work, so every feature gets evaluated against the same user rather than a freshly invented one.

@@ -1,0 +1,726 @@
+<title>Crazy 8s · The Date Window</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Schibsted+Grotesk:ital,wght@0,400..700;1,400&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* ── tokens ─────────────────────────────────────────────── */
+:root{
+  --page:#faf9f5; --card:#ffffff; --tint:#f3f1ea; --paper:#fdfcf8;
+  --ink:#141413; --ink-2:#4a4842; --ink-3:#847f74; --ink-4:#a9a49a;
+  --line:#e4e1d8; --line-2:#d3cfc4; --rule:#c9c4b7;
+  --c-100:#fdeae2; --c-300:#f4b79c; --c-600:#d24b1e; --c-900:#7c2d10;
+  --green-100:#e3efdf; --green-600:#3f7d43; --green-700:#2f6b32;
+  --blue-100:#e1ebf4; --blue-600:#3a6d9e; --blue-700:#2b5b8f;
+  --amber-100:#faf0d8; --amber-800:#8a5a12;
+  --gray-fill:#dcd8ce;
+  --grid-line:rgba(20,20,19,.055);
+  --r:10px; --r-sm:6px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#171614; --card:#201f1c; --tint:#242320; --paper:#1c1b18;
+    --ink:#f0eee8; --ink-2:#c2beb4; --ink-3:#8d897e; --ink-4:#6d695f;
+    --line:#33312c; --line-2:#454239; --rule:#514d43;
+    --c-100:#3a221a; --c-300:#8c412a; --c-600:#e8683a; --c-900:#f5a888;
+    --green-100:#233123; --green-600:#63a566; --green-700:#8ec48f;
+    --blue-100:#212c38; --blue-600:#6494c4; --blue-700:#8fb6de;
+    --amber-100:#332b1a; --amber-800:#dbb264;
+    --gray-fill:#3d3a34;
+    --grid-line:rgba(240,238,232,.05);
+  }
+}
+:root[data-theme="dark"]{
+  --page:#171614; --card:#201f1c; --tint:#242320; --paper:#1c1b18;
+  --ink:#f0eee8; --ink-2:#c2beb4; --ink-3:#8d897e; --ink-4:#6d695f;
+  --line:#33312c; --line-2:#454239; --rule:#514d43;
+  --c-100:#3a221a; --c-300:#8c412a; --c-600:#e8683a; --c-900:#f5a888;
+  --green-100:#233123; --green-600:#63a566; --green-700:#8ec48f;
+  --blue-100:#212c38; --blue-600:#6494c4; --blue-700:#8fb6de;
+  --amber-100:#332b1a; --amber-800:#dbb264;
+  --gray-fill:#3d3a34;
+  --grid-line:rgba(240,238,232,.05);
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--page); color:var(--ink);
+  font-family:'Schibsted Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  font-size:15px; line-height:1.62; margin:0; padding:0 20px 110px;
+}
+main{max-width:1080px; margin:0 auto;}
+.narrow{max-width:700px;}
+h1,h2,h3,h4{font-family:'Bricolage Grotesque','Schibsted Grotesk',sans-serif; line-height:1.13; text-wrap:balance; margin:0;}
+h1{font-size:clamp(32px,5.6vw,52px); font-weight:800; letter-spacing:-.02em;}
+h2{font-size:clamp(22px,3vw,28px); font-weight:700; letter-spacing:-.01em; margin-bottom:8px;}
+h3{font-size:17px; font-weight:700; margin-bottom:5px;}
+h4{font-size:14px; font-weight:700; margin-bottom:3px;}
+p{margin:0 0 14px; max-width:68ch;}
+a{color:var(--c-600); text-underline-offset:2px; text-decoration-color:color-mix(in srgb,var(--c-600) 38%,transparent);}
+a:hover{text-decoration-color:var(--c-600);}
+a:focus-visible,button:focus-visible{outline:2px solid var(--c-600); outline-offset:2px; border-radius:3px;}
+strong{font-weight:700}
+em{font-style:italic}
+.mono{font-family:'DM Mono',ui-monospace,SFMono-Regular,Menlo,monospace;}
+.eyebrow{font-family:'DM Mono',monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3);}
+
+/* ── header ─────────────────────────────────────────────── */
+header.doc{padding:60px 0 34px; border-bottom:2px solid var(--ink); margin-bottom:0;}
+.crumbs{display:flex; flex-wrap:wrap; gap:8px 16px; align-items:baseline; margin-bottom:22px;}
+.lede{font-size:17.5px; color:var(--ink-2); max-width:60ch; margin-top:16px;}
+.sprintbar{display:flex; flex-wrap:wrap; gap:0; margin-top:28px; border:1px solid var(--line-2); border-radius:var(--r); overflow:hidden;}
+.sprintbar div{flex:1 1 150px; padding:11px 15px; border-right:1px solid var(--line-2);}
+.sprintbar div:last-child{border-right:none;}
+.sprintbar .k{font-family:'DM Mono',monospace; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); display:block;}
+.sprintbar .v{font-size:13.5px; font-weight:600; margin-top:1px; display:block;}
+
+/* ── sections ───────────────────────────────────────────── */
+section{padding:46px 0 10px; border-bottom:1px solid var(--line);}
+section:last-of-type{border-bottom:none;}
+.sechead{display:flex; gap:14px; align-items:baseline; margin-bottom:6px;}
+.sechead .n{font-family:'DM Mono',monospace; font-size:12px; color:var(--c-600); font-weight:500; padding-top:4px;}
+.kicker{color:var(--ink-2); max-width:64ch; margin:0 0 26px;}
+
+/* ── generic bits ───────────────────────────────────────── */
+.tag{display:inline-block; font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:99px; white-space:nowrap; font-family:'DM Mono',monospace; letter-spacing:.02em;}
+.tag.g{background:var(--green-100); color:var(--green-700);}
+.tag.b{background:var(--blue-100); color:var(--blue-700);}
+.tag.c{background:var(--c-100); color:var(--c-900);}
+.tag.a{background:var(--amber-100); color:var(--amber-800);}
+.tag.n{background:var(--tint); color:var(--ink-2); border:1px solid var(--line-2);}
+.note{background:var(--tint); border-radius:var(--r); padding:15px 19px; margin:18px 0; font-size:14.2px; color:var(--ink-2); max-width:72ch;}
+.note strong{color:var(--ink);}
+.note.flag{background:var(--c-100); color:var(--c-900);} .note.flag strong{color:var(--c-900);}
+ul.list{margin:0 0 14px; padding-left:19px;} ul.list li{margin-bottom:7px; max-width:66ch;}
+ul.list li::marker{color:var(--ink-4);}
+.tablewrap{overflow-x:auto; margin:18px 0 22px;}
+table{border-collapse:collapse; width:100%; font-size:13.4px; min-width:520px;}
+th{text-align:left; font-family:'DM Mono',monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-3); font-weight:500; padding:0 14px 8px 0; border-bottom:1px solid var(--rule); white-space:nowrap; vertical-align:bottom;}
+td{padding:10px 14px 10px 0; border-bottom:1px solid var(--line); vertical-align:top; line-height:1.5;}
+tr:last-child td{border-bottom:none;}
+td.who{font-weight:600; white-space:nowrap;}
+
+/* ── micro-UI kit (shared by prior art + sketches) ──────── */
+.ui{background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-sm); padding:10px; font-size:11px; line-height:1.3;}
+.ui-bar{display:flex; gap:5px; align-items:center; margin-bottom:8px;}
+.ui-chip{border:1px solid var(--line-2); border-radius:99px; padding:2px 8px; font-size:9.5px; color:var(--ink-2); white-space:nowrap;}
+.ui-chip.on{background:var(--ink); color:var(--page); border-color:var(--ink);}
+.dow{display:grid; grid-template-columns:repeat(7,1fr); gap:2px; margin-bottom:3px;}
+.dow span{font-family:'DM Mono',monospace; font-size:8px; color:var(--ink-4); text-align:center;}
+.cal{display:grid; grid-template-columns:repeat(7,1fr); gap:2px;}
+.d{aspect-ratio:1/1; border-radius:3px; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:9.5px; color:var(--ink-2); background:var(--tint); position:relative; overflow:hidden;}
+.d.out{background:transparent; color:var(--ink-4);}
+.d .num{font-family:'DM Mono',monospace; line-height:1;}
+.d .sub{font-size:7px; color:var(--ink-3); margin-top:1px; line-height:1;}
+.d.gone{color:var(--ink-4); background:var(--tint);}
+.d.gone .num{text-decoration:line-through;}
+.d.sel{background:var(--ink); color:var(--page);} .d.sel .num{color:var(--page);} .d.sel .sub{color:var(--page);}
+.d.band{background:var(--c-100);}
+/* heat scale */
+.h1{background:color-mix(in srgb,var(--green-600) 12%,var(--tint));}
+.h2{background:color-mix(in srgb,var(--green-600) 28%,var(--tint));}
+.h3{background:color-mix(in srgb,var(--green-600) 48%,var(--tint));}
+.h4{background:color-mix(in srgb,var(--green-600) 70%,var(--tint)); color:var(--page);}
+.h4 .num{color:var(--page);}
+.h0{background:var(--gray-fill); color:var(--ink-4);}
+/* two-segment availability bar */
+.segwrap{position:absolute; bottom:2px; left:50%; transform:translateX(-50%); display:flex; gap:1px; height:3px; width:70%;}
+.seg-g{background:var(--green-600); border-radius:1px;}
+.seg-b{background:var(--blue-600); border-radius:1px;}
+.seg-x{background:var(--gray-fill); border-radius:1px;}
+.legend{display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:9px; font-size:9.5px; color:var(--ink-3);}
+.legend span{display:flex; align-items:center; gap:4px;}
+.sw{width:9px; height:9px; border-radius:2px; display:inline-block; flex-shrink:0;}
+.sw.g{background:var(--green-600)} .sw.b{background:var(--blue-600)} .sw.x{background:var(--gray-fill)}
+
+/* ── prior art ──────────────────────────────────────────── */
+.priorgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:16px; margin:24px 0 10px;}
+.prior{background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:16px 16px 14px; display:flex; flex-direction:column;}
+.prior .src{font-family:'DM Mono',monospace; font-size:10px; color:var(--ink-3); letter-spacing:.06em; text-transform:uppercase; margin-bottom:9px;}
+.prior .ui{margin-bottom:11px;}
+.prior h4{margin-bottom:4px;}
+.prior p{font-size:13px; color:var(--ink-2); margin:0 0 7px;}
+.prior .verdict{font-size:12.4px; margin-top:auto; padding-top:9px; border-top:1px solid var(--line); color:var(--ink-2);}
+.prior .verdict b{color:var(--ink);}
+
+/* ── crazy 8s panels ────────────────────────────────────── */
+.eights{display:grid; grid-template-columns:repeat(4,1fr); gap:0; border:2px solid var(--ink); border-radius:4px; overflow:hidden; margin:26px 0 8px; background:var(--rule);}
+@media (max-width:900px){.eights{grid-template-columns:repeat(2,1fr);}}
+@media (max-width:540px){.eights{grid-template-columns:1fr;}}
+.panel{
+  background:var(--paper); padding:16px 15px 17px; display:flex; flex-direction:column;
+  background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:14px 14px;
+  border-right:1px solid var(--rule); border-bottom:1px solid var(--rule);
+}
+.panel .pnum{font-family:'DM Mono',monospace; font-size:10px; color:var(--ink-4); letter-spacing:.1em;}
+.panel h3{font-size:15px; margin:3px 0 5px; letter-spacing:-.005em;}
+.panel .premise{font-size:12.6px; color:var(--ink-2); margin:0 0 11px; line-height:1.45;}
+.panel .ui{margin-bottom:10px;}
+.panel .foot{margin-top:auto; padding-top:9px; border-top:1px dashed var(--line-2); font-size:11.8px; color:var(--ink-2); line-height:1.45;}
+.panel .foot b{color:var(--ink); font-weight:600;}
+.panel .serves{display:flex; flex-wrap:wrap; gap:3px; margin-top:8px;}
+.panel .serves .tag{font-size:9.5px; padding:1px 6px;}
+
+/* micro components used inside panels */
+.rowlist{display:flex; flex-direction:column; gap:3px;}
+.rowitem{display:flex; justify-content:space-between; align-items:center; gap:6px; background:var(--tint); border-radius:3px; padding:4px 7px; font-size:10px;}
+.rowitem .lead{font-weight:600; color:var(--ink);}
+.rowitem .trail{font-family:'DM Mono',monospace; font-size:9px; color:var(--ink-3); white-space:nowrap;}
+.rowitem.on{background:var(--c-100);} .rowitem.on .trail{color:var(--c-900);} .rowitem.on .lead{color:var(--c-900);}
+.ribbon{position:relative; height:34px; background:var(--tint); border-radius:4px; overflow:hidden; margin-bottom:5px;}
+.ribbon i{position:absolute; top:7px; height:20px; border-radius:3px; display:block;}
+.ribbon .mo{position:absolute; bottom:2px; font-family:'DM Mono',monospace; font-size:7.5px; color:var(--ink-4);}
+.matrix{width:100%; border-collapse:collapse; font-size:9px; min-width:0;}
+.matrix th{font-family:'DM Mono',monospace; font-size:8px; padding:0 0 3px; border:none; color:var(--ink-4); text-align:center; letter-spacing:0;}
+.matrix th.rh{text-align:left; padding-right:5px;}
+.matrix td{padding:1px; border:none; text-align:center;}
+.matrix td div{border-radius:2px; padding:3px 0; font-family:'DM Mono',monospace; font-size:8.5px;}
+.sentence{font-size:12px; line-height:2.1; color:var(--ink-2);}
+.tok{background:var(--c-100); color:var(--c-900); border-radius:3px; padding:2px 6px; font-weight:600; white-space:nowrap;}
+.tok::after{content:" ▾"; font-size:8px; opacity:.6;}
+.minimap{position:relative; height:74px; background:var(--tint); border-radius:4px; overflow:hidden; margin-bottom:6px;}
+.minimap .pin{position:absolute; width:15px; height:15px; border-radius:99px; display:flex; align-items:center; justify-content:center; font-family:'DM Mono',monospace; font-size:7px; color:var(--page); font-weight:500;}
+.pin.ok{background:var(--green-600)} .pin.fc{background:var(--blue-600)} .pin.no{background:var(--gray-fill); color:var(--ink-3);}
+.scrub{height:16px; background:var(--tint); border-radius:3px; position:relative; display:flex; align-items:center; padding:0 4px;}
+.scrub .track{height:3px; background:var(--line-2); border-radius:2px; flex:1; position:relative;}
+.scrub .fill{position:absolute; left:18%; width:22%; height:3px; background:var(--c-600); border-radius:2px;}
+.scrub .knob{position:absolute; width:9px; height:9px; border-radius:99px; background:var(--c-600); top:-3px;}
+.dial{display:flex; gap:3px; margin-bottom:7px;}
+.dial b{flex:1; text-align:center; font-family:'DM Mono',monospace; font-size:10px; padding:4px 0; border-radius:3px; background:var(--tint); color:var(--ink-3); font-weight:400;}
+.dial b.on{background:var(--ink); color:var(--page);}
+.stack{display:flex; flex-direction:column; gap:4px;}
+.wknd{border:1px solid var(--line-2); border-radius:4px; padding:5px 7px; display:flex; justify-content:space-between; align-items:center; gap:6px;}
+.wknd .dt{font-size:10.5px; font-weight:600;}
+.wknd .ct{font-family:'DM Mono',monospace; font-size:9px; color:var(--green-700);}
+.wknd.thin .ct{color:var(--ink-4);}
+
+/* vote */
+.votegrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin:22px 0;}
+.vote{border:1px solid var(--line); border-radius:var(--r); padding:15px 17px; background:var(--card);}
+.vote.win{border:2px solid var(--c-600); background:var(--c-100);}
+.vote .lbl{font-family:'DM Mono',monospace; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); margin-bottom:5px;}
+.vote.win .lbl{color:var(--c-900);}
+.vote h4{margin-bottom:5px;} .vote.win h4{color:var(--c-900);}
+.vote p{font-size:13px; margin:0; color:var(--ink-2);} .vote.win p{color:var(--c-900);}
+
+/* journey */
+.journey{display:grid; grid-template-columns:repeat(6,1fr); gap:0; margin:24px 0 6px; border-top:2px solid var(--ink); border-bottom:1px solid var(--line);}
+@media (max-width:860px){.journey{grid-template-columns:repeat(3,1fr);} }
+@media (max-width:520px){.journey{grid-template-columns:repeat(2,1fr);} }
+.stage{padding:14px 12px 16px; border-right:1px solid var(--line);}
+.stage:last-child{border-right:none;}
+.stage.hot{background:var(--c-100);}
+.stage .st{font-family:'DM Mono',monospace; font-size:9.5px; color:var(--ink-3); letter-spacing:.08em;}
+.stage.hot .st{color:var(--c-900);}
+.stage h4{font-size:13.5px; margin:4px 0 5px;}
+.stage.hot h4{color:var(--c-900);}
+.stage p{font-size:11.8px; color:var(--ink-2); margin:0 0 7px; line-height:1.45;}
+.stage.hot p{color:var(--c-900);}
+.stage .ent{font-size:10.5px; color:var(--ink-3); border-top:1px dashed var(--line-2); padding-top:6px; margin-top:6px; display:block;}
+.stage.hot .ent{color:var(--c-900); border-color:var(--c-300);}
+
+footer{max-width:1080px; margin:52px auto 0; color:var(--ink-3); font-size:12.5px; border-top:1px solid var(--line); padding-top:18px;}
+@media (prefers-reduced-motion:no-preference){
+  .panel{transition:background-color .18s ease;}
+}
+</style>
+
+<main>
+<nav class="docs" aria-label="Milestones">
+  <a class="doc" href="https://claude.ai/code/artifact/064368ac-3804-499d-8816-c913e2fabf04"><b>Vision</b><i>The point of view</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/f65da110-5a18-4154-bf04-2e8bd1c2a194"><b>M0</b><i>Reskin</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/d173de8a-1332-456a-8438-3d3e7caa8031"><b>M1</b><i>The park surface</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/8833520f-385d-4caa-bbff-b640aa1cdc47"><b>M2</b><i>Assistant &amp; MCP</i></a>
+</nav>
+<nav class="docs2" aria-label="Research and sprints">
+  <a class="doc" href="https://claude.ai/code/artifact/9ff9ab0e-2bdd-46f5-b3fa-bed1c15448b2"><b>Personas</b><i>Who we build for</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/c2e87639-7b74-4f7d-96de-3ca5e942f63f"><b>Research</b><i>Market &amp; rivals</i></a>
+  <span class="doc doc--here" aria-current="page"><b>Crazy 8s</b><i>Date window</i></span>
+  <a class="doc" href="https://claude.ai/code/artifact/4c8a0e5f-45b2-426c-8348-90339764f310"><b>Timeline</b><i>What ships when</i></a>
+</nav>
+
+<header class="doc">
+  <div class="crumbs">
+    <span class="eyebrow">Roadtrip · Design sprint</span>
+    <span class="eyebrow" style="color:var(--ink-4)">27 Aug 2026 · Lew</span>
+  </div>
+  <h1>Crazy 8s: how a camper says<br>when they are free</h1>
+  <p class="lede">Eight sketches for the date window — the control the Vision calls the constraint nobody plans around, and the M1 doc calls the highest-value control in the product. Prior art, the psychology behind it, the journey it sits in, and eight ways it could go.</p>
+  <div class="sprintbar">
+    <div><span class="k">Target</span><span class="v">M1a-9 · Date window</span></div>
+    <div><span class="k">Format</span><span class="v">8 sketches · 8 minutes</span></div>
+    <div><span class="k">Serves</span><span class="v">6 camper types</span></div>
+    <div><span class="k">Next</span><span class="v">Dot vote → 1 prototype</span></div>
+  </div>
+</header>
+
+<!-- 1 · TARGET -->
+<section>
+  <div class="sechead"><span class="n">01</span><h2>Why this control gets the eight minutes</h2></div>
+  <p class="kicker">A Crazy 8s is worthless aimed at a vague area. The docs already argue this one is the sharpest target in the product — three independent lines converge on it.</p>
+  <div class="narrow">
+  <ul class="list">
+    <li><strong>The Vision makes it a value.</strong> Value 2 is <em>dates are the constraint nobody plans around</em>, bought at the cost of place-first search: "the question is not where is a dark campsite, it is which campsite, on which specific nights."</li>
+    <li><strong>M1 makes it the thesis slice.</strong> Slice 2 is the one that "carries the product thesis," and the date control is named "the highest-value control in the product" because it inverts the category's question — instead of <em>is this campground free on these nights</em>, the user says when they are free and the whole destination answers back.</li>
+    <li><strong>The research says the pattern is unclaimed.</strong> Nobody combines a scarcity-encoded calendar (Hopper) with a site-level grid (recreation.gov). Every incumbent owns one half. That gap is exactly where this control sits.</li>
+  </ul>
+  <div class="note"><strong>The brief in one line.</strong> Ask a person when they are free, and answer with what is open across an entire destination — honestly enough that they trust it, and fast enough that they act before the opening is gone.</div>
+  <p><strong>Constraints carried in from the docs.</strong> Reservable, first-come and seasonally closed stay three distinct answers, worded rather than colour-coded. Availability colour is sacred data language: green reservable, blue first-come, grey taken. Freshness is stamped. Nothing may claim a number we cannot observe. Every sketch below obeys these; where one strains them, it says so.</p>
+  </div>
+</section>
+
+<!-- 2 · PRIOR ART -->
+<section>
+  <div class="sechead"><span class="n">02</span><h2>Prior art, redrawn</h2></div>
+  <p class="kicker">Four patterns that already solve part of this problem, rebuilt here at working scale so the encoding is legible. These are recreations, not captures — each links to the original.</p>
+
+  <div class="priorgrid">
+    <!-- Airbnb -->
+    <div class="prior">
+      <div class="src">Airbnb · listing calendar</div>
+      <div class="ui">
+        <div class="dow"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+        <div class="cal">
+          <div class="d out"><span class="num">29</span></div>
+          <div class="d gone"><span class="num">30</span></div>
+          <div class="d"><span class="num">1</span><span class="sub">$92</span></div>
+          <div class="d"><span class="num">2</span><span class="sub">$92</span></div>
+          <div class="d sel"><span class="num">3</span><span class="sub">In</span></div>
+          <div class="d band"><span class="num">4</span><span class="sub">$140</span></div>
+          <div class="d sel"><span class="num">5</span><span class="sub">Out</span></div>
+          <div class="d"><span class="num">6</span><span class="sub">$88</span></div>
+          <div class="d gone"><span class="num">7</span></div>
+          <div class="d gone"><span class="num">8</span></div>
+          <div class="d"><span class="num">9</span><span class="sub">$88</span></div>
+          <div class="d"><span class="num">10</span><span class="sub">$95</span></div>
+          <div class="d"><span class="num">11</span><span class="sub">$150</span></div>
+          <div class="d"><span class="num">12</span><span class="sub">$150</span></div>
+        </div>
+      </div>
+      <h4>Price under the number</h4>
+      <p>Each day carries a second line of data. First click sets arrival, hovering paints a band to the cursor, second click sets departure. Unavailable days keep their number but strike it through.</p>
+      <p class="verdict"><b>Take:</b> the hover band, and the discipline that a day cell can hold a number <em>and</em> a fact. <b>Leave:</b> days that silently grey out mid-selection with no reason given.</p>
+    </div>
+
+    <!-- Hopper -->
+    <div class="prior">
+      <div class="src">Hopper · price heat</div>
+      <div class="ui">
+        <div class="dow"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+        <div class="cal">
+          <div class="d h1"><span class="num">1</span></div>
+          <div class="d h1"><span class="num">2</span></div>
+          <div class="d h2"><span class="num">3</span></div>
+          <div class="d h3"><span class="num">4</span></div>
+          <div class="d h4"><span class="num">5</span></div>
+          <div class="d h4"><span class="num">6</span></div>
+          <div class="d h3"><span class="num">7</span></div>
+          <div class="d h1"><span class="num">8</span></div>
+          <div class="d h1"><span class="num">9</span></div>
+          <div class="d h2"><span class="num">10</span></div>
+          <div class="d h2"><span class="num">11</span></div>
+          <div class="d h4"><span class="num">12</span></div>
+          <div class="d h4"><span class="num">13</span></div>
+          <div class="d h2"><span class="num">14</span></div>
+        </div>
+        <div class="legend"><span><i class="sw" style="background:color-mix(in srgb,var(--green-600) 12%,var(--tint))"></i>few</span><span><i class="sw" style="background:color-mix(in srgb,var(--green-600) 70%,var(--tint))"></i>many</span></div>
+      </div>
+      <h4>Colour as the whole message</h4>
+      <p>Every day filled on a four-step scale. Zero reading required — the shape of a good week is visible before any text is parsed.</p>
+      <p class="verdict"><b>Take:</b> pre-attentive scanning; the eye finds the open week in under a second. <b>Leave:</b> colour alone is ordinal only — it says <em>better</em>, never <em>how much better</em>, and it cannot survive our three-status rule unaided.</p>
+    </div>
+
+    <!-- Google Flights -->
+    <div class="prior">
+      <div class="src">Google Flights · date grid</div>
+      <div class="ui">
+        <table class="matrix">
+          <tr><th class="rh">In ↓ / nights →</th><th>1</th><th>2</th><th>3</th><th>4</th></tr>
+          <tr><th class="rh">Oct 3</th>
+            <td><div style="background:var(--green-100);color:var(--green-700)">9</div></td>
+            <td><div style="background:var(--green-100);color:var(--green-700)">6</div></td>
+            <td><div style="background:var(--tint);color:var(--ink-3)">2</div></td>
+            <td><div style="background:var(--gray-fill);color:var(--ink-3)">—</div></td></tr>
+          <tr><th class="rh">Oct 4</th>
+            <td><div style="background:var(--green-100);color:var(--green-700)">9</div></td>
+            <td><div style="background:var(--tint);color:var(--ink-3)">3</div></td>
+            <td><div style="background:var(--tint);color:var(--ink-3)">1</div></td>
+            <td><div style="background:var(--gray-fill);color:var(--ink-3)">—</div></td></tr>
+          <tr><th class="rh">Oct 10</th>
+            <td><div style="background:var(--green-100);color:var(--green-700)">8</div></td>
+            <td><div style="background:var(--green-100);color:var(--green-700)">7</div></td>
+            <td><div style="background:var(--green-100);color:var(--green-700)">5</div></td>
+            <td><div style="background:var(--tint);color:var(--ink-3)">2</div></td></tr>
+        </table>
+      </div>
+      <h4>Two variables at once</h4>
+      <p>Arrival down one axis, trip length across the other; the cell holds the answer. One glance settles "would shifting a day, or dropping a night, fix this?"</p>
+      <p class="verdict"><b>Take:</b> the only pattern here that treats <em>length of stay</em> as a variable rather than a given. <b>Leave:</b> it is hidden behind an affordance most people never find.</p>
+    </div>
+
+    <!-- rec.gov -->
+    <div class="prior">
+      <div class="src">Recreation.gov · site grid</div>
+      <div class="ui">
+        <table class="matrix">
+          <tr><th class="rh">Site</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th></tr>
+          <tr><th class="rh">A007</th>
+            <td><div style="background:var(--green-100);color:var(--green-700)">A</div></td>
+            <td><div style="background:var(--green-100);color:var(--green-700)">A</div></td>
+            <td><div style="background:var(--gray-fill);color:var(--ink-3)">R</div></td>
+            <td><div style="background:var(--gray-fill);color:var(--ink-3)">R</div></td>
+            <td><div style="background:var(--blue-100);color:var(--blue-700)">F</div></td></tr>
+          <tr><th class="rh">A014</th>
+            <td><div style="background:var(--gray-fill);color:var(--ink-3)">R</div></td>
+            <td><div style="background:var(--green-100);color:var(--green-700)">A</div></td>
+            <td><div style="background:var(--green-100);color:var(--green-700)">A</div></td>
+            <td><div style="background:var(--green-100);color:var(--green-700)">A</div></td>
+            <td><div style="background:var(--blue-100);color:var(--blue-700)">F</div></td></tr>
+          <tr><th class="rh">B002</th>
+            <td><div style="background:var(--tint);color:var(--ink-4)">NR</div></td>
+            <td><div style="background:var(--tint);color:var(--ink-4)">NR</div></td>
+            <td><div style="background:var(--tint);color:var(--ink-4)">NR</div></td>
+            <td><div style="background:var(--tint);color:var(--ink-4)">NR</div></td>
+            <td><div style="background:var(--tint);color:var(--ink-4)">NR</div></td></tr>
+        </table>
+      </div>
+      <h4>Letters, not just colour</h4>
+      <p>Sites down, nights across, every cell double-encoded as a letter and a fill. A/R/F/NR distinguish available, reserved, first-come and not-yet-released — four different answers, never merged.</p>
+      <p class="verdict"><b>Take:</b> double encoding, and the refusal to render "closed" and "full" alike — our own trust rule, already shipped by the incumbent. <b>Leave:</b> fourteen-day windows, and one campground at a time.</p>
+    </div>
+  </div>
+  <p class="eyebrow" style="margin-top:6px">Originals: <a href="https://www.airbnb.com">airbnb.com</a> · <a href="https://www.hopper.com">hopper.com</a> · <a href="https://www.google.com/travel/flights">google.com/travel/flights</a> · <a href="https://www.recreation.gov">recreation.gov</a></p>
+</section>
+
+<!-- 3 · PSYCHOLOGY -->
+<section>
+  <div class="sechead"><span class="n">03</span><h2>What we know about the person using it</h2></div>
+  <p class="kicker">Six camper types, one split that matters more than the six. The date control has to serve both sides of it without becoming two controls.</p>
+
+  <div class="narrow">
+    <h3>The split: satisficers and maximisers</h3>
+    <p>Schwartz's distinction does more work here than any persona. A <strong>satisficer</strong> wants a result that clears the bar and stops looking. A <strong>maximiser</strong> wants the best one and will keep looking until certain. Our six camper types sort cleanly, and they want opposite things from the same control.</p>
+  </div>
+
+  <div class="tablewrap"><table>
+    <tr><th>Mode</th><th>Camper types</th><th>What they type first</th><th>What the control owes them</th></tr>
+    <tr><td class="who">Satisficer</td><td>The flexible weekender · First-timers · Off-season travellers</td><td>A time, not a place — "some weekend soon"</td><td>A shortlist of windows that work, ranked, with the decision already mostly made. Showing them thirty days is a cost, not a service.</td></tr>
+    <tr><td class="who">Maximiser</td><td>The determined planner · RV &amp; trailer · Families with young kids</td><td>A specific place, often a specific site or loop</td><td>Confirmation and precision: exactly which nights, which sites, and proof the fit constraints hold. Summarising is a cost — they want the grid.</td></tr>
+  </table></div>
+
+  <div class="narrow">
+  <h3>Six principles the sketches are tested against</h3>
+  <ul class="list">
+    <li><strong>Hick's law.</strong> Thirty days × nine campgrounds is not a choice, it is a stall. Anything that presents the raw cross-product loses to anything that pre-narrows.</li>
+    <li><strong>Recognition over recall.</strong> Nobody should have to remember which campground had which nights. If comparing requires memory, the control has failed — this is the single strongest argument against per-campground calendars, which is what the whole category ships.</li>
+    <li><strong>Loss aversion, handled carefully.</strong> "2 of 4 nights open" moves people more than "2 available" — scarcity is genuinely motivating, and genuinely true here. But manufactured urgency is the category's sin, and our sixth value forbids it. Scarcity may be <em>reported</em>, never <em>performed</em>.</li>
+    <li><strong>Anchoring.</strong> The first window shown sets expectations for the whole session. Defaulting to today anchors a planning product to the one window that is almost never bookable; defaulting to the next window that actually works anchors to a win.</li>
+    <li><strong>The Zeigarnik effect.</strong> An unfinished task keeps its grip. An alert is a deliberate open loop — which is why setting one feels good rather than like a defeat, and why the empty state should offer it rather than apologise.</li>
+    <li><strong>Peak–end.</strong> The peak of planning is the moment a window turns out to work. The control's job is to manufacture that moment early and let it be legible; the end is the hand-off, which must not feel like being dumped on a government website.</li>
+  </ul>
+  <div class="note flag"><strong>The trap the whole category falls into.</strong> Every competitor optimises for the maximiser, because the maximiser is the one who knows what to type. The satisficer — over half the market, per the 56% who could not book at all — is left typing campground names they have no reason to know. The eight sketches deliberately over-index on that half.</div>
+  </div>
+</section>
+
+<!-- 4 · JOURNEY -->
+<section>
+  <div class="sechead"><span class="n">04</span><h2>The journey, and where each camper enters it</h2></div>
+  <p class="kicker">Six stages from itch to group chat. Nobody walks all six in order — what distinguishes the camper types is which stage they enter at, and which stage is their gate.</p>
+
+  <div class="journey">
+    <div class="stage">
+      <span class="st">01</span><h4>The itch</h4>
+      <p>"We should get out before it gets cold." No park, no dates, just an impulse and a rough season.</p>
+      <span class="ent">Enters here: the flexible weekender</span>
+    </div>
+    <div class="stage">
+      <span class="st">02</span><h4>A place</h4>
+      <p>A name gets typed. Today it returns a parish in Louisiana; after M1a-1 it returns a park with nine campgrounds under it.</p>
+      <span class="ent">Enters here: first-timers</span>
+    </div>
+    <div class="stage hot">
+      <span class="st">03 · the sprint target</span><h4>A window</h4>
+      <p>When am I free, and what is open then — across the whole destination at once. Every other stage inherits the answer.</p>
+      <span class="ent">Gate for: weekender, off-season</span>
+    </div>
+    <div class="stage">
+      <span class="st">04</span><h4>The fit</h4>
+      <p>Will the rig fit, is there water, how far is it from what we came for. Availability says <em>can</em>; this says <em>should</em>.</p>
+      <span class="ent">Gate for: RV &amp; trailer, families</span>
+    </div>
+    <div class="stage">
+      <span class="st">05</span><h4>Commit</h4>
+      <p>Hand off to the operator — or, when nothing is open, set an alert from the screen already in front of you.</p>
+      <span class="ent">Enters here: the determined planner</span>
+    </div>
+    <div class="stage">
+      <span class="st">06</span><h4>Bring the group</h4>
+      <p>One link carrying destination, window and filters. The plan travels without a screenshot.</p>
+      <span class="ent">Everyone, eventually</span>
+    </div>
+  </div>
+
+  <div class="narrow" style="margin-top:22px">
+    <p><strong>Two things fall out of drawing it this way.</strong> First, stage 3 is the only stage every camper type passes through, which is what justifies spending the sprint on it. Second, the two stages with the most entrants — 1 and 5 — are the two the product currently handles worst: the itch has nowhere to go without a park name, and committing means meeting a numeric ID.</p>
+    <div class="note"><strong>Where the feature set already lands.</strong> Stage 2 is M1a-1/2. Stage 3 is M1a-9, sketched below. Stage 4 is M1a-6 and M1a-17. Stage 5 is Slice 4 — alerts in context, which the docs say could ship beside M0 and would be the first thing a user notices. Stage 6 is the URL contract: dates in the link, decided. Stage 1 is the one with no owner in M1a at all — it belongs to M3 discovery, and sketch 6 below is the cheapest bridge to it.</div>
+  </div>
+</section>
+
+<!-- 5 · CRAZY 8s -->
+<section>
+  <div class="sechead"><span class="n">05</span><h2>Crazy 8s</h2></div>
+  <p class="kicker">Eight minutes, one sketch a minute, no editing between. Ordered by distance from the incumbent: panel 1 is the pattern everybody would draw first, panel 8 barely looks like a date picker. All eight use the same October at Acadia so they can be compared honestly.</p>
+
+  <div class="eights">
+
+    <!-- 1 -->
+    <div class="panel">
+      <span class="pnum">01</span>
+      <h3>The heat month</h3>
+      <p class="premise">One fill per day: how much of the park is open that night.</p>
+      <div class="ui">
+        <div class="dow"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+        <div class="cal">
+          <div class="d h3"><span class="num">1</span></div><div class="d h3"><span class="num">2</span></div>
+          <div class="d h2"><span class="num">3</span></div><div class="d h1"><span class="num">4</span></div>
+          <div class="d h0"><span class="num">5</span></div><div class="d h0"><span class="num">6</span></div>
+          <div class="d h2"><span class="num">7</span></div>
+          <div class="d h4"><span class="num">8</span></div><div class="d h4"><span class="num">9</span></div>
+          <div class="d h3"><span class="num">10</span></div><div class="d h2"><span class="num">11</span></div>
+          <div class="d h1"><span class="num">12</span></div><div class="d h0"><span class="num">13</span></div>
+          <div class="d h3"><span class="num">14</span></div>
+        </div>
+        <div class="legend"><span><i class="sw" style="background:var(--gray-fill)"></i>none</span><span><i class="sw" style="background:color-mix(in srgb,var(--green-600) 28%,var(--tint))"></i>some</span><span><i class="sw" style="background:color-mix(in srgb,var(--green-600) 70%,var(--tint))"></i>most</span></div>
+      </div>
+      <div class="foot"><b>Wins:</b> the open week is visible in under a second. <b>Breaks:</b> one fill cannot hold three statuses — first-come would have to hide inside "some," which our data language forbids.
+        <div class="serves"><span class="tag n">weekender</span><span class="tag n">off-season</span></div>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="panel">
+      <span class="pnum">02</span>
+      <h3>The two-segment bar</h3>
+      <p class="premise">Keep the day number; hang a small bar under it counting reservable against first-come.</p>
+      <div class="ui">
+        <div class="dow"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+        <div class="cal">
+          <div class="d"><span class="num">1</span><span class="segwrap"><i class="seg-g" style="flex:5"></i><i class="seg-b" style="flex:2"></i><i class="seg-x" style="flex:2"></i></span></div>
+          <div class="d"><span class="num">2</span><span class="segwrap"><i class="seg-g" style="flex:5"></i><i class="seg-b" style="flex:2"></i><i class="seg-x" style="flex:2"></i></span></div>
+          <div class="d"><span class="num">3</span><span class="segwrap"><i class="seg-g" style="flex:3"></i><i class="seg-b" style="flex:2"></i><i class="seg-x" style="flex:4"></i></span></div>
+          <div class="d"><span class="num">4</span><span class="segwrap"><i class="seg-g" style="flex:1"></i><i class="seg-b" style="flex:2"></i><i class="seg-x" style="flex:6"></i></span></div>
+          <div class="d"><span class="num">5</span><span class="segwrap"><i class="seg-b" style="flex:2"></i><i class="seg-x" style="flex:7"></i></span></div>
+          <div class="d"><span class="num">6</span><span class="segwrap"><i class="seg-b" style="flex:2"></i><i class="seg-x" style="flex:7"></i></span></div>
+          <div class="d"><span class="num">7</span><span class="segwrap"><i class="seg-g" style="flex:3"></i><i class="seg-b" style="flex:2"></i><i class="seg-x" style="flex:4"></i></span></div>
+          <div class="d sel"><span class="num">8</span></div>
+          <div class="d band"><span class="num">9</span></div>
+          <div class="d band"><span class="num">10</span></div>
+          <div class="d sel"><span class="num">11</span></div>
+          <div class="d"><span class="num">12</span><span class="segwrap"><i class="seg-g" style="flex:2"></i><i class="seg-b" style="flex:2"></i><i class="seg-x" style="flex:5"></i></span></div>
+          <div class="d"><span class="num">13</span><span class="segwrap"><i class="seg-b" style="flex:2"></i><i class="seg-x" style="flex:7"></i></span></div>
+          <div class="d"><span class="num">14</span><span class="segwrap"><i class="seg-g" style="flex:4"></i><i class="seg-b" style="flex:2"></i><i class="seg-x" style="flex:3"></i></span></div>
+        </div>
+        <div class="legend"><span><i class="sw g"></i>reservable</span><span><i class="sw b"></i>first-come</span><span><i class="sw x"></i>taken</span></div>
+      </div>
+      <div class="foot"><b>Wins:</b> three statuses stay three statuses; the spec'd design, and the only one that satisfies the data-language rule outright. <b>Breaks:</b> the bar is tiny — it survives desktop, and needs proving on a phone.
+        <div class="serves"><span class="tag n">all six</span></div>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="panel">
+      <span class="pnum">03</span>
+      <h3>Nights first</h3>
+      <p class="premise">Say how long, and the month answers with every run that fits. Length becomes the input, not the leftover.</p>
+      <div class="ui">
+        <div class="dial"><b>1</b><b>2</b><b class="on">3</b><b>4</b><b>5+</b></div>
+        <div class="rowlist">
+          <div class="rowitem on"><span class="lead">Oct 8–11</span><span class="trail">6 of 9</span></div>
+          <div class="rowitem"><span class="lead">Oct 14–17</span><span class="trail">4 of 9</span></div>
+          <div class="rowitem"><span class="lead">Oct 21–24</span><span class="trail">2 of 9</span></div>
+          <div class="rowitem"><span class="lead">Oct 28–31</span><span class="trail">7 of 9</span></div>
+        </div>
+      </div>
+      <div class="foot"><b>Wins:</b> kills Hick's law outright — four options, not thirty. Matches how people actually talk ("three nights, sometime in October"). <b>Breaks:</b> hides the shape of the month; a maximiser cannot see why their weekend lost.
+        <div class="serves"><span class="tag n">weekender</span><span class="tag n">first-timer</span></div>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="panel">
+      <span class="pnum">04</span>
+      <h3>The season ribbon</h3>
+      <p class="premise">Drop the month grid. One scrubable band across the whole season, thick where runs exist.</p>
+      <div class="ui">
+        <div class="ribbon">
+          <i style="left:2%; width:13%; background:var(--green-600)"></i>
+          <i style="left:17%; width:6%; background:var(--gray-fill)"></i>
+          <i style="left:24%; width:18%; background:var(--green-600)"></i>
+          <i style="left:43%; width:9%; background:var(--blue-600)"></i>
+          <i style="left:53%; width:22%; background:var(--green-600)"></i>
+          <i style="left:76%; width:22%; background:var(--gray-fill)"></i>
+          <span class="mo" style="left:2%">SEP</span><span class="mo" style="left:27%">OCT</span><span class="mo" style="left:53%">NOV</span><span class="mo" style="left:78%">DEC · closed</span>
+        </div>
+        <div class="legend"><span><i class="sw g"></i>bookable runs</span><span><i class="sw b"></i>first-come only</span><span><i class="sw x"></i>full or closed</span></div>
+      </div>
+      <div class="foot"><b>Wins:</b> answers a question no calendar can — <em>when should I go at all?</em> Shoulder season becomes visible as a shape. <b>Breaks:</b> no day-level precision; this is a lens onto the picker, not a replacement.
+        <div class="serves"><span class="tag n">off-season</span><span class="tag n">weekender</span></div>
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="panel">
+      <span class="pnum">05</span>
+      <h3>Arrival × nights</h3>
+      <p class="premise">Google Flights' grid, borrowed whole. Arrival down, length across, campgrounds in the cell.</p>
+      <div class="ui">
+        <table class="matrix">
+          <tr><th class="rh">arrive</th><th>1n</th><th>2n</th><th>3n</th><th>4n</th></tr>
+          <tr><th class="rh">Thu 2</th>
+            <td><div style="background:var(--green-100);color:var(--green-700)">9</div></td>
+            <td><div style="background:var(--green-100);color:var(--green-700)">6</div></td>
+            <td><div style="background:var(--tint);color:var(--ink-3)">2</div></td>
+            <td><div style="background:var(--gray-fill);color:var(--ink-3)">0</div></td></tr>
+          <tr><th class="rh">Fri 3</th>
+            <td><div style="background:var(--green-100);color:var(--green-700)">7</div></td>
+            <td><div style="background:var(--tint);color:var(--ink-3)">3</div></td>
+            <td><div style="background:var(--gray-fill);color:var(--ink-3)">0</div></td>
+            <td><div style="background:var(--gray-fill);color:var(--ink-3)">0</div></td></tr>
+          <tr><th class="rh">Wed 8</th>
+            <td><div style="background:var(--green-100);color:var(--green-700)">9</div></td>
+            <td><div style="background:var(--green-100);color:var(--green-700)">8</div></td>
+            <td><div style="background:var(--green-100);color:var(--green-700)">6</div></td>
+            <td><div style="background:var(--tint);color:var(--ink-3)">3</div></td></tr>
+        </table>
+      </div>
+      <div class="foot"><b>Wins:</b> the only sketch that makes the trade visible — drop one night, gain four campgrounds. <b>Breaks:</b> a table where the category expects a calendar; unfamiliar enough to need a label.
+        <div class="serves"><span class="tag n">planner</span><span class="tag n">families</span></div>
+      </div>
+    </div>
+
+    <!-- 6 -->
+    <div class="panel">
+      <span class="pnum">06</span>
+      <h3>The weekend shelf</h3>
+      <p class="premise">No calendar. A stack of the next weekends, each with what is open. Soonest that works, first.</p>
+      <div class="ui">
+        <div class="stack">
+          <div class="wknd"><span class="dt">Fri 3 – Sun 5</span><span class="ct">6 of 9 open</span></div>
+          <div class="wknd thin"><span class="dt">Fri 10 – Sun 12</span><span class="ct">first-come only</span></div>
+          <div class="wknd"><span class="dt">Fri 17 – Sun 19</span><span class="ct">4 of 9 open</span></div>
+          <div class="wknd thin"><span class="dt">Fri 24 – Sun 26</span><span class="ct">nothing open</span></div>
+        </div>
+        <div class="ui-bar" style="margin:8px 0 0"><span class="ui-chip on">Weekends</span><span class="ui-chip">Any 2 nights</span><span class="ui-chip">Midweek</span></div>
+      </div>
+      <div class="foot"><b>Wins:</b> the satisficer's whole journey collapsed into one screen; also the only sketch that works with no destination chosen yet. <b>Breaks:</b> assumes weekends — useless to anyone booking six months out.
+        <div class="serves"><span class="tag n">weekender</span><span class="tag n">first-timer</span></div>
+      </div>
+    </div>
+
+    <!-- 7 -->
+    <div class="panel">
+      <span class="pnum">07</span>
+      <h3>The sentence</h3>
+      <p class="premise">Dates as language. Fixed frame, swappable tokens — each one a small menu, not free text.</p>
+      <div class="ui">
+        <p class="sentence" style="margin:0">I'm free <span class="tok">any weekend</span> in <span class="tok">October</span> for <span class="tok">2 nights</span>, and I'd rather <span class="tok">avoid crowds</span>.</p>
+        <div class="rowlist" style="margin-top:9px">
+          <div class="rowitem on"><span class="lead">Oct 8–10 · midweek</span><span class="trail">quietest</span></div>
+          <div class="rowitem"><span class="lead">Oct 17–19</span><span class="trail">4 of 9</span></div>
+        </div>
+      </div>
+      <div class="foot"><b>Wins:</b> expresses constraints no control can hold — "new-moon weekends," "avoid crowds" — and prefigures M2 hyper search exactly. <b>Breaks:</b> every new constraint needs a new token type; this is the M2 assistant wearing a date picker's clothes.
+        <div class="serves"><span class="tag n">weekender</span><span class="tag n">planner</span></div>
+      </div>
+    </div>
+
+    <!-- 8 -->
+    <div class="panel">
+      <span class="pnum">08</span>
+      <h3>Scrub the map</h3>
+      <p class="premise">The window is a handle under the map. Drag it through the season and the pins repaint.</p>
+      <div class="ui">
+        <div class="minimap">
+          <span class="pin ok" style="left:14%; top:22%">6</span>
+          <span class="pin ok" style="left:40%; top:52%">2</span>
+          <span class="pin no" style="left:63%; top:18%">0</span>
+          <span class="pin fc" style="left:74%; top:60%">F</span>
+          <span class="pin ok" style="left:30%; top:76%">4</span>
+        </div>
+        <div class="scrub"><span class="track"><i class="fill"></i><i class="knob" style="left:18%"></i><i class="knob" style="left:38%"></i></span></div>
+        <div class="legend"><span><i class="sw g"></i>sites open</span><span><i class="sw b"></i>first-come</span><span><i class="sw x"></i>none</span></div>
+      </div>
+      <div class="foot"><b>Wins:</b> makes date change a spatial act — you <em>see</em> the park empty out as the season closes. Serves the one-canvas pillar better than any panel here. <b>Breaks:</b> continuous dragging against a live availability call; needs the calendar endpoint cached hard, or it stutters.
+        <div class="serves"><span class="tag n">first-timer</span><span class="tag n">off-season</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="eyebrow" style="margin-top:14px">All eight drawn against the same data: Acadia National Park, October, nine campgrounds.</p>
+</section>
+
+<!-- 6 · VOTE -->
+<section>
+  <div class="sechead"><span class="n">06</span><h2>The dot vote, and what I'd build</h2></div>
+  <p class="kicker">Crazy 8s ends in a heat-map vote, then one solution sketch. Here is the recommendation going in — argue with it rather than starting from nothing.</p>
+
+  <div class="votegrid">
+    <div class="vote win">
+      <div class="lbl">Build · the base</div>
+      <h4>02 · The two-segment bar</h4>
+      <p>The only sketch that keeps reservable, first-come and taken as three answers, which the data-language value makes non-negotiable. It is already the spec'd design; the sprint's job was to test whether anything beat it, and nothing did on that constraint.</p>
+    </div>
+    <div class="vote win">
+      <div class="lbl">Build · the entry</div>
+      <h4>06 · The weekend shelf</h4>
+      <p>Graft it on as the empty and no-dates state. It costs one component, serves the half of the market nobody serves, and it is the only thing in M1a that gives stage 1 — the itch — somewhere to go.</p>
+    </div>
+    <div class="vote">
+      <div class="lbl">Prototype next</div>
+      <h4>04 · The season ribbon</h4>
+      <p>Answers "when should I go at all," which the calendar structurally cannot. Cheap as a header strip above the month grid. Test it after the base lands.</p>
+    </div>
+    <div class="vote">
+      <div class="lbl">Hold for M2</div>
+      <h4>07 · The sentence</h4>
+      <p>This is hyper search with a date picker's face. Do not build it now — but let the token vocabulary here inform the verbs M2 will need, since M1a is what earns the right to ask that question.</p>
+    </div>
+  </div>
+
+  <div class="narrow">
+    <h3>What the eight minutes actually settled</h3>
+    <ul class="list">
+      <li><strong>The spec'd design survives contact.</strong> Panel 2 was not the most interesting sketch, and it won anyway — because the three-status rule eliminates every pure-colour approach. That is a value doing its job.</li>
+      <li><strong>The satisficer has no front door.</strong> Five of eight panels only work once a destination is chosen. Panel 6 is the exception, and it exposes a real gap: stage 1 of the journey has no owner in M1a.</li>
+      <li><strong>Length of stay is an input we throw away.</strong> Panels 3 and 5 both treat nights as a variable; the current model treats it as a by-product of two clicks. Worth carrying into the M1a-9 spec regardless of which shape wins.</li>
+      <li><strong>Two sketches are really other milestones.</strong> Panel 7 is M2, panel 8 leans on caching Will has not built yet. Naming that early is the point of sketching badly and fast.</li>
+    </ul>
+    <div class="note"><strong>To run this for real:</strong> eight minutes, one panel a minute, no editing between — quantity is the mechanism, and the bad ones do necessary work. Then everyone gets three dots, silent voting, no pitching first. Winner goes to a solution sketch at real device pixels against the numbers in M1 section 8: 300×38 control, 392px popover, 432px sidebar.</div>
+  </div>
+</section>
+</main>
+
+<footer>Sprint document · Roadtrip. Sits beside Vision, M0, M1, M2 and the user research doc. Prior-art panels are recreations drawn from the referenced products, not captured screenshots. Built on the Lew Design System with the roadtrip theme — persimmon brand, basalt structure, Bricolage Grotesque and Schibsted Grotesk.</footer>
+
+<style id="docset-nav">
+.docs,.docs2{display:grid;gap:8px;}
+.docs{grid-template-columns:repeat(4,1fr);margin:0 0 8px;}
+.docs2{grid-template-columns:repeat(4,1fr);margin:0 0 28px;}
+@media (max-width:720px){.docs,.docs2{grid-template-columns:repeat(2,1fr);}}
+.docs .doc,.docs2 .doc{display:grid;gap:2px;text-decoration:none;
+  padding:10px 13px;border-radius:10px;
+  border:1px solid var(--border-subdued,var(--line-2,#d3cfc4));
+  background:var(--surface-base,var(--card,#fff));}
+.docs2 .doc{padding:8px 12px;background:transparent;border-style:dashed;box-shadow:none;}
+.docs .doc:hover,.docs2 .doc:hover{background:var(--surface-sunken,var(--tint,#f3f1ea));}
+.docs .doc b,.docs2 .doc b{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;
+  font-size:14px;color:var(--gray-900,var(--ink,#141413));}
+.docs2 .doc b{font-size:13px;}
+.docs .doc i,.docs2 .doc i{font-style:normal;font-size:11px;
+  color:var(--gray-600,var(--ink-3,#847f74));letter-spacing:.01em;}
+.docs .doc--here,.docs2 .doc--here{border-style:solid;
+  background:var(--gray-900,var(--ink,#141413));
+  border-color:var(--gray-900,var(--ink,#141413));}
+.docs .doc--here b,.docs2 .doc--here b{color:var(--surface-page,var(--page,#faf9f5));}
+.docs .doc--here i,.docs2 .doc--here i{color:var(--gray-400,var(--ink-4,#a9a49a));}
+</style>

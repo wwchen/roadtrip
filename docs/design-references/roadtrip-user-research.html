@@ -1,0 +1,283 @@
+<title>Roadtrip User Research</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Schibsted+Grotesk:ital,wght@0,400..700;1,400&display=swap">
+<style>
+:root{
+  --surface-page:#faf9f5; --surface-card:#ffffff; --surface-tint:#f3f1ea;
+  --ink:#141413; --ink-2:#4a4842; --ink-3:#807c72;
+  --line:#e4e1d8; --line-2:#d3cfc4;
+  --c-100:#fdeae2; --c-600:#d24b1e; --c-900:#7c2d10;
+  --green-100:#e5f0e2; --green-700:#2f6b32;
+  --blue-100:#e3ecf5; --blue-700:#2b5b8f;
+  --amber-100:#faf0d8; --amber-800:#8a5a12;
+  --radius:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --surface-page:#171614; --surface-card:#201f1c; --surface-tint:#242320;
+    --ink:#f0eee8; --ink-2:#c2beb4; --ink-3:#8d897e;
+    --line:#33312c; --line-2:#454239;
+    --c-100:#3a221a; --c-600:#e8683a; --c-900:#f5a888;
+    --green-100:#233123; --green-700:#8ec48f;
+    --blue-100:#212c38; --blue-700:#8fb6de;
+    --amber-100:#332b1a; --amber-800:#dbb264;
+  }
+}
+:root[data-theme="dark"]{
+  --surface-page:#171614; --surface-card:#201f1c; --surface-tint:#242320;
+  --ink:#f0eee8; --ink-2:#c2beb4; --ink-3:#8d897e;
+  --line:#33312c; --line-2:#454239;
+  --c-100:#3a221a; --c-600:#e8683a; --c-900:#f5a888;
+  --green-100:#233123; --green-700:#8ec48f;
+  --blue-100:#212c38; --blue-700:#8fb6de;
+  --amber-100:#332b1a; --amber-800:#dbb264;
+}
+*{box-sizing:border-box}
+body{background:var(--surface-page); color:var(--ink);
+  font-family:'Schibsted Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;
+  font-size:15px; line-height:1.62; margin:0; padding:0 20px 96px;}
+main{max-width:760px; margin:0 auto;}
+h1,h2,h3{font-family:'Bricolage Grotesque','Schibsted Grotesk',sans-serif; line-height:1.15; text-wrap:balance; margin:0;}
+h1{font-size:clamp(30px,5vw,42px); font-weight:700; letter-spacing:-.01em;}
+h2{font-size:24px; font-weight:700; margin:0 0 6px;}
+h3{font-size:17px; font-weight:700; margin:0 0 4px;}
+p{margin:0 0 14px; max-width:68ch;}
+a{color:var(--c-600); text-decoration-color:color-mix(in srgb,var(--c-600) 40%,transparent);}
+a:hover{text-decoration-color:var(--c-600);}
+strong{font-weight:700;}
+.eyebrow{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); font-weight:600;}
+header.doc{padding:64px 0 36px; border-bottom:1px solid var(--line); margin-bottom:8px;}
+header.doc .meta{display:flex; gap:14px; align-items:baseline; margin-bottom:18px;}
+header.doc .meta .date{color:var(--ink-3); font-size:13px;}
+.lede{font-size:17px; color:var(--ink-2); max-width:62ch; margin-top:14px;}
+section{padding:40px 0 8px; border-bottom:1px solid var(--line);}
+section:last-of-type{border-bottom:none;}
+.secnum{display:flex; gap:12px; align-items:baseline; margin-bottom:16px;}
+.secnum .n{font-family:'Bricolage Grotesque',sans-serif; font-weight:700; color:var(--ink-3); font-size:15px;}
+.kicker{color:var(--ink-2); margin:-2px 0 20px; font-size:15px; max-width:64ch;}
+
+/* stat band — the one persimmon spend per screen is the hero band */
+.stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin:22px 0 8px;}
+.stat{background:var(--c-100); border-radius:var(--radius); padding:16px 16px 13px;}
+.stat .num{font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:27px; color:var(--c-900); line-height:1.05; font-variant-numeric:tabular-nums;}
+.stat .lbl{font-size:12.5px; color:var(--c-900); margin-top:5px; line-height:1.35;}
+.stat.quiet{background:var(--surface-tint);}
+.stat.quiet .num{color:var(--ink);}
+.stat.quiet .lbl{color:var(--ink-2);}
+
+table{border-collapse:collapse; width:100%; font-size:13.5px; margin:16px 0 20px;}
+.tablewrap{overflow-x:auto; margin:0 -4px; padding:0 4px;}
+th{text-align:left; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); font-weight:600; padding:8px 12px 8px 0; border-bottom:1px solid var(--line-2); white-space:nowrap;}
+td{padding:10px 12px 10px 0; border-bottom:1px solid var(--line); vertical-align:top; line-height:1.5;}
+td:first-child{font-weight:600; white-space:nowrap;}
+tr:last-child td{border-bottom:none;}
+.tag{display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:99px; white-space:nowrap;}
+.tag.good{background:var(--green-100); color:var(--green-700);}
+.tag.bad{background:var(--c-100); color:var(--c-900);}
+.tag.warn{background:var(--amber-100); color:var(--amber-800);}
+.tag.info{background:var(--blue-100); color:var(--blue-700);}
+.tag.screen{background:var(--surface-tint); color:var(--ink-2); border:1px solid var(--line-2); font-variant-numeric:tabular-nums;}
+
+.card{background:var(--surface-card); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px 12px; margin:0 0 14px;}
+.card h3{display:flex; gap:10px; align-items:baseline; flex-wrap:wrap;}
+.card .who{font-size:12.5px; color:var(--ink-3); font-weight:400;}
+.twocol{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:18px 0;}
+@media (max-width:640px){.twocol{grid-template-columns:1fr;}}
+.list{margin:0 0 14px; padding-left:20px;}
+.list li{margin-bottom:8px; max-width:64ch;}
+.list li::marker{color:var(--ink-3);}
+.note{background:var(--surface-tint); border-radius:var(--radius); padding:14px 18px; margin:16px 0; font-size:14px; color:var(--ink-2);}
+.note strong{color:var(--ink);}
+.src{font-size:12.5px; color:var(--ink-3); margin-top:-6px;}
+.maps{margin:6px 0 16px;}
+.maps .row{display:flex; gap:12px; align-items:baseline; padding:9px 0; border-bottom:1px solid var(--line);}
+.maps .row:last-child{border-bottom:none;}
+.maps .row .tag{flex-shrink:0;}
+.maps .row p{margin:0; font-size:14px;}
+footer{max-width:760px; margin:48px auto 0; color:var(--ink-3); font-size:12.5px; border-top:1px solid var(--line); padding-top:18px;}
+</style>
+
+<main>
+<nav class="docs" aria-label="Milestones">
+  <a class="doc" href="https://claude.ai/code/artifact/064368ac-3804-499d-8816-c913e2fabf04"><b>Vision</b><i>The point of view</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/f65da110-5a18-4154-bf04-2e8bd1c2a194"><b>M0</b><i>Reskin</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/d173de8a-1332-456a-8438-3d3e7caa8031"><b>M1</b><i>The park surface</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/8833520f-385d-4caa-bbff-b640aa1cdc47"><b>M2</b><i>Assistant &amp; MCP</i></a>
+</nav>
+<nav class="docs2" aria-label="Research and sprints">
+  <a class="doc" href="https://claude.ai/code/artifact/9ff9ab0e-2bdd-46f5-b3fa-bed1c15448b2"><b>Personas</b><i>Who we build for</i></a>
+  <span class="doc doc--here" aria-current="page"><b>Research</b><i>Market &amp; rivals</i></span>
+  <a class="doc" href="https://claude.ai/code/artifact/2740e8f3-a408-437c-95b3-be0652083eff"><b>Crazy 8s</b><i>Date window</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/4c8a0e5f-45b2-426c-8348-90339764f310"><b>Timeline</b><i>What ships when</i></a>
+</nav>
+
+<header class="doc">
+  <div class="meta"><span class="eyebrow">Roadtrip</span><span class="date">27 Aug 2026 · research compiled for the M1 screens</span></div>
+  <h1>User research · Why the park surface, and what it's up against</h1>
+  <p class="lede">Evidence behind the M1 screens: demand data that says users need them, the competitive record of everyone who has tried, and the visual precedents worth studying before drawing. Companion to the Vision, M0, M1 and M2 documents.</p>
+</header>
+
+<section id="s1">
+  <div class="secnum"><span class="n">1</span><h2>The demand data</h2></div>
+  <p class="kicker">Booking a popular campground is a lottery measured in seconds, and "sold out" is a temporary state. Every number below maps to a screen in M1a.</p>
+
+  <div class="stats">
+    <div class="stat"><div class="num">56.1%</div><div class="lbl">of campers couldn't book in 2024 because campgrounds were sold out (The Dyrt 2025 report; 66% in the Pacific region)</div></div>
+    <div class="stat"><div class="num">&lt; 2 min</div><div class="lbl">for Yosemite's Pines campgrounds to sell out a month of inventory at window-open</div></div>
+    <div class="stat"><div class="num">~0.3%</div><div class="lbl">success rate: ~19,000 users competing for one 57-site campground (recreation.gov's own figure)</div></div>
+  </div>
+  <div class="stats">
+    <div class="stat quiet"><div class="num">16%</div><div class="lbl">system-wide cancellation rate on recreation.gov (up from 9% in 2013) — "sold out" leaks constantly</div></div>
+    <div class="stat quiet"><div class="num">~61%</div><div class="lbl">eventual-cancellation pattern observed at popular campgrounds, peaking 10–14 days before check-in (Outdoorithm dataset: 233 of 381 wins were caught cancellations)</div></div>
+    <div class="stat quiet"><div class="num">44</div><div class="lbl">different reservation systems, each with different release rules — 6-month rolling, monthly blocks, wave releases, lotteries</div></div>
+  </div>
+
+  <h3>What the numbers say, mapped to screens</h3>
+  <div class="maps">
+    <div class="row"><span class="tag screen">M1a-9</span><p><strong>Park-wide date-window search is the core unmet need.</strong> With one-campground success rates near zero, the user's real question is "anything near my destination, in my flexible window" — flexibility across dates <em>and</em> campgrounds multiplies effective odds. Recreation.gov only answers one campground, exact dates. The date picker's cross-campground day bars are the product thesis.</p></div>
+    <div class="row"><span class="tag screen">M1a-11/12</span><p><strong>Alerts are statistically justified, not a gimmick.</strong> 13–16% of reservations cancel; at popular campgrounds most eventually churn. Freed sites re-book in minutes — an entire paid industry exists to catch them (§2). Multi-campground watches match the real intent: "anything near Acadia that week."</p></div>
+    <div class="row"><span class="tag screen">M1a-3/8</span><p><strong>Drive time turns availability into decisions.</strong> Yellowstone entrances are 2–5 hours apart; Acadia's Schoodic Woods is an hour from the Bar Harbor side. "Any availability in the park" is useless without minutes-to-what-you-came-for.</p></div>
+    <div class="row"><span class="tag screen">M1a-13</span><p><strong>The 10–14-day pre-trip spike is the alert window that wins.</strong> Cancellations cluster there (hedge-bookers consolidating). When odds return post-retention, this is the honest sentence to compute.</p></div>
+    <div class="row"><span class="tag screen">Conditions</span><p><strong>Release rules are themselves high-value data.</strong> Blackwoods releases 90% of sites 6 months out on the 1st at 10am ET and holds 10% until 14 days before arrival. Per-campground "when to be online" is content nobody aggregates well across 44 systems.</p></div>
+  </div>
+
+  <div class="note"><strong>Context worth knowing:</strong> academic work (Univ. of Montana, 2022) shows the 6-month-window arms race favors wealthy, internet-savvy campers, and a 2023 class action targeted recreation.gov's junk fees. Users arrive at this product already distrustful of booking systems — which raises the bar on honesty (freshness stamps, no fabricated odds, "hand-off to the operator, named explicitly").</div>
+  <p class="src">Sources: The Dyrt 2025/2026 Camping Reports · National Parks Traveler cancellation series · Outdoorithm booking datasets · KOA North American Camping Report (modal booking window: 3–5 months ahead) · UM/Rice equity research · NPS Acadia release policy.</p>
+</section>
+
+<section id="s2">
+  <div class="secnum"><span class="n">2</span><h2>The alert market</h2></div>
+  <p class="kicker">Slice 4's competition. Eight services scan for cancellations; only one auto-books; none are embedded in a trip-planning surface the way M1a-11 is. The industry-standard endpoint is <em>alert + deep link + human sprint</em>.</p>
+
+  <div class="tablewrap"><table>
+    <tr><th>Service</th><th>Model</th><th>Scan speed</th><th>Multi-campground</th><th>Editable after creation</th><th>Notably</th></tr>
+    <tr><td>Campflare</td><td>Free, forever</td><td>~45 sec</td><td>No</td><td>Cancel &amp; recreate</td><td>9M+ notifications; powers Hipcamp Alerts; public API</td></tr>
+    <tr><td>Campnab</td><td>$10–30/mo or $10–20/scan</td><td>1–15 min by tier</td><td>Up to 6, one park</td><td>Members yes · pay-per-use locks after 24h</td><td>Category leader; 5.3M alerts; SMS with booking link</td></tr>
+    <tr><td>The Dyrt Alerts</td><td>$9–15/scan · 2 free with PRO</td><td>20–60 min</td><td><strong>Up to 5 nearby, cross-campground</strong></td><td>PRO scans retargetable · paid scans no</td><td>Closest analog: alerts inside a planning app</td></tr>
+    <tr><td>Arvie</td><td>$74.50/yr or $29/5 scans</td><td>30–60 sec</td><td>Yes</td><td>Pro scans reusable</td><td><strong>Auto-books</strong> with stored credentials; claims 65% win rate</td></tr>
+    <tr><td>Wandering Labs</td><td>Free / $30 yr</td><td>Undisclosed</td><td>Via multiple requests</td><td>Recreate</td><td>Widest flexible windows — arrival ranges spanning months</td></tr>
+    <tr><td>Schnerp</td><td>Free / ~$15–29 mo</td><td>2–5 min</td><td>Capped at 7 active</td><td>—</td><td>Day-of-week filters ("any Fri–Sat in March"); AU/NZ + NA</td></tr>
+    <tr><td>Campsite Assist</td><td>$5–15/scan</td><td>3–33 min</td><td>No</td><td>Single-use</td><td>Paired with site photos; priciest per scan</td></tr>
+    <tr><td>Recreation.gov native</td><td>Free (Jul 2024)</td><td>Undisclosed</td><td>No</td><td>Limited</td><td><strong>Inherits page filters into the alert</strong> — but email-only, loses races</td></tr>
+  </table></div>
+
+  <div class="twocol">
+    <div class="card">
+      <h3><span class="tag good">Steal</span></h3>
+      <ul class="list">
+        <li><strong>Inherit context</strong> (rec.gov): the alert is created from the page you're on, filters and dates pre-filled. This is M1a-11's whole thesis — and validated by the incumbent.</li>
+        <li><strong>Cross-campground area watches</strong> (The Dyrt's "5 nearby"): the only mainstream multi-campground UX, and it's area-based, not park-siloed. M1a-12 can beat it with map + filter selection.</li>
+        <li><strong>Flexible windows and day-of-week intent</strong> (Wandering Labs, Schnerp): "any weekend in July" is what users mean; exact-date alerts undershoot it. Worth noting against the immutable-window constraint.</li>
+        <li><strong>Deep link in the notification</strong> (Campnab, Schnerp): seconds decide races; every hop loses. Roadtrip's email links already do this (#672).</li>
+        <li><strong>Transparent scan cadence</strong>: reviewers explicitly punish opacity and reward disclosure. Cadence is per-watch down to 5s — say so in the UI.</li>
+        <li><strong>Saved rig/party profile</strong> (Arvie): fit facts entered once, applied to every alert — pairs with M1a-17's facets.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="tag bad">Avoid</span></h3>
+      <ul class="list">
+        <li><strong>Locked scans resented as a paywall</strong> (Campnab's 24h edit window, Dyrt's no-refund scans) — the top complaint class. Roadtrip's windows are immutable too, but free: "watch different dates" carrying settings over must feel like a feature, not a lock.</li>
+        <li><strong>Slow tiers that look broken</strong>: a 60-min scan loses to a free 45-second one. Never ship a cadence that makes the system appear dead.</li>
+        <li><strong>Vague "something opened" alerts</strong> (The Dyrt): users want site type, count, and rig fit in the notification itself.</li>
+        <li><strong>Auto-booking with stored credentials</strong> (Arvie): ToS gray zone, operator backlash, trust barrier. The hand-off-to-operator stance is right.</li>
+        <li><strong>Dark-pattern billing</strong>: Dyrt's BBB record shows alert features bundled into memberships need pristine billing UX.</li>
+        <li><strong>Low caps on active watches</strong> (Schnerp's 7) frustrate exactly the multi-campground planners M1a-12 serves.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="note"><strong>Positioning:</strong> free + in-context + multi-campground + fast cadence is a combination nobody ships. Campflare is free but single-campground and context-free; The Dyrt is in-app but slow and paid; rec.gov is in-context but email-only. Roadtrip's Slice 4 sits in the empty quadrant.</div>
+</section>
+
+<section id="s3">
+  <div class="secnum"><span class="n">3</span><h2>What users will run into</h2></div>
+  <p class="kicker">Failure modes documented across competitors and booking systems, mapped to the M1 state matrix.</p>
+  <div class="maps">
+    <div class="row"><span class="tag warn">Stale</span><p><strong>Gone-by-the-time-you-tap.</strong> Freed sites re-book in minutes; every alert service is haunted by "it was gone when I clicked." M1a-10's freshness stamps and an honest "checked N min ago" are the trust answer — silently showing minutes-old data as current is the most damaging thing the product can do.</p></div>
+    <div class="row"><span class="tag warn">Partial</span><p><strong>One operator times out while others answer.</strong> Availability is a live call to a booking site; Aspira and RecGov fail independently. The bulk endpoint already returns per-campground errors — the destination page must render the sound half rather than blanking.</p></div>
+    <div class="row"><span class="tag warn">Empty</span><p><strong>"Nothing bookable" is the most common state at popular parks</strong> (56% hit it). Competitors dead-end here; M1a-7's ways-forward (nearest working window, nearby open campgrounds, set an alert) is the differentiator.</p></div>
+    <div class="row"><span class="tag info">Mechanics</span><p><strong>Release-rule confusion.</strong> Users assume one system; there are 44. Expect "why is October not bookable yet" (not-yet-released ≠ full — rec.gov's NR vs R distinction) and wave releases mid-window. Statuses must read as words, never color alone.</p></div>
+    <div class="row"><span class="tag info">Alerts</span><p><strong>Immutability surprise.</strong> Every service that locks scans gets punished for it. Confirm the window unmistakably at creation (the only chance to get it right), and offer "watch different dates" instead of greyed fields.</p></div>
+    <div class="row"><span class="tag info">Races</span><p><strong>Shared-alert racing:</strong> free services notify everyone at once, so users race each other. Per-watch cadence and in-context creation (fewer people watching the same thing the same way) soften this; never promise a site, only an opening.</p></div>
+    <div class="row"><span class="tag info">Hedges</span><p><strong>Hedge-booking pollutes the data users see:</strong> multi-site A/B/C bookings inflate apparent sell-outs and drive the late cancellation spike. Explains why availability looks worse than reality — and why odds (M1a-13) need real history, not vibes.</p></div>
+  </div>
+</section>
+
+<section id="s4">
+  <div class="secnum"><span class="n">4</span><h2>Visual precedent</h2></div>
+  <p class="kicker">Who already draws each M1 pattern, what their screen encodes, and where to find screenshots (Mobbin has full flows for Airbnb, Hopper and Google Travel; TravelTime's live demo renders isochrones).</p>
+
+  <div class="card">
+    <h3>Date-window pickers <span class="who">→ M1a-9</span></h3>
+    <ul class="list">
+      <li><strong>Airbnb</strong> — two-month popover; price-per-night under each day number; struck-through unavailable days; first click arrival, hover paints a connecting band to the cursor, second click departure. Steal the hover-band preview and explicit disabled-state semantics. Its failure: min-stay days grey out after the first click with no explanation.</li>
+      <li><strong>Google Flights date grid</strong> — departure × return matrix, cheapest cells tinted green: the best 2-D answer to "would shifting ±2 days help," transferable to arrival-night × nights. Its failure: hidden behind a small affordance nobody finds.</li>
+      <li><strong>Hopper</strong> — every day color-filled on a green→red scale: zero-reading scannability, the closest precedent for M1's per-day two-segment availability bars. Its failure: color is only ordinal; users can't size the difference without tapping.</li>
+      <li><strong>Recreation.gov grid</strong> — site rows × 14 night columns, letter+color double-encoded (A/R/F/W/NR/C), sticky site column, contiguous-run selection within a row. The mental model campers already have, and the accessibility bar to keep. Its failures are M1's openings: 14-day pagination, no cross-campground view, overwhelming for "just show me Fri–Sun."</li>
+    </ul>
+    <div class="note"><strong>The unclaimed pattern:</strong> nobody combines a Hopper-style heat calendar (when, across a whole destination) with a rec.gov-style site grid (which site, on demand). That combination is exactly M1a-9 → M1a-6, and it has no incumbent.</div>
+  </div>
+
+  <div class="card">
+    <h3>Destination pages, list + map <span class="who">→ M1a-3/4/16/17</span></h3>
+    <ul class="list">
+      <li><strong>Airbnb search</strong> — the converged standard: split list/map, hover a card and its price pill highlights, viewport-as-query with an explicit "search as I move the map" escape hatch, filter modal counting results live ("Show 312 places"). Mobile: list default, floating Map pill flips to full-screen map with a bottom card carousel — the exact map-as-mode M1a-4 specifies.</li>
+      <li><strong>Google Hotels</strong> — the pattern to steal most: <strong>the map is date-aware</strong>. Change dates and every pill visibly reprices in place. M1's equivalent: pins painted with availability for the current window ("2/4 open"), repainting on window change. Filters as instant chips, not buried modals.</li>
+      <li><strong>Hipcamp park pages</strong> — park page aggregating public campgrounds + private land as fallback supply; "3 of 5 sites available" per property is a good scarcity summary. Its failure: cards that turn out not to be bookable feel like bait — argues for M1's honest operator hand-off.</li>
+      <li><strong>The Dyrt / Campendium</strong> — overlay layers (public-land boundaries, cell coverage per carrier) as filters: the camping-native map feature no generalist has. Campendium's rig-size-and-road-condition review structure is the fit-facts precedent.</li>
+      <li><strong>AllTrails park pages</strong> — ranked "best of this place" cards with map-linked previews: the model for campground cards with the one-line <em>why</em>.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Drive time <span class="who">→ M1a-3/8, spec 8</span></h3>
+    <ul class="list">
+      <li><strong>Zillow commute filter</strong> — filter homes by minutes-to-address with rush-hour awareness, but no visible boundary: users can't see why an area is excluded. M1's dashed minute rings answer exactly this criticism.</li>
+      <li><strong>TravelTime</strong> — true isochrone polygons, jagged and road-real, with multi-origin intersections ("reachable by both of us in 45 min" — a future group-trip feature). Lesson: multi-band shading gets muddy fast; the rings' restraint (1px dashed, captioned once) is right.</li>
+      <li><strong>Google Maps search-along-route</strong> — results labeled "+5 min detour": the best proximity metric ever shipped for road trips, and it only exists mid-navigation. Minutes-of-detour beats miles everywhere; a planning-time version is an open gap (M1b territory).</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>Alert setup <span class="who">→ M1a-11/12/15</span></h3>
+    <ul class="list">
+      <li><strong>Recreation.gov availability alerts</strong> — created on the campground page, inheriting the page's filters and dates: the one elegant thing about it, and M1a-11's validation. Everything after (email-only, weak management UI) is the gap.</li>
+      <li><strong>The Dyrt scanner flow</strong> — search a place → "choose up to 5 nearby campgrounds" checklist → dates → phone number. The only shipped multi-campground picker; M1a-12's from-the-map and "everything matching my filters" selection would leapfrog it.</li>
+      <li><strong>Campnab</strong> — park-dependent filters (site type, vehicle length, ADA) at alert creation, and SMS that names the campground, dates and site numbers with a booking link: the notification content bar to meet.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s5">
+  <div class="secnum"><span class="n">5</span><h2>Where to look</h2></div>
+  <ul class="list">
+    <li><strong>Screenshot mining:</strong> <a href="https://mobbin.com/">Mobbin</a> (Airbnb, Hopper, Google Travel full flows) · <a href="https://app.traveltime.com">TravelTime demo</a> (live isochrones) · <a href="https://camperishtrails.com/reserve-campsite-recreation-gov/">Camperish rec.gov walkthrough</a> (grid states) · <a href="https://campnab.com/blog/your-ultimate-guide-to-booking-a-campsite-on-recreation-gov">Campnab's rec.gov guide</a> (cell codes).</li>
+    <li><strong>Demand data:</strong> <a href="https://thedyrt.com/press/more-than-half-of-campers-report-difficulty-booking-campsites-because-they-are-sold-out/">The Dyrt 2025 report</a> · <a href="https://www.nationalparkstraveler.org/2022/02/recreationgov-continues-see-increases-reservations-and-cancellations">Traveler cancellation series</a> · <a href="https://outdoorithm.com/blog/how-we-book-sold-out-campgrounds">Outdoorithm cancellation dataset</a> · <a href="https://www.umt.edu/news/2022/04/040122rice.php">UM equity research</a> · <a href="https://koa.com/north-american-camping-report/">KOA report</a>.</li>
+    <li><strong>Competitors:</strong> <a href="https://campnab.com/faq">Campnab</a> · <a href="https://campflare.com/">Campflare</a> (note its <a href="https://campflare.com/api">availability API</a> — a possible build-vs-buy shortcut) · <a href="https://thedyrt.com/alerts">The Dyrt Alerts</a> · <a href="https://www.arvie.com/how-it-works">Arvie</a> · <a href="https://wanderinglabs.com/">Wandering Labs</a> · <a href="https://www.schnerp.com/faq">Schnerp</a> · <a href="https://help.recreation.gov/helpcenter/en/camping-availability-alerts?id=kb_article&amp;sysparm_article=KB0011970">rec.gov native alerts</a> · <a href="https://huntandpeckblog.com/best-campsite-trackers/">Hunt &amp; Peck head-to-head</a>.</li>
+  </ul>
+</section>
+</main>
+
+<footer>Five of five. Vision, M0, M1, M2 and this research doc are separate documents on purpose. Compiled 27 Aug 2026 from web research; vendor-claimed figures noted as such. Built on the Lew Design System with the roadtrip theme.</footer>
+
+<style id="docset-nav">
+.docs,.docs2{display:grid;gap:8px;}
+.docs{grid-template-columns:repeat(4,1fr);margin:0 0 8px;}
+.docs2{grid-template-columns:repeat(4,1fr);margin:0 0 28px;}
+@media (max-width:720px){.docs,.docs2{grid-template-columns:repeat(2,1fr);}}
+.docs .doc,.docs2 .doc{display:grid;gap:2px;text-decoration:none;
+  padding:10px 13px;border-radius:10px;
+  border:1px solid var(--border-subdued,var(--line-2,#d3cfc4));
+  background:var(--surface-base,var(--card,#fff));}
+.docs2 .doc{padding:8px 12px;background:transparent;border-style:dashed;box-shadow:none;}
+.docs .doc:hover,.docs2 .doc:hover{background:var(--surface-sunken,var(--tint,#f3f1ea));}
+.docs .doc b,.docs2 .doc b{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;
+  font-size:14px;color:var(--gray-900,var(--ink,#141413));}
+.docs2 .doc b{font-size:13px;}
+.docs .doc i,.docs2 .doc i{font-style:normal;font-size:11px;
+  color:var(--gray-600,var(--ink-3,#847f74));letter-spacing:.01em;}
+.docs .doc--here,.docs2 .doc--here{border-style:solid;
+  background:var(--gray-900,var(--ink,#141413));
+  border-color:var(--gray-900,var(--ink,#141413));}
+.docs .doc--here b,.docs2 .doc--here b{color:var(--surface-page,var(--page,#faf9f5));}
+.docs .doc--here i,.docs2 .doc--here i{color:var(--gray-400,var(--ink-4,#a9a49a));}
+</style>

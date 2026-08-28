@@ -1,0 +1,516 @@
+<title>Roadtrip Personas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Schibsted+Grotesk:ital,wght@0,400..700;1,400&family=DM+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --page:#faf9f5; --card:#fff; --tint:#f3f1ea; --sunk:#e9e5db;
+  --ink:#141413; --ink-2:#4a4842; --ink-3:#847f74; --ink-4:#a9a49a;
+  --line:#e4e1d8; --line-2:#d3cfc4; --rule:#c9c4b7;
+  --c-100:#fdeae2; --c-300:#f2b096; --c-600:#d24b1e; --c-900:#7c2d10;
+  --time:#4a5f78; --time-bg:#e6ecf3;
+  --money:#6b5b3e; --money-bg:#f4eddf;
+  --opp:#4f6b4f; --opp-bg:#e8f0e6;
+  --r:11px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#171614; --card:#201f1c; --tint:#242320; --sunk:#2c2a26;
+  --ink:#f0eee8; --ink-2:#c2beb4; --ink-3:#8d897e; --ink-4:#6d695f;
+  --line:#33312c; --line-2:#454239; --rule:#514d43;
+  --c-100:#3a221a; --c-300:#8c412a; --c-600:#e8683a; --c-900:#f5a888;
+  --time:#9db6d1; --time-bg:#212c38;
+  --money:#cdb98f; --money-bg:#2e2822;
+  --opp:#9dc09d; --opp-bg:#222d22;
+}}
+:root[data-theme="dark"]{
+  --page:#171614; --card:#201f1c; --tint:#242320; --sunk:#2c2a26;
+  --ink:#f0eee8; --ink-2:#c2beb4; --ink-3:#8d897e; --ink-4:#6d695f;
+  --line:#33312c; --line-2:#454239; --rule:#514d43;
+  --c-100:#3a221a; --c-300:#8c412a; --c-600:#e8683a; --c-900:#f5a888;
+  --time:#9db6d1; --time-bg:#212c38;
+  --money:#cdb98f; --money-bg:#2e2822;
+  --opp:#9dc09d; --opp-bg:#222d22;
+}
+*{box-sizing:border-box}
+body{background:var(--page);color:var(--ink);margin:0;padding:0 20px 100px;
+  font-family:'Schibsted Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;line-height:1.62;}
+main{max-width:900px;margin:0 auto;}
+h1,h2,h3,h4{font-family:'Bricolage Grotesque','Schibsted Grotesk',sans-serif;line-height:1.12;text-wrap:balance;margin:0;}
+h1{font-size:clamp(31px,5.2vw,48px);font-weight:800;letter-spacing:-.02em;}
+h2{font-size:clamp(21px,2.9vw,27px);font-weight:700;margin-bottom:6px;letter-spacing:-.01em;}
+h3{font-size:17px;font-weight:700;margin-bottom:5px;}
+h4{font-size:13px;font-weight:700;margin-bottom:4px;}
+p{margin:0 0 13px;max-width:68ch;}
+a{color:var(--c-600);text-underline-offset:2px;text-decoration-color:color-mix(in srgb,var(--c-600) 38%,transparent);}
+a:hover{text-decoration-color:var(--c-600);}
+a:focus-visible{outline:2px solid var(--c-600);outline-offset:2px;border-radius:3px;}
+em{font-style:italic}
+.mono{font-family:'DM Mono',ui-monospace,Menlo,monospace;}
+.eyebrow{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);}
+header.doc{padding:58px 0 30px;border-bottom:2px solid var(--ink);}
+.lede{font-size:17px;color:var(--ink-2);max-width:60ch;margin-top:15px;}
+section{padding:44px 0 8px;border-bottom:1px solid var(--line);}
+section:last-of-type{border-bottom:none;}
+.sechead{display:flex;gap:13px;align-items:baseline;margin-bottom:6px;}
+.sechead .n{font-family:'DM Mono',monospace;font-size:12px;color:var(--c-600);}
+.kicker{color:var(--ink-2);max-width:66ch;margin:0 0 24px;}
+ul.list{margin:0 0 14px;padding-left:19px;} ul.list li{margin-bottom:8px;max-width:66ch;}
+ul.list li::marker{color:var(--ink-4);}
+.note{background:var(--tint);border-radius:var(--r);padding:15px 19px;margin:18px 0;font-size:14.2px;color:var(--ink-2);max-width:74ch;}
+.note strong{color:var(--ink);}
+.note.flag{background:var(--c-100);color:var(--c-900);} .note.flag strong{color:var(--c-900);}
+.tablewrap{overflow-x:auto;margin:18px 0;}
+table{border-collapse:collapse;width:100%;font-size:13.4px;min-width:540px;}
+th{text-align:left;font-family:'DM Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:500;padding:0 13px 8px 0;border-bottom:1px solid var(--rule);white-space:nowrap;vertical-align:bottom;}
+td{padding:9px 13px 9px 0;border-bottom:1px solid var(--line);vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+td.k{font-weight:600;white-space:nowrap;}
+
+/* stat strip */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:22px 0 6px;}
+.stat{background:var(--tint);border-radius:var(--r);padding:14px 15px 12px;}
+.stat .n{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:24px;line-height:1.05;font-variant-numeric:tabular-nums;}
+.stat .l{font-size:12.3px;color:var(--ink-2);margin-top:4px;line-height:1.35;}
+.stat.hot{background:var(--c-100);} .stat.hot .n{color:var(--c-900);} .stat.hot .l{color:var(--c-900);}
+
+/* persona */
+.persona{border:1px solid var(--line-2);border-radius:14px;background:var(--card);padding:0;margin:0 0 20px;overflow:hidden;}
+.persona.key{border-color:var(--c-300);}
+.p-head{padding:20px 24px 16px;border-bottom:1px solid var(--line);}
+.persona.key .p-head{background:var(--c-100);border-bottom-color:var(--c-300);}
+.p-rank{display:flex;gap:9px;align-items:center;margin-bottom:7px;flex-wrap:wrap;}
+.badge{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;padding:2px 8px;border-radius:99px;white-space:nowrap;}
+.badge.key{background:var(--c-600);color:#fff;}
+.badge.tail{background:var(--sunk);color:var(--ink-2);}
+.badge.seg{background:transparent;border:1px solid var(--line-2);color:var(--ink-3);}
+.persona.key .badge.seg{border-color:var(--c-300);color:var(--c-900);}
+.p-head h3{font-size:22px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;}
+.persona.key .p-head h3{color:var(--c-900);}
+.p-head .sub{font-size:13.5px;color:var(--ink-3);margin-top:4px;}
+.persona.key .p-head .sub{color:var(--c-900);opacity:.8;}
+.p-body{padding:18px 24px 8px;}
+.scene{font-size:15px;color:var(--ink-2);border-left:2px solid var(--line-2);padding-left:15px;margin:0 0 16px;max-width:64ch;font-style:italic;}
+.persona.key .scene{border-left-color:var(--c-300);}
+.tmo{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0;}
+@media(max-width:700px){.tmo{grid-template-columns:1fr;}}
+.tmo div{border-radius:9px;padding:12px 14px 10px;font-size:12.8px;line-height:1.45;}
+.tmo .t{background:var(--time-bg);color:var(--time);}
+.tmo .m{background:var(--money-bg);color:var(--money);}
+.tmo .o{background:var(--opp-bg);color:var(--opp);}
+.tmo h4{font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.75;margin-bottom:5px;font-weight:500;}
+.rows{margin:14px 0 6px;}
+.row{display:grid;grid-template-columns:130px 1fr;gap:0 16px;padding:9px 0;border-top:1px solid var(--line);font-size:13.8px;}
+@media(max-width:640px){.row{grid-template-columns:1fr;gap:3px;}}
+.row .lbl{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);padding-top:3px;}
+.row .val{color:var(--ink-2);max-width:60ch;}
+.row .val b{color:var(--ink);font-weight:600;}
+.screens{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;}
+.sc{font-family:'DM Mono',monospace;font-size:10px;padding:2px 7px;border-radius:4px;background:var(--tint);color:var(--ink-2);white-space:nowrap;}
+.persona.key .sc{background:var(--c-100);color:var(--c-900);}
+footer{max-width:900px;margin:46px auto 0;color:var(--ink-3);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px;}
+</style>
+
+<main>
+<nav class="docs" aria-label="Milestones">
+  <a class="doc" href="https://claude.ai/code/artifact/064368ac-3804-499d-8816-c913e2fabf04"><b>Vision</b><i>The point of view</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/f65da110-5a18-4154-bf04-2e8bd1c2a194"><b>M0</b><i>Reskin</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/d173de8a-1332-456a-8438-3d3e7caa8031"><b>M1</b><i>The park surface</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/8833520f-385d-4caa-bbff-b640aa1cdc47"><b>M2</b><i>Assistant &amp; MCP</i></a>
+</nav>
+<nav class="docs2" aria-label="Research and sprints">
+  <span class="doc doc--here" aria-current="page"><b>Personas</b><i>Who we build for</i></span>
+  <a class="doc" href="https://claude.ai/code/artifact/c2e87639-7b74-4f7d-96de-3ca5e942f63f"><b>Research</b><i>Market &amp; rivals</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/2740e8f3-a408-437c-95b3-be0652083eff"><b>Crazy 8s</b><i>Date window</i></a>
+  <a class="doc" href="https://claude.ai/code/artifact/4c8a0e5f-45b2-426c-8348-90339764f310"><b>Timeline</b><i>What ships when</i></a>
+</nav>
+
+<header class="doc">
+  <span class="eyebrow">Roadtrip · Research</span>
+  <h1>Five campers, and what stops them</h1>
+  <p class="lede">Evidence-grounded personas to replace the six inferred ones in the Vision. Three we build for, two we design around — and an honest account of the time, money and access barriers that decide who gets to camp at all.</p>
+</header>
+
+<section id="changed">
+  <div class="sechead"><span class="n">01</span><h2>What changed since the Vision</h2></div>
+  <p class="kicker">The Vision named six camper types and flagged them, correctly, as desk research: "the six campers are inferred, not observed, and nobody has watched a real person plan a trip." These five are still not interview-derived — but every one is now anchored to published participation, barrier and behavioural data rather than to intuition.</p>
+  <div class="stats">
+    <div class="stat hot"><div class="n">15%</div><div class="l">annual churn in outdoor participation — 26.3M people lost in a year against 31.6M gained</div></div>
+    <div class="stat hot"><div class="n">43% → 87%</div><div class="l">only 43% rate their first camping trip "great," but 87% of those who do keep camping</div></div>
+    <div class="stat"><div class="n">54%</div><div class="l">of campers book within five weeks of the trip — against a 6-month reservation window</div></div>
+    <div class="stat"><div class="n">5%</div><div class="l">of outdoor consumers are "core." Casual and Active are ~90% of the dollars</div></div>
+  </div>
+  <div class="note"><strong>The one finding that should reorder the roadmap.</strong> The industry's problem is not acquisition, it is retention — and the gap between "43% of first experiences are great" and "87% of great first experiences convert" is the entire opportunity. A planning product cannot make a campground nicer. It can make sure nobody arrives at the wrong one, on the wrong nights, without water, forty minutes from what they came for.</div>
+  <h3 class="srch">Is this “Google Flights for camping”?</h3>
+  <p>Half of it, and the half it gets right is worth being precise about. Google Flights' real power is not search — it is the <strong>flexible-date grid</strong>. It reframes the question from “is this specific flight available” to “when is this trip possible, and what does moving a day cost me.” That is exactly the reframe M1a-9 makes, for exactly the reason: two of our three key personas hold dates fixed and treat destination as negotiable, and every camping product in the market asks for the destination first.</p>
+  <p><strong>But one mechanic does not transfer, and getting it wrong would be expensive.</strong> Flights are fungible — a seat is a seat, so ranking by price is honest. <em>Campsites are not.</em> Site 43 backing onto the trail and site 12 on the gravel loop are the same price and a completely different trip. Any ranking that implies “cheapest wins” imports Google Flights' logic into a category where it is false, and produces exactly the arrival our retention data says we cannot afford.</p>
+  <div class="note flag"><strong>So the first-timer's question is two questions, and only one of them is Google Flights.</strong><br>
+    <b>“Is this weekend possible at all, anywhere near me?”</b> — the date-window half. Answered by M1a-9, the weekend shelf, and letting a search run with no destination. Nobody in the category answers this today.<br>
+    <b>“Will I actually be OK when I get there?”</b> — the half with no Google Flights equivalent, and the half where a first-timer is genuinely lost. Answered by stated absences, conditions, statuses as words, and a one-line reason to stay. <strong>This is where the 43%→87% gap lives.</strong> Search failure costs a trip; fit failure costs a camper, and the doc's evidence says they blame themselves and don't come back.</div>
+  <p>The practical consequence for a person who has never camped: the honest recommendation is often the <em>less</em> adventurous campground. 56% of new campers now prefer locations with a full range of amenities — restrooms, on-site staff, running water — and 87% of those who have a great first trip continue. Surfacing that clearly is not dumbing the product down; it is the highest-leverage retention move available to us, and it costs one line of copy per place page.</p>
+
+  <h3 class="srch">Free, flexible, or committed — which reservation are we in?</h3>
+  <p>All of them, and the POV is that <strong>we are the layer before the reservation, not the reservation itself</strong>. Camping inventory sits on a commitment ladder, and every competitor in the category shows one or two rungs of it. Showing the whole ladder honestly — including the rungs with no reservation at all — is the position nobody occupies.</p>
+  <div class="tablewrap">
+    <table>
+      <tr><th>Rung</th><th>What it commits you to</th><th>Who it's right for</th></tr>
+      <tr><td class="k">Free · dispersed &amp; first-come</td><td>Nothing. No booking exists, so no cancellation, no fee, no guarantee. The risk is a “FULL” sign after a two-hour drive.</td><td><b>The Weekender.</b> She is structurally a fallback user of every public campground in America, and this tier is the only one still open when she looks.</td></tr>
+      <tr><td class="k">Flexible · family sites</td><td>Barely a commitment — a 1-day cancellation cliff and a small fee. This is an <em>option</em>, not a booking.</td><td><b>Everyone.</b> The default, and the rung the whole category already serves well.</td></tr>
+      <tr><td class="k">Committed · group facilities</td><td>Real money at risk: a 14-day cancellation cliff, enforced minimum occupancy, headcount-banded pricing.</td><td><b>The Organizer and the Quartermaster</b> — and it is precisely the wrong shape for both of them.</td></tr>
+      <tr><td class="k">Locked · permits &amp; lotteries</td><td>You commit before you know whether you're in.</td><td><b>The Loyalist.</b> Out of M1a scope.</td></tr>
+    </table>
+  </div>
+  <div class="note flag"><strong>The trap this framing exposes: free is not a beginner feature.</strong> It reads like one — no money, no booking window, nothing to lose. But the first-timer's failure mode is arriving somewhere wrong, and a first-come site is the single most reliable way to arrive at a “FULL” sign with a car full of borrowed gear. That is the exact experience that ends a camping career, and our own data says only 43% of first trips are rated great while 87% of the great ones convert. <b>Surface first-come hardest to the Weekender, and softly — with the risk stated in words — to the Beginner.</b> Same inventory, opposite recommendation, and it turns on which persona is looking.</div>
+  <p><strong>And the Organizer's bind is that the two commitment curves run opposite.</strong> Group inventory demands its firmest commitment — the 14-day cliff, the enforced minimum — at exactly the moment her headcount is least settled, because a free yes converts to attendance only about three times in four. We cannot fix her people. What we can do is show her the rungs that tolerate uncertainty, and make “yes” cheap to give: a link that carries the dates, the filters and the live availability, so agreeing costs a glance instead of a meeting.</p>
+
+  <h3 class="srch">The analogies, audited</h3>
+  <p>Three have been proposed. Each one transfers a mechanic and imports a falsehood, so it is worth writing down which half we are taking.</p>
+  <div class="tablewrap">
+    <table>
+      <tr><th>Analogy</th><th>What transfers</th><th>What breaks</th></tr>
+      <tr><td class="k">Google Flights</td><td>The flexible-date grid. “When is this possible” instead of “is this specific thing available.” <b>This is M1a-9.</b></td><td>Fungibility. A seat is a seat; site 43 and site 12 are the same price and a different trip, so “cheapest wins” is a lie here.</td></tr>
+      <tr><td class="k">Gametime</td><td><b>The timing instinct, and it is the closest of the three.</b> Perishable inventory, supply reappearing as the date approaches, a user who wins by waiting.</td><td>The engine. Gametime runs on <em>price</em> — resale, dynamic pricing, sellers dumping before kickoff. Camping has no resale market and no dynamic pricing: a $25 site is $25 six months out and at 4pm. There is no deal to find.</td></tr>
+      <tr><td class="k">Resy / OpenTable</td><td>Notify-me on a released table, and the idea that the reservation is someone else's system.</td><td>Cadence. A restaurant is a Tuesday decision; a campground is a trip with a drive, gear and other people attached.</td></tr>
+    </table>
+  </div>
+  <div class="note flag"><strong>Gametime's mechanic with a different payoff: availability, not discount.</strong> Supply does reappear near the date — not because prices fall, but because <b>family sites carry a 1-day cancellation cliff</b>, so held inventory dumps back into the pool in the last 24–48 hours. That is a real, exploitable dynamic and it is what an alert is <em>for</em>. Add the one source Gametime has no analogue for — first-come inventory, which is 100% allocated on the day by definition — and the last-minute pool is genuinely large. We just never get to call it a bargain.</div>
+  <p><strong>But we are a short-horizon product, not a last-minute one, and the distinction decides the UI.</strong> Gametime optimises the final 48 hours. Our evidence says the crunch runs from about five weeks out to the morning of: <b>54% of campers book within five weeks</b>, and the Weekender is deciding on Tuesday for Saturday. A five-week band wants a date window and a standing alert. A 48-hour band wants a “tonight” feed. <em>We should ship the first and keep the second as one shelf inside it</em> — a weekend/tonight view showing only what is claimable right now.</p>
+  <p><strong>And there is a reason not to lean all the way in.</strong> Gametime's model teaches users to wait. That is fine when waiting costs a worse seat; it is not fine when waiting costs a first-timer a two-hour drive to a “FULL” sign, which is the failure this document says ends camping careers. <b>Last-minute is a capability we offer the Weekender, not a habit we should train in the Beginner.</b></p>
+
+  <p><strong>Still missing, stated plainly.</strong> No user interviews and no usage data, exactly as the Vision said. Five interviews would still test more of this page than another month of desk research. What has changed is that the guesses now have numbers attached, and several of the original six turned out to be the same person seen from different angles.</p>
+</section>
+
+<section id="method">
+  <div class="sechead"><span class="n">02</span><h2>The model underneath</h2></div>
+  <p class="kicker">Leisure research has a standard frame for "why people who want to, don't" — Crawford &amp; Godbey's hierarchy of constraints. It matters here because it predicts which barriers software can touch.</p>
+  <div class="tablewrap">
+    <table>
+      <tr><th>Constraint</th><th>What it is</th><th>Can a planning product help?</th></tr>
+      <tr><td class="k">Intrapersonal</td><td>"I'm not the kind of person who does this." Competence, belonging, self-efficacy. Encountered first and hardest.</td><td>Partly — by removing the moments that confirm the fear</td></tr>
+      <tr><td class="k">Interpersonal</td><td>No one to go with; can't align a group. The industry's own barrier list names "a participation companion."</td><td>Partly — sharing and coordination</td></tr>
+      <tr><td class="k">Structural</td><td>Money, time, transport, reservation systems. The <em>last</em> barrier encountered, not the first.</td><td>Yes, for booking and knowledge. No, for PTO or a car.</td></tr>
+    </table>
+  </div>
+  <div class="note flag"><strong>The uncomfortable implication.</strong> Every existing camping tool — ours included — solves structural friction. That means we serve people who already cleared the intrapersonal gate. The constraint ordering "denotes a hierarchy of social privilege," and our product sits at the top of it. Persona 2 exists specifically to push against that.</div>
+  <p>One more split does more work than the six types did: <strong>satisficers versus maximisers</strong>. A satisficer wants a result that clears the bar and to stop looking. A maximiser wants the best one and keeps looking. They want opposite things from the same date control, and the whole category has optimised for the maximiser — because the maximiser is the one who knows what to type.</p>
+</section>
+
+<section id="key">
+  <div class="sechead"><span class="n">03</span><h2>Three we build for</h2></div>
+  <p class="kicker">Ranked by how much of the product's value they capture, not by how loud they are.</p>
+
+  <!-- KEY 1 -->
+  <div class="persona key" id="weekender">
+    <div class="p-head">
+      <div class="p-rank"><span class="badge key">Key · 01</span><span class="badge seg">Satisficer</span><span class="badge seg">~42% casual segment</span></div>
+      <h3>The Flexible Weekender</h3>
+      <div class="sub">Commits early, plans late. Where is negotiable; <em>when</em> is not.</div>
+    </div>
+    <div class="p-body">
+      <p class="scene">It's Tuesday. There's a weekend coming and no plan. She's not choosing between Acadia and Olympic — she's choosing between going somewhere and not going. She has two days, a car, and about forty minutes of patience before this becomes next weekend's problem.</p>
+      <div class="tmo">
+        <div class="t"><h4>Time</h4>Two days, not five. 62% of campers say weekends dominate their calendar, and 63% stay within 150 miles of home. The ideal road trip Americans describe — 13 hours of driving over five days — is a different product.</div>
+        <div class="m"><h4>Money</h4>Not the blocker. Fuel and a $25 site. But she'll abandon rather than pay to find out, which is why every paid alert service loses her.</div>
+        <div class="o"><h4>Opportunity</h4>The killer. 54% of campers book within five weeks; the good inventory was allocated 180 days out in a sixty-second auction. She is, structurally, a fallback user of every public campground in America.</div>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="lbl">Evidence</span><span class="val">KOA calls this behaviour <b>"SnapCamping."</b> 40% of US hotel bookings now happen within seven days; 29% of all bookings within two weeks. Meanwhile 56.1% of campers report being blocked by sold-out sites — up from 10.6% in 2019.</span></div>
+        <div class="row"><span class="lbl">Breaks today</span><span class="val">Every site makes her name a campground first, then checks that one campground alone. <b>"What's open this weekend, anywhere near me" has nowhere to be asked.</b> When she does get shut out, the fallback tier she actually needs — first-come and BLM dispersed — has no reservations, no real-time occupancy, and a discovery model that requires driving to a "FULL" sign.</span></div>
+        <div class="row"><span class="lbl">Would stop her</span><span class="val">A date picker that opens on today and shows nothing. A results list she has to read campground-by-campground. Anything that takes more than one screen to answer "is this weekend possible."</span></div>
+        <div class="row"><span class="lbl">We serve her with</span><span class="val"><div class="screens"><span class="sc">M1a-9 date window</span><span class="sc">weekend shelf</span><span class="sc">M1a-2 no destination here</span><span class="sc">first-come as a real status</span><span class="sc">M1a-7 ways forward</span></div></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KEY 2 -->
+  <div class="persona key" id="beginner">
+    <div class="p-head">
+      <div class="p-rank"><span class="badge key">Key · 02</span><span class="badge seg">Satisficer</span><span class="badge seg">"Aspirational Core" · 14%</span></div>
+      <h3>The Aspirational Beginner</h3>
+      <div class="sub">Wants to be outdoorsy. Sticks close to home. Rents rather than commits.</div>
+    </div>
+    <div class="p-body">
+      <p class="scene">He has done this twice. Both times something went slightly wrong in a way that felt like his fault — the site was gravel, there was no water, the walk to the beach was longer than the listing implied. He's not afraid of the woods. He's afraid of looking like he doesn't belong in them.</p>
+      <div class="tmo">
+        <div class="t"><h4>Time</h4>Has weekends but spends them deciding. Research time <em>is</em> the cost — planning stress, not trip cost, is what kills the trip.</div>
+        <div class="m"><h4>Money</h4>$400–800 to equip a first trip, all sunk before night one. 28% of campers name gear affordability as a barrier; 22% of first-time campers spend $0 on gear, which means borrowing or renting.</div>
+        <div class="o"><h4>Opportunity</h4>Knowledge, not access. Two-thirds of campers wrongly believe a tent or vehicle is required to claim a first-come site — a false belief suppressing the single most accessible inventory in the country.</div>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="lbl">Evidence <a href="#sources" class="cite">src</a></span><span class="val">The barrier campers name themselves is money-for-gear, not fear: <b>28% say they “cannot afford to buy the gear needed for the outdoor experience”</b> — second only to the cost of the trips at 43%. The retention picture is worse than the acquisition one. Only <b>62% of campers who started camping in the past three years plan to camp again</b> — roughly four in ten recent entrants lapse — while <b>87% of those who rate their first trip “a great experience” keep camping</b>. The first trip is the whole funnel. On belonging, the strongest figure available is secondary: about a quarter of outdoor participants report feeling unwelcome or out of place, and eight in ten of those are 16–34, which is exactly this persona's cohort.</span></div>
+        <div class="row"><span class="lbl">Breaks today</span><span class="val">Absences go unstated. "No showers, no potable water" is a useful answer; silence is not. A campground with a gravel pad and a 40-minute walk to the water reads identically to one on the shore. Every failure lands as personal incompetence rather than as missing information.</span></div>
+        <div class="row"><span class="lbl">Would stop him</span><span class="val">Vocabulary that assumes he already knows — loop letters, hookup classes, "NR" versus "R". A page that lists what a campground has and stays silent on what it lacks. Anything that makes the first trip feel like an exam.</span></div>
+        <div class="row"><span class="lbl">We serve him with</span><span class="val"><div class="screens"><span class="sc">stated absences</span><span class="sc">one-line "why you'd stay"</span><span class="sc">M1a-8 thin place page</span><span class="sc">Conditions block</span><span class="sc">statuses as words</span><span class="sc">M1a-14 Ask</span></div></span></div>
+      </div>
+      <div class="note" style="margin-bottom:14px"><strong>Why this persona is worth more than it looks.</strong> REI shut down its entire 40-year guided Experiences business in January 2025: 40,000 customers, under 0.4% of members, losing millions a year. Human-led facilitation of getting outside does not scale. If this person is going to be served at all, it has to be by software — and REI's own framing of rentals and used gear as "the way people enter the outdoors" says the entry lane is real.</div>
+    </div>
+  </div>
+
+  <!-- KEY 3 -->
+  <div class="persona key" id="organizer">
+    <div class="p-head">
+      <div class="p-rank"><span class="badge key">Key · 03</span><span class="badge seg">Maximiser by necessity</span><span class="badge seg">avg. group ≈ 7</span></div>
+      <h3>The Trip Organizer</h3>
+      <div class="sub">One adult carries the whole trip. Usually a parent. Usually a woman.</div>
+    </div>
+    <div class="p-body">
+      <p class="scene">Four families said yes in the group chat in March. It is now May, two have gone quiet, one has a kid with a nut allergy, and the campground that works for everyone has two sites left on different loops. She has a spreadsheet. Nobody asked her to make a spreadsheet.</p>
+      <div class="tmo">
+        <div class="t"><h4>Time</h4><b>19 hours of planning across 11 days and 83 group-chat messages</b> for one trip. Locked to school holidays — June to August, exactly when supply is tightest and priced +20–50%.</div>
+        <div class="m"><h4>Money</h4>Fronts costs and chases reimbursement — Splitwise data shows ~$410/person in shared expenses on a typical group trip. Half of travellers dispute how splitting should even work.</div>
+        <div class="o"><h4>Opportunity</h4>Headcount churn is the real enemy. <b>76% of group trips never leave the group chat</b>, and 90% of travellers blame the people who won't commit.</div>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="lbl">Evidence</span><span class="val">80% of women say they do most of the planning for their group; 62% make most of the decisions. <b>72% of planners believe the trip would not happen without them, and they are blamed roughly twice as often as anyone admits to blaming them.</b> 71% say they would happily let someone else lead — the demand for an organizer is universal, the willingness to be one is not. 78% of parents find travel planning stressful. 22% of families “camp with grandparents and/or other relatives,” and multigenerational travel touches 28% of campers.</span></div>
+        <div class="row"><span class="lbl">Why yes means nothing</span><span class="val">Every number she plans against is derived from a headcount that keeps moving. Free events lose <b>40–60% of registrants</b>; paid ones hold 70–90%. Even after an explicit yes, roughly <b>one in four does not show</b> — the median confirmed-RSVP-to-attendance rate across 13,800 weddings was 76%. <b>The lever that actually works is a commitment signal at sign-up</b>, which is why deposits exist in organised group travel: they are a headcount-stabilisation mechanism, not a financing one. She has no way to ask for one.</span></div>
+        <div class="row"><span class="lbl">Breaks today</span><span class="val">The plan lives in her head and a screenshot. Sending it means sending a link nobody else can act on, or retyping it. Meanwhile a party of five exceeds the 6–8 person cap on most federal sites, so "one booking" was never an option — the system quietly requires her to hold two reservations and hope they're adjacent.</span></div>
+        <div class="row"><span class="lbl">Would stop her</span><span class="val">A plan that can't be shared as a link. Any flow that assumes one person, one tent, one decision. Losing her filters and dates when she sends the page to someone else.</span></div>
+        <div class="row"><span class="lbl">We serve her with</span><span class="val"><div class="screens"><span class="sc">dates + filters in the URL</span><span class="sc">M1a-3 destination page</span><span class="sc">M1a-17 filters</span><span class="sc">M1a-12 multi-campground alerts</span><span class="sc">M1b the trip object</span></div></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tail">
+  <div class="sechead"><span class="n">04</span><h2>Two we design around</h2></div>
+  <p class="kicker">Real, valuable, and deliberately not the target. Both are named so their constraints stay visible in decisions — not so we build for them now.</p>
+
+  <!-- TAIL 1 -->
+  <div class="persona" id="quartermaster">
+    <div class="p-head">
+      <div class="p-rank"><span class="badge tail">Long tail · 04</span><span class="badge seg">Institutional</span><span class="badge seg">20–50 people</span></div>
+      <h3>The Youth-Group Quartermaster</h3>
+      <div class="sub">Scout troop, church group, school outdoor-ed. Plans a year out, against rules no consumer software models.</div>
+    </div>
+    <div class="p-body">
+      <p class="scene">The troop picked its dates at an annual planning conference last September. He needs a site for 34 people, two adults minimum on site at all times, tents arranged so no youth sleeps in an adult's tent, and medical forms for everyone — Part C, signed by a physician, because the trip runs past 72 hours. The campground he wants takes reservations by telephone, weekdays only.</p>
+      <div class="tmo">
+        <div class="t"><h4>Time</h4>Inverted. Plans <b>12 months</b> out, not five weeks — Philmont opens two years ahead. But the horizon is not reliably an advantage: group windows are a <em>tendency</em>, not a rule. Capitol Reef releases group sites 12 months out; Bryce's Sunset group site opens just <b>14 days</b> ahead.</div>
+        <div class="m"><h4>Money</h4>Priced per site, either flat or in headcount bands — Bryce runs $55 for 7–10 people up to $100 for 26–30; Capitol Reef is a flat $125. Enforced <b>minimum occupancy</b> means a shrinking group still pays the block. Cancellation cliff is <b>14 days</b> for group facilities against 1 day for family sites.</div>
+        <div class="o"><h4>Opportunity</h4><b>The inventory is off-platform.</b> Texas, Florida, Pennsylvania, Ohio and Michigan all require phone or park-direct booking for group facilities. Only California, New York and Washington put group sites in the same online inventory as family sites.</div>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="lbl">The dead zone</span><span class="val">Difficulty is a <b>step function, not a slope</b>. Average party size on a national forest visit is <b>about 2.4 people</b> — the entire physical system is calibrated for that. A 40-person troop is at once five times that, over the ~8-person line that triggers group-permit paperwork, over the <b>12-person cap in most designated wilderness</b> (where the group must physically split and keep a mile apart), below the 75-person threshold for a Forest Service group-use permit, and outside the occupancy band of many group sites — Yosemite's take 13–30, others set minimums of 5, 7, 9 or 11. There is no permit path and no product path. Booking six individual sites isn't prohibited, but it collides with per-facility caps of 2–4 reservations per transaction and rules requiring the named person to be present.</span></div>
+        <div class="row"><span class="lbl">The 72-hour cliff</span><span class="val">A two-night trip needs a signature. A three-night trip needs <b>Part C of the Annual Health and Medical Record — a physician's exam for every participant</b>. For twelve families that is twelve external appointments he does not control, on a deadline. Nothing about the campground changed; the paperwork did.</span></div>
+        <div class="row"><span class="lbl">Rules software ignores</span><span class="val">Two-deep leadership on every outing, and no one-on-one contact including digital. Youth sharing a tent must be within two years of age; no youth sleeps in an adult's tent. Girl Scouts sets ratios by grade and uses the lowest grade in a mixed troop; California requires one adult per 15 youths, Wisconsin one per 10. Drivers need documented insurance — $100,000 combined single limit recommended, <b>$1,000,000 for anything carrying ten or more</b> — with no pickup beds, no pre-2005 15-passenger vans, and a 10-hour daily driving limit. At ~8% childhood food-allergy prevalence, a twelve-family group will almost certainly include a child with a diagnosed allergy, so every shared meal is a constraint problem rather than a multiplication.</span></div>
+        <div class="row"><span class="lbl">What he uses today</span><span class="val">Not the official tools. The observed stack is <b>BAND or GroupMe for talk, SignUpGenius for slots, a Google Sheet for the real data, and Cheddar Up or Venmo for money</b> — and nothing joins "signed up" to "paid" to "medical form on file" to "in a car." Scouting America's own Scoutbook is failing at exactly this surface: a troop of 36 found every event showing 24 attendees because sub-unit moves silently dropped Scouts from RSVPs, calendar feeds break when text is pasted from Word, messaging was switched off before its replacement shipped, and the mobile app sits at <b>2.0 stars across 902 ratings</b>. There is no public API at all, so every adjacent tool is stuck on manual CSV.</span></div>
+        <div class="row"><span class="lbl">Why not now</span><span class="val">Serving him properly means modelling occupancy minimums, adjacency, per-facility transaction caps, eligibility tests for youth-group pricing — which is a separate SKU, often phone-only, at $15–56/night for 35–50 people against $135–300 for a generic group camp — and an inventory substantially not on the internet. It also means working offline at a trailhead with no signal, which is the one moment the data is life-critical and every cloud tool fails. That is a different product, and the Vision's fifth value — camping-first, deliberately narrow — says so.</span></div>
+        <div class="row"><span class="lbl">And most of it isn't software</span><span class="val">Volunteer leaders arguing this out in the open name three obstacles to going digital: <b>people without email or unwilling to use another form, legal uncertainty about e-signatures on a minor's medical release, and forms sent out too late to be printed before departure</b>. <b>Only the third is a software problem.</b> The settled answer they reach is a hybrid — digital for logistics, printed ink signatures for the medical release — which is why even a well-served troop ends the process at a paper binder. A product that assumes it can absorb the whole workflow has misread the constraint.</span></div>
+        <div class="row"><span class="lbl">What we owe him anyway</span><span class="val"><b>Treat group-site min/max occupancy and vehicle caps as first-class fields rather than dropping them.</b> They already exist in the source data. Rendering "13–30 people, 5 vehicles" costs nothing and is the difference between a usable page and a misleading one. And never state a group booking rule globally — almost nothing here is set centrally, so a confident "group sites open 12 months out" will be wrong often enough to cost trust.</span></div>
+      </div>
+      <div class="note" style="margin:16px 0 14px"><strong>Two things worth knowing before anyone argues to build for him.</strong> First, <b>the incumbent has said publicly that it will not</b> — Scouting America's own volunteer support answers feature requests with "there is no money to rewrite it" and "significant staff reductions due to bankruptcy, including IT," and points leaders at GroupMe instead. That is simultaneously the size of the opening and the reason it stays open. Second, and more useful to us: <b>offline is both unmet and unrequested</b>. Search their forum for working without signal and there is nothing — volunteers stopped asking and quietly reverted to paper ("paper is portable and the batteries never die"). A need with no demand signal will never surface in research, and will still decide whether a product survives contact with a trailhead.</div>
+    </div>
+  </div>
+
+  <!-- TAIL 2 -->
+  <div class="persona" id="loyalist">
+    <div class="p-head">
+      <div class="p-rank"><span class="badge tail">Long tail · 05</span><span class="badge seg">Maximiser</span><span class="badge seg">~5% core segment</span></div>
+      <h3>The Site Loyalist</h3>
+      <div class="sub">Wants site 43 at Blackwoods, second week of July. Already has tools for this.</div>
+    </div>
+    <div class="p-body">
+      <p class="scene">She knows which loop is quietest, which sites back onto the trail, and what time the reservation window opens in her own timezone. She does not need to be told what Acadia is like. She needs to be told, within seconds, that something opened.</p>
+      <div class="tmo">
+        <div class="t"><h4>Time</h4>Will set an alarm for a 7am release six months out. Time is not a constraint; it is a weapon she already uses.</div>
+        <div class="m"><h4>Money</h4>Willing to pay — an entire paid industry exists on this, from $9 single scans to $75/year memberships.</div>
+        <div class="o"><h4>Opportunity</h4>Already solved by incumbents. Campflare scans every campground every ~45 seconds, free, and has sent 9M+ notifications.</div>
+      </div>
+      <div class="rows">
+        <div class="row"><span class="lbl">Why long tail</span><span class="val">Core participants are ~5% of outdoor consumers, and this need is the most competitively served in the entire category. Building <em>for</em> her means competing with a free 45-second scanner on latency alone — a race decided by infrastructure spend, not design.</span></div>
+        <div class="row"><span class="lbl">Why she still matters</span><span class="val">Our alerting backend already does everything hers needs — multi-target watches, per-watch cadence to 5 seconds, delivery — behind a form whose first field is a numeric POI ID. <b>Slice 4 serves her for almost nothing</b>, and the free + in-context + multi-campground combination is one nobody ships. That is worth taking, as long as it is not mistaken for the strategy.</span></div>
+        <div class="row"><span class="lbl">We serve her with</span><span class="val"><div class="screens"><span class="sc">M1a-11 alert in context</span><span class="sc">M1a-12 multi-campground</span><span class="sc">M1a-15 manage a watch</span><span class="sc">M1a-6 site grid</span></div></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="stacks">
+  <div class="sechead"><span class="n">05</span><h2>What each of them actually uses</h2></div>
+  <p class="kicker">The same trip, the same six stages, five different stacks. Read it across a row to see where the category competes, and down a column to see what one person is holding together by hand.</p>
+  <div class="tablewrap">
+    <table class="stax">
+      <tr><th>Stage</th><th>01 Weekender</th><th>02 Beginner</th><th>03 Organizer</th><th>04 Quartermaster</th><th>05 Loyalist</th></tr>
+      <tr><td class="k">Discover</td>
+        <td><span class="app">Instagram / TikTok saves</span><span class="app">Google Maps</span><span class="app">The&nbsp;Dyrt (free)</span></td>
+        <td><span class="app">YouTube</span><span class="app">REI Expert Advice</span><span class="app">Reddit</span></td>
+        <td><span class="app">the group chat</span><span class="app">saved Maps list</span></td>
+        <td><span class="app">last year's trip</span><span class="app">council calendar</span></td>
+        <td><span class="app">memory</span></td></tr>
+      <tr><td class="k">Decide</td>
+        <td><span class="app">Google Maps photos</span><span class="app">park website</span></td>
+        <td><span class="app">YouTube site walk-throughs</span><span class="app">Campendium / Dyrt reviews</span></td>
+        <td><span class="app gap">Google Sheets</span><span class="app">screenshots in chat</span></td>
+        <td><span class="app gap">Google Sheets</span><span class="app">phone call to the ranger</span></td>
+        <td><span class="app">loop maps</span></td></tr>
+      <tr><td class="k">Book</td>
+        <td><span class="app mono">Recreation.gov</span><span class="app mono">state portal</span><span class="app">Hipcamp</span></td>
+        <td><span class="app mono">Recreation.gov</span><span class="app">KOA</span><span class="app">Hipcamp</span></td>
+        <td><span class="app mono">Recreation.gov</span> <em>&times;2–3 transactions</em></td>
+        <td><span class="app gap">telephone, weekdays only</span></td>
+        <td><span class="app mono">Recreation.gov</span><span class="app">an alarm clock</span></td></tr>
+      <tr><td class="k">Watch for an opening</td>
+        <td><span class="app none">nothing — abandons</span></td>
+        <td><span class="app none">nothing — doesn't know this exists</span></td>
+        <td><span class="app">Campnab / Campflare, sometimes</span></td>
+        <td><span class="app none">nothing — the inventory isn't online</span></td>
+        <td><span class="app">Campflare</span><span class="app">Campnab</span><span class="app">Dyrt Alerts</span></td></tr>
+      <tr><td class="k">Coordinate people</td>
+        <td><span class="app">iMessage</span></td>
+        <td><span class="app">iMessage</span></td>
+        <td><span class="app gap">WhatsApp / iMessage</span><span class="app gap">SignUpGenius</span><span class="app gap">Splitwise / Venmo</span></td>
+        <td><span class="app gap">BAND / GroupMe</span><span class="app gap">SignUpGenius</span><span class="app gap">Cheddar Up / Venmo</span><span class="app gap">Scoutbook <em>(record only)</em></span></td>
+        <td><span class="app">—</span></td></tr>
+      <tr><td class="k">In the field</td>
+        <td><span class="app">Google Maps, until signal drops</span></td>
+        <td><span class="app">AllTrails</span><span class="app">a weather app</span></td>
+        <td><span class="app none">screenshots</span></td>
+        <td><span class="app none">a paper binder</span></td>
+        <td><span class="app">onX / Gaia</span></td></tr>
+    </table>
+  </div>
+  <p class="legend"><span class="key mono"></span> the one monopoly &nbsp; <span class="key gap"></span> general-purpose software doing outdoor work &nbsp; <span class="key none"></span> no tool at all</p>
+
+  <h3 class="srch">What the grid says</h3>
+  <ul class="list">
+    <li><strong>Nobody runs fewer than four apps, and no app spans more than two stages.</strong> Every stack is a chain of handoffs held together by a person retyping. That is the actual competitive landscape — not any one rival, but the seams between them.</li>
+    <li><strong>Booking is the only stage with a monopoly, and it is the only stage nobody attacks.</strong> Recreation.gov sits in four of five columns and every competitor in the category — The Dyrt, Campnab, Campflare, Hipcamp's public inventory — ends by handing the user to it. <b>Deciding not to be a booking engine is not a limitation, it is the category's standing consensus.</b> Our job is to be the best thing that hands off to it.</li>
+    <li><strong>Camping software owns <em>Discover</em> and has disappeared by <em>Coordinate</em>.</strong> In the Discover row, four of five columns open a purpose-built outdoor product. In the Coordinate row, none do — every column has switched to a chat app, a spreadsheet, a sign-up page and a payments app. The category stops at the moment a trip becomes other people's business, and hands the rest to general-purpose software that knows nothing about campsites.</li>
+    <li><strong>The stack grows with group size, and it grows in the wrong direction.</strong> One person needs three apps; the organizer needs eight; the quartermaster needs nine and still ends at paper. Each added person adds a tool that knows nothing about the campsite.</li>
+    <li><strong>Two rows are empty for the people we most want.</strong> The Weekender and the Beginner have <em>nothing</em> in the watch row — one abandons, the other doesn't know alerting exists. That is the single clearest product opening on this page, and Slice 4 is already most of the way to filling it.</li>
+    <li><strong>Every column degrades to screenshots or paper at the trailhead.</strong> Even the Loyalist. Signal is where all five stacks fail identically, and where nobody is competing.</li>
+  </ul>
+
+  <div class="note flag"><strong>The pattern in one line: the category sells inspiration and sells latency, and leaves the middle — deciding, agreeing, and carrying the decision — to a group chat.</strong> That middle is exactly what a shareable URL carrying dates, filters and availability addresses, which is why the smallest item in M1a is also the most strategically loaded one. We do not need to replace anything in this grid. We need to be the one artifact that survives being pasted into the chat app in row five.</div>
+
+  <div class="note"><strong>Sourcing, since it was asked.</strong> The Quartermaster column is the only one quote-backed — BAND/GroupMe, SignUpGenius, Google Sheets, Cheddar Up and the 2.0-star Scoutbook app all come from volunteers describing their own stacks in Scouting America's public forum, plus the incumbent's own support replies. Splitwise, Campnab, Campflare, The Dyrt, Hipcamp and Recreation.gov are documented products with published behaviour. <b>The rest of the grid is inference</b> — a plausible reconstruction from the barrier and behaviour data in <a href="#sources">Sources</a>, not observed usage. Confirming or breaking it is precisely what the five interviews are for, and it is a cheap thing to ask: <em>show me every app you opened for your last trip, in order.</em></div>
+</section>
+
+<section id="groups">
+  <div class="sechead"><span class="n">06</span><h2>Why groups break every planning tool</h2></div>
+  <p class="kicker">Families and youth organisations share a shape that consumer software consistently fails to anticipate. It is worth stating separately, because it explains both persona 3 and persona 4.</p>
+  <ul class="list">
+    <li><strong>The system is built for a party of two.</strong> Average group size on a national forest visit is about 2.4 people, and site sizing, vehicle pads, per-site fees and the reservation system are all calibrated to it. Federal sites commonly cap at 6–8; Sequoia and Yellowstone at 6 or "one family."</li>
+    <li><strong>Difficulty is a step function, not a slope.</strong> A three-family trip of twelve is simultaneously five times the design party size, over the ~8-person line that triggers group-permit paperwork, at or over the 12-person wilderness cap that forces a physical split, and in need of either three sites or one scarce group site with an entirely separate booking process. Nothing about that is gradual.</li>
+    <li><strong>Group inventory is a different product with different rules.</strong> Minimum <em>and</em> maximum occupancy, vehicle caps, banded pricing by headcount, a 14-day cancellation cliff against 1 day — and in five of eight states surveyed, no online booking at all. Booking windows vary from 14 days to 12 months <em>within the same agency</em>, so almost nothing here can be stated globally without being wrong somewhere.</li>
+    <li><strong>Headcount is not a number, it's a moving target — and nobody can stabilise it.</strong> Free events lose 40–60% of registrants; even a confirmed yes converts to attendance only about three times in four. Minimums are enforced, so a group that shrinks still pays the block. The one lever that demonstrably works is a commitment signal at sign-up, which is why organised group travel runs on deposits — <em>they are a headcount-stabilisation mechanism, not a financing one</em>. An informal organizer has no contract, no penalty, and a friendship with every defector.</li>
+    <li><strong>The binding constraints are non-spatial.</strong> Adult ratios, sleeping arrangements, driver insurance limits, medical forms with a 72-hour cliff, allergy management at ~8% childhood prevalence. No amount of map, drive time or availability data touches any of it, and a tool that assumes the hard part is finding a campsite is answering the wrong question.</li>
+    <li><strong>Nobody has one tool; everybody has four.</strong> Chat, a sign-up sheet, a spreadsheet, and a payment app — with nothing joining "signed up" to "paid" to "form on file" to "in a car." The free tiers are squeezed exactly where trips get real: one active poll, five items per collection page, custom questions behind a paywall. And the official tools fail hardest at the trip surface, which is why the consumer ones win on attention while the official ones keep the record.</li>
+    <li><strong>The organizer is a single point of failure with no leverage.</strong> One person, 19 hours, 83 messages, fronting the money, blamed twice as often as anyone admits. The most valuable thing a planning product can give this person is not a better search — it is <em>a link that carries the whole decision</em>, so the work becomes reviewable instead of re-explainable.</li>
+  </ul>
+  <div class="note"><strong>What this justifies in M1a.</strong> Exactly one thing, and it is already scoped: dates and filters in the URL, so a destination plus a window is one shareable link. That is the entire group feature set we should build now. The trip object (M1b) is where the rest belongs, and the youth-org rules belong nowhere until the product is deliberately widened.</div>
+</section>
+
+<section id="reach">
+  <div class="sechead"><span class="n">07</span><h2>Who this product will not reach</h2></div>
+  <p class="kicker">The barrier data names people no persona above represents. Naming them is not a plan to serve them — it is a check on claiming the product is for everyone.</p>
+  <div class="tablewrap">
+    <table>
+      <tr><th>Barrier</th><th>Scale</th><th>Can we touch it?</th></tr>
+      <tr><td class="k">Distance</td><td>68% of non-visitors say parks are too far from home</td><td>No — but drive time makes the real cost legible instead of a surprise</td></tr>
+      <tr><td class="k">No transport</td><td>37% of non-visitors overall; <b>65% of Hispanic and 62% of Black non-visitors versus 24% of White non-visitors</b> — the most racially divergent barrier in the federal data</td><td>No</td></tr>
+      <tr><td class="k">No paid time off</td><td>20% of private-sector workers, 46% in leisure and hospitality; 23% of workers took zero vacation days last year</td><td>No</td></tr>
+      <tr><td class="k">Cost of the trip</td><td>43% of campers can't afford the trips they want; 40% of Gen Z cite personal finances</td><td>Barely — surfacing free and first-come inventory is the only lever</td></tr>
+      <tr><td class="k">The booking window</td><td>Same campground, same season: reservation-site campers come from areas with <b>~$6,000 higher median income</b> than first-come campers. Higher-income campers report longer maximum booking windows.</td><td><b>Yes.</b> This is a filter for who has a job that permits planning six months ahead — and a product built around near-term and day-of availability attacks it directly</td></tr>
+      <tr><td class="k">Knowledge</td><td>32% of non-visitors — and 48% of both Hispanic and Black non-visitors — don't know what there is to do; two-thirds of campers hold a false belief about first-come sites</td><td><b>Yes.</b> The cheapest, most fixable barrier in the whole dataset</td></tr>
+      <tr><td class="k">Belonging</td><td>21% of Hispanic and 15% of Black non-visitors say parks are "unpleasant places for me to be," versus 4% of White non-visitors; 51% of Black non-visitors say they're "not that interested"</td><td>Marginally, and only by never adding a moment that confirms it</td></tr>
+    </table>
+  </div>
+  <div class="note flag"><strong>Two barriers are ours, and they are the two the roadmap already points at.</strong> The six-month booking window and the knowledge gap are the only structural constraints a planning product can meaningfully move — and they map exactly onto the date window and onto stating what a campground lacks. Everything else on this table is real, is larger, and is not a software problem. Say so rather than implying otherwise.</div>
+</section>
+
+<section id="changes">
+  <div class="sechead"><span class="n">08</span><h2>What this changes</h2></div>
+  <ul class="list">
+    <li><strong>The Vision's six collapse into three.</strong> First-timers and off-season travellers are both the Aspirational Beginner meeting different failures. Families and the determined planner separate cleanly into an organizer problem and a latency problem. RV and trailer travellers turn out to be a <em>filter</em> — rig length, hookups, clearance — exactly as value 1 already argued, not a persona.</li>
+    <li><strong>Two of three key personas are satisficers,</strong> and the entire category is built for maximisers. That is the strongest argument yet for the weekend shelf and for the date window leading the product rather than following a campground choice.</li>
+    <li><strong>Retention beats acquisition.</strong> 87% of great first experiences convert and only 43% are great. Every honesty rule in the Vision — stamp the freshness, closed is not full, state the absences, never overclaim — is retention machinery, not politeness.</li>
+    <li><strong>Group support is one URL, not a feature area.</strong> Dates and filters in the link serves the organizer today; everything past that is M1b or out of scope.</li>
+    <li><strong>Two numbers were withdrawn under checking.</strong> See <a href="#sources">Sources</a> — the belonging and first-timer-intake figures did not survive a trace to a primary source, and the claims that rested on them have been rewritten around evidence that did.</li>
+    <li><strong>The gap that would change the most is still five interviews.</strong> Specifically: watch one person plan a weekend from scratch, and one organizer coordinate four families. Everything on this page is inference over other people's surveys.</li>
+  </ul>
+</section>
+<section id="sources">
+  <div class="sechead"><span class="n">09</span><h2>Sources</h2></div>
+  <p class="kicker">Every load-bearing number, traced to the document it came from, with the sentence it came from where one exists. Grade A means quoted from a primary report; B means a press release or trade write-up of a study whose full text is paywalled or blocked; C means it did not survive checking and has been removed from the argument.</p>
+
+  <h3 class="srch">A · Quoted from the primary document</h3>
+  <div class="tablewrap">
+    <table>
+      <tr><th>Claim</th><th>Verbatim</th><th>Source</th></tr>
+      <tr><td class="k">54% book within five weeks<br>63% stay within 150 miles</td><td>“Among them, 54% have already booked or plan to book their stay within five weeks of their trip. Of those planning to camp, 63% are staying within 150 miles of their home.”</td><td><a href="https://www.outdoorrecreation.wi.gov/getContentAsset/1eeb3253-645d-47f9-8e4f-f28447d7d890/9a8ee9d5-7fbc-45fe-997b-9666ff2df2d1/2025-koa-camping-outdoor-hospitality-report-vlr.pdf?language=en">KOA 2025 Camping &amp; Outdoor Hospitality Report</a>, p.12</td></tr>
+      <tr><td class="k">28% blocked by gear cost</td><td>“Cannot afford to buy the gear needed for the outdoor experience — 28%” (campers), against 43% for “cannot afford to take the number or type of trips I would like to take”</td><td>Same report, <em>Barriers to Camping More Often</em>, p.38</td></tr>
+      <tr><td class="k">~4 in 10 recent entrants lapse</td><td>“62% of campers who started camping in the past 3 years plan to camp again in 2025”</td><td>Same report, p.24</td></tr>
+      <tr><td class="k">87% retention on a great first trip</td><td>“87% of those who report having a great experience are likely to continue camping in the future.”</td><td>Same report, p.23</td></tr>
+      <tr><td class="k">22% camp with grandparents</td><td>“22% of families camp with grandparents and/or other relatives”; multigenerational travel touches “28% of Campers / 22% of Camping Trips / 47% of Boomers”</td><td>Same report, pp.34–37</td></tr>
+      <tr><td class="k">Sold out is the modern default<br>56.1% vs 10.6%</td><td>56.1% of campers had a difficult time booking a site in 2024 because campgrounds were full; the same figure was 10.6% in 2019</td><td><a href="https://thedyrt.com/press/more-than-half-of-campers-report-difficulty-booking-campsites-because-they-are-sold-out/">The Dyrt, 2025 Camping Report</a></td></tr>
+    </table>
+  </div>
+
+  <h3 class="srch">B · Secondary — cite with the hedge attached</h3>
+  <div class="tablewrap">
+    <table>
+      <tr><th>Claim</th><th>Status</th><th>Source</th></tr>
+      <tr><td class="k">A quarter feel unwelcome outdoors; 8 in 10 of those are 16–34</td><td>Brand-run survey, reported in the brand's own journal; full methodology and sample size not published, and the page blocks direct retrieval. Directionally consistent with the participation literature. <b>Do not put a decimal on it.</b></td><td><a href="https://www.hellyhansen.com/journal/barriers-to-the-outdoors-lack-of-knowledge-prevents-many-from-getting-outdoors">Helly Hansen, <em>Barriers to the Outdoors</em></a></td></tr>
+      <tr><td class="k">“Only 43% call the first trip great”</td><td>Read off a stacked chart carrying two series (amenity campground vs rustic), not from a sentence. The direction is safe; the exact figure is not. Verify before it leaves this doc.</td><td>KOA 2025, p.23 chart</td></tr>
+      <tr><td class="k">Two-thirds believe a tent or vehicle is required for a first-come site</td><td>Repeated in the earlier research pass; no primary instrument located on this pass. Treat as a hypothesis to test in the five interviews, not as a finding.</td><td>—</td></tr>
+    </table>
+  </div>
+
+  <h3 class="srch">C · Withdrawn</h3>
+  <div class="note flag"><strong>Two figures failed the trace and are gone from the argument.</strong> “79% of young adults wish they had more outdoor skills” and “38% report feeling unwelcome in the outdoor community” could not be tied to any published instrument — no report, sample, or year. Likewise “first-time camper intake fell 5.8M to 2.6M”: the only series in the KOA data with that shape is <em>new glampers</em> (4.89M in 2021 → 2.12M in 2022 → 2.95M in 2024), which is a different population and a different set of years. The Aspirational Beginner's case is now made from the gear-cost, lapse-rate and first-trip-retention figures above, which are quotable. <strong>The persona did not weaken when the unsourced numbers came out — which is itself worth knowing.</strong></div>
+
+  <div class="note"><strong>A standing rule for this document set.</strong> A number without a traceable source is not evidence, it is a rumour with a decimal point. Anything that reaches a spec, a PR description or a stakeholder deck should come from group A, or carry group B's hedge in the same sentence. Everything here is still other people's survey data — none of it is interview-derived, and the five interviews named above remain the highest-value research we have not done.</div>
+</section>
+</main>
+
+<style>
+
+.stax td{font-size:12.9px;}
+.stax{min-width:860px;}
+.app{display:block;margin-bottom:3px;}
+.app.mono{font-family:'DM Mono',monospace;font-size:11.6px;letter-spacing:-.01em;}
+.app.gap{color:var(--ink-2);}
+.app.gap::before,.app.none::before,.app.mono::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+.app.mono::before{background:var(--c-600);}
+.app.gap::before{background:var(--ink-4,#9b978f);}
+.app.none::before{background:transparent;border:1px solid var(--ink-4,#9b978f);}
+.app.none{color:var(--ink-3);font-style:italic;}
+.legend{font-size:11.6px;color:var(--ink-3);margin:-6px 0 4px;}
+.legend .key{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:4px;vertical-align:middle;}
+.legend .key.mono{background:var(--c-600);}
+.legend .key.gap{background:var(--ink-4,#9b978f);}
+.legend .key.none{border:1px solid var(--ink-4,#9b978f);}
+.srch{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3,#6b6862);margin:22px 0 9px;font-weight:600;}
+#sources td{vertical-align:top;font-size:13.6px;}
+#sources td:nth-child(2){max-width:44ch;}
+a.cite{font-size:10px;letter-spacing:.04em;text-transform:uppercase;text-decoration:none;opacity:.7;margin-left:5px;}
+</style>
+
+<footer>Compiled 27 Aug 2026, sourced 28 Aug 2026 — see Sources for the trace. Compiled from published participation, barrier and behavioural research — OIA/Outdoor Foundation participation and ConsumerVue segments, KOA North American Camping Report, NPS Comprehensive Survey of the American Public (CSAP3), Rice et al. on reservation equity, Crawford &amp; Godbey's constraints model, Scouting America's Guide to Safe Scouting, Girl Scouts Safety Activity Checkpoints, Recreation.gov and eight state park systems, plus Splitwise, KAYAK, Klook and Vrbo group-travel data. Not interview-derived. Sits beside the Vision, M0, M1, M2, research and sprint documents.</footer>
+
+<style id="anchor-offset">
+[id]{scroll-margin-top:18px;}
+</style>
+<style id="docset-nav">
+.docs,.docs2{display:grid;gap:8px;}
+.docs{grid-template-columns:repeat(4,1fr);margin:0 0 8px;}
+.docs2{grid-template-columns:repeat(4,1fr);margin:0 0 28px;}
+@media (max-width:720px){.docs,.docs2{grid-template-columns:repeat(2,1fr);}}
+.docs .doc,.docs2 .doc{display:grid;gap:2px;text-decoration:none;
+  padding:10px 13px;border-radius:10px;
+  border:1px solid var(--border-subdued,var(--line-2,#d3cfc4));
+  background:var(--surface-base,var(--card,#fff));}
+.docs2 .doc{padding:8px 12px;background:transparent;border-style:dashed;box-shadow:none;}
+.docs .doc:hover,.docs2 .doc:hover{background:var(--surface-sunken,var(--tint,#f3f1ea));}
+.docs .doc b,.docs2 .doc b{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;
+  font-size:14px;color:var(--gray-900,var(--ink,#141413));}
+.docs2 .doc b{font-size:13px;}
+.docs .doc i,.docs2 .doc i{font-style:normal;font-size:11px;
+  color:var(--gray-600,var(--ink-3,#847f74));letter-spacing:.01em;}
+.docs .doc--here,.docs2 .doc--here{border-style:solid;
+  background:var(--gray-900,var(--ink,#141413));
+  border-color:var(--gray-900,var(--ink,#141413));}
+.docs .doc--here b,.docs2 .doc--here b{color:var(--surface-page,var(--page,#faf9f5));}
+.docs .doc--here i,.docs2 .doc--here i{color:var(--gray-400,var(--ink-4,#a9a49a));}
+</style>
