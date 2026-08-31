@@ -8,17 +8,15 @@ import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.mapCatching
 import ca.floo.roadtrip.route.common.receiveJsonBody
+import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.service.api.availabilityErrorDto
-import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.BulkAvailabilityRequest
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.plugins.origin
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
@@ -61,9 +59,8 @@ internal fun Route.bulkAvailabilityRoutes(
                         is RouteBodyResult.Valid -> body.value
                     }
 
-                call.respondText(
-                    encodeAvailabilityJson(controller.availabilityForPois(request)),
-                    ContentType.Application.Json,
+                call.respondEncodedJson(
+                    controller.availabilityForPois(request),
                     HttpStatusCode.OK,
                 )
             }.describeApi(
@@ -116,5 +113,5 @@ private suspend fun ApplicationCall.respondBulkError(
     error: String,
     status: HttpStatusCode,
 ) {
-    respondText(encodeAvailabilityJson(availabilityErrorDto(error)), ContentType.Application.Json, status)
+    respondEncodedJson(availabilityErrorDto(error), status)
 }

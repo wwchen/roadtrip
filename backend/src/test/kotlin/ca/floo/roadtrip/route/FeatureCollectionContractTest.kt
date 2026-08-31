@@ -5,9 +5,8 @@ import ca.floo.roadtrip.model.api.poi.PoiCtaSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailPropertiesSchema
 import ca.floo.roadtrip.model.domain.poi.PoiRow
-import ca.floo.roadtrip.route.api.pois.encodeOnRouteJson
 import ca.floo.roadtrip.route.api.pois.onRouteFeatureCollection
-import ca.floo.roadtrip.service.poi.encodePoiFeatureJson
+import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.service.poi.poiFeatureCollection
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
@@ -47,7 +46,7 @@ class FeatureCollectionContractTest {
                 """"properties":{"category":"campground","subcategory":"federal","agency":"National Park Service"}}""" +
                 """]}"""
         )
-        assertEquals(expected, encodePoiFeatureJson(poiFeatureCollection(rows, truncated = false)))
+        assertEquals(expected, encodeApiJson(poiFeatureCollection(rows, truncated = false)))
     }
 
     @Test
@@ -63,7 +62,7 @@ class FeatureCollectionContractTest {
                     lat = 49.0,
                 ),
             )
-        val out = encodePoiFeatureJson(poiFeatureCollection(rows, truncated = false))
+        val out = encodeApiJson(poiFeatureCollection(rows, truncated = false))
         assert(!out.contains("subcategory"))
         assert(!out.contains("agency"))
         assert(out.contains(""""category":"planet-fitness""""))
@@ -71,7 +70,7 @@ class FeatureCollectionContractTest {
 
     @Test
     fun `truncated true is reflected verbatim`() {
-        val out = encodePoiFeatureJson(poiFeatureCollection(emptyList(), truncated = true))
+        val out = encodeApiJson(poiFeatureCollection(emptyList(), truncated = true))
         assertEquals("""{"type":"FeatureCollection","truncated":true,"features":[]}""", out)
     }
 
@@ -95,12 +94,12 @@ class FeatureCollectionContractTest {
                 """"properties":{"category":"campground","subcategory":"federal","agency":"National Park Service"}}""" +
                 """]}"""
         )
-        assertEquals(expected, encodeOnRouteJson(onRouteFeatureCollection(rows)))
+        assertEquals(expected, encodeApiJson(onRouteFeatureCollection(rows)))
     }
 
     @Test
     fun `on-route empty input produces empty feature list with no truncated flag`() {
-        val out = encodeOnRouteJson(onRouteFeatureCollection(emptyList()))
+        val out = encodeApiJson(onRouteFeatureCollection(emptyList()))
         assertEquals("""{"type":"FeatureCollection","features":[]}""", out)
     }
 
@@ -171,13 +170,13 @@ class FeatureCollectionContractTest {
                 """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
                 """"season":"May-Oct","near":"Banff"}}}}"""
         )
-        assertEquals(expected, encodePoiFeatureJson(feature))
+        assertEquals(expected, encodeApiJson(feature))
     }
 
     @Test
     fun `single feature detail — null optional fields omitted`() {
         val out =
-            encodePoiFeatureJson(
+            encodeApiJson(
                 detailFeature(
                     id = 1,
                     source = "osm",
@@ -207,7 +206,7 @@ class FeatureCollectionContractTest {
     @Test
     fun `single feature detail — availability support is provider agnostic`() {
         val out =
-            encodePoiFeatureJson(
+            encodeApiJson(
                 detailFeature(
                     id = 117,
                     source = "reserveamerica-ny-campgrounds",
@@ -241,7 +240,7 @@ class FeatureCollectionContractTest {
     @Test
     fun `single feature detail — name with quote and backslash is escaped`() {
         val out =
-            encodePoiFeatureJson(
+            encodeApiJson(
                 detailFeature(
                     id = 7,
                     source = "test",

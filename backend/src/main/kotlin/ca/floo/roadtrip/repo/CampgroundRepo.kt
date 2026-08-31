@@ -10,13 +10,9 @@ import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRefLegacyJson
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL
-import java.time.Instant
-import java.time.OffsetDateTime
 
 class CampgroundRepo(
     private val ctx: DSLContext,
@@ -60,12 +56,6 @@ class CampgroundRepo(
                 "$baseSelect WHERE cg.id = ? AND cg.deleted_at IS NULL",
                 id,
             )?.let(::fromRecord)
-
-    fun findAll(): List<Campground> =
-        ctx
-            .fetch(
-                "$baseSelect WHERE cg.deleted_at IS NULL ORDER BY cg.id",
-            ).map(::fromRecord)
 
     fun findByPoi(poiId: Long): Campground? =
         ctx
@@ -193,17 +183,11 @@ class CampgroundRepo(
         )
     }
 
-    private fun parseJsonElement(raw: String): JsonElement = Json.parseToJsonElement(raw)
-
     private fun bookingProviderRefJson(campground: Campground): String? {
         val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
         val ref = BookingProviderRef.parse(provider, campground.bookingProviderRef ?: return null) ?: return null
         return BookingProviderRefLegacyJson.toLegacyJson(ref)
     }
-
-    private fun Record.instant(column: String): Instant = get(column, OffsetDateTime::class.java).toInstant()
-
-    private fun Record.nullableInstant(column: String): Instant? = get(column, OffsetDateTime::class.java)?.toInstant()
 
     private fun addInClause(
         clauses: MutableList<String>,

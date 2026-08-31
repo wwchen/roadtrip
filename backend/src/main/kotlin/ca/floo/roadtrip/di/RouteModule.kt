@@ -91,7 +91,6 @@ internal fun Application.registerKoinRoutes() {
     val mapboxGeocoder: ca.floo.roadtrip.client.mapbox.MapboxGeocoder by inject()
     val ingestController: IngestController by inject()
     val userSettings: UserSettingsService by inject()
-    val userRepo: UserRepo by inject()
     val slackInteractivity: SlackInteractivityWiring? = getKoin().getOrNull()
     val readiness: ReadinessService by inject()
     val schedulerScope: CoroutineScope by inject()
@@ -112,7 +111,7 @@ internal fun Application.registerKoinRoutes() {
 
     routing {
         apiDocsRoutes()
-        authRoutes(wiring = authWiring, userRepo = userRepo)
+        authRoutes(wiring = authWiring)
         settingsRoutes(userSettings)
         poiRoutes(poiService)
         availabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
@@ -140,7 +139,7 @@ internal fun Application.registerKoinRoutes() {
         geocodeRoutes(mapboxGeocoder)
         buildInfoRoutes(config.buildInfo)
         healthRoutes(readiness)
-        adminIngestRoutes(ingestController, ctx)
+        adminIngestRoutes(ingestController)
         // No /test/* notification routes: they took a caller-supplied recipient
         // list / Slack channel and sent on the deployment's own Resend key and
         // bot token, so any signed-in account could aim the deployment's
@@ -291,8 +290,8 @@ private fun authRouteWiring(
                     ),
                 userProvisioningService = UserProvisioningService(ctx, authConfig.roleGrants),
                 sessionService = sessionService,
+                userRepo = userRepo,
             ),
-        userRepo = userRepo,
         flowSigningKey = LoginFlowState.signingKeyFrom(authConfig.clientSecret),
         isCookieSecure = authConfig.isCookieSecure,
         sessionMaxAgeSeconds = authConfig.sessionTtl.seconds.toInt(),

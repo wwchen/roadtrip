@@ -18,13 +18,13 @@ import ca.floo.roadtrip.model.domain.ingest.IngestRunPhaseRow
 import ca.floo.roadtrip.model.domain.ingest.TargetIngestStatusRow
 import ca.floo.roadtrip.model.metadata.ingest.RunKind
 import ca.floo.roadtrip.model.metadata.ingest.RunOutcome
-import ca.floo.roadtrip.repo.AdminIngestReadRepo
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.pathParam
 import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.support.TargetBusyException
 import ca.floo.roadtrip.support.TargetNotFoundException
@@ -37,16 +37,9 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.json.Json
-import org.jooq.DSLContext
 
-@OptIn(ExperimentalSerializationApi::class)
-private val adminIngestJson =
-    Json {
-        encodeDefaults = true
-        explicitNulls = false
-    }
+// How many parent runs the admin runs list returns; the page shows one screenful.
+private const val RECENT_RUNS_LIMIT = 50
 
 // Admin surface for the ingestion controller (RFC 0004 / issue #44).
 //
@@ -63,12 +56,7 @@ private val adminIngestJson =
 // /api/admin/* (existing tunnel). Locally the routes are reachable on
 // 127.0.0.1:8765 directly for Tilt buttons and `make data-import`. If you ever
 // expose dev to the internet, bind to loopback only.
-fun Route.adminIngestRoutes(
-    controller: IngestController,
-    ctx: DSLContext,
-) {
-    val readRepo = AdminIngestReadRepo(ctx)
-
+fun Route.adminIngestRoutes(controller: IngestController) {
     route("/api") {
         route("/admin") {
             route("/data") {
@@ -85,8 +73,8 @@ fun Route.adminIngestRoutes(
                 route("/runs") {
                     get {
                         val target = call.queryParam("target")
-                        call.respondAdminJson(listRecent(readRepo, target, limit = 50))
-                    }.describeApi("admin", "Last 50 parent ingest runs (filter by ?target=)")
+                        call.respondAdminJson(listRecent(controller, target, limit = RECENT_RUNS_LIMIT))
+                    }.describeApi("admin", "Last $RECENT_RUNS_LIMIT parent ingest runs (filter by ?target=)")
                         .access(RouteAccess.Anonymous)
 
                     get("/{id}") {
@@ -95,7 +83,7 @@ fun Route.adminIngestRoutes(
                             call.respondAdminJson(ErrorNotFoundSchema(error = "bad id"), HttpStatusCode.BadRequest)
                             return@get
                         }
-                        val body = runDetail(readRepo, id)
+                        val body = runDetail(controller, id)
                         if (body == null) {
                             call.respondAdminJson(ErrorNotFoundSchema(error = "not found", id = id), HttpStatusCode.NotFound)
                         } else {
@@ -106,7 +94,7 @@ fun Route.adminIngestRoutes(
                 }
 
                 get("/status") {
-                    call.respondAdminJson(statusByTarget(readRepo, controller.knownTargets()))
+                    call.respondAdminJson(statusByTarget(controller))
                 }.describeApi("admin", "Per-target ingest run status + age in seconds")
                     .access(RouteAccess.Anonymous)
             }
@@ -210,32 +198,29 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
 }
 
 private fun listRecent(
-    readRepo: AdminIngestReadRepo,
+    controller: IngestController,
     target: String?,
     limit: Int,
 ): RunsListSchema =
     RunsListSchema(
-        runs = readRepo.listRecent(target, limit).map { it.toSchema() },
+        runs = controller.recentRuns(target, limit).map { it.toSchema() },
     )
 
 private fun runDetail(
-    readRepo: AdminIngestReadRepo,
+    controller: IngestController,
     id: Long,
-): RunDetailSchema? = readRepo.runDetail(id)?.toSchema()
+): RunDetailSchema? = controller.runDetail(id)?.toSchema()
 
-private fun statusByTarget(
-    readRepo: AdminIngestReadRepo,
-    targets: Set<String>,
-): StatusResponseSchema =
+private fun statusByTarget(controller: IngestController): StatusResponseSchema =
     StatusResponseSchema(
-        targets = readRepo.statusByTarget(targets).map { it.toSchema() },
+        targets = controller.statusByKnownTarget().map { it.toSchema() },
     )
 
 private suspend inline fun <reified T> ApplicationCall.respondAdminJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondEncodedJson(adminIngestJson, value, status)
+    respondEncodedJson(value, status)
 }
 
 private fun RunOutcome.toSchema(): RunOutcomeSchema =
@@ -280,7 +265,7 @@ private fun IngestRunPhaseRow.toSchema(): IngestRunPhaseSchema =
         exitCode = exitCode,
         startedAt = startedAt.toString(),
         completedAt = completedAt?.toString(),
-        counts = countsJson?.let { adminIngestJson.parseToJsonElement(it) },
+        counts = countsJson?.let { roadtripApiJson.parseToJsonElement(it) },
         notes = notes,
     )
 

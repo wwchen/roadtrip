@@ -25,6 +25,10 @@ import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.time.Instant
 
+// How many unmatched leaf names the summary log names; enough to start a
+// diagnosis without turning one line into a dump.
+private const val LOGGED_MISS_SAMPLES = 5
+
 // Aspira leaves + heterogeneous geometry sources → canonical campgrounds.
 //
 // `/api/maps` carries booking IDs but no lat/lng (the SPA renders against
@@ -247,7 +251,7 @@ class AspiraCampgroundsEtl(
             miss,
             skippedContainer,
             skippedNonBookable,
-            missSamples.take(5),
+            missSamples.take(LOGGED_MISS_SAMPLES),
         )
         return campgrounds.asSequence().map { TransformResult.Ok(it) }
     }

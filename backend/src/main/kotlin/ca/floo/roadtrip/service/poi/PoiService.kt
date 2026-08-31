@@ -10,8 +10,6 @@ import ca.floo.roadtrip.model.api.poi.SlimPoiPropertiesSchema
 import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.model.domain.poi.PoiRow
 import ca.floo.roadtrip.repo.PoiServingRepo
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 // Hard cap. The Mapbox/MapLibre frontend chokes on >5k features per source,
@@ -20,13 +18,6 @@ import kotlinx.serialization.json.Json
 internal const val POI_LIMIT: Int = 2000
 
 private const val MIN_SEARCH_QUERY_LENGTH = 2
-
-@OptIn(ExperimentalSerializationApi::class)
-private val poiFeatureJson =
-    Json {
-        encodeDefaults = true
-        explicitNulls = false
-    }
 
 private val poiCategoryAliases =
     mapOf(
@@ -147,7 +138,3 @@ internal fun poiFeatureCollection(
                 )
             },
     )
-
-internal fun encodePoiFeatureJson(value: PoiFeatureCollectionSchema): String = poiFeatureJson.encodeToString(value)
-
-internal fun encodePoiFeatureJson(value: PoiDetailFeatureSchema): String = poiFeatureJson.encodeToString(value)

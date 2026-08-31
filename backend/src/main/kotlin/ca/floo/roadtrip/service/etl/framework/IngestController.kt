@@ -1,10 +1,14 @@
 package ca.floo.roadtrip.service.etl.framework
 
+import ca.floo.roadtrip.model.domain.ingest.IngestRunDetailRow
+import ca.floo.roadtrip.model.domain.ingest.IngestRunListItemRow
+import ca.floo.roadtrip.model.domain.ingest.TargetIngestStatusRow
 import ca.floo.roadtrip.model.metadata.ingest.Phase
 import ca.floo.roadtrip.model.metadata.ingest.RunKind
 import ca.floo.roadtrip.model.metadata.ingest.RunOutcome
 import ca.floo.roadtrip.model.metadata.ingest.Target
 import ca.floo.roadtrip.observability.RoadtripMetrics
+import ca.floo.roadtrip.repo.AdminIngestReadRepo
 import ca.floo.roadtrip.repo.IngestRunRepo
 import ca.floo.roadtrip.support.TargetBusyException
 import ca.floo.roadtrip.support.TargetNotFoundException
@@ -55,12 +59,23 @@ class IngestController(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val ingestRunRepo = IngestRunRepo(ctx)
+    private val adminReadRepo = AdminIngestReadRepo(ctx)
 
     private val locks: Map<String, Mutex> = importTargets.keys.associateWith { Mutex() }
 
     private val active: MutableMap<String, Long> = mutableMapOf()
 
     fun knownTargets(): Set<String> = importTargets.keys
+
+    /** Run history for the admin surface; the route stays out of the repo. */
+    fun recentRuns(
+        target: String?,
+        limit: Int,
+    ): List<IngestRunListItemRow> = adminReadRepo.listRecent(target, limit)
+
+    fun runDetail(id: Long): IngestRunDetailRow? = adminReadRepo.runDetail(id)
+
+    fun statusByKnownTarget(): List<TargetIngestStatusRow> = adminReadRepo.statusByTarget(knownTargets())
 
     /** Fan-out targets for [kind]. Import order is the registry-derived execution order. */
     fun fanOutTargets(kind: RunKind): List<String> =

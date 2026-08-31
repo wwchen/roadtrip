@@ -4,7 +4,6 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
 import kotlinx.serialization.json.JsonObject
-import org.jooq.DSLContext
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -37,12 +36,12 @@ class AlertProviderRegistryTest {
         override val hostsAlerts: Boolean = false
 
         override fun onWatchActivated(
-            txn: DSLContext,
+            scope: WatchAlertScope,
             watch: AvailabilityWatchRepo.Watch,
         ) = Unit
 
         override fun onWatchDeactivated(
-            txn: DSLContext,
+            scope: WatchAlertScope,
             watch: AvailabilityWatchRepo.Watch,
         ) = Unit
     }
