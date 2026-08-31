@@ -136,4 +136,6 @@ openssl rand -base64 32 | ./secrets/manage.py set ENCRYPTION_KEY
 
 (or run `./secrets/manage.py set ENCRYPTION_KEY` interactively and paste an `openssl rand -base64 32` value; set it for both local and prod overlays per the prompts. `required_in: [prod]` means a prod deploy fails boot until this is done; `make run` still starts locally without it — per-user secret storage is simply disabled and answers 503 until the local value is set. `manage.py check` also reports the missing prod value until then.)
 
+**The local overlay value is not optional if sandboxes are used.** Sandbox deploys run the backend with `ROADTRIP_PROFILE=prod` (`docker-compose.sandbox.yml`) but source their secret *values* from the **local** overlay — `scripts/deploy.sh` sets `SANDBOX_SECRETS_ENV="local"` and `_sandbox_compose` runs `manage.py exec local -- docker compose`. Because `SecretsBootstrap.validate` keys off the profile, ENCRYPTION_KEY is required there, so a sandbox deploy fails boot with `MissingSecretsException` until `manage.py set` writes the value into the local overlay. Set both overlays.
+
 Rotation note for the operator: rotating this key orphans every existing `*_cipher` blob (they fail to decrypt and degrade per-user, they do not throw), so rotation means users re-enter stored secrets.
