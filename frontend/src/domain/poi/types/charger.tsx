@@ -7,6 +7,7 @@
 import { Button } from '@ui';
 import {
   DirectionsButton,
+  SharePoiButton,
   UpstreamTable,
   coordinatesOf,
   subline,
@@ -122,6 +123,7 @@ export function ChargerPoiPage({ feature, variant, onClose }: PoiTypeProps) {
             Open in Google Maps
           </Button>
         ) : null}
+        <SharePoiButton id={feature.id} />
       </PoiActions>
     ),
     ...(busy

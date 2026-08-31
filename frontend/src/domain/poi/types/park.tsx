@@ -11,6 +11,7 @@ import type { PoiFeature } from '@/lib/poi';
 import {
   DirectionsButton,
   ProviderHtml,
+  SharePoiButton,
   UpstreamTable,
   coordinatesOf,
   eyebrowFor,
@@ -130,6 +131,7 @@ export function ParkPoiPage({ feature, variant, onClose }: PoiTypeProps) {
         <Button variant="primary" href={url} target="_blank" rel="noreferrer">
           {host === NPS_HOST ? `Open on ${NPS_HOST}` : 'Search the web'}
         </Button>
+        <SharePoiButton id={feature.id} />
       </PoiActions>
     ),
     ...(about

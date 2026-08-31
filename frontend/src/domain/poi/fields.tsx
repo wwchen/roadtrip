@@ -6,6 +6,8 @@ import { Button, Icon } from '@ui';
 import { distanceKm, formatDistance } from '@/lib/geo';
 import type { PoiFeature } from '@/lib/poi';
 import { formatPhone, phoneNumbers, telHref } from '@/lib/phone';
+import { poiShareUrl } from '@/lib/share-links';
+import { useCopyLink } from '@/lib/use-copy-link';
 import { useMapStore } from '@/stores/mapStore';
 import { addPoiToTrip } from '@/domain/trip/add-poi-to-trip';
 import { useTripStore } from '@/stores/tripStore';
@@ -104,6 +106,34 @@ export function DirectionsButton({ name, lng, lat, kind = 'PLACE', onAdded }: Di
       }}
     >
       <Icon name="navigation" aria-hidden="true" />
+    </Button>
+  );
+}
+
+const COPY_POI_LABEL = 'Copy link to this place';
+const COPIED_POI_LABEL = 'Link copied';
+
+/**
+ * "Copy link to this place" — the POI half of the share writers.
+ *
+ * `poiShareUrl` builds from the current `pathname`, so the same control is correct
+ * on both surfaces that render an actions row: it hands out `/?poi=<id>` from the
+ * map drawer and `<poi page>?poi=<id>` from the routed page, and neither inherits
+ * the query of the link that opened the tab.
+ *
+ * Icon-only beside `DirectionsButton`, and for the same reason: the actions row is
+ * a row of affordances, not a row of sentences. The label is the whole disclosure,
+ * so it changes with the state rather than being re-labelled silently.
+ */
+export function SharePoiButton({ id }: { id: string | number | null | undefined }) {
+  const share = useCopyLink();
+  const url = poiShareUrl(id);
+  if (!url) return null;
+
+  const label = share.copied ? COPIED_POI_LABEL : COPY_POI_LABEL;
+  return (
+    <Button variant="tertiary" iconOnly aria-label={label} title={label} onClick={() => share.copy(url)}>
+      <Icon name={share.copied ? 'check' : 'link'} aria-hidden="true" />
     </Button>
   );
 }
