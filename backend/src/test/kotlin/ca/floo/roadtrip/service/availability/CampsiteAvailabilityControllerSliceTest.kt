@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
@@ -76,7 +76,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
      * Builds a controller over a fresh POI/campground with one seeded campsite
      * per entry in [siteTypes]. Mirrors the fake repos/services
      * `CampsiteAvailabilityServiceTest` builds: real repos over the shared test
-     * DB, a [SliceFakeAvailabilityProvider] standing in for rec.gov, and a
+     * DB, a [FakeAvailabilityProvider] standing in for rec.gov, and a
      * failover fetcher stubbed to answer with a canned batch instead of
      * calling out. `catalogService` and `watchCapabilityService` are wired
      * with real implementations since `poiAvailabilitySlice` never exercises
@@ -101,7 +101,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val campgroundRepo = CampgroundRepo(ctx)
         val dateResolver = AvailabilityDateResolver(PoiRepo(ctx))
-        val providers = listOf(SliceFakeAvailabilityProvider(BookingProvider.RECGOV))
+        val providers = listOf(FakeAvailabilityProvider(BookingProvider.RECGOV))
         val targets =
             DbAvailabilityTargetResolver(
                 poiRepo = PoiRepo(ctx),
@@ -131,25 +131,6 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                 ),
         )
     }
-}
-
-private class SliceFakeAvailabilityProvider(
-    override val id: BookingProvider,
-) : AvailabilityProvider {
-    override val capabilities =
-        AvailabilityProviderCapabilities(
-            supportsInternalPolling = true,
-            bookingHorizonDays = 180,
-            maxPollWindowDays = 60,
-        )
-
-    override fun isEnabled(): Boolean = true
-
-    override suspend fun availability(
-        campground: Campground,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used: the canned fetcher answers instead")
 }
 
 /**

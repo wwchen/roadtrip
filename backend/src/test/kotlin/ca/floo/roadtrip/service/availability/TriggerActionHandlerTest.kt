@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
+import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campsiteFixture
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
@@ -18,7 +18,6 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.testCampground
 import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
@@ -668,25 +667,6 @@ class TriggerActionHandlerTest {
         }
     }
 
-    private class FakeAvailabilityProvider(
-        override val id: BookingProvider,
-    ) : AvailabilityProvider {
-        override val capabilities: AvailabilityProviderCapabilities =
-            AvailabilityProviderCapabilities(
-                supportsInternalPolling = true,
-                bookingHorizonDays = 365,
-                maxPollWindowDays = 60,
-            )
-
-        override fun isEnabled(): Boolean = true
-
-        override suspend fun availability(
-            campground: Campground,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-    }
-
     private fun triggerOpening(parentRef: BookingProviderRef = BookingProviderRef.RecGov(facilityId = "100")): TriggerOpening {
         val providerId =
             when (parentRef) {
@@ -713,7 +693,11 @@ class TriggerActionHandlerTest {
             resolvedTarget =
                 ResolvedAvailabilityTarget(
                     campsite = campsite,
-                    provider = FakeAvailabilityProvider(providerId),
+                    provider =
+                        FakeAvailabilityProvider(
+                            id = providerId,
+                            bookingHorizonDays = FAKE_PROVIDER_YEAR_HORIZON_DAYS,
+                        ),
                     campground = campground,
                     parentPoiId = 100L,
                     dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),

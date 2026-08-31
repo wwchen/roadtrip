@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.ApiCacheEntity
+import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.PoiDateContext
@@ -260,23 +260,4 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
             return FailoverResult(batch = batch, servedBy = providers.first().id, attempts = emptyList())
         }
     }
-}
-
-private class FakeAvailabilityProvider(
-    override val id: BookingProvider,
-) : AvailabilityProvider {
-    override val capabilities =
-        AvailabilityProviderCapabilities(
-            supportsInternalPolling = true,
-            bookingHorizonDays = 180,
-            maxPollWindowDays = 60,
-        )
-
-    override fun isEnabled(): Boolean = true
-
-    override suspend fun availability(
-        campground: Campground,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used: the capturing fetcher answers instead")
 }
