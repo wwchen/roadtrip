@@ -73,10 +73,12 @@ export interface TripState {
   /**
    * The row that should take keyboard focus, once.
    *
-   * In the store rather than in the topbar's own state because it has two
-   * producers: the topbar's own edits, and the drawer's Directions button (which
-   * enters directions mode and wants the empty origin focused). The consumer —
-   * `StopRow` — clears it through `clearFocus`, so it is a request, not a mode.
+   * In the store rather than in the topbar's own state because it has several
+   * producers: the topbar's own edits, the drawer's Directions button (which
+   * enters directions mode and wants the empty origin focused), and the map's
+   * blocked-geolocation toast, whose "Search a place" action sends the user to
+   * row 0. The consumer — `StopRow` — clears it through `clearFocus`, so it is a
+   * request, not a mode.
    */
   focusRow: number | null;
 

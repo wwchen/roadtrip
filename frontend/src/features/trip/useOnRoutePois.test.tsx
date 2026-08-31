@@ -24,17 +24,27 @@ const wrapper = ({ children }: { children: React.ReactNode }) => {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 };
 
+/** Slack past the debounce window, so a boundary rounding cannot leave it pending. */
+const DEBOUNCE_SLACK_MS = 20;
+
 /**
  * Let the 250ms debounce fire inside `act`.
  *
  * Without this the timer resolves after the test's last await and React warns
  * about an update outside `act` — the state change is real, it just happens on a
  * timer nobody awaited.
+ *
+ * Fake timers only for the span of the wait: the surrounding `waitFor`s poll
+ * against the stubbed fetch's real microtasks, and the debounce is the only
+ * wall-clock delay in the suite worth skipping rather than sleeping through.
  */
-const settleDebounce = () =>
-  act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, ON_ROUTE_DEBOUNCE_MS + 20));
+const settleDebounce = async () => {
+  vi.useFakeTimers();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ON_ROUTE_DEBOUNCE_MS + DEBOUNCE_SLACK_MS);
   });
+  vi.useRealTimers();
+};
 
 /** A trip with a fetched route, which is what `selectRouteActive` needs. */
 const withActiveRoute = () => {

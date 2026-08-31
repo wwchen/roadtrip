@@ -14,10 +14,11 @@ import type { Watch } from '@/api/watches-api';
 import { TRIGGER_KIND_ATC, TRIGGER_KIND_SLACK_NOTIFY, TRIGGER_KIND_EMAIL_NOTIFY } from '@/lib/watch-triggers';
 import type { TriggerPayload } from '@/lib/watch-triggers';
 import { WatchEditor } from '@/domain/watch/WatchEditor';
+import { useDismiss } from '@/lib/use-dismiss';
 import { longDayLabel } from './week-labels';
 import { normalizeWatchCapabilities, type WatchCapabilities } from '@/lib/watch-windows';
 
-/** Matches `--rt-watch-editor-width` in availability.css. */
+/** Matches `--rt-watch-editor-width` in domain/watch/watch-editor.css. */
 const POPOVER_WIDTH_PX = 240;
 /** Keeps the popover off the viewport edges. */
 const POPOVER_MARGIN_PX = 8;
@@ -88,25 +89,7 @@ export function WatchPopover({
     };
   }, [reposition]);
 
-  useEffect(() => {
-    const onDocClick = (event: MouseEvent): void => {
-      if (hostRef.current?.contains(event.target as Node)) return;
-      onClose();
-    };
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose();
-    };
-    // A tick late, so the cell click that opened this does not close it.
-    const timer = setTimeout(() => {
-      document.addEventListener('click', onDocClick);
-      document.addEventListener('keydown', onKey);
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener('click', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
+  useDismiss(hostRef, onClose);
 
   const editorCapabilities = capabilitiesForEditor(capabilities, supportsAddToCart);
 

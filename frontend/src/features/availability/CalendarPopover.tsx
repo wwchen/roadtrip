@@ -4,11 +4,9 @@
 // arrows page months without closing, while the parent owns the selection — the
 // popover only reports a pick.
 //
-// The dismissal rules are the fiddly part: a click
-// inside must not count as an outside click, and the document listeners are attached
-// a tick late so the very click that opened the popover does not immediately close
-// it. Paging can detach the clicked button, so the inner stopPropagation guard stays.
-import { useEffect, useRef, useState } from 'react';
+// Dismissal is `@/lib/use-dismiss`. Paging can detach the clicked button, so the
+// inner stopPropagation guard stays on top of the hook's containment test.
+import { useRef, useState } from 'react';
 import {
   addLocalDays,
   addLocalMonths,
@@ -16,6 +14,7 @@ import {
   parseLocalYmd,
   startOfLocalMonth,
 } from '@/lib/local-date';
+import { useDismiss } from '@/lib/use-dismiss';
 
 const DOW_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 /** Six weeks, so the grid never changes height as you page months. */
@@ -45,25 +44,7 @@ export function CalendarPopover({
   const [month, setMonth] = useState(() => startOfLocalMonth(viewMonth));
   const hostRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const onDocClick = (event: MouseEvent): void => {
-      if (hostRef.current?.contains(event.target as Node)) return;
-      onClose();
-    };
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose();
-    };
-    // A tick late, or the click that opened this closes it again.
-    const timer = setTimeout(() => {
-      document.addEventListener('click', onDocClick);
-      document.addEventListener('keydown', onKey);
-    }, 0);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener('click', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
+  useDismiss(hostRef, onClose);
 
   const todayIso = localYmd(today);
   const selectedIso = selectedDate ? localYmd(selectedDate) : null;

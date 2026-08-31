@@ -8,6 +8,25 @@ import './shell.css';
 /** The mount point every page shell provides. */
 const ROOT_ELEMENT_ID = 'root';
 
+/** One listener per document, however many times `mountPage` is called. */
+let rejectionsLogged = false;
+
+/**
+ * Log promise rejections nothing awaited.
+ *
+ * Logged, never toasted: a rejection here has no user-facing story — the query
+ * layer already surfaces the failures a user can act on — and a toast for every
+ * aborted fetch would be noise over the page that is still working. The console
+ * is where the shipped-bug trail lives (`useViewportPois` logs the same way).
+ */
+function logUnhandledRejections(): void {
+  if (rejectionsLogged) return;
+  rejectionsLogged = true;
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error('unhandled promise rejection:', event.reason);
+  });
+}
+
 /**
  * Mount a page into its shell.
  *
@@ -16,9 +35,10 @@ const ROOT_ELEMENT_ID = 'root';
  * helper means a page entry is a single call and every page is wrapped
  * identically.
  *
- * Silently does nothing when the mount point is absent, matching the previous
- * behaviour: the shells always carry it, and throwing during module evaluation
- * would take out the page with no useful signal.
+ * A missing mount point still does not throw — that would take out the sandbox
+ * chrome and the theme with it — but it is logged rather than swallowed: the
+ * shells always carry `#root`, so its absence is a broken shell and the blank
+ * page is otherwise indistinguishable from a page that mounted nothing.
  *
  * The sandbox chrome starts here, before the root renders, for the same reason
  * the providers live here: it has to be on every page, and the failure mode of a
@@ -26,11 +46,15 @@ const ROOT_ELEMENT_ID = 'root';
  * outside `#root` and never blocks, so it does not wait on the mount point.
  */
 export function mountPage(node: ReactNode): void {
+  logUnhandledRejections();
   initSandboxChrome();
   useThemeStore.getState().initTheme();
 
   const el = document.getElementById(ROOT_ELEMENT_ID);
-  if (!el) return;
+  if (!el) {
+    console.error(`page shell has no #${ROOT_ELEMENT_ID} element; nothing was mounted`);
+    return;
+  }
   createRoot(el).render(
     <StrictMode>
       <AppProviders>{node}</AppProviders>

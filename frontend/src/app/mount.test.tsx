@@ -22,11 +22,28 @@ test('mounting a page starts the sandbox chrome', async () => {
   expect(fetched.requests.map((r) => r.url).sort()).toEqual([...chromeUrls].sort());
 });
 
-test('the chrome still starts when the shell has no mount point', async () => {
+test('the chrome still starts when the shell has no mount point, and says so', async () => {
   const fetched = stubFetch(jsonResponse({ env: 'prod', sha: 'abc', branch: 'master' }));
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
   mountPage(<p>page</p>);
   await vi.waitFor(() => expect(fetched.requests.length).toBe(chromeUrls.length));
 
   expect(document.querySelector('#root')).toBeNull();
+  expect(logged).toHaveBeenCalledWith(expect.stringContaining('no #root'));
+  logged.mockRestore();
+});
+
+test('logs a promise rejection nobody handled', async () => {
+  stubFetch(jsonResponse({ env: 'prod', sha: 'abc', branch: 'master' }));
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+  document.body.innerHTML = '<div id="root"></div>';
+
+  mountPage(<p>page</p>);
+  const event = new Event('unhandledrejection') as Event & { reason?: unknown };
+  event.reason = new Error('nobody awaited this');
+  window.dispatchEvent(event);
+
+  expect(logged).toHaveBeenCalledWith('unhandled promise rejection:', expect.any(Error));
+  logged.mockRestore();
 });
