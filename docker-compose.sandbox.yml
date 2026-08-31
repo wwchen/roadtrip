@@ -63,6 +63,7 @@ services:
       - auth_clerk_client_secret
       - auth_clerk_issuer
       - campflare_api_key
+      - carto_basemaps_api_key
       - mapbox_token
       - postgres_password
       - resend_api_key
@@ -102,6 +103,8 @@ secrets:
     environment: AUTH_CLERK_ISSUER
   campflare_api_key:
     environment: CAMPFLARE_API_KEY
+  carto_basemaps_api_key:
+    environment: CARTO_BASEMAPS_API_KEY
   mapbox_token:
     environment: MAPBOX_TOKEN
   postgres_password:

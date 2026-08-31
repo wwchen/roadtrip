@@ -13,9 +13,9 @@ import {
   storedBasemapKey,
 } from './basemaps';
 
-/** The `basemap` raster source of an inline style, narrowed for assertions. */
+/** The `basemap` raster source of a resolved inline style, narrowed for assertions. */
 function rasterSource(key: string): RasterSourceSpecification {
-  const style = BASEMAPS[key].style as StyleSpecification;
+  const style = basemapStyle(key) as StyleSpecification;
   return style.sources.basemap as RasterSourceSpecification;
 }
 
@@ -37,10 +37,10 @@ describe('the registry', () => {
     expect(BASEMAPS[DEFAULT_BASEMAP]).toBeDefined();
   });
 
-  test('the vector basemaps are style URLs and the raster ones are inline styles', () => {
-    expect(typeof BASEMAPS['openfreemap-liberty'].style).toBe('string');
-    expect(typeof BASEMAPS['carto-dark'].style).toBe('object');
-    expect(typeof BASEMAPS.osm.style).toBe('object');
+  test('the vector basemaps are style URLs and the raster ones resolve to inline styles', () => {
+    expect(typeof basemapStyle('openfreemap-liberty')).toBe('string');
+    expect(typeof basemapStyle('carto-dark')).toBe('object');
+    expect(typeof basemapStyle('osm')).toBe('object');
   });
 
   test('raster styles carry attribution, since the tiles are used under licence', () => {

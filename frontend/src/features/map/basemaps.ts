@@ -14,12 +14,6 @@ const CARTO_SUBDOMAINS = ['a', 'b', 'c', 'd'] as const;
 const CARTO_API_KEY_QUERY_PARAM = 'key';
 const RASTER_TILE_SIZE = 256;
 
-const CARTO_VARIANTS = {
-  'carto-voyager': 'voyager',
-  'carto-positron': 'light_all',
-  'carto-dark': 'dark_all',
-} as const;
-
 const OSM_ATTRIBUTION = '&copy; OpenStreetMap contributors';
 const CARTO_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
@@ -45,7 +39,7 @@ const cartoTileUrl = (
   return apiKey ? `${base}?${CARTO_API_KEY_QUERY_PARAM}=${encodeURIComponent(apiKey)}` : base;
 };
 
-const cartoStyle = (variant: string, apiKey: string | null = null): StyleSpecification =>
+const cartoStyle = (variant: string, apiKey: string | null): StyleSpecification =>
   rasterStyle(
     CARTO_SUBDOMAINS.map((s) => cartoTileUrl(s, variant, apiKey)),
     CARTO_ATTRIBUTION,
@@ -54,8 +48,10 @@ const cartoStyle = (variant: string, apiKey: string | null = null): StyleSpecifi
 export interface Basemap {
   /** The picker's tile label — a visual category, not the tile provider's own name. */
   name: string;
-  /** A style URL for the vector basemaps, or an inline style for the raster ones. */
-  style: string | StyleSpecification;
+  /** A style URL for the vector basemaps, an inline style for the raster ones, or a
+   *  resolver for the ones whose tile URLs depend on runtime config. Read it through
+   *  `basemapStyle`, never directly. */
+  style: string | StyleSpecification | (() => StyleSpecification);
   /** The picker tile's swatch preview, as a CSS `background` value. */
   swatch: string;
 }
@@ -75,17 +71,17 @@ export const BASEMAPS: Readonly<Record<string, Basemap>> = {
   },
   'carto-voyager': {
     name: 'Terrain',
-    style: cartoStyle('voyager'),
+    style: () => cartoStyle('voyager', cartoBasemapsApiKey()),
     swatch: 'var(--rt-basemap-terrain)',
   },
   'carto-positron': {
     name: 'Light',
-    style: cartoStyle('light_all'),
+    style: () => cartoStyle('light_all', cartoBasemapsApiKey()),
     swatch: 'var(--rt-basemap-light)',
   },
   'carto-dark': {
     name: 'Dark',
-    style: cartoStyle('dark_all'),
+    style: () => cartoStyle('dark_all', cartoBasemapsApiKey()),
     swatch: 'var(--rt-basemap-dark)',
   },
   osm: {
@@ -152,10 +148,8 @@ export function rememberBasemapKey(key: string): void {
 
 /** The style for a key, falling back to the default rather than returning undefined. */
 export function basemapStyle(key: string): string | StyleSpecification {
-  const resolvedKey = key in BASEMAPS ? key : DEFAULT_BASEMAP;
-  const cartoVariant = CARTO_VARIANTS[resolvedKey as keyof typeof CARTO_VARIANTS];
-  if (cartoVariant) return cartoStyle(cartoVariant, cartoBasemapsApiKey());
-  return BASEMAPS[resolvedKey].style;
+  const { style } = BASEMAPS[key] ?? BASEMAPS[DEFAULT_BASEMAP];
+  return typeof style === 'function' ? style() : style;
 }
 
 /**
