@@ -118,6 +118,11 @@ ca.floo.roadtrip
 Package names are singular (`model/`, `client/`, `route/`); the layer tables
 above name the layers in prose, not the directories.
 
+The tree above lives under `backend/src/main/kotlin`. A parallel
+`backend/src/main/java` holds exactly one file, `HealthProbe.java` — a
+deliberately zero-dependency container healthcheck probe. Application code
+belongs in Kotlin.
+
 Prefer these generic forms in docs and reviews:
 
 - `client/<vendor-or-api>/*Client.kt` for outbound HTTP clients.
