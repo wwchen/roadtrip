@@ -55,6 +55,10 @@ services:
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
+    # Hand-maintained mirror of the registry's backend consumers: this file
+    # runs a pinned image standalone, so it cannot layer the generated
+    # docker-compose.secrets.yml. `./secrets/manage.py check` (CI + pre-commit)
+    # fails if this list or the secrets: map below drifts from registry.yaml.
     secrets:
       - auth_auth0_client_id
       - auth_auth0_client_secret

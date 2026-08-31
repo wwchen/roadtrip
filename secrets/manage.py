@@ -43,6 +43,7 @@ ROOT = SECRETS_DIR.parent
 REGISTRY_FILE = SECRETS_DIR / "registry.yaml"
 SOPS_CONFIG = SECRETS_DIR / ".sops.yaml"
 GENERATED_COMPOSE = ROOT / "docker-compose.secrets.yml"
+SANDBOX_COMPOSE = ROOT / "docker-compose.sandbox.yml"
 
 COMMON_ENV = "common"
 ENVIRONMENTS = ("local", "prod")
@@ -368,6 +369,108 @@ def cmd_generate(args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------
+# sandbox drift
+#
+# docker-compose.sandbox.yml cannot layer the generated file — it runs a
+# pinned image standalone — so its secret mounts are hand-maintained, which
+# reintroduces exactly the drift the generator exists to prevent. The sandbox
+# boots with ROADTRIP_PROFILE=prod, so a backend secret missing there is a
+# MissingSecretsException at boot rather than a CI failure. `check` compares
+# the file against the registry instead.
+# --------------------------------------------------------------------------
+
+SANDBOX_SERVICE = "backend"
+
+TOP_SECTION_RE = re.compile(r"^([a-z][a-z-]*):\s*$")
+SERVICE_RE = re.compile(r"^  ([a-z][a-z0-9_-]*):\s*$")
+SERVICE_MOUNT_RE = re.compile(r"^      - ([a-z0-9_]+)\s*$")
+TOPLEVEL_SECRET_RE = re.compile(r"^  ([a-z0-9_]+):\s*$")
+TOPLEVEL_ENV_RE = re.compile(r"^    environment:\s*([A-Z][A-Z0-9_]*)\s*$")
+
+
+def parse_sandbox_compose(text: str) -> tuple[set[str], dict[str, str]]:
+    """The backend service's `secrets:` list and the top-level `secrets:` map.
+
+    Same stance as the registry parser: handles exactly the shape the file
+    uses, and raises on anything else in the parts it cares about rather than
+    silently misreading them.
+    """
+    mounts: set[str] = set()
+    toplevel: dict[str, str] = {}
+    section: str | None = None
+    service: str | None = None
+    in_service_secrets = False
+    pending_toplevel: str | None = None
+
+    for raw in text.splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        top = TOP_SECTION_RE.match(raw)
+        if top:
+            section, service, in_service_secrets, pending_toplevel = top.group(1), None, False, None
+            continue
+        if section == "services":
+            svc = SERVICE_RE.match(raw)
+            if svc:
+                service, in_service_secrets = svc.group(1), False
+                continue
+            if service != SANDBOX_SERVICE:
+                continue
+            if raw.rstrip() == "    secrets:":
+                in_service_secrets = True
+                continue
+            if in_service_secrets:
+                mount = SERVICE_MOUNT_RE.match(raw)
+                if mount:
+                    mounts.add(mount.group(1))
+                elif raw.startswith("      "):
+                    raise SecretsError(
+                        f"{SANDBOX_COMPOSE.name}: cannot parse backend secrets entry: {raw!r}"
+                    )
+                else:
+                    in_service_secrets = False
+            continue
+        if section == "secrets":
+            name = TOPLEVEL_SECRET_RE.match(raw)
+            if name:
+                pending_toplevel = name.group(1)
+                continue
+            env = TOPLEVEL_ENV_RE.match(raw)
+            if env and pending_toplevel:
+                toplevel[pending_toplevel] = env.group(1)
+                pending_toplevel = None
+                continue
+            raise SecretsError(f"{SANDBOX_COMPOSE.name}: cannot parse secrets entry: {raw!r}")
+    return mounts, toplevel
+
+
+def sandbox_drift_errors(registry: dict[str, Secret], text: str) -> list[str]:
+    """Every backend secret mounted, nothing unregistered mounted."""
+    expected = {s.file_name: s for s in registry.values() if SANDBOX_SERVICE in s.services()}
+    mounts, toplevel = parse_sandbox_compose(text)
+
+    errors = []
+    for file_name, secret in sorted(expected.items()):
+        if file_name not in mounts:
+            errors.append(
+                f"{secret.name} has consumers [backend] but {SANDBOX_COMPOSE.name} does not "
+                f"mount {file_name} — add it to the backend service's secrets: list and the "
+                f"top-level secrets: map"
+            )
+        elif toplevel.get(file_name) != secret.name:
+            errors.append(
+                f"{SANDBOX_COMPOSE.name}: top-level secret {file_name} must be "
+                f"`environment: {secret.name}`"
+            )
+    for name in sorted((mounts | set(toplevel)) - set(expected)):
+        errors.append(
+            f"{SANDBOX_COMPOSE.name} mounts {name}, which registry.yaml does not declare "
+            f"with consumers [backend] — remove it, or fix the registry"
+        )
+    return errors
+
+
+# --------------------------------------------------------------------------
 # commands
 # --------------------------------------------------------------------------
 
@@ -648,6 +751,14 @@ def cmd_check(args: argparse.Namespace) -> int:
             )
     else:
         errors.append(f"{GENERATED_COMPOSE.name} is missing — run ./secrets/manage.py generate")
+
+    if SANDBOX_COMPOSE.exists():
+        try:
+            errors.extend(sandbox_drift_errors(registry, SANDBOX_COMPOSE.read_text()))
+        except SecretsError as err:
+            errors.append(str(err))
+    else:
+        errors.append(f"{SANDBOX_COMPOSE.name} is missing")
 
     tracked = subprocess.run(
         ["git", "ls-files", "--error-unmatch", ".env", ".env.local"],

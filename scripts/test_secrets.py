@@ -158,6 +158,100 @@ class ComposeAgreementTest(unittest.TestCase):
         self.assertNotIn("path: .env", (ROOT / "docker-compose.yml").read_text())
 
 
+class SandboxComposeDriftTest(unittest.TestCase):
+    """docker-compose.sandbox.yml is hand-maintained; the registry is not.
+
+    The sandbox runs with ROADTRIP_PROFILE=prod, so a backend secret missing
+    from its mounts fails at boot with MissingSecretsException instead of in
+    CI. This nearly shipped with ENCRYPTION_KEY; these tests make `check`
+    catch it.
+    """
+
+    def _sandbox(self, service_secrets, toplevel):
+        lines = ["services:", "  backend:", "    image: x", "    secrets:"]
+        lines += [f"      - {name}" for name in service_secrets]
+        lines += ["", "secrets:"]
+        for name, env in toplevel.items():
+            lines += [f"  {name}:", f"    environment: {env}"]
+        return "\n".join(lines) + "\n"
+
+    def _registry(self, *names):
+        return manage.parse_registry(
+            "".join(
+                f"{name}:\n  description: x\n  consumers: [backend]\n  required_in: []\n"
+                for name in names
+            )
+        )
+
+    def test_parses_service_list_and_toplevel_map(self):
+        mounts, toplevel = manage.parse_sandbox_compose(
+            self._sandbox(["a_key", "b_key"], {"a_key": "A_KEY", "b_key": "B_KEY"})
+        )
+        self.assertEqual({"a_key", "b_key"}, mounts)
+        self.assertEqual({"a_key": "A_KEY", "b_key": "B_KEY"}, toplevel)
+
+    def test_parses_the_real_sandbox_compose_file(self):
+        mounts, toplevel = manage.parse_sandbox_compose(
+            (ROOT / "docker-compose.sandbox.yml").read_text()
+        )
+        self.assertIn("mapbox_token", mounts)
+        self.assertEqual("MAPBOX_TOKEN", toplevel["mapbox_token"])
+
+    def test_missing_backend_secret_is_an_error(self):
+        errors = manage.sandbox_drift_errors(
+            self._registry("A_KEY", "B_KEY"),
+            self._sandbox(["a_key"], {"a_key": "A_KEY"}),
+        )
+        self.assertEqual(1, len(errors))
+        self.assertIn("B_KEY", errors[0])
+
+    def test_unregistered_mount_is_an_error(self):
+        # A secret removed from the registry must not linger in the sandbox
+        # file, where its unset source variable would fail compose startup.
+        errors = manage.sandbox_drift_errors(
+            self._registry("A_KEY"),
+            self._sandbox(["a_key", "ghost"], {"a_key": "A_KEY", "ghost": "GHOST"}),
+        )
+        self.assertTrue(any("ghost" in e for e in errors))
+
+    def test_toplevel_entry_must_source_the_matching_variable(self):
+        errors = manage.sandbox_drift_errors(
+            self._registry("A_KEY"),
+            self._sandbox(["a_key"], {"a_key": "WRONG_VAR"}),
+        )
+        self.assertTrue(any("A_KEY" in e for e in errors))
+
+    def test_mount_without_toplevel_entry_is_an_error(self):
+        errors = manage.sandbox_drift_errors(
+            self._registry("A_KEY"), self._sandbox(["a_key"], {})
+        )
+        self.assertTrue(any("a_key" in e for e in errors))
+
+    def test_non_backend_secrets_are_not_expected_in_the_sandbox(self):
+        registry = manage.parse_registry(
+            "A_KEY:\n  description: x\n  consumers: [backend]\n  required_in: []\n"
+            "G_KEY:\n  description: x\n  consumers: [grafana]\n  required_in: []\n"
+        )
+        errors = manage.sandbox_drift_errors(
+            registry, self._sandbox(["a_key"], {"a_key": "A_KEY"})
+        )
+        self.assertEqual([], errors)
+
+    def test_the_committed_sandbox_file_agrees_with_the_registry(self):
+        # The same assertion `check` makes in CI.
+        errors = manage.sandbox_drift_errors(
+            manage.load_registry(), (ROOT / "docker-compose.sandbox.yml").read_text()
+        )
+        self.assertEqual([], errors)
+
+    def test_check_reports_sandbox_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stale = Path(tmp) / "docker-compose.sandbox.yml"
+            stale.write_text(self._sandbox(["mapbox_token"], {"mapbox_token": "MAPBOX_TOKEN"}))
+            with unittest.mock.patch.object(manage, "SANDBOX_COMPOSE", stale):
+                self.assertEqual(1, manage.cmd_check(args(staged=False)))
+
+
 class HostToolsDriftTest(unittest.TestCase):
     def test_credentials_read_by_scripts_are_registered(self):
         """A fetcher reading an unregistered credential has no way to receive it."""
