@@ -158,6 +158,127 @@ class ComposeAgreementTest(unittest.TestCase):
         self.assertNotIn("path: .env", (ROOT / "docker-compose.yml").read_text())
 
 
+class SandboxComposeGenerationTest(unittest.TestCase):
+    """docker-compose.sandbox.yml's secrets sections are regenerated in place.
+
+    The sandbox runs with ROADTRIP_PROFILE=prod, so a backend secret missing
+    from its mounts fails at boot with MissingSecretsException instead of in
+    CI — ENCRYPTION_KEY nearly shipped that way. The file cannot layer the
+    generated docker-compose.secrets.yml (it runs a pinned image standalone),
+    so `generate` rewrites its two secrets sections and `check` flags drift.
+    """
+
+    def _sandbox(self, service_secrets, toplevel, trailer=""):
+        lines = ["services:", "  backend:", "    image: x", "    secrets:"]
+        lines += [f"      - {name}" for name in service_secrets]
+        lines += ["", "secrets:"]
+        for name, env in toplevel.items():
+            lines += [f"  {name}:", f"    environment: {env}"]
+        return "\n".join(lines) + "\n" + trailer
+
+    def _registry(self, *names):
+        return manage.parse_registry(
+            "".join(
+                f"{name}:\n  description: x\n  consumers: [backend]\n  required_in: []\n"
+                for name in names
+            )
+        )
+
+    def test_adds_a_missing_backend_secret_to_both_sections(self):
+        rendered = manage.render_sandbox_compose(
+            self._registry("A_KEY", "B_KEY"),
+            self._sandbox(["a_key"], {"a_key": "A_KEY"}),
+        )
+        self.assertIn("      - b_key", rendered)
+        self.assertIn("  b_key:\n    environment: B_KEY", rendered)
+
+    def test_removes_an_unregistered_mount(self):
+        # A secret removed from the registry must not linger in the sandbox
+        # file, where its unset source variable would fail compose startup.
+        rendered = manage.render_sandbox_compose(
+            self._registry("A_KEY"),
+            self._sandbox(["a_key", "ghost"], {"a_key": "A_KEY", "ghost": "GHOST"}),
+        )
+        self.assertNotIn("ghost", rendered)
+
+    def test_non_backend_secrets_are_not_mounted(self):
+        registry = manage.parse_registry(
+            "A_KEY:\n  description: x\n  consumers: [backend]\n  required_in: []\n"
+            "G_KEY:\n  description: x\n  consumers: [grafana]\n  required_in: []\n"
+        )
+        rendered = manage.render_sandbox_compose(
+            registry, self._sandbox(["a_key"], {"a_key": "A_KEY"})
+        )
+        self.assertNotIn("g_key", rendered)
+
+    def test_everything_outside_the_secrets_sections_is_preserved(self):
+        trailer = "\nnetworks:\n  default:\n"
+        rendered = manage.render_sandbox_compose(
+            self._registry("A_KEY"),
+            self._sandbox(["a_key"], {"a_key": "A_KEY"}, trailer=trailer),
+        )
+        self.assertIn("    image: x", rendered)
+        self.assertTrue(rendered.endswith(trailer))
+
+    def test_render_is_idempotent(self):
+        registry = self._registry("A_KEY", "B_KEY")
+        once = manage.render_sandbox_compose(
+            registry, self._sandbox(["a_key"], {"a_key": "A_KEY"})
+        )
+        self.assertEqual(once, manage.render_sandbox_compose(registry, once))
+
+    def test_the_committed_sandbox_file_is_current(self):
+        # The same assertion `check` makes in CI.
+        text = (ROOT / "docker-compose.sandbox.yml").read_text()
+        self.assertEqual(text, manage.render_sandbox_compose(manage.load_registry(), text))
+
+    def test_a_file_without_secrets_sections_is_an_error(self):
+        # Silently returning the text unchanged would make `check` pass on a
+        # sandbox file that mounts nothing.
+        with self.assertRaises(manage.SecretsError):
+            manage.render_sandbox_compose(
+                self._registry("A_KEY"), "services:\n  backend:\n    image: x\n"
+            )
+
+    def _generate(self, check, sandbox_text, *names):
+        """Run cmd_generate against throwaway compose files; return the sandbox path."""
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        generated = Path(self.tmp.name) / "docker-compose.secrets.yml"
+        sandbox = Path(self.tmp.name) / "docker-compose.sandbox.yml"
+        sandbox.write_text(sandbox_text)
+        patches = unittest.mock.patch.multiple(
+            manage, GENERATED_COMPOSE=generated, SANDBOX_COMPOSE=sandbox
+        )
+        registry_patch = unittest.mock.patch.object(
+            manage, "load_registry", return_value=self._registry(*names)
+        )
+        with patches, registry_patch:
+            code = manage.cmd_generate(args(check=check))
+        return code, sandbox
+
+    def test_generate_adds_a_new_backend_secret_to_the_sandbox_file(self):
+        code, sandbox = self._generate(
+            False, self._sandbox(["a_key"], {"a_key": "A_KEY"}), "A_KEY", "B_KEY"
+        )
+        self.assertEqual(0, code)
+        self.assertIn("      - b_key", sandbox.read_text())
+        self.assertIn("  b_key:\n    environment: B_KEY", sandbox.read_text())
+
+    def test_generate_check_flags_a_stale_sandbox_file_without_writing(self):
+        stale_text = self._sandbox(["a_key"], {"a_key": "A_KEY"})
+        code, sandbox = self._generate(True, stale_text, "A_KEY", "B_KEY")
+        self.assertEqual(1, code)
+        self.assertEqual(stale_text, sandbox.read_text())
+
+    def test_check_reports_a_stale_sandbox_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stale = Path(tmp) / "docker-compose.sandbox.yml"
+            stale.write_text(self._sandbox(["mapbox_token"], {"mapbox_token": "MAPBOX_TOKEN"}))
+            with unittest.mock.patch.object(manage, "SANDBOX_COMPOSE", stale):
+                self.assertEqual(1, manage.cmd_check(args(staged=False)))
+
+
 class HostToolsDriftTest(unittest.TestCase):
     def test_credentials_read_by_scripts_are_registered(self):
         """A fetcher reading an unregistered credential has no way to receive it."""
