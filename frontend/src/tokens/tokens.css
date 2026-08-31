@@ -325,4 +325,73 @@
   --rt-e2: 0 4px 12px rgba(var(--rt-c-shadow-rgb), 0.30);
   --rt-e3: 0 6px 20px rgba(var(--rt-c-shadow-rgb), 0.40);
   --rt-e4: 0 8px 24px rgba(var(--rt-c-shadow-rgb), 0.45);
+
+  /* Stacking order.
+     ==========================================================
+
+     One scale, so a new fixed surface is PLACED rather than guessed. Before it
+     there were eleven literals across nine stylesheets, and the only way to know
+     whether 999 cleared 998 was to grep for both.
+
+     Every value here is the number that surface already carried. This is a
+     naming pass, not a re-ordering one — the two things it makes visible were
+     both already true:
+
+       • --rt-z-topbar and --rt-z-modal are the SAME number. On desktop the
+         search panel and the settings modal are both 1000, so which one wins is
+         decided by stylesheet order, not by intent. They are separate tokens so
+         that whoever decides the intent has somewhere to write it down.
+       • --rt-z-popover (the watch editor's host) sits ABOVE both of them. That
+         reads as deliberate for a popover anchored to a cell, and it is the
+         behaviour today, but nothing chose it: 1200 was picked when the popover
+         only ever had the drawer beneath it. Opening the settings modal while a
+         watch popover is up would show the popover through it.
+
+     Note the low numbers inside a component — the matrix's sticky header and
+     first column (1–4), the drawer close button — are deliberately NOT here.
+     They order siblings inside one stacking context and mean nothing outside it;
+     hoisting them onto a global scale would suggest they compete with the
+     drawer, which they cannot.
+
+     Ordered low to high. */
+  --rt-z-map:           0;     /* the MapLibre canvas, the ground plane */
+  --rt-z-map-panel:     5;     /* the trip panel, at its resting mobile depth */
+  --rt-z-map-control:  15;     /* locate-me and the zoom cluster */
+  --rt-z-map-overlay:  20;     /* the layers panel and its toggle */
+  --rt-z-map-account:  21;     /* the account pill, above the layers panel it shares a corner with */
+  --rt-z-sheet-scrim:  25;     /* the mobile layers sheet's backdrop */
+  --rt-z-sheet:        30;     /* the mobile layers sheet itself */
+  --rt-z-inline-popover: 50;   /* a popover in normal flow — the week-nav calendar */
+  --rt-z-drawer-scrim: 998;
+  --rt-z-drawer:       999;
+  --rt-z-modal:        1000;
+  --rt-z-topbar:       1000;   /* desktop only: the panel stays reachable over the drawer */
+  --rt-z-popover:      1200;   /* the fixed-position watch-editor host */
+  --rt-z-chrome:       9999;   /* the deployment banner, above everything the app draws */
+
+  /* Breakpoints.
+     ==========================================================
+
+     Not tokens — a custom property cannot be used in a media query, and there is
+     no CSS mechanism that would let one be. They are written here because this is
+     where a reader looks for the shared vocabulary, and because the repo had four
+     widths (480, 560, 640, 767/768) with the 767/768 pair disagreeing inside a
+     single file.
+
+     Two canonical widths:
+
+       640px — the phone/tablet seam. Below it a floating surface becomes a
+               bottom sheet or takes the full width.
+       768px — the mobile/desktop seam. The drawer changes shape here and the
+               topbar changes plane.
+
+     Always written as `max-width: 767px` / `min-width: 768px`, never 768/768.
+     A `max-width: 768px` block and a `min-width: 768px` block BOTH apply at
+     exactly 768px, so the two halves of one decision fight at a real device
+     width, and which wins depends on source order.
+
+     `max-width: 480px` in availability.css and `max-width: 560px` in account.css
+     are deliberate exceptions: each is a single-component fine-tune (the week nav's
+     grid columns, the settings rows) rather than a layout mode, and snapping them
+     to 640 would reflow those components on tablets that read fine today. */
 }

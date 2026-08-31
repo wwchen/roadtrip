@@ -21,11 +21,16 @@ export * from '@lew-ds/lds-react';
 // Components that exist to make an LDS constraint safe to use, rather than to
 // restyle anything. They belong here because the constraint they encode is LDS's,
 // so they disappear if upstream ever ships controlled inputs.
+//
+// `LinkButton` is the one exception and is here for the same reason: LDS has no
+// primitive for an action word inside a sentence — `Button` is a control and
+// `Link` is an `<a>` — so the shape is drawn here once instead of per feature.
 // ---------------------------------------------------------------------------
 
 export { SeededTextField, type SeededTextFieldProps } from './SeededTextField';
 export { ConfirmButton, type ConfirmButtonProps } from './ConfirmButton';
 export { SecretField, type SecretFieldProps } from './SecretField';
+export { LinkButton, type LinkButtonProps } from './LinkButton';
 
 // ---------------------------------------------------------------------------
 // Type corrections.

@@ -7,7 +7,7 @@
 // Each row links straight into the provider's booking flow for that exact night,
 // which is only possible because a day is selected — the same row in the matrix
 // cannot, which is why the matrix arms a cell before opening it.
-import { Icon } from '@ui';
+import { Icon, LinkButton } from '@ui';
 import type { Campsite, PoiCampsitesResponse } from '@/api/campsite-api';
 import { availableCampsiteIds, availableCount } from '@/lib/day-fields';
 import type { FusedDay } from './fuse';
@@ -70,9 +70,9 @@ export function SiteList({
       <Section header={<Header label={siteListLabel(count, total)} expanded={false} disabled />}>
         <div className="cg-sites-error">
           {error || "Couldn't load sites"} ·{' '}
-          <button type="button" className="cg-sites-retry cg-link-button" onClick={onRetry}>
+          <LinkButton className="cg-sites-retry" onClick={onRetry}>
             Retry
-          </button>
+          </LinkButton>
         </div>
       </Section>
     );

@@ -14,6 +14,7 @@ import {
   type TriggerState,
 } from '@/lib/watch-triggers';
 import type { WatchCapabilities } from '@/lib/watch-windows';
+import './watch-editor.css';
 
 export interface WatchEditorProps {
   title?: string;
