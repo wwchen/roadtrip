@@ -42,6 +42,10 @@ import {
   jsonResponse,
 } from './server/http.js'
 import { log } from './server/logging.js'
+import {
+  authorizeCompanionRequest,
+  companionApiToken,
+} from './server/apiToken.js'
 import { createServerRuntime } from './server/runtime.js'
 import {
   handleDiagnosticImage,
@@ -62,6 +66,7 @@ export function createCompanionServer ({
   testChromiumFn = testChromium,
   runAtcOnceFn = runAtcOnce,
   logoutRecgovSessionFn = logoutRecgovBrowserSession,
+  apiToken = companionApiToken(),
   ...screenshotOverrides
 } = {}) {
   const runtime = createServerRuntime()
@@ -77,6 +82,11 @@ export function createCompanionServer ({
   const companionServer = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://companion.local')
     const route = matchCompanionRoute(req.method, url.pathname)
+    const rejection = authorizeCompanionRequest({ req, route, token: apiToken })
+    if (rejection) {
+      jsonResponse(res, rejection.status, rejection.body)
+      return
+    }
     if (route) {
       await handleContractRoute(route, req, res, url, runtime, deps)
       return

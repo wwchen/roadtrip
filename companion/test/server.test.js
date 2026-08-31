@@ -9,6 +9,11 @@ import {
   runStartupAuthCheck,
 } from '../src/server.js'
 import { COMPANION_API_ROUTES } from '../src/apiContract.js'
+import { COMPANION_API_TOKEN_HEADER } from '../src/server/apiToken.js'
+
+const TEST_API_TOKEN = 'test-companion-token'
+const CONTAINER_ADDRESS = '172.18.0.4'
+const LOOPBACK_ADDRESS = '127.0.0.1'
 
 test('runStartupAuthCheck records logged-in status', async () => {
   const log = logCapture()
@@ -97,7 +102,7 @@ test('runStartupAuthCheck records exceptions as startup auth failures', async ()
 })
 
 test('GET / returns a simple operator login form', async () => {
-  const response = await request(createCompanionServer(), {
+  const response = await request(testServer(), {
     path: '/',
     headers: { accept: 'text/html' },
   })
@@ -133,7 +138,7 @@ test('GET / returns a simple operator login form', async () => {
 })
 
 test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
-  const response = await request(createCompanionServer(), {
+  const response = await request(testServer(), {
     path: '/openapi.json',
   })
 
@@ -177,7 +182,7 @@ test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
 })
 
 test('GET /docs returns Swagger UI for the companion OpenAPI spec', async () => {
-  const response = await request(createCompanionServer(), {
+  const response = await request(testServer(), {
     path: '/docs',
     headers: { accept: 'text/html' },
   })
@@ -190,7 +195,7 @@ test('GET /docs returns Swagger UI for the companion OpenAPI spec', async () => 
 
 test('POST /login passes request-scoped credentials to the auth check', async () => {
   let authOptions = null
-  const response = await request(createCompanionServer({
+  const response = await request(testServer({
     testChromiumFn: async (_rawCookieInput, options) => {
       authOptions = options
       return {
@@ -232,7 +237,7 @@ test('POST /login passes request-scoped credentials to the auth check', async ()
 })
 
 test('POST /login HTML response renders a failed login diagnostic screenshot', async () => {
-  const response = await request(createCompanionServer({
+  const response = await request(testServer({
     testChromiumFn: async () => ({
       ok: true,
       loggedIn: false,
@@ -264,7 +269,7 @@ test('POST /login HTML response renders a failed login diagnostic screenshot', a
 
 test('POST /refresh force-refreshes the stored browser session without credentials', async () => {
   let authOptions = null
-  const response = await request(createCompanionServer({
+  const response = await request(testServer({
     testChromiumFn: async (_rawCookieInput, options) => {
       authOptions = options
       return { ok: true, loggedIn: true }
@@ -285,7 +290,7 @@ test('POST /refresh force-refreshes the stored browser session without credentia
 })
 
 test('POST /logout runs the Rec.gov browser logout flow', async () => {
-  const response = await request(createCompanionServer({
+  const response = await request(testServer({
     logoutRecgovSessionFn: async () => ({
       ok: true,
       logged_in: false,
@@ -316,7 +321,7 @@ test('POST /atc passes the flat payload to the one-shot runner', async () => {
     campsite_id: '102524',
   }
   let argv = null
-  const response = await request(createCompanionServer({
+  const response = await request(testServer({
     runAtcOnceFn: async ({ argv: receivedArgv, stdout, stderr }) => {
       argv = receivedArgv
       stderr.write('Cart: opening https://www.recreation.gov/camping/campsites/102524\n')
@@ -368,7 +373,7 @@ test('GET /screenshot captures a Recreation.gov path with the companion browser 
   const image = Buffer.from([0x89, 0x50, 0x4e, 0x47])
   const page = fakeScreenshotPage(image)
 
-  const response = await request(createCompanionServer({
+  const response = await request(testServer({
     getContextFn: async () => ({
       newPage: async () => page,
     }),
@@ -386,7 +391,7 @@ test('GET /screenshot captures a Recreation.gov path with the companion browser 
 })
 
 test('GET /screenshot rejects non-Recreation.gov targets', async () => {
-  const response = await request(createCompanionServer(), {
+  const response = await request(testServer(), {
     path: '/screenshot?url=https://example.com/',
   })
 
@@ -395,12 +400,52 @@ test('GET /screenshot rejects non-Recreation.gov targets', async () => {
 })
 
 test('GET /screenshot path suffix is not an undocumented API route', async () => {
-  const response = await request(createCompanionServer(), {
+  const response = await request(testServer(), {
     path: '/screenshot/camping/campgrounds/232447',
   })
 
   assert.equal(response.status, 400)
   assert.equal(response.json.error, 'unsupported_route')
+})
+
+test('every route rejects a request without the shared-secret header', async () => {
+  const server = testServer()
+
+  for (const path of ['/', '/docs', '/openapi.json', '/health', '/screenshot', '/screenshot/diagnostics/x.png']) {
+    const response = await request(server, { path, token: null })
+
+    assert.equal(response.status, 401, `${path} must require the companion token`)
+    assert.equal(response.json.error, 'unauthorized')
+  }
+
+  const posted = await request(server, { method: 'POST', path: '/atc', token: null })
+
+  assert.equal(posted.status, 401)
+})
+
+test('an unmatched route is refused before it reports whether it exists', async () => {
+  const response = await request(testServer(), { path: '/not-a-route', token: null })
+
+  assert.equal(response.status, 401)
+  assert.equal(response.json.error, 'unauthorized')
+})
+
+test('GET /health answers the compose healthcheck from localhost without a token', async () => {
+  const response = await request(testServer(), {
+    path: '/health',
+    token: null,
+    remoteAddress: LOOPBACK_ADDRESS,
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.json.ok, true)
+})
+
+test('an unconfigured companion token fails closed off localhost', async () => {
+  const response = await request(testServer({ apiToken: '' }), { path: '/health', token: null })
+
+  assert.equal(response.status, 503)
+  assert.equal(response.json.error, 'companion_auth_unconfigured')
 })
 
 function contractOperations (routes) {
@@ -430,12 +475,24 @@ function logCapture () {
   }
 }
 
-async function request (server, { method = 'GET', path = '/', headers = {}, body = null } = {}) {
+function testServer (overrides = {}) {
+  return createCompanionServer({ apiToken: TEST_API_TOKEN, ...overrides })
+}
+
+async function request (server, {
+  method = 'GET',
+  path = '/',
+  headers = {},
+  body = null,
+  token = TEST_API_TOKEN,
+  remoteAddress = CONTAINER_ADDRESS,
+} = {}) {
   const handler = server.listeners('request')[0]
   const req = Readable.from(body ? [Buffer.from(body)] : [])
   req.method = method
   req.url = path
-  req.headers = headers
+  req.headers = token === null ? { ...headers } : { [COMPANION_API_TOKEN_HEADER]: token, ...headers }
+  req.socket = { remoteAddress }
 
   return new Promise((resolve, reject) => {
     const chunks = []
