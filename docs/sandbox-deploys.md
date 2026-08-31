@@ -160,9 +160,16 @@ stopping mean:
 | `github-token` | — | Token for GHCR reads and status comments |
 
 The deploy host, state directory, tunnel zone, and the tailnet tag and version
-are constants inside the action, not inputs. The credentials have to be inputs:
-a composite action cannot read the `secrets` context, so whatever it needs must
-be handed to it by the calling workflow.
+are constants rather than inputs. The credentials have to be inputs: a composite
+action cannot read the `secrets` context, so whatever it needs must be handed to
+it by the calling workflow.
+
+Joining the tailnet and installing the SSH credentials is itself a second shared
+composite action, `.github/actions/deploy-host-access`, used by this action, by
+`deploy.yml`, and by both sweep jobs — it is the one place the pinned Tailscale
+action, the `tag:ci` tag, and the tailnet version live. Its four credential
+inputs are passed straight through. Jobs that need it must check the repo out
+first, since a local action is resolved from the workspace.
 
 The action owns everything that touches the sandbox: joining the tailnet,
 configuring SSH, waiting for image manifests, and running `deploy.sh`. Workflows
@@ -248,9 +255,24 @@ can only see resources we own cannot collect someone else's stopped container or
 named volume. There is no list of things to spare, so nothing rots when another
 stack lands on the host.
 
-Prune also never removes a resource still referenced by a container, so "unused"
-is Docker's judgement rather than ours. Images are pruned dangling-only in the
+Prune never removes a resource still referenced by a container, so "unused" is
+Docker's judgement rather than ours. Images are pruned dangling-only in the
 sweep so the backstop cannot fight the tag retention `deploy.sh` applies.
+
+That reference check is not by itself enough for a **freshly created** volume.
+`_ensure_data_volume` labels `roadtrip-data-<sha>` the moment it creates it, but
+nothing mounts it until Compose brings the backend up — minutes later, on the
+far side of an image pull. The sweep runs every 30 minutes, and prod deploys,
+sandbox deploys and the sweep are three separate GitHub concurrency groups, so
+nothing stops a prune landing inside that window and deleting the volume the
+deploy is about to depend on. `deploy.sh` therefore starts a short-lived guard
+container on the volume for the duration, which gives it the reference count
+prune already respects; the guard is released once a real container mounts the
+volume. Docker has no API for relabelling a volume, so a "skip in-flight" prune
+filter is not available, and a host lock would only bind pruners that cooperate
+with it. The guard is bounded by a `sleep`
+(`ROADTRIP_DATA_VOLUME_GUARD_SECONDS`, default **1800**) rather than a cleanup
+trap, so an abandoned deploy cannot make a volume permanently unprunable.
 
 The second safety property is `--all`. Without it, `docker volume prune` reaches
 only *anonymous* volumes and cannot remove a named one however long its stack has
@@ -265,6 +287,31 @@ volumes those images were unpacked into used to outlive them, one full dataset
 copy each, forever. How far back a rollback reaches is set by the image
 retention, not by a separate volume policy: `_ensure_data_volume` repopulates a
 missing volume from its data image, so an old volume is a cache, not the record.
+
+### Automatic rollback
+
+A prod deploy whose health gate fails no longer leaves the broken container
+serving. `deploy.sh prod` dumps the backend's last log lines as before, then
+redeploys the previous release through the same `_deploy_prod` path and exits
+non-zero either way — the deploy is still a failure, production is just not
+running the failure. `deploy.yml` reads the transcript and says which of three
+states the host was left in: rolled back, could not roll back, or the rollback
+itself failed and prod needs hands.
+
+The rollback target comes from `~/.roadtrip/last-good-release`, written after
+every deploy that passes its gate, so it names an app/data/companion triple that
+provably came up healthy. A host that has never written one falls back to the
+`current` symlink — the deploy workflow flips it only after `deploy.sh` returns,
+so mid-deploy it still names the release that is live — reusing the current data
+and companion SHAs, which are the only ones available in that case. With neither
+(a first-ever deploy), or when the previous release is the same SHA that just
+failed, nothing is attempted and the failure says so. A rollback that is itself
+unhealthy stops rather than walking further back.
+
+Note the limits: Compose has already recreated the backend by the time the gate
+runs, so a rollback is a redeploy, not an undo. It cannot revert a Flyway
+migration the new release applied, and the symlink fallback restores the old
+application image against the new data and companion images.
 
 **Build cache is not pruned on a schedule.** The daemon enforces its own cap, so
 `daemon.json` on the deploy host needs:
@@ -296,7 +343,9 @@ Note that scheduled and dispatchable workflows are only picked up from the
 default branch, so the sweep starts working once this is merged to `master`.
 
 Required secrets (same as `deploy.yml`): `DEPLOY_SSH_KEY`,
-`DEPLOY_KNOWN_HOSTS`, `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`.
+`DEPLOY_KNOWN_HOSTS`, `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET` — all four handed
+to `.github/actions/deploy-host-access`, which is why both sweep jobs check the
+repository out even though neither runs anything from the tree.
 The zone the workflow advertises is hardcoded to `floo.ca` in the sandbox action;
 on the host, `deploy.sh` still honours a `SANDBOX_TUNNEL_ZONE` override.
 
