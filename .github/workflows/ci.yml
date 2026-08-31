@@ -91,6 +91,42 @@ jobs:
               - '.editorconfig'
               - '.github/workflows/ci.yml'
 
+  # Flyway stores a checksum for every migration it has applied, so a V*.sql
+  # that already ran is immutable. Editing one only surfaces at deploy time,
+  # against the one database that already has the old checksum recorded — which
+  # is exactly how it bit us before. Catch it on the PR instead.
+  migration-guard:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Reject edits to applied migrations
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          MIGRATION_DIR: backend/src/main/resources/db/migration
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --quiet origin \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          # Added files are fine; R__*.sql repeatables are re-applied by design.
+          touched="$(git diff --name-status --diff-filter=MDR \
+            "origin/${BASE_REF}...HEAD" -- "$MIGRATION_DIR" \
+            | awk -F'\t' '$2 ~ /\/V[^\/]*\.sql$/')"
+          if [ -n "$touched" ]; then
+            echo "::error::Applied Flyway migrations are immutable."
+            printf '%s\n' "$touched"
+            echo
+            echo "Flyway records a checksum for every migration it applies, so"
+            echo "editing, renaming, or deleting a V*.sql that already ran makes"
+            echo "validation fail on the next deploy against an existing database."
+            echo "Add a new V<n>__*.sql that carries the change forward instead."
+            exit 1
+          fi
+          echo "No applied migrations were modified."
+
   lint:
     needs: changes
     if: needs.changes.outputs.scripts == 'true'
@@ -129,6 +165,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+      # Mirrored locally by `make test` (see Makefile), which runs these same
+      # checks in one Gradle invocation. generateJooq is excluded here only
+      # because ktlint runs on its own in this job and needs no generated
+      # sources; make cannot exclude it, since the same invocation compiles
+      # and runs :backend:test.
       - name: ktlint
         run: ./gradlew :backend:ktlintCheck -x :backend:generateJooq
       - name: detekt
@@ -268,6 +309,17 @@ jobs:
 
   docker-build:
     needs: changes
+    # Unconditional on push: deploy pulls backend:<sha> for every master commit,
+    # so the image must exist even when the commit touched nothing it builds.
+    # On PRs, skip the fat-jar + buildx build only when nothing that lands in
+    # the image changed — `smoke` covers backend/frontend/gradle, `scripts`
+    # covers the Dockerfile, compose files and deploy tooling. Kept wider than
+    # the image's own inputs on purpose: `/sandbox` on a PR waits on
+    # backend:<head-sha>, so a PR that plausibly gets a sandbox must build one.
+    if: >-
+      github.event_name == 'push' ||
+      needs.changes.outputs.smoke == 'true' ||
+      needs.changes.outputs.scripts == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -343,7 +395,9 @@ jobs:
         with:
           files: backend/build/reports/kover/report.xml
           flags: backend
-          fail_ci_if_error: true
+          # Advisory: fork PRs get no CODECOV_TOKEN and Codecov outages are not
+          # a coverage regression. koverVerify above is the hard gate.
+          fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage report artifact
@@ -387,6 +441,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Build backend fat-jar
         run: ./gradlew :backend:buildFatJar
@@ -480,6 +539,7 @@ jobs:
   ci-passed:
     needs:
       - changes
+      - migration-guard
       - lint
       - gradle-lint
       - frontend-tests
