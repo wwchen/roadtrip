@@ -7,15 +7,9 @@ export const BASEMAP_STORAGE_KEY = 'basemap';
 
 export const DEFAULT_BASEMAP = 'openfreemap-liberty';
 
-/** Retina raster tiles, so the Carto basemaps are not soft on a 2x display. */
-const CARTO_TILE_SUFFIX = '{z}/{x}/{y}@2x.png';
-const CARTO_SUBDOMAINS = ['a', 'b', 'c', 'd'] as const;
 const RASTER_TILE_SIZE = 256;
 
 const OSM_ATTRIBUTION = '&copy; OpenStreetMap contributors';
-const CARTO_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
-  '&copy; <a href="https://carto.com/attributions">CARTO</a>';
 
 /** A single-source raster style, which is all the non-vector basemaps need. */
 function rasterStyle(tiles: string[], attribution: string): StyleSpecification {
@@ -28,13 +22,10 @@ function rasterStyle(tiles: string[], attribution: string): StyleSpecification {
   };
 }
 
-const cartoStyle = (variant: string): StyleSpecification =>
-  rasterStyle(
-    CARTO_SUBDOMAINS.map(
-      (s) => `https://${s}.basemaps.cartocdn.com/rastertiles/${variant}/${CARTO_TILE_SUFFIX}`,
-    ),
-    CARTO_ATTRIBUTION,
-  );
+/** Carto's vector styles. They need no API key, where the retiring raster tiles now do,
+ *  and they carry their own CARTO/OpenStreetMap attribution via the style's TileJSON. */
+const cartoStyle = (style: string): string =>
+  `https://basemaps.cartocdn.com/gl/${style}-gl-style/style.json`;
 
 export interface Basemap {
   /** The picker's tile label — a visual category, not the tile provider's own name. */
@@ -65,12 +56,12 @@ export const BASEMAPS: Readonly<Record<string, Basemap>> = {
   },
   'carto-positron': {
     name: 'Light',
-    style: cartoStyle('light_all'),
+    style: cartoStyle('positron'),
     swatch: 'var(--rt-basemap-light)',
   },
   'carto-dark': {
     name: 'Dark',
-    style: cartoStyle('dark_all'),
+    style: cartoStyle('dark-matter'),
     swatch: 'var(--rt-basemap-dark)',
   },
   osm: {
