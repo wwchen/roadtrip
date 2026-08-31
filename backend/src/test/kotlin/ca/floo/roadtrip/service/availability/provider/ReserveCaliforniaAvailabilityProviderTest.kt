@@ -18,13 +18,21 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+
+private const val OVERLAPPING_REQUESTS = 2
+
+/** Generous ceiling: the latch releases as soon as both requests arrive, so
+ *  this only bounds an actual regression rather than pacing the happy path. */
+private const val OVERLAP_TIMEOUT_SECONDS = 10L
 
 class ReserveCaliforniaAvailabilityProviderTest {
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
@@ -93,8 +101,11 @@ class ReserveCaliforniaAvailabilityProviderTest {
     @Test
     fun `catalog availability fetches facility grids concurrently`() =
         runBlocking {
-            val activeRequests = AtomicInteger(0)
-            val maxActiveRequests = AtomicInteger(0)
+            // Each request parks until OVERLAPPING_REQUESTS of them are in
+            // flight at once, so the assertion is a fact the stub observed
+            // rather than a race two sleeps happened to win.
+            val bothInFlight = CountDownLatch(OVERLAPPING_REQUESTS)
+            val observedOverlap = AtomicBoolean(false)
             server.createContext("/rdr/search/grid") { exchange ->
                 val body = exchange.requestBody.bufferedReader().use { it.readText() }
                 val facilityId =
@@ -103,16 +114,13 @@ class ReserveCaliforniaAvailabilityProviderTest {
                         .jsonObject["FacilityId"]!!
                         .jsonPrimitive
                         .long
-                val active = activeRequests.incrementAndGet()
-                maxActiveRequests.updateAndGet { current -> maxOf(current, active) }
-                try {
-                    Thread.sleep(500)
-                    respondJson(exchange, gridJson(facilityId, facilityId * 100, "Facility $facilityId Site", "2026-12-15"))
-                } finally {
-                    activeRequests.decrementAndGet()
+                bothInFlight.countDown()
+                if (bothInFlight.await(OVERLAP_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    observedOverlap.set(true)
                 }
+                respondJson(exchange, gridJson(facilityId, facilityId * 100, "Facility $facilityId Site", "2026-12-15"))
             }
-            startServer(Executors.newFixedThreadPool(2))
+            startServer(Executors.newFixedThreadPool(OVERLAPPING_REQUESTS))
 
             val availabilityClient = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
             val provider = ReserveCaliforniaAvailabilityProvider(availabilityClient = availabilityClient, enabled = true)
@@ -124,7 +132,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
                 endDate = LocalDate.parse("2026-12-16"),
             )
 
-            assertTrue(maxActiveRequests.get() > 1, "facility grid requests should overlap")
+            assertTrue(observedOverlap.get(), "facility grid requests should overlap")
         }
 
     @Test

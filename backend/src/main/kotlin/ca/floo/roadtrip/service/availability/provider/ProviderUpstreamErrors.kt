@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import kotlinx.coroutines.CancellationException
 
 /** Upstream said "slow down". Always retryable, always its own outcome. */
 const val HTTP_TOO_MANY_REQUESTS = 429
@@ -37,6 +38,35 @@ fun upstreamAvailabilityError(
 
         httpStatus == null && isTransportFailure(cause) -> AvailabilityProviderError.UpstreamUnreachable(cause)
         else -> AvailabilityProviderError.UpstreamUnavailable(cause)
+    }
+
+/**
+ * The one catch ladder every adapter wraps its upstream call in. Five copies of
+ * it existed and had already drifted — Aspira's was missing the
+ * [CancellationException] arm, so cancelling a poll run turned into a fake
+ * `upstream_5xx` that cooled the provider down.
+ *
+ * The order is the contract: cancellation is never an upstream failure, an
+ * [AvailabilityProviderError] a nested call already classified passes through
+ * untouched, [vendorError] classifies the adapter's own vendor exception, and
+ * [otherError] catches everything else — retryable-5xx by default, so an
+ * unfamiliar failure fails over instead of stopping the candidate walk.
+ */
+suspend inline fun <reified V : Exception, T> mapUpstreamErrors(
+    crossinline vendorError: (V) -> AvailabilityProviderError,
+    crossinline otherError: (Exception) -> AvailabilityProviderError = {
+        AvailabilityProviderError.UpstreamUnavailable(it)
+    },
+    crossinline block: suspend () -> T,
+): T =
+    try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: AvailabilityProviderError) {
+        throw e
+    } catch (e: Exception) {
+        throw if (e is V) vendorError(e) else otherError(e)
     }
 
 /** Depth cap so a self-referential cause chain can't spin. */

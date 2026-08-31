@@ -6,8 +6,9 @@ import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
+import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
-import ca.floo.roadtrip.service.api.encodeAvailabilityJson
+import ca.floo.roadtrip.support.RecGovException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
@@ -59,7 +60,7 @@ class RecGovObservationsTest {
                 campsiteFixture(id = siteId.toLong(), vendor = "recgov", vendorId = siteId)
             }
         val body =
-            encodeAvailabilityJson(
+            encodeApiJson(
                 availabilityResponseFromObservations(
                     runBlocking {
                         p.catalogAvailability(testCampground(), campsites, today, today.plusDays(days.toLong()))
@@ -75,7 +76,7 @@ class RecGovObservationsTest {
     ): JsonObject {
         val p = RecGovAvailabilityProvider(client, enabled = true)
         val body =
-            encodeAvailabilityJson(
+            encodeApiJson(
                 availabilityResponseFromObservations(
                     runBlocking { p.availability(testCampground(), today, today.plusDays(days.toLong())) },
                 ),
@@ -225,7 +226,7 @@ class RecGovObservationsTest {
             )
         val p = RecGovAvailabilityProvider(clientReturning(emptyMap()), enabled = true)
         val body =
-            encodeAvailabilityJson(
+            encodeApiJson(
                 availabilityResponseFromObservations(
                     runBlocking {
                         p.catalogAvailability(testCampground(), campsites, today, today.plusDays(1))
@@ -268,6 +269,20 @@ class RecGovObservationsTest {
         val (status, error) = mapRecgovUpstreamError(ex)
         assertEquals(503, status.value)
         assertEquals("rate_limited", error.error)
+    }
+
+    @Test
+    fun `a typed client 429 maps to the rate-limited outcome`() {
+        val client =
+            object : RecGovAvailabilityClient {
+                override suspend fun fetchMonth(
+                    campgroundId: String,
+                    monthStart: String,
+                ): Map<String, Campsite> = throw RecGovException("rec.gov 429 rate limit on 1/2026-12", httpStatus = 429)
+            }
+        val ex = runCatching { classify(client, days = 1) }.exceptionOrNull()
+        require(ex is AvailabilityProviderError.RateLimited) { "expected RateLimited, got $ex" }
+        assertEquals("rate_limited", mapRecgovUpstreamError(ex).second.error)
     }
 
     @Test

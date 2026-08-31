@@ -13,7 +13,6 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.ReserveAmericaException
-import kotlinx.coroutines.CancellationException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -168,19 +167,11 @@ class ReserveAmericaAvailabilityProvider(
     }
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
-        try {
-            block()
-        } catch (e: AvailabilityProviderError) {
-            throw e
-        } catch (e: ReserveAmericaException) {
+        mapUpstreamErrors(
             // No blocked statuses: ReserveAmerica has no bot challenge we can
             // tell apart from an outage, so everything but 429 is retryable-5xx.
-            throw upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            throw AvailabilityProviderError.UpstreamUnavailable(e)
-        }
+            vendorError = { e: ReserveAmericaException -> upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus) },
+        ) { block() }
 
     companion object {
         val tenants: Map<String, ReserveAmericaTenant> =

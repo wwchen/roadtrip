@@ -1,4 +1,5 @@
 package ca.floo.roadtrip.client.recgov
+import ca.floo.roadtrip.support.RecGovException
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.Json
@@ -7,9 +8,10 @@ import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * rec.gov availability fetch surface. The HTTP-backed implementation
- * ([HttpRecgovAvailabilityClient]) hits the monthly availability endpoint with a
- * global throttle and 429 backoff. Mirrors poller.js verbatim: 1.5s minimum
- * gap between calls, 3s/6s/12s retries on 429. Tests pass fakes.
+ * ([HttpRecgovAvailabilityClient]) hits the monthly availability endpoint behind
+ * a 1.5s global gap between calls. A 429 is thrown as a [RecGovException]
+ * straight away rather than slept on, so the failover fetcher can cool rec.gov
+ * down and move to the next candidate. Tests pass fakes.
  */
 interface RecGovAvailabilityClient : AutoCloseable {
     suspend fun fetchMonth(
