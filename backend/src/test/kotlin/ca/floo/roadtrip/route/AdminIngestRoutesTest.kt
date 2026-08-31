@@ -36,7 +36,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
     fun `POST fetch routes are not registered`() =
         testApplication {
             val controller = controllerWith(emptyMap())
-            application { routing { adminIngestRoutes(controller, ctx) } }
+            application { routing { adminIngestRoutes(controller) } }
 
             assertEquals(HttpStatusCode.NotFound, client.post("/api/admin/data/fetch").status)
             assertEquals(HttpStatusCode.NotFound, client.post("/api/admin/data/fetch/t").status)
@@ -53,7 +53,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         "Aspira Resources → Aspira Pins" to Target("Aspira Resources → Aspira Pins", emptyList()),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller, ctx) } }
+            application { routing { adminIngestRoutes(controller) } }
 
             val resp = client.post("/api/admin/data/import")
 
@@ -75,7 +75,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         "t" to Target("t", emptyList()),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller, ctx) } }
+            application { routing { adminIngestRoutes(controller) } }
 
             val resp = client.post("/api/admin/data/import/t")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -93,7 +93,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         "beta" to Target("beta", emptyList()),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller, ctx) } }
+            application { routing { adminIngestRoutes(controller) } }
 
             client.post("/api/admin/data/import/alpha")
             client.post("/api/admin/data/import/beta")
@@ -115,7 +115,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         "beta" to Target("beta", listOf(Phase.Import("k", "x"))),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller, ctx) } }
+            application { routing { adminIngestRoutes(controller) } }
 
             val resp = client.get("/api/admin/data/status")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -135,7 +135,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
     fun `POST catalog-match is not registered`() =
         testApplication {
             val controller = controllerWith(emptyMap())
-            application { routing { adminIngestRoutes(controller, ctx) } }
+            application { routing { adminIngestRoutes(controller) } }
 
             val resp = client.post("/api/admin/etl/catalog-match")
             assertEquals(HttpStatusCode.NotFound, resp.status)

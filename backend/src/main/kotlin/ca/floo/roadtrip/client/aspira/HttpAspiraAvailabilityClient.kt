@@ -1,8 +1,10 @@
 package ca.floo.roadtrip.client.aspira
 
 import ca.floo.roadtrip.client.DateStringFormatter
+import ca.floo.roadtrip.client.VendorHttpDefaults
 import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.support.AspiraException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -17,7 +19,6 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.time.Duration
 import java.time.LocalDate
 
 class HttpAspiraAvailabilityClient(
@@ -38,27 +39,88 @@ class HttpAspiraAvailabilityClient(
         mapId: Int,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): AspiraAvailability =
+    ): AspiraAvailability {
+        val url =
+            "https://$host/api/availability/map" +
+                "?mapId=$mapId" +
+                "&bookingCategoryId=${AspiraSearchDefaults.BOOKING_CATEGORY_ID}" +
+                "&startDate=$startDate" +
+                "&endDate=$endDate" +
+                "&isReserving=true" +
+                "&getDailyAvailability=true" +
+                "&partySize=${AspiraSearchDefaults.DEFAULT_PEOPLE_COUNT}" +
+                "&equipmentCategoryId=${AspiraSearchDefaults.ANY_EQUIPMENT_CATEGORY_ID}" +
+                "&subEquipmentCategoryId=${AspiraSearchDefaults.ANY_SUB_EQUIPMENT_CATEGORY_ID}"
+        log.info(
+            "aspira GET availability host={} mapId={} startDate={} endDate={}",
+            host,
+            mapId,
+            DateStringFormatter.date(startDate),
+            DateStringFormatter.date(endDate),
+        )
+        return parse(throttledGet(host, url, label = "availability", target = "mapId=$mapId"), mapId)
+    }
+
+    override suspend fun fetchOccupancy(
+        host: String,
+        resourceLocationId: Int,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AspiraOccupancy {
+        val url =
+            "https://$host/api/occupancy?" +
+                queryString(
+                    "bookingCategoryId" to AspiraSearchDefaults.BOOKING_CATEGORY_ID.toString(),
+                    "equipmentCategoryId" to AspiraSearchDefaults.ANY_EQUIPMENT_CATEGORY_ID.toString(),
+                    "subEquipmentCategoryId" to AspiraSearchDefaults.ANY_SUB_EQUIPMENT_CATEGORY_ID.toString(),
+                    "startDate" to startDate.toString(),
+                    "endDate" to endDate.toString(),
+                    "boatLength" to AspiraSearchDefaults.DEFAULT_BOAT_LENGTH.toString(),
+                    "boatDraft" to AspiraSearchDefaults.DEFAULT_BOAT_DRAFT.toString(),
+                    "boatWidth" to AspiraSearchDefaults.DEFAULT_BOAT_WIDTH.toString(),
+                    "peopleCapacityCategoryCounts" to AspiraSearchDefaults.occupancyPeopleCapacityCategoryCounts(),
+                    "numEquipment" to AspiraSearchDefaults.NO_EQUIPMENT_COUNT.toString(),
+                    "resourceLocationId" to resourceLocationId.toString(),
+                    "cartUid" to "",
+                    "cartTransactionUid" to "",
+                    "bookingUid" to "",
+                    "groupHoldUid" to "",
+                )
+        log.info(
+            "aspira GET occupancy host={} resourceLocationId={} startDate={} endDate={}",
+            host,
+            resourceLocationId,
+            DateStringFormatter.date(startDate),
+            DateStringFormatter.date(endDate),
+        )
+        val body = throttledGet(host, url, label = "occupancy", target = "resourceLocationId=$resourceLocationId")
+        return json.decodeFromString(AspiraOccupancy.serializer(), body)
+    }
+
+    /**
+     * The only way this client talks to Aspira: one call at a time, throttled,
+     * browser-shaped, with every upstream failure already an [AspiraException].
+     * Callers own URL construction and parsing, nothing else — the gate and the
+     * WAF checks are the part that must not diverge between endpoints.
+     *
+     * [label] and [target] name the call in error messages so a failure still
+     * says which endpoint and which id it was.
+     */
+    private suspend fun throttledGet(
+        host: String,
+        url: String,
+        label: String,
+        target: String,
+    ): String =
         mutex.withLock {
             val sinceLast = System.currentTimeMillis() - lastFetchAtMs
             if (sinceLast < throttleMs) {
-                kotlinx.coroutines.delay(throttleMs - sinceLast)
+                delay(throttleMs - sinceLast)
             }
-            val url =
-                "https://$host/api/availability/map" +
-                    "?mapId=$mapId" +
-                    "&bookingCategoryId=${AspiraSearchDefaults.BOOKING_CATEGORY_ID}" +
-                    "&startDate=$startDate" +
-                    "&endDate=$endDate" +
-                    "&isReserving=true" +
-                    "&getDailyAvailability=true" +
-                    "&partySize=${AspiraSearchDefaults.DEFAULT_PEOPLE_COUNT}" +
-                    "&equipmentCategoryId=${AspiraSearchDefaults.ANY_EQUIPMENT_CATEGORY_ID}" +
-                    "&subEquipmentCategoryId=${AspiraSearchDefaults.ANY_SUB_EQUIPMENT_CATEGORY_ID}"
             val req =
                 HttpRequest
                     .newBuilder(URI.create(url))
-                    .timeout(requestTimeout)
+                    .timeout(VendorHttpDefaults.requestTimeout)
                     // Aspira's WAF rejects bare-curl UAs (returns 403). A
                     // browser-shaped UA is the difference between 200 and
                     // immediately tripping the bot challenge.
@@ -67,19 +129,12 @@ class HttpAspiraAvailabilityClient(
                     .header("Referer", "https://$host/")
                     .GET()
                     .build()
-            log.info(
-                "aspira GET availability host={} mapId={} startDate={} endDate={}",
-                host,
-                mapId,
-                DateStringFormatter.date(startDate),
-                DateStringFormatter.date(endDate),
-            )
             val resp =
                 try {
                     httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
                 } catch (e: Exception) {
                     throw AspiraException(
-                        "aspira request failed for mapId=$mapId host=$host: ${e.javaClass.name}: ${e.message}",
+                        "aspira $label request failed for $target host=$host: ${e.javaClass.name}: ${e.message}",
                         httpStatus = null,
                         cause = e,
                     )
@@ -91,91 +146,18 @@ class HttpAspiraAvailabilityClient(
                     // transient block turns into a persistent one.
                     lastFetchAtMs = System.currentTimeMillis()
                 }
-            if (resp.statusCode() != 200) {
+            if (resp.statusCode() != HTTP_OK) {
                 throw AspiraException(
-                    "aspira HTTP ${resp.statusCode()} for mapId=$mapId",
+                    "aspira $label HTTP ${resp.statusCode()} for $target",
                     httpStatus = resp.statusCode(),
                 )
             }
             val body = resp.body()
             // WAF challenge bypass detection: Azure WAF returns HTML 200s.
             if (body.startsWith("<")) {
-                throw AspiraException("aspira WAF challenge (HTML response)", httpStatus = 503)
+                throw AspiraException("aspira $label WAF challenge (HTML response)", httpStatus = WAF_CHALLENGE_STATUS)
             }
-            parse(body, mapId)
-        }
-
-    override suspend fun fetchOccupancy(
-        host: String,
-        resourceLocationId: Int,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AspiraOccupancy =
-        mutex.withLock {
-            val sinceLast = System.currentTimeMillis() - lastFetchAtMs
-            if (sinceLast < throttleMs) {
-                kotlinx.coroutines.delay(throttleMs - sinceLast)
-            }
-            val url =
-                "https://$host/api/occupancy?" +
-                    queryString(
-                        "bookingCategoryId" to AspiraSearchDefaults.BOOKING_CATEGORY_ID.toString(),
-                        "equipmentCategoryId" to AspiraSearchDefaults.ANY_EQUIPMENT_CATEGORY_ID.toString(),
-                        "subEquipmentCategoryId" to AspiraSearchDefaults.ANY_SUB_EQUIPMENT_CATEGORY_ID.toString(),
-                        "startDate" to startDate.toString(),
-                        "endDate" to endDate.toString(),
-                        "boatLength" to AspiraSearchDefaults.DEFAULT_BOAT_LENGTH.toString(),
-                        "boatDraft" to AspiraSearchDefaults.DEFAULT_BOAT_DRAFT.toString(),
-                        "boatWidth" to AspiraSearchDefaults.DEFAULT_BOAT_WIDTH.toString(),
-                        "peopleCapacityCategoryCounts" to AspiraSearchDefaults.occupancyPeopleCapacityCategoryCounts(),
-                        "numEquipment" to AspiraSearchDefaults.NO_EQUIPMENT_COUNT.toString(),
-                        "resourceLocationId" to resourceLocationId.toString(),
-                        "cartUid" to "",
-                        "cartTransactionUid" to "",
-                        "bookingUid" to "",
-                        "groupHoldUid" to "",
-                    )
-            val req =
-                HttpRequest
-                    .newBuilder(URI.create(url))
-                    .timeout(requestTimeout)
-                    .header("User-Agent", USER_AGENT)
-                    .header("Accept", "application/json")
-                    .header("Referer", "https://$host/")
-                    .GET()
-                    .build()
-            log.info(
-                "aspira GET occupancy host={} resourceLocationId={} startDate={} endDate={}",
-                host,
-                resourceLocationId,
-                DateStringFormatter.date(startDate),
-                DateStringFormatter.date(endDate),
-            )
-            val resp =
-                try {
-                    httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
-                } catch (e: Exception) {
-                    throw AspiraException(
-                        "aspira occupancy request failed for resourceLocationId=$resourceLocationId " +
-                            "host=$host: ${e.javaClass.name}: ${e.message}",
-                        httpStatus = null,
-                        cause = e,
-                    )
-                } finally {
-                    // See fetch(): throttle on attempts, not successes.
-                    lastFetchAtMs = System.currentTimeMillis()
-                }
-            if (resp.statusCode() != 200) {
-                throw AspiraException(
-                    "aspira occupancy HTTP ${resp.statusCode()} for resourceLocationId=$resourceLocationId",
-                    httpStatus = resp.statusCode(),
-                )
-            }
-            val body = resp.body()
-            if (body.startsWith("<")) {
-                throw AspiraException("aspira occupancy WAF challenge (HTML response)", httpStatus = 503)
-            }
-            json.decodeFromString(AspiraOccupancy.serializer(), body)
+            body
         }
 
     internal fun parse(
@@ -213,8 +195,11 @@ class HttpAspiraAvailabilityClient(
         /** One call per 1.5s: Aspira's WAF scores burst volume from one IP,
          *  and this is the gap a hot drawer flow survived in probing. */
         private const val DEFAULT_THROTTLE_MS = 1_500L
-        private val requestTimeout: Duration = Duration.ofSeconds(30)
-        private val connectTimeout: Duration = Duration.ofSeconds(10)
+        private const val HTTP_OK = 200
+
+        /** A WAF challenge page is upstream refusing us, so it is reported with
+         *  the status the classifier already treats as blocked. */
+        private const val WAF_CHALLENGE_STATUS = 503
         private const val USER_AGENT =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
@@ -222,7 +207,7 @@ class HttpAspiraAvailabilityClient(
         fun defaultClient(): HttpClient =
             HttpClient
                 .newBuilder()
-                .connectTimeout(connectTimeout)
+                .connectTimeout(VendorHttpDefaults.connectTimeout)
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build()
     }

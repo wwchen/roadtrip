@@ -14,8 +14,8 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityErrorDto
+import ca.floo.roadtrip.support.RecGovException
 import io.ktor.http.HttpStatusCode
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -142,27 +142,25 @@ class RecGovAvailabilityProvider(
     }
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
-        try {
-            block()
-        } catch (e: AvailabilityProviderError) {
-            throw e
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            // rec.gov signals a rate limit through the exception message (the
-            // client bakes the status into the string), so that stays a text
-            // check. Everything else goes through the shared classifier with
-            // no typed status: a DNS/connect/socket cause becomes
-            // UpstreamUnreachable ("could not reach the booking site") instead
-            // of being mislabelled as a vendor 5xx — the exact confusion the
-            // incident turned on. A real 5xx has no transport cause, so it
-            // still falls through to UpstreamUnavailable.
-            val msg = e.message.orEmpty()
-            if (msg.contains("429") || msg.contains("rate")) {
-                throw AvailabilityProviderError.RateLimited(e)
-            }
-            throw upstreamAvailabilityError(cause = e, httpStatus = null)
-        }
+        mapUpstreamErrors(
+            vendorError = { e: RecGovException -> upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus) },
+            otherError = { e ->
+                // Anything not thrown by the client can still name a rate limit
+                // in its message, so that text check stays. Everything else goes
+                // through the shared classifier with no typed status: a
+                // DNS/connect/socket cause becomes UpstreamUnreachable ("could
+                // not reach the booking site") instead of being mislabelled as a
+                // vendor 5xx — the exact confusion the incident turned on. A real
+                // 5xx has no transport cause, so it still falls through to
+                // UpstreamUnavailable.
+                val msg = e.message.orEmpty()
+                if (msg.contains("429") || msg.contains("rate")) {
+                    AvailabilityProviderError.RateLimited(e)
+                } else {
+                    upstreamAvailabilityError(cause = e, httpStatus = null)
+                }
+            },
+        ) { block() }
 }
 
 internal fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, AvailabilityErrorDto> {

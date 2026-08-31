@@ -18,9 +18,6 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 
 private val lngLatRegex = Regex("""^-?\d{1,3}(\.\d{1,8})?,-?\d{1,3}(\.\d{1,8})?$""")
 private const val DEFAULT_GEOCODE_LIMIT = 5
@@ -28,13 +25,6 @@ private const val MIN_GEOCODE_LIMIT = 1
 private const val MAX_GEOCODE_LIMIT = 10
 
 private val geocodeLimitRange = MIN_GEOCODE_LIMIT..MAX_GEOCODE_LIMIT
-
-@OptIn(ExperimentalSerializationApi::class)
-private val geocodeRouteJson =
-    Json {
-        encodeDefaults = true
-        explicitNulls = false
-    }
 
 /**
  * GET /api/geocode?q=<text>[&autocomplete=0][&proximity=lng,lat][&limit=N]
@@ -94,8 +84,6 @@ internal fun geocodeResponseDto(results: List<GeocodeResult>): GeocodeResponseDt
             },
     )
 
-internal inline fun <reified T> encodeGeocodeJson(value: T): String = geocodeRouteJson.encodeToString(value)
-
 private suspend fun ApplicationCall.respondGeocodeError(
     error: String,
     status: HttpStatusCode,
@@ -108,5 +96,5 @@ private suspend inline fun <reified T> ApplicationCall.respondGeocodeJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondEncodedJson(geocodeRouteJson, value, status)
+    respondEncodedJson(value, status)
 }

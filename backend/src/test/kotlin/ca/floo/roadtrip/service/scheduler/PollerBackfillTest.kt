@@ -1,8 +1,6 @@
 package ca.floo.roadtrip.service.scheduler
 
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -16,12 +14,12 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+
+private val fakeProvider = FakeAvailabilityProvider(BookingProvider.RECGOV)
 
 class PollerBackfillTest : SharedDbTest() {
     private var userSeq = 0
@@ -93,7 +91,7 @@ class PollerBackfillTest : SharedDbTest() {
                 poiRepo = PoiRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
-                availabilityProviders = listOf(FakeProvider),
+                availabilityProviders = listOf(fakeProvider),
                 dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
@@ -122,23 +120,5 @@ class PollerBackfillTest : SharedDbTest() {
         backfill.run()
         assertEquals(listOf(pollerId), pollerRepo.pollerIdsForWatch(watchId))
         assertEquals(1, pollerRepo.count(active = true))
-    }
-
-    private object FakeProvider : AvailabilityProvider {
-        override val id = BookingProvider.RECGOV
-        override val capabilities =
-            AvailabilityProviderCapabilities(
-                supportsInternalPolling = true,
-                bookingHorizonDays = 180,
-                maxPollWindowDays = 60,
-            )
-
-        override fun isEnabled(): Boolean = true
-
-        override suspend fun availability(
-            campground: Campground,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 }

@@ -19,25 +19,13 @@ import ca.floo.roadtrip.route.common.trimmedQuery
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.POI_LIMIT
 import ca.floo.roadtrip.service.poi.PoiReader
-import ca.floo.roadtrip.service.poi.encodePoiFeatureJson
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.json.Json
-
-@OptIn(ExperimentalSerializationApi::class)
-private val poiRoutesJson =
-    Json {
-        ignoreUnknownKeys = true
-        explicitNulls = false
-    }
 
 private const val DEFAULT_SEARCH_LIMIT = 10
 private const val MIN_SEARCH_LIMIT = 1
@@ -174,11 +162,11 @@ private fun parseRequest(dto: PoisRequestSchema): PoiRequest {
 }
 
 private suspend fun ApplicationCall.respondPoiFeatureJson(value: PoiFeatureCollectionSchema) {
-    respondText(encodePoiFeatureJson(value), ContentType.Application.Json)
+    respondEncodedJson(value)
 }
 
 private suspend fun ApplicationCall.respondPoiFeatureJson(value: PoiDetailFeatureSchema) {
-    respondText(encodePoiFeatureJson(value), ContentType.Application.Json)
+    respondEncodedJson(value)
 }
 
 private suspend fun ApplicationCall.respondPoiError(
@@ -193,5 +181,5 @@ private suspend inline fun <reified T> ApplicationCall.respondPoiJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondEncodedJson(poiRoutesJson, value, status)
+    respondEncodedJson(value, status)
 }

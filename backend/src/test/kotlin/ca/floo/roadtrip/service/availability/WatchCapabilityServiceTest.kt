@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
+import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campsiteFixture
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
@@ -14,7 +14,6 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.testCampground
 import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
@@ -197,7 +196,12 @@ class WatchCapabilityServiceTest {
         supportsInternalPolling: Boolean,
     ) : AvailabilityTargetResolver {
         private val byId = campsites.associateBy { it.id }
-        private val provider = FakeAvailabilityProvider(supportsInternalPolling)
+        private val provider =
+            FakeAvailabilityProvider(
+                id = BookingProvider.RECGOV,
+                supportsInternalPolling = supportsInternalPolling,
+                bookingHorizonDays = FAKE_PROVIDER_YEAR_HORIZON_DAYS,
+            )
         private val campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "facility-1")
 
         override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? {
@@ -215,26 +219,6 @@ class WatchCapabilityServiceTest {
             // Unused by WatchCapabilityService tests
             throw UnsupportedOperationException("resolve(poller) not implemented in test fake")
         }
-    }
-
-    private class FakeAvailabilityProvider(
-        supportsInternalPolling: Boolean,
-    ) : AvailabilityProvider {
-        override val id: BookingProvider = BookingProvider.RECGOV
-        override val capabilities: AvailabilityProviderCapabilities =
-            AvailabilityProviderCapabilities(
-                supportsInternalPolling = supportsInternalPolling,
-                bookingHorizonDays = 365,
-                maxPollWindowDays = 60,
-            )
-
-        override fun isEnabled(): Boolean = true
-
-        override suspend fun availability(
-            campground: Campground,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
     private fun campsite(

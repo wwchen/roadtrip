@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.route
 
-import ca.floo.roadtrip.route.api.health.encodeHealthJson
 import ca.floo.roadtrip.route.api.health.healthResponseDto
 import ca.floo.roadtrip.route.api.health.healthRoutes
+import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.service.health.ReadinessService
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
@@ -19,7 +19,7 @@ import kotlin.test.assertEquals
 class HealthRoutesTest {
     @Test
     fun `health response serializes status and epoch seconds with dto`() {
-        val json = Json.parseToJsonElement(encodeHealthJson(healthResponseDto(1717683240))).jsonObject
+        val json = Json.parseToJsonElement(encodeApiJson(healthResponseDto(1717683240))).jsonObject
 
         assertEquals("ok", json["status"]!!.jsonPrimitive.content)
         assertEquals(1717683240, json["now"]!!.jsonPrimitive.long)

@@ -24,20 +24,9 @@ import io.ktor.server.application.call
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-
-@OptIn(ExperimentalSerializationApi::class)
-private val onRouteJson =
-    Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-        explicitNulls = false
-    }
 
 private val onRouteLog = LoggerFactory.getLogger("PoisOnRouteRoutes")
 
@@ -173,11 +162,9 @@ private fun onRouteFeature(row: PoiRow): PoisOnRouteFeatureSchema =
             ),
     )
 
-internal fun encodeOnRouteJson(value: PoisOnRouteResponseSchema): String = onRouteJson.encodeToString(value)
-
 private suspend inline fun <reified T> ApplicationCall.respondOnRouteJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondEncodedJson(onRouteJson, value, status)
+    respondEncodedJson(value, status)
 }

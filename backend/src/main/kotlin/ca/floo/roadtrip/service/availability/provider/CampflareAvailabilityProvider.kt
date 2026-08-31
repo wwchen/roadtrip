@@ -14,7 +14,6 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.support.CampflareException
-import kotlinx.coroutines.CancellationException
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -157,17 +156,11 @@ class CampflareAvailabilityProvider(
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.dataProviderRef::class.simpleName ?: "unknown")
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
-        try {
-            block()
-        } catch (e: AvailabilityProviderError) {
-            throw e
-        } catch (e: CampflareException) {
-            throw upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus, blockedStatuses = campflareBlockedStatuses)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            throw AvailabilityProviderError.UpstreamUnavailable(e)
-        }
+        mapUpstreamErrors(
+            vendorError = { e: CampflareException ->
+                upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus, blockedStatuses = campflareBlockedStatuses)
+            },
+        ) { block() }
 
     companion object {
         /** An auth failure is a key problem, not an outage: retrying it is

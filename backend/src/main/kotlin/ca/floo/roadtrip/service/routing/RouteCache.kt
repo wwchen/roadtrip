@@ -21,9 +21,13 @@ import java.util.concurrent.ConcurrentHashMap
 // back over the wire.
 //
 // TTL is generous because the cache key already includes every waypoint; a
-// route invalidates when the user changes any stop. Exhaustion strategy is
-// simple — TTL eviction on read; no LRU. Steady-state memory is bounded by
-// the number of distinct routes the user explores per session (typically <10).
+// route invalidates when the user changes any stop. Steady-state memory is the
+// distinct routes explored per session (typically <10), but the key is minted
+// from unauthenticated coordinates, so every insert first sweeps expired
+// entries and then evicts down to MAX_ENTRIES — an unbounded map here is a
+// memory-exhaustion primitive for anyone able to call /api/route in a loop.
+private const val MAX_ENTRIES = 500
+
 class RouteCache(
     private val directions: MapboxDirections,
     private val ttl: Duration = ApiCacheEntity.ROUTE.defaultTtl,
@@ -59,7 +63,7 @@ class RouteCache(
         persistentCache.get(namespace, key)?.let { persisted ->
             try {
                 val response = json.decodeFromJsonElement(RouteResponse.serializer(), persisted.payload)
-                store[key] = Entry(response, persisted.expiresAt)
+                remember(key, Entry(response, persisted.expiresAt))
                 log.debug("route persistent cache hit: key={}", key)
                 return response
             } catch (e: Exception) {
@@ -69,7 +73,7 @@ class RouteCache(
         }
         log.debug("route cache miss: key={}", key)
         val fresh = directions.directions(waypoints)
-        store[key] = Entry(fresh, nowInstant.plus(ttl))
+        remember(key, Entry(fresh, nowInstant.plus(ttl)))
         persistentCache.put(
             namespace,
             key,
@@ -85,13 +89,28 @@ class RouteCache(
         response: RouteResponse,
     ) {
         val key = waypointsKey(waypoints)
-        store[key] = Entry(response, now().plus(ttl))
+        remember(key, Entry(response, now().plus(ttl)))
         persistentCache.put(
             namespace,
             key,
             json.encodeToJsonElement(RouteResponse.serializer(), response),
             ttl,
         )
+    }
+
+    /** Insert, then keep the map at [MAX_ENTRIES]: expired entries first, then the soonest to expire. */
+    private fun remember(
+        key: String,
+        entry: Entry,
+    ) {
+        store[key] = entry
+        if (store.size <= MAX_ENTRIES) return
+        val nowInstant = now()
+        store.entries.removeIf { !it.value.expiresAt.isAfter(nowInstant) }
+        while (store.size > MAX_ENTRIES) {
+            val oldest = store.entries.minByOrNull { it.value.expiresAt } ?: return
+            store.remove(oldest.key, oldest.value)
+        }
     }
 
     private fun waypointsKey(waypoints: List<Pair<Double, Double>>): String =

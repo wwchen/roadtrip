@@ -299,21 +299,17 @@ class AspiraAvailabilityProvider(
         return value.toInt()
     }
 
-    private inline fun <T> runWithErrorMapping(block: () -> T): T =
-        try {
-            block()
-        } catch (e: AvailabilityProviderError) {
-            throw e
-        } catch (e: AspiraException) {
-            throw upstreamAvailabilityError(
-                cause = e,
-                httpStatus = e.httpStatus,
-                blockedStatuses = aspiraBlockedStatuses,
-                blockedMessageMarker = WAF_MESSAGE_MARKER,
-            )
-        } catch (e: Exception) {
-            throw AvailabilityProviderError.UpstreamUnavailable(e)
-        }
+    private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
+        mapUpstreamErrors(
+            vendorError = { e: AspiraException ->
+                upstreamAvailabilityError(
+                    cause = e,
+                    httpStatus = e.httpStatus,
+                    blockedStatuses = aspiraBlockedStatuses,
+                    blockedMessageMarker = WAF_MESSAGE_MARKER,
+                )
+            },
+        ) { block() }
 }
 
 internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, AvailabilityErrorDto> {

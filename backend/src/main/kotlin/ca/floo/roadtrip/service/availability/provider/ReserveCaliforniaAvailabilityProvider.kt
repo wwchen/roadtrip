@@ -13,7 +13,6 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.ReserveCaliforniaException
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -153,18 +152,10 @@ class ReserveCaliforniaAvailabilityProvider(
             ?.observedAt
             ?: Instant.now(clock)
 
-    private suspend fun <T> runWithErrorMapping(block: suspend () -> T): T =
-        try {
-            block()
-        } catch (e: AvailabilityProviderError) {
-            throw e
-        } catch (e: ReserveCaliforniaException) {
-            throw upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            throw AvailabilityProviderError.UpstreamUnavailable(e)
-        }
+    private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
+        mapUpstreamErrors(
+            vendorError = { e: ReserveCaliforniaException -> upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus) },
+        ) { block() }
 
     private companion object {
         const val PROVIDER = "reservecalifornia"

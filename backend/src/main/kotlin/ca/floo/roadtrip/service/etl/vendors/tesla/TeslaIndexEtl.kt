@@ -21,6 +21,9 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.time.Instant
 
+// How many colliding slugs the failure message names before it gets unreadable.
+private const val LOGGED_COLLISION_SAMPLES = 3
+
 // Tesla bulk locations feed → canonical tesla_superchargers.
 //
 // Capture path: data/raw/tesla-index/<ts>.json (single envelope).
@@ -92,7 +95,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerUpsertCandidate>
         val collisions = bySlug.filterValues { it.size > 1 }
         if (collisions.isNotEmpty()) {
             val sample =
-                collisions.entries.take(3).joinToString("; ") { (slug, group) ->
+                collisions.entries.take(LOGGED_COLLISION_SAMPLES).joinToString("; ") { (slug, group) ->
                     "$slug ← [${group.joinToString(", ") { it.commonSiteName }}]"
                 }
             error(

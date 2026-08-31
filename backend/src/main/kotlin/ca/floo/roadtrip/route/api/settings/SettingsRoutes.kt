@@ -125,7 +125,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
                     is RouteBodyResult.Valid -> body.value
                 }
             try {
-                call.respondEncodedJson(roadtripApiJson, service.sendSlackTest(principal.userId, req.channel))
+                call.respondEncodedJson(service.sendSlackTest(principal.userId, req.channel))
             } catch (e: SettingsError) {
                 call.respondSettingsError(e)
             }
@@ -135,7 +135,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
         post(EMAIL_TEST_PATH) {
             val principal = call.requireUser() ?: return@post
             try {
-                call.respondEncodedJson(roadtripApiJson, service.sendEmailTest(principal.userId))
+                call.respondEncodedJson(service.sendEmailTest(principal.userId))
             } catch (e: SettingsError) {
                 call.respondSettingsError(e)
             }
@@ -157,7 +157,7 @@ private suspend fun ApplicationCall.requireUser(): Principal.User? {
     return p
 }
 
-private suspend fun ApplicationCall.respondSettings(dto: SettingsResponseDto) = respondEncodedJson(roadtripApiJson, dto)
+private suspend fun ApplicationCall.respondSettings(dto: SettingsResponseDto) = respondEncodedJson(dto)
 
 /**
  * Maps a [SettingsError] to the HTTP status code and error code documented in

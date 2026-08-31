@@ -9,19 +9,17 @@ import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalDateQuery
 import ca.floo.roadtrip.route.common.queryValues
 import ca.floo.roadtrip.route.common.respondApiError
+import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.service.api.availabilityErrorDto
-import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
 import ca.floo.roadtrip.support.UpstreamHttpException
 import ca.floo.roadtrip.support.causeChain
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.plugins.origin
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
@@ -176,7 +174,7 @@ private suspend inline fun <reified T> ApplicationCall.respondCampsiteJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondText(encodeAvailabilityJson(value), ContentType.Application.Json, status)
+    respondEncodedJson(value, status)
 }
 
 private suspend fun ApplicationCall.respondAvailabilityError(
@@ -205,7 +203,7 @@ private suspend inline fun <reified T> ApplicationCall.respondAvailabilityJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondText(encodeAvailabilityJson(value), ContentType.Application.Json, status)
+    respondEncodedJson(value, status)
 }
 
 private fun availabilityErrorDto(e: AvailabilityServiceError.BadDateWindow): AvailabilityErrorDto =

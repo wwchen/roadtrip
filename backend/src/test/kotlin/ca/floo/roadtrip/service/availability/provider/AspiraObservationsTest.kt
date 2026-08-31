@@ -9,8 +9,8 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
+import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
-import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -51,7 +51,7 @@ class AspiraObservationsTest {
     @Test
     fun `aspira upstream mapper uses availability error dto renderer`() {
         val (status, error) = mapAspiraUpstreamError(AspiraException("WAF challenge", httpStatus = 503))
-        val json = Json.parseToJsonElement(encodeAvailabilityJson(error)).jsonObject
+        val json = Json.parseToJsonElement(encodeApiJson(error)).jsonObject
 
         assertEquals(503, status.value)
         assertEquals("error", json["state"]!!.jsonPrimitive.content)

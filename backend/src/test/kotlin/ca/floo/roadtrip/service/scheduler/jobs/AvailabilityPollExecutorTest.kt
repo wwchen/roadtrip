@@ -75,6 +75,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** How far a second poll's observations are stamped past the first's. */
+private val observationTick: Duration = Duration.ofSeconds(1)
+
 class AvailabilityPollExecutorTest : SharedDbTest() {
     private val testProviderCooldown = Duration.ofMinutes(5)
     private var userSeq = 0
@@ -497,6 +500,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         // (the only way a supported provider yields a null window now that the
         // window is vendor-derived, not watch-derived).
         maxPollWindowDays: Int = 60,
+        // Stamped on every observation. Tests that run the executor twice bump
+        // it by [observationTick] instead of sleeping for a later wall clock.
+        var observedAt: Instant = Instant.now(),
     ) : AvailabilityProvider {
         var calls: Int = 0
         var lastStart: LocalDate? = null
@@ -531,7 +537,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             lastEnd = endDate
             lastReservableCount = campsites.size
             mdcRunIdDuringCall = MDC.get("run_id")
-            val observedAt = Instant.now()
             val observations =
                 campsites.map { campsite ->
                     CampsiteDayObservation(
@@ -1437,7 +1442,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val rowsAfterFirst = repo.listForCampsite(campsiteId).size
             val currentAfterFirst = repo.readCurrent(listOf(campsiteId), listOf(farStart)).single()
 
-            Thread.sleep(5)
+            provider.observedAt = provider.observedAt.plus(observationTick)
             executorFor(provider).handle(poller)
             val rowsAfterSecond = repo.listForCampsite(campsiteId).size
             val currentAfterSecond = repo.readCurrent(listOf(campsiteId), listOf(farStart)).single()

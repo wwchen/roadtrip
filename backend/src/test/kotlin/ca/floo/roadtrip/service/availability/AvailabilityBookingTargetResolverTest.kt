@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
+import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campsiteFixture
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
@@ -29,8 +29,17 @@ private const val TEST_RECGOV_PARENT_ID = "recgov-parent-1"
 private const val TEST_CAMPFLARE_PARENT_ID = "campflare-parent-1"
 
 class AvailabilityBookingTargetResolverTest {
-    private val campflareProvider = FakeAvailabilityProvider(BookingProvider.CAMPFLARE)
-    private val recgovProvider = FakeAvailabilityProvider(BookingProvider.RECGOV)
+    private val campflareProvider =
+        FakeAvailabilityProvider(
+            id = BookingProvider.CAMPFLARE,
+            bookingHorizonDays = FAKE_PROVIDER_YEAR_HORIZON_DAYS,
+            parentRefOverride = { BookingProviderRef.Campflare(TEST_CAMPFLARE_PARENT_ID) },
+        )
+    private val recgovProvider =
+        FakeAvailabilityProvider(
+            id = BookingProvider.RECGOV,
+            bookingHorizonDays = FAKE_PROVIDER_YEAR_HORIZON_DAYS,
+        )
 
     @Test
     fun `targetFor skips availability-only campflare candidate and returns recgov booking target`() {
@@ -85,31 +94,6 @@ class AvailabilityBookingTargetResolverTest {
                 target.parentRef is BookingProviderRef.RecGov
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult = AddToCartResult.Unsupported
-    }
-
-    private class FakeAvailabilityProvider(
-        override val id: BookingProvider,
-    ) : AvailabilityProvider {
-        override val capabilities: AvailabilityProviderCapabilities =
-            AvailabilityProviderCapabilities(
-                supportsInternalPolling = true,
-                bookingHorizonDays = 365,
-                maxPollWindowDays = 60,
-            )
-
-        override fun isEnabled(): Boolean = true
-
-        override fun parentRefFor(campground: Campground): BookingProviderRef? =
-            when (id) {
-                BookingProvider.CAMPFLARE -> BookingProviderRef.Campflare(TEST_CAMPFLARE_PARENT_ID)
-                else -> super.parentRefFor(campground)
-            }
-
-        override suspend fun availability(
-            campground: Campground,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
     private fun resolvedTarget(candidates: List<AvailabilityProvider>): ResolvedAvailabilityTarget {
