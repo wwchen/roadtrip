@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Key format: base64 of exactly 32 bytes (`SecretsConfig` enforces with `require`).
-- `required_in: [local, prod]` per the spec — absence fails boot in both.
+- `required_in: [prod]` — prod fails boot without it; local degrades gracefully (503) until the operator sets the vault value.
 - Never put a secret value in any committed file; values go only into the sops vault via `manage.py set` (operator action).
 - Repo rule: no inline magic constants; none are needed here.
 - All commands run from the repo root.
@@ -37,7 +37,7 @@ Add to the end of `secrets/registry.yaml`:
 ENCRYPTION_KEY:
   description: AES-256-GCM key (base64 of 32 bytes) sealing per-user secrets in user_settings — the Slack bot token today, the rec.gov password next. Absent, secret storage is disabled and settings that need it answer 503.
   consumers: [backend]
-  required_in: [local, prod]
+  required_in: [prod]
 ```
 
 - [ ] **Step 2: Regenerate and validate**
@@ -134,6 +134,6 @@ The vault is age-encrypted; setting values requires the operator's age key and a
 openssl rand -base64 32 | ./secrets/manage.py set ENCRYPTION_KEY
 ```
 
-(or run `./secrets/manage.py set ENCRYPTION_KEY` interactively and paste an `openssl rand -base64 32` value; set it for both local and prod overlays per the prompts — `required_in: [local, prod]` means `make run` fails boot until this is done.)
+(or run `./secrets/manage.py set ENCRYPTION_KEY` interactively and paste an `openssl rand -base64 32` value; set it for both local and prod overlays per the prompts. `required_in: [prod]` means a prod deploy fails boot until this is done; `make run` still starts locally without it — per-user secret storage is simply disabled and answers 503 until the local value is set. `manage.py check` also reports the missing prod value until then.)
 
 Rotation note for the operator: rotating this key orphans every existing `*_cipher` blob (they fail to decrypt and degrade per-user, they do not throw), so rotation means users re-enter stored secrets.

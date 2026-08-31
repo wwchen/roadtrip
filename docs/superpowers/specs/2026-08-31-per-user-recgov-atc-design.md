@@ -62,7 +62,8 @@ this design:
 ### 1. Prerequisite: provision the encryption key
 
 Add `ENCRYPTION_KEY` to `secrets/registry.yaml` (consumer: backend; required in
-prod and local), thread it through the sops env files and compose, and add a
+prod; local degrades gracefully per the registry's contract — the
+`MAPBOX_TOKEN` pattern), thread it through the sops env files and compose, and add a
 `security:` section to `application.yaml`
 (`encryption-key: ${ENCRYPTION_KEY:}`). This is its own PR: it un-breaks the
 existing per-user Slack token storage independent of everything below.
