@@ -34,6 +34,9 @@ roadtrip:
     recgov-atc:
       companion-base-url:
       companion-timeout: 180s
+      # Shared secret for the companion channel. The companion requires it on
+      # every route; blank means every companion call is refused.
+      companion-api-token: ${COMPANION_API_TOKEN:}
   security:
     # AES-256-GCM key for per-user secret storage (SecretCipher), base64 of
     # 32 bytes. Absent or blank disables secret storage: SecretsConfig returns

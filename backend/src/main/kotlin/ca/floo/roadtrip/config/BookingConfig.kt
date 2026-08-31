@@ -16,6 +16,9 @@ data class BookingConfig(
 data class RecGovAtcConfig(
     val companionBaseUrl: String?,
     val companionTimeout: Duration,
+    // Shared secret the companion requires on every route. Blank means the
+    // companion answers 503 and ATC cannot run.
+    val companionApiToken: String? = null,
 ) {
     init {
         require(companionTimeout.isPositive()) { "recgov ATC companionTimeout must be positive" }
@@ -30,6 +33,7 @@ data class RecGovAtcConfig(
             RecGovAtcConfig(
                 companionBaseUrl = config.value("companion-base-url")?.trimEnd('/'),
                 companionTimeout = config.duration("companion-timeout", defaultCompanionTimeout),
+                companionApiToken = config.value("companion-api-token"),
             )
     }
 }

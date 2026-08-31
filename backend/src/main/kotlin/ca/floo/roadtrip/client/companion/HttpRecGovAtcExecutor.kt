@@ -22,6 +22,7 @@ private const val RECGOV_HEALTH_PATH = "/health"
 private const val CONTENT_TYPE_JSON = "application/json"
 private const val HEADER_ACCEPT = "Accept"
 private const val HEADER_CONTENT_TYPE = "Content-Type"
+private const val HEADER_COMPANION_TOKEN = "X-Companion-Token"
 private const val ERROR_COMPANION_REQUEST_FAILED = "companion_request_failed"
 private const val ERROR_COMPANION_INVALID_RESPONSE = "companion_invalid_response"
 private const val ERROR_COMPANION_HEALTH_REQUEST_FAILED = "companion_health_request_failed"
@@ -39,6 +40,11 @@ internal class HttpRecGovAtcExecutor(
     private val log = LoggerFactory.getLogger(javaClass)
     private val baseUrl = requireNotNull(config.companionBaseUrl) { "recgov ATC companion base URL is required" }
     private val timeout = config.companionTimeout
+    private val apiToken = config.companionApiToken
+
+    // The companion requires the shared secret on every route it serves.
+    private fun HttpRequest.Builder.withCompanionAuth(): HttpRequest.Builder =
+        apply { apiToken?.let { header(HEADER_COMPANION_TOKEN, it) } }
 
     override suspend fun addToCart(payload: JsonObject): RecGovAtcOutcome {
         preflightCompanion()?.let { return it }
@@ -50,6 +56,7 @@ internal class HttpRecGovAtcExecutor(
                 .timeout(timeout)
                 .header(HEADER_ACCEPT, CONTENT_TYPE_JSON)
                 .header(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON)
+                .withCompanionAuth()
                 .POST(HttpRequest.BodyPublishers.ofString(payload.toString()))
                 .build()
 
@@ -93,6 +100,7 @@ internal class HttpRecGovAtcExecutor(
                 .newBuilder(endpoint)
                 .timeout(timeout)
                 .header(HEADER_ACCEPT, CONTENT_TYPE_JSON)
+                .withCompanionAuth()
                 .GET()
                 .build()
 
