@@ -37,19 +37,19 @@ describe('the registry', () => {
 
   test('the vector basemaps are style URLs and the raster ones are inline styles', () => {
     expect(typeof BASEMAPS['openfreemap-liberty'].style).toBe('string');
-    expect(typeof BASEMAPS['carto-dark'].style).toBe('object');
+    expect(typeof BASEMAPS['carto-dark'].style).toBe('string');
     expect(typeof BASEMAPS.osm.style).toBe('object');
   });
 
   test('raster styles carry attribution, since the tiles are used under licence', () => {
-    for (const key of ['carto-voyager', 'carto-positron', 'carto-dark', 'osm']) {
-      expect(rasterSource(key).attribution, key).toBeTruthy();
-    }
+    expect(rasterSource('osm').attribution).toBeTruthy();
   });
 
-  test('the Carto tiles request @2x', () => {
-    for (const url of rasterSource('carto-voyager').tiles ?? []) {
-      expect(url).toContain('@2x');
+  test('the Carto basemaps are keyless vector styles, since the raster tiles now need an API key', () => {
+    for (const key of ['carto-voyager', 'carto-positron', 'carto-dark']) {
+      const style = BASEMAPS[key].style as string;
+      expect(style, key).toMatch(/^https:\/\/basemaps\.cartocdn\.com\/gl\/[a-z-]+-gl-style\/style\.json$/);
+      expect(style, key).not.toContain('key=');
     }
   });
 });

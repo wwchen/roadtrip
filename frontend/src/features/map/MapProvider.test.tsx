@@ -380,18 +380,21 @@ describe('satellite underlay', () => {
    * silently dropped EVERY overlay — superchargers, campgrounds, Planet Fitness,
    * state lines — with the legend still showing their counts. Nothing was logged.
    *
-   * The mechanism, in one sentence: the dark default is an inline style, so
+   * The mechanism, in one sentence: an inline style is applied in place, so
    * `style.load` fires synchronously inside `setStyle`, so the reset and the reload
    * land in one React batch — and a boolean that goes true -> false -> true within a
    * single batch is, to React, a boolean that never changed. Every effect keyed on
    * it therefore skipped the reinstall, after `diff: false` had already destroyed
    * the layers.
    *
+   * The dark default reached this path when it was a raster inline style; it is a
+   * Carto vector style URL now, so `osm` is the remaining inline style that can.
+   *
    * The satellite underlay stands in for the overlay hooks here: it is the one
    * consumer of the signal that lives in this component, and it reinstalls through
    * exactly the same effect-dependency mechanism they do.
    */
-  test('reinstalls itself when a mode change loads an inline style synchronously', async () => {
+  test('reinstalls itself when a basemap pick loads an inline style synchronously', async () => {
     renderMap();
     await loadStyle();
     await act(async () => {
@@ -400,13 +403,13 @@ describe('satellite underlay', () => {
     expect(instance.getLayer(SATELLITE_LAYER_ID)).toBeDefined();
 
     await act(async () => {
-      useThemeStore.getState().setChoice('dark');
+      ctx.setBasemap('osm');
     });
 
     // No hand-fired style.load: the inline style already announced itself inside
     // setStyle. If the reinstall needs a nudge from the test, it is broken.
     expect(instance.setStyleCalls).toHaveLength(1);
-    expect(instance.setStyleCalls[0].style).toBe(BASEMAPS[DARK_BASEMAP].style);
+    expect(instance.setStyleCalls[0].style).toBe(BASEMAPS.osm.style);
     expect(instance.getLayer(SATELLITE_LAYER_ID)).toBeDefined();
   });
 });
