@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.client.recgov
 
 import ca.floo.roadtrip.client.DateStringFormatter
+import ca.floo.roadtrip.support.RecGovException
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpRequestRetry
@@ -19,7 +20,7 @@ import java.nio.charset.StandardCharsets
 class HttpRecgovAvailabilityClient(
     private val httpClient: HttpClient = defaultClient(),
     private val minGapMs: Long = DEFAULT_MIN_GAP_MS,
-    private val retryDelaysMs: List<Long> = defaultRetryDelaysMs,
+    private val availBaseUrl: String = AVAIL_BASE,
 ) : RecGovAvailabilityClient {
     private val log = LoggerFactory.getLogger(HttpRecgovAvailabilityClient::class.java)
     private val mutex = Mutex()
@@ -32,32 +33,32 @@ class HttpRecgovAvailabilityClient(
     ): Map<String, Campsite> {
         val monthLabel = DateStringFormatter.month(monthStart)
         val isoMonth = URLEncoder.encode("${monthStart}T00:00:00.000Z", StandardCharsets.UTF_8)
-        val url = "$AVAIL_BASE/$campgroundId/month?start_date=$isoMonth"
-        for ((attempt, delayMs) in (listOf(0L) + retryDelaysMs).withIndex()) {
-            mutex.withLock {
-                val gap = System.currentTimeMillis() - lastCallAt
-                if (gap < minGapMs) delay(minGapMs - gap)
-                lastCallAt = System.currentTimeMillis()
-            }
-            log.info("recgov GET availability campground={} month={} attempt={}", campgroundId, monthLabel, attempt + 1)
-            val resp = httpClient.get(url)
-            if (resp.status == HttpStatusCode.TooManyRequests) {
-                if (attempt >= retryDelaysMs.size) {
-                    throw RuntimeException("rec.gov 429 after ${retryDelaysMs.size} retries on $campgroundId/$monthLabel")
-                }
-                val wait = retryDelaysMs[attempt]
-                log.warn("429 rate limit on {}/{} — retrying in {}s", campgroundId, monthLabel, wait / 1000)
-                delay(wait)
-                continue
-            }
-            if (!resp.status.isSuccess()) {
-                throw RuntimeException(
-                    "rec.gov ${resp.status} on $campgroundId/$monthLabel: ${resp.bodyAsText().take(ERROR_BODY_EXCERPT_CHARS)}",
-                )
-            }
-            return parseCampsites(resp.bodyAsText())
+        val url = "${availBaseUrl.trimEnd('/')}/$campgroundId/month?start_date=$isoMonth"
+        mutex.withLock {
+            val gap = System.currentTimeMillis() - lastCallAt
+            if (gap < minGapMs) delay(minGapMs - gap)
+            lastCallAt = System.currentTimeMillis()
         }
-        return emptyMap()
+        log.info("recgov GET availability campground={} month={}", campgroundId, monthLabel)
+        val resp = httpClient.get(url)
+        if (resp.status == HttpStatusCode.TooManyRequests) {
+            // Surfaced, not slept on. A blocking ladder here held the calling
+            // poll hostage for 21s and hid the rate limit from
+            // FailoverAvailabilityFetcher, which would rather cool rec.gov down
+            // and try the next candidate immediately.
+            log.warn("recgov 429 rate limit on {}/{}", campgroundId, monthLabel)
+            throw RecGovException(
+                "rec.gov 429 rate limit on $campgroundId/$monthLabel",
+                httpStatus = HttpStatusCode.TooManyRequests.value,
+            )
+        }
+        if (!resp.status.isSuccess()) {
+            throw RecGovException(
+                "rec.gov ${resp.status} on $campgroundId/$monthLabel: ${resp.bodyAsText().take(ERROR_BODY_EXCERPT_CHARS)}",
+                httpStatus = resp.status.value,
+            )
+        }
+        return parseCampsites(resp.bodyAsText())
     }
 
     override fun close() = httpClient.close()
@@ -67,9 +68,6 @@ class HttpRecgovAvailabilityClient(
 
         /** Floor on the gap between outbound calls; rec.gov 429s on bursts. */
         private const val DEFAULT_MIN_GAP_MS = 1500L
-
-        /** Backoff ladder for a 429; its size is also the retry budget. */
-        private val defaultRetryDelaysMs = listOf(3_000L, 6_000L, 12_000L)
 
         /** Error bodies go in an exception message — enough to identify the
          *  failure, not enough to dump a page of HTML into the logs. */

@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.client.reserveamerica
 
 import ca.floo.roadtrip.client.DateStringFormatter
+import ca.floo.roadtrip.client.VendorHttpDefaults
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.support.ReserveAmericaException
 import kotlinx.coroutines.future.await
@@ -13,7 +14,6 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -108,7 +108,7 @@ class HttpReserveAmericaAvailabilityClient(
         val req =
             HttpRequest
                 .newBuilder(URI.create(url))
-                .timeout(Duration.ofSeconds(30))
+                .timeout(VendorHttpDefaults.requestTimeout)
                 .header("User-Agent", USER_AGENT)
                 .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
                 .header("Accept-Language", "en-CA,en;q=0.9")
@@ -159,7 +159,7 @@ class HttpReserveAmericaAvailabilityClient(
         fun defaultClient(): HttpClient =
             HttpClient
                 .newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
+                .connectTimeout(VendorHttpDefaults.connectTimeout)
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .cookieHandler(CookieManager(null, CookiePolicy.ACCEPT_ALL))
                 .build()

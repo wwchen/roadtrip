@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.client.campflare
 
 import ca.floo.roadtrip.client.DateStringFormatter
+import ca.floo.roadtrip.client.VendorHttpDefaults
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.support.CampflareException
 import kotlinx.coroutines.future.await
@@ -16,7 +17,6 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 
@@ -76,7 +76,7 @@ class HttpCampflareAvailabilityClient(
         val req =
             HttpRequest
                 .newBuilder(URI.create(url))
-                .timeout(requestTimeout)
+                .timeout(VendorHttpDefaults.requestTimeout)
                 .header("User-Agent", USER_AGENT)
                 .header("Accept", "application/json")
                 .header("Authorization", apiKey)
@@ -103,13 +103,11 @@ class HttpCampflareAvailabilityClient(
         private const val MAX_BULK_CAMPGROUNDS = 25
         private const val DEFAULT_API_BASE_URL = "https://api.campflare.com/v2"
         private const val USER_AGENT = "roadtrip-campflare-availability/1.0"
-        private val requestTimeout: Duration = Duration.ofSeconds(30)
-        private val connectTimeout: Duration = Duration.ofSeconds(10)
 
         fun defaultClient(): HttpClient =
             HttpClient
                 .newBuilder()
-                .connectTimeout(connectTimeout)
+                .connectTimeout(VendorHttpDefaults.connectTimeout)
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build()
     }
