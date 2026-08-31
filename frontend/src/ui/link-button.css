@@ -1,0 +1,31 @@
+/* ---------------------------------------------------------------------------
+   `LinkButton` — the paint for a button that has to read as a link.
+
+   Lives here rather than beside one feature because five call sites across four
+   availability components already wanted it, and a sixth would have copied it
+   again. It was `.cg-link-button` in `features/availability/availability.css`.
+
+   Neither LDS primitive covers this. `.lds-btn` is a control — pill radius,
+   `min-height: var(--control-xl)`, 9px/17px padding — and every one of these
+   sits INSIDE a sentence ("Couldn't load sites · Retry"), where a control would
+   break the line box. `.lds-link` is the right paint but its template renders an
+   `<a>`, and these go nowhere: they refetch. LDS's own rule for the mirror-image
+   case says a link that must look like a button is a button with an `href`; this
+   is the same rule read the other way, so the element stays a `<button>` and
+   only the chrome comes off.
+
+   `color: inherit` is load-bearing. The surrounding span carries the meaning —
+   `.cg-retry` is error red, `.cg-refresh` is stale amber — and a colour of its
+   own here would repaint a failure notice in link blue. Keyboard focus is
+   deliberately the browser's default ring: an `<a href="#">` never got one, and
+   this is the affordance that arrived with the element change.
+   --------------------------------------------------------------------------- */
+.rt-link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}

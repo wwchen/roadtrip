@@ -25,7 +25,7 @@ html.has-sandbox-chrome {
   left: 0;
   right: 0;
   height: var(--rt-sandbox-banner-h);
-  z-index: 9999;
+  z-index: var(--rt-z-chrome);
   /* The height above is what the app reserves, so the bar must not exceed it.
      A second line — long branch name on a narrow phone, or a viewer with text
      zoom or a minimum font size — would paint outside the bar, over the app, in

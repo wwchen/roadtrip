@@ -12,6 +12,7 @@
 //   - "couldn't check", when asking failed — with the retry that implies;
 //   - "not available for this campground", when the provider cannot alert anyone;
 //   - "no online openings to watch", when the day itself has nothing to wait for.
+import { Button, LinkButton } from '@ui';
 import { availabilityStatusMeta, normalizeAvailabilityStatus } from '@/lib/availability-status';
 import { availableCount, campsiteCount } from '@/lib/day-fields';
 import type { FusedDay } from './fuse';
@@ -110,15 +111,15 @@ function DayAction({
 
   if (canAlert) {
     return (
-      <button
-        type="button"
-        className={`cg-btn ${watching ? 'cg-btn-secondary' : 'cg-btn-primary'} cg-day-alert`}
+      <Button
+        variant={watching ? 'secondary' : 'primary'}
+        className="cg-day-alert"
         data-state={watching ? 'watching' : 'set'}
         disabled={busy}
-        onClick={(event) => onToggleWatch(event.currentTarget)}
+        onClick={(event) => onToggleWatch(event.currentTarget as HTMLElement)}
       >
         {busy ? 'Working…' : watching ? 'Watching - tap to remove' : 'Set watch'}
-      </button>
+      </Button>
     );
   }
 
@@ -131,9 +132,9 @@ function DayAction({
       return (
         <span className="cg-day-detail-meta">
           Couldn&apos;t check your availability alerts.{' '}
-          <button type="button" className="cg-retry cg-link-button" onClick={onRetryWatches}>
+          <LinkButton className="cg-retry" onClick={onRetryWatches}>
             Retry
-          </button>
+          </LinkButton>
         </span>
       );
     case 'unsupported':

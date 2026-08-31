@@ -1,9 +1,10 @@
 // The availability grid, mounted inside the campground drawer.
 import { useCallback, useMemo, useState } from 'react';
-import { Button, EmptyState, Icon, useToast } from '@ui';
+import { Button, EmptyState, Icon, LinkButton, useToast } from '@ui';
 import type { PoiFeature } from '@/lib/poi';
 import { availableCount } from '@/lib/day-fields';
 import { addLocalDays, localToday, localYmd, parseLocalYmd, sameLocalDay } from '@/lib/local-date';
+import { copyShareUrl } from '@/lib/share-links';
 import { DayDetail, type WatchUnavailableReason } from './DayDetail';
 import { CalendarPopover } from './CalendarPopover';
 import { SiteList } from './SiteList';
@@ -256,10 +257,16 @@ function AvailabilityWeekView({
         onOpenWatch={(anchor) => actions.openWatch(anchor, selectedDate ?? localYmd(weekStart))}
         onReport={() => {
           const detail = `Recreation.gov error for ${poiName} (POI ${poiId}): ${week.error?.message ?? 'unknown'}`;
-          void navigator.clipboard
-            ?.writeText(detail)
-            .then(() => toast({ status: 'success', title: 'Copied the details', children: 'Send them to the team when you report it.' }))
-            .catch(() => toast({ status: 'warning', title: "Couldn't copy the details", children: detail }));
+          // `copyShareUrl` rather than `navigator.clipboard` directly: the async
+          // clipboard is absent in a non-secure context and rejects when the document
+          // is not focused, and the helper's textarea fallback covers both. A bare
+          // `?.writeText` reported no failure at all in the first case — the optional
+          // chain made the whole chain `undefined` and neither toast fired.
+          void copyShareUrl(detail).then((ok) =>
+            ok
+              ? toast({ status: 'success', title: 'Copied the details', children: 'Send them to the team when you report it.' })
+              : toast({ status: 'warning', title: "Couldn't copy the details", children: detail }),
+          );
         }}
         matrix={
           <SiteMatrix
@@ -498,9 +505,9 @@ function WeekSurface({
     return (
       <div className="cg-summary">
         <span className="cg-error">{week.error.message || GENERIC_AVAILABILITY_ERROR}</span> ·{' '}
-        <button type="button" className="cg-retry cg-link-button" onClick={() => void week.refetch()}>
+        <LinkButton className="cg-retry" onClick={() => void week.refetch()}>
           Retry
-        </button>
+        </LinkButton>
       </div>
     );
   }
@@ -546,9 +553,9 @@ function Freshness({
   return (
     <span className={ageMin >= STALE_THRESHOLD_MIN ? 'cg-stale' : undefined}>
       checked {ageMin}m ago ·{' '}
-      <button type="button" className="cg-refresh cg-link-button" onClick={onRefresh}>
+      <LinkButton className="cg-refresh" onClick={onRefresh}>
         refresh
-      </button>
+      </LinkButton>
     </span>
   );
 }

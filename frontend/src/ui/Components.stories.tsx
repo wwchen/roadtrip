@@ -11,6 +11,7 @@ import {
   ConfirmButton,
   EmptyState,
   Inline,
+  LinkButton,
   Radio,
   Row,
   SecretField,
@@ -155,6 +156,15 @@ function RoadtripAdditionsStory() {
           onConfirm={() => setConfirmed(true)}
         />
         {confirmed ? <Inline status="success">Confirmation callback fired.</Inline> : null}
+        {/* Shown inside prose on purpose: the point of the component is that it
+            takes the surrounding sentence's colour and metrics, which a row of
+            them on their own would not demonstrate. */}
+        <p>
+          Couldn&apos;t load sites · <LinkButton>Retry</LinkButton>
+        </p>
+        <p className="rt-storybook-note">
+          checked 4m ago · <LinkButton>refresh</LinkButton>
+        </p>
       </div>
     </div>
   );

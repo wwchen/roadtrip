@@ -17,6 +17,7 @@
 // sticky` on the `th` inside a scrolling container, sized by a CSS custom property the
 // resize drag updates. See the `.cg-site-matrix-*` rules in availability.css.
 import { useCallback, useEffect, useRef } from 'react';
+import { LinkButton } from '@ui';
 import type { Campsite } from '@/api/campsite-api';
 import type { FusedDay } from './fuse';
 import { SiteDetail } from './SiteDetail';
@@ -103,9 +104,9 @@ export function SiteMatrix(props: SiteMatrixProps) {
       <MatrixSection title="Sites by date" actions={weekActions}>
         <div className="cg-site-matrix-status cg-site-matrix-error">
           {sitesError || "Couldn't load sites"}{' '}
-          <button type="button" className="cg-sites-retry cg-link-button" onClick={onRetrySites}>
+          <LinkButton className="cg-sites-retry" onClick={onRetrySites}>
             Retry
-          </button>
+          </LinkButton>
         </div>
       </MatrixSection>
     );

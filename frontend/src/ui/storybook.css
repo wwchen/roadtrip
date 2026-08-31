@@ -33,6 +33,12 @@
   border-radius: var(--rt-r-lg);
 }
 
+/* A muted line of prose, so the `LinkButton` story can show that the component
+   inherits its sentence's colour rather than painting one of its own. */
+.rt-storybook-note {
+  color: var(--rt-muted);
+}
+
 @media (max-width: 640px) {
   .rt-storybook-shell {
     padding: 16px;

@@ -1,5 +1,7 @@
 /* The availability grid: week nav, the site-by-date matrix, the selected-day panel,
-   the site list, the site-detail row, and the calendar and watch popovers.
+   the site list, the site-detail row, the calendar popover, and the host the watch
+   popover portals into — the editor inside that host brings its own sheet
+   (`domain/watch/watch-editor.css`).
  *
  * A near-verbatim lift of the `cg-*` rules that lived in a 1,000-line inline
  * `<style>` block in the vanilla `index.html`. The class names are deliberately
@@ -129,7 +131,7 @@
   position: absolute;
   top: 100%; left: 50%;
   transform: translate(-50%, 6px);
-  z-index: 50;
+  z-index: var(--rt-z-inline-popover);
 }
 .cg-cal-popover {
   width: 280px;
@@ -174,7 +176,6 @@
   border-radius: var(--rt-r-sm);
   font-variant-numeric: tabular-nums;
 }
-.cg-cal-empty { visibility: hidden; }
 .cg-cal-day {
   border: 0;
   background: transparent;
@@ -235,7 +236,7 @@
 .cg-day-detail-actions {
   display: flex; gap: 8px; flex-wrap: wrap;
 }
-.cg-day-detail-actions .cg-btn { flex: 1 1 auto; min-width: 140px; }
+.cg-day-detail-actions .cg-day-alert { flex: 1 1 auto; min-width: 140px; }
 
 .cg-closed-banner {
   margin-top: 12px; padding: 28px 16px;
@@ -788,128 +789,6 @@
   background: var(--rt-brand);
   box-shadow: 0 0 0 1px var(--rt-surface);
 }
-/* In-view watch popover, anchored (position: fixed) to the clicked cell. */
-.cg-watch-pop {
-  width: 232px;
-  background: var(--rt-surface);
-  border: 1px solid var(--rt-border-strong);
-  border-radius: var(--rt-r-xl);
-  box-shadow: 0 8px 24px rgba(var(--rt-c-shadow-rgb),0.40);
-  padding: 12px;
-}
-.cg-watch-pop-head {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-.cg-watch-pop-title {
-  font-size: 13px; font-weight: 600; color: var(--rt-text);
-  line-height: 1.3;
-}
-.cg-watch-pop-close {
-  flex-shrink: 0;
-  width: 22px; height: 22px;
-  background: transparent; border: 0; color: var(--rt-faint);
-  border-radius: var(--rt-r-sm); cursor: pointer; font-size: 16px; line-height: 1;
-  display: grid; place-items: center;
-}
-.cg-watch-pop-close:hover { background: var(--rt-fill-hover); color: var(--rt-text); }
-.cg-watch-pop-date {
-  font-size: 12px; color: var(--rt-muted);
-  margin-bottom: 10px;
-}
-.cg-watch-pop-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-  color: var(--rt-text);
-  cursor: pointer;
-  user-select: none;
-}
-.cg-watch-pop-option-text {
-  display: block;
-  min-width: 0;
-}
-.cg-watch-pop-option-title {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-.cg-watch-pop-option-help {
-  display: block;
-  margin-top: 2px;
-  color: var(--rt-faint);
-  font-size: 11px;
-  line-height: 1.35;
-}
-.cg-watch-pop-switch {
-  position: relative;
-  display: inline-flex;
-  flex: 0 0 auto;
-  width: 36px;
-  height: 22px;
-}
-.cg-watch-pop-switch input {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-.cg-watch-pop-switch-track {
-  position: relative;
-  width: 36px;
-  height: 22px;
-  border-radius: var(--rt-r-pill);
-  background: var(--rt-border-strong);
-  box-shadow: inset 0 0 0 1px var(--rt-border-strong);
-  transition: background 120ms ease, box-shadow 120ms ease;
-  cursor: pointer;
-}
-.cg-watch-pop-switch-track::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--rt-text);
-  transition: transform 120ms ease, background 120ms ease;
-}
-.cg-watch-pop-switch input:checked + .cg-watch-pop-switch-track {
-  background: var(--rt-brand);
-  box-shadow: inset 0 0 0 1px var(--rt-brand);
-}
-.cg-watch-pop-switch input:checked + .cg-watch-pop-switch-track::after {
-  transform: translateX(14px);
-  background: var(--rt-on-accent);
-}
-.cg-watch-pop-switch input:focus-visible + .cg-watch-pop-switch-track {
-  outline: 2px solid var(--rt-brand);
-  outline-offset: 2px;
-}
-.cg-watch-pop-switch input:disabled,
-.cg-watch-pop-switch input:disabled + .cg-watch-pop-switch-track {
-  cursor: default;
-}
-.cg-watch-pop-switch input:disabled + .cg-watch-pop-switch-track {
-  opacity: 0.65;
-}
-.cg-watch-pop .cg-watch-pop-action { width: 100%; }
-.cg-watch-pop-error {
-  margin-top: 8px;
-  font-size: 11px; color: var(--rt-error);
-}
-.cg-watch-pop-note {
-  margin-top: 10px;
-  font-size: 11px; color: var(--rt-faint);
-  line-height: 1.4;
-}
 .cg-site-matrix-load-status {
   color: var(--rt-muted);
   font-size: 11px;
@@ -1052,211 +931,11 @@
   }
 }
 
-/* --- link-styled buttons ------------------------------------------------- */
-
-/* The vanilla grid used `<a href="#">` for Retry and refresh, with the click
-   intercepted and `preventDefault`ed. They are buttons here — they perform an
-   action and go nowhere — so this strips the button chrome back to the link look
-   the surrounding CSS already styles. Keyboard focus is the browser's default
-   ring, which an anchor-with-no-href never got. */
-.cg-link-button {
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-/* --- day-detail action buttons ------------------------------------------- */
-
-/* The `cg-btn` family, lifted from the vanilla index.html. Only the primary and
-   secondary variants are used here (the day panel's watch toggle); the tertiary and
-   disabled variants belong to the drawer's own CTAs, which are LDS `Button`s in the
-   React tree and do not need them. */
-.cg-btn {
-  padding: 0 16px;
-  height: 40px;
-  border-radius: var(--rt-r-md);
-  font-size: 14px; font-weight: 500;
-  text-align: center; text-decoration: none;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
-  letter-spacing: -0.005em;
-  border: 1px solid transparent;
-}
-@media (max-width: 767px) {
-  .cg-btn { height: 44px; font-size: 15px; }
-}
-
-.cg-btn-primary {
-  background: var(--rt-brand); color: var(--rt-on-accent); border: 0;
-  font-weight: 600;
-}
-.cg-btn-primary:hover { background: var(--rt-brand-hover); }
-.cg-btn-primary:active { background: var(--rt-brand-press); }
-
-.cg-btn-secondary {
-  background: var(--rt-fill-subtle); color: var(--rt-text);
-  border: 1px solid var(--rt-border-strong);
-}
-.cg-btn-secondary:hover { background: var(--rt-fill-hover); }
-.cg-btn-secondary:active { background: var(--rt-fill-active); }
-.cg-btn.copied,
-.tb-icon-btn.copied {
-  border-color: var(--rt-success);
-  color: var(--rt-success);
-}
-
-.cg-btn-tertiary {
-  background: transparent; color: var(--rt-muted);
-  border: 0;
-}
-.cg-btn-tertiary:hover { background: var(--rt-fill-subtle); color: var(--rt-text); }
-.cg-btn-tertiary:active { background: var(--rt-fill-hover); }
-
-.cg-btn-disabled {
-  background: var(--rt-fill-subtle); color: var(--rt-faint);
-  border: 1px solid var(--rt-border);
-  cursor: not-allowed;
-}
-.cg-btn[disabled] {
-  opacity: 0.56;
-  cursor: wait;
-}
-
-/* --- watch editor -------------------------------------------------------- */
-
-/* These rules did not live in a stylesheet at all: `web/availability/watch-editor.js`
-   built them as a template string and injected a `<style>` tag into `document.head`
-   on first mount, guarded by an element-id check. That is why they were invisible to
-   the colour guardrail, and why two of their literal colours needed tokenising on the
-   way in. Otherwise verbatim.
-
-   `--rt-watch-editor-width` is the number `WatchPopover` positions against, so the
-   two must agree — see POPOVER_WIDTH_PX there. */
-.rt-watch-editor {
-  --rt-watch-editor-width: 240px;
-  --rt-watch-editor-mobile-margin: 16px;
-  width: var(--rt-watch-editor-width);
-  box-sizing: border-box;
-  color: var(--rt-text);
-  background: var(--rt-surface);
-  border: 1px solid var(--rt-border-strong);
-  border-radius: var(--rt-r-md);
-  box-shadow: 0 12px 32px rgba(var(--rt-c-shadow-rgb),0.18);
-  padding: 12px;
-  font-size: 12px;
-}
-.rt-watch-editor-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-.rt-watch-editor-title { font-weight: 700; font-size: 13px; }
-.rt-watch-editor-subtitle { color: var(--rt-muted); margin-top: 2px; }
-.rt-watch-editor-icon {
-  --icon-size: 15px;
-  width: 24px; height: 24px;
-  display: grid; place-items: center;
-  border: 0; background: transparent; color: var(--rt-muted);
-  border-radius: var(--rt-r-sm); cursor: pointer;
-}
-.rt-watch-editor-icon:hover { background: var(--rt-fill-hover); color: var(--rt-text); }
-.rt-watch-editor-body { display: grid; gap: 8px; }
-.rt-watch-editor-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.rt-watch-editor-toggle-text { display: grid; gap: 2px; min-width: 0; }
-.rt-watch-editor-toggle-title { font-weight: 600; }
-.rt-watch-editor-toggle-help { color: var(--rt-muted); font-size: 11px; line-height: 1.25; }
-.rt-watch-editor-switch { position: relative; display: inline-grid; flex: 0 0 auto; }
-.rt-watch-editor-switch input { position: absolute; opacity: 0; pointer-events: none; }
-.rt-watch-editor-switch-track {
-  width: 34px; height: 18px; border-radius: var(--rt-r-pill);
-  background: var(--rt-border-strong); transition: background 120ms ease;
-}
-.rt-watch-editor-switch-track::after {
-  content: "";
-  display: block;
-  width: 14px; height: 14px; margin: 2px;
-  border-radius: 50%;
-  background: var(--rt-on-accent);
-  box-shadow: 0 1px 2px rgba(var(--rt-c-shadow-rgb),0.2);
-  transition: transform 120ms ease;
-}
-.rt-watch-editor-switch input:checked + .rt-watch-editor-switch-track { background: var(--rt-brand); }
-.rt-watch-editor-switch input:checked + .rt-watch-editor-switch-track::after { transform: translateX(16px); }
-.rt-watch-editor-switch input:disabled + .rt-watch-editor-switch-track { opacity: 0.55; }
-.rt-watch-editor-field {
-  display: grid;
-  gap: 4px;
-  color: var(--rt-muted);
-  font-size: 11px;
-}
-.rt-watch-editor-field input {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid var(--rt-border-strong);
-  border-radius: var(--rt-r-sm);
-  padding: 7px 8px;
-  color: var(--rt-text);
-  background: var(--rt-bg-sunken);
-  font: inherit;
-}
-.rt-watch-editor-error {
-  margin-top: 8px;
-  color: var(--rt-error);
-  font-size: 11px;
-}
-.rt-watch-editor-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 10px;
-}
-.rt-watch-editor-save,
-.rt-watch-editor-remove {
-  border-radius: var(--rt-r-sm);
-  padding: 7px 10px;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.rt-watch-editor-save {
-  border: 1px solid var(--rt-brand);
-  background: var(--rt-brand);
-  color: var(--rt-on-accent);
-}
-.rt-watch-editor-remove {
-  border: 1px solid var(--rt-border-strong);
-  background: transparent;
-  color: var(--rt-error);
-}
-.rt-watch-editor-save:disabled,
-.rt-watch-editor-remove:disabled { opacity: 0.6; cursor: wait; }
-@media (max-width: 768px) {
-  .rt-watch-editor {
-    width: min(var(--rt-watch-editor-width), calc(100vw - var(--rt-watch-editor-mobile-margin)));
-  }
-  .rt-watch-editor-field input {
-    min-height: 40px;
-    font-size: 16px;
-  }
-}
-
 /* The fixed-position host `WatchPopover` portals into. It carries no size of its own:
    the editor inside it is what has a width, and the host is positioned around that. */
 .cg-watch-pop-host {
   /* `position` and coordinates are set inline from the measured anchor rect. */
-  z-index: 1200;
+  z-index: var(--rt-z-popover);
 }
 
 /* --- containers ---------------------------------------------------------- */
