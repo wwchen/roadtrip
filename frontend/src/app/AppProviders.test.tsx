@@ -51,6 +51,26 @@ describe('AppProviders', () => {
     expect(screen.getByText('hello')).toBeInTheDocument();
   });
 
+  test('shows a reloadable banner instead of a white page when a child throws', () => {
+    // React reports a caught error itself, on top of the boundary's own log.
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    function Boom(): never {
+      throw new Error('render exploded');
+    }
+
+    render(
+      <AppProviders client={createTestQueryClient()}>
+        <Boom />
+      </AppProviders>,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong');
+    expect(screen.getByRole('button', { name: /reload/i })).toBeInTheDocument();
+    expect(logged.mock.calls.some(([first]) => first === 'page render failed:')).toBe(true);
+    logged.mockRestore();
+  });
+
   test('surfaces query failures without a second auth state store', async () => {
     stubFetch(textResponse('boom', 503));
     const client = createTestQueryClient();

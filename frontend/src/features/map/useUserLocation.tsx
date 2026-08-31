@@ -9,6 +9,7 @@ import {
   showUserLocation,
 } from '@/map/user-location';
 import { useMapStore } from '@/stores/mapStore';
+import { useTripStore } from '@/stores/tripStore';
 import { useMapContext } from './MapProvider';
 
 /** `GeolocationPositionError.PERMISSION_DENIED`, which is a runtime-only constant. */
@@ -20,9 +21,20 @@ export const GEOLOCATION_UNAVAILABLE_MESSAGE = 'Try again, or type a place name 
 const GEOLOCATION_ALLOW_INSTRUCTIONS =
   "Look for the location icon in your browser's address bar, allow access for this site, then reload the page.";
 
-/** Focuses the trip planner's first stop input, for the location toast's "Search a place" action. */
+/** The planner row the "Search a place" action sends the user to. */
+const FIRST_STOP_ROW = 0;
+
+/**
+ * Ask the trip planner's first stop input for focus.
+ *
+ * Through the store, not through the DOM: a `querySelector` for the topbar's own
+ * markup would be this feature reaching into `features/trip`, which the
+ * no-cross-feature-import lint cannot see, and it would break silently the next
+ * time that row is restyled. `focusRow` is the seam the drawer's Directions
+ * button already uses.
+ */
 function focusFirstStopInput(): void {
-  document.querySelector<HTMLInputElement>('.tb-input[data-i="0"]')?.focus();
+  useTripStore.getState().requestFocus(FIRST_STOP_ROW);
 }
 
 export interface UseUserLocationApi {

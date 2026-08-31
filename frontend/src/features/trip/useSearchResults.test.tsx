@@ -18,11 +18,23 @@ const wrapper = ({ children }: { children: React.ReactNode }) => {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 };
 
-/** Let the 220ms input debounce fire inside `act`. */
-const settleDebounce = () =>
-  act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, GEOCODE_DEBOUNCE_MS + 20));
+/** Slack past the debounce window, so a boundary rounding cannot leave it pending. */
+const DEBOUNCE_SLACK_MS = 20;
+
+/**
+ * Let the 220ms input debounce fire inside `act`.
+ *
+ * Fake timers only for the span of the wait: the surrounding `waitFor`s poll
+ * against the stubbed fetch's real microtasks, and the debounce is the only
+ * wall-clock delay worth skipping rather than sleeping through.
+ */
+const settleDebounce = async () => {
+  vi.useFakeTimers();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(GEOCODE_DEBOUNCE_MS + DEBOUNCE_SLACK_MS);
   });
+  vi.useRealTimers();
+};
 
 beforeEach(() => {
   urls = [];
@@ -59,6 +71,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   useMapStore.setState({ userLocation: null, viewport: null });
 });
 

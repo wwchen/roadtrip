@@ -6,8 +6,14 @@
 // count agree between a fused week response and a raw provider one.
 import { normalizeAvailabilityStatus } from './availability-status';
 
-/** A per-day availability row, as `fuse.ts` produces and the API returns. */
-export interface DayRow {
+/**
+ * A per-day availability row, as `fuse.ts` produces and the API returns.
+ *
+ * Module-private: callers pass whatever their query gave them and read a count
+ * off it, so exporting the shape would invite a second declaration of the same
+ * response to drift against the API client's.
+ */
+interface DayRow {
   date: string;
   status?: unknown;
   available_campsite_ids?: unknown;
@@ -21,7 +27,7 @@ export interface DayRow {
  * from a provider that ships empty collections as arrays would otherwise index by
  * position and produce campsite ids of `0`, `1`, `2`.
  */
-export function campsiteStatuses(day: DayRow | null | undefined): Record<string, unknown> {
+function campsiteStatuses(day: DayRow | null | undefined): Record<string, unknown> {
   const statuses = day?.campsite_statuses;
   return statuses && typeof statuses === 'object' && !Array.isArray(statuses)
     ? (statuses as Record<string, unknown>)
