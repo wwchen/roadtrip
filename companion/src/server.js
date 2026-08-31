@@ -136,7 +136,7 @@ const CONTRACT_ROUTE_HANDLERS = {
   getScreenshot: async ({ url, res, runtime, deps }) => handleLiveScreenshot(url, res, { runtime, ...deps }),
   getOpenApiJson: async ({ res }) => jsonResponse(res, HTTP_OK, COMPANION_OPENAPI_SPEC),
   getSwaggerDocs: async ({ res }) => htmlResponse(res, HTTP_OK, renderSwaggerPage()),
-  getHealth: async ({ res, url, runtime, deps }) => handleHealth(res, url, runtime, deps.pool),
+  getHealth: async ({ res, url, deps }) => handleHealth(res, url, deps.pool),
   getOperatorPage: async ({ res }) => htmlResponse(res, HTTP_OK, renderLoginPage()),
   postLogin: async ({ req, res, runtime, deps }) => handleLoginPost(req, res, { runtime, ...deps }),
   postLogout: async ({ req, res, runtime, deps }) => handleLogout(req, res, { runtime, ...deps }),
@@ -147,14 +147,17 @@ const CONTRACT_ROUTE_HANDLERS = {
 
 // Health is deliberately lock-free: the settings status row must answer while
 // a login for the same profile is still mid-flight.
-function handleHealth (res, url, runtime, pool) {
+function handleHealth (res, url, pool) {
   const rawProfileId = url.searchParams.get(PROFILE_ID_FIELD)
   if (rawProfileId === null) {
+    const snapshot = pool.snapshot()
     return jsonResponse(res, HTTP_OK, {
       ok: true,
-      busy: runtime.isBusy(),
+      // Companion-wide: any profile mid-operation. Per-profile busy needs
+      // profile_id, which is what the ATC preflight sends.
+      busy: snapshot.profiles.some((profile) => profile.busy),
       recgov_auth: getRecgovHealthStatus(),
-      pool: pool.snapshot(),
+      pool: snapshot,
     })
   }
 

@@ -12,7 +12,6 @@
 // lock for mutating operations (health reads never take it), the pending MFA
 // challenge, the failed-login backoff marker, and the last auth status.
 
-import fs from 'node:fs'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import {
@@ -165,9 +164,7 @@ export function createProfilePool ({
         }
       }
       await evictForLaunch(profileId)
-      const dir = profileDir(profileId)
-      fs.mkdirSync(dir, { recursive: true })
-      state.context = await launchContextFn(dir)
+      state.context = await launchContextFn(profileDir(profileId))
       state.context.once?.('close', () => {
         if (profiles.get(profileId)?.context === state.context) profiles.get(profileId).context = null
       })
@@ -228,10 +225,6 @@ export function createProfilePool ({
         expiresAt,
         complete,
         lock: lock?.token ?? null,
-        release: () => {
-          if (state.challenge?.id === challengeId) state.challenge = null
-          lock?.release()
-        },
       }
       return {
         challenge_id: challengeId,
