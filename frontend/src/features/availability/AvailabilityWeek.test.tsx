@@ -342,6 +342,31 @@ describe('the week"s states', () => {
     expect(screen.getByRole('button', { name: 'Report it' })).toBeInTheDocument();
   });
 
+  // The report button copies through `copyShareUrl`, so its textarea fallback
+  // applies here too: a non-secure context has no `navigator.clipboard` at all, and
+  // the previous `?.writeText(...)` chain reported neither success nor failure there.
+  test('reporting copies the details where there is no async clipboard', async () => {
+    stubs.availability = () => json({ error: 'upstream_5xx' }, 502);
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    const execCommand = vi.fn(() => true);
+    Object.defineProperty(document, 'execCommand', { value: execCommand, configurable: true });
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature()} />
+      </AppProviders>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Report it' })).toBeInTheDocument(),
+    );
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Report it' }).click();
+    });
+
+    expect(execCommand).toHaveBeenCalledWith('copy');
+    expect(await screen.findByText('Copied the details')).toBeInTheDocument();
+  });
+
   test('an unreachable provider offers a retry and a watch', async () => {
     stubs.availability = () => json({ error: 'upstream_unreachable' }, 504);
     render(

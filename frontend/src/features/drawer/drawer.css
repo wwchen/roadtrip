@@ -28,7 +28,7 @@
 .rt-drawer-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 998;
+  z-index: var(--rt-z-drawer-scrim);
   background: rgba(var(--rt-c-shadow-rgb), 0.32);
   opacity: 0;
   transition: opacity 220ms cubic-bezier(0.32, 0.72, 0, 1);
@@ -47,7 +47,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 999;
+  z-index: var(--rt-z-drawer);
   display: flex;
   flex-direction: column;
   max-height: 60dvh;

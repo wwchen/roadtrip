@@ -17,11 +17,13 @@
  * position — so without this the settings form renders as a block wherever it was
  * mounted. Scoped by `:has()` to the settings modal's own body so it cannot restyle
  * a future modal that arrives with its own layout, and z-indexed above the drawer
- * (999) since a modal is the top plane by definition. */
+ * since a modal is the top plane by definition. `--rt-z-modal` is the scale's name
+ * for that plane — and its own comment in tokens.css records that it is currently
+ * tied with `--rt-z-topbar` and beaten by `--rt-z-popover`. */
 .lds-modal-scrim:has(.rt-settings-modal) {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--rt-z-modal);
   overflow-y: auto;
 }
 

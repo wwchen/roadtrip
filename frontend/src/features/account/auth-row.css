@@ -10,7 +10,7 @@
   position: absolute;
   top: max(10px, env(safe-area-inset-top));
   right: 10px;
-  z-index: 21;
+  z-index: var(--rt-z-map-account);
   display: flex;
   align-items: center;
   gap: 8px;
