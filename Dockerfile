@@ -6,8 +6,13 @@ LABEL ca.floo.roadtrip.managed="true" \
       ca.floo.roadtrip.component="backend"
 
 ARG OTEL_JAVAAGENT_VERSION=2.29.0
+# sha256 of the v2.29.0 release asset. Bumping the version above without
+# updating this digest fails the build, which is the point: the agent runs
+# in-process with the app, so the tag alone is not enough to pin what we ship.
+ARG OTEL_JAVAAGENT_SHA256=546531ca690a8603d2923b6db26bbda35c6409327b1e610430ae33c2f8f68050
 
-ADD "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_JAVAAGENT_VERSION}/opentelemetry-javaagent.jar" \
+ADD --checksum=sha256:${OTEL_JAVAAGENT_SHA256} \
+    "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_JAVAAGENT_VERSION}/opentelemetry-javaagent.jar" \
     /app/opentelemetry-javaagent.jar
 
 ENV JAVA_OPTS="-Xmx3g -XX:+UseG1GC -javaagent:/app/opentelemetry-javaagent.jar"
