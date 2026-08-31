@@ -235,20 +235,31 @@ The channel today is plain HTTP with no auth and will now carry passwords.
 
 ## Delivery slicing
 
-Each lands independently green:
+Each lands independently green. **Docs land in the slice that changes the
+behavior they describe** — there is no trailing docs PR (that pattern is how
+provider docs drifted before #688).
 
 1. **Encryption key** — registry + sops + compose + `application.yaml`
    `security:` section. Fixes Slack token storage on its own.
+   Docs: `secrets.md`.
 2. **Companion pool + channel auth** — profile pool, busy locks, two-phase
    MFA, `/verify`, per-route token middleware, required `profile_id`.
-   Includes the doc fix: companion route is `POST /atc`, not
-   `POST /recgov/atc` (README.md, glossary.md).
+   Docs: **new `docs/companion.md`** owning the companion contract (routes,
+   profile pool, auth, exposure invariant) — today that contract is scattered
+   across `README.md:276-300`, `installation.md`, and `glossary.md`, and the
+   README documents a route that doesn't exist (`POST /recgov/atc`; actual is
+   `POST /atc`). README/installation/glossary trim to pointers; `secrets.md`
+   gains `COMPANION_API_TOKEN`.
 3. **Settings storage + routes + FE panel** — migration, service, routes,
-   Booking panel.
+   Booking panel. Docs: `backend-architecture.md` (new settings
+   service/client), `frontend-components.md` if the Booking panel adds shared
+   pieces.
 4. **ATC threading + gating + results email** — owner → profile plumbing,
    capability/validator changes, `sendAtcResult` email target, keepalive job.
-5. **Docs** — `reservation-providers.md` booking-seam and trigger-registry
-   sections, `secrets.md`, `installation.md`.
+   Docs: `reservation-providers.md` booking-seam + trigger-registry sections
+   (drop "inert atc" phrasing, describe per-user fulfillment and the email
+   result channel), `glossary.md` ATC/companion entries, `observability.md`
+   for the keepalive job and per-profile session-health metrics.
 
 ## Testing
 
