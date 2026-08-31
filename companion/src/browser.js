@@ -25,11 +25,13 @@ export const RECGOV_CAMPSITE_BOOKING_URL_PATTERN =
 export const COMPANION_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
 
+const CHROMIUM_SINGLETON_LOCK_FILES = ['SingletonLock', 'SingletonSocket', 'SingletonCookie']
+
 let sharedContext = null
 
-function clearStaleLocks () {
-  for (const name of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
-    const f = path.join(SESSION_DIR, name)
+function clearStaleLocks (profileDir) {
+  for (const name of CHROMIUM_SINGLETON_LOCK_FILES) {
+    const f = path.join(profileDir, name)
     try { if (fs.existsSync(f)) fs.unlinkSync(f) } catch {}
   }
 }
@@ -38,9 +40,18 @@ export async function getContext () {
   if (sharedContext) {
     try { await sharedContext.pages(); return sharedContext } catch { sharedContext = null }
   }
-  if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true })
-  clearStaleLocks()
-  sharedContext = await chromium.launchPersistentContext(SESSION_DIR, {
+  sharedContext = await launchProfileContext(SESSION_DIR)
+  sharedContext.once('close', () => { sharedContext = null })
+  return sharedContext
+}
+
+// One persistent Chromium profile directory in, one browser process out. The
+// profile pool calls this per profile id; getContext keeps the single legacy
+// profile the CLI entrypoints use.
+export async function launchProfileContext (profileDir) {
+  if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true })
+  clearStaleLocks(profileDir)
+  const context = await chromium.launchPersistentContext(profileDir, {
     headless: IS_HEADLESS,
     slowMo: IS_HEADLESS ? 0 : 200,
     viewport: { width: 1280, height: 900 },
@@ -48,7 +59,7 @@ export async function getContext () {
     args: ['--disable-blink-features=AutomationControlled'],
     ignoreDefaultArgs: ['--enable-automation'],
   })
-  await sharedContext.addInitScript(() => {
+  await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
     if (!window.chrome) window.chrome = { runtime: {}, loadTimes: () => {}, csi: () => {}, app: {} }
     if (navigator.plugins.length === 0) {
@@ -88,8 +99,7 @@ export async function getContext () {
       return _origFetch.apply(this, args)
     }
   })
-  sharedContext.once('close', () => { sharedContext = null })
-  return sharedContext
+  return context
 }
 
 export async function clearSession () {
