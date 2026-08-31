@@ -195,16 +195,76 @@ The channel today is plain HTTP with no auth and will now carry passwords.
 - The FE's "empty capability set is permissive" rollout rule in
   `capabilitiesForEditor` stays; the write-time validator is authoritative.
 
-### 8. Frontend
+### 8. Frontend / UI design
 
-- New "Booking" panel in `SettingsModal`: username input, `SecretField`
-  password, Save / Test login / Verify session actions, an MFA code step, and
-  a status line driven by `GET /api/settings/recgov/status`.
-- `WatchEditor` needs no structural change — it is already capability-driven.
-  Add a help-text variant for "scope supports ATC but you have no
-  credentials": "Add rec.gov credentials in Settings."
-- Error mapping extends `settings-errors.ts` (`mfa_required`,
-  `captcha_required`, `companion_unavailable`, `login_failed`).
+All new UI composes existing `@ui` primitives and the `features/account/`
+patterns; no new primitives and no new CSS files (extend `account.css`).
+
+**New Settings tab: "Booking"** (`features/account/BookingPanel.tsx`), in the
+rail between Notifications and Account. It has a savable slice (username +
+password), so it participates in the modal's Save button like Profile and
+Notifications do, following the established convention exactly:
+`BookingValues { recgov_username: string; recgov_password: string | null }`
+with `bookingValuesOf` / `isBookingDirty` / `buildBookingPayload` exports,
+wired into `SettingsModal`'s per-tab dirty gating and save switch, and keyed
+by `dataUpdatedAt` so a save remounts fields from the server's answer
+(including the new password hint) — same as the Slack token today.
+
+Panel contents, top to bottom:
+
+- **Username** — `SeededTextField`, type email.
+- **Password** — `SecretField` (write-only; `null` = unchanged; masked
+  `••••` + `recgov_password_hint` last-4). Help text notes what the
+  credential is used for and that ATC stops at a cart hold.
+- **Session status row** — driven by a dedicated query on
+  `GET /api/settings/recgov/status` (separate from `useSettings` so opening
+  the modal never blocks on the companion). States: *Not configured* /
+  *Session active* / *Session expired — test login below* / *Companion
+  unavailable — status unknown*. Rendered in the `TestStatusText` idiom
+  (icon + short text, `role="status"`).
+- **Test login** — secondary `Button`, disabled while any booking action is
+  pending (one shared in-flight guard + one status slot, as
+  `NotificationsPanel` does for its two tests). Uses **saved** credentials, so
+  it is disabled while the panel is dirty ("Save first" help text) — testing
+  what the server has, not what's in the form, because login is a companion
+  side effect, unlike the Slack test which can take the form value.
+- **MFA code step** — when login returns `mfa_required`, an inline code field
+  appears below the button (conditionally rendered, so it must be
+  `SeededTextField` per the uncontrolled-forms rule) with Submit and Cancel.
+  The login flow is a small state machine in a pure module beside the
+  component (`booking-login.ts`: idle → logging_in → mfa_pending(challengeId)
+  → submitting → ok | failed(code)), unit-tested directly — the
+  `matrix-rows.ts` pattern.
+- **Verify session** — secondary `Button` for the dry run; result lands in
+  the same status slot ("Session verified" / mapped error).
+
+**Credential removal** lives in `AccountPanel`, not the Booking panel,
+because Account is the established home for destructive account actions
+(Disconnect Slack). "Remove rec.gov credentials" uses the existing
+`ConfirmButton` primitive and reports through the modal notice banner.
+
+**Plumbing:** extend `api/account-api.ts` (settings endpoint group) with the
+booking calls; new hooks in `useSettings.ts` (`useSaveBooking`,
+`useRecgovLogin`, `useRecgovMfa`, `useRecgovVerify`, `useRecgovStatus`,
+`useRemoveRecgov`); `settings-errors.ts` gains `mfa_required`,
+`mfa_invalid`, `captcha_required`, `companion_unavailable`, `login_failed`.
+Buttons disable while in flight, never fields (LDS DOM-swap rule). New
+colors, if any, come from `--rt-*` semantic roles. A `BookingPanel` story
+joins the Storybook catalog with one story per state (unconfigured,
+configured+active, MFA step, captcha error, companion down).
+
+**Watch surfaces:**
+
+- `WatchEditor` (availability-grid popover + AlertsPanel) stays
+  capability-driven with one addition: when `booking_actions` includes
+  `add_to_cart` but `trigger_kinds` lacks `atc` — the "scope supports it,
+  user has no credentials" case the new gating creates — the ATC toggle
+  renders **disabled** with help "Add rec.gov credentials in Settings", for
+  discoverability, instead of disappearing. The existing "Unavailable for
+  this watch scope" help remains for scopes with no booking support.
+- The `/watches` page form (`TriggerSelector`) still does not offer ATC in
+  v1 — it lacks per-watch capability context today. Parity is a follow-up,
+  noted here so it is a decision rather than an accident.
 
 ### 9. Security and product risk
 
@@ -272,8 +332,11 @@ provider docs drifted before #688).
   capability gating with/without credentials and for anonymous readers;
   validator rejection; executor profile threading and one-shot re-login;
   `sendAtcResult` email resolution.
-- **FE (vitest):** Booking panel states (unconfigured, configured, MFA step,
-  captcha message, companion down) against a mocked settings API.
+- **FE (vitest):** `booking-login.ts` state machine directly; Booking panel
+  states (unconfigured, configured, MFA step, captcha message, companion
+  down) against a mocked settings API, asserting on roles/labels/text;
+  `WatchEditor` disabled-toggle help variant; dirty/save gating for the new
+  tab in `SettingsModal.test.tsx`.
 
 ## Resolved decisions
 
