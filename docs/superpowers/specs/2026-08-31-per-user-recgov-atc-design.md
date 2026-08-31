@@ -102,15 +102,24 @@ ALTER TABLE user_settings
   launched, and a backend keepalive job periodically calls `POST /refresh` for
   exactly those profiles, so a 3 a.m. firing never pays Chromium cold-start or
   re-login inside the seconds-critical window. Credential-only profiles with
-  no armed watch are torn down when idle.
-- **Per-profile busy lock:** no two operations run concurrently on one
-  profile. A pending MFA challenge holds the lock until completed or expired.
+  no armed watch are torn down when idle. **Armed profiles are exempt from
+  the concurrency cap** — the cap governs on-demand launches (logins,
+  verifies, cold ATCs); when armed profiles alone exceed it, the companion
+  logs and health reports the overflow rather than evicting an armed profile.
+- **Per-profile busy lock:** no two mutating operations run concurrently on
+  one profile. A pending MFA challenge holds the lock until completed or
+  expired. **Health/status reads are lock-free** — the settings status row
+  must answer while a login is mid-flight, not hang behind it.
 - **Two-phase MFA:** `POST /login` without a code returns `mfa_required` plus
-  a short-TTL challenge id (the pending browser page is held open); a second
-  call with the code completes it.
+  a challenge id (the pending browser page is held open); a second call with
+  the code completes it. The challenge TTL is **minutes-scale** (named
+  constant, ~5 min): rec.gov delivers codes by email/SMS and the user needs
+  time to fetch one.
 - **`POST /verify` (dry run):** confirm the profile's session by loading a
-  logged-in-only page and navigating a real booking URL **without clicking
-  Reserve**. No cart hold is ever placed by a test.
+  logged-in-only page (the rec.gov account page) and reading
+  `GET /api/cart/shoppingcart` from page context — exercising session,
+  fingerprint cookie, and Akamai without needing a campsite target, and
+  **never clicking Reserve**. No cart hold is ever placed by a test.
 - **Failed-login backoff:** one in-memory marker per profile suppresses rapid
   repeated credential logins (fire-time retries are edge-triggered but a
   backoff guards against rec.gov lockouts).
@@ -149,6 +158,11 @@ The channel today is plain HTTP with no auth and will now carry passwords.
   - `DELETE /api/settings/recgov` — clears the columns and best-effort
     destroys the companion profile. **Local delete succeeds even when the
     companion is down**; profile destruction is retried opportunistically.
+    The response (and the FE confirm copy) reports how many active `atc`
+    watches the deletion strands — those watches keep the kind and fail with
+    a notification on future fires; nothing mutates them behind the user's
+    back. (Revisable: auto-pausing stranded watches is the alternative if
+    fire-time failure spam proves annoying.)
   - `POST /api/settings/recgov/login` — begin login with stored credentials;
     may return `mfa_required` + challenge id, or `captcha_required` (see
     Known limitations).
@@ -260,8 +274,12 @@ configured+active, MFA step, captcha error, companion down).
   `add_to_cart` but `trigger_kinds` lacks `atc` — the "scope supports it,
   user has no credentials" case the new gating creates — the ATC toggle
   renders **disabled** with help "Add rec.gov credentials in Settings", for
-  discoverability, instead of disappearing. The existing "Unavailable for
-  this watch scope" help remains for scopes with no booking support.
+  discoverability, instead of disappearing. For a viewer who is not signed
+  in (magic-link/anonymous), the same state reads "Sign in to enable
+  add-to-cart" instead. The existing "Unavailable for this watch scope"
+  help remains for scopes with no booking support. This splits
+  `supportsAddToCart` in `lib/watch-windows.ts` (today an AND over both
+  fields) into the two states the editor now distinguishes.
 - The `/watches` page form (`TriggerSelector`) still does not offer ATC in
   v1 — it lacks per-watch capability context today. Parity is a follow-up,
   noted here so it is a decision rather than an accident.
