@@ -1,0 +1,47 @@
+name: Deploy host access
+description: Join the tailnet and install the SSH credentials every deploy-host command needs
+
+# Four workflows/actions used to carry byte-identical copies of this pair of
+# steps, so a pinned-version bump or an ssh hardening change had to be made in
+# four places and could silently drift in one. The tailnet tag and version are
+# constants here rather than inputs, for the same reason the sandbox action
+# keeps the host and state directory internal: they are properties of this
+# repo's deploy host, not of any caller. The credentials have to be inputs — a
+# composite action cannot read the `secrets` context.
+inputs:
+  ts-oauth-client-id:
+    description: Tailscale OAuth client id
+    required: true
+  ts-oauth-secret:
+    description: Tailscale OAuth secret
+    required: true
+  ssh-private-key:
+    description: Deploy SSH private key
+    required: true
+  ssh-known-hosts:
+    description: Deploy SSH known_hosts
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Join tailnet
+      uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+      with:
+        oauth-client-id: ${{ inputs.ts-oauth-client-id }}
+        oauth-secret: ${{ inputs.ts-oauth-secret }}
+        tags: tag:ci
+        version: 1.98.10
+
+    - name: Configure SSH
+      shell: bash
+      env:
+        SSH_PRIVATE_KEY: ${{ inputs.ssh-private-key }}
+        SSH_KNOWN_HOSTS: ${{ inputs.ssh-known-hosts }}
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        install -m 600 /dev/null ~/.ssh/id_ed25519
+        printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+        printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+        chmod 600 ~/.ssh/known_hosts

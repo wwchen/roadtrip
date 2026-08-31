@@ -19,6 +19,19 @@ STALE_DEPLOY_SECONDS="${STALE_DEPLOY_SECONDS:-2400}"
 # their own fixture instead of every deploy running on the machine.
 STALE_DEPLOY_PATTERN="${STALE_DEPLOY_PATTERN:-deploy\.sh (prod|sandbox-up|sandbox-down)}"
 
+# Root of the host's release tree: releases/<sha> plus the `current` symlink the
+# deploy workflow flips only after a deploy returns.
+ROADTRIP_HOME="${ROADTRIP_HOME:-${HOME}/.roadtrip}"
+
+# The last prod deploy that passed its health gate, and therefore the rollback
+# target. Written only on success, so it can never name a broken release.
+LAST_GOOD_RELEASE_FILE="${LAST_GOOD_RELEASE_FILE:-${ROADTRIP_HOME}/last-good-release}"
+
+# How long a guard container holds a freshly created data volume open. Must
+# outlast the slowest deploy (image pulls plus the health gate) and stay well
+# under a leak that matters; deploy.yml's own timeout is 30m.
+DATA_VOLUME_GUARD_SECONDS="${DATA_VOLUME_GUARD_SECONDS:-1800}"
+
 _require_sha() {
     local label="$1"
     local value="$2"
@@ -122,6 +135,51 @@ _kill_process_tree() {
     kill -9 "${root}" 2>/dev/null || true
 }
 
+_DATA_VOLUME_GUARD=""
+
+# A data volume is labelled `managed=true` from the moment it is created, but
+# nothing mounts it until Compose brings the backend up minutes later. The
+# sandbox sweep runs `docker volume prune --all` against that same label every
+# 30 minutes, and prod, sandbox and sweep sit in three different GitHub
+# concurrency groups, so nothing stops a prune landing inside that window and
+# deleting a volume a deploy is about to depend on.
+#
+# Docker never prunes a volume a container refers to, so hold one over the
+# window. The hold is a bounded `sleep` rather than an EXIT trap because the
+# sandbox path already owns the EXIT trap for its slot lock, and because an
+# abandoned deploy must not leave the volume unprunable forever. Relabelling
+# the volume instead is not an option: Docker has no API for it.
+_hold_data_volume() {
+    local data_volume="$1"
+    local data_image="$2"
+    local seconds="${ROADTRIP_DATA_VOLUME_GUARD_SECONDS:-${DATA_VOLUME_GUARD_SECONDS}}"
+    local name="roadtrip-data-guard-$$"
+
+    _release_data_volume
+    # PIDs are reused, so a guard from a long-dead deploy can still own the
+    # name. Clearing it is safe: it can only be a guard.
+    docker rm -f "${name}" >/dev/null 2>&1 || true
+    if docker run -d --rm \
+        --name "${name}" \
+        --entrypoint sh \
+        --mount "type=volume,src=${data_volume},dst=/target,readonly" \
+        "${data_image}" \
+        -c "sleep ${seconds}" >/dev/null 2>&1; then
+        _DATA_VOLUME_GUARD="${name}"
+        echo "==> holding ${data_volume} open against concurrent prunes (${name})"
+    else
+        echo "warning: could not hold ${data_volume}; a concurrent prune could remove it before it is mounted" >&2
+    fi
+}
+
+# Safe to call when nothing is held, and safe to call twice.
+_release_data_volume() {
+    if [[ -n "${_DATA_VOLUME_GUARD}" ]]; then
+        docker rm -f "${_DATA_VOLUME_GUARD}" >/dev/null 2>&1 || true
+        _DATA_VOLUME_GUARD=""
+    fi
+}
+
 _ensure_data_volume() {
     local data_sha="$1"
     local data_image="${ROADTRIP_DATA_IMAGE:-ghcr.io/wwchen/roadtrip/data:${data_sha}}"
@@ -136,6 +194,9 @@ _ensure_data_volume() {
             --label "ca.floo.roadtrip.data-image=${data_image}" \
             "${data_volume}" >/dev/null
     fi
+    # Before the populate run, so the volume is only unreferenced for the
+    # moment between `volume create` and this call.
+    _hold_data_volume "${data_volume}" "${data_image}"
     docker run --rm \
         --mount "type=volume,src=${data_volume},dst=/target" \
         "${data_image}"
@@ -204,6 +265,97 @@ _prune_data_volumes() {
         | tail -1
 }
 
+# ── Rollback ─────────────────────────────────────────────────────────────────
+# Set for the duration of a rollback deploy so a rollback that is itself
+# unhealthy stops instead of recursing into another one.
+_ROLLBACK_ACTIVE=0
+_ROLLBACK_FROM_SHA=""
+_ROLLBACK_TO_SHA=""
+
+# The release that is live right now. deploy.yml flips `current` only after
+# deploy.sh returns, so mid-deploy this still names the release we would roll
+# back to. The symlink target is authoritative; the marker install-release
+# writes inside the release is the fallback.
+_current_release_sha() {
+    local link="${ROADTRIP_HOME}/current"
+    local target=""
+    local sha=""
+
+    target="$(readlink "${link}" 2>/dev/null || true)"
+    if [[ -n "${target}" ]]; then
+        sha="$(basename "${target}")"
+    fi
+    if ! [[ "${sha}" =~ ^[0-9a-f]{40}$ ]]; then
+        # 2>/dev/null before the input redirect, or the shell's own "No such
+        # file" for a missing marker escapes to stderr.
+        sha="$(tr -d '[:space:]' 2>/dev/null < "${link}/.roadtrip-release-sha" || true)"
+    fi
+    [[ "${sha}" =~ ^[0-9a-f]{40}$ ]] || return 1
+    printf '%s\n' "${sha}"
+}
+
+_record_last_good_release() {
+    local app_sha="$1"
+    local data_sha="$2"
+    local companion_sha="$3"
+    local branch="$4"
+    local tmp="${LAST_GOOD_RELEASE_FILE}.tmp.$$"
+
+    mkdir -p "$(dirname "${LAST_GOOD_RELEASE_FILE}")"
+    printf 'APP_SHA=%s\nDATA_SHA=%s\nCOMPANION_SHA=%s\nBRANCH=%s\n' \
+        "${app_sha}" "${data_sha}" "${companion_sha}" "${branch}" > "${tmp}"
+    # Rename so a reader mid-write sees the previous record, never half of one.
+    mv -f "${tmp}" "${LAST_GOOD_RELEASE_FILE}"
+}
+
+# Prints "<app-sha> <data-sha> <companion-sha> <branch>" for the release to roll
+# back to, or fails when there is none. The last-good record is preferred: it
+# names a triple that provably passed a health gate. Hosts deployed before that
+# record existed fall back to the live release symlink, reusing the current data
+# and companion SHAs because the old ones were never written down anywhere.
+_previous_release() {
+    local fallback_data="$1"
+    local fallback_companion="$2"
+    local app_sha=""
+    local data_sha=""
+    local companion_sha=""
+    local branch=""
+
+    if [[ -f "${LAST_GOOD_RELEASE_FILE}" ]]; then
+        app_sha="$(sed -n 's/^APP_SHA=//p' "${LAST_GOOD_RELEASE_FILE}" | head -1)"
+        data_sha="$(sed -n 's/^DATA_SHA=//p' "${LAST_GOOD_RELEASE_FILE}" | head -1)"
+        companion_sha="$(sed -n 's/^COMPANION_SHA=//p' "${LAST_GOOD_RELEASE_FILE}" | head -1)"
+        branch="$(sed -n 's/^BRANCH=//p' "${LAST_GOOD_RELEASE_FILE}" | head -1)"
+    fi
+    if ! [[ "${app_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+        app_sha="$(_current_release_sha || true)"
+        data_sha="${fallback_data}"
+        companion_sha="${fallback_companion}"
+        branch=""
+    fi
+
+    [[ "${app_sha}" =~ ^[0-9a-f]{40}$ ]] || return 1
+    [[ "${data_sha}" =~ ^[0-9a-f]{40}$ ]] || data_sha="${fallback_data}"
+    [[ "${companion_sha}" =~ ^[0-9a-f]{40}$ ]] || companion_sha="${fallback_companion}"
+    printf '%s %s %s %s\n' \
+        "${app_sha}" "${data_sha}" "${companion_sha}" "${branch:-master}"
+}
+
+_rollback_failed_notice() {
+    echo "==> ROLLBACK FAILED: ${_ROLLBACK_FROM_SHA} was unhealthy and ${_ROLLBACK_TO_SHA} did not come back up; production needs manual recovery" >&2
+}
+
+# Reuses the ordinary deploy path rather than a second, less-tested one. The
+# EXIT trap is how a rollback that dies anywhere inside that path still says so
+# — under `set -e` there is no return to inspect.
+_rollback_prod() {
+    _ROLLBACK_ACTIVE=1
+    trap _rollback_failed_notice EXIT
+    _deploy_prod "$@"
+    trap - EXIT
+    _ROLLBACK_ACTIVE=0
+}
+
 _deploy_prod() {
     if [[ $# -lt 3 ]]; then
         echo "usage: deploy.sh prod <app-sha> <data-tree-sha> <companion-tree-sha> [branch]" >&2
@@ -216,6 +368,11 @@ _deploy_prod() {
     local caddy_dir="${SANDBOX_CADDY_DIR:-${HOME}/.roadtrip/caddy/sandboxes}"
     local wait_seconds="${ROADTRIP_DEPLOY_WAIT_SECONDS:-180}"
     local failure_log_lines="${ROADTRIP_DEPLOY_FAILURE_LOG_LINES:-120}"
+    local previous=""
+    local prev_app_sha=""
+    local prev_data_sha=""
+    local prev_companion_sha=""
+    local prev_branch=""
     local -a compose=(docker compose -f docker-compose.yml -f docker-compose.secrets.yml --profile tunnel --profile pois --profile recgov-companion)
     local -a secret_exec=(./secrets/manage.py exec prod --)
 
@@ -254,8 +411,36 @@ _deploy_prod() {
     if ! "${secret_exec[@]}" "${compose[@]}" up -d --wait --wait-timeout "${wait_seconds}"; then
         echo "==> deploy did not come up healthy; last ${failure_log_lines} backend lines:" >&2
         "${secret_exec[@]}" "${compose[@]}" logs --tail "${failure_log_lines}" --no-color backend >&2 || true
+
+        # A broken container is left live otherwise: Compose has already
+        # recreated the backend, and the workflow's only remaining act is to
+        # not flip the `current` symlink.
+        if (( _ROLLBACK_ACTIVE == 1 )); then
+            # The EXIT trap _rollback_prod installed says the rest.
+            exit 1
+        fi
+
+        previous="$(_previous_release "${data_sha}" "${companion_sha}" || true)"
+        if [[ -z "${previous}" ]]; then
+            echo "==> ROLLBACK UNAVAILABLE: no previous release to fall back to; ${app_sha} is live and unhealthy" >&2
+            exit 1
+        fi
+        read -r prev_app_sha prev_data_sha prev_companion_sha prev_branch <<<"${previous}"
+        if [[ "${prev_app_sha}" == "${app_sha}" ]]; then
+            echo "==> ROLLBACK UNAVAILABLE: ${app_sha} is itself the previous release; ${app_sha} is live and unhealthy" >&2
+            exit 1
+        fi
+
+        echo "==> rolling production back to ${prev_app_sha}" >&2
+        _ROLLBACK_FROM_SHA="${app_sha}"
+        _ROLLBACK_TO_SHA="${prev_app_sha}"
+        _rollback_prod \
+            "${prev_app_sha}" "${prev_data_sha}" "${prev_companion_sha}" "${prev_branch}"
+        echo "==> ROLLBACK OK: ${app_sha} was unhealthy; production is back on ${prev_app_sha}" >&2
         exit 1
     fi
+    _release_data_volume
+    _record_last_good_release "${app_sha}" "${data_sha}" "${companion_sha}" "${branch}"
     _prune_roadtrip_images
     _prune_data_volumes
     echo "==> production deployed: ${app_sha}"
@@ -926,6 +1111,9 @@ echo "==> backend ready"
 _write_sandbox_marker "live"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
+# The sandbox backend now mounts the data volume, so Docker's own refcount is
+# protection enough and the guard can go before we prune.
+_release_data_volume
 _prune_roadtrip_images
 _prune_data_volumes
 echo ""
