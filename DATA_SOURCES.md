@@ -1,226 +1,164 @@
 # Data Sources
 
-Summary of research for each POI category, with the chosen primary/fallback and a refresh plan.
+Catalog of the upstream feeds behind the POIs this app serves: what each one
+is, what it costs to talk to, and what it is licensed under.
 
-## Summary table
+`backend/src/main/resources/poi-registry.yaml` is the source of truth for which
+sources exist and how they chain into POI/campsite datasets — this file
+describes them, it does not define them. To add one, follow
+[docs/adding-a-data-source.md](docs/adding-a-data-source.md). For
+reservation-vendor wire shapes (availability, booking refs, rate limits) see
+[docs/reservation-providers.md](docs/reservation-providers.md) and the
+per-vendor docs under `docs/reservation-providers/`.
 
-| Category | Primary source | Fallback | License | Refresh | Runtime access |
-|---|---|---|---|---|---|
-| Tesla Supercharger | supercharge.info `/service/supercharge/allSites` | Open Charge Map (operator=23) | Source-available, no formal license; community-consumed | Daily via GH Action (or direct browser — CORS enabled) | Live fetch from supercharge.info (CORS) |
-| Planet Fitness | Overpass (`brand=Planet Fitness`) | One-time scrape of pf.com locator | OSM ODbL | Weekly | `/api/pois` bbox query (PostGIS) |
-| Campgrounds | USCampgrounds.info + BC Parks API + recreation.gov enrichment | Overpass `tourism=camp_site` | CC-BY + OGL-BC + rec.gov public domain | Weekly | `/api/pois` bbox query (PostGIS) |
-| Free chargers | NREL AFDC (filtered) | Open Charge Map (`usagetypeid=1`) | US Gov public domain + ODbL | Daily via GH Action | Prebuilt GeoJSON (not yet wired) |
-| State parks | USGS PAD-US 4.0 (filter state-managed) | OSM `protect_class` | Public domain | Annual | Prebuilt GeoJSON polygons under `/data/` |
-| Hipcamp | (none — skip for POC) | Manually-curated GeoJSON | n/a | Manual | Prebuilt GeoJSON |
+## Summary
 
----
+| Dataset | Upstream | Registry slugs | License | Key |
+|---|---|---|---|---|
+| Campflare campgrounds + campsites | Campflare bulk export API | `campflare-campgrounds-export`, `campflare-campsites-export` | Vendor API, contractual | `CAMPFLARE_API_KEY` |
+| Federal campgrounds | RIDB `ridb.recreation.gov` | `recgov-campgrounds-raw` | US Gov public domain | `RIDB_API_KEY` |
+| Federal campground ratings + cell coverage | rec.gov SPA aggregate endpoint | `recgov-campground-enrichment` | US Gov public domain | none |
+| Federal campsites | rec.gov monthly availability endpoint | `recgov-campsites-raw` | US Gov public domain | none |
+| Washington State Parks | Aspira NextGen + uscampgrounds.info geometry | `aspira-{maps,inventory,dictionaries}-wa`, `uscampgrounds` | Vendor API + CC-BY | none |
+| BC provincial parks | Aspira NextGen + BC Parks Strapi | `aspira-{maps,inventory,dictionaries}-bc`, `bcparks-strapi` | Vendor API + OGL-BC | none |
+| Parks Canada | Aspira NextGen + APCA ArcGIS layers | `aspira-{maps,inventory,dictionaries}-pc`, `apca-accommodation`, `apca-places` | Vendor API + OGL-Canada | none |
+| Alberta provincial parks | ReserveAmerica `shop.albertaparks.ca` | `reserveamerica-abpp`, `reserveamerica-campsites-abpp` | Scraped consumer site | none |
+| New York state parks | ReserveAmerica `newyorkstateparks.reserveamerica.com` | `reserveamerica-ny`, `reserveamerica-campsites-ny` | Scraped consumer site | none |
+| California state parks | ReserveCalifornia (Tyler Technologies) | `reservecalifornia-catalog` | Scraped consumer API | none |
+| Planet Fitness | OpenStreetMap via Overpass | `osm-pf` | ODbL | none |
+| Tesla Superchargers | Tesla `find_us` bulk endpoint | `tesla-index`, `tesla-locations` | Vendor site, cached captures | `TESLA_COOKIES` (host-local) |
 
-## 1. Tesla Superchargers
+Every row is fetched by a thin Python script under `scripts/`, writes
+envelope-wrapped raw captures under `data/raw/<slug>/`, and is replayed into
+Postgres by a Kotlin ETL. Nothing in the table is fetched from the browser at
+request time.
 
-**Primary — supercharge.info**
-- URL: `https://supercharge.info/service/supercharge/allSites` (full world dump, ~6MB JSON)
-- Changelog: `https://supercharge.info/service/supercharge/changes` (paginated)
-- Atom feed: `https://supercharge.info/service/supercharge/feed/atom.xml`
-- Source: community-curated (like OSM for Superchargers). Humans submit edits via forum.supercharge.info; editors vet. Cross-references Tesla's `locationId`, PlugShare `plugshareId`, and OSM `osmId` on each record.
-- Coverage verified: 10,492 sites worldwide, **3,883 US** (3,077 OPEN, 460 PLAN, 146 CONSTRUCTION, 118 PERMIT, 50 CLOSED_PERM, rest EXPANDING/VOTING/CLOSED_TEMP). Includes sites ahead of Tesla's own find-us page.
-- Fields: `gps.{latitude,longitude}`, `address.{street,city,state,zip,countryId}`, `stallCount`, `powerKilowatt`, `stalls.{v2,v3,v4,other,accessible,trailerFriendly}`, `plugs.{tpc,nacs,ccs1,ccs2,gbt,multi}`, `status` (OPEN/PLAN/CONSTRUCTION/PERMIT/VOTING/CLOSED_*), `dateOpened`, `solarCanopy`, `battery`, `otherEVs`, `facilityName`, `elevationMeters`, `plugshareId`, `osmId`.
-- **CORS enabled** (`Access-Control-Allow-Origin: *`) — can fetch directly from the browser. Still recommend prebuilding daily so the app works offline and doesn't depend on their uptime.
-- License: no LICENSE file on their GitHub org. Source-available, not formally open. Personal/hobby consumption is customary — multiple public projects consume these endpoints. Use respectfully; don't redistribute the raw dump.
-- Filter for US roadtripping: `countryId == 100` (USA). Optionally hide `CLOSED_PERM`; keep PLAN/CONSTRUCTION/PERMIT for forward-planning since openings happen fast.
+## Campgrounds
 
-**Fallback — Open Charge Map**
-- URL: `https://api.openchargemap.io/v3/poi/?countrycode=US&operatorid=23&maxresults=10000`
-- Key: free signup at openchargemap.org. CORS enabled. Format: JSON/GeoJSON. License: ODbL (attribute OCM).
-- Lags new openings by days–weeks; useful as a cross-check and as a backup if supercharge.info ever goes down.
+**Campflare export** — the broad commercial catalog. Bulk campground and
+campsite exports behind an API key; the campsite export depends on the
+campground export for its id list. Availability wire details:
+[docs/reservation-providers/campflare.md](docs/reservation-providers/campflare.md).
 
-**Rejected — Tesla `find_us` JSON**
-- Endpoint: `https://www.tesla.com/cms/data/find_us`. Verified 403 from non-browser IPs (Akamai blocks). ToS-gray. supercharge.info is strictly better for this use case (richer schema, includes planned/construction sites, reliable access).
+**RIDB (federal)** — `https://ridb.recreation.gov/api/v1/facilities/...`, free
+key. One capture covers every RIDB-publishing agency (NPS, USFS, BLM, USACE,
+FWS, BOR, TVA, …); the per-facility agency lands in campground metadata at
+transform time from `ORGANIZATION[0].OrgName`. RIDB carries media and
+activities but no ratings or cell coverage.
 
-## 2. Planet Fitness
+**rec.gov enrichment (federal)** — `GET /api/ratingreview/aggregate?location_id=
+<id>&location_type=Campground` fills the ratings/cell-coverage gap: a listing
+rating plus per-carrier coverage on rec.gov's 0–4 scale (0 none … 4 excellent)
+for Verizon/AT&T/T-Mobile/Sprint. No key; it is the endpoint the rec.gov SPA
+itself uses. One request at a time behind a configurable `--min-gap`, with 429
+backoff and `--resume` for partial backfills. `RecGovCampgroundsEtl` promotes
+`rating_reviews` (`[avg, count]`) and `cell_coverage` (`{carrier: [avg, count]}`)
+into `pois.properties`.
 
-PF has no open API and their ToS forbids scraping. Two pragmatic options:
+**rec.gov campsites (federal)** — the same monthly availability endpoint used
+at request time, walked once per facility for the *catalog* half of the payload
+(id, site, loop, campsite type, equipment). ~75 min for ~3000 facilities at the
+1.5 s gap, so it runs independently of the campground refresh. See
+[docs/reservation-providers/recgov.md](docs/reservation-providers/recgov.md).
 
-**Primary — OpenStreetMap via Overpass**
-- Query: `nwr["brand"="Planet Fitness"]` within US bbox. (Wikidata ID for Planet Fitness is **Q7201095**; earlier research had the wrong ID.)
-- Endpoint: `https://overpass-api.de/api/interpreter`
-- Coverage verified: **1,408 elements** in the continental US bbox (960 nodes + 446 ways + 2 relations), ~54% of the ~2,600 real PF locations. Tags include address, phone, website, opening_hours when populated.
-- License: ODbL, fine for personal use with attribution.
-- CORS-friendly.
+**Aspira NextGen tenants** — Washington State Parks, BC Parks, and Parks
+Canada all run on the same vendor platform, so one set of fetchers serves three
+tenants (`washington.goingtocamp.com`, `camping.bcparks.ca`,
+`reservation.pc.gc.ca`). Aspira supplies the park hierarchy and per-park site
+inventory; a geometry-side feed supplies coordinates and public park metadata.
+Wire details: [docs/reservation-providers/aspira.md](docs/reservation-providers/aspira.md).
 
-**Fallback — one-time scrape of planetfitness.com locator**
-- Their site hits an internal JSON endpoint (`/api/planetfitness/locations/search` or similar) taking ZIP + radius. Iterate a national ZIP grid, save to `data/planet-fitness.geojson`. Refresh every few months.
-- Keep the scraped file local; don't publish the raw dataset.
+- *uscampgrounds.info CSV* — `https://uscampgrounds.info/takeit.html`, ~11,000
+  US campgrounds, CC-BY, refreshed ~monthly upstream. Geometry side of the WA
+  join.
+- *BC Parks Strapi* — `https://bcparks.api.gov.bc.ca/api/protected-areas`,
+  public, no key, OGL-BC. Park name, `bcparks.ca` URL, photos, activities, and
+  facilities; ~486 parks have camping.
+- *Parks Canada ArcGIS* — the public APCA FeatureServer layers
+  (`vw_Accommodation_Hebergement_V2_FGP` filtered to `Accommodation_Type='Camping'`,
+  and `vw_Places_Public_lieux_public_APCA` as polygon centroids).
 
-**Plan:** start with Overpass. Given the verified 54% coverage, the locator scrape will likely be needed for full value — add it after the POC proves out.
+**ReserveAmerica tenants** — Alberta provincial parks and New York state parks,
+scraped from the consumer reservation sites (no key). The campsite roster comes
+from the same `campsiteCalendar.do` page as availability, so catalog ids bind to
+availability by construction. Details, including the decommissioned Active
+developer API:
+[docs/reservation-providers/reserveamerica.md](docs/reservation-providers/reserveamerica.md).
 
-## 3. Campgrounds (general)
+**ReserveCalifornia** — California state parks, discovered the way the public
+SPA does (one `/search/place` request with `isSearchAllParks=true`, then
+per-place facility and grid captures). Details:
+[docs/reservation-providers/reservecalifornia.md](docs/reservation-providers/reservecalifornia.md).
 
-Multi-stage pipeline. USCampgrounds.info seeds US parks (federal/state/local),
-BC Parks' API adds Canadian provincial parks, then a recreation.gov enricher
-attaches rec.gov-specific metadata to the federal subset.
+## Planet Fitness
 
-**Base — USCampgrounds.info CSV (US)**
-- URL: `https://uscampgrounds.info/takeit.html`
-- ~11,000 US campgrounds (federal, state, county/local, private). CC-BY,
-  updated ~monthly by the maintainer.
-- Fetcher: `scripts/fetch_campgrounds.py`.
+OpenStreetMap via Overpass (`https://overpass-api.de/api/interpreter`), query
+`nwr["brand"="Planet Fitness"]` over a US bbox (Wikidata `Q7201095`). ODbL,
+attribution required, CORS-friendly. Coverage is partial — roughly 1,400 of the
+~2,600 real locations — because it only has what mappers have added. Planet
+Fitness has no open API and its ToS forbids scraping its own locator, so the
+gap stays.
 
-**Parks Canada — BC + AB national-park campgrounds**
-- Source: hand-curated `data/parks-canada-{bc,ab}.json` scraped from
-  parks.canada.ca/pn-np/<region>/<slug>. Parks Canada does not publish an
-  open points dataset for campgrounds. Coordinates verified via OSM
-  Nominatim where possible.
-- ~46 frontcountry campgrounds across Yoho, Kootenay, Glacier, Mt Revelstoke,
-  Pacific Rim, Gulf Islands NPR (BC) + Banff, Jasper, Waterton Lakes (AB).
-- Fetcher: `scripts/fetch_parks_canada.py` (merges into campgrounds.geojson
-  with category=`federal`, country=`CA`, `parks_canada_url` set).
-- Data accuracy should be audited before trusting for navigation.
+## Tesla Superchargers
 
-**Reservation deeplink — `reservation.pc.gc.ca` (Aspira NextGen)**
-- Vendor: Aspira NextGen (formerly Active Network → Going to Camp). Same
-  platform powers `washington.goingtocamp.com`, `discovercamping.ca`
-  (BC Parks), and others.
-- Public API (no auth): `GET https://reservation.pc.gc.ca/api/maps`
-  returns the full park hierarchy. `mapType=2` entries are individual
-  parks; each carries `mapId` + `transactionLocationId` — the IDs the
-  booking-deeplink URL needs.
-- ID stamping: `scripts/fetch_parks_canada_aspira.py` walks the API once
-  and adds an `aspira: { transactionLocationId, mapId, … }` block to
-  each curated campground. Re-run only when Aspira renumbers (rare).
-- URL builder: the backend stamps a per-reservable URL template
-  (`ReservationUrlTemplate.kt`) from those IDs, and the frontend fills the
-  date window into it — `reservationUrlFromTemplate` in
-  `frontend/src/features/availability/booking-links.ts`. A campground with no
-  template falls back to the provider homepage. See RFC 0006 for the full URL
-  shape.
+Tesla's own bulk `find_us` endpoint, captured by `scripts/fetch_tesla_index.py`
+(index) and `scripts/fetch_tesla_locations.py` (detail pages) through
+`scripts/tesla_client.py`. The endpoint sits behind Akamai: fetches use
+curl-impersonate plus a browser-minted cookie, and `_abck` is bound to the
+egress IP that minted it, so `TESLA_COOKIES` lives in `.env.local` per machine
+rather than in the vault. Because fetches can be blocked, the registry keeps
+the cached `data/raw/` captures and the ingest row is left disabled for fan-out
+imports. The dump is global despite the `country=US` param; the Kotlin ETL
+filters to North America at parse time.
 
-**BC Parks — British Columbia provincial parks**
-- API: `https://bcparks.api.gov.bc.ca/api/protected-areas` (Strapi, public,
-  no key). Filter `parkCampingTypes.id.$notNull` to get just parks with
-  camping (~486).
-- One feature per park at `latitude`/`longitude`. Fields:
-  `protectedAreaName`, `url` (bcparks.ca/<slug>/), `parkPhotos[].imageUrl`,
-  `parkActivities[].activityType.activityName`,
-  `parkFacilities[].facilityType.facilityName`.
-- OGL-BC, no rate limits observed.
-- Fetcher: `scripts/fetch_bc_parks.py` (merges into the same GeoJSON with
-  category=`provincial`, state=`BC`, `bcparks_url` set for the popup link).
-
-**Enrichment — recreation.gov (federal only)**
-- `scripts/fetch_recgov_campground_enrichment.py` reads the newest
-  `recgov-campgrounds` RIDB capture for `FacilityID` values, then queries
-  one public-browser endpoint per reservable federal campground:
-  - `GET /api/ratingreview/aggregate?location_id=<id>&location_type=Campground`
-    — listing rating plus per-carrier cell coverage on rec.gov's 0–4 scale
-    (0 none, 1 major issues, 2 some, 3 good, 4 excellent) for
-    Verizon/AT&T/T-Mobile/Sprint.
-- No API key required. These are the same endpoints the rec.gov SPA uses.
-- Rate-limited: one request at a time with a configurable `--min-gap`,
-  429 exponential backoff, and `--resume` support for partial backfills.
-- Writes envelope-wrapped raw captures under
-  `data/raw/recgov-campground-enrichment/<ts>/facility-<id>.json`.
-- `RecGovCampgroundsEtl` promotes RIDB media/activity fields from
-  `recgov-campgrounds` plus `rating_reviews` (`[avg, count]`) and
-  `cell_coverage` (`{carrier: [avg, count]}`) from the enrichment capture
-  into `pois.properties`.
-
-**Optional — Overpass `tourism=camp_site`** for gap-filling / dispersed
-camping. Not yet integrated.
-
-**Note on RIDB:** the public Recreation Information Database API
-(`https://ridb.recreation.gov/api/v1/facilities/...`, free key required) was
-evaluated and is now the base federal campground source. It returns media and
-activities per facility, but not rating/cell coverage, so the SPA aggregate
-endpoint above remains the enrichment source for those fields.
-
-## 4. Free chargers (non-Tesla)
-
-**Primary — NREL AFDC**
-- URL: `https://developer.nrel.gov/api/alt-fuel-stations/v1.geojson?fuel_type=ELEC&...`
-- Key: free, 1000 req/hr.
-- Public domain (US Gov).
-- "Free" is inferred from `ev_pricing` text — filter client-side: null or matches `/^(free|\$?0(\.00)?|no fee)/i`. Also include known host-pays networks (ChargePoint hosts, Volta, etc.) at your discretion.
-- CORS enabled, but we'll still prebuild so no API key lives in the frontend.
-
-**Fallback — Open Charge Map**
-- Same endpoint as Supercharger, with `usagetypeid=1` (Public — Free).
-- CC-BY-SA, CORS-friendly.
-
-**Plan:** daily GH Action fetches both, filters free, dedupes by lat/lng ~50m, writes `data/free-chargers.geojson`.
-
-## 5. State parks
-
-**USGS PAD-US 4.0**
-- Download: https://www.usgs.gov/programs/gap-analysis-project/science/pad-us-data-download
-- ArcGIS REST: https://gis1.usgs.gov/arcgis/rest/services/padus4/
-- Filter: `Mang_Type = 'STAT'`, `Des_Tp IN ('SP','SRA')` (State Park, State Recreation Area).
-- Public domain. CORS enabled on the ArcGIS REST service.
-- Authoritative, all 50 states, one dataset.
-- Polygons → may render as boundaries + a centroid marker for clickability.
-
-**Plan:** one-time fetch → `data/state-parks.geojson`. Manual refresh annually on new PAD-US releases.
-
-## 6. Hipcamp
-
-Skip for the POC.
-- No public API. Cloudflare-protected. ToS prohibits scraping.
-- Sitemap + JSON-LD on listing pages exists but not worth the ToS risk for a personal map.
-- **UI treatment:** add a "Search on Hipcamp" link that deep-links to their map centered on the current view, rather than embedding their listings.
-- **Optional manual override:** curate a tiny `data/hipcamp-favorites.geojson` of sites you've personally bookmarked, if that's useful.
-
----
-
-## Refresh architecture
+## Refresh and import
 
 ```
-.github/workflows/refresh-data.yml     # scheduled cron (not yet set up)
-  ├─ superchargers (daily)             # live fetch from browser; nothing prebuilt
-  ├─ scripts/fetch_campgrounds.py      # weekly — USCampgrounds.info seed (US)
-  ├─ scripts/fetch_bc_parks.py         # weekly — BC Parks Strapi API (BC)
-  ├─ scripts/fetch_parks_canada.py     # static — hand-curated Parks Canada BC frontcountry
-  ├─ scripts/fetch_recgov.py           # weekly — RIDB federal campgrounds
-  ├─ scripts/fetch_recgov_campground_enrichment.py
-  │                                      # weekly — rec.gov rating/cell aggregates
-  └─ scripts/fetch_planet_fitness.py   # weekly — Overpass
-captures raw envelopes under `data/raw/`, then `make data-import` replays
-those captures into Postgres.
+make data-fetch [TARGET=<data_source slug>]   # scripts/poll_raw.py on the host
+  → data/raw/<slug>/<UTC-ts>/…                 # envelope-wrapped raw captures
+make data-import [TARGET=<poi_data name>]      # POST /api/admin/data/import
+  → Postgres + PostGIS                         # Kotlin ETL chain per registry row
+  → GET /api/pois?bbox=…                       # what the map reads
 ```
 
-The fetcher scripts above produce envelope-wrapped raw captures. `make
-data-import` (or `make data-import TARGET=<name>`) ingests the newest capture
-for each configured input into Postgres+PostGIS via the Kotlin ETL pipeline,
-and the Ktor backend serves POIs via the bbox-keyed `/api/pois` endpoint at
-runtime. Static parks polygons and Supercharger geometry remain file-served
-(`/data/*` and a live fetch from supercharge.info, respectively).
+Fetch is a host-side step (network acquisition only); import is a backend step
+(parse → transform → batched upsert). Splitting them is what lets an
+unreachable upstream fail a fetch command instead of the boot. Secrets are
+injected by `./secrets/manage.py exec`, never written to a plaintext `.env`.
 
-This sidesteps:
-- CORS (no runtime cross-origin calls — though supercharge.info, Overpass, OCM, NREL AFDC, PAD-US all support CORS and could be fetched live if we wanted)
-- API keys in the browser (keys live in GH Action secrets)
-- Rate limits (one fetch per source per day, not per pageload)
-- Third-party uptime (site still works if a source is down — just stale)
+Prebuilding rather than fetching live sidesteps CORS, keeps API keys out of the
+browser, spends one upstream request per source per refresh instead of one per
+pageload, and keeps the site working (just stale) when a source is down. The
+only static files still served from `/data/` are map furniture such as
+`us-states.geojson`.
 
-**API keys needed (all free, store as GH Action secrets when refresh runs move to CI):**
-- `NREL_API_KEY` — developer.nrel.gov (1000 req/hr) — for a future free-chargers fetcher
-- `OCM_API_KEY` — openchargemap.org — optional fallback
-- supercharge.info, Overpass, PAD-US, USCampgrounds.info, recreation.gov ratingreview — no key needed
+**Keys** (all free; stored in the vault — see [docs/secrets.md](docs/secrets.md)):
+`RIDB_API_KEY` for rec.gov RIDB, `CAMPFLARE_API_KEY` for the Campflare export.
+Overpass, BC Parks, the APCA ArcGIS layers, uscampgrounds.info, the rec.gov SPA
+endpoints, ReserveAmerica, and ReserveCalifornia need no key. `TESLA_COOKIES`
+is deliberately host-local, not vaulted.
 
-## Open decisions
+## Evaluated, not wired
 
-- **Map library**: Leaflet (easier, raster tiles) vs MapLibre GL (vector, nicer). Recommend **MapLibre + Protomaps** — one `.pmtiles` file can be hosted on GH Pages, no tile-server dependency, works offline by design.
-- **Clustering**: `supercluster` or the built-in clustering in whichever library.
-- **Routing**: use OSRM public demo (`router.project-osrm.org`) for the POC; self-host only if needed.
+Kept so the research isn't repeated, not because any of it is scheduled.
 
-## Next step
-Build a minimal POC: static page + MapLibre + one category loaded from GeoJSON (probably Superchargers, since it's the headline feature and supercharge.info's endpoint is verified working). Prove the refresh pipeline end-to-end on that one category before adding the rest.
-
-## Samples verified (2026-05-07)
-Sanity-checked each source from CLI; raw samples in `samples/`:
-- ✅ supercharge.info allSites — 3,883 US sites returned
-- ✅ Overpass PF (`brand=Planet Fitness`) — 1,408 US elements
-- ✅ Overpass Tesla chargers, Overpass campsites
-- ✅ NREL AFDC (DEMO_KEY) — CA returned 21,051 ELEC stations, rich `ev_pricing`/`ev_connector_types`/`ev_network` fields
-- ✅ USCampgrounds.info regional CSVs (WestCamp.csv = 3,926 rows)
-- ✅ PAD-US FeatureServer — CA state parks filter `Mang_Type='STAT' AND Des_Tp='SP'` returns polygons
-- ❌ Tesla `find_us` — 403 from CLI (Akamai block), rejected
-- ❌ OCM without key — 403 (free key needed, expected)
-- ❌ RIDB with DEMO_KEY — 401 (real free key needed)
+- **Free (non-Tesla) chargers** — NREL AFDC
+  (`developer.nrel.gov/api/alt-fuel-stations/v1.geojson?fuel_type=ELEC`, free
+  key, 1000 req/hr, US Gov public domain) as primary, Open Charge Map
+  (`usagetypeid=1`, ODbL) as fallback. "Free" has to be inferred from the
+  `ev_pricing` text. No fetcher, registry row, or map layer exists today.
+- **State park polygons** — USGS PAD-US 4.0 (`Mang_Type='STAT'`,
+  `Des_Tp IN ('SP','SRA')`, public domain, ArcGIS REST with CORS). A prebuilt
+  `state-parks.geojson` used to be served from `/data/`; it was dropped with
+  the legacy importer, and the map renders no park-polygon layer today.
+- **Hipcamp** — no public API, Cloudflare-protected, ToS prohibits scraping.
+  If it ever matters, deep-link to their map centered on the current view
+  rather than embedding listings.
+- **Overpass `tourism=camp_site`** — plausible gap-filler for dispersed
+  camping. Never integrated.
+- **supercharge.info** (`/service/supercharge/allSites`) — community-curated,
+  CORS-enabled, richer status vocabulary (PLAN/CONSTRUCTION/PERMIT) than
+  Tesla's own feed, but source-available with no formal license. Superseded by
+  the Tesla capture above; still the best fallback if that one breaks.
+- **Open Charge Map** (`operatorid=23`) — ODbL cross-check for Supercharger
+  coverage; lags new openings by days to weeks.

@@ -515,7 +515,8 @@ Each adapter's upstream API is documented separately under
   ReserveCalifornia / Tyler Technologies.
 - [reserveamerica.md](reservation-providers/reserveamerica.md) — ReserveAmerica /
   Active Network (`shop.albertaparks.ca`, `newyorkstateparks.reserveamerica.com`).
-- _recgov.md — to be written._
+- [recgov.md](reservation-providers/recgov.md) — Recreation.gov
+  (`www.recreation.gov` monthly availability API, RIDB catalog).
 
 When adding a new vendor, follow the
 [probe-vendor-api skill](../.claude/skills/probe-vendor-api/SKILL.md)
