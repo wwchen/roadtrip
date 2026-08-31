@@ -150,3 +150,11 @@ job. It lists all of them at once; `manage.py ls` shows where each is set.
 
 **`docker-compose.secrets.yml is stale`** — the registry changed without
 regenerating. `./secrets/manage.py generate`.
+
+## ENCRYPTION_KEY rotation
+
+`ENCRYPTION_KEY` seals per-user secrets in `user_settings` (`*_cipher`
+columns). Rotating it orphans every existing blob: decryption fails
+per-user and degrades gracefully (no Slack alert / no stored rec.gov
+password) rather than throwing, and affected users must re-enter their
+stored secrets. Rotate deliberately, not routinely.
