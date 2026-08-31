@@ -17,7 +17,7 @@
   position: absolute;
   top: max(10px, env(safe-area-inset-top));
   left: 10px;
-  z-index: 5;
+  z-index: var(--rt-z-map-panel);
   /* The third term keeps clear of the account pill (`useAcctClearance.ts`
      publishes its left edge into `--rt-acct-left`): 10px is this panel's own
      left inset, 8px is the gap before the pill. Falls back to 100vw — no
@@ -36,7 +36,7 @@
    modal bottom sheet, where the compact topbar is intentionally behind it. */
 @media (min-width: 768px) {
   .tb-panel {
-    z-index: 1000;
+    z-index: var(--rt-z-topbar);
     /* Bounded so the drawer underneath can always clear it. The drawer reserves
        exactly this panel's height (drawer.css), so an unbounded panel would push
        the drawer's contents off-screen — and clamping it there instead just puts
@@ -238,6 +238,15 @@
   background: var(--rt-map-route);
   border-color: var(--rt-map-route);
   color: var(--rt-on-accent);
+}
+
+/* The confirmation flash on the share button, held for `COPIED_STATE_MS` by
+   `useCopyLink`. It lived in `availability.css` while nothing set it and the
+   `.cg-btn` half of the pair still existed; both reasons are gone, so the rule sits
+   beside the selector it modifies. */
+.tb-icon-btn.copied {
+  border-color: var(--rt-success);
+  color: var(--rt-success);
 }
 
 .tb-icon-btn.primary:hover {
@@ -563,7 +572,11 @@
   margin: 0;
 }
 
-@media (max-width: 768px) {
+/* 767, not 768: the desktop block above opens at `min-width: 768px`, so a
+   `max-width: 768px` here put both halves of the same decision in force at exactly
+   768px — where the panel took the mobile width AND the desktop plane. See the
+   breakpoint note in tokens.css. */
+@media (max-width: 767px) {
   /* Reserve room on the right for the layers panel's hamburger, and — via
      `--rt-acct-left` — for the account pill, which sits above the hamburger
      in the same corner and can be wider than its 56px. */

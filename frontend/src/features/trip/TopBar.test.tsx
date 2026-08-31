@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createTestQueryClient } from '@/test/query-client';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
-import { encodeRouteState } from '@/lib/share-links';
+import { COPIED_STATE_MS, decodeRouteState, encodeRouteState } from '@/lib/share-links';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
 import { FakeMap } from '@/test/fake-map';
@@ -483,6 +483,82 @@ describe('a shared link', () => {
   });
 });
 
+describe('the share button', () => {
+  const COPY = 'Copy trip link';
+  const COPIED = 'Trip link copied';
+
+  const wholeTrip = () =>
+    useTripStore.setState({
+      mode: 'directions',
+      stops: [
+        { name: 'Seattle', lng: -122.33, lat: 47.6 },
+        { name: 'Bowman Bay', lng: -122.65, lat: 48.41 },
+      ],
+    });
+
+  let writeText: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+  });
+
+  test('copies a link that restores the whole trip', async () => {
+    wholeTrip();
+    mount();
+
+    await act(async () => {
+      screen.getByLabelText(COPY).click();
+    });
+
+    const copied = new URL(String(writeText.mock.calls[0]![0]));
+    const shared = decodeRouteState(copied.searchParams.get('route'));
+    expect(shared?.stops.map((s) => s.name)).toEqual(['Seattle', 'Bowman Bay']);
+    expect(shared?.corridorMiles).toBe(5);
+  });
+
+  test('says "copied", then goes back to being a button', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      wholeTrip();
+      mount();
+
+      await act(async () => {
+        screen.getByLabelText(COPY).click();
+      });
+
+      const button = screen.getByLabelText(COPIED);
+      expect(button).toHaveClass('copied');
+
+      await act(async () => {
+        vi.advanceTimersByTime(COPIED_STATE_MS);
+      });
+      expect(screen.getByLabelText(COPY)).not.toHaveClass('copied');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The same gate `useSharedTrip` writes the address bar behind: a half-typed trip
+  // has no shareable form, so there is nothing to offer yet.
+  test('is absent until the trip is whole', () => {
+    useTripStore.setState({
+      mode: 'directions',
+      stops: [{ name: 'Seattle', lng: -122.33, lat: 47.6 }, null],
+    });
+    mount();
+
+    expect(screen.queryByLabelText(COPY)).toBeNull();
+  });
+});
+
 describe('the smoke suite selectors', () => {
   test('rows carry the index the smoke selectors use', () => {
     useTripStore.setState({
@@ -493,6 +569,24 @@ describe('the smoke suite selectors', () => {
 
     expect(document.querySelector('.tb-row[data-i="0"] .tb-input')).toHaveValue('Seattle');
     expect(document.querySelector('#tb-corridor-range')).toBeNull();
+  });
+
+  // `SmokeTest.kt:730` asserts this id has count 0. It is the VANILLA's id for a
+  // control 4e dropped; the share button above is a different control and carries
+  // no id, so the backend assertion stays true. Pinned here so a future rename
+  // cannot break a Kotlin test this tree cannot run.
+  test('the share button does not claim the vanilla’s dropped id', () => {
+    useTripStore.setState({
+      mode: 'directions',
+      stops: [
+        { name: 'Seattle', lng: -122.33, lat: 47.6 },
+        { name: 'Bowman Bay', lng: -122.65, lat: 48.41 },
+      ],
+    });
+    mount();
+
+    expect(screen.getByLabelText('Copy trip link')).toBeInTheDocument();
+    expect(document.querySelector('#tb-share-route')).toBeNull();
   });
 });
 

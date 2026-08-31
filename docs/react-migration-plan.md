@@ -869,7 +869,7 @@ Landed across two branches: the panel itself on `claude/react-migration-4e-topba
 
 | Piece | File | Notes |
 |---|---|---|
-| Share links: both writers, the `?route=` reader, clipboard | `lib/share-links.ts` | 4c already ported the `?poi=` reader |
+| Share links: both writers, the `?route=` reader, clipboard | `lib/share-links.ts` | 4c already ported the `?poi=` reader. The two writers and the clipboard shipped as a **library with no caller** — see "Share links, wired to UI" below |
 | The stop list as algebra | `features/trip/stops.ts` | every rule from `onRowX`/`onAddStop`/`addTripStopFromExternal`/the drop handler |
 | Corridor buffer + radius clamp | `features/trip/corridor.ts` | turf from npm |
 | Summary copy, leg lines, routing errors | `features/trip/route-summary.ts` | |
@@ -938,7 +938,9 @@ rather than of a fetch: 250ms on the corridor slider, 220ms on typing.
   `#tb-corridor-range`, `#tb-corridor-value`. Cheap, and it is why graduating `/` left the
   smoke's topbar assertions untouched. Two selectors it names are **`hasCount(0)`
   assertions, not features**: `#tb-share-route` and `#tb-trip-dates` were dropped, and the
-  smoke pins their absence. And the corridor slider lives *inside*
+  smoke pins their absence. (Trip sharing has since come back as a control with **no id** —
+  see "Share links, wired to UI"; `#tb-trip-dates` is still genuinely absent.) And the
+  corridor slider lives *inside*
   `#tb-results .tb-results-body`, which is also what the vanilla did.
 
 **A latent Phase 0 defect, found in a browser rather than by a test.**
@@ -1014,7 +1016,8 @@ of the corridor response, sorted by distance along the route, each card hydrated
 the same campground share one round trip. `route-index.ts` is the only new algorithm: a
 cumulative-distance table over the route line, and a closest-segment lookup in degree
 space, which is what turns a POI into "33 km in". Two features the smoke's selectors
-implied do NOT exist and are asserted absent: `#tb-share-route` and `#tb-trip-dates`.
+implied do NOT exist and are asserted absent: `#tb-share-route` and `#tb-trip-dates`. Trip
+sharing was later wired back in under a different control — see "Share links, wired to UI".
 
 **The alerts panel** (`web/topbar/alerts.js`). Three status lists through `useQueries`, POI
 names under `queryKeys.pois.name`, and a 401 read as "this visitor is anonymous" rather
@@ -1306,6 +1309,52 @@ Consequences worth knowing:
 - **Kept on purpose:** `web/availability/watch-editor.js` and `web/api/watches-api.js`.
   Neither lives under `web/watches/`, and `availability-week.js` plus the vanilla
   topbar alerts panel still import them until Phases 2 and 4d.
+
+## Share links, wired to UI
+
+4e ported `lib/share-links.ts` whole and then wired **only the readers**. `decodeRouteState`
+and `setVisibleRouteParam` had a caller (`useSharedTrip`); `poiShareUrl`, `routeShareUrl` and
+`copyShareUrl` had none, in any non-test file, and no `.tsx` anywhere said "Share" or "Copy
+link". The `.tb-icon-btn.copied` rule sat in `availability.css` under a comment saying nothing
+set it. That is the gap this closes: the library was the port, the buttons are the feature.
+
+| Piece | File |
+|---|---|
+| The "Copied" flash, shared by both writers | `lib/use-copy-link.ts` (`useCopyLink`) |
+| Trip share button (`.tb-icon-btn` + `.copied`) | `features/trip/TopBar.tsx`, `topbar.css` |
+| POI share button, one per actions row | `domain/poi/fields.tsx` (`SharePoiButton`), used by `types/{park,charger,campground,place}.tsx` |
+| The `.copied` rule, moved beside its selector | `features/trip/topbar.css` (was `availability.css`) |
+
+Four things worth knowing:
+
+- **The trip button carries no id, deliberately.** `SmokeTest.kt:730` asserts
+  `#tb-share-route` has count 0 and `:512` asserts `.rt-poi-share` does, both pinning
+  *vanilla* selectors for controls 4e dropped. These are different controls with different
+  chrome, so the backend assertions stay true — but their **intent is now stale**, and the
+  smoke should grow real assertions for the two buttons. Backend was out of scope here, so
+  the pins are unchanged and `TopBar.test.tsx` mirrors the id one from this side.
+- **`__rtRouteShareUrl` is gone and should stay gone.** Phase 4e mounted it because
+  `SmokeTest.kt` read it; Phase 5 deleted the shim and rewrote the smoke to drive public UI.
+  `SmokeTest.kt` today contains **no `__rt` reference at all**, so nothing needs the global —
+  a share button the user can press is the seam a smoke test should reach for anyway.
+- **The trip button is gated on `allStopsFilled`**, the same gate `useSharedTrip` writes the
+  address bar behind, not on `routeShareUrl` returning non-empty. The encoder's `pending`
+  check catches the "Locating you…" placeholder, but a half-typed itinerary has no shareable
+  form either, and one gate for both means the button appears exactly when the visible URL is
+  worth copying. (This is the fourth appearance of the `(0, 0)` trap; see 4e's defect list.)
+- **`poiShareUrl` builds from `pathname`**, so one control is correct on both surfaces that
+  render an actions row: `/?poi=<id>` from the map drawer, `<poi page>?poi=<id>` from the
+  routed page, and neither inherits the query of the link that opened the tab.
+
+`AvailabilityWeek`'s "Report it" button copies through `copyShareUrl` now too. It had a raw
+`navigator.clipboard?.writeText(...).then().catch()`, which in a non-secure context made the
+whole chain `undefined` — no copy, and **neither toast fired**. The helper's textarea
+fallback covers that, and the failure toast is now reachable.
+
+Still without a caller, and left that way on purpose: `clearVisibleShareUrl` (nothing clears
+both parameters at once — clearing a trip must not close an open drawer's link) and
+`clearVisiblePoiUrl` (`lib/poi-url.ts`'s `clearPoiFromUrl` is the drawer's own writer and owns
+that job). One of the two `?poi=` writers should go; that is a separate cleanup.
 
 ## Gotchas / lessons (save yourself the debugging)
 

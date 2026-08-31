@@ -25,6 +25,7 @@ import {
 import {
   DirectionsButton,
   ProviderHtml,
+  SharePoiButton,
   UpstreamTable,
   coordinatesOf,
   eyebrowFor,
@@ -142,6 +143,7 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
             </Button>
           ))
         )}
+        <SharePoiButton id={feature.id} />
       </PoiActions>
     ),
     // Gated on the backend's own provider-capability flag, so the grid only appears

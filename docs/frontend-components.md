@@ -81,9 +81,12 @@ and it comes from the M0 screens doc (4a, "One order, thirteen blocks").
 - `PoiBlocks.tsx` is the block vocabulary — identity, actions, glance, prose, specs,
   contact, links, nearby, the footer stamp and the provenance disclosure. They
   render shapes from `model.ts` and know nothing about any provider.
-- `fields.tsx` is extraction and the two shared controls (`DirectionsButton`,
-  `CallButtons`); `campground-detail.ts` and `supercharger-detail.ts` are the
-  per-provider extractors.
+- `fields.tsx` is extraction and the three shared controls (`DirectionsButton`,
+  `CallButtons`, `SharePoiButton`); `campground-detail.ts` and
+  `supercharger-detail.ts` are the per-provider extractors. A control that belongs
+  in *every* actions row goes here and is added to each type's `PoiActions` — the
+  row's contents are the type's call, which is why they are not injected by the
+  shell.
 - `types/` holds one component per POI type plus `registry.ts`, a category → page
   `Map`. Types whose page is identity, actions and one spec list — gym, trailhead,
   town stop, dropped pin, state — are rows in `place.tsx`'s descriptor table rather
@@ -195,11 +198,18 @@ in it.**
 - The **sandbox chrome** (build banner) is started by `mountPage()`, so every
   page has the same deployment provenance indicator. Sandboxes use the normal
   provider-backed auth flow; there is no page-local user switcher.
+- `AppProviders` wraps every page in **`app/PageErrorBoundary`**, outside the
+  query client and the toast host, so a throwing component shows a banner with a
+  reload rather than a white page — the failure jsdom structurally cannot see.
+  Its fallback banners rather than toasts, because the provider it would toast
+  through may be the thing that failed. `mountPage()` also logs a missing `#root`
+  and any `unhandledrejection`; both go to `console.error`, which is the only
+  reporting path this app has.
 
 Both used to be `<link>`/`<script>` tags injected into every entry by a Vite plugin and
 served by Ktor from `web/`. They are bundled now; the plugin is gone.
 
-Three entries exist: `index.html` (map), `availability.html`, and `watches.html`. Ktor serves
+Four entries exist: `index.html` (map), `availability.html`, `watches.html`, and `poi.html`. Ktor serves
 each from `frontend/dist` and there is no fallback behind them, so an unbuilt tree 404s the
 whole site rather than degrading. Storybook is a development tool and is not a Ktor route or
 production Vite entry. Adding a production page means
