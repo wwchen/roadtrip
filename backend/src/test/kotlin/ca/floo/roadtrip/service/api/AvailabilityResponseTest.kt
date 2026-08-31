@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.DayClassification
+import ca.floo.roadtrip.route.common.encodeApiJson
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.boolean
@@ -21,7 +22,7 @@ class AvailabilityResponseTest {
     @Test
     fun `availability renderer serializes stable dto shape`() {
         val body =
-            encodeAvailabilityJson(
+            encodeApiJson(
                 availabilityResponseDto(
                     provider = "recgov",
                     startDate = LocalDate.parse("2026-06-10"),
@@ -206,7 +207,7 @@ class AvailabilityResponseTest {
 
     @Test
     fun `availability error renderer returns state error dto shape`() {
-        val body = encodeAvailabilityJson(availabilityErrorDto("rate_limited"))
+        val body = encodeApiJson(availabilityErrorDto("rate_limited"))
         val json = Json.parseToJsonElement(body).jsonObject
 
         assertEquals("error", json["state"]!!.jsonPrimitive.content)

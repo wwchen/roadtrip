@@ -25,8 +25,6 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.json.Json
 
 private const val DEFAULT_LIST_LIMIT = 100
 private const val MIN_LIST_LIMIT = 1
@@ -42,14 +40,6 @@ private const val SNAPSHOT_WINDOW_HOURS_DEFAULT = 24 * 7
 private val listLimitRange = MIN_LIST_LIMIT..MAX_LIST_LIMIT
 private val snapshotLimitRange = MIN_LIST_LIMIT..SNAPSHOT_MAX_LIMIT
 private val snapshotWindowHoursRange = SNAPSHOT_WINDOW_HOURS_MIN..SNAPSHOT_WINDOW_HOURS_MAX
-
-@OptIn(ExperimentalSerializationApi::class)
-private val dashboardJson =
-    Json {
-        encodeDefaults = true
-        explicitNulls = false
-        ignoreUnknownKeys = true
-    }
 
 internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardController) {
     route("/api") {
@@ -171,7 +161,7 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
 private suspend inline fun <reified T> ApplicationCall.respondJson(
     body: T,
     status: HttpStatusCode = HttpStatusCode.OK,
-) = respondEncodedJson(dashboardJson, body, status)
+) = respondEncodedJson(body, status)
 
 private suspend fun ApplicationCall.respondError(
     error: String,

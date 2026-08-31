@@ -2,6 +2,8 @@ package ca.floo.roadtrip.service.auth
 
 import ca.floo.roadtrip.config.AuthConfig
 import ca.floo.roadtrip.model.domain.auth.Principal
+import ca.floo.roadtrip.model.domain.auth.User
+import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.support.AuthException
 
 private const val DEFAULT_RETURN_TO = "/"
@@ -21,6 +23,7 @@ internal class AuthController(
     private val identityProviderRegistry: IdentityProviderRegistry,
     private val userProvisioningService: UserProvisioningService,
     private val sessionService: SessionService,
+    private val userRepo: UserRepo,
 ) {
     /** A started sign-in: where to send the browser, and what to remember. */
     data class LoginStart(
@@ -121,6 +124,9 @@ internal class AuthController(
             passwordChallenge = Pkce.challengeFor(request.codeVerifier),
         )
     }
+
+    /** The stored account behind a resolved principal, or null once it is gone. */
+    fun currentUser(principal: Principal.User): User? = userRepo.findById(principal.userId)
 
     fun resolve(sessionToken: String?): Principal {
         val token = sessionToken?.takeIf { it.isNotBlank() } ?: return Principal.Anonymous

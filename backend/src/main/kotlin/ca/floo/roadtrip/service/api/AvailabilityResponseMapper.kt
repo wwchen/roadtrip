@@ -10,7 +10,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.DayClassification
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.encodeToJsonElement
@@ -27,15 +26,14 @@ import java.time.temporal.ChronoUnit
 // inputs differ (rec.gov: per-campsite per-day status strings; Aspira:
 // per-sub-area per-day status codes). Everything below is provider-agnostic.
 
+// Only for embedding the season block as a JsonElement inside the DTO below;
+// HTTP serialization belongs to the route layer.
 @OptIn(ExperimentalSerializationApi::class)
-@PublishedApi
-internal val availabilityResponseJson: Json =
+private val seasonBlockJson: Json =
     Json {
         encodeDefaults = true
         explicitNulls = false
     }
-
-inline fun <reified T> encodeAvailabilityJson(value: T): String = availabilityResponseJson.encodeToString(value)
 
 fun dayClassificationsFromObservations(
     startDate: LocalDate,
@@ -181,7 +179,7 @@ fun availabilityResponseDto(
         startDate = startDate.toString(),
         endDate = endDate.toString(),
         state = state,
-        season = seasonBlock?.let { availabilityResponseJson.encodeToJsonElement(it) } ?: JsonNull,
+        season = seasonBlock?.let { seasonBlockJson.encodeToJsonElement(it) } ?: JsonNull,
         availability =
             perDay.map { day ->
                 AvailabilityDayDto(

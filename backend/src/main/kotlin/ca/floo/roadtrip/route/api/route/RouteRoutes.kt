@@ -15,6 +15,7 @@ import ca.floo.roadtrip.route.common.OptionalQuery
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.optionalDoubleQuery
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.route.common.trimmedQuery
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
@@ -25,18 +26,8 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
-import org.jooq.exception.DataAccessException
-
-@OptIn(ExperimentalSerializationApi::class)
-private val routeJson =
-    Json {
-        encodeDefaults = true
-        explicitNulls = false
-    }
 
 /**
  * GET /api/route?coords=lng,lat;lng,lat;...
@@ -172,7 +163,7 @@ internal fun Route.routeRoutes(
                             routeLineGeoJson,
                             radiusMiles,
                         )
-                    } catch (e: DataAccessException) {
+                    } catch (e: RoutingException) {
                         call.respondRouteError(
                             error = "corridor_unavailable",
                             detail = e.message ?: "",
@@ -202,7 +193,7 @@ internal fun routeResponseFeatureCollection(
 ): RouteFeatureCollectionDto {
     val features =
         mutableListOf(
-            routeJson.encodeToJsonElement(
+            roadtripApiJson.encodeToJsonElement(
                 RouteFeatureDto(
                     geometry = RouteLineGeometryDto(coordinates = response.coordinates),
                     properties =
@@ -223,7 +214,7 @@ internal fun routeResponseFeatureCollection(
         )
     if (corridorRadiusMiles != null && corridorPolygonGeoJson != null) {
         features +=
-            routeJson.encodeToJsonElement(
+            roadtripApiJson.encodeToJsonElement(
                 CorridorFeatureDto(
                     geometry = Json.parseToJsonElement(corridorPolygonGeoJson),
                     properties =
@@ -244,11 +235,9 @@ private suspend fun ApplicationCall.respondRouteError(
     respondRouteJson(RouteErrorDto(error = error, detail = detail), status)
 }
 
-internal fun encodeRouteJson(value: RouteFeatureCollectionDto): String = routeJson.encodeToString(value)
-
 private suspend inline fun <reified T> ApplicationCall.respondRouteJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondEncodedJson(routeJson, value, status)
+    respondEncodedJson(value, status)
 }

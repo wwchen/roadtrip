@@ -1,9 +1,7 @@
 package ca.floo.roadtrip.service.availability.alert
 
-import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
-import org.jooq.DSLContext
 import java.time.OffsetDateTime
 
 /**
@@ -12,9 +10,8 @@ import java.time.OffsetDateTime
  * resolved (provider, parent_ref) set, and the executor drives those pollers.
  *
  * Wraps today's [AvailabilityPollerMembership] sync + orphan-reap so watch
- * writes and this provider's hooks stay in the same transaction: membership
- * writes are transactional today, so the txn [DSLContext] flows through both
- * hooks.
+ * writes and this provider's hooks stay in the same transaction: both hooks
+ * work through the transaction-bound repo the [WatchAlertScope] hands them.
  */
 internal class InternalPollerAlertProvider(
     private val membership: AvailabilityPollerMembership,
@@ -25,7 +22,7 @@ internal class InternalPollerAlertProvider(
     override val hostsAlerts: Boolean = false
 
     override fun onWatchActivated(
-        txn: DSLContext,
+        scope: WatchAlertScope,
         watch: AvailabilityWatchRepo.Watch,
     ) {
         // A create (or a resume) should pull the coalesced poller's next_run_at
@@ -34,20 +31,20 @@ internal class InternalPollerAlertProvider(
         // later. Passing the current time matches the pre-seam behavior.
         membership.sync(
             watch,
-            AvailabilityPollerRepo(txn),
+            scope.pollerRepo,
             tighterCadencePull = OffsetDateTime.now(),
         )
     }
 
     override fun onWatchDeactivated(
-        txn: DSLContext,
+        scope: WatchAlertScope,
         watch: AvailabilityWatchRepo.Watch,
     ) {
-        val pollers = AvailabilityPollerRepo(txn)
+        val pollerRepo = scope.pollerRepo
         // Pause/done: clears the watch's remaining links. Delete: the FK
         // cascade has already cleared them, so this is a safe no-op. Then reap
         // any poller that lost its last link.
-        pollers.replaceLinksForWatch(watch.id, emptySet())
-        pollers.deactivatePollersWithNoLinks()
+        pollerRepo.replaceLinksForWatch(watch.id, emptySet())
+        pollerRepo.deactivatePollersWithNoLinks()
     }
 }

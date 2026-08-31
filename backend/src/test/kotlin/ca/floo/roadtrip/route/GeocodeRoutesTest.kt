@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.model.routing.GeocodeResult
-import ca.floo.roadtrip.route.api.geocode.encodeGeocodeJson
 import ca.floo.roadtrip.route.api.geocode.geocodeResponseDto
+import ca.floo.roadtrip.route.common.encodeApiJson
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray
@@ -15,7 +15,7 @@ class GeocodeRoutesTest {
     @Test
     fun `geocode response serializes results with dto`() {
         val payload =
-            encodeGeocodeJson(
+            encodeApiJson(
                 geocodeResponseDto(
                     listOf(
                         GeocodeResult(

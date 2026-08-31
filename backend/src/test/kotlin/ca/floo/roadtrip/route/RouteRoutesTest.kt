@@ -2,8 +2,8 @@ package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.model.routing.RouteLeg
 import ca.floo.roadtrip.model.routing.RouteResponse
-import ca.floo.roadtrip.route.api.route.encodeRouteJson
 import ca.floo.roadtrip.route.api.route.routeResponseFeatureCollection
+import ca.floo.roadtrip.route.common.encodeApiJson
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray
@@ -16,7 +16,7 @@ class RouteRoutesTest {
     @Test
     fun `route response serializes feature collection with dto`() {
         val payload =
-            encodeRouteJson(
+            encodeApiJson(
                 routeResponseFeatureCollection(
                     response =
                         RouteResponse(
@@ -44,7 +44,7 @@ class RouteRoutesTest {
     @Test
     fun `route response includes corridor feature when provided`() {
         val payload =
-            encodeRouteJson(
+            encodeApiJson(
                 routeResponseFeatureCollection(
                     response =
                         RouteResponse(

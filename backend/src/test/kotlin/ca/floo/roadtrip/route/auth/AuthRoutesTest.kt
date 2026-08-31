@@ -117,10 +117,10 @@ private fun authOnWiring(): AuthRouteWiring {
                 ),
             userProvisioningService = UserProvisioningService(detachedCtx),
             sessionService = sessionService,
+            userRepo = stubUserRepo,
         )
     return AuthRouteWiring(
         authController = authController,
-        userRepo = stubUserRepo,
         flowSigningKey = ByteArray(32),
         isCookieSecure = false,
         sessionMaxAgeSeconds = 3600,
@@ -142,7 +142,7 @@ class AuthRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = null, userRepo = stubUserRepo) }
+                routing { authRoutes(wiring = null) }
             }
             val resp = client.get("/api/me")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -162,7 +162,7 @@ class AuthRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = authOnWiring(), userRepo = stubUserRepo) }
+                routing { authRoutes(wiring = authOnWiring()) }
             }
             val resp =
                 client.get("/api/me") { header(HttpHeaders.Cookie, "$SESSION_COOKIE=$AUTH_ON_TOKEN") }
@@ -183,7 +183,7 @@ class AuthRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = authOnWiring(), userRepo = stubUserRepo) }
+                routing { authRoutes(wiring = authOnWiring()) }
             }
             val resp = client.get("/api/me")
             assertEquals(HttpStatusCode.OK, resp.status)

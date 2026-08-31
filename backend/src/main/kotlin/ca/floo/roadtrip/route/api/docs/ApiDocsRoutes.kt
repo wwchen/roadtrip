@@ -18,8 +18,6 @@ import io.ktor.server.routing.openapi.plus
 import io.ktor.server.routing.path
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routingRoot
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.json.Json
 
 private const val API_DOCS_PATH = "/api/docs"
 private const val API_PATH_PREFIX = "/api/"
@@ -35,13 +33,6 @@ private val roadtripOpenApiInfo =
         description = OPENAPI_DESCRIPTION,
     )
 
-@OptIn(ExperimentalSerializationApi::class)
-private val openApiJson =
-    Json {
-        encodeDefaults = true
-        explicitNulls = false
-    }
-
 internal fun Route.apiDocsRoutes() {
     swaggerUI(API_DOCS_PATH) {
         info = roadtripOpenApiInfo
@@ -51,7 +42,7 @@ internal fun Route.apiDocsRoutes() {
     route(API_DOCS_PATH) {
         get("/openapi.json") {
             val doc = OpenApiDoc(info = roadtripOpenApiInfo) + call.application.roadtripOpenApiRoutes()
-            call.respondEncodedJson(openApiJson, doc)
+            call.respondEncodedJson(doc)
         }.hide().access(RouteAccess.Anonymous)
     }
 }

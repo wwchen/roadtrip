@@ -28,8 +28,6 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.json.Json
 
 private const val DEFAULT_LIST_LIMIT = 100
 private const val MIN_LIST_LIMIT = 1
@@ -38,14 +36,6 @@ private const val DEFAULT_LIST_OFFSET = 0
 private const val MIN_LIST_OFFSET = 0
 
 private val listLimitRange = MIN_LIST_LIMIT..MAX_LIST_LIMIT
-
-@OptIn(ExperimentalSerializationApi::class)
-private val watchJson =
-    Json {
-        encodeDefaults = true
-        explicitNulls = false
-        ignoreUnknownKeys = true
-    }
 
 private suspend fun ApplicationCall.requireUser(): Principal.User? {
     val p = principal() as? Principal.User
@@ -130,7 +120,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
 private suspend inline fun <reified T> ApplicationCall.respondJson(
     body: T,
     status: HttpStatusCode = HttpStatusCode.OK,
-) = respondEncodedJson(watchJson, body, status)
+) = respondEncodedJson(body, status)
 
 private suspend fun ApplicationCall.respondError(
     error: String,

@@ -7,13 +7,12 @@ import ca.floo.roadtrip.model.api.PasswordBeginResponseDto
 import ca.floo.roadtrip.model.api.PasswordCompleteRequestDto
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
-import ca.floo.roadtrip.repo.UserRepo
+import ca.floo.roadtrip.model.domain.auth.User
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
-import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.service.auth.AuthController
 import ca.floo.roadtrip.service.auth.LoginFlowState
 import ca.floo.roadtrip.service.auth.encode
@@ -57,10 +56,7 @@ private val log = LoggerFactory.getLogger("ca.floo.roadtrip.route.auth")
  * `auth_enabled: false`, and the login endpoints answer 503. A fresh clone and
  * CI therefore boot and serve every anonymous surface with no tenant anywhere.
  */
-internal fun Route.authRoutes(
-    wiring: AuthRouteWiring?,
-    userRepo: UserRepo,
-) {
+internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
     route("/auth") {
         get("/login") {
             val auth = wiring ?: return@get call.respondAuthDisabled()
@@ -192,15 +188,13 @@ internal fun Route.authRoutes(
         get("/me") {
             if (wiring == null) {
                 return@get call.respondEncodedJson(
-                    roadtripApiJson,
                     MeResponseDto(isAuthenticated = false, isAuthEnabled = false),
                 )
             }
             when (val principal = wiring.authController.resolve(call.request.sessionToken())) {
-                is Principal.User -> call.respondEncodedJson(roadtripApiJson, wiring.meResponse(principal))
+                is Principal.User -> call.respondEncodedJson(wiring.meResponse(principal))
                 else ->
                     call.respondEncodedJson(
-                        roadtripApiJson,
                         MeResponseDto(
                             isAuthenticated = false,
                             authClientId = wiring.authClientId,
@@ -218,7 +212,7 @@ internal fun Route.authRoutes(
 
 private fun AuthRouteWiring.meResponse(principal: Principal.User): MeResponseDto =
     meResponseForUser(
-        userRepo,
+        authController.currentUser(principal),
         principal,
         isAuthEnabled = true,
         authClientId = authClientId,
@@ -229,7 +223,7 @@ private fun AuthRouteWiring.meResponse(principal: Principal.User): MeResponseDto
     )
 
 private fun meResponseForUser(
-    userRepo: UserRepo,
+    user: User?,
     principal: Principal.User,
     isAuthEnabled: Boolean,
     authClientId: String? = null,
@@ -237,9 +231,8 @@ private fun meResponseForUser(
     authRealm: String? = null,
     providerLabel: String? = null,
     isEmbeddedLogin: Boolean = false,
-): MeResponseDto {
-    val user = userRepo.findById(principal.userId)
-    return MeResponseDto(
+): MeResponseDto =
+    MeResponseDto(
         isAuthenticated = user != null,
         isAuthEnabled = isAuthEnabled,
         user =
@@ -259,7 +252,6 @@ private fun meResponseForUser(
         providerLabel = providerLabel,
         isEmbeddedLogin = isEmbeddedLogin,
     )
-}
 
 private suspend fun ApplicationCall.respondAuthDisabled() =
     respondApiError(
@@ -277,7 +269,6 @@ private suspend fun ApplicationCall.respondAuthDisabled() =
  */
 internal class AuthRouteWiring(
     val authController: AuthController,
-    val userRepo: UserRepo,
     val flowSigningKey: ByteArray,
     val isCookieSecure: Boolean,
     val sessionMaxAgeSeconds: Int,

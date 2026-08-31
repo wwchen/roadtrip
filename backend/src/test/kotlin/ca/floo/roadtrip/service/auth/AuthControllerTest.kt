@@ -109,6 +109,7 @@ class AuthControllerTest : SharedDbTest() {
                     userSessionRepo = UserSessionRepo(ctx),
                     sessionTtl = Duration.ofDays(30),
                 ),
+            userRepo = userRepo,
         )
     }
 

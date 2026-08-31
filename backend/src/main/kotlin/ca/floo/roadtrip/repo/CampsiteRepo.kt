@@ -8,8 +8,6 @@ import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL
-import java.time.Instant
-import java.time.OffsetDateTime
 
 class CampsiteRepo(
     private val ctx: DSLContext,
@@ -378,10 +376,10 @@ class CampsiteRepo(
             latitude = record.get("latitude", Double::class.java),
             longitude = record.get("longitude", Double::class.java),
             reservationUrl = record.get("reservation_url", String::class.java),
-            equipment = parseJsonElement(record.get("equipment_text", String::class.java)),
+            equipment = parseNullableJsonElement(record.get("equipment_text", String::class.java)),
             kindListed = record.get("kind_listed", String::class.java),
-            schedule = parseRequiredJsonElement(record.get("schedule_text", String::class.java)),
-            price = parseRequiredJsonElement(record.get("price_text", String::class.java)),
+            schedule = parseJsonElement(record.get("schedule_text", String::class.java)),
+            price = parseJsonElement(record.get("price_text", String::class.java)),
             firepit = record.get("firepit", Boolean::class.java),
             picnicTable = record.get("picnic_table", Boolean::class.java),
             adaAccessible = record.get("ada_accessible", Boolean::class.java),
@@ -394,8 +392,8 @@ class CampsiteRepo(
             drivewayLength = record.get("driveway_length", Int::class.java),
             maxRvLength = record.get("max_rv_length", Int::class.java),
             maxTrailerLength = record.get("max_trailer_length", Double::class.java),
-            photos = parseRequiredJsonElement(record.get("photos_text", String::class.java)),
-            sourcePayload = parseRequiredJsonElement(record.get("source_payload_text", String::class.java)),
+            photos = parseJsonElement(record.get("photos_text", String::class.java)),
+            sourcePayload = parseJsonElement(record.get("source_payload_text", String::class.java)),
             createdAt = record.instant("created_at"),
             updatedAt = record.instant("updated_at"),
             deletedAt = record.nullableInstant("deleted_at"),
@@ -406,16 +404,10 @@ class CampsiteRepo(
         )
     }
 
-    private fun parseRequiredJsonElement(raw: String): JsonElement = Json.parseToJsonElement(raw)
-
-    private fun parseJsonElement(raw: String?): JsonElement? =
+    private fun parseNullableJsonElement(raw: String?): JsonElement? =
         raw
             ?.takeIf { it != "null" }
             ?.let { Json.parseToJsonElement(it) }
-
-    private fun Record.instant(column: String): Instant = get(column, OffsetDateTime::class.java).toInstant()
-
-    private fun Record.nullableInstant(column: String): Instant? = get(column, OffsetDateTime::class.java)?.toInstant()
 
     private data class ParentKey(
         val dataProvider: String,

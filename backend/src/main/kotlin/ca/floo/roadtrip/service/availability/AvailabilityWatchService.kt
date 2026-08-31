@@ -5,6 +5,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
+import ca.floo.roadtrip.service.availability.alert.TransactionalWatchAlertScope
 import kotlinx.serialization.json.JsonObject
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -63,7 +64,7 @@ internal class AvailabilityWatchService(
                 val txn = DSL.using(config)
                 val created = AvailabilityWatchRepo(txn).create(input)
                 capabilityValidator.validate(created)
-                alertProviders.forWatch(created).onWatchActivated(txn, created)
+                alertProviders.forWatch(created).onWatchActivated(TransactionalWatchAlertScope(txn), created)
                 created
             }
         lifecycleNotifications.afterCreate(watch)
@@ -108,10 +109,11 @@ internal class AvailabilityWatchService(
                 // any non-ACTIVE status is a deactivate as far as opening-detection
                 // is concerned -- the watch holds no live subscription.
                 val provider = alertProviders.forWatch(updated)
+                val scope = TransactionalWatchAlertScope(txn)
                 if (updated.status == WatchStatus.ACTIVE) {
-                    provider.onWatchActivated(txn, updated)
+                    provider.onWatchActivated(scope, updated)
                 } else {
-                    provider.onWatchDeactivated(txn, updated)
+                    provider.onWatchDeactivated(scope, updated)
                 }
                 before to updated
             }
@@ -132,7 +134,7 @@ internal class AvailabilityWatchService(
                 val existing = repo.findById(id) ?: return@transactionResult null
                 val deleted = repo.delete(id)
                 if (deleted) {
-                    alertProviders.forWatch(existing).onWatchDeactivated(txn, existing)
+                    alertProviders.forWatch(existing).onWatchDeactivated(TransactionalWatchAlertScope(txn), existing)
                     existing
                 } else {
                     null

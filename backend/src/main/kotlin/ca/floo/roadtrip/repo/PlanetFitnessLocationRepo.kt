@@ -4,13 +4,9 @@ import ca.floo.roadtrip.model.domain.CatalogUpsertResult
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocation
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.poi.PlanetFitnessLocationPoiDetail
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL
-import java.time.Instant
-import java.time.OffsetDateTime
 
 /**
  * Persistence boundary for Planet Fitness location catalog reads and writes.
@@ -98,12 +94,6 @@ class PlanetFitnessLocationRepo(
         )
     }
 
-    fun findAll(): List<PlanetFitnessLocation> =
-        ctx
-            .fetch(
-                "$baseSelect WHERE pfl.deleted_at IS NULL ORDER BY pfl.name, pfl.id",
-            ).map(::fromRecord)
-
     private fun fromRecord(record: Record): PlanetFitnessLocation =
         PlanetFitnessLocation(
             id = record.get("id", Long::class.java),
@@ -120,12 +110,6 @@ class PlanetFitnessLocationRepo(
             updatedAt = record.instant("updated_at"),
             deletedAt = record.nullableInstant("deleted_at"),
         )
-
-    private fun parseJsonElement(raw: String): JsonElement = Json.parseToJsonElement(raw)
-
-    private fun Record.instant(column: String): Instant = get(column, OffsetDateTime::class.java).toInstant()
-
-    private fun Record.nullableInstant(column: String): Instant? = get(column, OffsetDateTime::class.java)?.toInstant()
 
     private fun upsertPlanetFitnessLocation(record: PlanetFitnessLocationUpsertCandidate): Boolean {
         val locationId =

@@ -443,7 +443,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals("CA", teslaRow.country)
         assertEquals(json("""{"location_url_slug":"vancouver-bc-1"}"""), teslaRow.indexPayload)
         assertEquals(teslaRow.id, teslaRepo.findById(teslaRow.id)?.id)
-        assertEquals(listOf(teslaRow.id), teslaRepo.findAll().map { it.id })
+        assertEquals(teslaRow.id, teslaRepo.findByLocationSlug("vancouver-bc-1")?.id)
         val teslaPoiId =
             ctx
                 .fetchOne("SELECT poi_id FROM poi_tesla_superchargers WHERE tesla_supercharger_id = ?", teslaRow.id)!!
@@ -457,7 +457,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals("555-0100", planetFitnessRow.phone)
         assertEquals(json("""{"id":123}"""), planetFitnessRow.payload)
         assertEquals(planetFitnessRow.id, planetFitnessRepo.findById(planetFitnessRow.id)?.id)
-        assertEquals(listOf(planetFitnessRow.id), planetFitnessRepo.findAll().map { it.id })
+        assertEquals(planetFitnessRow.id, planetFitnessRepo.findByLocationId("node-123")?.id)
         val planetFitnessPoiId =
             ctx
                 .fetchOne(

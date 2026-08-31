@@ -13,16 +13,7 @@ import io.ktor.server.application.call
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.time.Instant
-
-@OptIn(ExperimentalSerializationApi::class)
-private val healthRouteJson =
-    Json {
-        encodeDefaults = true
-    }
 
 /**
  * The two infra probes, deliberately answering different questions.
@@ -72,11 +63,9 @@ internal fun readinessResponseDto(
             },
     )
 
-internal inline fun <reified T> encodeHealthJson(value: T): String = healthRouteJson.encodeToString(value)
-
 private suspend inline fun <reified T> ApplicationCall.respondHealthJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondEncodedJson(healthRouteJson, value, status)
+    respondEncodedJson(value, status)
 }

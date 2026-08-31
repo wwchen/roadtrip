@@ -4,13 +4,9 @@ import ca.floo.roadtrip.model.domain.CatalogUpsertResult
 import ca.floo.roadtrip.model.domain.TeslaSupercharger
 import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
 import ca.floo.roadtrip.model.domain.poi.TeslaSuperchargerPoiDetail
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL
-import java.time.Instant
-import java.time.OffsetDateTime
 
 /**
  * Persistence boundary for Tesla Supercharger catalog reads and writes.
@@ -98,12 +94,6 @@ class TeslaSuperchargerRepo(
         )
     }
 
-    fun findAll(): List<TeslaSupercharger> =
-        ctx
-            .fetch(
-                "$baseSelect WHERE ts.deleted_at IS NULL ORDER BY ts.common_site_name, ts.id",
-            ).map(::fromRecord)
-
     private fun fromRecord(record: Record): TeslaSupercharger =
         TeslaSupercharger(
             id = record.get("id", Long::class.java),
@@ -133,12 +123,6 @@ class TeslaSuperchargerRepo(
             updatedAt = record.instant("updated_at"),
             deletedAt = record.nullableInstant("deleted_at"),
         )
-
-    private fun parseJsonElement(raw: String): JsonElement = Json.parseToJsonElement(raw)
-
-    private fun Record.instant(column: String): Instant = get(column, OffsetDateTime::class.java).toInstant()
-
-    private fun Record.nullableInstant(column: String): Instant? = get(column, OffsetDateTime::class.java)?.toInstant()
 
     private fun upsertTeslaSupercharger(record: TeslaSuperchargerUpsertCandidate): Boolean {
         val superchargerId =

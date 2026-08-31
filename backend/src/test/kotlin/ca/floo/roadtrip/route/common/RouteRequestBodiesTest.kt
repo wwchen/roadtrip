@@ -37,11 +37,10 @@ class RouteRequestBodiesTest {
                         when (val body = call.receiveJsonBody<RequestBodyTestDto>()) {
                             is RouteBodyResult.Invalid ->
                                 call.respondEncodedJson(
-                                    roadtripApiJson,
                                     ApiErrorSchema(error = "invalid_body", detail = body.detail),
                                     HttpStatusCode.BadRequest,
                                 )
-                            is RouteBodyResult.Valid -> call.respondEncodedJson(roadtripApiJson, body.value)
+                            is RouteBodyResult.Valid -> call.respondEncodedJson(body.value)
                         }
                     }
                 }
@@ -73,11 +72,10 @@ class RouteRequestBodiesTest {
                         ) {
                             is RouteBodyResult.Invalid ->
                                 call.respondEncodedJson(
-                                    roadtripApiJson,
                                     ApiErrorSchema(error = "invalid_body", detail = body.detail),
                                     HttpStatusCode.BadRequest,
                                 )
-                            is RouteBodyResult.Valid -> call.respondEncodedJson(requestBodyTestJson, body.value)
+                            is RouteBodyResult.Valid -> call.respondEncodedJson(body.value)
                         }
                     }
                 }

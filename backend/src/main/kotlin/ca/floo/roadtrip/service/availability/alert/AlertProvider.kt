@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability.alert
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.support.Dispatchable
-import org.jooq.DSLContext
 
 /**
  * Who detects openings for a watch. The internal poller is the default; a
@@ -14,8 +13,8 @@ import org.jooq.DSLContext
  * registry row.
  *
  * The hooks run inside [ca.floo.roadtrip.service.availability.AvailabilityWatchService]'s
- * watch-write transaction; membership writes are transactional today, so the
- * [DSLContext] passed in is the txn context — never open a new connection.
+ * watch-write transaction; [WatchAlertScope] hands them repo handles already bound
+ * to it, so a hosted implementation never sees a database type it has no use for.
  */
 internal interface AlertProvider : Dispatchable<AlertProviderId> {
     /** Stable slug identifying this provider ("internal_poller", later "campflare"). */
@@ -37,7 +36,7 @@ internal interface AlertProvider : Dispatchable<AlertProviderId> {
      * an upstream alert subscription for the watch's targets.
      */
     fun onWatchActivated(
-        txn: DSLContext,
+        scope: WatchAlertScope,
         watch: AvailabilityWatchRepo.Watch,
     )
 
@@ -49,7 +48,7 @@ internal interface AlertProvider : Dispatchable<AlertProviderId> {
      * subscription.
      */
     fun onWatchDeactivated(
-        txn: DSLContext,
+        scope: WatchAlertScope,
         watch: AvailabilityWatchRepo.Watch,
     )
 }

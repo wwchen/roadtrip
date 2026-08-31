@@ -23,20 +23,21 @@ internal suspend fun ApplicationCall.respondApiError(
     detail: String? = null,
 ) {
     respondEncodedJson(
-        roadtripApiJson,
         ApiErrorSchema(error = error, detail = detail),
         status,
     )
 }
 
 internal suspend inline fun <reified T> ApplicationCall.respondEncodedJson(
-    json: Json,
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
     respondText(
-        json.encodeToString(value),
+        encodeApiJson(value),
         ContentType.Application.Json,
         status,
     )
 }
+
+/** The wire form of any API DTO. Response serialization belongs to routes, so this is the one encoder. */
+internal inline fun <reified T> encodeApiJson(value: T): String = roadtripApiJson.encodeToString(value)
