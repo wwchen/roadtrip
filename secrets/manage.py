@@ -348,35 +348,43 @@ def render_compose(registry: dict[str, Secret]) -> str:
 
 
 def cmd_generate(args: argparse.Namespace) -> int:
-    rendered = render_compose(load_registry())
-    current = GENERATED_COMPOSE.read_text() if GENERATED_COMPOSE.exists() else ""
-    if args.check:
-        if current != rendered:
-            print(
-                f"error: {GENERATED_COMPOSE.name} is stale. "
-                "Run: ./secrets/manage.py generate",
-                file=sys.stderr,
-            )
-            return 1
-        print(f"{GENERATED_COMPOSE.name} is up to date")
-        return 0
-    if current == rendered:
-        print(f"{GENERATED_COMPOSE.name} already current")
-        return 0
-    GENERATED_COMPOSE.write_text(rendered)
-    print(f"wrote {GENERATED_COMPOSE.name}")
+    registry = load_registry()
+    if not SANDBOX_COMPOSE.exists():
+        raise SecretsError(f"{SANDBOX_COMPOSE.name} is missing")
+    targets = [
+        (GENERATED_COMPOSE, render_compose(registry)),
+        (SANDBOX_COMPOSE, render_sandbox_compose(registry, SANDBOX_COMPOSE.read_text())),
+    ]
+
+    stale, wrote = [], []
+    for path, rendered in targets:
+        current = path.read_text() if path.exists() else ""
+        if current == rendered:
+            continue
+        if args.check:
+            stale.append(path.name)
+        else:
+            path.write_text(rendered)
+            wrote.append(path.name)
+    if stale:
+        print(
+            f"error: {', '.join(stale)} stale. Run: ./secrets/manage.py generate",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"wrote {', '.join(wrote)}" if wrote else "generated compose files are up to date")
     return 0
 
 
 # --------------------------------------------------------------------------
-# sandbox drift
+# sandbox compose
 #
 # docker-compose.sandbox.yml cannot layer the generated file — it runs a
-# pinned image standalone — so its secret mounts are hand-maintained, which
-# reintroduces exactly the drift the generator exists to prevent. The sandbox
-# boots with ROADTRIP_PROFILE=prod, so a backend secret missing there is a
-# MissingSecretsException at boot rather than a CI failure. `check` compares
-# the file against the registry instead.
+# pinned image standalone — so `generate` regenerates its two secrets
+# sections in place instead. The rest of the file stays hand-maintained. The
+# sandbox boots with ROADTRIP_PROFILE=prod, so before this a backend secret
+# missing there was a MissingSecretsException at boot rather than a CI
+# failure (ENCRYPTION_KEY nearly shipped that way).
 # --------------------------------------------------------------------------
 
 SANDBOX_SERVICE = "backend"
@@ -384,90 +392,68 @@ SANDBOX_SERVICE = "backend"
 TOP_SECTION_RE = re.compile(r"^([a-z][a-z-]*):\s*$")
 SERVICE_RE = re.compile(r"^  ([a-z][a-z0-9_-]*):\s*$")
 SERVICE_MOUNT_RE = re.compile(r"^      - ([a-z0-9_]+)\s*$")
-TOPLEVEL_SECRET_RE = re.compile(r"^  ([a-z0-9_]+):\s*$")
-TOPLEVEL_ENV_RE = re.compile(r"^    environment:\s*([A-Z][A-Z0-9_]*)\s*$")
 
 
-def parse_sandbox_compose(text: str) -> tuple[set[str], dict[str, str]]:
-    """The backend service's `secrets:` list and the top-level `secrets:` map.
+def render_sandbox_compose(registry: dict[str, Secret], text: str) -> str:
+    """The sandbox compose file with its two secrets sections regenerated.
 
-    Same stance as the registry parser: handles exactly the shape the file
-    uses, and raises on anything else in the parts it cares about rather than
-    silently misreading them.
+    Everything outside the backend service's `secrets:` list and the
+    top-level `secrets:` map is preserved byte for byte. Same stance as the
+    registry parser: handles exactly the shape the file uses, and raises
+    rather than silently misreading the parts it rewrites.
     """
-    mounts: set[str] = set()
-    toplevel: dict[str, str] = {}
+    expected = sorted(
+        (s for s in registry.values() if SANDBOX_SERVICE in s.services()),
+        key=lambda s: s.file_name,
+    )
+    lines = text.splitlines()
+    out: list[str] = []
     section: str | None = None
     service: str | None = None
-    in_service_secrets = False
-    pending_toplevel: str | None = None
+    replaced_mounts = replaced_map = False
 
-    for raw in text.splitlines():
-        if not raw.strip() or raw.lstrip().startswith("#"):
-            continue
+    i = 0
+    while i < len(lines):
+        raw = lines[i]
         top = TOP_SECTION_RE.match(raw)
         if top:
-            section, service, in_service_secrets, pending_toplevel = top.group(1), None, False, None
-            continue
-        if section == "services":
+            section, service = top.group(1), None
+            if section == "secrets":
+                out.append(raw)
+                for secret in expected:
+                    out.append(f"  {secret.file_name}:")
+                    out.append(f"    environment: {secret.name}")
+                i += 1
+                while i < len(lines) and lines[i].startswith("  "):
+                    i += 1
+                replaced_map = True
+                continue
+        elif section == "services":
             svc = SERVICE_RE.match(raw)
             if svc:
-                service, in_service_secrets = svc.group(1), False
-                continue
-            if service != SANDBOX_SERVICE:
-                continue
-            if raw.rstrip() == "    secrets:":
-                in_service_secrets = True
-                continue
-            if in_service_secrets:
-                mount = SERVICE_MOUNT_RE.match(raw)
-                if mount:
-                    mounts.add(mount.group(1))
-                elif raw.startswith("      "):
+                service = svc.group(1)
+            elif service == SANDBOX_SERVICE and raw.rstrip() == "    secrets:":
+                out.append(raw)
+                out.extend(f"      - {secret.file_name}" for secret in expected)
+                i += 1
+                while i < len(lines) and SERVICE_MOUNT_RE.match(lines[i]):
+                    i += 1
+                if i < len(lines) and lines[i].startswith("      "):
                     raise SecretsError(
-                        f"{SANDBOX_COMPOSE.name}: cannot parse backend secrets entry: {raw!r}"
+                        f"{SANDBOX_COMPOSE.name}: cannot parse backend secrets entry: "
+                        f"{lines[i]!r}"
                     )
-                else:
-                    in_service_secrets = False
-            continue
-        if section == "secrets":
-            name = TOPLEVEL_SECRET_RE.match(raw)
-            if name:
-                pending_toplevel = name.group(1)
+                replaced_mounts = True
                 continue
-            env = TOPLEVEL_ENV_RE.match(raw)
-            if env and pending_toplevel:
-                toplevel[pending_toplevel] = env.group(1)
-                pending_toplevel = None
-                continue
-            raise SecretsError(f"{SANDBOX_COMPOSE.name}: cannot parse secrets entry: {raw!r}")
-    return mounts, toplevel
+        out.append(raw)
+        i += 1
 
-
-def sandbox_drift_errors(registry: dict[str, Secret], text: str) -> list[str]:
-    """Every backend secret mounted, nothing unregistered mounted."""
-    expected = {s.file_name: s for s in registry.values() if SANDBOX_SERVICE in s.services()}
-    mounts, toplevel = parse_sandbox_compose(text)
-
-    errors = []
-    for file_name, secret in sorted(expected.items()):
-        if file_name not in mounts:
-            errors.append(
-                f"{secret.name} has consumers [backend] but {SANDBOX_COMPOSE.name} does not "
-                f"mount {file_name} — add it to the backend service's secrets: list and the "
-                f"top-level secrets: map"
-            )
-        elif toplevel.get(file_name) != secret.name:
-            errors.append(
-                f"{SANDBOX_COMPOSE.name}: top-level secret {file_name} must be "
-                f"`environment: {secret.name}`"
-            )
-    for name in sorted((mounts | set(toplevel)) - set(expected)):
-        errors.append(
-            f"{SANDBOX_COMPOSE.name} mounts {name}, which registry.yaml does not declare "
-            f"with consumers [backend] — remove it, or fix the registry"
+    if not replaced_mounts or not replaced_map:
+        raise SecretsError(
+            f"{SANDBOX_COMPOSE.name}: expected a backend `secrets:` list and a "
+            "top-level `secrets:` map to regenerate"
         )
-    return errors
+    return "\n".join(out) + "\n"
 
 
 # --------------------------------------------------------------------------
@@ -644,7 +630,7 @@ def cmd_add(args: argparse.Namespace) -> int:
     cmd_generate(argparse.Namespace(check=False))
     print()
     print(f"Commit secrets/registry.yaml, secrets/{args.environment}.enc.env, "
-          f"and {GENERATED_COMPOSE.name}.")
+          f"and any regenerated compose files.")
     return 0
 
 
@@ -754,7 +740,12 @@ def cmd_check(args: argparse.Namespace) -> int:
 
     if SANDBOX_COMPOSE.exists():
         try:
-            errors.extend(sandbox_drift_errors(registry, SANDBOX_COMPOSE.read_text()))
+            sandbox_text = SANDBOX_COMPOSE.read_text()
+            if sandbox_text != render_sandbox_compose(registry, sandbox_text):
+                errors.append(
+                    f"{SANDBOX_COMPOSE.name} secrets drifted from registry.yaml — "
+                    "run ./secrets/manage.py generate"
+                )
         except SecretsError as err:
             errors.append(str(err))
     else:
