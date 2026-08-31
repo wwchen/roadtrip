@@ -13,6 +13,7 @@ import type { PoiLink } from '../model';
 import {
   CallButtons,
   DirectionsButton,
+  SharePoiButton,
   UpstreamTable,
   coordinatesOf,
   subline,
@@ -127,6 +128,7 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
           </Button>
         ) : null}
         {spec.call ? <CallButtons phone={p.phone} /> : null}
+        <SharePoiButton id={feature.id} />
       </PoiActions>
     ),
     ...(tags.length > 0 ? { glance: <PoiGlance tags={tags} /> } : null),

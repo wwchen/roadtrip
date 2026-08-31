@@ -18,10 +18,15 @@ import { useSharedTrip } from './useSharedTrip';
 import { useTopbarClearance } from './useTopbarClearance';
 import { useTripPlanner } from './useTripPlanner';
 import { MAX_STOPS } from '@/stores/tripStore';
+import { routeShareUrl } from '@/lib/share-links';
+import { useCopyLink } from '@/lib/use-copy-link';
 import './topbar.css';
 
 /** What the keyboard has selected before any arrow key is pressed. */
 const NO_ACTIVE_RESULT = -1;
+
+const COPY_LABEL = 'Copy trip link';
+const COPIED_LABEL = 'Trip link copied';
 
 export interface TopBarProps {
   alerts?: ReactNode;
@@ -60,6 +65,10 @@ export function TopBar({ alerts }: TopBarProps) {
   const results = search.results;
   const isDirections = planner.mode === 'directions';
   const rowCount = Math.max(planner.stops.length, 1);
+  // One gate, two consumers: the share button and the results section both mean
+  // "there is a whole trip here".
+  const shareable = allStopsFilled(planner.stops);
+  const share = useCopyLink();
 
   const pick = (result: SearchResult) => {
     planner.pickResult(draft?.row ?? 0, result);
@@ -179,6 +188,26 @@ export function TopBar({ alerts }: TopBarProps) {
           </button>
         ) : null}
 
+        {/* The trip's share writer. Gated on `allStopsFilled` rather than on
+            `routeShareUrl` alone: the encoder already refuses a stop that is still
+            locating, but a half-typed itinerary has no shareable form either, and
+            the same gate decides what `useSharedTrip` writes into the address bar —
+            so the button appears exactly when the visible URL is worth copying.
+
+            No id: `SmokeTest.kt` pins `#tb-share-route` absent, which is the
+            *vanilla's* id for a control 4e dropped. This is a different control. */}
+        {shareable ? (
+          <button
+            type="button"
+            className={share.copied ? 'tb-icon-btn copied' : 'tb-icon-btn'}
+            title={share.copied ? COPIED_LABEL : COPY_LABEL}
+            aria-label={share.copied ? COPIED_LABEL : COPY_LABEL}
+            onClick={() => share.copy(routeShareUrl(planner.stops, planner.corridorMiles))}
+          >
+            <Icon name={share.copied ? 'check' : 'link'} aria-hidden="true" />
+          </button>
+        ) : null}
+
         {planner.stops.length > 0 ? (
           <button
             type="button"
@@ -217,7 +246,7 @@ export function TopBar({ alerts }: TopBarProps) {
 
           It appears only with a live route: without one there is nothing for a radius
           to be a radius of, and nothing to be "along". */}
-      {allStopsFilled(planner.stops) && route.route ? (
+      {shareable && route.route ? (
         <TripResults
           cards={cards}
           loading={corridor.isFetching}
