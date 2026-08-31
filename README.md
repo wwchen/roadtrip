@@ -283,89 +283,22 @@ the operator's machine is the only thing that lands cart adds reliably. The
 backend never touches a browser; it only polls the public availability API,
 then calls the companion's one-shot executor.
 
-- **`companion/`** — Node 22.9+ Playwright HTTP executor. It exposes
-  `POST /recgov/atc`, drives Chromium to add the site to the operator's
-  rec.gov cart, and returns a terminal JSON success/failure response to the
-  backend.
+- **`companion/`** — Node 22.9+ Playwright HTTP service. It runs one
+  persistent Chromium profile per user, drives the add-to-cart flow, and
+  returns a terminal JSON success/failure to the backend.
+  [docs/companion.md](docs/companion.md) owns the contract: routes
+  (`POST /atc`, `POST /login`, `POST /verify`, ...), the browser-profile pool
+  and its `profile_id` requirement, the shared-secret header, and the
+  exposure invariant that keeps the companion off the public internet.
   ```sh
   cd companion
   npm install
-  npm start
+  COMPANION_API_TOKEN=dev npm start
   ```
-- **Recreation.gov login** happens in the companion's persistent Chromium
-  profile. Run the companion headed, log in to recreation.gov in that window
-  once, and the companion manages `localStorage.recaccount` and refreshes in
-  that same browser context. The backend never receives the Recreation.gov JWT;
-  it only sends ATC payloads to the companion and records terminal
-  success/failure. The companion exposes `GET /login` as an operator form for
-  a Recreation.gov username, password, and optional MFA code. The submitted
-  credentials are used only for that request and are not stored in the backend,
-  companion config, or environment. To test the real browser auth integration,
-  run:
-  ```sh
-  cd companion
-  npm run recgov:login
-  npm run recgov:refresh   # force the real Recreation.gov refresh endpoint
-  # or from repo root:
-  make recgov-login
-  make recgov-refresh
-  ```
-  `recgov:login` exits `0` after `REC_GOV_AUTH_OK`. `recgov:refresh` exits
-  `0` after `REC_GOV_AUTH_REFRESH_OK` only after the browser session has
-  successfully refreshed through Recreation.gov. If the stored access token is
-  still valid but its `refresh_id` has gone stale, `recgov:refresh` clears that
-  stale browser `recaccount` and prompts for a fresh headed login. Both commands
-  return non-zero after `REC_GOV_AUTH_FAILED` / `REC_GOV_AUTH_ERROR`. The Make
-  targets set `COMPANION_BROWSER_PROFILE` from
-  `RECGOV_COMPANION_BROWSER_PROFILE`, falling back to
-  `$HOME/.campsite-companion/browser-session`, which is the same host path the
-  Docker companion mounts.
-- **One-shot Rec.gov ATC** runs the same browser add-to-cart code as the HTTP
-  executor. This can place a real hold in the operator's Recreation.gov cart,
-  so use a real payload only when that side effect is intended.
-  ```json
-  {
-    "payload": {
-      "watch_id": 12,
-      "start_date": "2026-07-15",
-      "end_date": "2026-07-16",
-      "openings": [
-        {
-          "label": "116",
-          "date": "2026-07-15",
-          "booking_url": "https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16",
-          "campground_id": 232447,
-          "campsite_id": 131925,
-          "vendor_id": "300"
-        }
-      ]
-    }
-  }
-  ```
-  ```sh
-  cd companion
-  npm run --silent recgov:atc -- --payload-file /tmp/recgov-atc.json
-  # or from repo root:
-  make recgov-atc PAYLOAD=/tmp/recgov-atc.json
-  ```
-  Browser logs go to stderr. Stdout is one JSON result, suitable for a backend
-  process caller; exit `0` means `cart_added=true`, exit `1` means the browser
-  ran but did not confirm a cart hold, and exit `2` means invalid input.
-- **Docker Rec.gov ATC executor** runs the companion HTTP executor as a Compose
-  service. Start the service with the `recgov-companion` profile; the backend
-  companion URL and timeout live in `backend/src/main/resources/application*.yaml`.
-  ```sh
-  RECGOV_COMPANION_BROWSER_PROFILE=$HOME/.campsite-companion/browser-session
-
-  docker compose --profile pois --profile recgov-companion up -d recgov-companion backend
-  ```
-  The mounted browser profile is the same persistent profile used by
-  `recgov:login`. Open `http://localhost:8770/login` to submit Recreation.gov
-  credentials to the companion container for a one-request login. The companion
-  container name is under the `roadtrip-*`
-  Compose project, so Alloy's Docker log discovery ships its stdout/stderr to
-  Loki; the backend also records the terminal ATC result and sends Slack for
-  direct success/failure.
+  Operator commands (headed login, forced refresh, a one-shot ATC that places
+  a **real** hold) are `make recgov-login`, `make recgov-refresh` and
+  `make recgov-atc PAYLOAD=…`; see the companion doc for their contracts and
+  for running the Compose `recgov-companion` profile.
 - **Slack notifications** are optional. Create a Slack app with the
   `chat:write` scope, install it to the workspace, and paste the bot
   token (`xoxb-…`) plus a channel name (`#camping-alerts`) or channel ID

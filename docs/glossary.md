@@ -95,10 +95,11 @@ Source of truth: `backend/src/main/resources/poi-registry.yaml`, loaded by
   (`service/availability/TriggerKind.kt`): `slack_notify`, `email_notify`, or
   `atc`.
 - **ATC** — add-to-cart: the `atc` trigger asks the companion to place the
-  opening in the operator's real recreation.gov shopping cart (a genuine
-  hold). Rec.gov only; other providers' watches can only notify.
-- **Companion** — the Node 22.9+ Playwright HTTP executor in `companion/`. It
-  drives a real, persistently-logged-in Chromium because Akamai blocks
+  opening in a real recreation.gov shopping cart (a genuine hold). Rec.gov
+  only; other providers' watches can only notify.
+- **Companion** — the Node 22.9+ Playwright HTTP service in `companion/`. It
+  drives real, persistently-logged-in Chromium profiles because Akamai blocks
   datacenter IPs and headless browsers; the backend never touches a browser —
   it polls public availability APIs and POSTs ATC payloads to the companion
-  (`POST /recgov/atc`).
+  (`POST /atc`). One Chromium profile per user, keyed by a required
+  `profile_id`. See [companion.md](companion.md) for the full contract.
