@@ -46,6 +46,16 @@ import {
   authorizeCompanionRequest,
   companionApiToken,
 } from './server/apiToken.js'
+import { handleVerify } from './server/routes/verify.js'
+import { verifyRecgovSession } from './recgovVerify.js'
+import {
+  normalizeProfileId,
+  profilePool,
+} from './profilePool.js'
+import {
+  PROFILE_ID_FIELD,
+  badRequest,
+} from './server/requestInput.js'
 import { createServerRuntime } from './server/runtime.js'
 import {
   handleDiagnosticImage,
@@ -67,17 +77,24 @@ export function createCompanionServer ({
   runAtcOnceFn = runAtcOnce,
   logoutRecgovSessionFn = logoutRecgovBrowserSession,
   apiToken = companionApiToken(),
+  pool = profilePool,
+  verifyRecgovSessionFn = verifyRecgovSession,
   ...screenshotOverrides
 } = {}) {
   const runtime = createServerRuntime()
   const deps = {
+    pool,
     testChromiumFn,
     runAtcOnceFn,
-    logoutRecgovSessionFn: () => logoutRecgovSessionFn({
-      getContextFn: screenshotOverrides.getContextFn,
+    verifyRecgovSessionFn,
+    logoutRecgovSessionFn: ({ getContextFn }) => logoutRecgovSessionFn({
+      getContextFn: screenshotOverrides.getContextFn || getContextFn,
       isSpaLoggedInFn: screenshotOverrides.isSpaLoggedInFn,
     }),
-    recgovScreenshotDeps: createRecgovScreenshotDeps(screenshotOverrides),
+    recgovScreenshotDeps: createRecgovScreenshotDeps({
+      getContextFn: (profileId) => pool.context(profileId),
+      ...screenshotOverrides,
+    }),
   }
   const companionServer = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://companion.local')
@@ -119,12 +136,48 @@ const CONTRACT_ROUTE_HANDLERS = {
   getScreenshot: async ({ url, res, runtime, deps }) => handleLiveScreenshot(url, res, { runtime, ...deps }),
   getOpenApiJson: async ({ res }) => jsonResponse(res, HTTP_OK, COMPANION_OPENAPI_SPEC),
   getSwaggerDocs: async ({ res }) => htmlResponse(res, HTTP_OK, renderSwaggerPage()),
-  getHealth: async ({ res, runtime }) => jsonResponse(res, HTTP_OK, { ok: true, busy: runtime.isBusy(), recgov_auth: getRecgovHealthStatus() }),
+  getHealth: async ({ res, url, runtime, deps }) => handleHealth(res, url, runtime, deps.pool),
   getOperatorPage: async ({ res }) => htmlResponse(res, HTTP_OK, renderLoginPage()),
   postLogin: async ({ req, res, runtime, deps }) => handleLoginPost(req, res, { runtime, ...deps }),
   postLogout: async ({ req, res, runtime, deps }) => handleLogout(req, res, { runtime, ...deps }),
   postRefresh: async ({ req, res, runtime, deps }) => handleRefresh(req, res, { runtime, ...deps }),
   postAtc: async ({ req, res, runtime, deps }) => handleAtc(req, res, { runtime, ...deps }),
+  postVerify: async ({ req, res, runtime, deps }) => handleVerify(req, res, { runtime, ...deps }),
+}
+
+// Health is deliberately lock-free: the settings status row must answer while
+// a login for the same profile is still mid-flight.
+function handleHealth (res, url, runtime, pool) {
+  const rawProfileId = url.searchParams.get(PROFILE_ID_FIELD)
+  if (rawProfileId === null) {
+    return jsonResponse(res, HTTP_OK, {
+      ok: true,
+      busy: runtime.isBusy(),
+      recgov_auth: getRecgovHealthStatus(),
+      pool: pool.snapshot(),
+    })
+  }
+
+  const profile = normalizeProfileId(rawProfileId)
+  if (!profile.ok) {
+    const rejection = badRequest(profile.error, 'profile_id must be an opaque profile identifier')
+    return jsonResponse(res, rejection.status, rejection.body)
+  }
+  return jsonResponse(res, HTTP_OK, {
+    ok: true,
+    profile_id: profile.profileId,
+    busy: pool.isBusy(profile.profileId),
+    recgov_auth: profileHealthStatus(pool.getAuthStatus(profile.profileId)),
+    pool: pool.snapshot(),
+  })
+}
+
+function profileHealthStatus (status) {
+  const { diagnostic: _diagnostic, ...authStatus } = status
+  return {
+    login_status: authStatus.state,
+    ...authStatus,
+  }
 }
 
 export const HANDLED_OPERATION_IDS = Object.freeze(Object.keys(CONTRACT_ROUTE_HANDLERS))

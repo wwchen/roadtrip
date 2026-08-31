@@ -4,7 +4,6 @@ import {
   EXIT_SUCCESS,
   EXIT_USAGE,
   HTTP_BAD_REQUEST,
-  HTTP_CONFLICT,
   HTTP_INTERNAL_ERROR,
   HTTP_OK,
   HTTP_UNPROCESSABLE_ENTITY,
@@ -12,52 +11,66 @@ import {
 } from '../constants.js'
 import { jsonResponse, readBody } from '../http.js'
 import {
+  ERROR_INVALID_REQUEST,
+  badRequest,
+  profileBusyResponse,
+  requireProfileId,
+} from '../requestInput.js'
+import {
   captureStdout,
   captureWritable,
   compactLogLines,
   truncateLogField,
 } from '../logging.js'
 
+const OPERATION_ATC = 'atc'
+
 export async function handleAtc (req, res, {
   runtime,
+  pool,
   runAtcOnceFn = runAtcOnce,
 }) {
-  if (runtime.isBusy()) {
-    jsonResponse(res, HTTP_CONFLICT, {
+  let raw
+  try {
+    raw = await readBody(req)
+  } catch (error) {
+    jsonResponse(res, error.status || HTTP_BAD_REQUEST, {
       ok: false,
       cart_added: false,
-      error: 'companion_busy',
-      detail: 'companion is already running an ATC request',
+      error: ERROR_INVALID_REQUEST,
+      detail: error.message,
     })
     return
   }
 
-  runtime.setBusy(true)
+  const profile = requireProfileId(atcRequestFields(req, raw))
+  if (!profile.ok) {
+    const rejection = badRequest(profile.error, 'profile_id identifies the browser profile that holds the cart')
+    jsonResponse(res, rejection.status, { ...rejection.body, cart_added: false })
+    return
+  }
+
+  const profileId = profile.profileId
+  const lock = pool.acquire(profileId, OPERATION_ATC)
+  if (!lock) {
+    const rejection = profileBusyResponse(profileId, pool.busyOperation(profileId))
+    jsonResponse(res, rejection.status, { ...rejection.body, cart_added: false })
+    return
+  }
+
   const stdout = captureStdout()
   const stderr = captureWritable(process.stderr)
   const startedAt = Date.now()
   let atcStartLine = null
   try {
-    let raw
-    try {
-      raw = await readBody(req)
-    } catch (error) {
-      jsonResponse(res, error.status || HTTP_BAD_REQUEST, {
-        ok: false,
-        cart_added: false,
-        error: 'invalid_request',
-        detail: error.message,
-      })
-      return
-    }
-
-    atcStartLine = `recgov atc start ${payloadSummary(raw)}`
+    atcStartLine = `recgov atc start profile=${profileId} ${payloadSummary(raw)}`
     runtime.logger(atcStartLine)
     await runtime.waitForStartupAuthCheck()
     const code = await runAtcOnceFn({
       argv: ['--payload-json', raw],
       stdout,
       stderr,
+      contextOptions: { getContextFn: () => pool.context(profileId) },
     })
     const baseResult = parseRunResult(stdout.value())
     const resultLine = `recgov atc result ${[
@@ -94,7 +107,19 @@ export async function handleAtc (req, res, {
       ]),
     })
   } finally {
-    runtime.setBusy(false)
+    lock.release()
+  }
+}
+
+function atcRequestFields (req, raw) {
+  const url = new URL(req.url || '/', 'http://companion.local')
+  const fields = Object.fromEntries(url.searchParams.entries())
+  try {
+    const payload = JSON.parse(raw)
+    const body = payload?.payload || payload
+    return { ...fields, ...(body && typeof body === 'object' ? body : {}) }
+  } catch {
+    return fields
   }
 }
 

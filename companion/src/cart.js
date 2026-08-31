@@ -564,8 +564,8 @@ function truncateText (value, maxLength) {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`
 }
 
-export async function setupAuthPage () {
-  const context = await getContext()
+export async function setupAuthPage ({ getContextFn = getContext } = {}) {
+  const context = await getContextFn()
   await injectStoredCookies(context)
   const page = await context.newPage()
 
@@ -678,7 +678,7 @@ export function bookingUrlForMatch (match) {
   )
 }
 
-export async function addToCart (match) {
+export async function addToCart (match, contextOptions = {}) {
   const firstDate = match.first_date
   const availableDates = match.available_dates || (firstDate ? [firstDate] : [])
   const site = match.campsite_site
@@ -686,7 +686,7 @@ export async function addToCart (match) {
   const url = bookingUrlForMatch(match)
   console.log(`Cart: opening ${url}`)
 
-  const { page, recaccount, authFailure } = await setupAuthPage()
+  const { page, recaccount, authFailure } = await setupAuthPage(contextOptions)
   const screenshots = createAtcScreenshotCollector(page)
   await screenshots.capture(recaccount ? 'auth-session-ready' : 'auth-session-missing')
   if (!recaccount) return withScreenshots({ ok: false, page, ...authFailure }, screenshots)

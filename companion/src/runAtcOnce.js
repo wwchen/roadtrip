@@ -25,6 +25,10 @@ export async function runAtcOnce ({
   stdout = process.stdout,
   stderr = process.stderr,
   addToCartFn = addToCart,
+  // Which browser profile runs the automation. The HTTP route resolves the
+  // requested profile_id to its pooled context; the CLI entrypoint keeps the
+  // single legacy profile.
+  contextOptions = {},
 } = {}) {
   const args = parseArgs(argv)
   if (args.help) {
@@ -49,7 +53,7 @@ export async function runAtcOnce ({
   let result
   const restoreConsole = redirectConsoleLog(stderr)
   try {
-    result = await addToCartFn(match)
+    result = await addToCartFn(match, contextOptions)
   } catch (err) {
     writeResult(stdout, failureResult(ERROR_ADD_TO_CART_EXCEPTION, err.message, { match }))
     return EXIT_RUNTIME_FAILURE

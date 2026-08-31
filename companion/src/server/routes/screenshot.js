@@ -19,6 +19,10 @@ import {
   jsonResponse,
 } from '../http.js'
 import { truncateLogField } from '../logging.js'
+import {
+  badRequest,
+  requireProfileId,
+} from '../requestInput.js'
 
 export async function handleDiagnosticImage (url, res) {
   const filename = diagnosticFilename(url)
@@ -43,6 +47,13 @@ export async function handleDiagnosticImage (url, res) {
 }
 
 export async function handleLiveScreenshot (url, res, { runtime, recgovScreenshotDeps }) {
+  const profile = requireProfileId(Object.fromEntries(url.searchParams.entries()))
+  if (!profile.ok) {
+    const rejection = badRequest(profile.error, 'profile_id identifies the browser profile to screenshot')
+    jsonResponse(res, rejection.status, rejection.body)
+    return
+  }
+
   const target = recgovScreenshotTargetUrl(url)
   if (!target) {
     jsonResponse(res, HTTP_BAD_REQUEST, {
@@ -53,11 +64,11 @@ export async function handleLiveScreenshot (url, res, { runtime, recgovScreensho
     return
   }
 
-  runtime.logger('recgov screenshot start', `target=${target.href}`)
+  runtime.logger('recgov screenshot start', `profile=${profile.profileId}`, `target=${target.href}`)
   const startedAt = Date.now()
   try {
-    const { image, recaccountPresent } = await captureRecgovScreenshot(target, recgovScreenshotDeps)
-    runtime.logger('recgov screenshot result ok', `target=${target.href}`, `recaccount=${recaccountPresent}`, `duration_ms=${Date.now() - startedAt}`)
+    const { image, recaccountPresent } = await captureRecgovScreenshot(target, recgovScreenshotDeps, { profileId: profile.profileId })
+    runtime.logger('recgov screenshot result ok', `profile=${profile.profileId}`, `target=${target.href}`, `recaccount=${recaccountPresent}`, `duration_ms=${Date.now() - startedAt}`)
     imageResponse(res, HTTP_OK, image, PNG_CONTENT_TYPE)
   } catch (error) {
     runtime.logger('recgov screenshot result fail', `target=${target.href}`, `detail="${truncateLogField(error.message, LOG_DETAIL_MAX_CHARS)}"`, `duration_ms=${Date.now() - startedAt}`)

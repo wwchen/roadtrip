@@ -39,9 +39,9 @@ export function createRecgovScreenshotDeps ({
   }
 }
 
-export async function captureRecgovScreenshot (target, deps = createRecgovScreenshotDeps()) {
+export async function captureRecgovScreenshot (target, deps = createRecgovScreenshotDeps(), { profileId = null } = {}) {
   let page = null
-  const context = await deps.getContextFn()
+  const context = await deps.getContextFn(profileId)
   await deps.injectStoredCookiesFn(context)
   page = await context.newPage()
   try {

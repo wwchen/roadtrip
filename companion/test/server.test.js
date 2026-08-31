@@ -10,10 +10,17 @@ import {
 } from '../src/server.js'
 import { COMPANION_API_ROUTES } from '../src/apiContract.js'
 import { COMPANION_API_TOKEN_HEADER } from '../src/server/apiToken.js'
+import {
+  DEFAULT_MFA_CHALLENGE_TTL_MS,
+  createProfilePool,
+} from '../src/profilePool.js'
 
 const TEST_API_TOKEN = 'test-companion-token'
 const CONTAINER_ADDRESS = '172.18.0.4'
 const LOOPBACK_ADDRESS = '127.0.0.1'
+const PROFILE_ID = 'user-7'
+const OTHER_PROFILE_ID = 'user-8'
+const MFA_CHALLENGE_TTL_OVERSHOOT_MS = DEFAULT_MFA_CHALLENGE_TTL_MS + 1_000
 
 test('runStartupAuthCheck records logged-in status', async () => {
   const log = logCapture()
@@ -129,10 +136,14 @@ test('GET / returns a simple operator login form', async () => {
   assert.match(response.text, /id="health-json"/)
   assert.match(response.text, /id="logout-session"/)
   assert.match(response.text, /id="session-screenshot"/)
-  assert.match(response.text, /src="\/screenshot\?path=\/"/)
+  assert.match(response.text, /name="profile_id"/)
+  assert.match(response.text, /name="challenge_id"/)
+  assert.match(response.text, /'x-companion-token': tokenInput\.value\.trim\(\)/)
+  assert.match(response.text, /target\.searchParams\.set\('profile_id'/)
+  assert.doesNotMatch(response.text, /src="\/screenshot\?path=\/"/)
   assert.match(response.text, /togglePanel\(loginPanel, loginToggle\)/)
   assert.match(response.text, /JSON\.stringify\(Object\.fromEntries\(new FormData\(atcForm\)\)\)/)
-  assert.match(response.text, /fetch\(url/)
+  assert.match(response.text, /fetch\(withProfile\(url\)/)
   assert.doesNotMatch(response.text, /action="\/refresh"/)
   assert.doesNotMatch(response.text, /RECGOV_EMAIL|RECGOV_PASSWORD|RECGOV_MFA_CODE|RECGOV_OTP/)
 })
@@ -162,9 +173,16 @@ test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
   assert.equal(response.json.paths['/refresh'].get, undefined)
   assert.ok(response.json.paths['/refresh'].post)
 
+  assert.ok(response.json.paths['/verify'].post)
+  assert.deepEqual(response.json.security, [{ companionToken: [] }])
+  assert.equal(response.json.components.securitySchemes.companionToken.name, COMPANION_API_TOKEN_HEADER)
+
   const loginSchema = response.json.components.schemas.LoginRequest
-  assert.deepEqual(Object.keys(loginSchema.properties), ['username', 'password', 'mfa_code'])
-  assert.deepEqual(loginSchema.required, ['username', 'password'])
+  assert.deepEqual(
+    Object.keys(loginSchema.properties),
+    ['profile_id', 'username', 'password', 'mfa_code', 'challenge_id'],
+  )
+  assert.deepEqual(loginSchema.required, ['profile_id'])
 
   const authSchema = response.json.components.schemas.RecgovAuthStatus
   assert.equal(authSchema.properties.last_login_diagnostic, undefined)
@@ -173,8 +191,8 @@ test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
   const diagnosticSchema = response.json.components.schemas.LoginDiagnostic
   assert.equal(diagnosticSchema.properties.screenshot_path, undefined)
   const atcSchema = response.json.components.schemas.AtcRequest
-  assert.deepEqual(atcSchema.required, ['start_date', 'end_date', 'campsite_id'])
-  assert.deepEqual(Object.keys(atcSchema.properties), ['start_date', 'end_date', 'campsite_id'])
+  assert.deepEqual(atcSchema.required, ['profile_id', 'start_date', 'end_date', 'campsite_id'])
+  assert.deepEqual(Object.keys(atcSchema.properties), ['profile_id', 'start_date', 'end_date', 'campsite_id'])
   const atcResultSchema = response.json.components.schemas.AtcResult
   assert.equal(atcResultSchema.properties.campsite_site, undefined)
   assert.ok(atcResultSchema.properties.logs)
@@ -215,6 +233,7 @@ test('POST /login passes request-scoped credentials to the auth check', async ()
       'content-type': 'application/x-www-form-urlencoded',
     },
     body: new URLSearchParams({
+      profile_id: PROFILE_ID,
       username: 'camper@example.test',
       password: 'secret',
       mfa_code: '123456',
@@ -254,6 +273,7 @@ test('POST /login HTML response renders a failed login diagnostic screenshot', a
       'content-type': 'application/x-www-form-urlencoded',
     },
     body: new URLSearchParams({
+      profile_id: PROFILE_ID,
       username: 'camper@example.test',
       password: 'secret',
       mfa_code: '123456',
@@ -276,7 +296,7 @@ test('POST /refresh force-refreshes the stored browser session without credentia
     },
   }), {
     method: 'POST',
-    path: '/refresh',
+    path: `/refresh?profile_id=${PROFILE_ID}`,
     headers: { accept: 'application/json' },
   })
 
@@ -300,7 +320,7 @@ test('POST /logout runs the Rec.gov browser logout flow', async () => {
     }),
   }), {
     method: 'POST',
-    path: '/logout',
+    path: `/logout?profile_id=${PROFILE_ID}`,
     headers: { accept: 'application/json' },
   })
 
@@ -316,6 +336,7 @@ test('POST /logout runs the Rec.gov browser logout flow', async () => {
 
 test('POST /atc passes the flat payload to the one-shot runner', async () => {
   const payload = {
+    profile_id: PROFILE_ID,
     start_date: '2026-07-19',
     end_date: '2026-07-20',
     campsite_id: '102524',
@@ -354,7 +375,7 @@ test('POST /atc passes the flat payload to the one-shot runner', async () => {
   assert.deepEqual(argv, ['--payload-json', JSON.stringify(payload)])
   assert.match(
     response.json.logs[0],
-    /^recgov atc start start_date=2026-07-19 end_date=2026-07-20 campsite=102524 booking_url="https:\/\/www\.recreation\.gov\/camping\/campsites\/102524\?startDate=2026-07-19&endDate=2026-07-20"/,
+    /^recgov atc start profile=user-7 start_date=2026-07-19 end_date=2026-07-20 campsite=102524 booking_url="https:\/\/www\.recreation\.gov\/camping\/campsites\/102524\?startDate=2026-07-19&endDate=2026-07-20"/,
   )
   assert.deepEqual(response.json.logs.slice(1, 3), [
     'Cart: opening https://www.recreation.gov/camping/campsites/102524',
@@ -382,7 +403,7 @@ test('GET /screenshot captures a Recreation.gov path with the companion browser 
     injectRecaccountFn: async () => {},
     injectBearerRouteFn: async () => true,
   }), {
-    path: '/screenshot?path=/camping/campgrounds/232447&startDate=2026-07-19',
+    path: `/screenshot?profile_id=${PROFILE_ID}&path=/camping/campgrounds/232447&startDate=2026-07-19`,
   })
 
   assert.equal(response.status, 200)
@@ -392,7 +413,7 @@ test('GET /screenshot captures a Recreation.gov path with the companion browser 
 
 test('GET /screenshot rejects non-Recreation.gov targets', async () => {
   const response = await request(testServer(), {
-    path: '/screenshot?url=https://example.com/',
+    path: `/screenshot?profile_id=${PROFILE_ID}&url=https://example.com/`,
   })
 
   assert.equal(response.status, 400)
@@ -406,6 +427,239 @@ test('GET /screenshot path suffix is not an undocumented API route', async () =>
 
   assert.equal(response.status, 400)
   assert.equal(response.json.error, 'unsupported_route')
+})
+
+test('every profile-scoped route rejects a request without profile_id', async () => {
+  const server = testServer()
+  const cases = [
+    { method: 'POST', path: '/login', body: new URLSearchParams({ username: 'a@b.test', password: 'p' }).toString(), headers: { 'content-type': 'application/x-www-form-urlencoded' } },
+    { method: 'POST', path: '/logout' },
+    { method: 'POST', path: '/refresh' },
+    { method: 'POST', path: '/verify' },
+    { method: 'POST', path: '/atc', body: JSON.stringify({ start_date: '2026-07-19', end_date: '2026-07-20', campsite_id: '1' }), headers: { 'content-type': 'application/json' } },
+    { method: 'GET', path: '/screenshot?path=/' },
+  ]
+
+  for (const testCase of cases) {
+    const response = await request(server, { headers: { accept: 'application/json' }, ...testCase })
+
+    assert.equal(response.status, 400, `${testCase.path} must require profile_id`)
+    assert.equal(response.json.error, 'profile_id_required')
+  }
+})
+
+test('a malformed profile_id is rejected before any browser work', async () => {
+  const response = await request(testServer(), {
+    method: 'POST',
+    path: '/verify?profile_id=../escape',
+    headers: { accept: 'application/json' },
+  })
+
+  assert.equal(response.status, 400)
+  assert.equal(response.json.error, 'invalid_profile_id')
+})
+
+test('each profile runs in its own browser context', async () => {
+  const pool = testPool()
+  const contexts = []
+  const server = testServer({
+    pool,
+    testChromiumFn: async (_raw, options) => {
+      contexts.push(await options.getContextFn())
+      return { ok: true, loggedIn: true }
+    },
+  })
+
+  await request(server, { method: 'POST', path: `/refresh?profile_id=${PROFILE_ID}` })
+  await request(server, { method: 'POST', path: `/refresh?profile_id=${OTHER_PROFILE_ID}` })
+
+  assert.equal(contexts.length, 2)
+  assert.notEqual(contexts[0], contexts[1])
+  assert.match(contexts[0].dir, new RegExp(`/profiles/${PROFILE_ID}$`))
+  assert.match(contexts[1].dir, new RegExp(`/profiles/${OTHER_PROFILE_ID}$`))
+})
+
+test('a mutating route is refused while the same profile is busy, and never for another', async () => {
+  const pool = testPool()
+  const server = testServer({ pool, testChromiumFn: async () => ({ ok: true, loggedIn: true }) })
+  pool.acquire(PROFILE_ID, 'login')
+
+  const blocked = await request(server, { method: 'POST', path: `/refresh?profile_id=${PROFILE_ID}` })
+  const allowed = await request(server, { method: 'POST', path: `/refresh?profile_id=${OTHER_PROFILE_ID}` })
+
+  assert.equal(blocked.status, 409)
+  assert.equal(blocked.json.error, 'profile_busy')
+  assert.equal(allowed.status, 200)
+})
+
+test('POST /login opens an MFA challenge and a second call completes it', async () => {
+  const pool = testPool()
+  const seen = []
+  const server = testServer({
+    pool,
+    testChromiumFn: async (_raw, options) => {
+      seen.push(options.credentials)
+      if (!options.credentials.mfaCode) {
+        return { ok: true, loggedIn: false, diagnostic: { reason: 'mfa_required' } }
+      }
+      return { ok: true, loggedIn: true }
+    },
+  })
+
+  const challenged = await request(server, {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ profile_id: PROFILE_ID, username: 'camper@example.test', password: 'secret' }),
+  })
+
+  assert.equal(challenged.status, 401)
+  assert.equal(challenged.json.error, 'mfa_required')
+  assert.match(challenged.json.challenge_id, /^[0-9a-f]+$/)
+  assert.ok(Date.parse(challenged.json.expires_at) > Date.now())
+  assert.equal(pool.isBusy(PROFILE_ID), true, 'the pending challenge holds the profile lock')
+
+  const completed = await request(server, {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      profile_id: PROFILE_ID,
+      challenge_id: challenged.json.challenge_id,
+      mfa_code: '123456',
+    }),
+  })
+
+  assert.equal(completed.status, 200)
+  assert.equal(completed.json.ok, true)
+  assert.equal(seen.at(-1).mfaCode, '123456')
+  assert.equal(pool.isBusy(PROFILE_ID), false)
+})
+
+test('an expired MFA challenge is refused and the lock is released', async () => {
+  let clock = Date.now()
+  const pool = testPool({ now: () => clock })
+  const server = testServer({
+    pool,
+    testChromiumFn: async () => ({ ok: true, loggedIn: false, diagnostic: { reason: 'mfa_required' } }),
+  })
+
+  const challenged = await request(server, {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ profile_id: PROFILE_ID, username: 'camper@example.test', password: 'secret' }),
+  })
+  clock += MFA_CHALLENGE_TTL_OVERSHOOT_MS
+
+  const expired = await request(server, {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      profile_id: PROFILE_ID,
+      challenge_id: challenged.json.challenge_id,
+      mfa_code: '123456',
+    }),
+  })
+
+  assert.equal(expired.status, 400)
+  assert.equal(expired.json.error, 'mfa_challenge_expired')
+  assert.equal(pool.isBusy(PROFILE_ID), false)
+})
+
+test('a failed credential login backs the profile off before the next attempt', async () => {
+  const pool = testPool()
+  const server = testServer({ pool, testChromiumFn: async () => ({ ok: true, loggedIn: false }) })
+  const loginRequest = {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ profile_id: PROFILE_ID, username: 'camper@example.test', password: 'wrong' }),
+  }
+
+  const failed = await request(server, loginRequest)
+  const backedOff = await request(server, loginRequest)
+
+  assert.equal(failed.status, 401)
+  assert.equal(backedOff.status, 429)
+  assert.equal(backedOff.json.error, 'login_backoff')
+  assert.ok(backedOff.json.retry_after_ms > 0)
+})
+
+test('POST /verify dry-runs the profile session and reports the cart read', async () => {
+  const pool = testPool()
+  let verifiedContext = null
+  const response = await request(testServer({
+    pool,
+    verifyRecgovSessionFn: async ({ getContextFn }) => {
+      verifiedContext = await getContextFn()
+      return { ok: true, logged_in: true, cart_status: 200, cart_reservation_count: 0, checked_at: new Date().toISOString() }
+    },
+  }), {
+    method: 'POST',
+    path: '/verify',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ profile_id: PROFILE_ID }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.json.ok, true)
+  assert.equal(response.json.profile_id, PROFILE_ID)
+  assert.equal(response.json.verify.cart_status, 200)
+  assert.equal(response.json.recgov_auth.state, 'ok')
+  assert.match(verifiedContext.dir, new RegExp(`/profiles/${PROFILE_ID}$`))
+  assert.equal(pool.isBusy(PROFILE_ID), false)
+})
+
+test('POST /verify reports an unusable session as 401 without failing the request', async () => {
+  const response = await request(testServer({
+    verifyRecgovSessionFn: async () => ({
+      ok: false,
+      logged_in: false,
+      error: 'recgov_not_authenticated',
+      detail: 'no session',
+      checked_at: new Date().toISOString(),
+    }),
+  }), {
+    method: 'POST',
+    path: `/verify?profile_id=${PROFILE_ID}`,
+    headers: { accept: 'application/json' },
+  })
+
+  assert.equal(response.status, 401)
+  assert.equal(response.json.ok, false)
+  assert.equal(response.json.verify.error, 'recgov_not_authenticated')
+})
+
+test('GET /health reports per-profile auth without taking the profile lock', async () => {
+  const pool = testPool()
+  pool.setAuthStatus(PROFILE_ID, { state: 'ok', logged_in: true, operation: 'login' })
+  pool.acquire(PROFILE_ID, 'login')
+  const server = testServer({ pool })
+
+  const scoped = await request(server, { path: `/health?profile_id=${PROFILE_ID}` })
+  const other = await request(server, { path: `/health?profile_id=${OTHER_PROFILE_ID}` })
+
+  assert.equal(scoped.status, 200)
+  assert.equal(scoped.json.profile_id, PROFILE_ID)
+  assert.equal(scoped.json.busy, true)
+  assert.equal(scoped.json.recgov_auth.login_status, 'ok')
+  assert.equal(scoped.json.recgov_auth.logged_in, true)
+  assert.equal(scoped.json.pool.max_concurrent_browsers > 0, true)
+
+  assert.equal(other.json.busy, false)
+  assert.equal(other.json.recgov_auth.login_status, 'unchecked')
+})
+
+test('GET /health without profile_id keeps answering the companion-wide check', async () => {
+  const response = await request(testServer(), { path: '/health' })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.json.ok, true)
+  assert.equal(response.json.profile_id, undefined)
+  assert.ok(response.json.recgov_auth)
+  assert.deepEqual(response.json.pool.keep_warm, [])
 })
 
 test('every route rejects a request without the shared-secret header', async () => {
@@ -476,7 +730,20 @@ function logCapture () {
 }
 
 function testServer (overrides = {}) {
-  return createCompanionServer({ apiToken: TEST_API_TOKEN, ...overrides })
+  return createCompanionServer({
+    apiToken: TEST_API_TOKEN,
+    pool: overrides.pool || testPool(),
+    ...overrides,
+  })
+}
+
+function testPool (overrides = {}) {
+  return createProfilePool({
+    rootDir: '/tmp/companion-server-test-profiles',
+    launchContextFn: async (dir) => ({ dir, pages: async () => [], close: async () => {}, once: () => {} }),
+    logger: () => {},
+    ...overrides,
+  })
 }
 
 async function request (server, {
