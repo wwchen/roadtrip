@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.PoiDateContext
@@ -156,24 +156,7 @@ class CatalogAvailabilityBatcherTest {
 
     // --- fixtures ---
 
-    private fun fakeProvider(): AvailabilityProvider =
-        object : AvailabilityProvider {
-            override val id: BookingProvider = BookingProvider.RECGOV
-            override val capabilities: AvailabilityProviderCapabilities =
-                AvailabilityProviderCapabilities(
-                    supportsInternalPolling = true,
-                    bookingHorizonDays = 180,
-                    maxPollWindowDays = 60,
-                )
-
-            override fun isEnabled(): Boolean = true
-
-            override suspend fun availability(
-                campground: Campground,
-                startDate: LocalDate,
-                endDate: LocalDate,
-            ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used by fetchByGroup tests")
-        }
+    private fun fakeProvider(): AvailabilityProvider = FakeAvailabilityProvider(BookingProvider.RECGOV)
 
     private fun campsite(
         campsiteId: Long,

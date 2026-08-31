@@ -1,12 +1,10 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -27,6 +25,7 @@ import ca.floo.roadtrip.service.auth.MagicLinkTokenService
 import ca.floo.roadtrip.service.availability.alert.AlertProvider
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
+import ca.floo.roadtrip.service.availability.alert.WatchAlertScope
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
@@ -38,13 +37,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+
+private val fakeProvider = FakeAvailabilityProvider(BookingProvider.RECGOV)
+private val nonPollableProvider = FakeAvailabilityProvider(BookingProvider.RECGOV, supportsInternalPolling = false)
 
 class AvailabilityWatchServiceTest : SharedDbTest() {
     private val testOwner: ca.floo.roadtrip.model.domain.auth.UserId by lazy {
@@ -88,7 +89,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     private fun service(
         alertProviders: AlertProviderRegistry? = null,
         capabilityValidator: WatchCapabilityValidator = WatchCapabilityValidator { },
-        availabilityProvider: AvailabilityProvider = FakeProvider,
+        availabilityProvider: AvailabilityProvider = fakeProvider,
         lifecycleNotifications: WatchLifecycleNotifications = ignoredLifecycleNotifications(),
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
@@ -114,7 +115,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
     private fun bookingValidatedService(
         bookingProviders: BookingAdapterRegistry,
-        availabilityProvider: AvailabilityProvider = FakeProvider,
+        availabilityProvider: AvailabilityProvider = fakeProvider,
         notificationTriggerKinds: List<String> =
             listOf(
                 AvailabilityTriggerKinds.SLACK_NOTIFY,
@@ -176,7 +177,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 poiRepo = PoiRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
-                availabilityProviders = listOf(FakeProvider),
+                availabilityProviders = listOf(fakeProvider),
                 dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
@@ -499,7 +500,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val svc =
             bookingValidatedService(
                 bookingProviders = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider)),
-                availabilityProvider = NonPollableProvider,
+                availabilityProvider = nonPollableProvider,
             )
 
         val error =
@@ -523,7 +524,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val svc =
             bookingValidatedService(
                 bookingProviders = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider)),
-                availabilityProvider = NonPollableProvider,
+                availabilityProvider = nonPollableProvider,
             )
 
         val error = assertFailsWith<AvailabilityWatchValidationException> { svc.createForTest(poiInput(poiId)) }
@@ -536,7 +537,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     fun `create does not link a poller when provider does not support internal polling`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
-        val watch = service(availabilityProvider = NonPollableProvider).createForTest(poiInput(poiId))
+        val watch = service(availabilityProvider = nonPollableProvider).createForTest(poiInput(poiId))
 
         assertEquals(emptyList<Long>(), AvailabilityPollerRepo(ctx).pollerIdsForWatch(watch.id))
     }
@@ -746,54 +747,18 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val events: MutableList<Pair<Long, AlertEvent>> = mutableListOf()
 
         override fun onWatchActivated(
-            txn: DSLContext,
+            scope: WatchAlertScope,
             watch: AvailabilityWatchRepo.Watch,
         ) {
             events += watch.id to AlertEvent.ACTIVATED
         }
 
         override fun onWatchDeactivated(
-            txn: DSLContext,
+            scope: WatchAlertScope,
             watch: AvailabilityWatchRepo.Watch,
         ) {
             events += watch.id to AlertEvent.DEACTIVATED
         }
-    }
-
-    private object FakeProvider : AvailabilityProvider {
-        override val id = BookingProvider.RECGOV
-        override val capabilities =
-            AvailabilityProviderCapabilities(
-                supportsInternalPolling = true,
-                bookingHorizonDays = 180,
-                maxPollWindowDays = 60,
-            )
-
-        override fun isEnabled(): Boolean = true
-
-        override suspend fun availability(
-            campground: Campground,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-    }
-
-    private object NonPollableProvider : AvailabilityProvider {
-        override val id = BookingProvider.RECGOV
-        override val capabilities =
-            AvailabilityProviderCapabilities(
-                supportsInternalPolling = false,
-                bookingHorizonDays = 180,
-                maxPollWindowDays = 60,
-            )
-
-        override fun isEnabled(): Boolean = true
-
-        override suspend fun availability(
-            campground: Campground,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
     private object RecGovOnlyBookingProvider : BookingAdapter {

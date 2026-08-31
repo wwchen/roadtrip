@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -15,7 +14,6 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import kotlinx.serialization.json.JsonNull
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
@@ -141,27 +139,6 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
 
     private fun watch(id: Long): AvailabilityWatchRepo.Watch = AvailabilityWatchRepo(ctx).findById(id)!!
 
-    /** Minimal AvailabilityProvider stub — membership consumes id and internal polling support. */
-    private class FakeProvider(
-        override val id: BookingProvider,
-        supportsInternalPolling: Boolean,
-    ) : AvailabilityProvider {
-        override val capabilities: AvailabilityProviderCapabilities =
-            AvailabilityProviderCapabilities(
-                supportsInternalPolling = supportsInternalPolling,
-                bookingHorizonDays = 180,
-                maxPollWindowDays = 60,
-            )
-
-        override fun isEnabled(): Boolean = true
-
-        override suspend fun availability(
-            campground: Campground,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used by AvailabilityPollerMembershipTest")
-    }
-
     /**
      * In-memory fake keyed by campsite id, so a test can control exactly
      * which (provider, parentRef, parentPoiId) each campsite resolves to
@@ -182,7 +159,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
             byCampsiteId[campsite.id] =
                 ResolvedAvailabilityTarget(
                     campsite = campsite,
-                    provider = FakeProvider(provider, supportsInternalPolling),
+                    provider = FakeAvailabilityProvider(provider, supportsInternalPolling),
                     campground = campground,
                     parentPoiId = parentPoiId,
                     dateContext = dateContext,
