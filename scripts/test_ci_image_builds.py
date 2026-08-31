@@ -33,7 +33,10 @@ class DeploymentContractTest(unittest.TestCase):
     def test_ci_publishes_the_three_immutable_images(self) -> None:
         jobs = workflow("ci.yml")["jobs"]
         app = jobs["docker-build"]
-        self.assertNotIn("if", app)
+        # The job may be skipped on a PR that cannot change the image (docs
+        # only), but every master push must still publish backend:<sha>,
+        # because deploy pulls exactly that tag.
+        self.assertIn("github.event_name == 'push' ||", app.get("if", ""))
         self.assertIn('docker push "$IMAGE:${SHA}"', job_commands(app))
 
         for job_name, tree in (("companion-image", "companion"), ("data-image", "data")):

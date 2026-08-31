@@ -13,9 +13,11 @@ on:
         description: "PR number to rebase (blank = all conflicting)"
         required: false
 
-permissions:
-  contents: write
-  pull-requests: write
+# Every step below authenticates with the GitHub App token (checkout, gh pr
+# list/comment, the force-push), so the default GITHUB_TOKEN needs nothing —
+# which matters more than usual here because pull_request_target runs with
+# repo secrets available on PR-authored refs.
+permissions: {}
 
 concurrency:
   group: auto-rebase-${{ github.event.issue.number || github.event.pull_request.number || github.event.inputs.pr_number || 'master' }}
@@ -199,6 +201,12 @@ jobs:
           # the last 30 merged PRs (newest first), and return the first
           # recorded SHA that is an ancestor of the branch but not of master.
           # That's the lowest still-present-in-branch commit from a parent PR.
+          #
+          # Only markers authored by the bot count — anyone who can comment on
+          # a merged PR could otherwise name the commit we rebase onto. gh
+          # reads comments over GraphQL, which spells the bot `github-actions`;
+          # REST spells the same account `github-actions[bot]`, so accept both
+          # rather than depend on which API surface gh uses.
           lookup_recorded_pre_squash_sha() {
             local branch="$1"
             local recorded
@@ -209,6 +217,8 @@ jobs:
                   sort_by(.mergedAt) | reverse
                   | .[]
                   | .comments[]?
+                  | select(.author.login == "github-actions"
+                           or .author.login == "github-actions[bot]")
                   | .body
                   | capture("auto-rebase-meta: pre-squash-sha=(?<sha>[0-9a-f]{40})")?
                   | .sha

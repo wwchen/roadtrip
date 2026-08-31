@@ -81,6 +81,14 @@ install: install-hooks
 # Grafana dashboard validation. Backend tests need a running Docker daemon
 # (Testcontainers). One Gradle invocation shares configuration and compilation
 # across the backend checks that CI runs in separate jobs.
+#
+# This target is the local mirror of ci.yml's gradle-lint, backend-tests,
+# frontend-tests, companion-tests and lint jobs — change one, change the other.
+# The single deliberate divergence: gradle-lint runs `ktlintCheck` with
+# `-x :backend:generateJooq`, since linting alone has no reason to spin up the
+# codegen Testcontainer. Here ktlintCheck shares an invocation with
+# :backend:test, whose compilation consumes the generated jOOQ sources
+# (generateSchemaSourceOnCompilation), so excluding it would break a fresh clone.
 test: _ensure-hooks
 	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :detekt-rules:test
 	# npm run build includes the TypeScript check before bundling.
@@ -147,14 +155,14 @@ _ensure-hooks:
 	@[ "$$(git config core.hooksPath 2>/dev/null)" = ".githooks" ] || \
 	  { git config core.hooksPath .githooks 2>/dev/null && echo "git hooks installed (.githooks/)"; } || true
 
+frontend:
+	cd frontend && npm ci && npm run build
+
 # Snapshot Grafana dashboards from the running container into
 # grafana/dashboards/*.json, then apply shared dashboard navigation links.
 # Workflow: edit in the UI (allowUiUpdates=true in dev), then
 # `make grafana-export` before committing. UID, password, and UID list
 # overridable via env vars; see scripts/export_grafana_dashboards.py.
-frontend:
-	cd frontend && npm ci && npm run build
-
 grafana-export:
 	./scripts/export_grafana_dashboards.py
 	./scripts/sync_grafana_dashboard_links.py
