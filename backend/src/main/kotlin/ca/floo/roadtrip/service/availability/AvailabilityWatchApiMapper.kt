@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.api.AvailabilityWatchListResponse
 import ca.floo.roadtrip.model.api.AvailabilityWatchResponse
 import ca.floo.roadtrip.model.api.AvailabilityWatchSchema
 import ca.floo.roadtrip.model.api.AvailabilityWatchTargetSchema
+import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import kotlinx.serialization.json.JsonObject
@@ -35,7 +36,7 @@ internal class AvailabilityWatchApiMapper(
             watch = schema(watch).let { if (redactDelivery) it.withoutDelivery() else it },
             watchCapabilities =
                 if (includeCapabilities) {
-                    watchCapabilityService?.capabilitiesFor(scopeResolver.resolve(watch))
+                    watchCapabilityService?.capabilitiesFor(scopeResolver.resolve(watch), UserId(watch.ownerUserId))
                 } else {
                     null
                 },

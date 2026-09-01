@@ -223,6 +223,9 @@ val serviceModule =
                 availabilityTargets = get<DbAvailabilityTargetResolver>(),
                 bookingTargets = get<AvailabilityBookingTargetResolver>(),
                 notificationTriggerKinds = notificationTriggerKinds(emailConfigured = config.email != null),
+                // `atc` is offered only to a user whose rec.gov credentials are
+                // stored; the credential service is the one place that knows.
+                recgovCredentials = get<RecGovCredentialService>(),
             )
         }
         single {

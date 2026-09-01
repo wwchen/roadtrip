@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
+import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import java.time.Instant
@@ -103,9 +104,12 @@ internal class CampsiteAvailabilityController(
         siteTypes: List<String>,
         startDate: LocalDate?,
         endDate: LocalDate?,
+        // Null for anonymous and magic-link readers. Capability gating narrows
+        // to what *this* caller could set, so `atc` is simply absent for them.
+        requester: UserId? = null,
     ): PoiCampsitesAvailabilityResponseDto {
         val slice = poiAvailabilitySlice(poiId, siteTypes, startDate, endDate)
-        val watchCaps = watchCapabilityService.capabilitiesFor(slice.allCampsites)
+        val watchCaps = watchCapabilityService.capabilitiesFor(slice.allCampsites, requester)
         val perCampsite = slice.perCampsiteEnvelopes().map { it.response }
 
         return PoiCampsitesAvailabilityResponseDto(

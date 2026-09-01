@@ -10,6 +10,7 @@ import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -27,6 +28,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private const val TEST_PARENT_POI_ID = 100L
+private val credentialedUser = UserId(11L)
+private val uncredentialedUser = UserId(12L)
 
 class WatchCapabilityServiceTest {
     @Test
@@ -43,7 +46,7 @@ class WatchCapabilityServiceTest {
         assertEquals(setOf(BookingAction.ADD_TO_CART), service.supportedBookingActions(listOf(campsiteA, campsiteB)))
         assertEquals(
             listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY, AvailabilityTriggerKinds.ATC),
-            service.supportedTriggerKinds(listOf(campsiteA, campsiteB)),
+            service.supportedTriggerKinds(listOf(campsiteA, campsiteB), credentialedUser),
         )
     }
 
@@ -61,7 +64,7 @@ class WatchCapabilityServiceTest {
         assertEquals(emptySet(), service.supportedBookingActions(listOf(supported, unsupported)))
         assertEquals(
             listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY),
-            service.supportedTriggerKinds(listOf(supported, unsupported)),
+            service.supportedTriggerKinds(listOf(supported, unsupported), credentialedUser),
         )
     }
 
@@ -75,7 +78,7 @@ class WatchCapabilityServiceTest {
         assertEquals(0, support.scopedCount)
         assertEquals(0, support.unsupportedCount)
         assertFalse(service.internalPollingSupportFor(emptyList()).supported)
-        assertEquals(emptyList(), service.supportedTriggerKinds(emptyList()))
+        assertEquals(emptyList(), service.supportedTriggerKinds(emptyList(), credentialedUser))
     }
 
     @Test
@@ -89,7 +92,45 @@ class WatchCapabilityServiceTest {
         assertEquals(1, support.scopedCount)
         assertEquals(1, support.unsupportedCount)
         assertEquals(setOf(BookingAction.ADD_TO_CART), service.supportedBookingActions(listOf(campsite)))
-        assertEquals(emptyList(), service.supportedTriggerKinds(listOf(campsite)))
+        assertEquals(emptyList(), service.supportedTriggerKinds(listOf(campsite), credentialedUser))
+    }
+
+    @Test
+    fun `atc is absent for an anonymous reader, and is not an error`() {
+        // Magic-link and signed-out readers of the availability API get the
+        // notification kinds and nothing that needs an account behind it.
+        val campsite = campsite(1L, "site-1")
+        val service = service(campsites = listOf(campsite))
+
+        val capabilities = service.capabilitiesFor(listOf(campsite), requester = null)
+
+        assertEquals(
+            listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY),
+            capabilities.triggerKinds,
+        )
+        // booking_actions stays populated regardless: the editor tells "your
+        // scope has no cart" apart from "you have no credentials" with it.
+        assertEquals(listOf(BookingAction.ADD_TO_CART.wireValue), capabilities.bookingActions)
+    }
+
+    @Test
+    fun `atc is offered only to a user who has rec_gov credentials configured`() {
+        val campsite = campsite(1L, "site-1")
+        val service = service(campsites = listOf(campsite), configuredUsers = setOf(credentialedUser.value))
+
+        assertTrue(AvailabilityTriggerKinds.ATC in service.supportedTriggerKinds(listOf(campsite), credentialedUser))
+        assertFalse(AvailabilityTriggerKinds.ATC in service.supportedTriggerKinds(listOf(campsite), uncredentialedUser))
+    }
+
+    @Test
+    fun `credentials alone do not add atc to a scope with no cart`() {
+        val unsupported = campsite(2L, "")
+        val service = service(campsites = listOf(unsupported), configuredUsers = setOf(credentialedUser.value))
+
+        assertEquals(
+            listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY),
+            service.supportedTriggerKinds(listOf(unsupported), credentialedUser),
+        )
     }
 
     @Test
@@ -103,7 +144,7 @@ class WatchCapabilityServiceTest {
 
         assertEquals(
             listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.ATC),
-            service.supportedTriggerKinds(listOf(campsite)),
+            service.supportedTriggerKinds(listOf(campsite), credentialedUser),
         )
     }
 
@@ -117,12 +158,14 @@ class WatchCapabilityServiceTest {
                 AvailabilityTriggerKinds.SLACK_NOTIFY,
                 AvailabilityTriggerKinds.EMAIL_NOTIFY,
             ),
+        configuredUsers: Set<Long> = setOf(credentialedUser.value),
     ): WatchCapabilityService {
         val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider))
         return WatchCapabilityService(
             availabilityTargets = FakeTargetResolver(campsites, supportsInternalPolling),
             bookingTargets = AvailabilityBookingTargetResolver(registry),
             notificationTriggerKinds = notificationTriggerKinds,
+            recgovCredentials = { userId -> userId.value in configuredUsers },
         )
     }
 
