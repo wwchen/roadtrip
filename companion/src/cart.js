@@ -22,6 +22,7 @@ import {
   RECGOV_LOGIN_STATE_SETTLE_MS,
   clearBrowserRecaccount,
   resolveRecaccount,
+  withRecgovProfileScope,
 } from './recgovSession.js'
 import { captureRecgovPageImage } from './recgovScreenshotCapture.js'
 import { SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX } from './recgovScreenshotRoutes.js'
@@ -679,6 +680,10 @@ export function bookingUrlForMatch (match) {
 }
 
 export async function addToCart (match, contextOptions = {}) {
+  return withRecgovProfileScope(contextOptions.profileId ?? null, () => runAddToCart(match, contextOptions))
+}
+
+async function runAddToCart (match, contextOptions) {
   const firstDate = match.first_date
   const availableDates = match.available_dates || (firstDate ? [firstDate] : [])
   const site = match.campsite_site
@@ -784,6 +789,10 @@ export async function addToCart (match, contextOptions = {}) {
 }
 
 export async function testChromium (rawCookieInput = null, options = {}) {
+  return withRecgovProfileScope(options.profileId ?? null, () => runTestChromium(rawCookieInput, options))
+}
+
+async function runTestChromium (rawCookieInput, options) {
   const {
     getContextFn = getContext,
     injectStoredCookiesFn = injectStoredCookies,

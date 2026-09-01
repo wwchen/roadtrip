@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { IS_HEADLESS } from './browser.js'
 import { testChromium } from './cart.js'
 import {
+  getRecgovSessionStatus,
   logoutRecgovBrowserSession,
   runRecgovProfileLogin,
 } from './recgovSession.js'
@@ -175,15 +176,20 @@ function handleHealth (res, url, pool) {
     ok: true,
     profile_id: profile.profileId,
     busy: pool.isBusy(profile.profileId),
-    recgov_auth: profileHealthStatus(pool.getAuthStatus(profile.profileId)),
+    recgov_auth: profileHealthStatus(profile.profileId, pool.getAuthStatus(profile.profileId)),
     pool: pool.snapshot(),
   })
 }
 
-function profileHealthStatus (status) {
+function profileHealthStatus (profileId, status) {
   const { diagnostic: _diagnostic, ...authStatus } = status
+  const {
+    last_login_diagnostic: _lastLoginDiagnostic,
+    ...sessionStatus
+  } = getRecgovSessionStatus(profileId)
   return {
     login_status: authStatus.state,
+    ...sessionStatus,
     ...authStatus,
   }
 }

@@ -357,6 +357,36 @@ test('runRecgovProfileLogin reports a rejected MFA code without re-submitting cr
   assert.equal(page.mfaSubmitClicks, 1)
 })
 
+test('login diagnostics and refresh metadata are recorded per profile', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-scoped' }),
+  })
+  const failing = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    mfaRequired: true,
+  })
+  const succeeding = fakePage({ credentialRawRecaccount: JSON.stringify(recaccount) })
+
+  await runRecgovProfileLogin({
+    getContextFn: async () => failing.context(),
+    credentials: { username: 'a@example.com', password: 'secret' },
+    options: { loginTimeoutMs: '1', allowManualLogin: false, credentialSessionTimeoutMs: '1' },
+    profileId: 'user-a',
+  })
+  await runRecgovProfileLogin({
+    getContextFn: async () => succeeding.context(),
+    credentials: { username: 'b@example.com', password: 'secret' },
+    options: { loginTimeoutMs: '1', allowManualLogin: false },
+    profileId: 'user-b',
+  })
+
+  assert.equal(getRecgovSessionStatus('user-a').last_login_diagnostic.reason, 'mfa_required')
+  assert.equal(getRecgovSessionStatus('user-b').last_login_diagnostic.reason, 'login_success')
+  assert.ok(Date.parse(getRecgovSessionStatus('user-b').next_refresh_at) > 0)
+  assert.equal(getRecgovSessionStatus('user-a').next_refresh_at, null)
+  assert.equal(getRecgovSessionStatus('user-c').last_login_diagnostic, null)
+})
+
 test('runRecgovProfileLogin returns the existing session without touching the login form', async () => {
   const recaccount = testRecaccount({
     token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-existing' }),

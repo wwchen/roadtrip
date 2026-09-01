@@ -775,6 +775,25 @@ test('GET /health reports per-profile auth without taking the profile lock', asy
   assert.equal(other.json.recgov_auth.login_status, 'unchecked')
 })
 
+test('a profile operation never overwrites another profile or the companion-wide status', async () => {
+  await runStartupAuthCheck({
+    testChromiumFn: async () => ({ ok: true, loggedIn: true }),
+    logger: () => {},
+  })
+  const pool = testPool()
+  const server = testServer({ pool, testChromiumFn: async () => ({ ok: true, loggedIn: false }) })
+
+  const refreshed = await request(server, { method: 'POST', path: `/refresh?profile_id=${PROFILE_ID}` })
+  const scoped = await request(server, { path: `/health?profile_id=${PROFILE_ID}` })
+  const other = await request(server, { path: `/health?profile_id=${OTHER_PROFILE_ID}` })
+  const companionWide = await request(server, { path: '/health' })
+
+  assert.equal(refreshed.status, 401)
+  assert.equal(scoped.json.recgov_auth.login_status, 'failed')
+  assert.equal(other.json.recgov_auth.login_status, 'unchecked')
+  assert.equal(companionWide.json.recgov_auth.login_status, 'ok', 'the startup check still owns the global row')
+})
+
 test('GET /health without profile_id keeps answering the companion-wide check', async () => {
   const response = await request(testServer(), { path: '/health' })
 

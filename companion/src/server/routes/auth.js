@@ -37,7 +37,6 @@ import {
   logoutLogFields,
   recgovLogoutStatus,
   runRecgovAuthCheck,
-  setRecgovAuthStatus,
 } from '../authStatus.js'
 
 const LOGIN_STATE_OK = 'ok'
@@ -64,8 +63,8 @@ export async function handleLogout (req, res, { runtime, pool, logoutRecgovSessi
       respondRejection(req, res, resolved.rejection)
       return
     }
-    const result = await logoutRecgovSessionFn({ getContextFn: async () => resolved.context })
-    const statusBody = pool.setAuthStatus(profileId, setRecgovAuthStatus(recgovLogoutStatus(result)))
+    const result = await logoutRecgovSessionFn({ getContextFn: async () => resolved.context, profileId })
+    const statusBody = pool.setAuthStatus(profileId, recgovLogoutStatus(result))
     const status = result.ok ? HTTP_OK : HTTP_INTERNAL_ERROR
     runtime.logger(
       'recgov auth logout request result',
@@ -76,7 +75,7 @@ export async function handleLogout (req, res, { runtime, pool, logoutRecgovSessi
     )
     respondAuthResult(req, res, status, authActionResponseBody(statusBody, result.ok === true))
   } catch (error) {
-    const statusBody = pool.setAuthStatus(profileId, setRecgovAuthStatus(logoutExceptionStatus(error)))
+    const statusBody = pool.setAuthStatus(profileId, logoutExceptionStatus(error))
     runtime.logger('recgov auth logout request exception', `profile=${profileId}`, error.message)
     respondAuthResult(req, res, HTTP_INTERNAL_ERROR, authActionResponseBody(statusBody, false))
   } finally {
@@ -102,6 +101,7 @@ export async function handleRefresh (req, res, { runtime, pool, testChromiumFn }
       operation: OPERATION_REFRESH,
       testChromiumFn,
       authFailureFn: () => recgovAuthenticationFailure({ attemptedRefresh: true }),
+      statusStore: pool.authStatusStore(profileId),
       options: {
         forceRefresh: true,
         allowManualLogin: false,
@@ -109,12 +109,11 @@ export async function handleRefresh (req, res, { runtime, pool, testChromiumFn }
         getContextFn: async () => resolved.context,
       },
     })
-    pool.setAuthStatus(profileId, status)
     runtime.logger('recgov auth refresh request result', status.state, `profile=${profileId}`, `duration_ms=${Date.now() - startedAt}`)
     respondAuthResult(req, res, authHttpStatus(status), authResponseBody(status))
   } catch (error) {
     runtime.logger('recgov auth refresh request exception', `profile=${profileId}`, error.message)
-    const status = pool.setAuthStatus(profileId, setRecgovAuthStatus(authExceptionStatus(OPERATION_REFRESH, error)))
+    const status = pool.setAuthStatus(profileId, authExceptionStatus(OPERATION_REFRESH, error))
     respondAuthResult(req, res, HTTP_INTERNAL_ERROR, authActionResponseBody(status, false))
   } finally {
     lock.release()
@@ -220,7 +219,7 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
     respondAuthResult(req, res, authHttpStatus(status), authResponseBody(status))
   } catch (error) {
     runtime.logger('recgov auth login request exception', `profile=${profileId}`, error.message)
-    const status = pool.setAuthStatus(profileId, setRecgovAuthStatus(authExceptionStatus(OPERATION_LOGIN, error)))
+    const status = pool.setAuthStatus(profileId, authExceptionStatus(OPERATION_LOGIN, error))
     respondAuthResult(req, res, HTTP_INTERNAL_ERROR, authActionResponseBody(status, false))
   } finally {
     if (!challengeHoldsLock) lock.release()
@@ -261,7 +260,7 @@ async function completeMfaChallenge (req, res, { runtime, pool, profileId, chall
     })
   } catch (error) {
     runtime.logger('recgov auth mfa completion exception', `profile=${profileId}`, error.message)
-    const status = pool.setAuthStatus(profileId, setRecgovAuthStatus(authExceptionStatus(OPERATION_LOGIN, error)))
+    const status = pool.setAuthStatus(profileId, authExceptionStatus(OPERATION_LOGIN, error))
     respondAuthResult(req, res, HTTP_INTERNAL_ERROR, authActionResponseBody(status, false))
   } finally {
     taken.challenge.release()

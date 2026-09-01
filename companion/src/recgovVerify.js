@@ -17,7 +17,10 @@ import {
   injectStoredCookies,
   isSpaLoggedIn,
 } from './browser.js'
-import { resolveRecaccount } from './recgovSession.js'
+import {
+  resolveRecaccount,
+  withRecgovProfileScope,
+} from './recgovSession.js'
 
 export const RECGOV_ACCOUNT_URL = 'https://www.recreation.gov/account/profile'
 export const VERIFY_NAVIGATION_TIMEOUT_MS = 30_000
@@ -50,6 +53,10 @@ export function createRecgovVerifyDeps ({
 }
 
 export async function verifyRecgovSession ({ profileId = null, ...overrides } = {}) {
+  return withRecgovProfileScope(profileId, () => runVerify(profileId, overrides))
+}
+
+async function runVerify (profileId, overrides) {
   const deps = createRecgovVerifyDeps(overrides)
   const context = await deps.getContextFn()
   await deps.injectStoredCookiesFn(context, null, profileId)

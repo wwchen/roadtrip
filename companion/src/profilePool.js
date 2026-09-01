@@ -296,6 +296,18 @@ export function createProfilePool ({
       return profiles.get(profileId)?.authStatus ?? { ...UNCHECKED_AUTH_STATUS }
     },
 
+    // The status sink runRecgovAuthCheck writes through, so a profile-scoped
+    // operation records against that profile and never the companion-wide row.
+    authStatusStore (profileId) {
+      return {
+        get: () => entry(profileId).authStatus,
+        set: (status) => {
+          entry(profileId).authStatus = status
+          return status
+        },
+      }
+    },
+
     snapshot () {
       sweepExpiredChallenges()
       const resident = residentStates()

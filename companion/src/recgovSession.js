@@ -2,6 +2,7 @@
 // The backend never sees rec.gov credentials; this module reads and refreshes
 // localStorage.recaccount inside the same Chromium context that clicks ATC.
 
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { Buffer } from 'node:buffer'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -167,11 +168,45 @@ const LOGIN_ERROR_SELECTORS = [
   '[data-error]',
 ]
 
-let recgovSessionStatus = {
-  last_refresh_at: null,
-  last_refresh_expires_at: null,
-  next_refresh_at: null,
-  last_login_diagnostic: null,
+// Session status is per profile: one user's refresh window and login
+// diagnostic must never show up on another user's health row. The active
+// profile travels with the async context rather than through twenty call
+// sites, so two profiles operating concurrently cannot interleave into one
+// another's record.
+const LEGACY_PROFILE_KEY = '__legacy__'
+const profileScope = new AsyncLocalStorage()
+const sessionStatuses = new Map()
+
+function emptySessionStatus () {
+  return {
+    last_refresh_at: null,
+    last_refresh_expires_at: null,
+    next_refresh_at: null,
+    last_login_diagnostic: null,
+  }
+}
+
+function sessionStatusKey (profileId) {
+  return profileId || LEGACY_PROFILE_KEY
+}
+
+function activeSessionStatusKey () {
+  return profileScope.getStore() || LEGACY_PROFILE_KEY
+}
+
+function sessionStatusFor (key) {
+  if (!sessionStatuses.has(key)) sessionStatuses.set(key, emptySessionStatus())
+  return sessionStatuses.get(key)
+}
+
+function updateSessionStatus (patch) {
+  const key = activeSessionStatusKey()
+  sessionStatuses.set(key, { ...sessionStatusFor(key), ...patch })
+}
+
+// Runs `fn` with every session-status write attributed to `profileId`.
+export function withRecgovProfileScope (profileId, fn) {
+  return profileScope.run(sessionStatusKey(profileId), fn)
 }
 
 export async function resolveRecaccount (page, options = {}) {
@@ -202,21 +237,25 @@ export async function resolveRecaccount (page, options = {}) {
   return null
 }
 
-export function getRecgovSessionStatus () {
-  return { ...recgovSessionStatus }
+export function getRecgovSessionStatus (profileId = undefined) {
+  const key = profileId === undefined ? activeSessionStatusKey() : sessionStatusKey(profileId)
+  return { ...sessionStatusFor(key) }
 }
 
 export async function logoutRecgovBrowserSession ({
   getContextFn = getContext,
   isSpaLoggedInFn = isSpaLoggedIn,
+  profileId = null,
 } = {}) {
-  const context = await getContextFn()
-  const page = await context.newPage()
-  try {
-    return await logoutRecgovPage(page, isSpaLoggedInFn)
-  } finally {
-    await page.close().catch(() => {})
-  }
+  return withRecgovProfileScope(profileId, async () => {
+    const context = await getContextFn()
+    const page = await context.newPage()
+    try {
+      return await logoutRecgovPage(page, isSpaLoggedInFn)
+    } finally {
+      await page.close().catch(() => {})
+    }
+  })
 }
 
 // Two-phase credential login for one browser profile.
@@ -225,7 +264,11 @@ export async function logoutRecgovBrowserSession ({
 // with the page left open on the 2FA prompt — `resume(code)` finishes on that
 // same page and closes it. The caller (the /login route) holds the profile's
 // busy lock for as long as a resume is outstanding.
-export async function runRecgovProfileLogin ({
+export async function runRecgovProfileLogin (args = {}) {
+  return withRecgovProfileScope(args.profileId ?? null, () => profileLogin(args))
+}
+
+async function profileLogin ({
   getContextFn = getContext,
   credentials = {},
   options = {},
@@ -247,7 +290,9 @@ export async function runRecgovProfileLogin ({
       pageHeldForMfa = true
       return loginOutcome('mfa_required', {
         reason: MFA_REQUIRED_REASON,
-        resume: async (mfaCode) => {
+        // The resume runs later, on its own request, so it re-enters this
+        // profile's scope rather than inheriting the caller's.
+        resume: async (mfaCode) => withRecgovProfileScope(profileId, async () => {
           try {
             const completion = await completeRecgovMfaLogin(page, mfaCode, options)
             if (completion.recaccount) return loginOutcome('ok', { recaccount: completion.recaccount })
@@ -255,7 +300,7 @@ export async function runRecgovProfileLogin ({
           } finally {
             await page.close().catch(() => {})
           }
-        },
+        }),
       })
     }
     return loginOutcome('failed', attempt.failure)
@@ -797,27 +842,20 @@ async function captureLoginDiagnostic (page, reason, detail = null) {
     console.log(`Cart: failed to capture Recreation.gov login diagnostic screenshot reason=${reason} error="${error.message}" page=${diagnostic.page_url}`)
   }
 
-  recgovSessionStatus = {
-    ...recgovSessionStatus,
-    last_login_diagnostic: diagnostic,
-  }
+  updateSessionStatus({ last_login_diagnostic: diagnostic })
   return diagnostic
 }
 
 function clearLoginDiagnostic () {
-  recgovSessionStatus = {
-    ...recgovSessionStatus,
-    last_login_diagnostic: null,
-  }
+  updateSessionStatus({ last_login_diagnostic: null })
 }
 
 function recordRecgovLogout () {
-  recgovSessionStatus = {
-    ...recgovSessionStatus,
+  updateSessionStatus({
     last_refresh_at: null,
     last_refresh_expires_at: null,
     next_refresh_at: null,
-  }
+  })
 }
 
 function safePageUrl (page) {
@@ -977,18 +1015,14 @@ async function refreshRecaccountInBrowser (page, token, credentials) {
 }
 
 function recordRecgovRefresh (recaccount) {
-  recgovSessionStatus = {
-    ...recgovSessionStatus,
+  updateSessionStatus({
     last_refresh_at: new Date().toISOString(),
     last_refresh_expires_at: recaccount?.expiration || null,
-  }
+  })
 }
 
 function recordRecgovSessionExpiry (recaccount) {
-  recgovSessionStatus = {
-    ...recgovSessionStatus,
-    next_refresh_at: nextRefreshAtIso(recaccount),
-  }
+  updateSessionStatus({ next_refresh_at: nextRefreshAtIso(recaccount) })
 }
 
 function nextRefreshAtIso (recaccount) {
