@@ -20,6 +20,7 @@ export function resolveSessionDir (env = process.env, homeDir = os.homedir()) {
 
 const SESSION_DIR = resolveSessionDir()
 const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
+const RECGOV_COOKIES_SETTING = 'recgov_cookies'
 export const RECGOV_CAMPSITE_BOOKING_URL_PATTERN =
   'https://www.recreation.gov/camping/campsites/{campsite_id}?startDate={start_date}&endDate={end_date}'
 export const COMPANION_USER_AGENT =
@@ -130,8 +131,16 @@ function parseCookieString (str) {
   }).filter(Boolean)
 }
 
-export async function injectStoredCookies (context, rawInput = null) {
-  const cookieStr = extractCookiesFromInput(rawInput || getSetting('recgov_cookies') || '')
+// Stored cookies are per profile. The unkeyed setting belongs to the legacy
+// single-profile CLI session and must never be handed to a user's profile:
+// a rec.gov cookie jar is a session, and sharing one is sharing an account.
+export function recgovCookieSettingKey (profileId = null) {
+  return profileId ? `${RECGOV_COOKIES_SETTING}:${profileId}` : RECGOV_COOKIES_SETTING
+}
+
+export async function injectStoredCookies (context, rawInput = null, profileId = null) {
+  const stored = getSetting(recgovCookieSettingKey(profileId)) || ''
+  const cookieStr = extractCookiesFromInput(rawInput || stored)
   if (!cookieStr) return 0
   const cookies = parseCookieString(cookieStr)
   if (!cookies.length) return 0

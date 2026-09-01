@@ -42,7 +42,7 @@ export function createRecgovScreenshotDeps ({
 export async function captureRecgovScreenshot (target, deps = createRecgovScreenshotDeps(), { profileId = null } = {}) {
   let page = null
   const context = await deps.getContextFn(profileId)
-  await deps.injectStoredCookiesFn(context)
+  await deps.injectStoredCookiesFn(context, null, profileId)
   page = await context.newPage()
   try {
     const recaccount = await deps.resolveRecaccountFn(page, { allowManualLogin: false })

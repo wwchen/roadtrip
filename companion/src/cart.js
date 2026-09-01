@@ -564,9 +564,9 @@ function truncateText (value, maxLength) {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`
 }
 
-export async function setupAuthPage ({ getContextFn = getContext } = {}) {
+export async function setupAuthPage ({ getContextFn = getContext, profileId = null } = {}) {
   const context = await getContextFn()
-  await injectStoredCookies(context)
+  await injectStoredCookies(context, null, profileId)
   const page = await context.newPage()
 
   const recaccount = await resolveRecaccount(page)
@@ -796,7 +796,7 @@ export async function testChromium (rawCookieInput = null, options = {}) {
   } = options
 
   const context = await getContextFn()
-  await injectStoredCookiesFn(context, rawCookieInput)
+  await injectStoredCookiesFn(context, rawCookieInput, resolveOptions.profileId ?? null)
   let page = await context.newPage()
   try {
     const first = await resolveAndVerifyRecgovSession(page, resolveOptions, {

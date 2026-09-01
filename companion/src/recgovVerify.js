@@ -49,10 +49,10 @@ export function createRecgovVerifyDeps ({
   }
 }
 
-export async function verifyRecgovSession (overrides = {}) {
+export async function verifyRecgovSession ({ profileId = null, ...overrides } = {}) {
   const deps = createRecgovVerifyDeps(overrides)
   const context = await deps.getContextFn()
-  await deps.injectStoredCookiesFn(context)
+  await deps.injectStoredCookiesFn(context, null, profileId)
   const page = await context.newPage()
   try {
     const recaccount = await deps.resolveRecaccountFn(page, { allowManualLogin: false })
