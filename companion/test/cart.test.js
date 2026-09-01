@@ -93,13 +93,13 @@ test('resolveSessionDir uses mounted companion profile env before legacy session
   assert.equal(resolveSessionDir({}, '/home/test'), '/home/test/.campsite-companion/browser-session')
 })
 
-test('recgovAuthenticationFailure reports the operator action for headless missing session', () => {
+test('recgovAuthenticationFailure names the profile, not a single operator session', () => {
   const failure = recgovAuthenticationFailure({
     headless: true,
   })
 
   assert.equal(failure.error, 'recgov_not_authenticated')
-  assert.match(failure.detail, /headless companion is not logged in/)
+  assert.match(failure.detail, /This profile has no Recreation\.gov session/)
   assert.match(failure.corrective_action, /companion root page/)
   assert.deepEqual(failure.auth, { headless: true })
 })

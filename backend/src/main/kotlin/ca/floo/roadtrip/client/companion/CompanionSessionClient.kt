@@ -45,6 +45,11 @@ private const val FIELD_ERROR = "error"
 private const val FIELD_DETAIL = "detail"
 private const val FIELD_REASON = "reason"
 private const val FIELD_LOGGED_IN = "logged_in"
+private const val FIELD_LOGIN_STATUS = "login_status"
+private const val FIELD_STATE = "state"
+
+/** The companion's word for a profile it has never been asked about. */
+private const val STATUS_UNCHECKED = "unchecked"
 private const val FIELD_RECGOV_AUTH = "recgov_auth"
 private const val FIELD_VERIFY = "verify"
 
@@ -162,13 +167,30 @@ internal class CompanionSessionClient(
             is Exchange.Unreachable -> CompanionSessionHealth.Unavailable(exchange.detail)
             is Exchange.Answered -> {
                 if (!exchange.succeeded) return CompanionSessionHealth.Unavailable(exchange.body.stringValue(FIELD_ERROR))
-                val auth = exchange.body.objectValue(FIELD_RECGOV_AUTH)
-                if (auth?.booleanValue(FIELD_LOGGED_IN) == true) {
-                    CompanionSessionHealth.Active
-                } else {
-                    CompanionSessionHealth.Inactive(auth?.stringValue(FIELD_ERROR))
-                }
+                sessionHealth(exchange.body.objectValue(FIELD_RECGOV_AUTH))
             }
+        }
+    }
+
+    /**
+     * The companion's per-profile auth record, as three distinct not-active
+     * answers rather than one.
+     *
+     * `login_status: "unchecked"` is the companion's word for "this profile has
+     * never been asked" — a fresh profile, not a lapsed session. And an auth
+     * check that *threw* reports its own exception code; telling that user their
+     * session expired sends them to re-login against a service that is broken.
+     */
+    private fun sessionHealth(auth: JsonObject?): CompanionSessionHealth {
+        if (auth?.booleanValue(FIELD_LOGGED_IN) == true) return CompanionSessionHealth.Active
+        val code = auth?.stringValue(FIELD_ERROR)
+        val status = auth?.stringValue(FIELD_LOGIN_STATUS) ?: auth?.stringValue(FIELD_STATE)
+        return when {
+            code == RecGovSessionCodes.AUTH_CHECK_EXCEPTION -> CompanionSessionHealth.CheckFailed(code)
+            // Only when the companion has genuinely never looked. An explicit
+            // `logged_in: false` IS an answer, even with no status beside it.
+            auth == null || status == STATUS_UNCHECKED -> CompanionSessionHealth.NeverLoggedIn
+            else -> CompanionSessionHealth.Inactive(code)
         }
     }
 

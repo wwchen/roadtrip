@@ -30,6 +30,9 @@ object RecGovSessionCodes {
 
     /** No credentials are stored for this user, so nothing can be attempted. */
     const val NOT_CONFIGURED = "recgov_not_configured"
+
+    /** The companion's own auth check threw. An outage, not a credential problem. */
+    const val AUTH_CHECK_EXCEPTION = "recgov_auth_check_exception"
 }
 
 /** Result of a credential login or of completing an MFA challenge. */
@@ -58,11 +61,25 @@ sealed interface CompanionActionResult {
     ) : CompanionActionResult
 }
 
-/** What the companion says about one profile's live rec.gov session. */
+/**
+ * What the companion says about one profile's live rec.gov session.
+ *
+ * Four *different* not-active answers, because collapsing them told every user
+ * "session expired" — including the ones who had never logged in at all, and
+ * the ones whose companion had thrown on its own health check.
+ */
 sealed interface CompanionSessionHealth {
     data object Active : CompanionSessionHealth
 
+    /** Credentials saved, this profile never signed in. Nothing has gone wrong. */
+    data object NeverLoggedIn : CompanionSessionHealth
+
     data class Inactive(
+        val code: String?,
+    ) : CompanionSessionHealth
+
+    /** The companion answered but its health check itself failed. */
+    data class CheckFailed(
         val code: String?,
     ) : CompanionSessionHealth
 

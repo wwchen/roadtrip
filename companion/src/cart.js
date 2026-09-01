@@ -198,7 +198,7 @@ const ERROR_RECGOV_REFRESH_FAILED = 'recgov_refresh_failed'
 const ERROR_RECGOV_SPA_LOGGED_OUT = 'recgov_spa_logged_out'
 const ERROR_RECGOV_CONFIRMATION_DISABLED = 'recgov_confirmation_disabled'
 const HEADLESS_NO_SESSION_DETAIL =
-  'No Recreation.gov browser session is available in the companion profile, and the headless companion is not logged in.'
+  'This profile has no Recreation.gov session — test login in Settings, or run the companion headed to log in once.'
 const HEADED_NO_SESSION_DETAIL =
   'No Recreation.gov browser session is available in the companion profile.'
 const LOGIN_FAILED_DETAIL =

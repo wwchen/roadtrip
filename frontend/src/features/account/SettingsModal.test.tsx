@@ -114,7 +114,7 @@ beforeEach(() => {
   requests.length = 0;
   getSettings = () => json(settingsBody());
   getRecgovStatus = () =>
-    json({ configured: false, username: null, password_hint: null, session: 'not_configured' });
+    json({ configured: false, username: null, session: 'not_configured' });
   onPut = () => json(settingsBody());
   client = createTestQueryClient();
   stubApi();
@@ -329,7 +329,7 @@ describe('the Booking tab', () => {
     expect(await screen.findByText('Settings saved.')).toBeInTheDocument();
   });
 
-  test('after saving a password the masked hint comes from the server', async () => {
+  test('a saved password shows as placeholder dots, never as characters', async () => {
     renderSettingsModal();
     await screen.findByLabelText('Display name');
 
@@ -342,9 +342,11 @@ describe('the Booking tab', () => {
     getSettings = stored;
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    // A fixed-length mask, not the password's last characters and not its length.
-    expect(await screen.findByText('\u2022'.repeat(10))).toBeInTheDocument();
-    expect(screen.queryByLabelText('Recreation.gov password')).not.toBeInTheDocument();
+    // The field stays, emptied, with fixed-length dots as its PLACEHOLDER — so
+    // nothing real is in the DOM and the length is not the stored one either.
+    const password = await screen.findByLabelText('Recreation.gov password');
+    await waitFor(() => expect(password).toHaveValue(''));
+    expect(password).toHaveAttribute('placeholder', '\u2022'.repeat(10));
   });
 
   test('the session row never blocks the panel when the companion is down', async () => {
@@ -353,7 +355,7 @@ describe('the Booking tab', () => {
       json({
         configured: true,
         username: 'ada@example.test',
-        password_hint: '9f2c',
+       
         session: 'companion_unavailable',
         detail: 'connection refused',
       });
@@ -375,7 +377,8 @@ describe('remove rec.gov credentials', () => {
     renderSettingsModal();
     await screen.findByLabelText('Display name');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Account' }));
+    // Removal lives on Booking now, beside the credentials it removes.
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
     expect(await screen.findByText('Danger zone')).toBeInTheDocument();
 
     onPut = () => json({ removed: true, stranded_atc_watches: 2, companion_signed_out: false });

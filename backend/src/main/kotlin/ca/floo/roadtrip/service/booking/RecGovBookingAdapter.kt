@@ -22,6 +22,9 @@ private const val ERROR_COMPANION_EXCEPTION = "companion_exception"
 internal const val RECGOV_SESSION_EXPIRED_ERROR = "recgov_session_expired"
 internal const val RECGOV_SESSION_EXPIRED_DETAIL = "session expired — re-login in Settings"
 
+/** The companion itself is broken; nothing the owner can do about it. */
+internal const val COMPANION_ERROR_DETAIL = "the booking service hit an internal error"
+
 private const val FIELD_PROFILE_ID = "profile_id"
 
 internal class RecGovBookingAdapter(
@@ -81,6 +84,15 @@ internal class RecGovBookingAdapter(
             is CompanionSessionHealth.Active -> null
             is CompanionSessionHealth.Unavailable ->
                 PreflightBlocker(RecGovSessionCodes.COMPANION_UNAVAILABLE, health.detail)
+            // The companion answered but its own check threw. A login against a
+            // service that is erroring is unlikely to fare better, and blaming
+            // the owner's credentials for it would send them to re-login for
+            // nothing — report the outage as the outage it is.
+            is CompanionSessionHealth.CheckFailed ->
+                PreflightBlocker(health.code ?: RecGovSessionCodes.AUTH_CHECK_EXCEPTION, COMPANION_ERROR_DETAIL)
+            // Never signed in, or signed out: both are exactly what the one
+            // unattended re-login exists for.
+            is CompanionSessionHealth.NeverLoggedIn -> reLogin(client, owner, null)
             is CompanionSessionHealth.Inactive -> reLogin(client, owner, health.code)
         }
     }

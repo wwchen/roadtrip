@@ -53,6 +53,64 @@ class CompanionSessionClientTest {
         }
 
     @Test
+    fun `a profile that has never been asked reads as not-logged-in, not expired`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/health" to TestResponse(body = """{"ok":true,"recgov_auth":{"login_status":"unchecked"}}""")))
+                .use { server ->
+                    // Telling a user who has never logged in that their session
+                    // "expired" sends them looking for a problem that isn't there.
+                    assertEquals<CompanionSessionHealth>(
+                        CompanionSessionHealth.NeverLoggedIn,
+                        clientFor(server.baseUrl).health(PROFILE_ID),
+                    )
+                }
+        }
+
+    @Test
+    fun `a companion whose own auth check threw is not reported as an expired session`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/health" to
+                            TestResponse(
+                                body =
+                                    """{"ok":true,"recgov_auth":{"login_status":"failed","error":"recgov_auth_check_exception"}}""",
+                            ),
+                    ),
+                ).use { server ->
+                    assertEquals<CompanionSessionHealth>(
+                        CompanionSessionHealth.CheckFailed("recgov_auth_check_exception"),
+                        clientFor(server.baseUrl).health(PROFILE_ID),
+                    )
+                }
+        }
+
+    @Test
+    fun `a genuinely lapsed session still reads as inactive`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/health" to
+                            TestResponse(
+                                body =
+                                    """
+                                    {"ok":true,"recgov_auth":{"login_status":"failed","logged_in":false,
+                                     "error":"recgov_not_authenticated"}}
+                                    """.trimIndent(),
+                            ),
+                    ),
+                ).use { server ->
+                    assertEquals<CompanionSessionHealth>(
+                        CompanionSessionHealth.Inactive("recgov_not_authenticated"),
+                        clientFor(server.baseUrl).health(PROFILE_ID),
+                    )
+                }
+        }
+
+    @Test
     fun `an interactive login never marks itself unattended`() =
         runBlocking {
             CompanionTestServer

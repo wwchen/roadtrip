@@ -39,8 +39,18 @@ describe('settingsErrorMessage', () => {
     );
   });
 
-  test('falls back for an unknown code', () => {
-    expect(settingsErrorMessage('brand_new_code')).toBe(DEFAULT);
+  test('an unknown code is named in the fallback', () => {
+    // Still vague about meaning — we do not know it — but "something went
+    // wrong" alone gave the user nothing to report and support nothing to act on.
+    expect(settingsErrorMessage('brand_new_code')).toBe(
+      'Something went wrong (brand_new_code). Please try again.',
+    );
+  });
+
+  test('the booking service internal errors read as its problem, not the user\'s', () => {
+    for (const code of ['recgov_login_exception', 'recgov_verify_exception', 'recgov_auth_check_exception']) {
+      expect(settingsErrorMessage(code)).toBe('The booking service hit an internal error — check its logs.');
+    }
   });
 
   test('falls back for a missing code', () => {
@@ -51,7 +61,7 @@ describe('settingsErrorMessage', () => {
 
   test('a prototype-shadowing code still yields the fallback', () => {
     for (const code of ['toString', 'constructor', 'hasOwnProperty', '__proto__']) {
-      expect(settingsErrorMessage(code)).toBe(DEFAULT);
+      expect(settingsErrorMessage(code)).toBe(`Something went wrong (${code}). Please try again.`);
     }
   });
 });

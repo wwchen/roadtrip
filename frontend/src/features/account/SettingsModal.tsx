@@ -290,6 +290,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     onLogin={recgovLogin}
                     onSubmitMfa={recgovMfa}
                     onVerify={recgovVerify}
+                    onRemoveRecgov={() => void handleRemoveRecgov()}
                   />
                 )}
                 {activeTab === TAB_ACCOUNT && (
@@ -297,7 +298,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     settings={settings}
                     onSignOut={signOut}
                     onDisconnectSlack={() => void handleDisconnectSlack()}
-                    onRemoveRecgov={() => void handleRemoveRecgov()}
                   />
                 )}
               </>

@@ -982,10 +982,10 @@ test('POST /keep-warm refuses a body that is not an array of profile ids', async
   assert.equal(response.json.error, 'invalid_request')
 })
 
-test('every route rejects a request without the shared-secret header', async () => {
+test('every data route rejects a request without the shared-secret header', async () => {
   const server = testServer()
 
-  for (const path of ['/', '/docs', '/openapi.json', '/health', '/screenshot', '/screenshot/diagnostics/x.png']) {
+  for (const path of ['/docs', '/openapi.json', '/health', '/screenshot', '/screenshot/diagnostics/x.png']) {
     const response = await request(server, { path, token: null })
 
     assert.equal(response.status, 401, `${path} must require the companion token`)
@@ -995,6 +995,26 @@ test('every route rejects a request without the shared-secret header', async () 
   const posted = await request(server, { method: 'POST', path: '/atc', token: null })
 
   assert.equal(posted.status, 401)
+})
+
+test('the operator shell loads without a token, because it carries nothing', async () => {
+  // A browser cannot set a header on a navigation, and the compose port mapping
+  // means a request from the host is not in-container loopback — so the page was
+  // unreachable in the one situation it exists for. It is static markup; the
+  // controls on it send the token from their own field.
+  const response = await request(testServer(), { path: '/', token: null })
+
+  assert.equal(response.status, 200)
+  assert.match(response.headers['content-type'], /text\/html/)
+})
+
+test('the un-gated shell does not un-gate the data behind it', async () => {
+  const server = testServer()
+
+  for (const path of ['/screenshot?profile_id=user-7', '/health?profile_id=user-7']) {
+    const response = await request(server, { path, token: null })
+    assert.equal(response.status, 401, `${path} must still require the companion token`)
+  }
 })
 
 test('an unmatched route is refused before it reports whether it exists', async () => {

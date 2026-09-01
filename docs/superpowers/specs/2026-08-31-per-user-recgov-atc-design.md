@@ -232,13 +232,21 @@ the Slack token today.
 
 Panel contents, top to bottom:
 
-- **Username** — `SeededTextField`, type email.
-- **Password** — `SecretField` (write-only; `null` = unchanged). A stored
-  password renders as a **fixed-length opaque mask** plus Replace — no hint,
-  and not one dot per character, since the length is information as well.
-  `SecretField` takes an explicit `stored` flag for this; the Slack token keeps
-  its `hint`. Help text notes what the credential is used for and that ATC
-  stops at a cart hold.
+- **Username** — `SeededTextField`, type email, **full width**.
+- **Password** — a plain `SeededTextField`, `type="password"`, **full width**,
+  stacked below the username with its own label. **No `SecretField`, no
+  mask-and-Replace row.** A saved password shows as a fixed-length dot
+  *placeholder* (`••••••••••`): a placeholder, so no real character is ever in
+  the DOM, and fixed-length, so the real length is not either. The field is
+  seeded empty; typing makes the typed value the new password, and leaving it
+  alone submits `null` (unchanged). Clearing is never an empty save — that is
+  the explicit removal button below. Help text notes what the credential is
+  used for and that ATC stops at a cart hold.
+
+  *(User design decision, superseding the `SecretField`/last-4 convention this
+  spec originally copied from the Slack token. `SecretField` itself stays —
+  the Slack bot token still uses it, hint and all, because a machine-generated
+  token is a different thing from a password a person types.)*
 - **Session status row** — driven by a dedicated query on
   `GET /api/settings/recgov/status` (separate from `useSettings` so opening
   the modal never blocks on the companion). States: *Not configured* /
@@ -261,10 +269,14 @@ Panel contents, top to bottom:
 - **Verify session** — secondary `Button` for the dry run; result lands in
   the same status slot ("Session verified" / mapped error).
 
-**Credential removal** lives in `AccountPanel`, not the Booking panel,
-because Account is the established home for destructive account actions
-(Disconnect Slack). "Remove rec.gov credentials" uses the existing
-`ConfirmButton` primitive and reports through the modal notice banner.
+**Credential removal** lives at the bottom of the **Booking panel**, in its own
+danger zone, as the destructive action for the page that owns the credential.
+It uses the existing `ConfirmButton` primitive, keeps the stranded-`atc`-watch
+confirm copy, and reports through the modal notice banner. *(User design
+decision: this spec originally put it in `AccountPanel` beside Disconnect
+Slack. Removing a credential from a different tab than the one displaying it
+is a step nobody expects. Slack disconnection stays in Account — Slack has no
+panel of its own to host a danger zone.)*
 
 **Plumbing:** extend `api/account-api.ts` (settings endpoint group) with the
 booking calls; new hooks in `useSettings.ts` (`useSaveBooking`,

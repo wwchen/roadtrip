@@ -221,7 +221,9 @@ class RecGovCredentialService(
         val (session, detail) =
             when (health) {
                 is CompanionSessionHealth.Active -> RecgovSessionState.ACTIVE to null
+                is CompanionSessionHealth.NeverLoggedIn -> RecgovSessionState.NOT_LOGGED_IN to null
                 is CompanionSessionHealth.Inactive -> RecgovSessionState.EXPIRED to health.code
+                is CompanionSessionHealth.CheckFailed -> RecgovSessionState.CHECK_FAILED to health.code
                 is CompanionSessionHealth.Unavailable -> RecgovSessionState.COMPANION_UNAVAILABLE to health.detail
             }
         return RecgovStatusDto(

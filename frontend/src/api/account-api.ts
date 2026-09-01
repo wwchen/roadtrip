@@ -71,8 +71,15 @@ export interface SettingsResponse {
 export interface RecgovStatus {
   configured: boolean;
   username: string | null;
-  password_hint: string | null;
-  session: 'not_configured' | 'active' | 'expired' | 'companion_unavailable';
+  session:
+    | 'not_configured'
+    | 'active'
+    /** Credentials saved, this profile never signed in. Not a failure. */
+    | 'not_logged_in'
+    | 'expired'
+    /** The booking service's own health check threw. Not the user's problem. */
+    | 'check_failed'
+    | 'companion_unavailable';
   detail?: string | null;
   /**
    * True while a login of this user's is waiting on a verification code. The

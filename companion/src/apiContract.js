@@ -19,6 +19,11 @@ export const COMPANION_API_ROUTES = [
     path: '/',
     operationId: 'getOperatorPage',
     summary: 'Operator login and session page',
+    description:
+      'The only route reachable without the shared-secret header from anywhere. It is static markup ' +
+      'carrying no profile data and no secrets; a browser cannot set a header on a navigation, so ' +
+      'gating it made the page unreachable in the one case it exists for. Every control on it sends ' +
+      'the token from its own field, and every route those controls call is still gated.',
     responses: {
       200: htmlResponse('HTML operator page with Rec.gov login, refresh, logout, health, and live session screenshot controls'),
     },

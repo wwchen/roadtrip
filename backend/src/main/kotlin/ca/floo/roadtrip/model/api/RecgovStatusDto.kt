@@ -7,7 +7,17 @@ import kotlinx.serialization.Serializable
 object RecgovSessionState {
     const val NOT_CONFIGURED = "not_configured"
     const val ACTIVE = "active"
+
+    /**
+     * Credentials are saved but this profile has never been signed in — the
+     * companion has no session to have lost. Distinct from [EXPIRED] because
+     * the user has not failed at anything yet; they simply have not started.
+     */
+    const val NOT_LOGGED_IN = "not_logged_in"
     const val EXPIRED = "expired"
+
+    /** The companion answered, but its own health check threw. Not the user's problem. */
+    const val CHECK_FAILED = "check_failed"
 
     /** The companion could not be asked. Never an error — the row just says so. */
     const val COMPANION_UNAVAILABLE = "companion_unavailable"

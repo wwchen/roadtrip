@@ -22,10 +22,19 @@ Transport is plain HTTP on the internal Docker network; TLS is not added.
 
 ## Authentication
 
-Every route requires the shared secret `COMPANION_API_TOKEN` in the
-`x-companion-token` header — `GET /`, `/docs`, `/openapi.json` and
-`/screenshot` included. The only exemption is `GET /health` from loopback,
-which is what the Compose healthcheck uses and which cannot hold a secret.
+Every route that returns data or touches a profile requires the shared secret
+`COMPANION_API_TOKEN` in the `x-companion-token` header — `/docs`,
+`/openapi.json` and `/screenshot` included. Two exemptions, both for things
+that carry nothing:
+
+- `GET /health` **from loopback**, which is what the Compose healthcheck uses
+  and which cannot hold a secret.
+- `GET /`, the **static operator shell**, from anywhere. It has no profile data
+  and no secrets in it; the controls on the page send the token from their own
+  field, and every route they call is still gated. Gating the shell made it
+  unreachable in exactly the case it exists for — a browser cannot set a header
+  on a navigation, and a request from the host through the Compose port mapping
+  is not in-container loopback, so the health exemption did not cover it.
 
 - The secret is registered in `secrets/registry.yaml` with
   `consumers: [backend, companion]`, so one value reaches both sides and
@@ -39,11 +48,9 @@ which is what the Compose healthcheck uses and which cannot hold a secret.
   companion_auth_unconfigured`. Local development must export
   `COMPANION_API_TOKEN` before `npm start`.
 
-Because the header is required on `GET /` too, the operator page is not
-directly loadable in a plain browser tab. Fetch it with the header
-(`curl -H "x-companion-token: …" http://127.0.0.1:8770/`) or use a
-header-injecting client; the page then carries a token field of its own, and
-every control it drives sends the header and the profile id.
+The operator page loads in a plain browser tab. It then needs a token in its
+own field before any of its controls will work, since every route they call is
+gated.
 
 ## Browser-profile pool
 

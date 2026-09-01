@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
   RecgovLoginResponse,
@@ -45,7 +45,7 @@ const CONFIGURED = {
 const activeStatus: RecgovStatus = {
   configured: true,
   username: 'ada@example.test',
-  password_hint: '9f2c',
+ 
   session: 'active',
 };
 
@@ -55,6 +55,7 @@ interface Handlers {
   onLogin?: () => Promise<RecgovLoginResponse>;
   onSubmitMfa?: (code: string) => Promise<RecgovLoginResponse>;
   onVerify?: () => Promise<RecgovVerifyResponse>;
+  onRemoveRecgov?: () => void;
 }
 
 /** Renders with the parent's state wired up, and exposes the latest values. */
@@ -73,6 +74,7 @@ function renderPanel(s: SettingsResponse, handlers: Handlers = {}) {
       statusPending={handlers.statusPending ?? false}
       onLogin={handlers.onLogin ?? (async () => ({ status: 'ok' }))}
       onSubmitMfa={handlers.onSubmitMfa ?? (async () => ({ status: 'ok' }))}
+      onRemoveRecgov={handlers.onRemoveRecgov ?? vi.fn()}
       onVerify={handlers.onVerify ?? (async () => ({ ok: true }))}
     />
   );
@@ -107,13 +109,56 @@ describe('the credential slice', () => {
     expect(isBookingDirty(s, state.values)).toBe(true);
   });
 
-  test('a stored password shows as an opaque mask that leaks neither characters nor length', () => {
-    // The Slack token shows its last 4 because it is machine-generated. A
-    // human password's last 4 narrow a guess, and so does its length.
+  test('a stored password shows as placeholder dots, never as characters or real length', () => {
+    // The Slack token shows its last 4 because it is machine-generated. A human
+    // password's last 4 narrow a guess, and so does its length — so the dots
+    // are a fixed-length placeholder and the input itself holds nothing.
     renderPanel(settings(CONFIGURED));
 
-    expect(screen.getByText('••••••••••')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Recreation.gov password')).not.toBeInTheDocument();
+    const password = screen.getByLabelText('Recreation.gov password');
+    expect(password).toHaveValue('');
+    expect(password).toHaveAttribute('placeholder', '••••••••••');
+    expect(password).toHaveAttribute('type', 'password');
+  });
+
+  test('an unconfigured account gets a plain empty password field', () => {
+    renderPanel(settings());
+
+    expect(screen.getByLabelText('Recreation.gov password')).not.toHaveAttribute('placeholder');
+  });
+
+  test('the three not-active session states read differently', () => {
+    const row = (session: RecgovStatus['session']) =>
+      renderPanel(settings(CONFIGURED), {
+        status: { configured: true, username: 'ada@example.test', session },
+      });
+
+    row('not_logged_in');
+    expect(screen.getByText('Not logged in yet — test login below')).toBeInTheDocument();
+    cleanup();
+
+    row('expired');
+    expect(screen.getByText('Session expired — test login below')).toBeInTheDocument();
+    cleanup();
+
+    row('check_failed');
+    expect(screen.getByText('Booking service error — status unknown')).toBeInTheDocument();
+  });
+
+  test('removing credentials is offered here, once something is stored', async () => {
+    const onRemoveRecgov = vi.fn();
+    renderPanel(settings(CONFIGURED), { onRemoveRecgov });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm removal' }));
+
+    expect(onRemoveRecgov).toHaveBeenCalledTimes(1);
+  });
+
+  test('nothing stored means nothing to remove', () => {
+    renderPanel(settings());
+
+    expect(screen.queryByRole('button', { name: 'Remove rec.gov credentials' })).not.toBeInTheDocument();
   });
 
   test('typing a password makes it the payload value', async () => {
@@ -130,7 +175,7 @@ describe('the credential slice', () => {
 describe('the session row', () => {
   test('unconfigured', () => {
     renderPanel(settings(), {
-      status: { configured: false, username: null, password_hint: null, session: 'not_configured' },
+      status: { configured: false, username: null, session: 'not_configured' },
     });
 
     expect(screen.getByText('Not configured')).toBeInTheDocument();

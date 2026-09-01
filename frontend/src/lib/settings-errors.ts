@@ -32,15 +32,26 @@ const MESSAGES = new Map<string, string>([
   ['recgov_not_configured', 'Save your recreation.gov credentials first.'],
   ['recgov_not_authenticated', 'The recreation.gov session has expired. Test login again.'],
   ['companion_unavailable', "The booking service isn't reachable right now."],
+  // The companion reached rec.gov but threw on the way. Nothing the user did.
+  ['recgov_login_exception', 'The booking service hit an internal error — check its logs.'],
+  ['recgov_verify_exception', 'The booking service hit an internal error — check its logs.'],
+  ['recgov_auth_check_exception', 'The booking service hit an internal error — check its logs.'],
 ]);
 
 /**
  * Shown for an unrecognised or absent code.
  *
- * Deliberately vague: an unmapped code is a backend the frontend does not know
- * about yet, and guessing at its meaning would be worse than saying little.
+ * Still vague about *meaning* — an unmapped code is a backend the frontend does
+ * not know about yet, and guessing would be worse than saying little — but it
+ * now carries the code itself. "Something went wrong" alone told the user
+ * nothing and told whoever they reported it to even less; the raw code is the
+ * one piece of information that makes the report actionable.
  */
 const DEFAULT_MESSAGE = 'Something went wrong. Please try again.';
+
+function unmappedMessage(code: string | undefined | null): string {
+  return code ? `Something went wrong (${code}). Please try again.` : DEFAULT_MESSAGE;
+}
 
 /**
  * A short message for a settings error code.
@@ -53,5 +64,5 @@ export function settingsErrorMessage(code: string | undefined | null): string {
   // `??`, not `||`: a mapped message is shown as written, including one deliberately
   // set to the empty string. `||` would silently substitute the default for it,
   // which is the kind of difference that only shows up the day someone adds one.
-  return (code == null ? undefined : MESSAGES.get(code)) ?? DEFAULT_MESSAGE;
+  return (code == null ? undefined : MESSAGES.get(code)) ?? unmappedMessage(code);
 }

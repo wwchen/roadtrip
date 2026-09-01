@@ -1,11 +1,20 @@
 // Shared-secret middleware for the backend -> companion channel.
 //
 // The channel carries rec.gov passwords and drives a logged-in browser, so
-// every route requires the header — the operator page, the docs, the OpenAPI
-// document and the screenshots included. The single exemption is `GET /health`
-// from loopback, which is the compose healthcheck: it has no way to hold a
-// secret and cannot reach the companion from off-box (the service publishes no
-// ports and has no Caddy route).
+// every route that returns data or touches a profile requires the header — the
+// docs, the OpenAPI document and the screenshots included.
+//
+// Two exemptions, both for things that carry nothing:
+//
+//  - `GET /health` from loopback, the compose healthcheck, which has no way to
+//    hold a secret.
+//  - `GET /`, the operator shell. It is static markup with no profile data and
+//    no secrets in it; every control on the page sends the token from its own
+//    field, and every route those controls call is still gated. Gating the
+//    shell made it unreachable in exactly the case it exists for: a browser
+//    cannot set a header on a navigation, and a request from the host through
+//    the compose port mapping is not in-container loopback, so the health
+//    exemption did not cover it either.
 
 import fs from 'node:fs'
 import { timingSafeEqual } from 'node:crypto'
@@ -17,6 +26,9 @@ import {
 export const COMPANION_API_TOKEN_HEADER = 'x-companion-token'
 export const COMPANION_API_TOKEN_FILE_DEFAULT = '/run/secrets/companion_api_token'
 export const HEALTH_OPERATION_ID = 'getHealth'
+
+/** The static operator shell. Carries no data, so it needs no token. */
+export const OPERATOR_PAGE_OPERATION_ID = 'getOperatorPage'
 
 export const ERROR_UNAUTHORIZED = 'unauthorized'
 export const ERROR_COMPANION_AUTH_UNCONFIGURED = 'companion_auth_unconfigured'
@@ -42,6 +54,7 @@ export function isLoopbackRequest (req) {
 export function authorizeCompanionRequest ({ req, route, token }) {
   const healthFromLoopback = route?.operationId === HEALTH_OPERATION_ID && isLoopbackRequest(req)
   if (healthFromLoopback) return null
+  if (route?.operationId === OPERATOR_PAGE_OPERATION_ID) return null
   if (!token) {
     return {
       status: HTTP_SERVICE_UNAVAILABLE,
