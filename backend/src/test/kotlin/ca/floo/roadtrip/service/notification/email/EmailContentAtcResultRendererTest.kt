@@ -43,6 +43,40 @@ class EmailContentAtcResultRendererTest {
     }
 
     @Test
+    fun `a preflight failure with no companion response still names its reason`() {
+        // The producer's own shape: RecGovBookingAdapter fails before the
+        // companion is called, so there is nothing in `response` to read.
+        val content =
+            EmailContentAtcResultRenderer.render(
+                watchId = 7L,
+                vendor = "recgov",
+                status = "failed",
+                response = null,
+                error = "recgov_session_expired",
+                detail = "session expired — re-login in Settings",
+                magicLinkUrl = null,
+            )
+
+        assertTrue(content.text.contains("session expired — re-login in Settings"), content.text)
+    }
+
+    @Test
+    fun `the caller's reason wins over anything in the companion response`() {
+        val content =
+            EmailContentAtcResultRenderer.render(
+                watchId = 7L,
+                vendor = "recgov",
+                status = "failed",
+                response = buildJsonObject { put("detail", "stale companion text") },
+                detail = "session expired — re-login in Settings",
+                magicLinkUrl = null,
+            )
+
+        assertTrue(content.text.contains("session expired"), content.text)
+        assertFalse(content.text.contains("stale companion text"), content.text)
+    }
+
+    @Test
     fun `dynamic fields are escaped in the html body`() {
         val content =
             EmailContentAtcResultRenderer.render(

@@ -41,12 +41,14 @@ internal object EmailContentAtcResultRenderer {
         vendor: String,
         status: String,
         response: JsonObject?,
+        error: String? = null,
+        detail: String? = null,
         magicLinkUrl: String?,
         appRootUrl: String? = null,
     ): EmailContent {
         val completed = status == ATC_STATUS_COMPLETED
         val header = if (completed) "Site held in your cart" else "Could not hold the site"
-        val body = if (completed) COMPLETED_BODY else failureBody(response)
+        val body = if (completed) COMPLETED_BODY else failureBody(response, error, detail)
         val links = watchControlLinks(appRootUrl, watchId, magicLinkUrl)
         return EmailContent(
             subject = "Roadtrip watch #$watchId: $header",
@@ -99,10 +101,22 @@ internal object EmailContentAtcResultRenderer {
             }
         }
 
-    private fun failureBody(response: JsonObject?): String {
-        val detail = response?.textField(FIELD_DETAIL)
-        val error = response?.textField(FIELD_ERROR)
-        val reason = detail ?: error ?: "the booking service did not confirm a hold"
+    /**
+     * The caller's own reason wins over anything in the companion response. A
+     * preflight failure — a dead session, an unreachable companion — produces no
+     * response at all, and those are exactly the failures the owner can fix.
+     */
+    private fun failureBody(
+        response: JsonObject?,
+        error: String?,
+        detail: String?,
+    ): String {
+        val reason =
+            detail
+                ?: error
+                ?: response?.textField(FIELD_DETAIL)
+                ?: response?.textField(FIELD_ERROR)
+                ?: "the booking service did not confirm a hold"
         return "$FAILED_BODY_PREFIX $reason"
     }
 

@@ -1,5 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.client.resend.EmailDeliveryClient
+import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
+import ca.floo.roadtrip.config.EmailConfig
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campsiteFixture
@@ -21,11 +24,20 @@ import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.availability.provider.testCampground
 import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
+import ca.floo.roadtrip.service.booking.RECGOV_SESSION_EXPIRED_DETAIL
+import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
+import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
+import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
+import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.security.SecretCipher
+import ca.floo.roadtrip.service.settings.CompanionActionResult
+import ca.floo.roadtrip.service.settings.CompanionSessionHealth
+import ca.floo.roadtrip.service.settings.RecGovProfileSessionPort
+import ca.floo.roadtrip.service.settings.RecGovSessionCodes
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -456,6 +468,42 @@ class TriggerActionHandlerTest {
         }
 
     @Test
+    fun `a session-expired preflight tells the owner how to recover, in the delivered email`() =
+        runBlocking {
+            // End to end through the real adapter, the real fanout and the real
+            // email renderer. The renderer's own tests hand-build a response
+            // object; this one proves the producer and the renderer agree, which
+            // is exactly where the recovery message was being dropped.
+            val emailClient = RecordingEmailClient()
+            val adapter =
+                RecGovBookingAdapter(
+                    // Never reached: the preflight fails before any browser is driven.
+                    companionAtc = { RecGovAtcOutcome.Failed("companion_should_not_be_called", null) },
+                    session = DeadSession(reLogin = CompanionActionResult.Failed(RecGovSessionCodes.MFA_REQUIRED)),
+                )
+            val registry = BookingAdapterRegistry(listOf(adapter))
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    targetResolver = resolver(),
+                    notifications = NotificationFanout(listOf(emailService(emailClient))),
+                )
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertFalse(delivered)
+            val sent = emailClient.messages.single()
+            assertEquals("owner@example.test", sent.to)
+            assertTrue(sent.text.contains(RECGOV_SESSION_EXPIRED_DETAIL), sent.text)
+            assertTrue(sent.html.contains("re-login in Settings"), sent.html)
+        }
+
+    @Test
     fun `AtcTriggerActionHandler reports direct companion failure without marking fired`() =
         runBlocking {
             val bookingProvider =
@@ -599,6 +647,33 @@ class TriggerActionHandlerTest {
             cipher = if (settings?.slackTokenCipher != null) testCipher else null,
         )
 
+    /** A profile whose session is dead and whose recovery answers [reLogin]. */
+    private class DeadSession(
+        private val reLogin: CompanionActionResult,
+    ) : RecGovProfileSessionPort {
+        override fun profileId(userId: UserId): String = userId.value.toString()
+
+        override suspend fun health(userId: UserId): CompanionSessionHealth =
+            CompanionSessionHealth.Inactive(RecGovSessionCodes.NOT_AUTHENTICATED)
+
+        override suspend fun reLogin(userId: UserId): CompanionActionResult = reLogin
+    }
+
+    private class RecordingEmailClient : EmailDeliveryClient {
+        val messages = mutableListOf<EmailDeliveryMessage>()
+
+        override suspend fun send(message: EmailDeliveryMessage): Boolean {
+            messages += message
+            return true
+        }
+    }
+
+    private fun emailService(client: EmailDeliveryClient) =
+        EmailNotificationService(
+            config = EmailConfig(resendApiKey = "re_test", from = "Roadtrip Alerts <alerts@example.test>"),
+            emailDeliveryClient = client,
+        )
+
     private class FakeHandler(
         kind: String,
         supportedKinds: Set<String> = setOf(kind),
@@ -625,6 +700,8 @@ class TriggerActionHandlerTest {
             val vendor: String,
             val status: String,
             val response: JsonObject?,
+            val error: String?,
+            val detail: String?,
             val targets: List<NotificationTarget>,
         )
 
@@ -660,9 +737,11 @@ class TriggerActionHandlerTest {
             status: String,
             request: JsonObject,
             response: JsonObject?,
+            error: String?,
+            detail: String?,
             targets: List<NotificationTarget>,
         ): Boolean {
-            atcResults += AtcResult(watchId, vendor, status, response, targets)
+            atcResults += AtcResult(watchId, vendor, status, response, error, detail, targets)
             return result
         }
     }

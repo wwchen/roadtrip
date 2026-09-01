@@ -69,6 +69,8 @@ class EmailNotificationService(
         status: String,
         request: JsonObject,
         response: JsonObject?,
+        error: String?,
+        detail: String?,
         target: NotificationTarget,
     ): Boolean {
         val emailTarget = target as? NotificationTarget.Email ?: return false
@@ -78,6 +80,8 @@ class EmailNotificationService(
                 vendor = vendor,
                 status = status,
                 response = response,
+                error = error,
+                detail = detail,
                 magicLinkUrl = emailTarget.magicLinkUrl,
             )
         return sendContent(content, emailTarget.recipients, failureContext = "watch #$watchId ATC result")

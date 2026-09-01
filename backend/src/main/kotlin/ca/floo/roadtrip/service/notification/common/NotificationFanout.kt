@@ -43,6 +43,8 @@ class NotificationFanout(
         status: String,
         request: JsonObject,
         response: JsonObject?,
+        error: String?,
+        detail: String?,
         targets: List<NotificationTarget>,
     ): Boolean =
         sendToTargets(targets) { service, target ->
@@ -52,6 +54,8 @@ class NotificationFanout(
                 status = status,
                 request = request,
                 response = response,
+                error = error,
+                detail = detail,
                 target = target,
             )
         }

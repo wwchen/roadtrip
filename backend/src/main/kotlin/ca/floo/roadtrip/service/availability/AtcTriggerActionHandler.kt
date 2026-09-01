@@ -8,6 +8,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
+import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
 
 internal class AtcTriggerActionHandler(
@@ -78,13 +79,12 @@ internal class AtcTriggerActionHandler(
                     next.request.target.campsiteId,
                     next.request.arrivalDate,
                 )
-                notifications.sendAtcResult(
-                    watchId = watch.id,
+                reportResult(
+                    watch = watch,
                     vendor = result.providerId.vendorSlug(),
                     status = ATC_RESULT_COMPLETED,
                     request = result.request,
                     response = result.response,
-                    targets = atcTargets(watch),
                 )
                 true
             }
@@ -98,13 +98,17 @@ internal class AtcTriggerActionHandler(
                     result.error,
                     result.detail,
                 )
-                notifications.sendAtcResult(
-                    watchId = watch.id,
+                reportResult(
+                    watch = watch,
                     vendor = result.providerId.vendorSlug(),
                     status = ATC_RESULT_FAILED,
                     request = result.request,
                     response = result.response,
-                    targets = atcTargets(watch),
+                    // The reason travels as its own argument: a preflight
+                    // failure has no companion response to carry it, and those
+                    // are the failures the owner can actually act on.
+                    error = result.error,
+                    detail = result.detail,
                 )
                 false
             }
@@ -118,6 +122,44 @@ internal class AtcTriggerActionHandler(
                 false
             }
             null -> false
+        }
+    }
+
+    /**
+     * Sends the outcome and says so when nobody heard it.
+     *
+     * The delivery result was previously discarded, which made "the hold
+     * happened but the owner was never told" indistinguishable from a clean
+     * run in the logs — the exact failure this whole path exists to prevent.
+     */
+    private suspend fun reportResult(
+        watch: AvailabilityWatchRepo.Watch,
+        vendor: String,
+        status: String,
+        request: JsonObject,
+        response: JsonObject?,
+        error: String? = null,
+        detail: String? = null,
+    ) {
+        val targets = atcTargets(watch)
+        val delivered =
+            notifications.sendAtcResult(
+                watchId = watch.id,
+                vendor = vendor,
+                status = status,
+                request = request,
+                response = response,
+                error = error,
+                detail = detail,
+                targets = targets,
+            )
+        if (!delivered) {
+            log.warn(
+                "ATC result for watch_id={} status={} reached no one (targets={})",
+                watch.id,
+                status,
+                targets.size,
+            )
         }
     }
 
