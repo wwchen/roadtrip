@@ -45,6 +45,8 @@ export const ERROR_MFA_REQUIRED = 'mfa_required'
 export const ERROR_MFA_INVALID = 'mfa_invalid'
 export const ERROR_LOGIN_BACKOFF = 'login_backoff'
 
+const UNATTENDED_FIELD = 'unattended'
+
 const OPERATION_LOGIN = 'login'
 const OPERATION_LOGOUT = 'logout'
 const OPERATION_REFRESH = 'refresh'
@@ -134,6 +136,12 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
   }
   const profileId = profile.profileId
   const credentials = loginCredentialsFromFields(input.fields)
+  // The backend's fire-time re-login sets this. Nobody is there to read a code,
+  // so an MFA prompt must not open a challenge: the challenge holds the
+  // profile's busy lock for its whole TTL, which would wedge the owner's own
+  // Test login, the keepalive refresh and any second ATC behind a code that is
+  // never coming. The interactive Settings flow does not send it.
+  const unattended = isUnattended(input.fields)
 
   if (input.fields.challenge_id) {
     await completeMfaChallenge(req, res, {
@@ -193,6 +201,23 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
       profileId,
     })
     runtime.logger('recgov auth login request result', outcome.state, `profile=${profileId}`, `duration_ms=${Date.now() - startedAt}`)
+
+    if (outcome.state === LOGIN_STATE_MFA_REQUIRED && unattended) {
+      // Close the page rec.gov is showing the prompt on and let the `finally`
+      // release the lock. The answer names the blocker but carries no
+      // challenge_id, because this caller could never complete one.
+      try {
+        outcome.abandon?.()
+      } catch (error) {
+        runtime.logger('recgov auth unattended mfa abandon failed', `profile=${profileId}`, error.message)
+      }
+      runtime.logger('recgov auth login mfa refused (unattended)', `profile=${profileId}`)
+      respondAuthResult(req, res, HTTP_UNAUTHORIZED, {
+        ...authActionResponseBody(loginStatus(pool, profileId, outcome), false),
+        error: ERROR_MFA_REQUIRED,
+      })
+      return
+    }
 
     if (outcome.state === LOGIN_STATE_MFA_REQUIRED) {
       const challenge = pool.openMfaChallenge(profileId, {
@@ -321,6 +346,12 @@ async function profileRequest (req, res, requestUrl, pool, operation) {
 
 function url (req) {
   return new URL(req.url || '/', 'http://companion.local')
+}
+
+/** Accepts a JSON boolean or the form-encoded string an operator page would send. */
+function isUnattended (fields) {
+  const raw = fields?.[UNATTENDED_FIELD]
+  return raw === true || raw === 'true'
 }
 
 function loginCredentialsFromFields (fields) {

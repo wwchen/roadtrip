@@ -172,6 +172,7 @@ class RecGovKeepaliveJobTest {
             profileId: String,
             username: String,
             password: String,
+            unattended: Boolean,
         ): CompanionLoginResult = CompanionLoginResult.Ok
 
         override suspend fun completeMfa(

@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import java.time.Duration
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private const val PROFILE_ID = "42"
@@ -36,6 +37,32 @@ class CompanionSessionClientTest {
                     assertTrue(body.contains("\"profile_id\":\"$PROFILE_ID\""), body)
                     assertTrue(body.contains("\"username\":\"ada@example.com\""), body)
                     assertTrue(body.contains("\"password\":\"hunter2\""), body)
+                }
+        }
+
+    @Test
+    fun `an interactive login never marks itself unattended`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/login" to TestResponse(body = LOGGED_IN)))
+                .use { server ->
+                    clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "hunter2")
+
+                    // Present would make the companion refuse to open a challenge
+                    // for a user who is sitting right there waiting to type a code.
+                    assertFalse(server.bodies.single().contains("unattended"), server.bodies.single())
+                }
+        }
+
+    @Test
+    fun `an unattended login says so on the wire`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/login" to TestResponse(body = LOGGED_IN)))
+                .use { server ->
+                    clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "hunter2", unattended = true)
+
+                    assertTrue(server.bodies.single().contains("\"unattended\":true"), server.bodies.single())
                 }
         }
 

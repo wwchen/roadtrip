@@ -188,7 +188,7 @@ test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
   const loginSchema = response.json.components.schemas.LoginRequest
   assert.deepEqual(
     Object.keys(loginSchema.properties),
-    ['profile_id', 'username', 'password', 'mfa_code', 'challenge_id'],
+    ['profile_id', 'username', 'password', 'mfa_code', 'challenge_id', 'unattended'],
   )
   assert.deepEqual(loginSchema.required, ['profile_id'])
 
@@ -877,6 +877,55 @@ test('GET /health without profile_id keeps answering the companion-wide check', 
   assert.equal(response.json.profile_id, undefined)
   assert.ok(response.json.recgov_auth)
   assert.deepEqual(response.json.pool.keep_warm, [])
+})
+
+test('an unattended login that hits MFA opens no challenge and frees the profile', async () => {
+  // The fire path has nobody to read a code. Opening a challenge there would
+  // pin the profile's busy lock for the whole 5-minute TTL, wedging the owner's
+  // own Test login, the keepalive refresh and any second ATC.
+  const abandoned = []
+  const pool = testPool()
+  const server = testServer({
+    pool,
+    credentialLoginFn: async () => ({
+      state: 'mfa_required',
+      logged_in: false,
+      diagnostic: { reason: 'mfa_required' },
+      resume: async () => ({ state: 'ok', logged_in: true }),
+      abandon: () => abandoned.push(true),
+    }),
+  })
+
+  const response = await request(server, {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      profile_id: PROFILE_ID,
+      username: 'camper@example.test',
+      password: 'secret',
+      unattended: true,
+    }),
+  })
+
+  assert.equal(response.status, 401)
+  assert.equal(response.json.error, 'mfa_required')
+  assert.equal(response.json.challenge_id, undefined, 'an unattended caller can never complete a challenge')
+  assert.equal(pool.isBusy(PROFILE_ID), false, 'the lock must be released immediately')
+  assert.equal(pool.snapshot().profiles.find((p) => p.profile_id === PROFILE_ID)?.mfa_pending, false)
+  assert.deepEqual(abandoned, [true], 'the held login page must be closed')
+})
+
+test('an interactive login still opens a challenge and holds the lock', async () => {
+  const pool = testPool()
+  const server = testServer({ pool, credentialLoginFn: mfaChallengeLogin() })
+
+  const response = await beginLogin(server)
+
+  assert.equal(response.status, 401)
+  assert.equal(response.json.error, 'mfa_required')
+  assert.ok(response.json.challenge_id, 'the interactive flow is unchanged')
+  assert.equal(pool.isBusy(PROFILE_ID), true)
 })
 
 test('POST /keep-warm replaces the armed set wholesale', async () => {

@@ -128,6 +128,14 @@ are authoritative; this is the shape.
      page** — an abandoned login must not leave a page sitting on rec.gov with
      credentials typed into it.
 
+**Unattended logins never open a challenge.** `POST /login` with
+`unattended: true` — the backend's fire-time re-login, never the Settings flow
+— answers `401 mfa_required` with **no** `challenge_id`, closes the held page
+and releases the profile lock immediately. Holding a challenge for a caller
+that can never complete it would pin the profile busy for the whole TTL and
+wedge the owner's own Test login, the keepalive refresh and any second ATC
+behind a code nobody is going to type.
+
 Because a pending challenge keeps its profile resident and locked, it occupies
 a slot against the concurrency cap for up to the TTL. That is the accepted
 trade for not making the user re-enter credentials; `GET /health` shows the

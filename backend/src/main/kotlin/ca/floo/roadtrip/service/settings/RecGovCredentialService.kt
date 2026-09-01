@@ -244,24 +244,46 @@ class RecGovCredentialService(
      * One unattended login with the stored credentials, for a profile whose
      * session died between the keepalive sweep and the fire.
      *
-     * Reuses [login] rather than re-deriving the decrypt: the password is
-     * opened in exactly one place. An MFA challenge is a *failure* here — the
-     * user is not present to read a code — and is not remembered, because
-     * nothing will ever complete it.
+     * Decryption is [requireCredentials], the same helper the interactive login
+     * uses — the sealed password is opened in exactly one place. The companion
+     * call is marked `unattended`, so an MFA prompt answers without opening a
+     * challenge: nobody is here to read a code, and a challenge would hold the
+     * profile's busy lock for its whole TTL.
+     *
+     * **It must not disturb an interactive challenge.** A user mid-MFA in
+     * Settings holds the profile lock, so this call comes back `profile_busy` —
+     * transient, and emphatically not a reason to forget the challenge id the
+     * user is about to submit a code against. Only the codes that mean the
+     * companion's held page is genuinely gone clear it, exactly as [recordLogin]
+     * decides.
      */
     override suspend fun reLogin(userId: UserId): CompanionActionResult {
-        val answer =
+        val credentials =
             try {
-                login(userId)
+                requireCredentials(userId)
             } catch (e: SettingsError) {
                 return CompanionActionResult.Failed(RecGovSessionCodes.NOT_CONFIGURED, e.message)
             }
-        if (answer.status == RecgovLoginStatus.OK) return CompanionActionResult.Ok
-        pendingChallenges.remove(userId.value)
-        return CompanionActionResult.Failed(
-            answer.error ?: RecGovSessionCodes.LOGIN_FAILED,
-            answer.detail,
-        )
+        val client = companion ?: return CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, null)
+
+        return when (
+            val result =
+                client.login(
+                    profileId = profileId(userId),
+                    username = credentials.username,
+                    password = credentials.password,
+                    unattended = true,
+                )
+        ) {
+            is CompanionLoginResult.Ok -> CompanionActionResult.Ok
+            // The companion opens no challenge for an unattended caller, so
+            // there is nothing to remember even if it somehow answers one.
+            is CompanionLoginResult.MfaRequired -> CompanionActionResult.Failed(RecGovSessionCodes.MFA_REQUIRED, null)
+            is CompanionLoginResult.Failed -> {
+                if (result.code in challengeEndingCodes) pendingChallenges.remove(userId.value)
+                CompanionActionResult.Failed(result.code, result.detail)
+            }
+        }
     }
 
     // ── internals ────────────────────────────────────────────────────────────

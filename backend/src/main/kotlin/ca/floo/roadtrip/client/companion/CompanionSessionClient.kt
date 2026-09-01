@@ -37,6 +37,7 @@ private const val FIELD_USERNAME = "username"
 private const val FIELD_PASSWORD = "password"
 private const val FIELD_CHALLENGE_ID = "challenge_id"
 private const val FIELD_MFA_CODE = "mfa_code"
+private const val FIELD_UNATTENDED = "unattended"
 private const val FIELD_EXPIRES_AT = "expires_at"
 private const val FIELD_OK = "ok"
 private const val FIELD_ERROR = "error"
@@ -86,6 +87,7 @@ internal class CompanionSessionClient(
         profileId: String,
         username: String,
         password: String,
+        unattended: Boolean,
     ): CompanionLoginResult =
         loginExchange(
             profileId,
@@ -93,6 +95,7 @@ internal class CompanionSessionClient(
                 put(FIELD_PROFILE_ID, profileId)
                 put(FIELD_USERNAME, username)
                 put(FIELD_PASSWORD, password)
+                if (unattended) put(FIELD_UNATTENDED, true)
             },
         )
 

@@ -80,10 +80,17 @@ sealed interface CompanionSessionHealth {
  * isolation enforceable (see `docs/companion.md`).
  */
 interface CompanionSessionPort {
+    /**
+     * [unattended] tells the companion nobody is waiting on this login, so an
+     * MFA prompt must answer without opening a challenge — a challenge holds
+     * the profile's busy lock for its whole TTL, and the fire path can never
+     * complete one. Only the fire-time re-login sets it.
+     */
     suspend fun login(
         profileId: String,
         username: String,
         password: String,
+        unattended: Boolean = false,
     ): CompanionLoginResult
 
     suspend fun completeMfa(

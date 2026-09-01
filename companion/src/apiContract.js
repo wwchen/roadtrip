@@ -45,7 +45,10 @@ export const COMPANION_API_ROUTES = [
     description:
       'Phase one posts profile_id + username + password. When Rec.gov prompts for a code the ' +
       'response is 401 `mfa_required` with a challenge_id that holds the profile lock until it is ' +
-      'completed or expires; phase two posts profile_id + challenge_id + mfa_code.',
+      'completed or expires; phase two posts profile_id + challenge_id + mfa_code. ' +
+      'An `unattended: true` login skips the challenge entirely: it answers 401 `mfa_required` ' +
+      'with no challenge_id, closes the held page and releases the lock at once, because the ' +
+      'caller has nobody to read a code.',
     requestBody: {
       required: true,
       content: {
@@ -344,6 +347,12 @@ export const COMPANION_API_SCHEMAS = {
       challenge_id: {
         type: 'string',
         description: 'Challenge id returned by a phase-one login that hit an MFA prompt',
+      },
+      unattended: {
+        type: 'boolean',
+        description:
+          'No human is waiting on this login (the backend fire-time re-login). An MFA prompt ' +
+          'answers mfa_required with no challenge_id and holds neither the page nor the lock.',
       },
     },
   },

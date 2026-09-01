@@ -76,6 +76,7 @@ private class FakeCompanion(
     var healthResult: CompanionSessionHealth = CompanionSessionHealth.Active,
 ) : CompanionSessionPort {
     val loginCalls = mutableListOf<Triple<String, String, String>>()
+    val unattendedFlags = mutableListOf<Boolean>()
     val mfaCalls = mutableListOf<Triple<String, String, String>>()
     val logoutCalls = mutableListOf<String>()
 
@@ -86,8 +87,10 @@ private class FakeCompanion(
         profileId: String,
         username: String,
         password: String,
+        unattended: Boolean,
     ): CompanionLoginResult {
         loginCalls += Triple(profileId, username, password)
+        unattendedFlags += unattended
         return loginResult
     }
 
@@ -573,5 +576,62 @@ class RecGovCredentialServiceTest {
 
             assertFalse(dto.configured)
             assertEquals(RecgovSessionState.NOT_CONFIGURED, dto.session)
+        }
+
+    // ── fire-time re-login ───────────────────────────────────────────────────
+
+    @Test
+    fun `a fire-time re-login tells the companion nobody is waiting on it`() =
+        runBlocking {
+            val companion = FakeCompanion()
+            val svc = service(configuredRepo(), companion)
+
+            assertEquals(CompanionActionResult.Ok, svc.reLogin(testUserId))
+
+            // Without this the companion opens a challenge no one can complete
+            // and holds the profile lock for its whole TTL.
+            assertEquals(listOf(true), companion.unattendedFlags)
+        }
+
+    @Test
+    fun `a busy profile during re-login leaves an interactive MFA challenge intact`() =
+        runBlocking {
+            // The exact trap: the user is mid-MFA in Settings, which holds the
+            // profile lock, so the fire path's re-login answers profile_busy.
+            // Forgetting the challenge here breaks the code they are about to
+            // submit with mfa_challenge_unknown.
+            val companion = FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", null))
+            val svc = service(configuredRepo(), companion)
+            assertEquals(RecgovLoginStatus.MFA_REQUIRED, svc.login(testUserId).status)
+
+            companion.loginResult = CompanionLoginResult.Failed(RecGovSessionCodes.PROFILE_BUSY, "login in flight")
+            val recovery = svc.reLogin(testUserId)
+
+            assertEquals(CompanionActionResult.Failed(RecGovSessionCodes.PROFILE_BUSY, "login in flight"), recovery)
+            companion.mfaResult = CompanionLoginResult.Ok
+            assertEquals(RecgovLoginStatus.OK, svc.completeMfa(testUserId, "123456").status)
+            assertEquals(listOf(Triple("7", "chal-1", "123456")), companion.mfaCalls)
+        }
+
+    @Test
+    fun `a dead-challenge code during re-login does clear the challenge`() =
+        runBlocking {
+            val companion = FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", null))
+            val svc = service(configuredRepo(), companion)
+            svc.login(testUserId)
+
+            companion.loginResult = CompanionLoginResult.Failed(RecGovSessionCodes.CAPTCHA_REQUIRED, null)
+            svc.reLogin(testUserId)
+
+            val answer = svc.completeMfa(testUserId, "123456")
+            assertEquals(RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN, answer.error)
+        }
+
+    @Test
+    fun `re-login without stored credentials is a refusal, not an exception`() =
+        runBlocking {
+            val result = service(FakeSettingsRepo()).reLogin(testUserId)
+
+            assertEquals(RecGovSessionCodes.NOT_CONFIGURED, (result as CompanionActionResult.Failed).code)
         }
 }
