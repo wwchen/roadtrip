@@ -21,6 +21,17 @@ const MESSAGES = new Map<string, string>([
   ['mfa_required', 'Recreation.gov sent a verification code. Enter it below.'],
   ['mfa_invalid', 'That code was rejected. Start the login again for a new one.'],
   ['mfa_challenge_unknown', 'That code request expired. Start the login again.'],
+  // Sibling of `mfa_challenge_unknown`, worded apart on purpose. Both end the
+  // challenge — the backend clears it and the code field unmounts, which is why
+  // neither may say "try again": there is nothing left to try. The difference
+  // the user can act on is *why*: this one is their own delay past the
+  // challenge's minutes-scale TTL, so naming the deadline is what makes the
+  // retry succeed. `unknown` is a challenge that was never ours (already spent,
+  // or from a dead session), where a deadline would only mislead.
+  [
+    'mfa_challenge_expired',
+    'That code expired before it was entered. Start the login again, and enter the new code within a few minutes.',
+  ],
   [
     'captcha_required',
     'Recreation.gov showed a challenge we cannot solve. Try again in a moment.',
@@ -37,6 +48,13 @@ const MESSAGES = new Map<string, string>([
     'We could not clear your existing recreation.gov session, so nothing was changed. Try again shortly — if it keeps failing, the booking service needs attention.',
   ],
   ['recgov_not_authenticated', 'The recreation.gov session has expired. Test login again.'],
+  // Signed in, but rec.gov's own cart endpoint would not answer. Deliberately
+  // NOT the session copy above: the session is fine, so "test login again"
+  // would send the user round a loop that cannot fix anything.
+  [
+    'recgov_cart_unreachable',
+    "You're signed in, but recreation.gov's cart could not be read — try again shortly.",
+  ],
   ['companion_unavailable', "The booking service isn't reachable right now."],
   // The companion reached rec.gov but threw on the way. Nothing the user did.
   ['recgov_login_exception', 'The booking service hit an internal error — check its logs.'],
@@ -64,6 +82,25 @@ const MESSAGES = new Map<string, string>([
   ['unsupported_target', 'This campground cannot be held from Roadtrip.'],
   ['credentials_required', 'Add your recreation.gov credentials in Settings first.'],
   ['recgov_session_expired', 'Your recreation.gov session expired — test login in Settings.'],
+  // The same user condition as `recgov_session_expired`, reached by a different
+  // layer. The grid's add-to-cart preflights session health, then drives a
+  // browser for ~30s against sub-hour rec.gov tokens — so the session can die
+  // *after* the preflight passed, and the companion, not the backend, is the
+  // one that notices. Identical copy is the point: same condition, same single
+  // thing the user can do. Wording them apart would be false precision, and
+  // leaving them unmapped split one condition across mapped-403 and
+  // raw-code-502 depending only on which layer saw it first.
+  ['recgov_spa_logged_out', 'Your recreation.gov session expired — test login in Settings.'],
+  ['recgov_refresh_failed', 'Your recreation.gov session expired — test login in Settings.'],
+  // The exception in that family, and the reason it is not folded into the two
+  // above: here the companion *did* sign in again with the saved credentials
+  // and rec.gov refused. So a changed password is on the table in a way it is
+  // not for a merely lapsed session, and the copy has to point at the
+  // credentials rather than at the session.
+  [
+    'recgov_login_failed',
+    'Recreation.gov would not sign you back in — check your credentials in Settings.',
+  ],
 ]);
 
 /**

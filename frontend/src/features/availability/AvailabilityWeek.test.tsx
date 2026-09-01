@@ -1020,4 +1020,23 @@ describe('holding a site straight from the grid', () => {
     );
     expect(screen.queryByText(/Holding site…/)).toBeNull();
   });
+
+  test('a session that dies mid-hold names the expiry, not the raw code', async () => {
+    // 502 with the companion's own code passed through: the preflight found the
+    // session healthy and it lapsed before the click. Note the wire shape —
+    // `{ error }`, which `http.ts` maps onto `err.code`. A `{ code }` mock here
+    // would pass without the map ever being consulted.
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () => json({ error: 'recgov_spa_logged_out' }, 502);
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(
+      await screen.findByText('Your recreation.gov session expired — test login in Settings.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/recgov_spa_logged_out/)).toBeNull();
+  });
 });
