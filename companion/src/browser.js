@@ -25,11 +25,17 @@ export const RECGOV_CAMPSITE_BOOKING_URL_PATTERN =
 export const COMPANION_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
 
-const CHROMIUM_SINGLETON_LOCK_FILES = ['SingletonLock', 'SingletonSocket', 'SingletonCookie']
+export const CHROMIUM_SINGLETON_LOCK_FILES = Object.freeze(['SingletonLock', 'SingletonSocket', 'SingletonCookie'])
 
 let sharedContext = null
 
+// Directories with a live browser on them. A singleton lock there belongs to
+// that browser, not to a crash, and deleting it would let a second Chromium
+// attach to the same user-data directory and corrupt the profile.
+const liveProfileDirs = new Set()
+
 function clearStaleLocks (profileDir) {
+  if (liveProfileDirs.has(profileDir)) return
   for (const name of CHROMIUM_SINGLETON_LOCK_FILES) {
     const f = path.join(profileDir, name)
     try { if (fs.existsSync(f)) fs.unlinkSync(f) } catch {}
@@ -48,10 +54,10 @@ export async function getContext () {
 // One persistent Chromium profile directory in, one browser process out. The
 // profile pool calls this per profile id; getContext keeps the single legacy
 // profile the CLI entrypoints use.
-export async function launchProfileContext (profileDir) {
+export async function launchProfileContext (profileDir, { chromiumFn = chromium } = {}) {
   if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true })
   clearStaleLocks(profileDir)
-  const context = await chromium.launchPersistentContext(profileDir, {
+  const context = await chromiumFn.launchPersistentContext(profileDir, {
     headless: IS_HEADLESS,
     slowMo: IS_HEADLESS ? 0 : 200,
     viewport: { width: 1280, height: 900 },
@@ -99,6 +105,8 @@ export async function launchProfileContext (profileDir) {
       return _origFetch.apply(this, args)
     }
   })
+  liveProfileDirs.add(profileDir)
+  context.once('close', () => liveProfileDirs.delete(profileDir))
   return context
 }
 

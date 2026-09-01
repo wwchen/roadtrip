@@ -77,6 +77,7 @@ export function createProfilePool ({
       state = {
         profileId,
         context: null,
+        launching: null,
         lock: null,
         challenge: null,
         backoffUntil: 0,
@@ -141,6 +142,17 @@ export function createProfilePool ({
     }
   }
 
+  async function launchProfile (state, profileId) {
+    await evictForLaunch(profileId)
+    const context = await launchContextFn(profileDir(profileId))
+    state.context = context
+    context.once?.('close', () => {
+      if (state.context === context) state.context = null
+    })
+    logger('recgov profile launched', `profile=${profileId}`, `keep_warm=${isKeepWarm(profileId)}`)
+    return context
+  }
+
   async function closeState (state) {
     const context = state.context
     state.context = null
@@ -163,13 +175,16 @@ export function createProfilePool ({
           state.context = null
         }
       }
-      await evictForLaunch(profileId)
-      state.context = await launchContextFn(profileDir(profileId))
-      state.context.once?.('close', () => {
-        if (profiles.get(profileId)?.context === state.context) profiles.get(profileId).context = null
-      })
-      logger('recgov profile launched', `profile=${profileId}`, `keep_warm=${isKeepWarm(profileId)}`)
-      return state.context
+      // Two concurrent cold callers must not start two Chromiums on one
+      // user-data directory — that corrupts the profile. The first caller
+      // parks its in-flight launch here and the rest await the same promise.
+      if (!state.launching) {
+        state.launching = launchProfile(state, profileId)
+          .finally(() => {
+            state.launching = null
+          })
+      }
+      return state.launching
     },
 
     async closeProfile (profileId) {

@@ -49,6 +49,43 @@ test('two profiles never share a browser context or a profile directory', async 
   assert.match(pool.profileDir(PROFILE_A), new RegExp(`${TEST_ROOT_DIR}/profiles/${PROFILE_A}$`))
 })
 
+test('concurrent cold callers share one launch instead of starting two Chromiums', async () => {
+  let launches = 0
+  let release = null
+  const pending = new Promise((resolve) => { release = resolve })
+  const pool = testPool({
+    launchContextFn: async () => {
+      launches += 1
+      await pending
+      return { pages: async () => [], close: async () => {}, once: () => {} }
+    },
+  })
+
+  const both = Promise.all([pool.context(PROFILE_A), pool.context(PROFILE_A)])
+  release()
+  const [first, second] = await both
+
+  assert.equal(launches, 1)
+  assert.equal(first, second)
+})
+
+test('a launch failure does not poison the next attempt', async () => {
+  let launches = 0
+  const pool = testPool({
+    launchContextFn: async () => {
+      launches += 1
+      if (launches === 1) throw new Error('chromium exploded')
+      return { pages: async () => [], close: async () => {}, once: () => {} }
+    },
+  })
+
+  await assert.rejects(() => pool.context(PROFILE_A))
+  const recovered = await pool.context(PROFILE_A)
+
+  assert.ok(recovered)
+  assert.equal(launches, 2)
+})
+
 test('a profile reuses its launched context', async () => {
   const launcher = fakeLauncher()
   const pool = testPool({ launchContextFn: launcher.launch })
