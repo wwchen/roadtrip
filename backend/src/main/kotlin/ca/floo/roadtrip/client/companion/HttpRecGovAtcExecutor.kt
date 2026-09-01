@@ -6,10 +6,7 @@ import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
 import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 import java.net.URI
 import java.net.http.HttpClient
@@ -185,12 +182,6 @@ internal class HttpRecGovAtcExecutor(
                 .build()
     }
 }
-
-private fun JsonObject.stringValue(name: String): String? = get(name)?.jsonPrimitive?.contentOrNull
-
-private fun JsonObject.booleanValue(name: String): Boolean? = get(name)?.jsonPrimitive?.booleanOrNull
-
-private fun JsonObject.objectValue(name: String): JsonObject? = get(name) as? JsonObject
 
 private fun JsonObject.recgovAuthOk(): Boolean {
     val auth = objectValue("recgov_auth") ?: return false

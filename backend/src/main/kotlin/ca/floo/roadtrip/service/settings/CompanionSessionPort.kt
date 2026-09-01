@@ -1,0 +1,85 @@
+package ca.floo.roadtrip.service.settings
+
+/**
+ * Outcome codes the rec.gov settings surface speaks.
+ *
+ * They are the vocabulary shared by the companion adapter, this service and the
+ * frontend's `settings-errors.ts`; the companion's own internal blockers stay
+ * behind the port (see [ca.floo.roadtrip.client.companion.CompanionSessionClient]).
+ */
+object RecGovSessionCodes {
+    const val LOGIN_FAILED = "login_failed"
+    const val MFA_REQUIRED = "mfa_required"
+    const val MFA_INVALID = "mfa_invalid"
+    const val CAPTCHA_REQUIRED = "captcha_required"
+    const val LOGIN_BACKOFF = "login_backoff"
+    const val NOT_AUTHENTICATED = "recgov_not_authenticated"
+    const val COMPANION_UNAVAILABLE = "companion_unavailable"
+}
+
+/** Result of a credential login or of completing an MFA challenge. */
+sealed interface CompanionLoginResult {
+    data object Ok : CompanionLoginResult
+
+    /** Rec.gov asked for a code; the companion holds the prompt open until [expiresAt]. */
+    data class MfaRequired(
+        val challengeId: String,
+        val expiresAt: String?,
+    ) : CompanionLoginResult
+
+    data class Failed(
+        val code: String,
+        val detail: String? = null,
+    ) : CompanionLoginResult
+}
+
+/** Result of a companion call with nothing to report but success or a reason. */
+sealed interface CompanionActionResult {
+    data object Ok : CompanionActionResult
+
+    data class Failed(
+        val code: String,
+        val detail: String? = null,
+    ) : CompanionActionResult
+}
+
+/** What the companion says about one profile's live rec.gov session. */
+sealed interface CompanionSessionHealth {
+    data object Active : CompanionSessionHealth
+
+    data class Inactive(
+        val code: String?,
+    ) : CompanionSessionHealth
+
+    /** The companion is unreachable or not configured — never an error to the user. */
+    data class Unavailable(
+        val detail: String?,
+    ) : CompanionSessionHealth
+}
+
+/**
+ * Port over the companion's per-profile session routes.
+ *
+ * `profileId` is the caller's own user id, stringified: the backend authenticates
+ * the user and only ever passes *their* profile, which is what makes per-user
+ * isolation enforceable (see `docs/companion.md`).
+ */
+interface CompanionSessionPort {
+    suspend fun login(
+        profileId: String,
+        username: String,
+        password: String,
+    ): CompanionLoginResult
+
+    suspend fun completeMfa(
+        profileId: String,
+        challengeId: String,
+        code: String,
+    ): CompanionLoginResult
+
+    suspend fun logout(profileId: String): CompanionActionResult
+
+    suspend fun verify(profileId: String): CompanionActionResult
+
+    suspend fun health(profileId: String): CompanionSessionHealth
+}
