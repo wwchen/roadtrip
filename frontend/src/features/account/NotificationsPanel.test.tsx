@@ -32,7 +32,6 @@ const settings = (over: Partial<SettingsResponse['notifications']> = {}): Settin
   booking: {
     recgov_configured: false,
     recgov_username: null,
-    recgov_password_hint: null,
   },
 });
 

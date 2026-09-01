@@ -17,7 +17,6 @@ open class UserSettingsRepo(
         val slackTokenHint: String?,
         val recgovUsername: String? = null,
         val recgovPasswordCipher: ByteArray? = null,
-        val recgovPasswordHint: String? = null,
     )
 
     open fun find(userId: UserId): Settings? =
@@ -29,7 +28,6 @@ open class UserSettingsRepo(
                 USER_SETTINGS.SLACK_TOKEN_HINT,
                 USER_SETTINGS.RECGOV_USERNAME,
                 USER_SETTINGS.RECGOV_PASSWORD_CIPHER,
-                USER_SETTINGS.RECGOV_PASSWORD_HINT,
             ).from(USER_SETTINGS)
             .where(USER_SETTINGS.USER_ID.eq(userId.value))
             .fetchOne()
@@ -41,7 +39,6 @@ open class UserSettingsRepo(
                     it[USER_SETTINGS.SLACK_TOKEN_HINT],
                     it[USER_SETTINGS.RECGOV_USERNAME],
                     it[USER_SETTINGS.RECGOV_PASSWORD_CIPHER],
-                    it[USER_SETTINGS.RECGOV_PASSWORD_HINT],
                 )
             }
 
@@ -128,17 +125,18 @@ open class UserSettingsRepo(
     }
 
     /**
-     * Upserts the rec.gov username and — when [passwordCipher] and [passwordHint]
-     * are both non-null — the sealed password, in one statement.
+     * Upserts the rec.gov username and — when [passwordCipher] is non-null — the
+     * sealed password, in one statement.
      *
-     * Null password args mean "leave the stored password untouched", the write-only
-     * `SecretField` contract the Slack token already follows.
+     * A null [passwordCipher] means "leave the stored password untouched", the
+     * write-only `SecretField` contract the Slack token already follows. Unlike
+     * that token there is no hint column: see V53 for why a human password's
+     * last 4 characters are credential material, not a display aid.
      */
     open fun saveRecgovCredentials(
         userId: UserId,
         username: String,
         passwordCipher: ByteArray?,
-        passwordHint: String?,
     ) {
         val now = OffsetDateTime.now()
         val insert =
@@ -147,16 +145,13 @@ open class UserSettingsRepo(
                 .set(USER_SETTINGS.USER_ID, userId.value)
                 .set(USER_SETTINGS.RECGOV_USERNAME, username)
                 .set(USER_SETTINGS.RECGOV_PASSWORD_CIPHER, passwordCipher)
-                .set(USER_SETTINGS.RECGOV_PASSWORD_HINT, passwordHint)
                 .set(USER_SETTINGS.UPDATED_AT, now)
                 .onConflict(USER_SETTINGS.USER_ID)
                 .doUpdate()
                 .set(USER_SETTINGS.RECGOV_USERNAME, username)
                 .set(USER_SETTINGS.UPDATED_AT, now)
-        if (passwordCipher != null && passwordHint != null) {
-            insert
-                .set(USER_SETTINGS.RECGOV_PASSWORD_CIPHER, passwordCipher)
-                .set(USER_SETTINGS.RECGOV_PASSWORD_HINT, passwordHint)
+        if (passwordCipher != null) {
+            insert.set(USER_SETTINGS.RECGOV_PASSWORD_CIPHER, passwordCipher)
         }
         insert.execute()
     }
@@ -166,7 +161,6 @@ open class UserSettingsRepo(
             .update(USER_SETTINGS)
             .setNull(USER_SETTINGS.RECGOV_USERNAME)
             .setNull(USER_SETTINGS.RECGOV_PASSWORD_CIPHER)
-            .setNull(USER_SETTINGS.RECGOV_PASSWORD_HINT)
             .set(USER_SETTINGS.UPDATED_AT, OffsetDateTime.now())
             .where(USER_SETTINGS.USER_ID.eq(userId.value))
             .execute()

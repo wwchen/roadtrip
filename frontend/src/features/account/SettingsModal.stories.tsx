@@ -28,7 +28,6 @@ const SETTINGS: SettingsResponse = {
   booking: {
     recgov_configured: true,
     recgov_username: 'ada@example.test',
-    recgov_password_hint: '9f2c',
   },
 };
 

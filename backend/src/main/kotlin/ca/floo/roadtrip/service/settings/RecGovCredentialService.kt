@@ -18,9 +18,6 @@ import ca.floo.roadtrip.service.security.SecretCipher
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 
-/** How much of the password is safe to show back. Mirrors the Slack token hint. */
-private const val PASSWORD_HINT_CHARS = 4
-
 /**
  * Codes that mean the companion's held prompt page is gone, so the remembered
  * challenge id points at nothing.
@@ -54,7 +51,6 @@ internal fun bookingSettingsDto(
     return BookingSettingsDto(
         recgovConfigured = configured,
         recgovUsername = settings?.recgovUsername.takeIf { configured },
-        recgovPasswordHint = settings?.recgovPasswordHint.takeIf { configured },
     )
 }
 
@@ -138,7 +134,6 @@ class RecGovCredentialService(
             userId = userId,
             username = username,
             passwordCipher = sealed,
-            passwordHint = password?.takeLast(PASSWORD_HINT_CHARS),
         )
         return bookingSettingsDto(settingsRepo.find(userId), cipher)
     }
@@ -217,7 +212,6 @@ class RecGovCredentialService(
             return RecgovStatusDto(
                 configured = false,
                 username = null,
-                passwordHint = null,
                 session = RecgovSessionState.NOT_CONFIGURED,
             )
         }
@@ -231,7 +225,6 @@ class RecGovCredentialService(
         return RecgovStatusDto(
             configured = true,
             username = stored.recgovUsername,
-            passwordHint = stored.recgovPasswordHint,
             session = session,
             detail = detail,
             mfaPending = pendingChallenges.containsKey(userId.value),

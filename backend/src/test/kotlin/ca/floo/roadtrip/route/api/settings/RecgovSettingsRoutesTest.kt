@@ -50,7 +50,7 @@ private const val USER_TOKEN = "user-token"
 private val testUserId = UserId(42L)
 
 private val configuredBooking =
-    BookingSettingsDto(recgovConfigured = true, recgovUsername = "ada@example.com", recgovPasswordHint = "cret")
+    BookingSettingsDto(recgovConfigured = true, recgovUsername = "ada@example.com")
 
 /** Stub of [RecGovCredentialPort] with injectable behaviors. */
 private class StubRecgovService(
@@ -65,7 +65,6 @@ private class StubRecgovService(
             RecgovStatusDto(
                 configured = true,
                 username = "ada@example.com",
-                passwordHint = "cret",
                 session = RecgovSessionState.ACTIVE,
             )
         },
@@ -156,8 +155,10 @@ class RecgovSettingsRoutesTest {
             assertFalse(body.contains("password\":"), body)
             val json = Json.parseToJsonElement(body).jsonObject
             assertEquals("ada@example.com", json["recgov_username"]!!.jsonPrimitive.content)
-            assertEquals("cret", json["recgov_password_hint"]!!.jsonPrimitive.content)
             assertEquals("hunter2-secret", service.savedRequests.single().password)
+            // No hint field, and nothing that could be a fragment of the password.
+            assertFalse(json.containsKey("recgov_password_hint"), body)
+            assertNoPasswordFragment(body, "hunter2-secret")
         }
 
     @Test
@@ -362,7 +363,6 @@ class RecgovSettingsRoutesTest {
                         RecgovStatusDto(
                             configured = true,
                             username = "ada@example.com",
-                            passwordHint = "cret",
                             session = RecgovSessionState.EXPIRED,
                             mfaPending = true,
                         )
@@ -385,7 +385,6 @@ class RecgovSettingsRoutesTest {
                         RecgovStatusDto(
                             configured = true,
                             username = "ada@example.com",
-                            passwordHint = "cret",
                             session = RecgovSessionState.COMPANION_UNAVAILABLE,
                             detail = "connection refused",
                         )
@@ -408,3 +407,22 @@ class RecgovSettingsRoutesTest {
             ?.jsonPrimitive
             ?.content
 }
+
+/**
+ * Fails if any window of [PASSWORD_FRAGMENT_CHARS] characters of [password]
+ * appears in [body].
+ *
+ * Blunter than checking for one named field on purpose: the hint was a *design*
+ * mistake, not a typo, and the property worth pinning is "no response carries a
+ * recognisable piece of the password" rather than "this one key is absent".
+ */
+private fun assertNoPasswordFragment(
+    body: String,
+    password: String,
+) {
+    password.windowed(PASSWORD_FRAGMENT_CHARS).forEach { fragment ->
+        assertFalse(body.contains(fragment), "response leaked the password fragment '$fragment': $body")
+    }
+}
+
+private const val PASSWORD_FRAGMENT_CHARS = 4

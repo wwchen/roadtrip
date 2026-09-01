@@ -200,7 +200,9 @@ export function BookingPanel({
         id="settings-recgov-password"
         name="recgov_password"
         label="Recreation.gov password"
-        hint={settings.booking.recgov_password_hint}
+        // No hint: a human password's last characters are credential
+        // material, so the mask says only "something is stored".
+        stored={settings.booking.recgov_configured}
         help={PASSWORD_HELP}
         value={values.recgov_password}
         onChange={(recgov_password) => onChange({ ...values, recgov_password })}

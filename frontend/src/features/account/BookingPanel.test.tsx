@@ -33,7 +33,6 @@ const settings = (over: Partial<SettingsResponse['booking']> = {}): SettingsResp
   booking: {
     recgov_configured: false,
     recgov_username: null,
-    recgov_password_hint: null,
     ...over,
   },
 });
@@ -41,7 +40,6 @@ const settings = (over: Partial<SettingsResponse['booking']> = {}): SettingsResp
 const CONFIGURED = {
   recgov_configured: true,
   recgov_username: 'ada@example.test',
-  recgov_password_hint: '9f2c',
 };
 
 const activeStatus: RecgovStatus = {
@@ -109,10 +107,12 @@ describe('the credential slice', () => {
     expect(isBookingDirty(s, state.values)).toBe(true);
   });
 
-  test('a stored password shows as a masked hint, never a value', () => {
+  test('a stored password shows as an opaque mask that leaks neither characters nor length', () => {
+    // The Slack token shows its last 4 because it is machine-generated. A
+    // human password's last 4 narrow a guess, and so does its length.
     renderPanel(settings(CONFIGURED));
 
-    expect(screen.getByText('••••9f2c')).toBeInTheDocument();
+    expect(screen.getByText('••••••••••')).toBeInTheDocument();
     expect(screen.queryByLabelText('Recreation.gov password')).not.toBeInTheDocument();
   });
 

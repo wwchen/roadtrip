@@ -51,12 +51,13 @@ export interface Notifications {
  * whose own request is the one that can wait on the companion.
  *
  * The password is never returned: `recgov_configured` says whether one is
- * stored and `recgov_password_hint` is the last-4 fragment `SecretField` masks.
+ * stored. There is deliberately no password hint: unlike a Slack bot token, a
+ * human-chosen password's last characters are credential material, so the field
+ * renders a fixed-length mask instead.
  */
 export interface BookingSettings {
   recgov_configured: boolean;
   recgov_username: string | null;
-  recgov_password_hint: string | null;
 }
 
 /** Mirrors SettingsResponseDto — returned by the GET and by every mutation. */

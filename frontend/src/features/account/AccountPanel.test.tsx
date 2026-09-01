@@ -35,7 +35,6 @@ const settings = (over: {
   booking: {
     recgov_configured: false,
     recgov_username: null,
-    recgov_password_hint: null,
     ...over.booking,
   },
 });

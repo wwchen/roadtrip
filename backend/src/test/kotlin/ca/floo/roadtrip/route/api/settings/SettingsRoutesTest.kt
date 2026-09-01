@@ -98,7 +98,7 @@ private fun defaultSettingsDto(slackConfigured: Boolean = false): SettingsRespon
                 slackConfigured = slackConfigured,
                 slackTokenHint = null,
             ),
-        booking = BookingSettingsDto(recgovConfigured = false, recgovUsername = null, recgovPasswordHint = null),
+        booking = BookingSettingsDto(recgovConfigured = false, recgovUsername = null),
     )
 
 private fun resolve(token: String?): Principal =

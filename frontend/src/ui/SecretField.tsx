@@ -6,9 +6,20 @@ export interface SecretFieldProps {
   label: string;
   /**
    * Redacted fragment of the stored secret (e.g. the last four characters), or null
-   * when nothing is stored. The secret itself is never sent to the client.
+   * when there is none to show. The secret itself is never sent to the client.
+   *
+   * **Machine tokens only.** A Slack bot token's last 4 characters say *which*
+   * token is stored without helping anyone guess it. For a human-chosen
+   * password they are credential material, so the rec.gov field stores and
+   * shows none — it passes [stored] instead and gets a fixed-length mask.
    */
   hint?: string | null;
+  /**
+   * Whether a secret is stored, when that cannot be inferred from [hint].
+   * Defaults to "a hint means something is stored", which is what every
+   * hint-bearing caller relies on.
+   */
+  stored?: boolean;
   help?: string;
   id: string;
   name?: string;
@@ -17,8 +28,17 @@ export interface SecretFieldProps {
   onChange: (value: string | null) => void;
 }
 
-/** What a stored secret looks like when it is not being replaced. */
+/** Prefix for a stored secret shown alongside its hint. */
 const MASK = '••••';
+
+/**
+ * The whole mask for a secret with no hint.
+ *
+ * Fixed length on purpose: rendering one dot per stored character would leak
+ * the password's length, which is the second thing a guesser wants after its
+ * last few characters.
+ */
+const OPAQUE_MASK = '••••••••••';
 
 /**
  * A write-only secret input.
@@ -51,13 +71,15 @@ const MASK = '••••';
 export function SecretField({
   label,
   hint = null,
+  stored,
   help,
   id,
   name,
   value,
   onChange,
 }: SecretFieldProps) {
-  const hasStored = hint != null && hint !== '';
+  const hasHint = hint != null && hint !== '';
+  const hasStored = stored ?? hasHint;
   // With nothing stored there is nothing to reveal or keep, so the input is the
   // only sensible resting state and there is no Replace step to offer.
   const [replacing, setReplacing] = useState(!hasStored);
@@ -67,8 +89,7 @@ export function SecretField({
       <div className="rt-secret-field">
         <span className="rt-secret-field-label">{label}</span>
         <span className="rt-secret-field-mask">
-          {MASK}
-          {hint}
+          {hasHint ? `${MASK}${hint}` : OPAQUE_MASK}
         </span>
         <Button
           size="sm"

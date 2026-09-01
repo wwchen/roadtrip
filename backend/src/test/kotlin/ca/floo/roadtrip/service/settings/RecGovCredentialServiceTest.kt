@@ -44,19 +44,17 @@ private class FakeSettingsRepo : UserSettingsRepo(ctx = detachedCtx) {
         userId: UserId,
         username: String,
         passwordCipher: ByteArray?,
-        passwordHint: String?,
     ) {
         val current = settings ?: Settings(null, null, null, null)
         settings =
             current.copy(
                 recgovUsername = username,
                 recgovPasswordCipher = passwordCipher ?: current.recgovPasswordCipher,
-                recgovPasswordHint = passwordHint ?: current.recgovPasswordHint,
             )
     }
 
     override fun clearRecgov(userId: UserId) {
-        settings = settings?.copy(recgovUsername = null, recgovPasswordCipher = null, recgovPasswordHint = null)
+        settings = settings?.copy(recgovUsername = null, recgovPasswordCipher = null)
     }
 }
 
@@ -138,7 +136,6 @@ class RecGovCredentialServiceTest {
                     slackTokenHint = null,
                     recgovUsername = "ada@example.com",
                     recgovPasswordCipher = cipher.seal(password),
-                    recgovPasswordHint = password.takeLast(4),
                 )
         }
 
@@ -152,7 +149,6 @@ class RecGovCredentialServiceTest {
 
         assertTrue(dto.recgovConfigured)
         assertEquals("ada@example.com", dto.recgovUsername)
-        assertEquals("cret", dto.recgovPasswordHint)
         assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
     }
 
@@ -503,7 +499,6 @@ class RecGovCredentialServiceTest {
 
             assertTrue(dto.configured)
             assertEquals("ada@example.com", dto.username)
-            assertEquals("cret", dto.passwordHint)
             assertEquals(RecgovSessionState.ACTIVE, dto.session)
         }
 

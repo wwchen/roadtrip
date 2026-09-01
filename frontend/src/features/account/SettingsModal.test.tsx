@@ -30,7 +30,6 @@ const settingsBody = (
   booking: {
     recgov_configured: false,
     recgov_username: null,
-    recgov_password_hint: null,
     ...booking,
   },
 });
@@ -41,7 +40,6 @@ const RECGOV_STATUS_URL = '/api/settings/recgov/status';
 const CONFIGURED_BOOKING = {
   recgov_configured: true,
   recgov_username: 'ada@example.test',
-  recgov_password_hint: '9f2c',
 };
 
 const profile: SettingsResponse['profile'] = settingsBody().profile;
@@ -339,12 +337,13 @@ describe('the Booking tab', () => {
     await userEvent.type(await screen.findByLabelText('Recreation.gov email'), 'ada@example.test');
     await userEvent.type(screen.getByLabelText('Recreation.gov password'), 'hunter2-secret');
 
-    const stored = () => json(settingsBody({}, { ...CONFIGURED_BOOKING, recgov_password_hint: 'cret' }));
+    const stored = () => json(settingsBody({}, CONFIGURED_BOOKING));
     onPut = stored;
     getSettings = stored;
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByText('\u2022\u2022\u2022\u2022cret')).toBeInTheDocument();
+    // A fixed-length mask, not the password's last characters and not its length.
+    expect(await screen.findByText('\u2022'.repeat(10))).toBeInTheDocument();
     expect(screen.queryByLabelText('Recreation.gov password')).not.toBeInTheDocument();
   });
 

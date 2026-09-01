@@ -76,14 +76,19 @@ One migration (next V-number), following the V48 Slack pattern:
 ```sql
 ALTER TABLE user_settings
   ADD COLUMN recgov_username        TEXT,
-  ADD COLUMN recgov_password_cipher BYTEA,
-  ADD COLUMN recgov_password_hint   TEXT;
+  ADD COLUMN recgov_password_cipher BYTEA;
 ```
 
 - Username is stored plaintext deliberately: it is an email-shaped identifier,
   needed for display and re-login, and not a secret in the way the password is.
-- The password is sealed with `SecretCipher` (AES-256-GCM); the hint is the
-  last 4 characters for the masked `SecretField` display.
+- The password is sealed with `SecretCipher` (AES-256-GCM). **No hint is
+  stored or shown for it** — a fixed-length mask plus Replace. Last-4 hints are
+  for *machine* tokens only: a Slack bot token's tail says which token is
+  stored without helping anyone guess it, while a human-chosen password's tail
+  is credential material and its length is information too.
+  *(Correction: v1 of this spec specified `recgov_password_hint TEXT` by
+  copying the V48 Slack pattern. V53 never creates the column, so no
+  deployment ever stored a hint.)*
 - No session-status column. "Configured" is derived from the columns; live
   session health is always asked of the companion, never persisted.
 
@@ -169,8 +174,8 @@ The channel today is plain HTTP with no auth and will now carry passwords.
     Known limitations).
   - `POST /api/settings/recgov/login/mfa` — complete with the user's code.
   - `POST /api/settings/recgov/verify` — the dry run.
-  - `GET /api/settings/recgov/status` — configured flag, username, password
-    hint, and live session state from companion health. **Deliberately a
+  - `GET /api/settings/recgov/status` — configured flag, username, and live
+    session state from companion health (no password hint; see §2). **Deliberately a
     separate endpoint** so `GET /api/settings` never blocks on companion
     latency or availability; when the companion is unreachable the status
     degrades to `companion_unavailable` rather than erroring.
@@ -222,15 +227,18 @@ Notifications do, following the established convention exactly:
 `BookingValues { recgov_username: string; recgov_password: string | null }`
 with `bookingValuesOf` / `isBookingDirty` / `buildBookingPayload` exports,
 wired into `SettingsModal`'s per-tab dirty gating and save switch, and keyed
-by `dataUpdatedAt` so a save remounts fields from the server's answer
-(including the new password hint) — same as the Slack token today.
+by `dataUpdatedAt` so a save remounts fields from the server's answer — same as
+the Slack token today.
 
 Panel contents, top to bottom:
 
 - **Username** — `SeededTextField`, type email.
-- **Password** — `SecretField` (write-only; `null` = unchanged; masked
-  `••••` + `recgov_password_hint` last-4). Help text notes what the
-  credential is used for and that ATC stops at a cart hold.
+- **Password** — `SecretField` (write-only; `null` = unchanged). A stored
+  password renders as a **fixed-length opaque mask** plus Replace — no hint,
+  and not one dot per character, since the length is information as well.
+  `SecretField` takes an explicit `stored` flag for this; the Slack token keeps
+  its `hint`. Help text notes what the credential is used for and that ATC
+  stops at a cart hold.
 - **Session status row** — driven by a dedicated query on
   `GET /api/settings/recgov/status` (separate from `useSettings` so opening
   the modal never blocks on the companion). States: *Not configured* /

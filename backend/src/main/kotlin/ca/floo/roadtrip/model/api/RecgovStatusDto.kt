@@ -31,7 +31,6 @@ object RecgovLoginStatus {
 data class RecgovStatusDto(
     val configured: Boolean,
     val username: String?,
-    @SerialName("password_hint") val passwordHint: String?,
     /** One of [RecgovSessionState]. */
     val session: String,
     val detail: String? = null,

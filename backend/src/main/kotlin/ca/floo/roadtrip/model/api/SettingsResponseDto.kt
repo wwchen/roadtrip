@@ -23,7 +23,6 @@ data class SettingsResponseDto(
 data class BookingSettingsDto(
     @SerialName("recgov_configured") val recgovConfigured: Boolean,
     @SerialName("recgov_username") val recgovUsername: String?,
-    @SerialName("recgov_password_hint") val recgovPasswordHint: String?,
 )
 
 @Serializable

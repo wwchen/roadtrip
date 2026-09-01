@@ -29,7 +29,6 @@ const settingsWith = (booking: Partial<SettingsResponse['booking']>): SettingsRe
   booking: {
     recgov_configured: false,
     recgov_username: null,
-    recgov_password_hint: null,
     ...booking,
   },
 });
@@ -37,7 +36,6 @@ const settingsWith = (booking: Partial<SettingsResponse['booking']>): SettingsRe
 const CONFIGURED = settingsWith({
   recgov_configured: true,
   recgov_username: 'ada@example.test',
-  recgov_password_hint: '9f2c',
 });
 
 const activeStatus: RecgovStatus = {
