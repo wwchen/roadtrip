@@ -5,6 +5,10 @@ import type { PoiFeature } from '@/lib/poi';
 import { availableCount } from '@/lib/day-fields';
 import { addLocalDays, localToday, localYmd, parseLocalYmd, sameLocalDay } from '@/lib/local-date';
 import { copyShareUrl } from '@/lib/share-links';
+import { settingsErrorMessage } from '@/lib/settings-errors';
+import { addToCart } from '@/api/booking-api';
+import { isCartActionPending } from './cart-action';
+import './cell-book-popover.css';
 import { DayDetail, type WatchUnavailableReason } from './DayDetail';
 import { CalendarPopover } from './CalendarPopover';
 import { SiteList } from './SiteList';
@@ -96,6 +100,7 @@ function AvailabilityWeekView({
     selectedSiteId,
     sitesExpanded,
     armedBook,
+    cartAction,
     filters,
     siteColumnWidth,
     calendarOpen,
@@ -146,6 +151,44 @@ function AvailabilityWeekView({
       actions.selectDate(date);
     },
     [actions],
+  );
+
+  // The same condition that enables the watch editor's ATC toggle: the scope
+  // supports a cart AND this caller has credentials. One source of truth, so a
+  // user can never be offered a hold the write path would refuse.
+  const canAddToCart = supportsAddToCart(capabilities);
+
+  const holdSite = useCallback(
+    (campsiteId: string, date: string) => {
+      const cell = { campsiteId, date };
+      actions.cartActionChanged({ type: 'requested', cell });
+      void addToCart({ campsite_id: campsiteId, start_date: date, end_date: stayEndDate(date) })
+        .then((answer) => {
+          actions.cartActionChanged({ type: 'held', cell, cartUrl: answer.cart_url });
+          toast({
+            status: 'success',
+            title: 'Site held in your rec.gov cart',
+            children: (
+              <>
+                Check out on recreation.gov within 15 minutes.{' '}
+                <a href={answer.cart_url} target="_blank" rel="noreferrer noopener">
+                  Open rec.gov cart ↗
+                </a>
+              </>
+            ),
+          });
+        })
+        .catch((err: unknown) => {
+          const code = (err as { code?: string } | null)?.code;
+          actions.cartActionChanged({ type: 'failed', cell, code: code ?? '' });
+          toast({
+            status: 'warning',
+            title: 'Could not hold the site',
+            children: settingsErrorMessage(code),
+          });
+        });
+    },
+    [actions, toast],
   );
 
   const openBooking = useCallback(
@@ -285,6 +328,8 @@ function AvailabilityWeekView({
               armedBook,
               watchedDates: watchedDatesOf(watches.byWindow),
               canWatch,
+              canAddToCart,
+              cartAction,
             }}
             events={{
               filtersChanged: actions.changeFilters,
@@ -292,6 +337,7 @@ function AvailabilityWeekView({
               siteSelected: actions.selectSite,
               bookingArmed: actions.armBooking,
               bookingOpened: openBooking,
+              cartRequested: holdSite,
               dateSelected: onSelectDate,
               watchOpened: actions.openWatch,
             }}
@@ -299,6 +345,16 @@ function AvailabilityWeekView({
           />
         }
       />
+
+      {/* Bottom of the panel, where the toasts speak from — not floating over
+          the rows. A chip pinned mid-grid covers the very cells the user is
+          watching for the answer. */}
+      {isCartActionPending(cartAction) ? (
+        <div className="cg-availability-cart-chip" role="status">
+          <CartChipSpinner />
+          Holding site… this can take up to 30 seconds
+        </div>
+      ) : null}
 
       <div className="cg-freshness">
         <Freshness week={week} onRefresh={() => void week.refetch()} />
@@ -575,3 +631,13 @@ function featureEarliestDate(feature: PoiFeature): Date {
 }
 
 export { DEFAULT_SITE_COLUMN_WIDTH };
+
+/** The chip's own spinner. Same mark as the cell's, at the chip's size. */
+function CartChipSpinner() {
+  return (
+    <svg className="cg-cell-spinner" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}

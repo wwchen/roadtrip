@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
 import { createTestQueryClient } from '@/test/query-client';
 import type { PoiFeature } from '@/lib/poi';
@@ -61,6 +62,8 @@ interface Stubs {
   campsites: () => Response;
   /** May return a pending promise, which is how the loading state is exercised. */
   watches: () => Response | Promise<Response>;
+  /** Pending on purpose in the tests that assert the in-flight cell. */
+  addToCart: () => Response | Promise<Response>;
 }
 
 let stubs: Stubs;
@@ -89,6 +92,7 @@ beforeEach(() => {
     availability: () => json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])])),
     campsites: () => json(catalogBody([catalogRow(1)], { 1: BOOKING_TEMPLATE })),
     watches: () => json({ watches: [], total: 0 }),
+    addToCart: () => json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart' }),
   };
   vi.stubGlobal(
     'fetch',
@@ -98,6 +102,7 @@ beforeEach(() => {
       if (url.includes('/campsites/availability')) return stubs.availability(url);
       if (url.includes('/campsites')) return stubs.campsites();
       if (url.includes('/api/watches')) return stubs.watches();
+      if (url.includes('/api/booking/add-to-cart')) return stubs.addToCart();
       return json({}, 404);
     }),
   );
@@ -843,5 +848,103 @@ describe('the catalog', () => {
     );
 
     expect(requests.filter((url) => url.endsWith('/campsites'))).toHaveLength(before);
+  });
+});
+
+/** The capability block a user who can actually hold a site gets back. */
+const ATC_CAPABILITIES = { trigger_kinds: ['slack_notify', 'atc'], booking_actions: ['add_to_cart'] };
+
+describe('holding a site straight from the grid', () => {
+  const armFirstCell = async () => {
+    await userEvent.click(cell('Site 1', WEEK[0]));
+  };
+
+  test('without the capability an armed cell is the two-tap Book it always was', async () => {
+    // The default fixtures have no `atc` — this is the unchanged population.
+    await mount();
+
+    await armFirstCell();
+
+    expect(screen.queryByRole('group', { name: 'Booking actions' })).toBeNull();
+    await userEvent.click(cell('Site 1', WEEK[0]));
+    expect(window.open).toHaveBeenCalled();
+  });
+
+  test('with the capability an armed cell offers the two actions', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    await mount();
+
+    await armFirstCell();
+
+    const popover = await screen.findByRole('group', { name: 'Booking actions' });
+    expect(within(popover).getByRole('button', { name: /Book on rec\.gov/ })).toBeInTheDocument();
+    expect(within(popover).getByRole('button', { name: /Add to cart/ })).toBeInTheDocument();
+  });
+
+  test('the rec.gov row still opens the provider, as the flip used to', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Book on rec\.gov/ }));
+
+    expect(window.open).toHaveBeenCalled();
+  });
+
+  test('a hold in flight locks the cell and says so at the bottom of the panel', async () => {
+    let release: ((value: Response) => void) | null = null;
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () => new Promise<Response>((resolve) => { release = resolve; });
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    // The cell is no longer a button — nothing to click while it runs.
+    await waitFor(() => expect(screen.queryByRole('button', { name: new RegExp(`^Site 1 ${WEEK[0]}:`) })).toBeNull());
+    expect(screen.getByLabelText(new RegExp(`^Site 1 ${WEEK[0]}:.*holding this site`))).toBeInTheDocument();
+    expect(screen.getByText(/Holding site… this can take up to 30 seconds/)).toBeInTheDocument();
+
+    await act(async () => {
+      release?.(json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart' }));
+    });
+  });
+
+  test('a held site turns the cell green and points at the cart', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(await screen.findByText('Site held in your rec.gov cart')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open rec\.gov cart/ })).toHaveAttribute(
+      'href',
+      'https://www.recreation.gov/cart',
+    );
+    expect(screen.getByLabelText(new RegExp(`^Site 1 ${WEEK[0]}:.*held in your cart`))).toBeInTheDocument();
+    // The chip is transient: it belongs to the pending state only.
+    expect(screen.queryByText(/Holding site…/)).toBeNull();
+  });
+
+  test('a refused hold reverts the cell and names the reason', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () => json({ error: 'not_available' }, 409);
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(await screen.findByText('Could not hold the site — it is no longer available.')).toBeInTheDocument();
+    // Back to a plain, clickable available cell.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: new RegExp(`^Site 1 ${WEEK[0]}:`) })).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/Holding site…/)).toBeNull();
   });
 });

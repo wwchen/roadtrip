@@ -98,7 +98,11 @@ Source of truth: `backend/src/main/resources/poi-registry.yaml`, loaded by
   opening in the **watch owner's** real recreation.gov shopping cart (a genuine
   hold; never payment or checkout). Rec.gov only; other providers' watches can
   only notify. Offered only to a signed-in user with rec.gov credentials saved
-  in Settings, since the hold lands in their account. The outcome — held or
+  in Settings, since the hold lands in their account. **Two entry points:** the
+  `atc` watch trigger, which fires unattended when a site opens, and the
+  availability grid's *Add to cart*, which holds a site that is free right now
+  (`POST /api/booking/add-to-cart`). Same adapter and same gates; the direct one
+  answers in its HTTP response and notifies nobody. The outcome — held or
   not — is emailed to the owner, and also posted to their Slack when they have
   a personal token and channel.
 - **Armed profile** — a browser profile backing at least one active `atc`

@@ -388,3 +388,69 @@ provider docs drifted before #688).
 - Gating: `atc` offered only to users with credentials configured.
 - No grandfathering: there are no existing `atc` watches; `profile_id` is
   required from day one.
+
+---
+
+### 11. Direct add-to-cart from the grid
+
+*(Added after the slice-4 wave, user-approved design, popover variant.)*
+
+A watch is the right tool for a site that is **not** free yet. For one that is
+free right now, making the user set a watch and wait for it to fire is absurd —
+so the availability grid can hold a site directly.
+
+**Route.** `POST /api/booking/add-to-cart`, `RouteAccess.User`, body
+`{campsite_id, start_date, end_date}` (the same half-open window everything
+else uses). `route/api/BookingRoutes.kt` is the shell over
+`service/booking/BookingActionService`.
+
+**Gate order**, cheapest first, each ruling out a different reason so the caller
+learns the actual blocker rather than a generic failure after a browser round
+trip:
+
+| # | check | refusal |
+| --- | --- | --- |
+| 1 | `CampsiteRepo` → `DbAvailabilityTargetResolver` → `AvailabilityBookingTargetResolver.targetFor(ADD_TO_CART, …)` | 422 `unsupported_target` |
+| 2 | `RecGovCredentialService.isConfigured(caller)` | 403 `credentials_required` |
+| 3 | every night currently `available` in the availability interval table | 409 `not_available` |
+| 4 | adapter `addToCart` with `profile_id` = caller | the companion's own code |
+
+Gate 3 is a cheap stale-grid guard, **not** a vendor call: it reads what the
+poller last saw. The companion is the authority and gets the last word at
+gate 4, where "the site is gone" comes back as `not_available` too.
+
+Gate 4 is the *identical* seam `AtcTriggerActionHandler` uses, preflight and
+one-shot unattended re-login included. Transient contention (`profile_busy`,
+`browser_cap_reached`) is a 409 the caller can retry; a broken booking service
+is a 502. Success is `200 {status:"completed", cart_url}`.
+
+**No notification is sent on this path.** The user is watching the response;
+emailing them what their own screen just said would be noise. That is the only
+behavioural difference from the watch-fired path.
+
+**Popover UX.** An armed available cell today flips to "Book" and a second tap
+opens recreation.gov. When — and only when — `trigger_kinds` contains `atc`
+(the same condition that enables the watch editor's ATC toggle, via the split
+helpers in `lib/watch-windows.ts`), arming instead opens a small anchored
+popover with two 44px rows: *Book on rec.gov* (the existing behaviour) and
+*Add to cart* (brand-tinted). **A user without the capability sees no change at
+all.** Positioning reuses the `WatchPopover` idiom, because the matrix clips
+anything wider than one 66px column.
+
+**State flow.** A pure `cart-action.ts` machine — `idle → pending → held |
+failed(code)` — with the state held in `availability-controller.ts` beside
+`armedBook`, so disarm, week changes and refetch decide in one place what
+survives. One action at a time: the companion serialises per profile, so a
+second concurrent hold could only ever answer `profile_busy`. Answers carry
+their cell and are refused by identity if that cell is no longer pending, which
+is what stops a late response resurrecting a cell the user has moved on from.
+A *running* hold survives navigation (it is real work with a real browser
+behind it); a settled one does not.
+
+While pending the cell is locked, brand-tinted with an inset brand ring and a
+spinner, and a chip reading "Holding site… this can take up to 30 seconds"
+appears at the **bottom of the availability panel** — the same place the toasts
+speak from, never floating over the rows, because a chip pinned mid-grid covers
+the very cells the user is watching for the answer. Success turns the cell
+green with a check and "Cart" until the next refetch, and toasts with a link to
+`cart_url`; failure reverts the cell and toasts the mapped code.

@@ -276,6 +276,11 @@ lives in the adapter rather than the executor because that is the layer where
 credential custody is reachable, and so there is one health authority rather
 than two readers of the same route.
 
+The seam now has a **user-initiated caller** as well as the watch-fired one:
+`BookingActionService` behind `POST /api/booking/add-to-cart` holds a site the
+user is looking at right now, through the same adapter, profile threading and
+preflight (see the spec's §11 for its gate order).
+
 A `RecGovKeepaliveJob` under `service/scheduler/` keeps the cost of that path
 low: on an env-tunable cadence it pushes the *armed set* — the distinct owners
 of active `atc` watches — to the companion's keep-warm marking and refreshes

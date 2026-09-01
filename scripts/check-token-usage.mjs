@@ -60,6 +60,9 @@ const COMPONENT_LOCAL = new Set([
   '--rt-site-column-width',
   // Declared in availability.css; WatchPopover positions against the same number.
   '--rt-watch-editor-width',
+  // Declared in cell-book-popover.css; CellBookPopover positions against it, for
+  // the same reason the watch editor does.
+  '--rt-cell-book-pop-width',
   '--rt-watch-editor-mobile-margin',
   // Set from React inline styles in SiteMatrix.tsx (lines ~352 and ~370), never
   // declared in CSS, and read with a fallback for the pre-measurement first paint.
