@@ -275,7 +275,13 @@ class RecGovCredentialService(
                     unattended = true,
                 )
         ) {
-            is CompanionLoginResult.Ok -> CompanionActionResult.Ok
+            is CompanionLoginResult.Ok -> {
+                // The profile is signed in, so whatever page a remembered
+                // challenge pointed at is gone. Leaving the id would keep the
+                // status row offering a code step that can only fail.
+                pendingChallenges.remove(userId.value)
+                CompanionActionResult.Ok
+            }
             // The companion opens no challenge for an unattended caller, so
             // there is nothing to remember even if it somehow answers one.
             is CompanionLoginResult.MfaRequired -> CompanionActionResult.Failed(RecGovSessionCodes.MFA_REQUIRED, null)

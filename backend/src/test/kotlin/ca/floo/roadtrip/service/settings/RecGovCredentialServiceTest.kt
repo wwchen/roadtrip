@@ -628,6 +628,24 @@ class RecGovCredentialServiceTest {
         }
 
     @Test
+    fun `a successful re-login clears a challenge nobody is going to complete`() =
+        runBlocking {
+            // The user started an MFA login and walked away. The fire path then
+            // signed the profile in unattended, so the held page is gone and the
+            // remembered id points at nothing — the status row must stop
+            // offering a code step for it.
+            val companion = FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", null))
+            val svc = service(configuredRepo(), companion)
+            svc.login(testUserId)
+            assertTrue(svc.status(testUserId).mfaPending)
+
+            companion.loginResult = CompanionLoginResult.Ok
+            assertEquals(CompanionActionResult.Ok, svc.reLogin(testUserId))
+
+            assertFalse(svc.status(testUserId).mfaPending)
+        }
+
+    @Test
     fun `re-login without stored credentials is a refusal, not an exception`() =
         runBlocking {
             val result = service(FakeSettingsRepo()).reLogin(testUserId)

@@ -153,9 +153,12 @@ internal class AtcTriggerActionHandler(
                 detail = detail,
                 targets = targets,
             )
+        // The fanout is all-or-nothing per target, so this covers both "nobody
+        // heard" and "one channel of two failed" — either way somebody who
+        // should know about this hold does not.
         if (!delivered) {
             log.warn(
-                "ATC result for watch_id={} status={} reached no one (targets={})",
+                "ATC result for watch_id={} status={}: at least one notification target failed (targets={})",
                 watch.id,
                 status,
                 targets.size,

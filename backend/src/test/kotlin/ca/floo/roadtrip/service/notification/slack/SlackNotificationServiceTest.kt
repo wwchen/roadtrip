@@ -11,9 +11,12 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -43,6 +46,53 @@ class SlackNotificationServiceTest {
             }
         return SlackClient(config = null, httpClient = HttpClient(engine)) to capture
     }
+
+    @Test
+    fun `a failed ATC card names the reason the caller gave it`() =
+        runBlocking {
+            // A preflight failure never reaches the companion, so there is no
+            // response object to dig a reason out of — the card would otherwise
+            // say only "failed". The email side has producer-to-renderer
+            // coverage; this is the Slack half.
+            val (client, capture) = clientReturning("""{"ok":true}""")
+            val service = SlackNotificationService(config = null, slackClient = client)
+
+            val sent =
+                service.sendAtcResult(
+                    watchId = 42,
+                    vendor = "recgov",
+                    status = "failed",
+                    request = buildJsonObject { put("campsite_id", "102524") },
+                    response = null,
+                    error = "recgov_session_expired",
+                    detail = "session expired — re-login in Settings",
+                    target = NotificationTarget.Slack(channel = "#owner-channel", token = "xoxb-owner"),
+                )
+
+            assertTrue(sent)
+            val body = capture["body"].orEmpty()
+            assertTrue(body.contains("*Reason*"), body)
+            assertTrue(body.contains("recgov_session_expired"), body)
+            assertTrue(body.contains("re-login in Settings"), body)
+        }
+
+    @Test
+    fun `a completed ATC card carries no reason block`() =
+        runBlocking {
+            val (client, capture) = clientReturning("""{"ok":true}""")
+            val service = SlackNotificationService(config = null, slackClient = client)
+
+            service.sendAtcResult(
+                watchId = 42,
+                vendor = "recgov",
+                status = "completed",
+                request = buildJsonObject { put("campsite_id", "102524") },
+                response = buildJsonObject { put("cart_added", true) },
+                target = NotificationTarget.Slack(channel = "#owner-channel", token = "xoxb-owner"),
+            )
+
+            assertFalse(capture["body"].orEmpty().contains("*Reason*"))
+        }
 
     @Test
     fun `sendWatchStatus uses owner token when config is null but client is present`() =
