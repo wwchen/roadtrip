@@ -63,6 +63,7 @@ import {
 import { createServerRuntime } from './server/runtime.js'
 import {
   handleDiagnosticImage,
+  handleDiagnosticList,
   handleLiveScreenshot,
 } from './server/routes/screenshot.js'
 
@@ -141,6 +142,7 @@ async function handleContractRoute (route, req, res, url, runtime, deps) {
 
 const CONTRACT_ROUTE_HANDLERS = {
   getDiagnosticScreenshot: async ({ url, res }) => handleDiagnosticImage(url, res),
+  listDiagnostics: async ({ res }) => handleDiagnosticList(res),
   getScreenshot: async ({ url, res, runtime, deps }) => handleLiveScreenshot(url, res, { runtime, ...deps }),
   getOpenApiJson: async ({ res }) => jsonResponse(res, HTTP_OK, COMPANION_OPENAPI_SPEC),
   getSwaggerDocs: async ({ res }) => htmlResponse(res, HTTP_OK, renderSwaggerPage()),

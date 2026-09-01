@@ -1,5 +1,6 @@
 import { campsiteUrl } from '../../browser.js'
 import { runAtcOnce } from '../../runAtcOnce.js'
+import { withTrace } from '../../tracing.js'
 import {
   EXIT_SUCCESS,
   EXIT_USAGE,
@@ -69,12 +70,19 @@ export async function handleAtc (req, res, {
     }
     atcStartLine = `recgov atc start profile=${profileId} ${payloadSummary(raw)}`
     runtime.logger(atcStartLine)
-    const code = await runAtcOnceFn({
-      argv: ['--payload-json', raw],
-      stdout,
-      stderr,
-      contextOptions: { getContextFn: async () => resolved.context, profileId },
-    })
+    // The fire path is where failure visibility matters most and where nobody
+    // is watching. Tracing adds no waits; the trace is discarded unless the
+    // hold failed.
+    const { result: code, trace } = await withTrace(
+      resolved.context,
+      { operation: OPERATION_ATC, failureReason: (c) => (c === EXIT_SUCCESS ? null : `exit_${c}`) },
+      () => runAtcOnceFn({
+        argv: ['--payload-json', raw],
+        stdout,
+        stderr,
+        contextOptions: { getContextFn: async () => resolved.context, profileId },
+      }),
+    )
     const baseResult = parseRunResult(stdout.value())
     const resultLine = `recgov atc result ${[
       ...resultLogFields(baseResult),
@@ -93,7 +101,7 @@ export async function handleAtc (req, res, {
           ? HTTP_UNPROCESSABLE_ENTITY
           : HTTP_INTERNAL_ERROR
     runtime.logger(resultLine)
-    jsonResponse(res, status, result)
+    jsonResponse(res, status, trace ? { ...result, diagnostics: { ...(result.diagnostics || {}), trace: trace.url } } : result)
   } catch (error) {
     const exceptionLine = `recgov atc exception ${error.message}`
     runtime.logger(exceptionLine)

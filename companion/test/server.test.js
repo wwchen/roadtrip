@@ -1,6 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Readable } from 'node:stream'
+import fsp from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import {
   HANDLED_OPERATION_IDS,
   createCompanionServer,
@@ -997,6 +1000,51 @@ test('every data route rejects a request without the shared-secret header', asyn
   assert.equal(posted.status, 401)
 })
 
+test('a failed login names its trace in the response and leaves the file behind', async () => {
+  const dir = await freshDiagnosticsDir()
+  const pool = tracingPool(dir)
+  const server = testServer({
+    pool,
+    credentialLoginFn: async () => ({ state: 'failed', logged_in: false, reason: 'captcha_required' }),
+  })
+
+  const response = await beginLogin(server)
+
+  assert.equal(response.status, 401)
+  assert.match(response.json.diagnostics.trace, /recgov-login-.*-captcha_required\.trace\.zip$/)
+  const written = await fsp.readdir(dir)
+  assert.equal(written.length, 1, 'the failure keeps exactly its own trace')
+  assert.match(written[0], /\.trace\.zip$/)
+})
+
+test('a successful login leaves zero trace files behind', async () => {
+  const dir = await freshDiagnosticsDir()
+  const pool = tracingPool(dir)
+  const server = testServer({
+    pool,
+    credentialLoginFn: async () => ({ state: 'ok', logged_in: true }),
+  })
+
+  const response = await beginLogin(server)
+
+  assert.equal(response.status, 200)
+  assert.equal(response.json.diagnostics, null, 'nothing was kept, so nothing is named')
+  assert.deepEqual(await fsp.readdir(dir), [], 'a success must write no trace at all')
+})
+
+test('the diagnostics listing is token-gated and reports the prune bound', async () => {
+  const server = testServer()
+
+  const refused = await request(server, { path: '/screenshot/diagnostics', token: null })
+  assert.equal(refused.status, 401, 'diagnostics name real failures on real profiles')
+
+  const listed = await request(server, { path: '/screenshot/diagnostics' })
+  assert.equal(listed.status, 200)
+  assert.equal(listed.json.ok, true)
+  assert.equal(Array.isArray(listed.json.artifacts), true)
+  assert.equal(listed.json.max_artifacts > 0, true)
+})
+
 test('the operator shell loads without a token, because it carries nothing', async () => {
   // A browser cannot set a header on a navigation, and the compose port mapping
   // means a request from the host is not in-container loopback — so the page was
@@ -1099,6 +1147,29 @@ async function beginLogin (server) {
     headers: { accept: 'application/json', 'content-type': 'application/json' },
     body: JSON.stringify({ profile_id: PROFILE_ID, username: 'camper@example.test', password: 'secret' }),
   })
+}
+
+/** A pool whose contexts record tracing into `dir`, like a real browser would. */
+function tracingPool (dir) {
+  return testPool({
+    launchContextFn: async () => ({
+      pages: async () => [],
+      close: async () => {},
+      once: () => {},
+      tracing: {
+        start: async () => {},
+        stop: async (options) => {
+          if (options?.path) await fsp.writeFile(options.path, 'trace-bytes')
+        },
+      },
+    }),
+  })
+}
+
+async function freshDiagnosticsDir () {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'companion-server-diag-'))
+  process.env.RECGOV_DIAGNOSTIC_DIR = dir
+  return dir
 }
 
 function testPool (overrides = {}) {

@@ -3,6 +3,7 @@ import {
   recgovLoginCredentialsFromInput,
 } from '../../recgovSession.js'
 import { renderLoginPage } from '../../templates.js'
+import { withTrace } from '../../tracing.js'
 import {
   ERROR_MFA_CHALLENGE_EXPIRED,
   ERROR_MFA_CHALLENGE_UNKNOWN,
@@ -48,6 +49,7 @@ export const ERROR_LOGIN_BACKOFF = 'login_backoff'
 const UNATTENDED_FIELD = 'unattended'
 
 const OPERATION_LOGIN = 'login'
+const OPERATION_MFA = 'mfa'
 const OPERATION_LOGOUT = 'logout'
 const OPERATION_REFRESH = 'refresh'
 
@@ -195,11 +197,18 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
       return
     }
 
-    const outcome = await credentialLoginFn({
-      getContextFn: async () => resolved.context,
-      credentials,
-      profileId,
-    })
+    // An MFA prompt is not a failure to trace: the login is mid-flight and the
+    // page is still open. Only an outright failure keeps its trace.
+    const { result: outcome, trace } = await withTrace(
+      resolved.context,
+      {
+        operation: OPERATION_LOGIN,
+        failureReason: (o) =>
+          o?.state === LOGIN_STATE_OK || o?.state === LOGIN_STATE_MFA_REQUIRED ? null : o?.reason || 'login_failed',
+      },
+      () => credentialLoginFn({ getContextFn: async () => resolved.context, credentials, profileId }),
+    )
+    if (trace) outcome.trace_url = trace.url
     runtime.logger('recgov auth login request result', outcome.state, `profile=${profileId}`, `duration_ms=${Date.now() - startedAt}`)
 
     if (outcome.state === LOGIN_STATE_MFA_REQUIRED && unattended) {
@@ -240,7 +249,7 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
     const status = loginStatus(pool, profileId, outcome)
     if (status.logged_in !== true) pool.recordLoginFailure(profileId)
     else pool.clearLoginFailure(profileId)
-    respondAuthResult(req, res, authHttpStatus(status), authResponseBody(status))
+    respondAuthResult(req, res, authHttpStatus(status), withDiagnostics(authResponseBody(status), outcome.trace_url))
   } catch (error) {
     runtime.logger('recgov auth login request exception', `profile=${profileId}`, error.message)
     const status = pool.setAuthStatus(profileId, authExceptionStatus(OPERATION_LOGIN, error))
@@ -267,7 +276,12 @@ async function completeMfaChallenge (req, res, { runtime, pool, profileId, chall
   const startedAt = Date.now()
   try {
     runtime.logger('recgov auth mfa completion start', `profile=${profileId}`)
-    const outcome = await taken.challenge.complete(mfaCode)
+    const { result: outcome, trace } = await withTrace(
+      pool.liveContext(profileId),
+      { operation: OPERATION_MFA, failureReason: (o) => (o?.state === LOGIN_STATE_OK ? null : o?.reason || ERROR_MFA_INVALID) },
+      () => taken.challenge.complete(mfaCode),
+    )
+    if (trace) outcome.trace_url = trace.url
     const status = loginStatus(pool, profileId, outcome)
     runtime.logger('recgov auth mfa completion result', status.state, `profile=${profileId}`, `duration_ms=${Date.now() - startedAt}`)
     if (status.logged_in === true) {
@@ -277,11 +291,11 @@ async function completeMfaChallenge (req, res, { runtime, pool, profileId, chall
     }
     // A wrong code is not a failed credential login: arming the credential
     // backoff here would lock the user out of retrying over a typo.
-    respondAuthResult(req, res, HTTP_UNAUTHORIZED, {
+    respondAuthResult(req, res, HTTP_UNAUTHORIZED, withDiagnostics({
       ...authActionResponseBody(status, false),
       error: ERROR_MFA_INVALID,
       detail: outcome?.detail || outcome?.reason || 'Recreation.gov rejected the code',
-    })
+    }, outcome?.trace_url))
   } catch (error) {
     runtime.logger('recgov auth mfa completion exception', `profile=${profileId}`, error.message)
     const status = pool.setAuthStatus(profileId, authExceptionStatus(OPERATION_LOGIN, error))
@@ -312,6 +326,19 @@ function loginStatus (pool, profileId, outcome) {
     ...(outcome?.reason ? { reason: outcome.reason } : {}),
     ...(outcome?.detail ? { detail: outcome.detail } : {}),
   })
+}
+
+/**
+ * Names the artifacts a failure left behind, so the caller can go find them.
+ *
+ * The screenshot url already rides in `diagnostics` (the login diagnostic
+ * object); this adds the trace beside it under one key rather than inventing a
+ * second top-level field. Absent when nothing was kept — a successful run has
+ * no residue to point at.
+ */
+function withDiagnostics (body, traceUrl) {
+  if (!traceUrl) return body
+  return { ...body, diagnostics: { ...(body.diagnostics || {}), trace: traceUrl } }
 }
 
 function mfaChallengeDetail (error) {

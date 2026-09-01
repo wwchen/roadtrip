@@ -111,6 +111,33 @@ class CompanionSessionClientTest {
         }
 
     @Test
+    fun `a failure that kept artifacts says so, without carrying filenames`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/login" to
+                            TestResponse(
+                                status = 401,
+                                body =
+                                    """
+                                    {"ok":false,"error":"recgov_login_failed","detail":"password rejected",
+                                     "diagnostics":{"trace":"/screenshot/diagnostics/recgov-login-x.trace.zip"}}
+                                    """.trimIndent(),
+                            ),
+                    ),
+                ).use { server ->
+                    val result = clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "hunter2")
+
+                    val failed = result as CompanionLoginResult.Failed
+                    assertTrue(failed.detail!!.contains("password rejected"), failed.detail!!)
+                    assertTrue(failed.detail!!.contains("diagnostics captured"), failed.detail!!)
+                    // The filename belongs on the operator page, not in a one-line status row.
+                    assertFalse(failed.detail!!.contains(".trace.zip"), failed.detail!!)
+                }
+        }
+
+    @Test
     fun `an interactive login never marks itself unattended`() =
         runBlocking {
             CompanionTestServer

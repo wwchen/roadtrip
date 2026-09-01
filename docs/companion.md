@@ -110,7 +110,8 @@ are authoritative; this is the shape.
 | `POST /verify` | Dry-run session check. Never places a hold. |
 | `POST /atc` | One-shot add-to-cart in one profile. |
 | `GET /screenshot` | Live PNG of a recreation.gov page from one profile. |
-| `GET /screenshot/diagnostics/{file}` | Stored login/ATC diagnostic PNG. |
+| `GET /screenshot/diagnostics` | List stored failure diagnostics, newest first. |
+| `GET /screenshot/diagnostics/{file}` | Download one diagnostic — a PNG, or a Playwright trace archive. |
 
 ### Two-phase MFA
 
@@ -169,6 +170,43 @@ the fingerprint cookie and Akamai without needing a campsite target. It
 the session is live; `401` carries `verify.error`
 (`recgov_not_authenticated` or `recgov_cart_unreachable`).
 
+### Failure diagnostics and traces
+
+Every browser operation — `/login` (both phases), `/verify`, `/atc` — runs
+under a Playwright trace (screenshots, snapshots, sources). **`/refresh` does
+not**: the keepalive sweep touches every armed profile on a cadence and would
+churn artifacts for nothing.
+
+The outcome decides what survives:
+
+- **Success:** tracing stops with no path, so Playwright discards the buffer.
+  Nothing is written — not written and later swept.
+- **Failure:** the trace is written to the diagnostics directory beside the
+  failure screenshot, under the same naming convention
+  (`recgov-<operation>-<timestamp>-<reason>.trace.zip`), and the response names
+  it in `diagnostics.trace`.
+
+Open one with:
+
+```sh
+npx playwright show-trace recgov-login-2026-09-01T00-00-00-000Z-captcha_required.trace.zip
+```
+
+The directory is pruned to the newest `COMPANION_MAX_DIAGNOSTIC_ARTIFACTS`
+(default 40) on every artifact write — screenshots and traces share the budget,
+since a trace is the expensive one. Pruning runs on write rather than on a
+timer: the directory only grows when something writes to it.
+
+The operator page has a **Failure diagnostics** section listing what is stored
+with per-artifact download buttons. Downloads go through fetch + the token
+header, because the listing and download routes are gated like every other data
+route — only the static shell is not.
+
+Tracing never changes an outcome: if the tracing API itself throws, the
+operation's own result stands and the trace is simply absent. It adds no waits,
+which is what makes it acceptable on the ATC fire path — the one place failure
+visibility matters most and nobody is watching.
+
 ## Configuration
 
 | variable | default | meaning |
@@ -179,6 +217,8 @@ the session is live; `401` carries `verify.error`
 | `COMPANION_MAX_CONCURRENT_BROWSERS` | `3` | Cap on on-demand resident browsers. |
 | `COMPANION_MFA_CHALLENGE_TTL_MS` | `300000` | Pending MFA challenge lifetime. |
 | `COMPANION_FAILED_LOGIN_BACKOFF_MS` | `60000` | Suppression window after a failed login. |
+| `COMPANION_MAX_DIAGNOSTIC_ARTIFACTS` | `40` | Failure screenshots + traces kept before the oldest are pruned. |
+| `RECGOV_DIAGNOSTIC_DIR` | `/tmp/campsite-companion/recgov-diagnostics` | Where those artifacts live. |
 | `HEADLESS` | true in Docker | Headed Chromium for operator login. |
 | `RECGOV_LOGIN_TIMEOUT_MS` | `120000` | Manual-login wait. |
 

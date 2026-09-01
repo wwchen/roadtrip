@@ -1,5 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import {
+  listDiagnostics,
+  maxDiagnosticArtifacts,
+} from '../../tracing.js'
 import { RECGOV_DIAGNOSTIC_DIR } from '../../recgovSession.js'
 import {
   SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX,
@@ -13,6 +17,8 @@ import {
   HTTP_OK,
   LOG_DETAIL_MAX_CHARS,
   PNG_CONTENT_TYPE,
+  TRACE_CONTENT_TYPE,
+  TRACE_SUFFIX,
 } from '../constants.js'
 import {
   imageResponse,
@@ -27,6 +33,15 @@ import {
 } from '../requestInput.js'
 
 const OPERATION_SCREENSHOT = 'screenshot'
+
+/** The stored failure diagnostics, newest first. Token-gated like every data route. */
+export async function handleDiagnosticList (res) {
+  jsonResponse(res, HTTP_OK, {
+    ok: true,
+    max_artifacts: maxDiagnosticArtifacts(),
+    artifacts: await listDiagnostics(),
+  })
+}
 
 export async function handleDiagnosticImage (url, res) {
   const filename = diagnosticFilename(url)
@@ -47,7 +62,25 @@ export async function handleDiagnosticImage (url, res) {
     return
   }
 
-  await serveScreenshotImage(imagePath, res, 'diagnostic_not_found')
+  await serveDiagnosticArtifact(imagePath, res)
+}
+
+/**
+ * Screenshots are PNGs; traces are zip archives. Same directory, same guard,
+ * different content type — a trace served as image/png downloads as a file the
+ * browser then refuses to name correctly.
+ */
+async function serveDiagnosticArtifact (artifactPath, res) {
+  if (!artifactPath.endsWith(TRACE_SUFFIX)) {
+    await serveScreenshotImage(artifactPath, res, 'diagnostic_not_found')
+    return
+  }
+  try {
+    const archive = await readFile(artifactPath)
+    imageResponse(res, HTTP_OK, archive, TRACE_CONTENT_TYPE)
+  } catch {
+    jsonResponse(res, HTTP_NOT_FOUND, { ok: false, error: 'diagnostic_not_found' })
+  }
 }
 
 export async function handleLiveScreenshot (url, res, { runtime, pool, recgovScreenshotDeps }) {

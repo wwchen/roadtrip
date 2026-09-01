@@ -196,6 +196,18 @@ export function createProfilePool ({
       return state.launching
     },
 
+    /**
+     * The already-launched context for a profile, or null.
+     *
+     * Deliberately not `context()`: that LAUNCHES one, and the callers of this
+     * (tracing around work on a profile someone else already opened, e.g. an
+     * MFA completion resuming a held page) must never start a browser as a
+     * side effect of wanting to observe one.
+     */
+    liveContext (profileId) {
+      return profiles.get(profileId)?.context ?? null
+    },
+
     async closeProfile (profileId) {
       const state = profiles.get(profileId)
       if (!state) return

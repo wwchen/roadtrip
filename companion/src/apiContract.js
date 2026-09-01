@@ -206,6 +206,19 @@ export const COMPANION_API_ROUTES = [
   },
   {
     method: 'GET',
+    path: SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX,
+    operationId: 'listDiagnostics',
+    summary: 'List stored failure diagnostics (screenshots and Playwright traces)',
+    description:
+      'Newest first. Artifacts are kept only for operations that FAILED — a successful run writes ' +
+      'nothing — and the directory is pruned to COMPANION_MAX_DIAGNOSTIC_ARTIFACTS. Open a trace ' +
+      'with `npx playwright show-trace <file>`.',
+    responses: {
+      200: jsonResponse('The stored diagnostics', 'DiagnosticListResponse'),
+    },
+  },
+  {
+    method: 'GET',
     path: `${SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX}/{filename}`,
     operationId: 'getDiagnosticScreenshot',
     summary: 'Read a stored login diagnostic screenshot',
@@ -221,9 +234,9 @@ export const COMPANION_API_ROUTES = [
       },
     ],
     responses: {
-      200: pngResponse('Stored diagnostic PNG'),
+      200: pngResponse('Stored diagnostic PNG, or a Playwright trace archive'),
       400: jsonResponse('Diagnostic filename is invalid', 'ErrorResponse'),
-      404: jsonResponse('Diagnostic screenshot was not found', 'ErrorResponse'),
+      404: jsonResponse('Diagnostic artifact was not found', 'ErrorResponse'),
     },
   },
   {
@@ -465,6 +478,29 @@ export const COMPANION_API_SCHEMAS = {
       screenshots: {
         type: 'array',
         items: { $ref: '#/components/schemas/PlaywrightScreenshot' },
+      },
+    },
+  },
+  DiagnosticListResponse: {
+    type: 'object',
+    required: ['ok', 'artifacts'],
+    properties: {
+      ok: { type: 'boolean' },
+      max_artifacts: { type: 'integer', description: 'The prune bound this companion keeps.' },
+      artifacts: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            file: { type: 'string', example: 'recgov-login-2026-09-01T00-00-00-000Z-captcha_required.trace.zip' },
+            kind: { type: 'string', enum: ['screenshot', 'trace'] },
+            operation: { type: 'string', example: 'login' },
+            reason: { type: 'string', example: 'captcha_required' },
+            url: { type: 'string' },
+            size_bytes: { type: 'integer' },
+            modified_at: { type: 'string', format: 'date-time' },
+          },
+        },
       },
     },
   },

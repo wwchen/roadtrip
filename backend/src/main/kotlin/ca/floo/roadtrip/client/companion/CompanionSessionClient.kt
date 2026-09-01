@@ -52,6 +52,11 @@ private const val FIELD_STATE = "state"
 private const val STATUS_UNCHECKED = "unchecked"
 private const val FIELD_RECGOV_AUTH = "recgov_auth"
 private const val FIELD_VERIFY = "verify"
+private const val FIELD_DIAGNOSTICS = "diagnostics"
+private const val FIELD_TRACE = "trace"
+
+/** Short by design: the operator page carries the filenames. */
+private const val DIAGNOSTICS_CAPTURED_NOTE = "diagnostics captured"
 
 // ── Companion-internal codes this adapter translates ─────────────────────────
 private const val COMPANION_LOGIN_FAILED = "recgov_login_failed"
@@ -235,8 +240,18 @@ internal class CompanionSessionClient(
         }
     }
 
-    private fun failureDetail(body: JsonObject): String? =
-        body.stringValue(FIELD_DETAIL) ?: body.objectValue(FIELD_RECGOV_AUTH)?.stringValue(FIELD_DETAIL)
+    /**
+     * The failure's own words, plus a note when the companion kept artifacts.
+     *
+     * Only a note: the filenames are long, the settings line is one row, and
+     * the operator page lists them in full. What the user needs to know is that
+     * there is something to look at.
+     */
+    private fun failureDetail(body: JsonObject): String? {
+        val detail = body.stringValue(FIELD_DETAIL) ?: body.objectValue(FIELD_RECGOV_AUTH)?.stringValue(FIELD_DETAIL)
+        if (body.objectValue(FIELD_DIAGNOSTICS)?.stringValue(FIELD_TRACE) == null) return detail
+        return listOfNotNull(detail, DIAGNOSTICS_CAPTURED_NOTE).joinToString(" — ")
+    }
 
     private fun profileBody(profileId: String): JsonObject = buildJsonObject { put(FIELD_PROFILE_ID, profileId) }
 
