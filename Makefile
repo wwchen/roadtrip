@@ -7,8 +7,12 @@ DEPLOY_BRANCH ?= master
 DEPLOY_DATA_SHA ?=
 DEPLOY_COMPANION_SHA ?=
 RECGOV_ATC_LOCAL_URL ?= http://127.0.0.1:8770
-RECGOV_COMPANION_BROWSER_PROFILE ?= $(HOME)/.campsite-companion/browser-session
-RECGOV_COMPANION_PROFILE_ENV := COMPANION_BROWSER_PROFILE="$${COMPANION_BROWSER_PROFILE:-$${RECGOV_COMPANION_BROWSER_PROFILE:-$(RECGOV_COMPANION_BROWSER_PROFILE)}}"
+# The companion's whole data directory. The container mounts it at
+# /var/lib/campsite-companion, so the host CLI and the container name the same
+# store.json — which is what lets a headed mint here reach the container.
+RECGOV_COMPANION_DATA_DIR ?= $(HOME)/.campsite-companion
+RECGOV_COMPANION_BROWSER_PROFILE ?= $(RECGOV_COMPANION_DATA_DIR)/browser-session
+RECGOV_COMPANION_PROFILE_ENV := COMPANION_BROWSER_PROFILE="$${COMPANION_BROWSER_PROFILE:-$${RECGOV_COMPANION_BROWSER_PROFILE:-$(RECGOV_COMPANION_BROWSER_PROFILE)}}" COMPANION_DIR="$${COMPANION_DIR:-$(RECGOV_COMPANION_DATA_DIR)}"
 LOCAL_COMPOSE_PROFILES ?= --profile pois --profile recgov-companion
 # Every stack command runs under `manage.py exec`, which decrypts the vault in
 # memory and execs the command with the values in its environment. Compose then

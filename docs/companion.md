@@ -63,19 +63,25 @@ a request without it is rejected with `400 profile_id_required`.
   `<browser-session volume>/profiles/<profile_id>`. Two concurrent cold
   callers for one profile share a single launch: two Chromiums on one
   user-data directory corrupt the profile.
-- Anything stored per session — the `recgov_cookies` Akamai workaround
-  included — is keyed by profile id. The unkeyed legacy value belongs to the
-  CLI's single profile and never enters a user's profile.
+- Anything stored per session — the `recgov_cookies` cookie jar included — is
+  keyed by profile id (`recgov_cookies:<profile_id>`). See
+  [Session durability](#session-durability) for the round trip and the one
+  narrow case where the unkeyed legacy value is still read.
 - Playwright persistent contexts are one browser process per directory, so
   residency is a real memory cost. `COMPANION_MAX_CONCURRENT_BROWSERS`
   (default 3) caps on-demand launches; the least recently used idle profile is
   evicted to make room. When every resident profile is busy the launch is
   refused with `503 browser_cap_reached` rather than evicting live work.
-- **Keep-warm (armed) profiles are exempt from the cap.** These are the
-  profiles backing at least one active `atc` watch. The companion cannot derive
-  that — the watches live in the backend's database — so the backend's keepalive
-  job pushes the whole set to `POST /keep-warm` on each sweep and the companion
-  defaults to none. The push **replaces** rather than merges, which is what
+- **Keep-warm profiles are exempt from the cap.** The companion cannot derive
+  the set — the watches and credentials live in the backend's database — so the
+  backend's keepalive job pushes the whole set to `POST /keep-warm` on each
+  sweep and the companion defaults to none. The backend builds it as **owners of
+  active `atc` watches, plus every user with rec.gov credentials whose profile
+  has been signed in at least once**. Armed-watch owners come first and a
+  never-signed-in profile is skipped (there is no session to keep alive), and
+  the whole set is truncated to `BOOKING_MAX_KEEP_WARM_PROFILES` (default 25).
+  Armed watches alone were too narrow: a user who logged in without an `atc`
+  watch had nothing refreshing them, so their session lapsed within the hour. The push **replaces** rather than merges, which is what
   disarms a profile whose last `atc` watch was paused or deleted; an empty array
   disarms everyone. When armed profiles alone exceed the cap, the companion logs
   and `GET /health` reports `pool.keep_warm_overflow` rather than evicting an
@@ -170,6 +176,48 @@ the fingerprint cookie and Akamai without needing a campsite target. It
 the session is live; `401` carries `verify.error`
 (`recgov_not_authenticated` or `recgov_cart_unreachable`).
 
+### Session durability
+
+**Sessions survive a container restart via the per-profile cookie store.**
+Rec.gov's session cookies — including the `r1s-fingerprint` value its JWT is
+pinned to — are session-scoped in Chromium: they live in memory and die with
+the browser process, so the persistent profile directory alone does not carry
+a login across a restart.
+
+So the round trip is explicit:
+
+- **Save.** Every auth-bearing operation that *succeeded* — `POST /login`
+  (credential and MFA completion), `POST /refresh`, `POST /verify`, and the
+  host-side `recgov:login` / `recgov:refresh` probes — exports the context's
+  `recreation.gov` cookies to `recgov_cookies:<profile_id>`. Failure paths
+  deliberately do not: a failed attempt's jar would overwrite a good one.
+- **Inject.** `launchProfileContext` re-injects that key on every launch.
+- **Bootstrap.** When a profile's own key is empty, the unkeyed legacy
+  `recgov_cookies` — the operator's documented cookie paste — is injected
+  instead, once. It stops being consulted as soon as that profile saves a jar
+  of its own, and nothing ever writes back to the unkeyed key. One profile's
+  *saved* jar is never reachable from another profile.
+
+The store file must live on the mounted volume. The container sets
+`COMPANION_DIR=/var/lib/campsite-companion`, and Compose mounts the operator's
+whole `$HOME/.campsite-companion` there (`RECGOV_COMPANION_DATA_DIR`) rather
+than just the pool inside it. Left at its default the file would land in the
+image's ephemeral `/root` and every container recreate — every Tilt rebuild,
+every deploy — would sign every profile out. Host and container therefore name
+the same `store.json`, which is also what lets a headed mint on the host reach
+the container.
+
+**Treat `recgov_cookies*` as credential material.** The value is not a hint or
+a cache: it *is* a live rec.gov session, and anyone holding it is signed in as
+that account. It never leaves the companion host, never appears in traces or
+diagnostics, and a store file holding one deserves the same handling as a
+password file.
+
+`profile_id` has exactly one shape: the roadtrip user id as a decimal string
+(`"7"`). Every backend caller derives it the same way; the store key and the
+profile directory are both built from it, so a second shape would save a
+session under a key the launch path never reads.
+
 ### Failure diagnostics and traces
 
 Every browser operation — `/login` (both phases), `/verify`, `/atc` — runs
@@ -228,7 +276,9 @@ visibility matters most and nobody is watching.
 | --- | --- | --- |
 | `COMPANION_API_TOKEN` / `COMPANION_API_TOKEN_FILE` | — / `/run/secrets/companion_api_token` | Shared secret; unset fails closed. |
 | `COMPANION_HOST` / `COMPANION_PORT` | `0.0.0.0` / `8770` | Listen address. |
-| `COMPANION_BROWSER_PROFILE` | `$HOME/.campsite-companion/browser-session` | Root of the profile pool. |
+| `COMPANION_DIR` | `$HOME/.campsite-companion` | The companion's data directory. `store.json` — the per-profile cookie jars — lives here. **In Docker it must point inside the mounted volume**, or sessions die with the container. |
+| `COMPANION_BROWSER_PROFILE` | `$COMPANION_DIR/browser-session` | Root of the profile pool. |
+| `COMPANION_PROFILE_ID` | derived from the profile directory's name | Which pooled profile a host-side CLI run mints a session for. |
 | `COMPANION_MAX_CONCURRENT_BROWSERS` | `3` | Cap on on-demand resident browsers. |
 | `COMPANION_MFA_CHALLENGE_TTL_MS` | `300000` | Pending MFA challenge lifetime. |
 | `COMPANION_FAILED_LOGIN_BACKOFF_MS` | `60000` | Suppression window after a failed login. |
@@ -258,7 +308,7 @@ npm test                            # node --test, no browser needed
 As a Compose service (opt-in profile, no published ports):
 
 ```sh
-RECGOV_COMPANION_BROWSER_PROFILE=$HOME/.campsite-companion/browser-session \
+RECGOV_COMPANION_DATA_DIR=$HOME/.campsite-companion \
   docker compose --profile pois --profile recgov-companion up -d recgov-companion backend
 ```
 
@@ -286,6 +336,21 @@ make recgov-login     # headed login; exits 0 on REC_GOV_AUTH_OK
 make recgov-refresh   # forces the real refresh endpoint
 make recgov-atc PAYLOAD=/tmp/recgov-atc.json   # places a REAL hold
 ```
+
+**Minting a session for a pooled profile from the host.** A headed login on
+the host clears challenges a headless container cannot. Point
+`COMPANION_BROWSER_PROFILE` at that profile's pool directory and the resulting
+cookie jar is saved under the profile's key, so the container picks it up on
+its next launch:
+
+```sh
+COMPANION_BROWSER_PROFILE=$HOME/.campsite-companion/browser-session/profiles/7 \
+  npm --prefix companion run recgov:login
+```
+
+The profile id is the directory's own name; `COMPANION_PROFILE_ID` overrides
+it. Point it anywhere else and the run stays an unkeyed legacy session — the
+probe prints which it resolved.
 
 `recgov:atc` writes browser logs to stderr and one JSON result to stdout:
 exit `0` means `cart_added=true`, `1` means the browser ran but confirmed no

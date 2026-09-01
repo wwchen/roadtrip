@@ -11,6 +11,7 @@ import {
   ERROR_PROFILE_ID_REQUIRED,
   createProfilePool,
   normalizeProfileId,
+  profileIdForSessionDir,
 } from '../src/profilePool.js'
 
 const PROFILE_A = 'user-a'
@@ -362,3 +363,30 @@ function fakeClock (start = 1_700_000_000_000) {
     },
   }
 }
+
+test('the host runbook takes its profile id from the pool directory name', () => {
+  // The container and the backend both key a profile by the bare user id, so a
+  // headed mint on the host must land under that same key or the launch path
+  // never reads it.
+  assert.equal(
+    profileIdForSessionDir({ COMPANION_BROWSER_PROFILE: '/var/lib/campsite-companion/browser-session/profiles/7' }),
+    '7',
+  )
+})
+
+test('an explicit profile id beats the directory name', () => {
+  assert.equal(
+    profileIdForSessionDir({
+      COMPANION_BROWSER_PROFILE: '/var/lib/campsite-companion/browser-session/profiles/7',
+      COMPANION_PROFILE_ID: '9',
+    }),
+    '9',
+  )
+})
+
+test('a directory that is not a pool profile mints no profile id', () => {
+  // The legacy single-profile directory has no owner. Guessing one would write
+  // a jar under a key that belongs to somebody else.
+  assert.equal(profileIdForSessionDir({ COMPANION_BROWSER_PROFILE: '/var/lib/campsite-companion/browser-session' }), null)
+  assert.equal(profileIdForSessionDir({ COMPANION_BROWSER_PROFILE: '/tmp/scratch' }), null)
+})

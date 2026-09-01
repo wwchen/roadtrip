@@ -1,4 +1,5 @@
 import { recgovAuthenticationFailure } from '../../cart.js'
+import { persistProfileCookies } from '../../browser.js'
 import {
   recgovLoginCredentialsFromInput,
 } from '../../recgovSession.js'
@@ -111,6 +112,7 @@ export async function handleRefresh (req, res, { runtime, pool, testChromiumFn }
         getContextFn: async () => resolved.context,
       },
     })
+    if (status.logged_in === true) await persistCookies(runtime, pool, profileId, 'refresh')
     runtime.logger('recgov auth refresh request result', status.state, `profile=${profileId}`, `duration_ms=${Date.now() - startedAt}`)
     respondAuthResult(req, res, authHttpStatus(status), authResponseBody(status))
   } catch (error) {
@@ -250,8 +252,15 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
     }
 
     const status = loginStatus(pool, profileId, outcome)
-    if (status.logged_in !== true) pool.recordLoginFailure(profileId)
-    else pool.clearLoginFailure(profileId)
+    if (status.logged_in !== true) {
+      pool.recordLoginFailure(profileId)
+    } else {
+      pool.clearLoginFailure(profileId)
+      // Rec.gov's session cookies are session-scoped in Chromium, so without
+      // this the login dies with the browser process. Only on success: a
+      // failed attempt's jar would overwrite a good one.
+      await persistCookies(runtime, pool, profileId, 'login')
+    }
     respondAuthResult(req, res, authHttpStatus(status), withDiagnostics(authResponseBody(status), outcome.trace_url))
   } catch (error) {
     runtime.logger('recgov auth login request exception', `profile=${profileId}`, error.message)
@@ -293,6 +302,7 @@ async function completeMfaChallenge (req, res, { runtime, pool, profileId, chall
     runtime.logger('recgov auth mfa completion result', status.state, `profile=${profileId}`, `duration_ms=${Date.now() - startedAt}`)
     if (status.logged_in === true) {
       pool.clearLoginFailure(profileId)
+      await persistCookies(runtime, pool, profileId, 'mfa')
       respondAuthResult(req, res, authHttpStatus(status), authResponseBody(status))
       return
     }
@@ -326,7 +336,7 @@ function loginStatus (pool, profileId, outcome) {
   if (base.logged_in) return pool.setAuthStatus(profileId, base)
   // `error` stays the documented, stable code. The internal blocker — which
   // selector went missing, which challenge appeared — rides in `reason`.
-  const failure = recgovAuthenticationFailure({ attemptedLogin: true })
+  const failure = recgovAuthenticationFailure({ attemptedLogin: true, reason: outcome?.reason })
   return pool.setAuthStatus(profileId, {
     ...base,
     ...failure,
@@ -380,6 +390,15 @@ async function profileRequest (req, res, requestUrl, pool, operation) {
 
 function url (req) {
   return new URL(req.url || '/', 'http://companion.local')
+}
+
+/**
+ * Writes the profile's live cookie jar to its store key after a successful
+ * auth-bearing operation. `pool.liveContext` is the only part of this these
+ * routes own; the rest is shared with `POST /verify`.
+ */
+function persistCookies (runtime, pool, profileId, operation) {
+  return persistProfileCookies(pool.liveContext(profileId), profileId, { logger: runtime.logger, operation })
 }
 
 /** Accepts a JSON boolean or the form-encoded string an operator page would send. */

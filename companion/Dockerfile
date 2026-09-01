@@ -20,6 +20,10 @@ ENV HEADLESS=true
 ENV COMPANION_HOST=0.0.0.0
 ENV COMPANION_PORT=8770
 ENV COMPANION_BROWSER_PROFILE=/var/lib/campsite-companion/browser-session
+# The JSON store holds the per-profile rec.gov cookie jars. Left at its
+# `$HOME/.campsite-companion` default it lands in the image's ephemeral
+# /root and every restart signs everyone out.
+ENV COMPANION_DIR=/var/lib/campsite-companion
 
 EXPOSE 8770
 

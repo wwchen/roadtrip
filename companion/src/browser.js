@@ -5,7 +5,7 @@ import { chromium } from 'playwright'
 import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
-import { getSetting } from './store.js'
+import { getSetting, setSetting } from './store.js'
 import { extractCookiesFromInput } from './auth.js'
 
 export const IS_HEADLESS = process.env.HEADLESS !== undefined
@@ -21,6 +21,7 @@ export function resolveSessionDir (env = process.env, homeDir = os.homedir()) {
 const SESSION_DIR = resolveSessionDir()
 const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
 const RECGOV_COOKIES_SETTING = 'recgov_cookies'
+const RECGOV_ORIGIN = 'https://www.recreation.gov'
 export const RECGOV_CAMPSITE_BOOKING_URL_PATTERN =
   'https://www.recreation.gov/camping/campsites/{campsite_id}?startDate={start_date}&endDate={end_date}'
 export const COMPANION_USER_AGENT =
@@ -150,21 +151,99 @@ function parseCookieString (str) {
   }).filter(Boolean)
 }
 
-// Stored cookies are per profile. The unkeyed setting belongs to the legacy
-// single-profile CLI session and must never be handed to a user's profile:
-// a rec.gov cookie jar is a session, and sharing one is sharing an account.
+// Stored cookies are per profile. The unkeyed setting is the legacy
+// single-profile CLI/operator value; see `storedCookiesFor` for the one narrow
+// way it still reaches a profile.
 export function recgovCookieSettingKey (profileId = null) {
   return profileId ? `${RECGOV_COOKIES_SETTING}:${profileId}` : RECGOV_COOKIES_SETTING
 }
 
+/**
+ * The stored jar to launch a profile with.
+ *
+ * A profile's own key wins. When it is empty the operator-set legacy global
+ * `recgov_cookies` — the documented Akamai cookie-paste workaround — is used
+ * instead, because keying injection per profile without this orphaned every
+ * environment that had the paste set.
+ *
+ * The fallback reaches ONLY the operator's global value, never another
+ * profile's saved jar: `saveProfileCookies` refuses a null profile id, so
+ * nothing this code writes can ever land in the global key. And it stops the
+ * first time this profile saves a jar of its own — the paste bootstraps a
+ * profile, it does not keep feeding it.
+ */
+function storedCookiesFor (profileId) {
+  const own = getSetting(recgovCookieSettingKey(profileId)) || ''
+  if (own || !profileId) return own
+  return getSetting(recgovCookieSettingKey(null)) || ''
+}
+
 export async function injectStoredCookies (context, rawInput = null, profileId = null) {
-  const stored = getSetting(recgovCookieSettingKey(profileId)) || ''
-  const cookieStr = extractCookiesFromInput(rawInput || stored)
+  const cookieStr = extractCookiesFromInput(rawInput || storedCookiesFor(profileId))
   if (!cookieStr) return 0
   const cookies = parseCookieString(cookieStr)
   if (!cookies.length) return 0
   await context.addCookies(cookies)
   return cookies.length
+}
+
+/**
+ * Saves this context's recreation.gov cookies to the profile's store key.
+ *
+ * **This is what makes a session outlive the browser.** Rec.gov's session
+ * cookies — the Akamai/fingerprint pair the JWT is pinned to among them — are
+ * session-scoped in Chromium, so they die with the process and a container
+ * restart loses the login. The legacy operator flow survived only because
+ * somebody pasted a cookie header into the store by hand.
+ *
+ * Slice 2 keyed *injection* per profile and `launchProfileContext` re-injects on
+ * every launch, but nothing ever wrote the key: the save half of the round trip
+ * did not exist. Every successful auth-bearing operation calls this, so the
+ * store always holds the freshest jar we have seen.
+ *
+ * Failure paths deliberately do NOT call it — overwriting a good jar with the
+ * cookies of a failed attempt would destroy the very thing being preserved.
+ *
+ * Treat the stored value as credential material: it IS the session.
+ */
+export async function saveProfileCookies (context, profileId = null) {
+  if (!context || !profileId) return 0
+  let cookies
+  try {
+    cookies = await context.cookies(RECGOV_ORIGIN)
+  } catch {
+    // A context mid-teardown must not fail the operation that just succeeded.
+    return 0
+  }
+  const usable = (cookies || []).filter((cookie) => cookie?.name && cookie?.value)
+  if (!usable.length) return 0
+  // The same `name=value; …` header shape `extractCookiesFromInput` already
+  // parses, so injection needs no new format to understand.
+  setSetting(
+    recgovCookieSettingKey(profileId),
+    usable.map((cookie) => `${cookie.name}=${cookie.value}`).join('; '),
+  )
+  return usable.length
+}
+
+/**
+ * `saveProfileCookies` with the reporting every caller wants and the failure
+ * handling every caller needs.
+ *
+ * Four sites persist a jar — login, MFA completion, refresh, verify — and all
+ * four want the same thing: never throw. The operation already succeeded and
+ * the caller has been told so; losing the durability of a session is worth a
+ * log line, not a 500.
+ */
+export async function persistProfileCookies (context, profileId, { logger = console.log, operation } = {}) {
+  try {
+    const saved = await saveProfileCookies(context, profileId)
+    if (saved > 0) logger('recgov cookies persisted', `profile=${profileId}`, `op=${operation}`, `count=${saved}`)
+    return saved
+  } catch (error) {
+    logger('recgov cookie persist failed', `profile=${profileId}`, `op=${operation}`, error.message)
+    return 0
+  }
 }
 
 // rec.gov pins the JWT's `fingerprint` claim against the `r1s-fingerprint`

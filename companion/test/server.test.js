@@ -1,6 +1,7 @@
-import { test } from 'node:test'
+import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { Readable } from 'node:stream'
+import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -13,10 +14,24 @@ import {
 } from '../src/server.js'
 import { COMPANION_API_ROUTES } from '../src/apiContract.js'
 import { COMPANION_API_TOKEN_HEADER } from '../src/server/apiToken.js'
+import { recgovCookieSettingKey } from '../src/browser.js'
+import { getSetting, setSetting } from '../src/store.js'
 import {
   DEFAULT_MFA_CHALLENGE_TTL_MS,
   createProfilePool,
 } from '../src/profilePool.js'
+
+// The cookie-jar assertions below write through store.js, which must never be
+// the developer's real ~/.campsite-companion.
+let storeDir
+before(() => {
+  storeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'companion-server-store-'))
+  process.env.COMPANION_DIR = storeDir
+})
+after(() => {
+  delete process.env.COMPANION_DIR
+  fs.rmSync(storeDir, { recursive: true, force: true })
+})
 
 const TEST_API_TOKEN = 'test-companion-token'
 const CONTAINER_ADDRESS = '172.18.0.4'
@@ -1067,6 +1082,38 @@ test('a successful opted-in login leaves zero trace files behind', async () => {
   delete process.env.COMPANION_TRACE_LOGIN
 })
 
+test('a successful login stores the profile cookie jar so it outlives the browser', async () => {
+  // Rec.gov's session cookies are session-scoped in Chromium: without this
+  // write, a container restart loses the login the user just performed. The
+  // save is best-effort by design, so only asserting on the store catches a
+  // persist path that silently stopped running.
+  setSetting(recgovCookieSettingKey(PROFILE_ID), '')
+  const server = testServer({
+    pool: cookieJarPool([{ name: 'r1s-fingerprint', value: 'fp-abc' }]),
+    credentialLoginFn: async () => ({ state: 'ok', logged_in: true }),
+  })
+
+  const response = await beginLogin(server)
+
+  assert.equal(response.status, 200)
+  assert.equal(getSetting(recgovCookieSettingKey(PROFILE_ID)), 'r1s-fingerprint=fp-abc')
+})
+
+test('a failed login leaves the stored jar alone', async () => {
+  // The failed attempt's context holds nothing worth keeping, and overwriting
+  // a good jar with it destroys the session we are trying to preserve.
+  setSetting(recgovCookieSettingKey(PROFILE_ID), 'r1s-fingerprint=keep-me')
+  const server = testServer({
+    pool: cookieJarPool([{ name: 'r1s-fingerprint', value: 'fp-new' }]),
+    credentialLoginFn: async () => ({ state: 'failed', logged_in: false, reason: 'captcha_required' }),
+  })
+
+  const response = await beginLogin(server)
+
+  assert.equal(response.status, 401)
+  assert.equal(getSetting(recgovCookieSettingKey(PROFILE_ID)), 'r1s-fingerprint=keep-me')
+})
+
 test('a listed trace can actually be downloaded', async () => {
   // The listing handed out .trace.zip urls that the download route rejected as
   // invalid_diagnostic_path, so every one of them was a dead link.
@@ -1241,6 +1288,19 @@ function tracingPool (dir) {
           if (options?.path) await fsp.writeFile(options.path, 'trace-bytes')
         },
       },
+    }),
+  })
+}
+
+/** A pool whose contexts answer a real cookie jar, the way Playwright's do. */
+function cookieJarPool (cookies) {
+  return testPool({
+    launchContextFn: async (dir) => ({
+      dir,
+      pages: async () => [],
+      close: async () => {},
+      once: () => {},
+      cookies: async () => cookies,
     }),
   })
 }

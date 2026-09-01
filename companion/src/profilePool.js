@@ -53,6 +53,27 @@ export function profilesRootDir (env = process.env) {
   return path.join(resolveSessionDir(env), PROFILE_DIR_SEGMENT)
 }
 
+/**
+ * The profile id a host-side CLI run is minting a session for, or null.
+ *
+ * The manual runbook points `COMPANION_BROWSER_PROFILE` at one pool directory
+ * — `<volume>/profiles/<profile_id>` — so the id is that directory's own name.
+ * `COMPANION_PROFILE_ID` says it outright and wins.
+ *
+ * Anything else answers null on purpose. A cookie jar IS a session, so an
+ * unkeyed or wrongly-keyed save hands one account's session to another; the
+ * legacy single-profile directory has no owner and must stay unkeyed.
+ */
+export function profileIdForSessionDir (env = process.env) {
+  const explicit = normalizeProfileId(env.COMPANION_PROFILE_ID)
+  if (explicit.ok) return explicit.profileId
+
+  const dir = resolveSessionDir(env)
+  if (path.basename(path.dirname(dir)) !== PROFILE_DIR_SEGMENT) return null
+  const derived = normalizeProfileId(path.basename(dir))
+  return derived.ok ? derived.profileId : null
+}
+
 export function createProfilePool ({
   rootDir = null,
   env = process.env,

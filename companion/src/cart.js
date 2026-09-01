@@ -7,6 +7,7 @@ import {
   IS_HEADLESS,
   getContext,
   injectStoredCookies,
+  persistProfileCookies,
   injectFingerprintCookie,
   injectBearerRoute,
   injectRecaccount,
@@ -808,6 +809,9 @@ async function runAddToCart (match, contextOptions) {
   }
 }
 
+/** Names the persist log line for the CLI/refresh auth probe. */
+const OPERATION_TEST_CHROMIUM = 'test-chromium'
+
 export async function testChromium (rawCookieInput = null, options = {}) {
   return withRecgovProfileScope(options.profileId ?? null, () => runTestChromium(rawCookieInput, options))
 }
@@ -816,6 +820,7 @@ async function runTestChromium (rawCookieInput, options) {
   const {
     getContextFn = getContext,
     injectStoredCookiesFn = injectStoredCookies,
+    persistProfileCookiesFn = persistProfileCookies,
     resolveRecaccountFn = resolveRecaccount,
     clearBrowserRecaccountFn = clearBrowserRecaccount,
     injectRecaccountFn = injectRecaccount,
@@ -824,8 +829,9 @@ async function runTestChromium (rawCookieInput, options) {
     ...resolveOptions
   } = options
 
+  const profileId = resolveOptions.profileId ?? null
   const context = await getContextFn()
-  await injectStoredCookiesFn(context, rawCookieInput, resolveOptions.profileId ?? null)
+  await injectStoredCookiesFn(context, rawCookieInput, profileId)
   let page = await context.newPage()
   try {
     const first = await resolveAndVerifyRecgovSession(page, resolveOptions, {
@@ -836,6 +842,9 @@ async function runTestChromium (rawCookieInput, options) {
     })
     if (first.loggedIn) {
       lastLoginState = true
+      // The headed runbook mints a session on the host; without this it dies
+      // with the browser and never reaches the container.
+      await persistProfileCookiesFn(context, profileId, { operation: OPERATION_TEST_CHROMIUM })
       console.log(`Logged in to recreation.gov ✓ (token expires ${first.recaccount.expiration})`)
       return { ok: true, loggedIn: true }
     }
@@ -859,6 +868,7 @@ async function runTestChromium (rawCookieInput, options) {
     })
     lastLoginState = recovered.loggedIn
     if (recovered.loggedIn) {
+      await persistProfileCookiesFn(context, profileId, { operation: OPERATION_TEST_CHROMIUM })
       console.log(`Logged in to recreation.gov ✓ (token expires ${recovered.recaccount.expiration})`)
     } else {
       console.log('testChromium: no logged-in Recreation.gov browser session found after fallback')

@@ -1,5 +1,6 @@
 import { verifyRecgovSession } from '../../recgovVerify.js'
 import { withTrace } from '../../tracing.js'
+import { persistProfileCookies } from '../../browser.js'
 import {
   HTTP_BAD_REQUEST,
   HTTP_INTERNAL_ERROR,
@@ -62,6 +63,11 @@ export async function handleVerify (req, res, { runtime, pool, verifyRecgovSessi
     )
     if (trace) verify.trace_url = trace.url
     pool.setAuthStatus(profileId, verifyAuthStatus(verify))
+    // A verify that passed proves the jar in this context is good, and it is
+    // the freshest evidence we will get — worth storing.
+    if (verify?.ok) {
+      await persistProfileCookies(resolved.context, profileId, { logger: runtime.logger, operation: OPERATION_VERIFY })
+    }
     runtime.logger(
       'recgov verify result',
       verify.ok ? 'ok' : 'failed',
