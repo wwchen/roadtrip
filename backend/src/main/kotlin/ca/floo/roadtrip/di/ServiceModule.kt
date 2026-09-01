@@ -80,7 +80,6 @@ import ca.floo.roadtrip.service.scheduler.WatchReaper
 import ca.floo.roadtrip.service.scheduler.framework.Scheduler
 import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
 import ca.floo.roadtrip.service.security.SecretCipher
-import ca.floo.roadtrip.service.settings.CompanionSessionPort
 import ca.floo.roadtrip.service.settings.RecGovCredentialService
 import ca.floo.roadtrip.service.settings.UserSettingsService
 import kotlinx.coroutines.CoroutineScope
@@ -134,20 +133,27 @@ val serviceModule =
         }
 
         single {
+            // One client for one companion: every caller resolves this rather
+            // than building its own (and its own selector thread and pool).
+            CompanionChannel(
+                get<AppConfig>()
+                    .booking.recgovAtc
+                    .takeIf { it.companionEnabled }
+                    ?.let(::CompanionSessionClient),
+            )
+        }
+
+        single {
             // Same optional-dependency shape as the settings service above: a
             // deployment without an encryption key or without a companion still
             // boots, with storage or the live session degraded rather than absent.
             val config: AppConfig = get()
             val cipher: SecretCipher? = config.secrets?.let { SecretCipher(it.encryptionKey) }
-            val companion: CompanionSessionPort? =
-                config.booking.recgovAtc
-                    .takeIf { it.companionEnabled }
-                    ?.let(::CompanionSessionClient)
             RecGovCredentialService(
                 settingsRepo = get<UserSettingsRepo>(),
                 watchRepo = get<AvailabilityWatchRepo>(),
                 cipher = cipher,
-                companion = companion,
+                companion = get<CompanionChannel>().session,
             )
         }
 
@@ -342,12 +348,8 @@ val serviceModule =
             // keep warm, so the job is simply not started rather than sweeping
             // against nothing. Koin cannot hold a null single, hence the wrapper.
             val config: AppConfig = get()
-            val companion: CompanionSessionPort? =
-                config.booking.recgovAtc
-                    .takeIf { it.companionEnabled }
-                    ?.let(::CompanionSessionClient)
             RecGovKeepalive(
-                companion?.let {
+                get<CompanionChannel>().session?.let {
                     RecGovKeepaliveJob(
                         watchRepo = get<AvailabilityWatchRepo>(),
                         companion = it,

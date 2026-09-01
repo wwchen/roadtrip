@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
 import kotlin.test.assertNotNull
+import kotlin.test.assertSame
 
 /**
  * Boot-time DI regression guard.
@@ -60,6 +61,41 @@ class ServiceModuleWiringTest : SharedDbTest() {
                 app.koin.get<RecGovCredentialService>(),
                 "RecGovCredentialService must resolve with a null cipher and no companion",
             )
+        } finally {
+            app.close()
+        }
+    }
+
+    @Test
+    fun `every companion caller shares one client`() {
+        // Three callers each built their own HttpClient — three selector threads
+        // and three pools to one service — with the enabled-check copy-pasted
+        // beside each. One single, resolved by all of them.
+        val config =
+            AppConfig.fromProperties(
+                mapOf(
+                    "roadtrip.availability.force-pull-cooldown" to "5m",
+                    "roadtrip.availability.provider-cooldown" to "5m",
+                    "roadtrip.booking.recgov-atc.companion-base-url" to "http://companion.invalid:8770",
+                ),
+            )
+
+        val app =
+            koinApplication(createEagerInstances = false) {
+                modules(
+                    repoModule,
+                    serviceModule,
+                    module {
+                        single { config }
+                        single<DSLContext> { ctx }
+                    },
+                )
+            }
+
+        try {
+            val channel = app.koin.get<CompanionChannel>()
+            assertNotNull(channel.session, "a configured companion must yield a session client")
+            assertSame(channel, app.koin.get<CompanionChannel>(), "the channel must be a single, not per-resolution")
         } finally {
             app.close()
         }

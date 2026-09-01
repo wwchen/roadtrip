@@ -99,11 +99,23 @@ internal class HttpRecGovAtcExecutor(
                 ignoreUnknownKeys = true
             }
 
-        fun defaultClient(): HttpClient =
+        /**
+         * One client for every companion caller.
+         *
+         * Each `java.net.http.HttpClient` owns a selector thread and its own
+         * connection pool, and there is exactly one companion behind all of
+         * them — so a fresh client per caller buys nothing and costs a thread
+         * plus a cold connection. Built lazily so a deployment with no
+         * companion never allocates one; tests inject their own.
+         */
+        private val sharedClient: HttpClient by lazy {
             HttpClient
                 .newBuilder()
                 .connectTimeout(defaultConnectTimeout)
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build()
+        }
+
+        fun defaultClient(): HttpClient = sharedClient
     }
 }
