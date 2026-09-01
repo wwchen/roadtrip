@@ -112,6 +112,13 @@ class RecGovCredentialService(
      */
     private val pendingChallenges = ConcurrentHashMap<Long, String>()
 
+    /**
+     * Users with a code submission in flight, so exactly one reaches the held
+     * page. `add` is the atomic test-and-set; the entry is always released in a
+     * `finally`, which is what keeps a sequential retry unblocked.
+     */
+    private val mfaInFlight = ConcurrentHashMap.newKeySet<Long>()
+
     override fun save(
         userId: UserId,
         req: UpdateRecgovRequest,
@@ -168,14 +175,29 @@ class RecGovCredentialService(
         userId: UserId,
         code: String,
     ): RecgovLoginResponseDto {
-        // Read, not taken: the answer decides whether the challenge is spent. A
-        // busy profile or an unreachable companion never reached the held page,
-        // so the id must survive for the retry.
-        val challengeId =
-            pendingChallenges[userId.value]
-                ?: return failedLogin(RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN, "no login is waiting for a code")
-        val client = companion ?: return companionUnavailableLogin()
-        return recordLogin(userId, client.completeMfa(profileId(userId), challengeId, code))
+        // The challenge is READ rather than taken, so the answer can decide
+        // whether it is spent — a busy profile or an unreachable companion never
+        // reached the held page and must stay retryable. That makes this a
+        // check-then-call, so it needs a guard: two tabs that both resumed the
+        // pending step would otherwise send two codes at one held browser page.
+        //
+        // Fail fast rather than queue. The loser is told `profile_busy`, which is
+        // what the companion itself answers for concurrent work on one profile,
+        // and waiting behind a companion call that may run for its full timeout
+        // would park a request for minutes to submit an almost-certainly stale
+        // code. Only CONCURRENT submits are excluded; a later retry is untouched.
+        if (!mfaInFlight.add(userId.value)) {
+            return failedLogin(RecGovSessionCodes.PROFILE_BUSY, "a verification code is already being submitted")
+        }
+        try {
+            val challengeId =
+                pendingChallenges[userId.value]
+                    ?: return failedLogin(RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN, "no login is waiting for a code")
+            val client = companion ?: return companionUnavailableLogin()
+            return recordLogin(userId, client.completeMfa(profileId(userId), challengeId, code))
+        } finally {
+            mfaInFlight.remove(userId.value)
+        }
     }
 
     override suspend fun verify(userId: UserId): RecgovVerifyResponseDto {

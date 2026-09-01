@@ -8,7 +8,11 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.security.SecretCipher
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
 import org.junit.jupiter.api.Test
@@ -22,6 +26,14 @@ private val detachedCtx = DSL.using(SQLDialect.POSTGRES)
 private val testUserId = UserId(7L)
 private val testKey = ByteArray(32) { it.toByte() }
 private const val PROFILE_ID = "7"
+
+/**
+ * Ceiling for the tests that park a caller inside the fake companion. Without it
+ * a regression in the concurrency guard hangs the build instead of failing it:
+ * the second caller would park on the same gate as the first, and nothing would
+ * ever complete it.
+ */
+private const val GATED_TEST_TIMEOUT_MS = 5_000L
 
 private class FakeSettingsRepo : UserSettingsRepo(ctx = detachedCtx) {
     var settings: Settings? = null
@@ -69,6 +81,9 @@ private class FakeCompanion(
     val mfaCalls = mutableListOf<Triple<String, String, String>>()
     val logoutCalls = mutableListOf<String>()
 
+    /** When set, [completeMfa] parks inside the companion until it completes. */
+    var mfaGate: CompletableDeferred<Unit>? = null
+
     override suspend fun login(
         profileId: String,
         username: String,
@@ -84,6 +99,7 @@ private class FakeCompanion(
         code: String,
     ): CompanionLoginResult {
         mfaCalls += Triple(profileId, challengeId, code)
+        mfaGate?.await()
         return mfaResult
     }
 
@@ -338,6 +354,79 @@ class RecGovCredentialServiceTest {
             companion.mfaResult = CompanionLoginResult.Ok
             assertEquals(RecgovLoginStatus.OK, svc.completeMfa(testUserId, "123456").status)
             assertEquals(2, companion.mfaCalls.size)
+        }
+
+    @Test
+    fun `a second concurrent code submission is refused rather than racing the first`() =
+        runBlocking {
+            // Two tabs that both resumed the pending step would otherwise read the
+            // same challenge id and send two codes at one held browser page.
+            val companion = FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", null))
+            val svc = service(configuredRepo(), companion)
+            svc.login(testUserId)
+
+            val gate = CompletableDeferred<Unit>()
+            companion.mfaGate = gate
+            withTimeout(GATED_TEST_TIMEOUT_MS) {
+                // UNDISPATCHED so the first call is provably parked inside the
+                // companion before the second one starts — no polling, no timing.
+                val first = async(start = CoroutineStart.UNDISPATCHED) { svc.completeMfa(testUserId, "111111") }
+                assertEquals(1, companion.mfaCalls.size)
+
+                val second = svc.completeMfa(testUserId, "222222")
+
+                assertEquals(RecgovLoginStatus.FAILED, second.status)
+                assertEquals(RecGovSessionCodes.PROFILE_BUSY, second.error)
+                assertEquals(1, companion.mfaCalls.size)
+
+                gate.complete(Unit)
+                assertEquals(RecgovLoginStatus.OK, first.await().status)
+                assertEquals(listOf(Triple(PROFILE_ID, "chal-1", "111111")), companion.mfaCalls)
+            }
+        }
+
+    @Test
+    fun `the concurrent refusal leaves the challenge standing for a later retry`() =
+        runBlocking {
+            val companion =
+                FakeCompanion(
+                    loginResult = CompanionLoginResult.MfaRequired("chal-1", null),
+                    mfaResult = CompanionLoginResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, "refused"),
+                )
+            val svc = service(configuredRepo(), companion)
+            svc.login(testUserId)
+
+            val gate = CompletableDeferred<Unit>()
+            companion.mfaGate = gate
+            withTimeout(GATED_TEST_TIMEOUT_MS) {
+                val first = async(start = CoroutineStart.UNDISPATCHED) { svc.completeMfa(testUserId, "111111") }
+                assertEquals(RecGovSessionCodes.PROFILE_BUSY, svc.completeMfa(testUserId, "222222").error)
+                gate.complete(Unit)
+                assertEquals(RecGovSessionCodes.COMPANION_UNAVAILABLE, first.await().error)
+            }
+
+            // Neither the concurrent refusal nor the transient answer spent it.
+            companion.mfaGate = null
+            companion.mfaResult = CompanionLoginResult.Ok
+            assertEquals(RecgovLoginStatus.OK, svc.completeMfa(testUserId, "333333").status)
+            assertEquals(2, companion.mfaCalls.size)
+        }
+
+    @Test
+    fun `the in-flight guard is released so a sequential retry is never blocked`() =
+        runBlocking {
+            val companion =
+                FakeCompanion(
+                    loginResult = CompanionLoginResult.MfaRequired("chal-1", null),
+                    mfaResult = CompanionLoginResult.Failed(RecGovSessionCodes.PROFILE_BUSY, "companion busy"),
+                )
+            val svc = service(configuredRepo(), companion)
+            svc.login(testUserId)
+
+            repeat(3) { assertEquals(RecGovSessionCodes.PROFILE_BUSY, svc.completeMfa(testUserId, "123456").error) }
+
+            // Every attempt reached the companion: the guard is per-call, not sticky.
+            assertEquals(3, companion.mfaCalls.size)
         }
 
     @Test
