@@ -69,7 +69,6 @@ export async function handleAtc (req, res, {
     }
     atcStartLine = `recgov atc start profile=${profileId} ${payloadSummary(raw)}`
     runtime.logger(atcStartLine)
-    await runtime.waitForStartupAuthCheck()
     const code = await runAtcOnceFn({
       argv: ['--payload-json', raw],
       stdout,

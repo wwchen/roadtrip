@@ -118,6 +118,7 @@ internal class AtcTriggerActionHandler(
         val watchOpening = opening.watchOpening
         return AddToCartRequest(
             watchId = watch.id,
+            ownerUserId = watch.ownerUserId,
             target = target,
             arrivalDate = opening.date,
             checkoutDate = watch.endDate,

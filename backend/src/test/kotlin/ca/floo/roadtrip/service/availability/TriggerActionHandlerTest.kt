@@ -328,6 +328,8 @@ class TriggerActionHandlerTest {
             assertTrue(delivered)
             val request = bookingProvider.requests.single()
             assertEquals(42L, request.watchId)
+            // The hold must land in the watch OWNER's cart, not a shared one.
+            assertEquals(1L, request.ownerUserId)
             assertEquals(BookingProvider.RECGOV, request.target.providerId)
             assertEquals(7L, request.target.campsiteId)
             assertEquals("site-7", request.target.vendorSiteId)

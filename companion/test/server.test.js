@@ -6,7 +6,7 @@ import {
   createCompanionServer,
   getRecgovAuthStatus,
   getRecgovHealthStatus,
-  runStartupAuthCheck,
+  runRecgovAuthCheck,
 } from '../src/server.js'
 import { COMPANION_API_ROUTES } from '../src/apiContract.js'
 import { COMPANION_API_TOKEN_HEADER } from '../src/server/apiToken.js'
@@ -22,10 +22,11 @@ const PROFILE_ID = 'user-7'
 const OTHER_PROFILE_ID = 'user-8'
 const MFA_CHALLENGE_TTL_OVERSHOOT_MS = DEFAULT_MFA_CHALLENGE_TTL_MS + 1_000
 
-test('runStartupAuthCheck records logged-in status', async () => {
+test('an unscoped auth check records logged-in status on the companion-wide row', async () => {
   const log = logCapture()
 
-  const status = await runStartupAuthCheck({
+  const status = await runRecgovAuthCheck({
+    operation: 'check',
     testChromiumFn: async () => ({ ok: true, loggedIn: true }),
     logger: log.write,
   })
@@ -33,8 +34,8 @@ test('runStartupAuthCheck records logged-in status', async () => {
   assert.equal(status.state, 'ok')
   assert.equal(status.logged_in, true)
   assert.equal(getRecgovAuthStatus(), status)
-  assert.match(log.text(), /recgov auth startup check start/)
-  assert.match(log.text(), /recgov auth startup check ok/)
+  assert.match(log.text(), /recgov auth check start/)
+  assert.match(log.text(), /recgov auth check ok/)
 })
 
 test('getRecgovHealthStatus exposes login status and refresh metadata', async () => {
@@ -42,7 +43,8 @@ test('getRecgovHealthStatus exposes login status and refresh metadata', async ()
     reason: 'login_success',
     screenshot_url: '/screenshot/diagnostics/recgov-login-success.png',
   }
-  await runStartupAuthCheck({
+  await runRecgovAuthCheck({
+    operation: 'check',
     testChromiumFn: async () => ({ ok: true, loggedIn: true, diagnostic }),
     logger: () => {},
   })
@@ -58,14 +60,15 @@ test('getRecgovHealthStatus exposes login status and refresh metadata', async ()
   assert.equal('last_login_diagnostic' in health, false)
 })
 
-test('runStartupAuthCheck records actionable auth failure status', async () => {
+test('an unscoped auth check records actionable auth failure status', async () => {
   const log = logCapture()
   const diagnostic = {
     reason: 'captcha_required',
     screenshot_url: '/screenshot/diagnostics/recgov-login-captcha.png',
   }
 
-  const status = await runStartupAuthCheck({
+  const status = await runRecgovAuthCheck({
+    operation: 'check',
     testChromiumFn: async () => ({ ok: true, loggedIn: false, diagnostic }),
     authFailureFn: () => ({
       error: 'recgov_not_authenticated',
@@ -86,16 +89,17 @@ test('runStartupAuthCheck records actionable auth failure status', async () => {
     headless: true,
   })
   assert.deepEqual(status.diagnostic, diagnostic)
-  assert.match(log.text(), /recgov auth startup check fail/)
+  assert.match(log.text(), /recgov auth check fail/)
   assert.match(log.text(), /error=recgov_not_authenticated/)
   assert.match(log.text(), /diagnostic_reason=captcha_required/)
   assert.match(log.text(), /screenshot=\/screenshot\/diagnostics\/recgov-login-captcha\.png/)
 })
 
-test('runStartupAuthCheck records exceptions as startup auth failures', async () => {
+test('an unscoped auth check records exceptions as auth failures', async () => {
   const log = logCapture()
 
-  const status = await runStartupAuthCheck({
+  const status = await runRecgovAuthCheck({
+    operation: 'check',
     testChromiumFn: async () => { throw new Error('browser launch failed') },
     logger: log.write,
   })
@@ -105,7 +109,7 @@ test('runStartupAuthCheck records exceptions as startup auth failures', async ()
   assert.equal(status.error, 'recgov_auth_check_exception')
   assert.equal(status.detail, 'browser launch failed')
   assert.match(status.corrective_action, /recgov-login/)
-  assert.match(log.text(), /recgov auth startup check exception/)
+  assert.match(log.text(), /recgov auth check exception/)
 })
 
 test('GET / returns a simple operator login form', async () => {
@@ -846,7 +850,8 @@ test('GET /health reports per-profile auth without taking the profile lock', asy
 })
 
 test('a profile operation never overwrites another profile or the companion-wide status', async () => {
-  await runStartupAuthCheck({
+  await runRecgovAuthCheck({
+    operation: 'check',
     testChromiumFn: async () => ({ ok: true, loggedIn: true }),
     logger: () => {},
   })
@@ -861,7 +866,7 @@ test('a profile operation never overwrites another profile or the companion-wide
   assert.equal(refreshed.status, 401)
   assert.equal(scoped.json.recgov_auth.login_status, 'failed')
   assert.equal(other.json.recgov_auth.login_status, 'unchecked')
-  assert.equal(companionWide.json.recgov_auth.login_status, 'ok', 'the startup check still owns the global row')
+  assert.equal(companionWide.json.recgov_auth.login_status, 'ok', 'an unscoped check still owns the global row')
 })
 
 test('GET /health without profile_id keeps answering the companion-wide check', async () => {

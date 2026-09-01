@@ -206,7 +206,12 @@ val serviceModule =
                     .takeIf { it.companionEnabled }
                     ?.let(::HttpRecGovAtcExecutor)
             listOfNotNull(
-                atcExecutor?.let(::RecGovBookingAdapter),
+                atcExecutor?.let { executor ->
+                    // The credential service is the fire path's session authority:
+                    // it answers per-profile health and owns the one unattended
+                    // re-login, because it is where the sealed password lives.
+                    RecGovBookingAdapter(executor, get<RecGovCredentialService>())
+                },
             )
         }
         single { BookingAdapterRegistry(get(named("bookingAdapters"))) }

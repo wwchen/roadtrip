@@ -27,7 +27,6 @@ import {
   getRecgovAuthStatus,
   getRecgovHealthStatus,
   runRecgovAuthCheck,
-  runStartupAuthCheck,
 } from './server/authStatus.js'
 import {
   handleLoginPost,
@@ -70,7 +69,6 @@ export {
   getRecgovAuthStatus,
   getRecgovHealthStatus,
   runRecgovAuthCheck,
-  runStartupAuthCheck,
 }
 
 const HOST = process.env.COMPANION_HOST || DEFAULT_HOST
@@ -202,9 +200,10 @@ export const HANDLED_OPERATION_IDS = Object.freeze(Object.keys(CONTRACT_ROUTE_HA
 export const server = createCompanionServer()
 
 export function startServer () {
+  // No auth check at boot: profiles are launched on demand, per user. The
+  // legacy single profile this used to sign in belonged to nobody.
   server.listen(PORT, HOST, () => {
     log('listening', `http://${HOST}:${PORT}`, `headless=${IS_HEADLESS}`)
-    server.companionRuntime.setStartupAuthCheck(runStartupAuthCheck())
   })
   return server
 }

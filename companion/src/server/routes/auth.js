@@ -57,7 +57,6 @@ export async function handleLogout (req, res, { runtime, pool, logoutRecgovSessi
   const startedAt = Date.now()
   try {
     runtime.logger('recgov auth logout request start', `profile=${profileId}`)
-    await runtime.waitForStartupAuthCheck()
     const resolved = await resolveProfileContext(pool, profileId)
     if (!resolved.ok) {
       respondRejection(req, res, resolved.rejection)
@@ -91,7 +90,6 @@ export async function handleRefresh (req, res, { runtime, pool, testChromiumFn }
   const startedAt = Date.now()
   try {
     runtime.logger('recgov auth refresh request start', `profile=${profileId}`)
-    await runtime.waitForStartupAuthCheck()
     const resolved = await resolveProfileContext(pool, profileId)
     if (!resolved.ok) {
       respondRejection(req, res, resolved.rejection)
@@ -183,7 +181,6 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
       `user=${maskLoginUsername(credentialState.email)}`,
       `mfa=${credentialState.mfaConfigured}`,
     )
-    await runtime.waitForStartupAuthCheck()
     const resolved = await resolveProfileContext(pool, profileId)
     if (!resolved.ok) {
       respondRejection(req, res, resolved.rejection)

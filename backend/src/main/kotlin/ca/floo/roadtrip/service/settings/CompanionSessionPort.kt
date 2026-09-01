@@ -27,6 +27,9 @@ object RecGovSessionCodes {
     const val LOGIN_BACKOFF = "login_backoff"
     const val NOT_AUTHENTICATED = "recgov_not_authenticated"
     const val COMPANION_UNAVAILABLE = "companion_unavailable"
+
+    /** No credentials are stored for this user, so nothing can be attempted. */
+    const val NOT_CONFIGURED = "recgov_not_configured"
 }
 
 /** Result of a credential login or of completing an MFA challenge. */

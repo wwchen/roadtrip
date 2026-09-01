@@ -4,8 +4,13 @@ import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
+import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.service.settings.CompanionActionResult
+import ca.floo.roadtrip.service.settings.CompanionSessionHealth
+import ca.floo.roadtrip.service.settings.RecGovProfileSessionPort
+import ca.floo.roadtrip.service.settings.RecGovSessionCodes
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -19,6 +24,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val TEST_WATCH_ID = 42L
+private const val TEST_OWNER_USER_ID = 91L
 private const val TEST_CAMPSITE_ID = 7L
 private const val TEST_VENDOR_ID = "300"
 private const val TEST_RECGOV_CAMPGROUND_ID = "232447"
@@ -91,13 +97,89 @@ class RecGovBookingAdapterTest {
                     ?.toBoolean()
             assertEquals(true, ok)
             val payload = executor.payload
-            assertEquals(setOf("start_date", "end_date", "campsite_id"), payload?.keys)
+            assertEquals(setOf("profile_id", "start_date", "end_date", "campsite_id"), payload?.keys)
             assertEquals("2026-07-04", payload?.get("start_date")?.jsonPrimitive?.content)
             assertEquals("2026-07-05", payload?.get("end_date")?.jsonPrimitive?.content)
             assertEquals(TEST_VENDOR_ID, payload?.get("campsite_id")?.jsonPrimitive?.content)
             assertFalse(payload?.containsKey("watch_id") == true)
             assertFalse(payload?.containsKey("payload_version") == true)
             assertFalse(payload?.containsKey("openings") == true)
+        }
+
+    @Test
+    fun `add to cart addresses the owner's browser profile`() =
+        runBlocking {
+            val executor = RecordingAtcExecutor(completedOutcome())
+            val session = FakeProfileSession()
+            val provider = provider(executor, session)
+
+            provider.addToCart(request(recgovTarget()))
+
+            assertEquals(
+                TEST_OWNER_USER_ID.toString(),
+                executor.payload
+                    ?.get("profile_id")
+                    ?.jsonPrimitive
+                    ?.content,
+            )
+            assertEquals(listOf(TEST_OWNER_USER_ID.toString()), session.healthChecks)
+        }
+
+    @Test
+    fun `a dead session is recovered by exactly one unattended re-login`() =
+        runBlocking {
+            val executor = RecordingAtcExecutor(completedOutcome())
+            val session =
+                FakeProfileSession(
+                    health = CompanionSessionHealth.Inactive(RecGovSessionCodes.NOT_AUTHENTICATED),
+                    reLogin = CompanionActionResult.Ok,
+                )
+            val provider = provider(executor, session)
+
+            val result = provider.addToCart(request(recgovTarget()))
+
+            assertTrue(result is AddToCartResult.Completed)
+            assertEquals(listOf(TEST_OWNER_USER_ID.toString()), session.reLogins)
+            assertEquals(
+                TEST_OWNER_USER_ID.toString(),
+                executor.payload
+                    ?.get("profile_id")
+                    ?.jsonPrimitive
+                    ?.content,
+            )
+        }
+
+    @Test
+    fun `an MFA-blocked re-login fails the ATC and says how to recover`() =
+        runBlocking {
+            val executor = RecordingAtcExecutor(completedOutcome())
+            val session =
+                FakeProfileSession(
+                    health = CompanionSessionHealth.Inactive(RecGovSessionCodes.NOT_AUTHENTICATED),
+                    reLogin = CompanionActionResult.Failed(RecGovSessionCodes.MFA_REQUIRED),
+                )
+            val provider = provider(executor, session)
+
+            val failed = provider.addToCart(request(recgovTarget())) as AddToCartResult.Failed
+
+            assertEquals(RECGOV_SESSION_EXPIRED_ERROR, failed.error)
+            assertEquals(RECGOV_SESSION_EXPIRED_DETAIL, failed.detail)
+            assertNull(executor.payload)
+            assertEquals(1, session.reLogins.size)
+        }
+
+    @Test
+    fun `an unreachable companion fails the ATC without attempting a re-login`() =
+        runBlocking {
+            val executor = RecordingAtcExecutor(completedOutcome())
+            val session = FakeProfileSession(health = CompanionSessionHealth.Unavailable("connection refused"))
+            val provider = provider(executor, session)
+
+            val failed = provider.addToCart(request(recgovTarget())) as AddToCartResult.Failed
+
+            assertEquals(RecGovSessionCodes.COMPANION_UNAVAILABLE, failed.error)
+            assertNull(executor.payload)
+            assertTrue(session.reLogins.isEmpty())
         }
 
     @Test
@@ -136,8 +218,31 @@ class RecGovBookingAdapterTest {
             assertNull(executor.payload)
         }
 
-    private fun provider(executor: RecordingAtcExecutor = RecordingAtcExecutor(completedOutcome())): RecGovBookingAdapter =
-        RecGovBookingAdapter(executor)
+    private fun provider(
+        executor: RecordingAtcExecutor = RecordingAtcExecutor(completedOutcome()),
+        session: FakeProfileSession = FakeProfileSession(),
+    ): RecGovBookingAdapter = RecGovBookingAdapter(executor, session)
+
+    /** [RecGovProfileSessionPort] double: an active session unless told otherwise. */
+    private class FakeProfileSession(
+        private val health: CompanionSessionHealth = CompanionSessionHealth.Active,
+        private val reLogin: CompanionActionResult = CompanionActionResult.Ok,
+    ) : RecGovProfileSessionPort {
+        val healthChecks = mutableListOf<String>()
+        val reLogins = mutableListOf<String>()
+
+        override fun profileId(userId: UserId): String = userId.value.toString()
+
+        override suspend fun health(userId: UserId): CompanionSessionHealth {
+            healthChecks += profileId(userId)
+            return health
+        }
+
+        override suspend fun reLogin(userId: UserId): CompanionActionResult {
+            reLogins += profileId(userId)
+            return reLogin
+        }
+    }
 
     private fun completedOutcome(): RecGovAtcOutcome.Completed =
         RecGovAtcOutcome.Completed(
@@ -165,6 +270,7 @@ class RecGovBookingAdapterTest {
     ): AddToCartRequest =
         AddToCartRequest(
             watchId = TEST_WATCH_ID,
+            ownerUserId = TEST_OWNER_USER_ID,
             target = target,
             arrivalDate = LocalDate.parse("2026-07-04"),
             checkoutDate = LocalDate.parse("2026-07-05"),

@@ -4,8 +4,6 @@ import ca.floo.roadtrip.config.RecGovAtcConfig
 import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
 import java.time.Duration
@@ -18,20 +16,43 @@ class HttpRecGovAtcExecutorTest {
     fun `posts payload and maps success response`() =
         runBlocking {
             CompanionTestServer
-                .of(
-                    responses =
-                        mapOf(
-                            "/health" to TestResponse(body = HEALTH_OK),
-                            "/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
-                        ),
-                ).use { server ->
+                .of(responses = mapOf("/atc" to TestResponse(body = """{"ok":true,"cart_added":true}""")))
+                .use { server ->
                     val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
 
-                    val outcome = executor.addToCart(flatAtcPayload())
+                    val outcome = executor.addToCart(atcPayload())
 
                     assertTrue(outcome is RecGovAtcOutcome.Completed)
-                    assertEquals(listOf("/health", "/atc"), server.paths)
-                    assertEquals(flatAtcPayload().toString(), server.bodies.last())
+                    assertEquals(listOf("/atc"), server.paths)
+                    assertEquals(atcPayload().toString(), server.bodies.last())
+                }
+        }
+
+    @Test
+    fun `the profile id the caller addressed rides in the posted body`() =
+        runBlocking {
+            CompanionTestServer
+                .of(responses = mapOf("/atc" to TestResponse(body = """{"ok":true,"cart_added":true}""")))
+                .use { server ->
+                    val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
+
+                    executor.addToCart(atcPayload())
+
+                    assertTrue(server.bodies.single().contains(""""profile_id":"91""""))
+                }
+        }
+
+    @Test
+    fun `no health preflight is issued — the adapter owns that check`() =
+        runBlocking {
+            CompanionTestServer
+                .of(responses = mapOf("/atc" to TestResponse(body = """{"ok":true,"cart_added":true}""")))
+                .use { server ->
+                    val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
+
+                    executor.addToCart(atcPayload())
+
+                    assertEquals(listOf("/atc"), server.paths)
                 }
         }
 
@@ -42,7 +63,6 @@ class HttpRecGovAtcExecutorTest {
                 .of(
                     responses =
                         mapOf(
-                            "/health" to TestResponse(body = HEALTH_OK),
                             "/atc" to
                                 TestResponse(
                                     status = 500,
@@ -52,123 +72,45 @@ class HttpRecGovAtcExecutorTest {
                 ).use { server ->
                     val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
 
-                    val outcome = executor.addToCart(flatAtcPayload())
+                    val outcome = executor.addToCart(atcPayload())
 
                     val failed = outcome as RecGovAtcOutcome.Failed
-                    assertEquals(listOf("/health", "/atc"), server.paths)
+                    assertEquals(listOf("/atc"), server.paths)
                     assertEquals("cart_not_added", failed.error)
                     assertEquals("no hold", failed.detail)
                 }
         }
 
     @Test
-    fun `fails before atc when companion health reports recgov auth failure`() =
+    fun `an unreadable body never fabricates a companion response`() =
         runBlocking {
             CompanionTestServer
-                .of(
-                    responses =
-                        mapOf(
-                            "/health" to
-                                TestResponse(
-                                    body =
-                                        """
-                                        {
-                                          "ok": true,
-                                          "busy": false,
-                                          "recgov_auth": {
-                                            "login_status": "failed",
-                                            "logged_in": false,
-                                            "error": "recgov_not_authenticated",
-                                            "detail": "run make recgov-login"
-                                          }
-                                        }
-                                        """.trimIndent(),
-                                ),
-                            "/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
-                        ),
-                ).use { server ->
+                .of(responses = mapOf("/atc" to TestResponse(body = "not json")))
+                .use { server ->
                     val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
 
-                    val outcome = executor.addToCart(flatAtcPayload())
+                    val failed = executor.addToCart(atcPayload()) as RecGovAtcOutcome.Failed
 
-                    val failed = outcome as RecGovAtcOutcome.Failed
-                    assertEquals(listOf("/health"), server.paths)
-                    assertEquals("recgov_not_authenticated", failed.error)
-                    assertEquals("run make recgov-login", failed.detail)
-                    val auth = failed.response!!["recgov_auth"]!!.jsonObject
-                    assertEquals("failed", auth["login_status"]!!.jsonPrimitive.content)
-                }
-        }
-
-    @Test
-    fun `fails before atc when companion is busy`() =
-        runBlocking {
-            CompanionTestServer
-                .of(
-                    responses =
-                        mapOf(
-                            "/health" to TestResponse(body = """{"ok":true,"busy":true,"recgov_auth":{"login_status":"ok"}}"""),
-                            "/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
-                        ),
-                ).use { server ->
-                    val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
-
-                    val outcome = executor.addToCart(flatAtcPayload())
-
-                    val failed = outcome as RecGovAtcOutcome.Failed
-                    assertEquals(listOf("/health"), server.paths)
-                    assertEquals("companion_health_not_ok", failed.error)
-                    assertEquals(
-                        true,
-                        failed.response!!["busy"]!!
-                            .jsonPrimitive
-                            .content
-                            .toBoolean(),
-                    )
-                }
-        }
-
-    @Test
-    fun `health parse failure does not fabricate companion response`() =
-        runBlocking {
-            CompanionTestServer
-                .of(
-                    responses =
-                        mapOf(
-                            "/health" to TestResponse(body = "not json"),
-                        ),
-                ).use { server ->
-                    val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
-
-                    val outcome = executor.addToCart(flatAtcPayload())
-
-                    val failed = outcome as RecGovAtcOutcome.Failed
-                    assertEquals(listOf("/health"), server.paths)
-                    assertEquals("companion_health_invalid_response", failed.error)
+                    assertEquals("companion_invalid_response", failed.error)
                     assertEquals("not json", failed.detail)
                     assertNull(failed.response)
                 }
         }
 
     @Test
-    fun `sends the shared secret header on health and atc`() =
+    fun `sends the shared secret header`() =
         runBlocking {
             CompanionTestServer
-                .of(
-                    responses =
-                        mapOf(
-                            "/health" to TestResponse(body = HEALTH_OK),
-                            "/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
-                        ),
-                ).use { server ->
+                .of(responses = mapOf("/atc" to TestResponse(body = """{"ok":true,"cart_added":true}""")))
+                .use { server ->
                     val executor =
                         HttpRecGovAtcExecutor(
                             RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5), COMPANION_TOKEN),
                         )
 
-                    executor.addToCart(flatAtcPayload())
+                    executor.addToCart(atcPayload())
 
-                    assertEquals(listOf<String?>(COMPANION_TOKEN, COMPANION_TOKEN), server.companionTokens)
+                    assertEquals(listOf<String?>(COMPANION_TOKEN), server.companionTokens)
                 }
         }
 
@@ -176,27 +118,22 @@ class HttpRecGovAtcExecutorTest {
     fun `omits the shared secret header when no token is configured`() =
         runBlocking {
             CompanionTestServer
-                .of(
-                    responses =
-                        mapOf(
-                            "/health" to TestResponse(body = HEALTH_OK),
-                            "/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
-                        ),
-                ).use { server ->
+                .of(responses = mapOf("/atc" to TestResponse(body = """{"ok":true,"cart_added":true}""")))
+                .use { server ->
                     val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
 
-                    executor.addToCart(flatAtcPayload())
+                    executor.addToCart(atcPayload())
 
-                    assertEquals(listOf<String?>(null, null), server.companionTokens)
+                    assertEquals(listOf<String?>(null), server.companionTokens)
                 }
         }
 
     companion object {
-        private const val HEALTH_OK = """{"ok":true,"busy":false,"recgov_auth":{"login_status":"ok","logged_in":true}}"""
         private const val COMPANION_TOKEN = "shared-companion-secret"
 
-        private fun flatAtcPayload() =
+        private fun atcPayload() =
             buildJsonObject {
+                put("profile_id", "91")
                 put("start_date", "2026-07-19")
                 put("end_date", "2026-07-20")
                 put("campsite_id", "102524")

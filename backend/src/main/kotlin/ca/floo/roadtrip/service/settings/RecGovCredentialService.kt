@@ -96,7 +96,9 @@ class RecGovCredentialService(
     private val watchRepo: AvailabilityWatchRepo,
     private val cipher: SecretCipher?,
     private val companion: CompanionSessionPort?,
-) : RecGovCredentialPort {
+) : RecGovCredentialPort,
+    RecGovCredentialsConfigured,
+    RecGovProfileSessionPort {
     private val log = LoggerFactory.getLogger(javaClass)
 
     /**
@@ -231,6 +233,37 @@ class RecGovCredentialService(
         )
     }
 
+    // ── ports the watch surfaces and the ATC fire path depend on ─────────────
+
+    override fun isConfigured(userId: UserId): Boolean = bookingSettingsDto(settingsRepo.find(userId), cipher).recgovConfigured
+
+    override suspend fun health(userId: UserId): CompanionSessionHealth =
+        companion?.health(profileId(userId)) ?: CompanionSessionHealth.Unavailable(null)
+
+    /**
+     * One unattended login with the stored credentials, for a profile whose
+     * session died between the keepalive sweep and the fire.
+     *
+     * Reuses [login] rather than re-deriving the decrypt: the password is
+     * opened in exactly one place. An MFA challenge is a *failure* here — the
+     * user is not present to read a code — and is not remembered, because
+     * nothing will ever complete it.
+     */
+    override suspend fun reLogin(userId: UserId): CompanionActionResult {
+        val answer =
+            try {
+                login(userId)
+            } catch (e: SettingsError) {
+                return CompanionActionResult.Failed(RecGovSessionCodes.NOT_CONFIGURED, e.message)
+            }
+        if (answer.status == RecgovLoginStatus.OK) return CompanionActionResult.Ok
+        pendingChallenges.remove(userId.value)
+        return CompanionActionResult.Failed(
+            answer.error ?: RecGovSessionCodes.LOGIN_FAILED,
+            answer.detail,
+        )
+    }
+
     // ── internals ────────────────────────────────────────────────────────────
 
     /**
@@ -287,5 +320,5 @@ class RecGovCredentialService(
         SettingsError.EncryptionUnavailable("Encryption key not configured; cannot store rec.gov credentials")
 
     /** The companion's profile id for a user is their user id, as an opaque string. */
-    private fun profileId(userId: UserId): String = userId.value.toString()
+    override fun profileId(userId: UserId): String = userId.value.toString()
 }
