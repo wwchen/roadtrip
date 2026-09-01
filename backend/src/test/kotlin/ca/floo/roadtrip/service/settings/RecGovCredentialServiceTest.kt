@@ -305,6 +305,57 @@ class RecGovCredentialServiceTest {
         }
 
     @Test
+    fun `a transient failure does not destroy the challenge the companion is still holding`() =
+        runBlocking {
+            // The trap: a pending challenge holds the profile's busy lock, so a
+            // second Test login answers 409. Forgetting the id there would lock the
+            // user out until the companion's minutes-scale TTL expires.
+            val companion = FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", null))
+            val svc = service(configuredRepo(), companion)
+            svc.login(testUserId)
+
+            companion.loginResult = CompanionLoginResult.Failed(RecGovSessionCodes.PROFILE_BUSY, "mfa pending")
+            assertEquals(RecGovSessionCodes.PROFILE_BUSY, svc.login(testUserId).error)
+
+            companion.mfaResult = CompanionLoginResult.Ok
+            assertEquals(RecgovLoginStatus.OK, svc.completeMfa(testUserId, "123456").status)
+            assertEquals(listOf(Triple(PROFILE_ID, "chal-1", "123456")), companion.mfaCalls)
+        }
+
+    @Test
+    fun `a transient failure while submitting the code keeps the challenge for a retry`() =
+        runBlocking {
+            val companion =
+                FakeCompanion(
+                    loginResult = CompanionLoginResult.MfaRequired("chal-1", null),
+                    mfaResult = CompanionLoginResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, "refused"),
+                )
+            val svc = service(configuredRepo(), companion)
+            svc.login(testUserId)
+
+            assertEquals(RecGovSessionCodes.COMPANION_UNAVAILABLE, svc.completeMfa(testUserId, "123456").error)
+
+            companion.mfaResult = CompanionLoginResult.Ok
+            assertEquals(RecgovLoginStatus.OK, svc.completeMfa(testUserId, "123456").status)
+            assertEquals(2, companion.mfaCalls.size)
+        }
+
+    @Test
+    fun `a dead-challenge code clears it`() =
+        runBlocking {
+            val companion = FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", null))
+            val svc = service(configuredRepo(), companion)
+            svc.login(testUserId)
+
+            // A captcha means rec.gov abandoned the whole attempt, prompt included.
+            companion.loginResult = CompanionLoginResult.Failed(RecGovSessionCodes.CAPTCHA_REQUIRED, null)
+            svc.login(testUserId)
+
+            assertEquals(RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN, svc.completeMfa(testUserId, "123456").error)
+            assertTrue(companion.mfaCalls.isEmpty())
+        }
+
+    @Test
     fun `a rejected code clears the challenge so the next attempt starts a fresh login`() =
         runBlocking {
             val companion =
@@ -396,6 +447,35 @@ class RecGovCredentialServiceTest {
 
             assertEquals(RecgovSessionState.COMPANION_UNAVAILABLE, dto.session)
         }
+
+    @Test
+    fun `status surfaces an open MFA challenge so a remounted panel can resume it`() =
+        runBlocking {
+            val companion = FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", null))
+            val svc = service(configuredRepo(), companion)
+
+            assertFalse(svc.status(testUserId).mfaPending)
+
+            svc.login(testUserId)
+            assertTrue(svc.status(testUserId).mfaPending)
+
+            companion.mfaResult = CompanionLoginResult.Ok
+            svc.completeMfa(testUserId, "123456")
+            assertFalse(svc.status(testUserId).mfaPending)
+        }
+
+    // ── secrets never reach a string ─────────────────────────────────────────
+
+    @Test
+    fun `neither the request nor the decrypted credentials print their password`() {
+        val req = UpdateRecgovRequest("ada@example.com", "hunter2-secret")
+        val credentials = RecGovCredentialService.Credentials("ada@example.com", "hunter2-secret")
+
+        for (rendered in listOf(req.toString(), credentials.toString())) {
+            assertFalse(rendered.contains("hunter2-secret"), rendered)
+            assertTrue(rendered.contains("ada@example.com"), rendered)
+        }
+    }
 
     @Test
     fun `credentials stored without an encryption key read back as unconfigured`() =

@@ -8,6 +8,7 @@ import ca.floo.roadtrip.model.api.RecgovSessionState
 import ca.floo.roadtrip.model.api.RecgovStatusDto
 import ca.floo.roadtrip.model.api.RecgovVerifyResponseDto
 import ca.floo.roadtrip.model.api.UpdateRecgovRequest
+import ca.floo.roadtrip.model.api.redact
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
@@ -19,6 +20,24 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** How much of the password is safe to show back. Mirrors the Slack token hint. */
 private const val PASSWORD_HINT_CHARS = 4
+
+/**
+ * Codes that mean the companion's held prompt page is gone, so the remembered
+ * challenge id points at nothing.
+ *
+ * Everything NOT in this set is transient — `profile_busy` above all, which is
+ * what a *pending* challenge itself provokes when the user presses Test login
+ * again: the challenge holds the profile's lock. Forgetting the id there would
+ * strand the user until the companion's minutes-scale TTL expired.
+ */
+private val challengeEndingCodes =
+    setOf(
+        RecGovSessionCodes.MFA_INVALID,
+        RecGovSessionCodes.LOGIN_FAILED,
+        RecGovSessionCodes.CAPTCHA_REQUIRED,
+        RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN,
+        RecGovSessionCodes.MFA_CHALLENGE_EXPIRED,
+    )
 
 /**
  * Projects stored settings into the wire shape the settings document carries.
@@ -149,10 +168,11 @@ class RecGovCredentialService(
         userId: UserId,
         code: String,
     ): RecgovLoginResponseDto {
-        // Taken, not read: a consumed challenge is spent either way, and the
-        // companion refuses a replay. Retrying means starting a fresh login.
+        // Read, not taken: the answer decides whether the challenge is spent. A
+        // busy profile or an unreachable companion never reached the held page,
+        // so the id must survive for the retry.
         val challengeId =
-            pendingChallenges.remove(userId.value)
+            pendingChallenges[userId.value]
                 ?: return failedLogin(RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN, "no login is waiting for a code")
         val client = companion ?: return companionUnavailableLogin()
         return recordLogin(userId, client.completeMfa(profileId(userId), challengeId, code))
@@ -192,15 +212,22 @@ class RecGovCredentialService(
             passwordHint = stored.recgovPasswordHint,
             session = session,
             detail = detail,
+            mfaPending = pendingChallenges.containsKey(userId.value),
         )
     }
 
     // ── internals ────────────────────────────────────────────────────────────
 
-    private data class Credentials(
+    /**
+     * Not a data class: the generated `toString` would print the plaintext
+     * password, and one future log line is all it would take.
+     */
+    internal class Credentials(
         val username: String,
         val password: String,
-    )
+    ) {
+        override fun toString(): String = "Credentials(username=$username, password=${redact(password)})"
+    }
 
     private fun requireCredentials(userId: UserId): Credentials {
         val c = cipher ?: throw encryptionUnavailable()
@@ -229,7 +256,7 @@ class RecGovCredentialService(
                 )
             }
             is CompanionLoginResult.Failed -> {
-                pendingChallenges.remove(userId.value)
+                if (result.code in challengeEndingCodes) pendingChallenges.remove(userId.value)
                 failedLogin(result.code, result.detail)
             }
         }

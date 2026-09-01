@@ -10,12 +10,10 @@ import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.decodeOptionalTextJsonBody
 import ca.floo.roadtrip.route.common.decodeTextJsonBody
 import ca.floo.roadtrip.route.common.describeApi
-import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.service.settings.SettingsError
 import ca.floo.roadtrip.service.settings.UserSettingsPort
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.routing.Route
@@ -60,7 +58,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
             val req =
                 when (val body = call.decodeTextJsonBody<UpdateProfileRequest>(roadtripApiJson)) {
                     is RouteBodyResult.Invalid ->
-                        return@put call.respondApiError(ERROR_INVALID_BODY, HttpStatusCode.BadRequest, body.detail)
+                        return@put call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
             try {
@@ -81,7 +79,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
                         }
                 ) {
                     is RouteBodyResult.Invalid ->
-                        return@put call.respondApiError(ERROR_INVALID_BODY, HttpStatusCode.BadRequest, body.detail)
+                        return@put call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
             try {
@@ -107,7 +105,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
                         call.decodeOptionalTextJsonBody<SlackTestRequest>(roadtripApiJson) { SlackTestRequest() }
                 ) {
                     is RouteBodyResult.Invalid ->
-                        return@post call.respondApiError(ERROR_INVALID_BODY, HttpStatusCode.BadRequest, body.detail)
+                        return@post call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
             try {

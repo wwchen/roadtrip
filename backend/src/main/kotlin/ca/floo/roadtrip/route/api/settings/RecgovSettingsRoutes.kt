@@ -8,12 +8,10 @@ import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.decodeTextJsonBody
 import ca.floo.roadtrip.route.common.describeApi
-import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.service.settings.RecGovCredentialPort
 import ca.floo.roadtrip.service.settings.SettingsError
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
@@ -50,7 +48,7 @@ internal fun Route.recgovSettingsRoutes(service: RecGovCredentialPort) {
             val req =
                 when (val body = call.decodeTextJsonBody<UpdateRecgovRequest>(roadtripApiJson)) {
                     is RouteBodyResult.Invalid ->
-                        return@put call.respondApiError(ERROR_INVALID_BODY, HttpStatusCode.BadRequest, body.detail)
+                        return@put call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
             try {
@@ -86,7 +84,7 @@ internal fun Route.recgovSettingsRoutes(service: RecGovCredentialPort) {
             val req =
                 when (val body = call.decodeTextJsonBody<RecgovMfaRequest>(roadtripApiJson)) {
                     is RouteBodyResult.Invalid ->
-                        return@post call.respondApiError(ERROR_INVALID_BODY, HttpStatusCode.BadRequest, body.detail)
+                        return@post call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
             try {

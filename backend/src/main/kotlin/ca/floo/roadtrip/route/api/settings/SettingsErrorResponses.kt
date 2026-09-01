@@ -36,6 +36,19 @@ internal suspend fun ApplicationCall.requireUser(): Principal.User? {
 }
 
 /**
+ * Fixed detail for an unparseable settings body.
+ *
+ * The parser's own message quotes the offending input, and every writable body
+ * on this surface carries a secret — a Slack token, a rec.gov password. A
+ * malformed PUT would reflect it straight back in the 400. The caller learns
+ * only that the JSON was bad, which is all they can act on anyway.
+ */
+private const val INVALID_BODY_DETAIL = "Request body is not valid JSON for this endpoint"
+
+internal suspend fun ApplicationCall.respondInvalidBody() =
+    respondApiError(ERROR_INVALID_BODY, HttpStatusCode.BadRequest, INVALID_BODY_DETAIL)
+
+/**
  * Maps a [SettingsError] to its status code and error code. One mapper for the
  * whole settings surface, so the notification and booking routes cannot drift on
  * what `encryption_unavailable` means. Must be called from a suspend handler.

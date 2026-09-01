@@ -271,6 +271,56 @@ class CompanionSessionClientTest {
         }
 
     @Test
+    fun `health degrades rather than throwing when a field is an array, not a string`() =
+        runBlocking {
+            // Nothing throws is the contract, and the status route only catches
+            // SettingsError — an unread field must not become a 500.
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/health" to
+                            TestResponse(
+                                body =
+                                    """
+                                    {"ok":true,"busy":false,"recgov_auth":{"logged_in":false,
+                                     "error":["recgov_not_authenticated","stale"],"detail":{"why":"cookies"}}}
+                                    """.trimIndent(),
+                            ),
+                    ),
+                ).use { server ->
+                    val result = clientFor(server.baseUrl).health(PROFILE_ID)
+
+                    assertEquals<CompanionSessionHealth>(CompanionSessionHealth.Inactive(null), result)
+                }
+        }
+
+    @Test
+    fun `a login answer with a structured detail still maps to a code`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/login" to
+                            TestResponse(
+                                status = 401,
+                                body =
+                                    """
+                                    {"ok":false,"detail":["bad","password"],
+                                     "recgov_auth":{"logged_in":false,"error":"recgov_login_failed","reason":{"code":1}}}
+                                    """.trimIndent(),
+                            ),
+                    ),
+                ).use { server ->
+                    val result = clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "nope")
+
+                    assertEquals<CompanionLoginResult>(
+                        CompanionLoginResult.Failed(RecGovSessionCodes.LOGIN_FAILED, null),
+                        result,
+                    )
+                }
+        }
+
+    @Test
     fun `health degrades rather than failing when the companion is unreachable`() =
         runBlocking {
             val result = clientFor("http://127.0.0.1:1").health(PROFILE_ID)

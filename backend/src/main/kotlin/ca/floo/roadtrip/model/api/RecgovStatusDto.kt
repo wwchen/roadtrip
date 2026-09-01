@@ -35,6 +35,14 @@ data class RecgovStatusDto(
     /** One of [RecgovSessionState]. */
     val session: String,
     val detail: String? = null,
+    /**
+     * True while a login of this user's is waiting on a verification code.
+     *
+     * The companion holds the rec.gov prompt page open for minutes, so a panel
+     * that remounted (a reload, a reopened modal) can resume the code step
+     * instead of orphaning a challenge that still holds the profile's lock.
+     */
+    @SerialName("mfa_pending") val mfaPending: Boolean = false,
 )
 
 /** Body of `PUT /api/settings/recgov`. A null password means "leave unchanged". */
@@ -42,7 +50,13 @@ data class RecgovStatusDto(
 data class UpdateRecgovRequest(
     val username: String? = null,
     val password: String? = null,
-)
+) {
+    /** Redacted: the generated one would print the password into any log line. */
+    override fun toString(): String = "UpdateRecgovRequest(username=$username, password=${redact(password)})"
+}
+
+/** Renders a secret's presence without its value. */
+internal fun redact(secret: String?): String = if (secret == null) "null" else "***"
 
 /** Body of `POST /api/settings/recgov/login/mfa`. */
 @Serializable

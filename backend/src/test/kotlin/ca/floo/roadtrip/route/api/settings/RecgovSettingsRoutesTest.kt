@@ -176,6 +176,26 @@ class RecgovSettingsRoutesTest {
         }
 
     @Test
+    fun `a malformed body never echoes back what was sent`() =
+        testApplication {
+            mount(StubRecgovService())
+
+            // kotlinx's parser message quotes the offending input, which for this
+            // route is a password. The 400 carries a fixed detail instead.
+            val resp =
+                client.put(RECGOV_PATH) {
+                    asUser()
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"username":"ada@example.com","password":"hunter2-secret",}""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = resp.bodyAsText()
+            assertEquals(ERROR_INVALID_BODY, errorCode(body))
+            assertFalse(body.contains("hunter2-secret"), body)
+        }
+
+    @Test
     fun `a rejected field is a 400 invalid_field`() =
         testApplication {
             mount(StubRecgovService(onSave = { _, _ -> throw SettingsError.InvalidField("username must not be blank") }))
@@ -331,6 +351,29 @@ class RecgovSettingsRoutesTest {
             val json = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertFalse(json["ok"]!!.jsonPrimitive.content.toBoolean())
             assertEquals(RecGovSessionCodes.NOT_AUTHENTICATED, json["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `status reports an open MFA challenge`() =
+        testApplication {
+            mount(
+                StubRecgovService(
+                    onStatus = {
+                        RecgovStatusDto(
+                            configured = true,
+                            username = "ada@example.com",
+                            passwordHint = "cret",
+                            session = RecgovSessionState.EXPIRED,
+                            mfaPending = true,
+                        )
+                    },
+                ),
+            )
+
+            val resp = client.get(STATUS_PATH) { asUser() }
+
+            val json = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertTrue(json["mfa_pending"]!!.jsonPrimitive.content.toBoolean())
         }
 
     @Test

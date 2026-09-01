@@ -14,6 +14,15 @@ object RecGovSessionCodes {
 
     /** No challenge is in flight for this user — the login has to start again. */
     const val MFA_CHALLENGE_UNKNOWN = "mfa_challenge_unknown"
+
+    /** The companion's held prompt page timed out and was closed. */
+    const val MFA_CHALLENGE_EXPIRED = "mfa_challenge_expired"
+
+    /** Another operation holds this profile's lock. Transient by nature. */
+    const val PROFILE_BUSY = "profile_busy"
+
+    /** The companion is at its concurrent-browser cap. Transient by nature. */
+    const val BROWSER_CAP_REACHED = "browser_cap_reached"
     const val CAPTCHA_REQUIRED = "captcha_required"
     const val LOGIN_BACKOFF = "login_backoff"
     const val NOT_AUTHENTICATED = "recgov_not_authenticated"
