@@ -1019,6 +1019,42 @@ test('POST /destroy erases the profile and answers ok', async () => {
   assert.equal(getSetting(recgovCookieSettingKey(PROFILE_ID)), null)
 })
 
+test('POST /destroy erases the traces a failed verify kept for that profile', async () => {
+  // The trigger the audit named: a failed /verify keeps a trace, the trace's
+  // network log holds the profile's live session cookies and bearer token, and
+  // the user then removes their credentials. Deleting the jar while that
+  // archive stays on disk erases the copy and keeps the original.
+  const dir = await freshDiagnosticsDir()
+  const pool = tracingPool(dir)
+  const server = testServer({
+    pool,
+    verifyRecgovSessionFn: async () => ({ ok: false, logged_in: false, error: 'recgov_cart_unreachable' }),
+  })
+  const someoneElse = 'recgov-verify-2026-09-01T00-00-00-000Z-profile_user_8-recgov_cart_unreachable.trace.zip'
+  await fsp.writeFile(path.join(dir, someoneElse), 'trace-bytes')
+
+  const verified = await request(server, {
+    method: 'POST',
+    path: `/verify?profile_id=${PROFILE_ID}`,
+    headers: { accept: 'application/json' },
+  })
+  assert.equal(verified.status, 401)
+  const kept = (await fsp.readdir(dir)).filter((name) => name !== someoneElse)
+  assert.equal(kept.length, 1, 'a failed verify keeps its trace')
+  assert.match(kept[0], /-profile_user_7-recgov_cart_unreachable\.trace\.zip$/)
+
+  const destroyed = await request(server, {
+    method: 'POST',
+    path: '/destroy',
+    body: JSON.stringify({ profile_id: PROFILE_ID }),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(destroyed.status, 200)
+  assert.equal(destroyed.json.diagnostics_removed, 1)
+  assert.deepEqual(await fsp.readdir(dir), [someoneElse], "another profile's diagnostics stay")
+})
+
 test('POST /destroy queues behind live work on the same profile', async () => {
   // It deletes the user-data directory out from under a browser, so it must
   // never race a login, verify or ATC mid-flight.

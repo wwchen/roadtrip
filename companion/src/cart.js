@@ -21,12 +21,14 @@ import {
   RECGOV_HOME_URL,
   RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
   RECGOV_LOGIN_STATE_SETTLE_MS,
+  activeProfileId,
   clearBrowserRecaccount,
   resolveRecaccount,
   withRecgovProfileScope,
 } from './recgovSession.js'
 import { captureRecgovPageImage } from './recgovScreenshotCapture.js'
 import { SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX } from './recgovScreenshotRoutes.js'
+import { diagnosticArtifactName } from './tracing.js'
 
 let lastLoginState = null
 export function getLastLoginState () { return lastLoginState }
@@ -205,7 +207,7 @@ const CONFIRMATION_CLICK_TIMEOUT_MS = 3_000
 const POST_CONFIRMATION_CLICK_SETTLE_MS = 2_000
 const CONFIRMATION_DIAGNOSTIC_LIMIT = 8
 const CONFIRMATION_TEXT_LOG_LIMIT = 80
-const ATC_SCREENSHOT_PREFIX = 'recgov-atc'
+const ATC_SCREENSHOT_OPERATION = 'atc'
 const ATC_SCREENSHOT_LABEL_MAX_CHARS = 60
 const CART_URL_CAMPSITE_ID_RE = /\/camping\/campsites\/([^/?#]+)/
 const CART_VERIFY_MATCHED = 'matched'
@@ -615,12 +617,21 @@ function truncateText (value, maxLength) {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`
 }
 
-export async function setupAuthPage ({ getContextFn = getContext, profileId = null } = {}) {
+export async function setupAuthPage ({
+  getContextFn = getContext,
+  profileId = null,
+  resolveRecaccountFn = resolveRecaccount,
+} = {}) {
   const context = await getContextFn()
   await injectStoredCookies(context, null, profileId)
   const page = await context.newPage()
 
-  const recaccount = await resolveRecaccount(page)
+  // Never the manual-login wait: nobody watches an ATC, so parking the request
+  // for RECGOV_LOGIN_TIMEOUT_MS holds the profile lock and loses the hold
+  // anyway — and /atc is traced, so a password typed into that window lands in
+  // the trace past the COMPANION_TRACE_LOGIN gate. Fail fast instead; sessions
+  // get minted headed by `make recgov-login`.
+  const recaccount = await resolveRecaccountFn(page, { allowManualLogin: false })
   const authFailure = recaccount ? null : recgovAuthenticationFailure()
   if (recaccount) {
     console.log(`Cart: session ready (expires ${recaccount.expiration})`)
@@ -671,7 +682,13 @@ function createAtcScreenshotCollector (page) {
     screenshots,
     async capture (label) {
       const capturedAt = new Date().toISOString()
-      const filename = `${ATC_SCREENSHOT_PREFIX}-${capturedAt.replace(/[:.]/g, '-')}-${sanitizeScreenshotLabel(label)}.png`
+      // Named with its profile so `POST /destroy` erases it with the rest of
+      // the profile: these are pictures of that user's signed-in cart.
+      const filename = `${diagnosticArtifactName(
+        ATC_SCREENSHOT_OPERATION,
+        sanitizeScreenshotLabel(label),
+        { profileId: activeProfileId(), capturedAt },
+      )}.png`
       const screenshot = {
         label,
         captured_at: capturedAt,

@@ -113,10 +113,43 @@ test('the legacy unkeyed cookie jar is never deleted by destroying a profile', a
   assert.equal(getSetting(recgovCookieSettingKey(null)), 'legacy=operator')
 })
 
-function testPool () {
+// A kept /verify or /atc trace records the network log, so it holds the live
+// rec.gov session cookie jar and the bearer token — the same material the jar
+// removal above exists to delete. A wipe that leaves it behind is not a wipe.
+
+test('destroy erases the profile\'s failure diagnostics', async () => {
+  const diagnosticsDir = tempDiagnosticsDir()
+  const pool = testPool({ diagnosticsDir })
+  const mine = [
+    'recgov-atc-2026-09-01T00-00-00-000Z-profile_7-exit_1.trace.zip',
+    'recgov-login-2026-09-01T00-00-01-000Z-profile_7-captcha_required.png',
+  ]
+  const theirs = 'recgov-verify-2026-09-01T00-00-02-000Z-profile_8-recgov_not_authenticated.trace.zip'
+  for (const name of [...mine, theirs]) fs.writeFileSync(path.join(diagnosticsDir, name), 'x')
+  seedProfileDir(pool, PROFILE)
+
+  const result = await pool.destroyProfile(PROFILE)
+
+  assert.equal(result.diagnostics_removed, mine.length)
+  assert.deepEqual(fs.readdirSync(diagnosticsDir), [theirs], 'only this profile\'s artifacts go')
+})
+
+test('destroy fails loudly when a diagnostic artifact cannot be deleted', async () => {
+  // Reporting a successful wipe while a trace holding the session is still on
+  // disk is the failure mode this refuses.
+  const diagnosticsDir = tempDiagnosticsDir()
+  const pool = testPool({ diagnosticsDir })
+  fs.mkdirSync(path.join(diagnosticsDir, 'recgov-atc-2026-09-01T00-00-00-000Z-profile_7-exit_1.trace.zip'))
+  seedProfileDir(pool, PROFILE)
+
+  await assert.rejects(() => pool.destroyProfile(PROFILE))
+})
+
+function testPool ({ diagnosticsDir = tempDiagnosticsDir() } = {}) {
   rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'companion-destroy-'))
   return createProfilePool({
     rootDir,
+    env: { ...process.env, RECGOV_DIAGNOSTIC_DIR: diagnosticsDir },
     launchContextFn: async (dir) => {
       fs.mkdirSync(dir, { recursive: true })
       const context = { dir, closed: false, pages: async () => [], once: () => {} }
@@ -125,6 +158,10 @@ function testPool () {
     },
     logger: () => {},
   })
+}
+
+function tempDiagnosticsDir () {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'companion-destroy-diag-'))
 }
 
 function seedProfileDir (pool, profileId) {

@@ -5,9 +5,12 @@ import path from 'node:path'
 import os from 'node:os'
 import {
   DEFAULT_MAX_DIAGNOSTIC_ARTIFACTS,
+  diagnosticArtifactName,
   listDiagnostics,
   maxDiagnosticArtifacts,
   pruneDiagnostics,
+  sweepProfileDiagnostics,
+  traceSessionOpsEnabled,
   withTrace,
 } from '../src/tracing.js'
 
@@ -141,6 +144,101 @@ test('the listing reads operation and reason back out of the filename', async ()
 
 test('listing a directory that does not exist is empty, not an error', async () => {
   assert.deepEqual(await listDiagnostics(path.join(os.tmpdir(), 'companion-no-such-dir-xyz')), [])
+})
+
+// --- Profile attribution -----------------------------------------------
+//
+// A kept trace records the network log, so a /verify or /atc trace holds the
+// profile's live rec.gov session cookies and its bearer token. That makes the
+// archive credential material, and credential material has to be erasable by
+// the operation that claims to erase the profile — which is only possible if
+// the filename says whose it is.
+
+test('a kept trace names the profile it belongs to', async () => {
+  const dir = await tempDiagnosticsDir()
+  const context = fakeContext()
+
+  const { trace } = await withTrace(
+    context,
+    { operation: 'atc', profileId: '7', failureReason: () => 'exit_1', dir },
+    async () => 1,
+  )
+
+  assert.match(trace.file, /^recgov-atc-.*Z-profile_7-exit_1\.trace\.zip$/)
+})
+
+test('artifact names round-trip the profile id, and legacy names have none', () => {
+  const named = diagnosticArtifactName('verify', 'recgov_cart_unreachable', {
+    profileId: '7',
+    capturedAt: '2026-09-01T00:00:00.000Z',
+  })
+
+  assert.equal(named, 'recgov-verify-2026-09-01T00-00-00-000Z-profile_7-recgov_cart_unreachable')
+  assert.equal(
+    diagnosticArtifactName('verify', 'boom', { capturedAt: '2026-09-01T00:00:00.000Z' }),
+    'recgov-verify-2026-09-01T00-00-00-000Z-boom',
+  )
+})
+
+test('the listing reports which profile an artifact belongs to', async () => {
+  const dir = await tempDiagnosticsDir()
+  await fs.writeFile(path.join(dir, 'recgov-atc-2026-09-01T00-00-00-000Z-profile_7-exit_1.trace.zip'), 'x')
+  await fs.writeFile(path.join(dir, 'recgov-login-2026-09-01T00-00-01-000Z-captcha_required.png'), 'x')
+
+  const listed = await listDiagnostics(dir)
+
+  const mine = listed.find((a) => a.kind === 'trace')
+  assert.equal(mine.profile_id, '7')
+  assert.equal(mine.operation, 'atc')
+  assert.equal(mine.reason, 'exit_1')
+  // Written before artifacts carried a profile: unattributable, so no wipe can
+  // honestly claim it.
+  assert.equal(listed.find((a) => a.kind === 'screenshot').profile_id, null)
+})
+
+test("sweeping a profile deletes that profile's artifacts and nothing else", async () => {
+  const dir = await tempDiagnosticsDir()
+  const mine = [
+    'recgov-atc-2026-09-01T00-00-00-000Z-profile_7-exit_1.trace.zip',
+    'recgov-login-2026-09-01T00-00-01-000Z-profile_7-captcha_required.png',
+  ]
+  const theirs = [
+    'recgov-verify-2026-09-01T00-00-02-000Z-profile_8-recgov_not_authenticated.trace.zip',
+    'recgov-login-2026-09-01T00-00-03-000Z-captcha_required.png',
+  ]
+  for (const name of [...mine, ...theirs]) await fs.writeFile(path.join(dir, name), 'x')
+
+  const removed = await sweepProfileDiagnostics('7', dir)
+
+  assert.deepEqual(removed.sort(), [...mine].sort())
+  assert.deepEqual((await fs.readdir(dir)).sort(), [...theirs].sort())
+})
+
+test('a profile with no artifacts sweeps to nothing', async () => {
+  assert.deepEqual(await sweepProfileDiagnostics('7', await tempDiagnosticsDir()), [])
+  assert.deepEqual(
+    await sweepProfileDiagnostics('7', path.join(os.tmpdir(), 'companion-no-such-dir-xyz')),
+    [],
+  )
+})
+
+test('a sweep that cannot delete an artifact fails loudly', async () => {
+  // "Wiped" must never be reported over material still on disk, so an
+  // undeletable artifact is an error the caller has to see.
+  const dir = await tempDiagnosticsDir()
+  await fs.mkdir(path.join(dir, 'recgov-atc-2026-09-01T00-00-00-000Z-profile_7-exit_1.trace.zip'))
+
+  await assert.rejects(() => sweepProfileDiagnostics('7', dir))
+})
+
+test('session-op tracing is on by default and can be turned off', () => {
+  // /verify and /atc traces hold the live session cookie. Default on, because
+  // the fire path is where failure visibility matters most; an operator who
+  // wants a cookie-clean diagnostics directory can say so.
+  assert.equal(traceSessionOpsEnabled({}), true)
+  assert.equal(traceSessionOpsEnabled({ COMPANION_TRACE_SESSION_OPS: 'true' }), true)
+  assert.equal(traceSessionOpsEnabled({ COMPANION_TRACE_SESSION_OPS: 'false' }), false)
+  assert.equal(traceSessionOpsEnabled({ COMPANION_TRACE_SESSION_OPS: 'FALSE' }), false)
 })
 
 /** A fresh diagnostics dir per test, passed in explicitly — the module's

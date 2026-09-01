@@ -21,6 +21,7 @@ import {
   resolveSessionDir,
 } from './browser.js'
 import { removeSetting } from './store.js'
+import { diagnosticDir, sweepProfileDiagnostics } from './tracing.js'
 import { log } from './server/logging.js'
 
 export const PROFILE_DIR_SEGMENT = 'profiles'
@@ -88,6 +89,7 @@ export function createProfilePool ({
   failedLoginBackoffMs = null,
 } = {}) {
   const profilesDir = rootDir ? path.join(rootDir, PROFILE_DIR_SEGMENT) : profilesRootDir(env)
+  const diagnosticsDir = diagnosticDir(env)
   const browserCap = positiveNumber(maxConcurrentBrowsers, env.COMPANION_MAX_CONCURRENT_BROWSERS, DEFAULT_MAX_CONCURRENT_BROWSERS)
   const challengeTtlMs = positiveNumber(mfaChallengeTtlMs, env.COMPANION_MFA_CHALLENGE_TTL_MS, DEFAULT_MFA_CHALLENGE_TTL_MS)
   const backoffMs = positiveNumber(failedLoginBackoffMs, env.COMPANION_FAILED_LOGIN_BACKOFF_MS, DEFAULT_FAILED_LOGIN_BACKOFF_MS)
@@ -239,7 +241,8 @@ export function createProfilePool ({
     },
 
     /**
-     * Erases every trace of one profile: browser, directory, stored jar.
+     * Erases every trace of one profile: browser, directory, stored jar,
+     * failure diagnostics.
      *
      * This is the ONLY operation that deletes profile state. `logout` clicks
      * through rec.gov's sign-out flow in the browser and leaves the user-data
@@ -278,6 +281,13 @@ export function createProfilePool ({
 
       const dirExisted = fs.existsSync(target)
       fs.rmSync(target, { recursive: true, force: true })
+      // A kept /verify or /atc trace records the network log, so it holds the
+      // very session the jar above held; a login screenshot shows the user's
+      // page. Swept after the browser is closed, so nothing can write a new
+      // artifact behind the sweep — and NOT swallowed: an artifact that
+      // survives means the wipe did not happen, and the caller (which gates
+      // the credential delete on this result) has to hear about it.
+      const diagnosticsRemoved = await sweepProfileDiagnostics(parsed.profileId, diagnosticsDir)
       // Last, so the busy lock the caller holds still guards everything above:
       // the entry owns the lock, and a fresh one would let a second operation
       // in mid-delete.
@@ -288,8 +298,15 @@ export function createProfilePool ({
         `profile=${parsed.profileId}`,
         `dir_removed=${dirExisted}`,
         `cookie_jar_removed=${jarRemoved}`,
+        `diagnostics_removed=${diagnosticsRemoved.length}`,
       )
-      return { ok: true, profile_id: parsed.profileId, directory_removed: dirExisted, cookie_jar_removed: jarRemoved }
+      return {
+        ok: true,
+        profile_id: parsed.profileId,
+        directory_removed: dirExisted,
+        cookie_jar_removed: jarRemoved,
+        diagnostics_removed: diagnosticsRemoved.length,
+      }
     },
 
     setKeepWarmProfiles (ids = []) {

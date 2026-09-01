@@ -1,7 +1,7 @@
 import { campsiteUrl } from '../../browser.js'
 import { runAtcOnce } from '../../runAtcOnce.js'
 import { withLogCapture } from '../../logCapture.js'
-import { withTrace } from '../../tracing.js'
+import { traceSessionOpsEnabled, withTrace } from '../../tracing.js'
 import {
   EXIT_SUCCESS,
   EXIT_USAGE,
@@ -73,10 +73,16 @@ export async function handleAtc (req, res, {
     runtime.logger(atcStartLine)
     // The fire path is where failure visibility matters most and where nobody
     // is watching. Tracing adds no waits; the trace is discarded unless the
-    // hold failed.
+    // hold failed. A kept one holds this profile's live session, so it is named
+    // with the profile — that is what lets `POST /destroy` erase it.
     const { result: code, trace } = await withTrace(
       resolved.context,
-      { operation: OPERATION_ATC, failureReason: (c) => (c === EXIT_SUCCESS ? null : `exit_${c}`) },
+      {
+        operation: OPERATION_ATC,
+        profileId,
+        enabled: traceSessionOpsEnabled(),
+        failureReason: (c) => (c === EXIT_SUCCESS ? null : `exit_${c}`),
+      },
       () =>
         withLogCapture(stderr, () =>
           runAtcOnceFn({

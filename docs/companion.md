@@ -111,7 +111,7 @@ are authoritative; this is the shape.
 | `GET /health` | Companion health. With `?profile_id=` it reports that profile's `recgov_auth`, busy flag and pool residency. Lock-free; tokenless from loopback only. |
 | `POST /login` | Two-phase credential login for one profile. |
 | `POST /logout` | Click through the rec.gov logout flow in one profile. Leaves the profile directory and stored cookie jar in place. |
-| `POST /destroy` | Erase one profile: close the browser, delete its directory and its stored cookie jar. Takes the busy lock. Idempotent. |
+| `POST /destroy` | Erase one profile: close the browser, delete its directory, its stored cookie jar and its failure diagnostics. Takes the busy lock. Idempotent. |
 | `POST /refresh` | Force a session refresh for one profile. The keepalive job calls it for each armed profile. |
 | `POST /keep-warm` | Replace the armed profile set (`{ "profile_ids": [...] }`). Lock-free; marks profiles, never drives a browser. |
 | `POST /verify` | Dry-run session check. Never places a hold. |
@@ -189,8 +189,20 @@ alone leaves the user's rec.gov session material on this host.
 It takes the per-profile busy lock, so it can never delete a user-data
 directory out from under a live login, verify or ATC. In order it closes and
 evicts the context, drops the profile from the keep-warm set (so the keepalive
-sweep stops asking for it), deletes the profile's stored cookie jar, and
-deletes the profile directory.
+sweep stops asking for it), deletes the profile's stored cookie jar, deletes
+the profile directory, and deletes that profile's failure diagnostics —
+reporting how many in `diagnostics_removed`.
+
+- **The diagnostics sweep is load-bearing, not tidying.** A kept `/verify` or
+  `/atc` trace records the network log, so it holds the same live session the
+  cookie jar held; deleting the jar and leaving the archive would erase the copy
+  and keep the original. Artifacts are swept after the browser is closed, so
+  nothing can write a new one behind the sweep, and only the ones naming this
+  profile are touched.
+- **It fails loudly.** An artifact that cannot be deleted makes `POST /destroy`
+  answer `500 profile_destroy_failed` rather than reporting a wipe over material
+  still on disk. The backend already refuses the credential delete when destroy
+  fails, so the user is told the truth and a retry converges.
 
 - **Idempotent.** Destroying a profile that was never launched, or was already
   destroyed, is `200` with `directory_removed: false`. The caller asked for it
@@ -273,9 +285,16 @@ starts a fresh store, at the cost of every session that was in it.
 
 **Treat `recgov_cookies*` as credential material.** The value is not a hint or
 a cache: it *is* a live rec.gov session, and anyone holding it is signed in as
-that account. It never leaves the companion host, never appears in traces or
-diagnostics, and a store file holding one deserves the same handling as a
-password file.
+that account. It never leaves the companion host, and a store file holding one
+deserves the same handling as a password file.
+
+**A kept trace holds the same session.** A Playwright trace records the network
+log with full request headers, so a `/verify` or `/atc` trace written on failure
+contains the profile's live `cookie:` jar and the `authorization: Bearer …`
+header the cart path injects — Playwright offers no redaction. Trace archives
+are therefore credential material too: they are named with the profile they
+belong to and `POST /destroy` deletes them, and an operator who wants a
+cookie-clean diagnostics directory sets `COMPANION_TRACE_SESSION_OPS=false`.
 
 `profile_id` has exactly one shape: the roadtrip user id as a decimal string
 (`"7"`). Every backend caller derives it the same way; the store key and the
@@ -295,16 +314,24 @@ The outcome decides what survives:
   Nothing is written — not written and later swept.
 - **Failure:** the trace is written to the diagnostics directory beside the
   failure screenshot, under the same naming convention
-  (`recgov-<operation>-<timestamp>-<reason>.trace.zip`), and the response names
-  it in `diagnostics.trace`.
+  (`recgov-<operation>-<timestamp>-profile_<profile_id>-<reason>.trace.zip`),
+  and the response names it in `diagnostics.trace`.
+
+**Every artifact is named with the profile it belongs to.** That is what makes
+`POST /destroy` able to erase them: the name is the only record of whose
+material an archive holds. The profile segment is sanitized to
+`[A-Za-z0-9_]` so it can be parsed back out of a name whose reason contains
+hyphens. Artifacts with no segment — written before this convention, or by the
+operator CLI's legacy profile — belong to no pooled profile, so no per-profile
+wipe claims them; they age out through the prune bound.
 
 **What the artifacts contain — read this before turning login tracing on.**
 
 | artifact | contains | posture |
 | --- | --- | --- |
-| `/verify`, `/atc` traces | page state, network, DOM snapshots. **No raw password** — neither route ever holds one. | Traced unconditionally. |
+| `/verify`, `/atc` traces | page state, DOM snapshots of the signed-in account and cart pages, and **the network log with request headers — the profile's live rec.gov session cookie jar and its `authorization: Bearer …`**. No raw password: neither route ever holds one, and neither can reach a login form (see below). | Traced by default; `COMPANION_TRACE_SESSION_OPS=false` turns it off. |
 | Failure screenshots | a rendered page. Login forms mask the password field. | Always kept on failure. |
-| `/login` and MFA traces | **the typed rec.gov password**, in fill parameters and DOM snapshots. | **Off by default.** `COMPANION_TRACE_LOGIN=true` opts in. |
+| `/login` and MFA traces | **the typed rec.gov password**, in fill parameters and DOM snapshots, on top of everything the row above lists. | **Off by default.** `COMPANION_TRACE_LOGIN=true` opts in. |
 
 A login trace defeats the point of everything else in this design: the backend
 seals the password with AES-256-GCM, the companion holds it in memory for one
@@ -313,10 +340,25 @@ Writing it to a file on disk for debuggability would undo all of that. Turn it
 on to debug a specific login, treat the output like the vault, and delete it
 afterwards.
 
+A session trace is milder but not clean: anyone who can read the file can act
+as that user on rec.gov until the session lapses. Exposure is bounded — the
+download route is token-gated, the companion has no published port, and the
+directory is pruned — and the archive dies with the profile. Treat one you have
+copied off the host like the store file.
+
+**`/atc` never reaches a login form.** `resolveRecaccount` can fall through to
+a manual-login wait on a headed browser; the ATC path passes
+`allowManualLogin: false`, so a fired hold against a logged-out profile fails
+fast with `recgov_not_authenticated` instead of parking the request for
+`RECGOV_LOGIN_TIMEOUT_MS` waiting for a human, holding the profile lock, and
+recording whatever got typed into a trace that is not gated on
+`COMPANION_TRACE_LOGIN`. Nobody watches a fire path, and the hold is gone by
+then anyway. Mint a session headed with `make recgov-login` instead.
+
 Open one with:
 
 ```sh
-npx playwright show-trace recgov-login-2026-09-01T00-00-00-000Z-captcha_required.trace.zip
+npx playwright show-trace recgov-login-2026-09-01T00-00-00-000Z-profile_7-captcha_required.trace.zip
 ```
 
 The directory is pruned to the newest `COMPANION_MAX_DIAGNOSTIC_ARTIFACTS`
@@ -348,9 +390,10 @@ visibility matters most and nobody is watching.
 | `COMPANION_FAILED_LOGIN_BACKOFF_MS` | `60000` | Suppression window after a failed login. |
 | `COMPANION_MAX_DIAGNOSTIC_ARTIFACTS` | `40` | Failure screenshots + traces kept before the oldest are pruned. |
 | `COMPANION_TRACE_LOGIN` | unset (off) | Trace `/login` and MFA completion. **The trace contains the typed password** — see above. |
+| `COMPANION_TRACE_SESSION_OPS` | unset (on) | Trace `/verify` and `/atc`. **A kept trace contains the profile's live session cookies and bearer token** — see above. `false` keeps the screenshots and writes no session traces. |
 | `RECGOV_DIAGNOSTIC_DIR` | `/tmp/campsite-companion/recgov-diagnostics` | Where those artifacts live. |
 | `HEADLESS` | true in Docker | Headed Chromium for operator login. |
-| `RECGOV_LOGIN_TIMEOUT_MS` | `120000` | Manual-login wait. |
+| `RECGOV_LOGIN_TIMEOUT_MS` | `120000` | Manual-login wait, headed login paths only. `/atc` and `/verify` never enter it. |
 
 The **backend** side has two knobs of its own. `RECGOV_KEEPALIVE_INTERVAL`
 (default 15m) sets how often it re-pushes the armed set and refreshes those

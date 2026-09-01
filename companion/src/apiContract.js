@@ -243,7 +243,7 @@ export const COMPANION_API_ROUTES = [
         required: true,
         schema: {
           type: 'string',
-          example: 'recgov-login-2026-07-17T00-00-00-000Z-login_success.png',
+          example: 'recgov-login-2026-07-17T00-00-00-000Z-profile_7-login_success.png',
         },
       },
     ],
@@ -413,7 +413,7 @@ export const COMPANION_API_SCHEMAS = {
   },
   ProfileDestroyResponse: {
     type: 'object',
-    required: ['ok', 'profile_id', 'directory_removed', 'cookie_jar_removed'],
+    required: ['ok', 'profile_id', 'directory_removed', 'cookie_jar_removed', 'diagnostics_removed'],
     properties: {
       ok: { type: 'boolean' },
       profile_id: PROFILE_ID_SCHEMA,
@@ -424,6 +424,13 @@ export const COMPANION_API_SCHEMAS = {
       cookie_jar_removed: {
         type: 'boolean',
         description: 'Whether a stored per-profile rec.gov cookie jar was deleted.',
+      },
+      diagnostics_removed: {
+        type: 'integer',
+        description:
+          "How many of the profile's failure diagnostics were deleted. A kept /verify or /atc trace " +
+          'records the network log, so it holds that profile\'s live session cookies — the wipe deletes it too, ' +
+          'and fails rather than reporting success over an artifact it could not remove.',
       },
     },
   },
@@ -522,9 +529,15 @@ export const COMPANION_API_SCHEMAS = {
         items: {
           type: 'object',
           properties: {
-            file: { type: 'string', example: 'recgov-login-2026-09-01T00-00-00-000Z-captcha_required.trace.zip' },
+            file: { type: 'string', example: 'recgov-login-2026-09-01T00-00-00-000Z-profile_7-captcha_required.trace.zip' },
             kind: { type: 'string', enum: ['screenshot', 'trace'] },
             operation: { type: 'string', example: 'login' },
+            profile_id: {
+              type: 'string',
+              nullable: true,
+              description: 'Which profile the artifact belongs to, read back out of its name. Null for artifacts written before names carried one, and for the operator CLI\'s legacy profile — those no per-profile wipe can claim.',
+              example: '7',
+            },
             reason: { type: 'string', example: 'captcha_required' },
             url: { type: 'string' },
             size_bytes: { type: 'integer' },

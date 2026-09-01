@@ -208,6 +208,7 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
       {
         enabled: traceLoginEnabled(),
         operation: OPERATION_LOGIN,
+        profileId,
         failureReason: (o) =>
           o?.state === LOGIN_STATE_OK || o?.state === LOGIN_STATE_MFA_REQUIRED ? null : o?.reason || 'login_failed',
       },
@@ -293,6 +294,7 @@ async function completeMfaChallenge (req, res, { runtime, pool, profileId, chall
       {
         enabled: traceLoginEnabled(),
         operation: OPERATION_MFA,
+        profileId,
         failureReason: (o) => (o?.state === LOGIN_STATE_OK ? null : o?.reason || ERROR_MFA_INVALID),
       },
       () => taken.challenge.complete(mfaCode),

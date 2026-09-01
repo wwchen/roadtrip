@@ -1,5 +1,5 @@
 import { verifyRecgovSession } from '../../recgovVerify.js'
-import { withTrace } from '../../tracing.js'
+import { traceSessionOpsEnabled, withTrace } from '../../tracing.js'
 import { persistProfileCookies } from '../../browser.js'
 import {
   HTTP_BAD_REQUEST,
@@ -55,10 +55,16 @@ export async function handleVerify (req, res, { runtime, pool, verifyRecgovSessi
     }
     // Traced, and the trace kept only if the verify failed — a dry run that
     // says "not authenticated" is exactly the case where the screenshot alone
-    // does not say why.
+    // does not say why. A kept one holds this profile's live session, so it is
+    // named with the profile and `POST /destroy` erases it.
     const { result: verify, trace } = await withTrace(
       resolved.context,
-      { operation: OPERATION_VERIFY, failureReason: (r) => (r?.ok ? null : r?.error || 'verify_failed') },
+      {
+        operation: OPERATION_VERIFY,
+        profileId,
+        enabled: traceSessionOpsEnabled(),
+        failureReason: (r) => (r?.ok ? null : r?.error || 'verify_failed'),
+      },
       () => verifyRecgovSessionFn({ getContextFn: async () => resolved.context, profileId }),
     )
     if (trace) verify.trace_url = trace.url
