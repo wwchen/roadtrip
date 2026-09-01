@@ -2,6 +2,7 @@ package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.service.settings.RecGovCredentialService
 import ca.floo.roadtrip.service.settings.UserSettingsService
 import org.jooq.DSLContext
 import org.junit.jupiter.api.Test
@@ -14,7 +15,8 @@ import kotlin.test.assertNotNull
  *
  * `UserSettingsService`'s optional deps (the AES-GCM cipher and the per-user
  * Slack client) are null when no encryption key / Slack is configured — the
- * default for a fresh install. They must be built INLINE in the service's
+ * default for a fresh install, and `RecGovCredentialService` has the same shape
+ * with its cipher and its companion client. They must be built INLINE in the service's
  * definition, never registered as `single<T?>`: a Koin `single { }` that
  * produces null throws at resolution ("Single instance created couldn't return
  * value"), which crashed application boot. This test resolves the service from
@@ -22,7 +24,7 @@ import kotlin.test.assertNotNull
  */
 class ServiceModuleWiringTest : SharedDbTest() {
     @Test
-    fun `UserSettingsService resolves when no encryption key or Slack is configured`() {
+    fun `the settings services resolve when no encryption key, Slack or companion is configured`() {
         // auth/secrets/slack keys omitted => those sections resolve to null: the exact
         // config that crashed boot. Only the two globally-required durations are supplied.
         val config =
@@ -53,6 +55,10 @@ class ServiceModuleWiringTest : SharedDbTest() {
             assertNotNull(
                 app.koin.get<UserSettingsService>(),
                 "UserSettingsService must resolve with a null cipher and null Slack client",
+            )
+            assertNotNull(
+                app.koin.get<RecGovCredentialService>(),
+                "RecGovCredentialService must resolve with a null cipher and no companion",
             )
         } finally {
             app.close()
