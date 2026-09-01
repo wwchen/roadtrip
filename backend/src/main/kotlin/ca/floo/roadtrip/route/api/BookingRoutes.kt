@@ -63,7 +63,16 @@ private val transientConflictCodes =
  * broken, the user simply has to log in again in Settings — exactly like
  * `credentials_required`.
  */
-private val callerActionableCodes = setOf(RecGovSessionCodes.SESSION_EXPIRED)
+private val callerActionableCodes =
+    setOf(
+        RecGovSessionCodes.SESSION_EXPIRED,
+        // The companion's three other ways of saying the same thing, which reach
+        // the fire path verbatim. Answering 502 for these claimed an upstream
+        // broke when the user simply has to sign in again.
+        RecGovSessionCodes.SPA_LOGGED_OUT,
+        RecGovSessionCodes.REFRESH_FAILED,
+        RecGovSessionCodes.COMPANION_LOGIN_FAILED,
+    )
 
 /**
  * Direct add-to-cart, from the availability grid.

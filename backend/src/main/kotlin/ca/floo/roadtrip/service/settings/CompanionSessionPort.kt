@@ -43,6 +43,17 @@ object RecGovSessionCodes {
      * automated re-login reports and which reads as "your password is wrong".
      */
     const val SESSION_LAPSED = "recgov_session_lapsed"
+
+    /**
+     * The companion's other three ways of saying the session is gone.
+     *
+     * These are emitted by `companion/src/cart.js` on the fire path and reach the
+     * backend verbatim, so they belong in the shared vocabulary rather than as
+     * literals at the call sites that have to classify them.
+     */
+    const val SPA_LOGGED_OUT = "recgov_spa_logged_out"
+    const val REFRESH_FAILED = "recgov_refresh_failed"
+    const val COMPANION_LOGIN_FAILED = "recgov_login_failed"
 }
 
 /** Result of a credential login or of completing an MFA challenge. */

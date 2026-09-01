@@ -200,6 +200,35 @@ class BookingRoutesTest {
         }
 
     @Test
+    fun `every session-death code is the caller's to fix, not a bad gateway`() {
+        // The companion has three more ways to say "your session is gone" than
+        // recgov_session_expired, and they arrive verbatim on the fire path. All
+        // four send the user to the same place — Settings — so answering 502 for
+        // three of them tells the UI an upstream broke when nothing did.
+        for (
+        code in
+        listOf(
+            RecGovSessionCodes.SPA_LOGGED_OUT,
+            RecGovSessionCodes.REFRESH_FAILED,
+            RecGovSessionCodes.COMPANION_LOGIN_FAILED,
+        )
+        ) {
+            testApplication {
+                mount(StubBookingActions(AddToCartOutcome.Failed(code, "re-login")))
+
+                val resp =
+                    client.post(ADD_TO_CART) {
+                        asUser()
+                        contentType(ContentType.Application.Json)
+                        setBody(VALID_BODY)
+                    }
+
+                assertEquals(HttpStatusCode.Forbidden, resp.status, "$code is the user's to fix in Settings")
+            }
+        }
+    }
+
+    @Test
     fun `a vendor-side miss is a conflict the caller can retry`() {
         for (code in listOf(BookingActionCodes.CART_NOT_ADDED, BookingActionCodes.CONFIRMATION_DISABLED)) {
             testApplication {
