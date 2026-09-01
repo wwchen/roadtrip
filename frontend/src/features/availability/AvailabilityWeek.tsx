@@ -8,7 +8,6 @@ import { copyShareUrl } from '@/lib/share-links';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import { addToCart } from '@/api/booking-api';
 import { isCartActionPending } from './cart-action';
-import './cell-book-popover.css';
 import { DayDetail, type WatchUnavailableReason } from './DayDetail';
 import { CalendarPopover } from './CalendarPopover';
 import { SiteList } from './SiteList';
@@ -160,9 +159,20 @@ function AvailabilityWeekView({
 
   const holdSite = useCallback(
     (campsiteId: string, date: string) => {
+      // The reducer refuses a second in-flight hold, but the fetch below is not
+      // the reducer's to stop: without this the request really went out, with
+      // no cell to show for it and a toast about a cell the user never armed.
+      if (isCartActionPending(cartAction)) {
+        toast({
+          status: 'warning',
+          title: 'One hold at a time',
+          children: 'A hold is already running — wait for it to finish before holding another site.',
+        });
+        return;
+      }
       const cell = { campsiteId, date };
       actions.cartActionChanged({ type: 'requested', cell });
-      void addToCart({ campsite_id: campsiteId, start_date: date, end_date: stayEndDate(date) })
+      void addToCart({ campsite_id: Number(campsiteId), start_date: date, end_date: stayEndDate(date) })
         .then((answer) => {
           actions.cartActionChanged({ type: 'held', cell, cartUrl: answer.cart_url });
           toast({
@@ -188,7 +198,7 @@ function AvailabilityWeekView({
           });
         });
     },
-    [actions, toast],
+    [actions, cartAction, toast],
   );
 
   const openBooking = useCallback(
@@ -352,7 +362,7 @@ function AvailabilityWeekView({
       {isCartActionPending(cartAction) ? (
         <div className="cg-availability-cart-chip" role="status">
           <CartChipSpinner />
-          Holding site… this can take up to 30 seconds
+          Holding site… usually under a minute; can take a few
         </div>
       ) : null}
 

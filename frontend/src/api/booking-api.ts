@@ -10,7 +10,9 @@ import { jsonPostOk, type RequestOptions } from './http';
 const ADD_TO_CART_URL = '/api/booking/add-to-cart';
 
 export interface AddToCartFields {
-  campsite_id: number | string;
+  /** Numeric on the wire. The backend's DTO is a Long, and the grid carries ids
+   *  as strings — `Number()` at the call site, as `useWatches` does. */
+  campsite_id: number;
   start_date: string;
   end_date: string;
 }

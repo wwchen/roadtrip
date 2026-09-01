@@ -234,11 +234,7 @@ val serviceModule =
                 bookingTargets = get<AvailabilityBookingTargetResolver>(),
                 credentials = get<RecGovCredentialService>(),
                 availability = { campsiteId, nights ->
-                    get<AvailabilityRepo>()
-                        .readCurrent(listOf(campsiteId), nights)
-                        .filter { it.available }
-                        .map { it.targetDate }
-                        .toSet()
+                    get<AvailabilityRepo>().availableDates(campsiteId, nights, get<AppConfig>().booking.freshnessMaxAge)
                 },
                 bookings = get<BookingAdapterRegistry>(),
             )

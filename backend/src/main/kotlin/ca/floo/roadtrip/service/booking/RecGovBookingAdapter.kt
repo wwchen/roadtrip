@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory
 private const val ERROR_COMPANION_EXCEPTION = "companion_exception"
 
 /** The profile could not be signed in unattended; only the user can fix it. */
-internal const val RECGOV_SESSION_EXPIRED_ERROR = "recgov_session_expired"
+internal const val RECGOV_SESSION_EXPIRED_ERROR = RecGovSessionCodes.SESSION_EXPIRED
 internal const val RECGOV_SESSION_EXPIRED_DETAIL = "session expired — re-login in Settings"
 
 /** The companion itself is broken; nothing the owner can do about it. */
@@ -66,7 +66,7 @@ internal class RecGovBookingAdapter(
         if (!can(BookingAction.ADD_TO_CART, request.target)) return AddToCartResult.Unsupported
         val owner = UserId(request.ownerUserId)
         val payload = request.toAtcPayload(profileIdFor(owner))
-        preflight(owner)?.let { blocker -> return blocker.toFailure(payload) }
+        preflight(owner, request.allowUnattendedRelogin)?.let { blocker -> return blocker.toFailure(payload) }
         return request.addToCartViaCompanion(payload)
     }
 
@@ -78,7 +78,10 @@ internal class RecGovBookingAdapter(
      * stops this hold. There is exactly one re-login: a second would only ask
      * rec.gov the same question inside the seconds-critical window.
      */
-    private suspend fun preflight(owner: UserId): PreflightBlocker? {
+    private suspend fun preflight(
+        owner: UserId,
+        allowRelogin: Boolean,
+    ): PreflightBlocker? {
         val client = session ?: return null
         return when (val health = client.health(owner)) {
             is CompanionSessionHealth.Active -> null
@@ -92,8 +95,12 @@ internal class RecGovBookingAdapter(
                 PreflightBlocker(health.code ?: RecGovSessionCodes.AUTH_CHECK_EXCEPTION, COMPANION_ERROR_DETAIL)
             // Never signed in, or signed out: both are exactly what the one
             // unattended re-login exists for.
-            is CompanionSessionHealth.NeverLoggedIn -> reLogin(client, owner, null)
-            is CompanionSessionHealth.Inactive -> reLogin(client, owner, health.code)
+            // A caller who is waiting is told now; only an unattended fire pays
+            // for the recovery attempt.
+            is CompanionSessionHealth.NeverLoggedIn ->
+                if (allowRelogin) reLogin(client, owner, null) else sessionExpired()
+            is CompanionSessionHealth.Inactive ->
+                if (allowRelogin) reLogin(client, owner, health.code) else sessionExpired()
         }
     }
 
@@ -118,6 +125,8 @@ internal class RecGovBookingAdapter(
                 PreflightBlocker(RECGOV_SESSION_EXPIRED_ERROR, RECGOV_SESSION_EXPIRED_DETAIL)
             }
         }
+
+    private fun sessionExpired() = PreflightBlocker(RECGOV_SESSION_EXPIRED_ERROR, RECGOV_SESSION_EXPIRED_DETAIL)
 
     private fun profileIdFor(owner: UserId): String = session?.profileId(owner) ?: owner.value.toString()
 

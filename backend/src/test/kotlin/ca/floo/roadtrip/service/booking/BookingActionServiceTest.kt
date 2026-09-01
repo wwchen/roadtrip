@@ -44,7 +44,9 @@ class BookingActionServiceTest {
             val request = adapter.requests.single()
             // The hold lands in the CALLER's cart, and no watch fired it.
             assertEquals(caller.value, request.ownerUserId)
-            assertEquals(null, request.watchId)
+            // The caller is waiting; a re-login they cannot complete is worse
+            // than a fast, honest "your session expired".
+            assertEquals(false, request.allowUnattendedRelogin)
             assertEquals(arrival, request.arrivalDate)
             assertEquals(checkout, request.checkoutDate)
             assertTrue(!request.stopWhenTriggered)

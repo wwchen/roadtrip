@@ -339,7 +339,6 @@ class TriggerActionHandlerTest {
 
             assertTrue(delivered)
             val request = bookingProvider.requests.single()
-            assertEquals(42L, request.watchId)
             // The hold must land in the watch OWNER's cart, not a shared one.
             assertEquals(1L, request.ownerUserId)
             assertEquals(BookingProvider.RECGOV, request.target.providerId)
@@ -359,7 +358,7 @@ class TriggerActionHandlerTest {
                     resultFactory = { request: AddToCartRequest ->
                         AddToCartResult.Completed(
                             providerId = BookingProvider.RECGOV,
-                            request = buildJsonObject { put("watch_id", request.watchId) },
+                            request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                             response =
                                 buildJsonObject {
                                     put("ok", true)
@@ -513,7 +512,7 @@ class TriggerActionHandlerTest {
                             providerId = BookingProvider.RECGOV,
                             error = "cart_not_added",
                             detail = "cart automation did not confirm a cart hold",
-                            request = buildJsonObject { put("watch_id", request.watchId) },
+                            request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                             response =
                                 buildJsonObject {
                                     put("ok", false)
@@ -552,7 +551,7 @@ class TriggerActionHandlerTest {
                             providerId = BookingProvider.RECGOV,
                             error = "recgov_not_authenticated",
                             detail = "run make recgov-login",
-                            request = buildJsonObject { put("watch_id", request.watchId) },
+                            request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                             response =
                                 buildJsonObject {
                                     put("ok", true)
@@ -802,7 +801,7 @@ class TriggerActionHandlerTest {
             resultFactory?.let { return it(request) }
             return AddToCartResult.Completed(
                 providerId = BookingProvider.RECGOV,
-                request = buildJsonObject { put("watch_id", request.watchId) },
+                request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                 response =
                     buildJsonObject {
                         put("ok", true)

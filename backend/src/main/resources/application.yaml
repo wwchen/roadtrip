@@ -31,6 +31,9 @@ roadtrip:
       tolerance: 2h
       ip-rate-limit-per-minute: 10
   booking:
+    # How stale the last availability observation may be and still let a direct
+    # add-to-cart through its freshness gate. Follows the poller cadence.
+    freshness-max-age: ${BOOKING_FRESHNESS_MAX_AGE:5m}
     recgov-atc:
       companion-base-url:
       companion-timeout: 180s

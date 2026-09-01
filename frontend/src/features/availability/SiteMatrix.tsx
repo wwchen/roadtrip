@@ -42,7 +42,7 @@ import { hasReservationUrlTemplate, type ReservationUrlTemplates } from './booki
 import { dayOfMonthLabel, dowLabel } from './week-labels';
 import { clampSiteColumnWidth, saveSiteColumnWidth } from './site-column';
 import { CellBookPopover } from './CellBookPopover';
-import { cartActionFor, type CartAction } from './cart-action';
+import { cartActionFor, isCartActionPending, type CartAction } from './cart-action';
 
 /** Width of one date column, matching `.cg-site-matrix-date` in the stylesheet. */
 const DATE_COLUMN_WIDTH_PX = 66;
@@ -762,6 +762,7 @@ function MatrixCell({
           anchor={cellAnchor}
           onOpenBooking={() => onOpenBooking(id, day.date)}
           onAddToCart={() => onAddToCart(id, day.date)}
+          cartBusy={isCartActionPending(cartAction)}
           onClose={() => onArmBook(null)}
         />
       ) : null}

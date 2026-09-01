@@ -4,11 +4,29 @@ import java.time.Duration
 
 data class BookingConfig(
     val recgovAtc: RecGovAtcConfig,
+    /**
+     * How old the last observation of a night may be and still gate a direct
+     * add-to-cart.
+     *
+     * Defaults to the poller's own default cadence: a cell older than one poll
+     * cycle means the poller is behind or the site fell out of coverage, and
+     * either way we are guessing. Tunable because the right answer follows the
+     * cadence, which is itself tunable.
+     */
+    val freshnessMaxAge: Duration = defaultFreshnessMaxAge,
 ) {
+    init {
+        require(!freshnessMaxAge.isZero && !freshnessMaxAge.isNegative) { "booking freshnessMaxAge must be positive" }
+    }
+
     companion object {
+        /** The poller's default cadence. See `availability.poller.default-cadence`. */
+        private val defaultFreshnessMaxAge: Duration = Duration.ofMinutes(5)
+
         fun fromConfig(config: ConfigSection): BookingConfig =
             BookingConfig(
                 recgovAtc = RecGovAtcConfig.fromConfig(config.section("recgov-atc")),
+                freshnessMaxAge = config.duration("freshness-max-age", defaultFreshnessMaxAge),
             )
     }
 }

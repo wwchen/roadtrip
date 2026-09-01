@@ -36,8 +36,13 @@ const MESSAGES = new Map<string, string>([
   ['recgov_login_exception', 'The booking service hit an internal error — check its logs.'],
   ['recgov_verify_exception', 'The booking service hit an internal error — check its logs.'],
   ['recgov_auth_check_exception', 'The booking service hit an internal error — check its logs.'],
-  // Direct add-to-cart from the grid: the cell the user clicked went stale.
+  // Direct add-to-cart from the grid. Two different misses, deliberately worded
+  // apart: the first is OUR grid being stale (caught before any browser ran),
+  // the second is rec.gov itself declining after we drove the browser — which
+  // in practice means somebody beat this user to it by seconds.
   ['not_available', 'Could not hold the site — it is no longer available.'],
+  ['cart_not_added', 'Recreation.gov would not add it — someone else likely took it.'],
+  ['recgov_confirmation_disabled', 'Recreation.gov would not add it — someone else likely took it.'],
   ['unsupported_target', 'This campground cannot be held from Roadtrip.'],
   ['credentials_required', 'Add your recreation.gov credentials in Settings first.'],
   ['recgov_session_expired', 'Your recreation.gov session expired — test login in Settings.'],

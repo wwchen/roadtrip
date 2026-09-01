@@ -33,6 +33,9 @@ object RecGovSessionCodes {
 
     /** The companion's own auth check threw. An outage, not a credential problem. */
     const val AUTH_CHECK_EXCEPTION = "recgov_auth_check_exception"
+
+    /** The profile's session is dead and only the user can revive it. */
+    const val SESSION_EXPIRED = "recgov_session_expired"
 }
 
 /** Result of a credential login or of completing an MFA challenge. */

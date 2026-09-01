@@ -410,19 +410,36 @@ trip:
 
 | # | check | refusal |
 | --- | --- | --- |
+| 0 | the window is a positive number of nights | 400 `invalid_window` |
 | 1 | `CampsiteRepo` → `DbAvailabilityTargetResolver` → `AvailabilityBookingTargetResolver.targetFor(ADD_TO_CART, …)` | 422 `unsupported_target` |
 | 2 | `RecGovCredentialService.isConfigured(caller)` | 403 `credentials_required` |
-| 3 | every night currently `available` in the availability interval table | 409 `not_available` |
-| 4 | adapter `addToCart` with `profile_id` = caller | the companion's own code |
+| 3 | every night currently `available` **and observed within `booking.freshness-max-age`** | 409 `not_available` |
+| 4 | adapter `addToCart` with `profile_id` = caller | the companion's own code, below |
 
 Gate 3 is a cheap stale-grid guard, **not** a vendor call: it reads what the
-poller last saw. The companion is the authority and gets the last word at
-gate 4, where "the site is gone" comes back as `not_available` too.
+poller last saw, through `AvailabilityRepo.availableDates`. The age bound
+matters as much as the status — `readCurrent` will happily return a year-old
+`available`, since it is still the newest row, and a gate that trusted it would
+drive a browser on last season's observation. Default is the poller's own
+default cadence (5m), env-tunable via `BOOKING_FRESHNESS_MAX_AGE`. The
+companion is the authority and gets the last word at gate 4.
 
-Gate 4 is the *identical* seam `AtcTriggerActionHandler` uses, preflight and
-one-shot unattended re-login included. Transient contention (`profile_busy`,
-`browser_cap_reached`) is a 409 the caller can retry; a broken booking service
-is a 502. Success is `200 {status:"completed", cart_url}`.
+Gate 4 is the same seam `AtcTriggerActionHandler` uses, with **one deliberate
+difference**: `AddToCartRequest.allowUnattendedRelogin` is false here. A watch
+firing at 3am should spend up to a minute on a re-login because nobody is
+there; a person watching a spinner should be told "session expired, fix it in
+Settings" in two seconds, especially as MFA would block the re-login anyway.
+
+Gate-4 codes and their statuses:
+
+| code | status | meaning |
+| --- | --- | --- |
+| `recgov_session_expired` | 403 | caller-actionable, like `credentials_required` |
+| `profile_busy`, `browser_cap_reached` | 409 | transient contention; retry |
+| `cart_not_added`, `recgov_confirmation_disabled` | 409 | rec.gov declined — somebody else took it |
+| `companion_unavailable`, anything else | 502 | the booking service failed |
+
+Success is `200 {status:"completed", cart_url}`.
 
 **No notification is sent on this path.** The user is watching the response;
 emailing them what their own screen just said would be noise. That is the only

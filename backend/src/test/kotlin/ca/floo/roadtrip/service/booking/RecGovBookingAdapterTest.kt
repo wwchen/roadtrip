@@ -169,6 +169,36 @@ class RecGovBookingAdapterTest {
         }
 
     @Test
+    fun `an interactive caller is told at once, without a re-login they cannot finish`() =
+        runBlocking {
+            val executor = RecordingAtcExecutor(completedOutcome())
+            val session = FakeProfileSession(health = CompanionSessionHealth.Inactive(RecGovSessionCodes.NOT_AUTHENTICATED))
+            val provider = provider(executor, session)
+
+            val failed =
+                provider.addToCart(request(recgovTarget()).copy(allowUnattendedRelogin = false))
+                    as AddToCartResult.Failed
+
+            assertEquals(RECGOV_SESSION_EXPIRED_ERROR, failed.error)
+            assertTrue(session.reLogins.isEmpty(), "no browser login for a caller watching a spinner")
+            assertNull(executor.payload)
+        }
+
+    @Test
+    fun `a never-logged-in profile is also fast-failed for an interactive caller`() =
+        runBlocking {
+            val session = FakeProfileSession(health = CompanionSessionHealth.NeverLoggedIn)
+            val provider = provider(session = session)
+
+            val failed =
+                provider.addToCart(request(recgovTarget()).copy(allowUnattendedRelogin = false))
+                    as AddToCartResult.Failed
+
+            assertEquals(RECGOV_SESSION_EXPIRED_ERROR, failed.error)
+            assertTrue(session.reLogins.isEmpty())
+        }
+
+    @Test
     fun `an unreachable companion fails the ATC without attempting a re-login`() =
         runBlocking {
             val executor = RecordingAtcExecutor(completedOutcome())
@@ -269,7 +299,6 @@ class RecGovBookingAdapterTest {
         bookingUrl: String? = null,
     ): AddToCartRequest =
         AddToCartRequest(
-            watchId = TEST_WATCH_ID,
             ownerUserId = TEST_OWNER_USER_ID,
             target = target,
             arrivalDate = LocalDate.parse("2026-07-04"),

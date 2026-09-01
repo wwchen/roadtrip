@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CellTransition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -182,6 +183,30 @@ class AvailabilityRepo(
                     observedAt = r.get("last_observed_at", OffsetDateTime::class.java),
                 )
             }
+    }
+
+    /**
+     * Of [dates], the ones this campsite currently reads as bookable **and**
+     * were observed within [maxAge].
+     *
+     * The age bound is the point. `readCurrent` happily returns a year-old
+     * `available` — the newest row is still the newest row — and a booking gate
+     * that trusted it would drive a browser on the strength of an observation
+     * from last season. A cell older than the bound is treated as unknown,
+     * which for a gate means unavailable.
+     */
+    fun availableDates(
+        campsiteId: Long,
+        dates: List<LocalDate>,
+        maxAge: Duration,
+        now: OffsetDateTime = OffsetDateTime.now(),
+    ): Set<LocalDate> {
+        if (dates.isEmpty()) return emptySet()
+        val freshAfter = now.minus(maxAge)
+        return readCurrent(listOf(campsiteId), dates)
+            .filter { it.available && it.observedAt.isAfter(freshAfter) }
+            .map { it.targetDate }
+            .toSet()
     }
 
     /**

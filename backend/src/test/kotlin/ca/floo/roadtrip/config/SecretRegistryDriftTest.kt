@@ -45,6 +45,7 @@ class SecretRegistryDriftTest {
             "ROADTRIP_WEB_ROOT_URL",
             "RECGOV_KEEPALIVE_INTERVAL",
             "RECGOV_FIRE_TIMEOUT",
+            "BOOKING_FRESHNESS_MAX_AGE",
         )
 
     @Test

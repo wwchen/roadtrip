@@ -161,6 +161,63 @@ class BookingRoutesTest {
         }
 
     @Test
+    fun `a quoted campsite_id still decodes to the same Long`() =
+        testApplication {
+            // Pinned because the frontend used to send String(row.id) and the
+            // shape of that bug depends entirely on this: kotlinx coerces a
+            // quoted number into a Long here, so it was never the 400 it looked
+            // like it should be. The frontend now sends a number regardless —
+            // this test exists so the tolerance is a recorded fact rather than
+            // an assumption either side is free to break.
+            val service = StubBookingActions()
+            mount(service)
+
+            val resp =
+                client.post(ADD_TO_CART) {
+                    asUser()
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"campsite_id":"42","start_date":"2026-07-04","end_date":"2026-07-06"}""")
+                }
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            assertEquals(42L, service.lastCampsiteId)
+        }
+
+    @Test
+    fun `an expired session is the caller's to fix, not a bad gateway`() =
+        testApplication {
+            mount(StubBookingActions(AddToCartOutcome.Failed(RecGovSessionCodes.SESSION_EXPIRED, "re-login")))
+
+            val resp =
+                client.post(ADD_TO_CART) {
+                    asUser()
+                    contentType(ContentType.Application.Json)
+                    setBody(VALID_BODY)
+                }
+
+            // Same shape as credentials_required: nothing upstream is broken.
+            assertEquals(HttpStatusCode.Forbidden, resp.status)
+        }
+
+    @Test
+    fun `a vendor-side miss is a conflict the caller can retry`() {
+        for (code in listOf(BookingActionCodes.CART_NOT_ADDED, BookingActionCodes.CONFIRMATION_DISABLED)) {
+            testApplication {
+                mount(StubBookingActions(AddToCartOutcome.Failed(code, null)))
+
+                val resp =
+                    client.post(ADD_TO_CART) {
+                        asUser()
+                        contentType(ContentType.Application.Json)
+                        setBody(VALID_BODY)
+                    }
+
+                assertEquals(HttpStatusCode.Conflict, resp.status, "$code is somebody else taking the site")
+            }
+        }
+    }
+
+    @Test
     fun `a broken booking service is a bad gateway, with its own code intact`() =
         testApplication {
             mount(StubBookingActions(AddToCartOutcome.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, "refused")))

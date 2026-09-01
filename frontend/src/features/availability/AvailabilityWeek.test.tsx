@@ -906,7 +906,7 @@ describe('holding a site straight from the grid', () => {
     // The cell is no longer a button — nothing to click while it runs.
     await waitFor(() => expect(screen.queryByRole('button', { name: new RegExp(`^Site 1 ${WEEK[0]}:`) })).toBeNull());
     expect(screen.getByLabelText(new RegExp(`^Site 1 ${WEEK[0]}:.*holding this site`))).toBeInTheDocument();
-    expect(screen.getByText(/Holding site… this can take up to 30 seconds/)).toBeInTheDocument();
+    expect(screen.getByText(/Holding site… usually under a minute/)).toBeInTheDocument();
 
     await act(async () => {
       release?.(json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart' }));
@@ -929,6 +929,79 @@ describe('holding a site straight from the grid', () => {
     expect(screen.getByLabelText(new RegExp(`^Site 1 ${WEEK[0]}:.*held in your cart`))).toBeInTheDocument();
     // The chip is transient: it belongs to the pending state only.
     expect(screen.queryByText(/Holding site…/)).toBeNull();
+  });
+
+  test('the request carries campsite_id as a NUMBER, matching the backend DTO', async () => {
+    // The grid carries ids as strings; the DTO is a Long. Asserting the
+    // serialized body rather than the argument, because the wire is what the
+    // two dialects actually agree on.
+    let sentBody: string | null = null;
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    const realFetch = globalThis.fetch as unknown as (i: RequestInfo | URL, r?: RequestInit) => Promise<Response>;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/api/booking/add-to-cart')) sentBody = String(init?.body ?? '');
+      return realFetch(input, init);
+    }));
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+    await screen.findByText('Site held in your rec.gov cart');
+
+    expect(sentBody).toContain('"campsite_id":1');
+    expect(sentBody).not.toContain('"campsite_id":"1"');
+  });
+
+  test('a second hold while one runs is refused, with no second request', async () => {
+    let release: ((value: Response) => void) | null = null;
+    let cartRequests = 0;
+    stubs.availability = () =>
+      json(availabilityBody(
+        [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown']),
+         stream(2, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
+        ATC_CAPABILITIES,
+      ));
+    stubs.campsites = () => json(catalogBody([catalogRow(1), catalogRow(2)], { 1: BOOKING_TEMPLATE, 2: BOOKING_TEMPLATE }));
+    stubs.addToCart = () => {
+      cartRequests += 1;
+      return new Promise<Response>((resolve) => { release = resolve; });
+    };
+    await mount();
+    await armFirstCell();
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+    await screen.findByText(/Holding site…/);
+
+    // Arm a different cell while the first is still running.
+    await userEvent.click(cell('Site 2', WEEK[0]));
+    const secondCart = await screen.findByRole('button', { name: /Add to cart/ });
+
+    // Disabled, so the click cannot even reach the handler — one hold at a
+    // time is enforced at the control, not only in the reducer.
+    expect(secondCart).toBeDisabled();
+    await userEvent.click(secondCart);
+    expect(cartRequests).toBe(1);
+
+    await act(async () => {
+      release?.(json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart' }));
+    });
+  });
+
+  test('the popover takes focus, and Escape hands it back to the cell', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    await mount();
+    const armed = cell('Site 1', WEEK[0]);
+    await userEvent.click(armed);
+
+    // A keyboard user lands on the choice, not on a button whose meaning changed.
+    await waitFor(() => expect(screen.getByRole('button', { name: /Book on rec\.gov/ })).toHaveFocus());
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('group', { name: 'Booking actions' })).toBeNull();
+    // Focus returns to where it came from rather than dropping to the body.
+    await waitFor(() => expect(cell('Site 1', WEEK[0])).toHaveFocus());
   });
 
   test('a refused hold reverts the cell and names the reason', async () => {

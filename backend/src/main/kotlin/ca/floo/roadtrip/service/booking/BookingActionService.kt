@@ -25,6 +25,12 @@ object BookingActionCodes {
 
     /** The window was not a positive number of nights. */
     const val INVALID_WINDOW = "invalid_window"
+
+    /** The browser reached rec.gov and it declined to add the site. */
+    const val CART_NOT_ADDED = "cart_not_added"
+
+    /** Rec.gov offered the site but not a bookable confirmation control. */
+    const val CONFIRMATION_DISABLED = "recgov_confirmation_disabled"
 }
 
 /**
@@ -134,8 +140,6 @@ internal class BookingActionService(
 
         val request =
             AddToCartRequest(
-                // No watch fired this; a person clicked it.
-                watchId = null,
                 ownerUserId = caller.value,
                 target = target,
                 arrivalDate = startDate,
@@ -145,6 +149,8 @@ internal class BookingActionService(
                 campgroundName = resolved.campground.name,
                 // Nothing to stop: there is no watch behind this.
                 stopWhenTriggered = false,
+                // The caller is watching a spinner. Answer now.
+                allowUnattendedRelogin = false,
             )
 
         return when (val result = bookings.addToCart(request)) {

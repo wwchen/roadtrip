@@ -954,3 +954,134 @@
   white-space: nowrap;
 }
 
+/* ---- direct add-to-cart ----
+   The armed-cell booking choice, and the states a hold puts the cell through.
+   Lives in this file rather than beside its components because the cell fills
+   below have to win over `.cg-site-matrix-cell-available .cg-site-matrix-cell-button`
+   above — equal specificity means source order decides, and a separate
+   stylesheet lost that race silently.
+   Every colour is an --rt-* role: the mockup's hexes are the resolved dark
+   values, not literals to copy, and the grid has to work in both themes. */
+
+.cg-cell-book-pop {
+  --rt-cell-book-pop-width: 200px;
+
+  z-index: var(--rt-z-popover);
+  display: flex;
+  flex-direction: column;
+  width: var(--rt-cell-book-pop-width);
+  overflow: hidden;
+  background: var(--rt-surface);
+  border: 1px solid var(--rt-border);
+  border-radius: 10px;
+  /* --rt-e3 is the elevation role for a floating panel; the watch editor
+     composes the same channel primitive for its own popover. */
+  box-shadow: var(--rt-e3);
+}
+
+/* 44px: a touch target, and the grid is used on phones at a campsite. */
+.cg-cell-book-pop-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--rt-text);
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.cg-cell-book-pop-row:hover,
+.cg-cell-book-pop-row:focus-visible {
+  background: var(--rt-fill-hover);
+}
+
+/* The primary action reads as the branded one; the rec.gov link is the plain
+   escape hatch it has always been. */
+.cg-cell-book-pop-row--cart {
+  color: var(--rt-brand-text);
+  background: var(--rt-brand-tint);
+}
+
+.cg-cell-book-pop-row--cart:hover,
+.cg-cell-book-pop-row--cart:focus-visible {
+  /* No stronger tint role exists; the neutral hover fill over the tint is
+     the same treatment the plain row gets. */
+  background: var(--rt-fill-hover);
+}
+
+.cg-cell-book-pop-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+
+/* ---- the cell while a hold is running ---- */
+
+.cg-site-matrix-cell-available .cg-site-matrix-cell-button.is-cart-pending {
+  color: var(--rt-brand-text);
+  background: var(--rt-brand-tint);
+  /* Inset rather than an outline: a real ring would overlap the neighbouring
+     cell in a 66px grid with no gutters. */
+  box-shadow: inset 0 0 0 2px var(--rt-brand);
+  cursor: progress;
+}
+
+.cg-cell-spinner {
+  width: 14px;
+  height: 14px;
+  animation: cg-cell-spin 900ms linear infinite;
+}
+
+@keyframes cg-cell-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cg-cell-spinner {
+    animation: none;
+  }
+}
+
+/* ---- the cell once the site is held ---- */
+
+.cg-site-matrix-cell-available .cg-site-matrix-cell-button.is-cart-held {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  /* --rt-success, so "held" reads as a stronger form of the available green
+     rather than as an unrelated colour. --rt-on-accent is the paired
+     foreground role for a filled accent surface. */
+  color: var(--rt-on-accent);
+  background: var(--rt-success);
+}
+
+.cg-cell-held-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* ---- the pending chip ----
+   At the BOTTOM of the panel, in the same place the toasts speak from, not
+   floating over the rows: a chip pinned mid-grid covers the very cells the
+   user is watching for the answer. */
+
+.cg-availability-cart-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--rt-brand-text);
+  background: var(--rt-brand-tint);
+  border: 1px solid var(--rt-border);
+  border-radius: 8px;
+}

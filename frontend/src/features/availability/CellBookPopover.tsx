@@ -12,9 +12,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismiss } from '@/lib/use-dismiss';
-import './cell-book-popover.css';
 
-/** Matches `--rt-cell-book-pop-width` in cell-book-popover.css. */
+/** Matches `--rt-cell-book-pop-width` in availability.css. */
 const POPOVER_WIDTH_PX = 200;
 const POPOVER_MARGIN_PX = 8;
 const POPOVER_ANCHOR_GAP_PX = 6;
@@ -24,11 +23,20 @@ export interface CellBookPopoverProps {
   /** Opens the provider's own booking page. The behaviour this replaces. */
   onOpenBooking: () => void;
   onAddToCart: () => void;
+  /** True while a hold is running: one at a time, so the row is inert. */
+  cartBusy?: boolean;
   onClose: () => void;
 }
 
-export function CellBookPopover({ anchor, onOpenBooking, onAddToCart, onClose }: CellBookPopoverProps) {
+export function CellBookPopover({
+  anchor,
+  onOpenBooking,
+  onAddToCart,
+  cartBusy = false,
+  onClose,
+}: CellBookPopoverProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const firstRowRef = useRef<HTMLButtonElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
 
   const reposition = useCallback(() => {
@@ -55,6 +63,27 @@ export function CellBookPopover({ anchor, onOpenBooking, onAddToCart, onClose }:
     };
   }, [reposition]);
 
+  // Focus moves in on open, so a keyboard user who armed a cell lands on the
+  // choice rather than being left on a button whose meaning just changed.
+  useEffect(() => {
+    firstRowRef.current?.focus();
+  }, []);
+
+  // Escape closes and hands focus back to the cell that opened this. Without
+  // the hand-back, dismissing drops focus to the body and the user restarts
+  // their tab journey from the top of the page.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      anchor.focus();
+      onClose();
+    };
+    const host = hostRef.current;
+    host?.addEventListener('keydown', onKeyDown);
+    return () => host?.removeEventListener('keydown', onKeyDown);
+  }, [anchor, onClose]);
+
   useDismiss(hostRef, onClose);
 
   return createPortal(
@@ -71,13 +100,23 @@ export function CellBookPopover({ anchor, onOpenBooking, onAddToCart, onClose }:
         visibility: position ? 'visible' : 'hidden',
       }}
     >
-      <button type="button" className="cg-cell-book-pop-row" onClick={onOpenBooking}>
+      <button
+        type="button"
+        ref={firstRowRef}
+        className="cg-cell-book-pop-row"
+        onClick={() => {
+          onOpenBooking();
+          // The choice is made; leaving it open over the grid is clutter.
+          onClose();
+        }}
+      >
         <ExternalLinkIcon />
         <span>Book on rec.gov</span>
       </button>
       <button
         type="button"
         className="cg-cell-book-pop-row cg-cell-book-pop-row--cart"
+        disabled={cartBusy}
         onClick={onAddToCart}
       >
         <CartIcon />

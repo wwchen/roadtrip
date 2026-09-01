@@ -52,6 +52,57 @@ class AvailabilityRepoTest : SharedDbTest() {
     }
 
     @Test
+    fun `availableDates drops a cell older than the age bound`() {
+        // readCurrent happily returns a year-old `available` — it is still the
+        // newest row. A booking gate that trusted it would drive a browser on
+        // the strength of last season's observation.
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val observedAt = Instant.parse("2026-06-18T10:00:00Z")
+        val now = OffsetDateTime.parse("2026-06-18T10:20:00Z")
+        repo.recordObservations(
+            runId = null,
+            listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, observedAt)),
+        )
+
+        assertEquals(
+            setOf(date),
+            repo.availableDates(campsiteId, listOf(date), Duration.ofMinutes(30), now),
+        )
+        assertEquals(
+            emptySet(),
+            repo.availableDates(campsiteId, listOf(date), Duration.ofMinutes(5), now),
+            "20 minutes old against a 5 minute bound is not evidence the site is free",
+        )
+    }
+
+    @Test
+    fun `availableDates drops a fresh cell that is not bookable`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val observedAt = Instant.parse("2026-06-18T10:00:00Z")
+        repo.recordObservations(
+            runId = null,
+            listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.RESERVED, observedAt)),
+        )
+
+        assertEquals(
+            emptySet(),
+            repo.availableDates(campsiteId, listOf(date), Duration.ofMinutes(30), OffsetDateTime.parse("2026-06-18T10:05:00Z")),
+        )
+    }
+
+    @Test
+    fun `availableDates counts a night never observed as unavailable`() {
+        val campsiteId = seedCampsite("100")
+
+        assertEquals(
+            emptySet(),
+            AvailabilityRepo(ctx).availableDates(campsiteId, listOf(date), Duration.ofMinutes(30), OffsetDateTime.now()),
+        )
+    }
+
+    @Test
     fun `status change inserts a new row linked by previous_id`() {
         val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)

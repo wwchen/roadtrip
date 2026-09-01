@@ -174,7 +174,6 @@ internal class AtcTriggerActionHandler(
         val target = bookingTargets.targetFor(BookingAction.ADD_TO_CART, resolved) ?: return null
         val watchOpening = opening.watchOpening
         return AddToCartRequest(
-            watchId = watch.id,
             ownerUserId = watch.ownerUserId,
             target = target,
             arrivalDate = opening.date,

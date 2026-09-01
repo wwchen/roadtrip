@@ -44,7 +44,21 @@ private val transientConflictCodes =
         RecGovSessionCodes.PROFILE_BUSY,
         RecGovSessionCodes.BROWSER_CAP_REACHED,
         BookingActionCodes.NOT_AVAILABLE,
+        // The browser reached rec.gov and rec.gov declined: almost always
+        // somebody else took the site between the grid read and the click.
+        // A conflict, not a broken service.
+        BookingActionCodes.CART_NOT_ADDED,
+        BookingActionCodes.CONFIRMATION_DISABLED,
     )
+
+/**
+ * Codes the caller can act on themselves.
+ *
+ * `recgov_session_expired` belongs here, not in the 502s: nothing upstream is
+ * broken, the user simply has to log in again in Settings — exactly like
+ * `credentials_required`.
+ */
+private val callerActionableCodes = setOf(RecGovSessionCodes.SESSION_EXPIRED)
 
 /**
  * Direct add-to-cart, from the availability grid.
@@ -100,9 +114,16 @@ private suspend fun ApplicationCall.respondOutcome(outcome: AddToCartOutcome) =
         is AddToCartOutcome.Failed ->
             respondApiError(
                 error = outcome.code,
-                status = if (outcome.code in transientConflictCodes) HttpStatusCode.Conflict else HttpStatusCode.BadGateway,
+                status = failureStatus(outcome.code),
                 detail = outcome.detail,
             )
+    }
+
+private fun failureStatus(code: String): HttpStatusCode =
+    when (code) {
+        in callerActionableCodes -> HttpStatusCode.Forbidden
+        in transientConflictCodes -> HttpStatusCode.Conflict
+        else -> HttpStatusCode.BadGateway
     }
 
 private fun refusalStatus(code: String): HttpStatusCode =
