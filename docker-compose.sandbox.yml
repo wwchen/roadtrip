@@ -64,6 +64,7 @@ services:
       - auth_clerk_client_secret
       - auth_clerk_issuer
       - campflare_api_key
+      - companion_api_token
       - encryption_key
       - mapbox_token
       - postgres_password
@@ -105,6 +106,8 @@ secrets:
     environment: AUTH_CLERK_ISSUER
   campflare_api_key:
     environment: CAMPFLARE_API_KEY
+  companion_api_token:
+    environment: COMPANION_API_TOKEN
   encryption_key:
     environment: ENCRYPTION_KEY
   mapbox_token:
