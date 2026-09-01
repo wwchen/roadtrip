@@ -218,23 +218,31 @@
         download.type = 'button'
         download.className = 'secondary'
         download.textContent = artifact.file
-        download.addEventListener('click', () => downloadArtifact(artifact))
+        download.addEventListener('click', () => downloadArtifact(artifact, download))
         item.appendChild(download)
         diagnosticsList.appendChild(item)
       }
     }
 
-    async function downloadArtifact (artifact) {
+    async function downloadArtifact (artifact, button) {
+      const restore = button.textContent
       try {
         const response = await fetch(artifact.url, { headers: authHeaders() })
-        if (!response.ok) return
+        if (!response.ok) {
+          // Silently doing nothing here is how a dead download route stayed
+          // invisible: the listing offered the file and the click just did not.
+          button.textContent = `${restore} — download failed (${response.status})`
+          return
+        }
         const href = URL.createObjectURL(await response.blob())
         const link = document.createElement('a')
         link.href = href
         link.download = artifact.file
         link.click()
         URL.revokeObjectURL(href)
-      } catch {}
+      } catch (error) {
+        button.textContent = `${restore} — download failed (${error.message})`
+      }
     }
 
     async function loadScreenshot () {

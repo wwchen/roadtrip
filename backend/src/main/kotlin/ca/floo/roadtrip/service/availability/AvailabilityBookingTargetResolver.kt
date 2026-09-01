@@ -59,6 +59,19 @@ internal class AvailabilityBookingTargetResolver(
      * its own `booking_provider`/`booking_provider_ref` pair; when that pair
      * does not name the booking vendor, this site genuinely has no bookable
      * identity and null is the honest answer.
+     *
+     * **Load-bearing constraint.** This reads the stored ref *raw*, where the
+     * candidate walk below goes through [AvailabilityProvider.vendorSiteIdFor]
+     * and so picks up per-provider overrides (Aspira derives a resource id
+     * rather than using the column). That is sound only while every adapter
+     * registered for booking treats its `booking_provider_ref` as the literal
+     * vendor site id — true today, where rec.gov is the only one. Register a
+     * second adapter whose ref needs deriving and this path would hand it the
+     * stored string: give the *booking* seam its own `vendorSiteIdFor` at that
+     * point rather than reaching for the availability provider's, which may not
+     * even be the same vendor. Until then an unregistered provider's declared
+     * ref simply finds no adapter and falls through to the candidate walk,
+     * which is what keeps this safe rather than merely lucky.
      */
     private fun declaredTarget(
         action: BookingAction,

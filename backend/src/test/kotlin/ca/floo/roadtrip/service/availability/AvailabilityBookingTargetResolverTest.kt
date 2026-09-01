@@ -104,6 +104,52 @@ class AvailabilityBookingTargetResolverTest {
     }
 
     @Test
+    fun `a declared ref no adapter serves falls through to the candidate walk untouched`() {
+        // Pins the constraint the declared-ref path depends on: it reads the
+        // campsite's stored ref raw, bypassing per-provider vendorSiteIdFor
+        // overrides. That is safe only because a provider with no registered
+        // booking adapter never reaches the cart through this path — its
+        // declared ref finds nothing and the candidate walk decides instead.
+        val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
+        val resolver = AvailabilityBookingTargetResolver(registry)
+        val aspiraDeclared =
+            resolvedTarget(candidates = listOf(recgovProvider))
+                .let { base ->
+                    base.copy(
+                        campground =
+                            campground(
+                                bookingProvider = "aspira",
+                                bookingProviderRef = "bc:1:2:3",
+                                dataProviderRef = DataProviderRef.RecGov(id = TEST_RECGOV_PARENT_ID),
+                            ),
+                        campsite =
+                            campsiteFixture(
+                                id = TEST_CAMPSITE_ID,
+                                vendor = "recgov",
+                                vendorId = "site-7",
+                                name = "Site 7",
+                                loopName = null,
+                                kind = null,
+                                sourcePayload = null,
+                                bookingProvider = "aspira",
+                                // Aspira's structured ref. If the declared path
+                                // ever served it, THIS is what would reach a cart.
+                                bookingProviderRef = "bc:1:2:3",
+                            ),
+                    )
+                }
+
+        val target = resolver.targetFor(BookingAction.ADD_TO_CART, aspiraDeclared)
+
+        // Null, and that is the point. No aspira adapter is registered, so the
+        // declared ref finds none; the candidate walk then asks the recgov
+        // provider, whose default parentRefFor reads the same aspira columns
+        // and also yields an aspira ref. Unbookable — and, load-bearingly,
+        // "bc:1:2:3" never becomes a vendorSiteId anywhere.
+        assertNull(target)
+    }
+
+    @Test
     fun `targetFor returns null when no candidate maps to supported booking provider`() {
         val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
         val resolver = AvailabilityBookingTargetResolver(registry)

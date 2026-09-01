@@ -1000,24 +1000,58 @@ test('every data route rejects a request without the shared-secret header', asyn
   assert.equal(posted.status, 401)
 })
 
-test('a failed login names its trace in the response and leaves the file behind', async () => {
+test('a failed login writes no trace by default, but keeps its screenshot', async () => {
+  // A login trace records fill params and DOM snapshots, so it contains the
+  // typed password. Off unless the operator asks for it; the screenshot
+  // diagnostic, which holds no password, is unaffected.
+  delete process.env.COMPANION_TRACE_LOGIN
   const dir = await freshDiagnosticsDir()
-  const pool = tracingPool(dir)
   const server = testServer({
-    pool,
-    credentialLoginFn: async () => ({ state: 'failed', logged_in: false, reason: 'captcha_required' }),
+    pool: tracingPool(dir),
+    credentialLoginFn: async () => ({
+      state: 'failed',
+      logged_in: false,
+      reason: 'captcha_required',
+      diagnostic: { reason: 'captcha_required', screenshot_url: '/screenshot/diagnostics/shot.png' },
+    }),
   })
 
   const response = await beginLogin(server)
 
   assert.equal(response.status, 401)
-  assert.match(response.json.diagnostics.trace, /recgov-login-.*-captcha_required\.trace\.zip$/)
-  const written = await fsp.readdir(dir)
-  assert.equal(written.length, 1, 'the failure keeps exactly its own trace')
-  assert.match(written[0], /\.trace\.zip$/)
+  assert.equal(response.json.diagnostics.trace, undefined, 'no trace without the opt-in')
+  assert.equal(response.json.diagnostics.screenshot_url, '/screenshot/diagnostics/shot.png')
+  assert.deepEqual(await fsp.readdir(dir), [], 'nothing containing a password may be written')
 })
 
-test('a successful login leaves zero trace files behind', async () => {
+test('a failed login keeps a trace when the operator opts in', async () => {
+  process.env.COMPANION_TRACE_LOGIN = 'true'
+  try {
+    const dir = await freshDiagnosticsDir()
+    const server = testServer({
+      pool: tracingPool(dir),
+      credentialLoginFn: async () => ({
+        state: 'failed',
+        logged_in: false,
+        reason: 'captcha_required',
+        diagnostic: { reason: 'captcha_required', screenshot_url: '/screenshot/diagnostics/shot.png' },
+      }),
+    })
+
+    const response = await beginLogin(server)
+
+    assert.match(response.json.diagnostics.trace, /recgov-login-.*-captcha_required\.trace\.zip$/)
+    assert.equal(response.json.diagnostics.screenshot_url, '/screenshot/diagnostics/shot.png')
+    const written = await fsp.readdir(dir)
+    assert.equal(written.length, 1)
+    assert.match(written[0], /\.trace\.zip$/)
+  } finally {
+    delete process.env.COMPANION_TRACE_LOGIN
+  }
+})
+
+test('a successful opted-in login leaves zero trace files behind', async () => {
+  process.env.COMPANION_TRACE_LOGIN = 'true'
   const dir = await freshDiagnosticsDir()
   const pool = tracingPool(dir)
   const server = testServer({
@@ -1030,6 +1064,51 @@ test('a successful login leaves zero trace files behind', async () => {
   assert.equal(response.status, 200)
   assert.equal(response.json.diagnostics, null, 'nothing was kept, so nothing is named')
   assert.deepEqual(await fsp.readdir(dir), [], 'a success must write no trace at all')
+  delete process.env.COMPANION_TRACE_LOGIN
+})
+
+test('a listed trace can actually be downloaded', async () => {
+  // The listing handed out .trace.zip urls that the download route rejected as
+  // invalid_diagnostic_path, so every one of them was a dead link.
+  const dir = await freshDiagnosticsDir()
+  const file = 'recgov-login-2026-09-01T00-00-00-000Z-captcha_required.trace.zip'
+  await fsp.writeFile(path.join(dir, file), 'trace-bytes')
+  const server = testServer()
+
+  const listed = await request(server, { path: '/screenshot/diagnostics' })
+  const artifact = listed.json.artifacts.find((a) => a.file === file)
+  assert.ok(artifact, 'the trace must be listed')
+
+  const downloaded = await request(server, { path: artifact.url })
+
+  assert.equal(downloaded.status, 200)
+  assert.equal(downloaded.headers['content-type'], 'application/zip')
+})
+
+test('a listed screenshot still downloads as a png', async () => {
+  const dir = await freshDiagnosticsDir()
+  const file = 'recgov-verify-2026-09-01T00-00-00-000Z-not_authenticated.png'
+  await fsp.writeFile(path.join(dir, file), 'png-bytes')
+
+  const downloaded = await request(testServer(), { path: `/screenshot/diagnostics/${file}` })
+
+  assert.equal(downloaded.status, 200)
+  assert.equal(downloaded.headers['content-type'], 'image/png')
+})
+
+test('the download route still refuses traversal and anything that is not an artifact', async () => {
+  const server = testServer()
+
+  for (const target of [
+    '/screenshot/diagnostics/..%2F..%2Fetc%2Fpasswd',
+    '/screenshot/diagnostics/nested%2Fpath.png',
+    '/screenshot/diagnostics/companion.env',
+    '/screenshot/diagnostics/notes.txt',
+  ]) {
+    const response = await request(server, { path: target })
+    assert.equal(response.status, 400, `${target} must be refused`)
+    assert.equal(response.json.error, 'invalid_diagnostic_path')
+  }
 })
 
 test('the diagnostics listing is token-gated and reports the prune bound', async () => {

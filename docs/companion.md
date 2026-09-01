@@ -186,6 +186,21 @@ The outcome decides what survives:
   (`recgov-<operation>-<timestamp>-<reason>.trace.zip`), and the response names
   it in `diagnostics.trace`.
 
+**What the artifacts contain — read this before turning login tracing on.**
+
+| artifact | contains | posture |
+| --- | --- | --- |
+| `/verify`, `/atc` traces | page state, network, DOM snapshots. **No raw password** — neither route ever holds one. | Traced unconditionally. |
+| Failure screenshots | a rendered page. Login forms mask the password field. | Always kept on failure. |
+| `/login` and MFA traces | **the typed rec.gov password**, in fill parameters and DOM snapshots. | **Off by default.** `COMPANION_TRACE_LOGIN=true` opts in. |
+
+A login trace defeats the point of everything else in this design: the backend
+seals the password with AES-256-GCM, the companion holds it in memory for one
+attempt only, and V54 dropped even its last four characters from the database.
+Writing it to a file on disk for debuggability would undo all of that. Turn it
+on to debug a specific login, treat the output like the vault, and delete it
+afterwards.
+
 Open one with:
 
 ```sh
@@ -218,6 +233,7 @@ visibility matters most and nobody is watching.
 | `COMPANION_MFA_CHALLENGE_TTL_MS` | `300000` | Pending MFA challenge lifetime. |
 | `COMPANION_FAILED_LOGIN_BACKOFF_MS` | `60000` | Suppression window after a failed login. |
 | `COMPANION_MAX_DIAGNOSTIC_ARTIFACTS` | `40` | Failure screenshots + traces kept before the oldest are pruned. |
+| `COMPANION_TRACE_LOGIN` | unset (off) | Trace `/login` and MFA completion. **The trace contains the typed password** — see above. |
 | `RECGOV_DIAGNOSTIC_DIR` | `/tmp/campsite-companion/recgov-diagnostics` | Where those artifacts live. |
 | `HEADLESS` | true in Docker | Headed Chromium for operator login. |
 | `RECGOV_LOGIN_TIMEOUT_MS` | `120000` | Manual-login wait. |

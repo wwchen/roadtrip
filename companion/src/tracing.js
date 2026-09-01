@@ -16,6 +16,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { RECGOV_DIAGNOSTIC_DIR } from './recgovSession.js'
 import { SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX } from './recgovScreenshotRoutes.js'
+import { TRACE_SUFFIX } from './server/constants.js'
 
 /**
  * How many diagnostic artifacts to keep. Screenshots and traces share the
@@ -35,12 +36,29 @@ export function diagnosticDir (env = process.env) {
   return env.RECGOV_DIAGNOSTIC_DIR || RECGOV_DIAGNOSTIC_DIR
 }
 
+/**
+ * Whether to trace the login flows. **Off by default, deliberately.**
+ *
+ * A trace records fill parameters and DOM snapshots, so a login trace contains
+ * the user's plaintext rec.gov password — the one thing the whole design goes
+ * out of its way never to persist (the backend seals it, the companion holds
+ * it in memory for one attempt, and V54 dropped even its last four characters).
+ * Writing it to a file on a failure would undo all of that for the sake of
+ * debuggability.
+ *
+ * `/verify` and `/atc` never hold a raw password, so they stay traced
+ * unconditionally. Turn this on to debug a login, and treat what it produces
+ * like the vault.
+ */
+export function traceLoginEnabled (env = process.env) {
+  return String(env.COMPANION_TRACE_LOGIN || '').trim().toLowerCase() === 'true'
+}
+
 export function maxDiagnosticArtifacts (env = process.env) {
   const raw = Number.parseInt(env.COMPANION_MAX_DIAGNOSTIC_ARTIFACTS || '', 10)
   return Number.isInteger(raw) && raw > 0 ? raw : DEFAULT_MAX_DIAGNOSTIC_ARTIFACTS
 }
 
-const TRACE_SUFFIX = '.trace.zip'
 const EXCEPTION_REASON = 'exception'
 
 /** Where the reason starts once the ISO timestamp's own hyphens are counted. */
@@ -61,14 +79,17 @@ function sanitize (value) {
  * [failureReason] inspects the result and returns a reason string for a
  * failure, or null for a success. A thrown error is always a failure.
  *
+ * [enabled] false runs the work untraced — the login paths use it, see
+ * [traceLoginEnabled].
+ *
  * Returns `{ result, trace }` — `trace` is `{ file, url }` when one was kept,
  * else null. Tracing never changes the outcome: if the tracing API itself
  * throws (an old browser, a context already closed), the work's result stands
  * and the trace is simply absent. Adds no waits of its own, which matters on
  * the ATC fire path.
  */
-export async function withTrace (context, { operation, failureReason, dir = diagnosticDir() }, work) {
-  const started = await startTracing(context)
+export async function withTrace (context, { operation, failureReason, dir = diagnosticDir(), enabled = true }, work) {
+  const started = enabled ? await startTracing(context) : false
   let result
   let reason = null
   try {

@@ -3,7 +3,7 @@ import {
   recgovLoginCredentialsFromInput,
 } from '../../recgovSession.js'
 import { renderLoginPage } from '../../templates.js'
-import { withTrace } from '../../tracing.js'
+import { traceLoginEnabled, withTrace } from '../../tracing.js'
 import {
   ERROR_MFA_CHALLENGE_EXPIRED,
   ERROR_MFA_CHALLENGE_UNKNOWN,
@@ -198,10 +198,13 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
     }
 
     // An MFA prompt is not a failure to trace: the login is mid-flight and the
-    // page is still open. Only an outright failure keeps its trace.
+    // page is still open. Only an outright failure keeps its trace — and only
+    // when the operator opted in, because a login trace holds the typed
+    // password (see traceLoginEnabled).
     const { result: outcome, trace } = await withTrace(
       resolved.context,
       {
+        enabled: traceLoginEnabled(),
         operation: OPERATION_LOGIN,
         failureReason: (o) =>
           o?.state === LOGIN_STATE_OK || o?.state === LOGIN_STATE_MFA_REQUIRED ? null : o?.reason || 'login_failed',
@@ -278,7 +281,11 @@ async function completeMfaChallenge (req, res, { runtime, pool, profileId, chall
     runtime.logger('recgov auth mfa completion start', `profile=${profileId}`)
     const { result: outcome, trace } = await withTrace(
       pool.liveContext(profileId),
-      { operation: OPERATION_MFA, failureReason: (o) => (o?.state === LOGIN_STATE_OK ? null : o?.reason || ERROR_MFA_INVALID) },
+      {
+        enabled: traceLoginEnabled(),
+        operation: OPERATION_MFA,
+        failureReason: (o) => (o?.state === LOGIN_STATE_OK ? null : o?.reason || ERROR_MFA_INVALID),
+      },
       () => taken.challenge.complete(mfaCode),
     )
     if (trace) outcome.trace_url = trace.url

@@ -21,3 +21,4 @@ export const PNG_CONTENT_TYPE = 'image/png'
 /** Playwright trace archives. Open one with `npx playwright show-trace <file>`. */
 export const TRACE_CONTENT_TYPE = 'application/zip'
 export const TRACE_SUFFIX = '.trace.zip'
+export const PNG_SUFFIX = '.png'
