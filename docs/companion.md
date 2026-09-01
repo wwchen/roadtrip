@@ -53,21 +53,30 @@ on `POST /login`, `POST /logout`, `POST /refresh`, `POST /atc`,
 a request without it is rejected with `400 profile_id_required`.
 
 - Each profile id maps to its own persistent Chromium user-data directory at
-  `<browser-session volume>/profiles/<profile_id>`.
+  `<browser-session volume>/profiles/<profile_id>`. Two concurrent cold
+  callers for one profile share a single launch: two Chromiums on one
+  user-data directory corrupt the profile.
+- Anything stored per session — the `recgov_cookies` Akamai workaround
+  included — is keyed by profile id. The unkeyed legacy value belongs to the
+  CLI's single profile and never enters a user's profile.
 - Playwright persistent contexts are one browser process per directory, so
   residency is a real memory cost. `COMPANION_MAX_CONCURRENT_BROWSERS`
   (default 3) caps on-demand launches; the least recently used idle profile is
-  evicted to make room, and a launch fails with `browser_cap_reached` only
-  when every resident profile is busy.
+  evicted to make room. When every resident profile is busy the launch is
+  refused with `503 browser_cap_reached` rather than evicting live work.
 - **Keep-warm (armed) profiles are exempt from the cap.** These are the
   profiles backing at least one active `atc` watch. The backend pushes the
   armed set; the companion defaults to none. When armed profiles alone exceed
   the cap, the companion logs and `GET /health` reports
   `pool.keep_warm_overflow` rather than evicting an armed profile.
 - **Per-profile busy lock:** no two mutating operations run concurrently on
-  one profile (`409 profile_busy`). Different profiles never block each other.
-  **Health is lock-free** — the settings status row must answer while a login
-  is mid-flight.
+  one profile (`409 profile_busy`). That includes `GET /screenshot`, which
+  drives the browser and mutates the context's cookies. Different profiles
+  never block each other. **Health is lock-free** — the settings status row
+  must answer while a login is mid-flight.
+- Session state that health reports — the refresh window, the last login
+  diagnostic, the last auth result — is recorded per profile, so one user's
+  failed login never appears on another user's status row.
 
 ## Routes
 
@@ -90,13 +99,27 @@ are authoritative; this is the shape.
 
 1. `POST /login` with `profile_id`, `username`, `password`. If rec.gov prompts
    for a code, the response is `401` with `error: "mfa_required"`, a
-   `challenge_id` and an `expires_at`. The challenge **holds the profile's
-   busy lock** until it is completed or expires; the TTL is minutes-scale
+   `challenge_id` and an `expires_at`. **The login page is left open on the
+   prompt**, and the challenge **holds the profile's busy lock** until it is
+   completed or expires; the TTL is minutes-scale
    (`COMPANION_MFA_CHALLENGE_TTL_MS`, default 5 minutes) because rec.gov
    delivers codes by email or SMS.
-2. `POST /login` with `profile_id`, `challenge_id` and `mfa_code` completes
-   it. An unknown id is `mfa_challenge_unknown`; a lapsed one is
-   `mfa_challenge_expired`, and the lock is released.
+2. `POST /login` with `profile_id`, `challenge_id` and `mfa_code` types the
+   code into **that same held page**. Phase two never navigates and never
+   re-submits the username and password: a fresh login makes rec.gov issue a
+   new code, which would invalidate the one the user is holding.
+   - A rejected code answers `401 mfa_invalid`. It consumes the challenge but
+     does **not** arm the failed-login backoff — a typo must not lock the user
+     out of retrying. Start a new login to get a new challenge.
+   - A missing `mfa_code` is refused with `400 mfa_required` and leaves the
+     challenge and its held page intact.
+   - An unknown id is `mfa_challenge_unknown`; a lapsed one is
+     `mfa_challenge_expired`, and the lock is released.
+
+Because a pending challenge keeps its profile resident and locked, it occupies
+a slot against the concurrency cap for up to the TTL. That is the accepted
+trade for not making the user re-enter credentials; `GET /health` shows the
+pending challenge (`mfa_pending`) and the cap so the cost is observable.
 
 Credentials are held in memory for the life of the attempt (and of a pending
 challenge) only. The companion persists no passwords — only Chromium profile
@@ -107,7 +130,8 @@ state. The backend is the credential custodian.
 A credential login that does not end logged in arms a per-profile in-memory
 marker; the next login inside `COMPANION_FAILED_LOGIN_BACKOFF_MS` (default
 60s) is refused with `429 login_backoff` and a `retry_after_ms`. This guards
-against rec.gov lockouts from rapid repeats.
+against rec.gov lockouts from rapid repeats. A rejected MFA code is not a
+failed credential login and never arms it.
 
 ### `POST /verify` (dry run)
 

@@ -174,6 +174,10 @@ test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
   assert.ok(response.json.paths['/refresh'].post)
 
   assert.ok(response.json.paths['/verify'].post)
+  for (const path of ['/login', '/logout', '/refresh', '/verify', '/atc', '/screenshot']) {
+    const operation = response.json.paths[path].post || response.json.paths[path].get
+    assert.ok(operation.responses[503], `${path} must document browser_cap_reached`)
+  }
   assert.deepEqual(response.json.security, [{ companionToken: [] }])
   assert.equal(response.json.components.securitySchemes.companionToken.name, COMPANION_API_TOKEN_HEADER)
 
