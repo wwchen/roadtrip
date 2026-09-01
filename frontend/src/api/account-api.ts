@@ -11,6 +11,11 @@ const NOTIFICATIONS_URL = '/api/settings/notifications';
 const SLACK_URL = '/api/settings/notifications/slack';
 const SLACK_TEST_URL = '/api/settings/notifications/slack/test';
 const EMAIL_TEST_URL = '/api/settings/notifications/email/test';
+const RECGOV_URL = '/api/settings/recgov';
+const RECGOV_STATUS_URL = '/api/settings/recgov/status';
+const RECGOV_LOGIN_URL = '/api/settings/recgov/login';
+const RECGOV_MFA_URL = '/api/settings/recgov/login/mfa';
+const RECGOV_VERIFY_URL = '/api/settings/recgov/verify';
 
 /** Mirrors ProfileDto. */
 export interface Profile {
@@ -38,10 +43,65 @@ export interface Notifications {
   slack_token_hint: string | null;
 }
 
+/**
+ * Mirrors BookingSettingsDto.
+ *
+ * Stored credentials only — a pure database read, which is why it rides in the
+ * settings document. The live session state comes from `fetchRecgovStatus`,
+ * whose own request is the one that can wait on the companion.
+ *
+ * The password is never returned: `recgov_configured` says whether one is
+ * stored and `recgov_password_hint` is the last-4 fragment `SecretField` masks.
+ */
+export interface BookingSettings {
+  recgov_configured: boolean;
+  recgov_username: string | null;
+  recgov_password_hint: string | null;
+}
+
 /** Mirrors SettingsResponseDto — returned by the GET and by every mutation. */
 export interface SettingsResponse {
   profile: Profile;
   notifications: Notifications;
+  booking: BookingSettings;
+}
+
+/** Mirrors RecgovStatusDto. `session` is one of RecgovSessionState. */
+export interface RecgovStatus {
+  configured: boolean;
+  username: string | null;
+  password_hint: string | null;
+  session: 'not_configured' | 'active' | 'expired' | 'companion_unavailable';
+  detail?: string | null;
+}
+
+/** Mirrors RecgovLoginResponseDto. A blocked login is a 200 with a code. */
+export interface RecgovLoginResponse {
+  status: 'ok' | 'mfa_required' | 'failed';
+  challenge_id?: string | null;
+  expires_at?: string | null;
+  error?: string | null;
+  detail?: string | null;
+}
+
+/** Mirrors RecgovVerifyResponseDto. The dry run never places a cart hold. */
+export interface RecgovVerifyResponse {
+  ok: boolean;
+  error?: string | null;
+  detail?: string | null;
+}
+
+/** Mirrors RecgovRemovedDto. */
+export interface RecgovRemovedResponse {
+  removed: boolean;
+  stranded_atc_watches: number;
+  companion_signed_out: boolean;
+}
+
+export interface UpdateBookingFields {
+  recgov_username: string;
+  /** Only send this when the user typed a new password; null means "unchanged". */
+  recgov_password?: string | null;
 }
 
 /** Mirrors SlackTestResponseDto. */
@@ -119,4 +179,64 @@ export function sendSlackTest(
 /** Send a test email to the user's notification email address. */
 export function sendEmailTest(options: RequestOptions = {}): Promise<EmailTestResponse> {
   return jsonPostOk<EmailTestResponse>(EMAIL_TEST_URL, {}, options);
+}
+
+/**
+ * Store the rec.gov username and, when the user typed one, a new password.
+ *
+ * `recgov_password` is omitted entirely when null — the backend reads a missing
+ * key as "unchanged", the same contract `updateNotifications` follows for the
+ * Slack token. Clearing is `removeRecgov`, never an empty save.
+ */
+export function updateBooking(
+  { recgov_username, recgov_password }: UpdateBookingFields,
+  options: RequestOptions = {},
+): Promise<BookingSettings> {
+  const body: Record<string, string> = { username: recgov_username };
+  if (recgov_password != null) body.password = recgov_password;
+  return jsonPutOk<BookingSettings>(RECGOV_URL, body, options);
+}
+
+/**
+ * Remove the stored rec.gov credentials. Reports the active atc watches it strands.
+ *
+ * The count defaults to zero if the body is somehow absent: the caller shows it
+ * in a confirmation, and "0" reads better there than a crash on a successful
+ * delete.
+ */
+export async function removeRecgov(
+  options: RequestOptions = {},
+): Promise<RecgovRemovedResponse> {
+  const body = await jsonDeleteOk<RecgovRemovedResponse>(RECGOV_URL, options);
+  return body ?? { removed: true, stranded_atc_watches: 0, companion_signed_out: false };
+}
+
+/**
+ * The stored credentials plus the live session state.
+ *
+ * Its own request, deliberately: it is the one settings read that talks to the
+ * companion, and opening the modal must not wait on it.
+ */
+export function fetchRecgovStatus({ signal }: RequestOptions = {}): Promise<RecgovStatus> {
+  return jsonGetOk<RecgovStatus>(RECGOV_STATUS_URL, { signal });
+}
+
+/** Begin a login with the SAVED credentials. May answer `mfa_required`. */
+export function startRecgovLogin(options: RequestOptions = {}): Promise<RecgovLoginResponse> {
+  return jsonPostOk<RecgovLoginResponse>(RECGOV_LOGIN_URL, {}, options);
+}
+
+/** Complete the challenge the login opened. The backend remembers which one. */
+export function submitRecgovMfa(
+  code: string,
+  options: RequestOptions = {},
+): Promise<RecgovLoginResponse> {
+  return jsonPostOk<RecgovLoginResponse>(RECGOV_MFA_URL, { code }, options);
+}
+
+/** Dry-run session check. Never places a cart hold. */
+export function verifyRecgovSession(
+  options: RequestOptions = {},
+): Promise<RecgovVerifyResponse> {
+  return jsonPostOk<RecgovVerifyResponse>(RECGOV_VERIFY_URL, {}, options);
 }

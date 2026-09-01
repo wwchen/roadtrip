@@ -30,6 +30,7 @@ beforeEach(() => {
         return json({
           profile: { display_name: 'Bo', email: 'bo@example.com' },
           notifications: {},
+          booking: { recgov_configured: false },
         });
       }
       return json({}, 404);

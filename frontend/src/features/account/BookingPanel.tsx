@@ -1,0 +1,272 @@
+import { useState } from 'react';
+import { Button, SecretField, SeededTextField } from '@ui';
+import type {
+  RecgovLoginResponse,
+  RecgovStatus,
+  RecgovVerifyResponse,
+  SettingsResponse,
+  UpdateBookingFields,
+} from '@/api/account-api';
+import { settingsErrorMessage } from '@/lib/settings-errors';
+import { AccountStatusText, type StatusTone } from './AccountStatusText';
+import {
+  IDLE,
+  isLoginBusy,
+  nextLoginState,
+  type BookingLoginState,
+} from './booking-login';
+import './account.css';
+
+export interface BookingValues {
+  recgov_username: string;
+  /** A newly typed password, or null for "leave unchanged". */
+  recgov_password: string | null;
+}
+
+export function bookingValuesOf(settings: SettingsResponse): BookingValues {
+  return {
+    recgov_username: settings.booking.recgov_username || '',
+    recgov_password: null,
+  };
+}
+
+/** True when the edited values differ from what is saved. */
+export function isBookingDirty(settings: SettingsResponse, values: BookingValues): boolean {
+  return (
+    values.recgov_username !== (settings.booking.recgov_username || '') ||
+    values.recgov_password !== null
+  );
+}
+
+export function buildBookingPayload(values: BookingValues): UpdateBookingFields {
+  return {
+    recgov_username: values.recgov_username,
+    recgov_password: values.recgov_password,
+  };
+}
+
+/** Copy for the session row, by server-reported state. */
+const SESSION_ROW: Record<RecgovStatus['session'], { tone: StatusTone; text: string }> = {
+  not_configured: { tone: 'muted', text: 'Not configured' },
+  active: { tone: 'ok', text: 'Session active' },
+  expired: { tone: 'warn', text: 'Session expired — test login below' },
+  companion_unavailable: { tone: 'warn', text: 'Booking service unavailable — status unknown' },
+};
+
+const CHECKING_ROW = { tone: 'muted' as StatusTone, text: 'Checking session…' };
+const UNKNOWN_ROW = SESSION_ROW.companion_unavailable;
+
+const SAVE_FIRST_HELP = 'Save your changes first — a test login uses the saved credentials.';
+const PASSWORD_HELP =
+  'Used only to sign in to recreation.gov on your behalf. Add-to-cart stops at a cart hold; it never checks out.';
+
+export interface BookingPanelProps {
+  settings: SettingsResponse;
+  values: BookingValues;
+  onChange: (values: BookingValues) => void;
+  /** The live session row, from its own query. Undefined while it is in flight. */
+  status: RecgovStatus | undefined;
+  statusPending: boolean;
+  onLogin: () => Promise<RecgovLoginResponse>;
+  onSubmitMfa: (code: string) => Promise<RecgovLoginResponse>;
+  onVerify: () => Promise<RecgovVerifyResponse>;
+}
+
+/**
+ * Rec.gov credentials and the session they open.
+ *
+ * The credential half is a savable slice like Notifications: the modal owns the
+ * values and its Save button writes them. The session half is actions —
+ * everything below the password — and reports into one status slot with one
+ * shared in-flight guard, so two results can never contradict each other.
+ *
+ * Test login is disabled while the form is dirty. It logs in with what the
+ * *server* has, not with what is in the form, because a login is a side effect
+ * on a real browser profile — unlike the Slack test, which can take a form
+ * value because sending to a channel commits nothing.
+ */
+export function BookingPanel({
+  settings,
+  values,
+  onChange,
+  status,
+  statusPending,
+  onLogin,
+  onSubmitMfa,
+  onVerify,
+}: BookingPanelProps) {
+  const [login, setLogin] = useState<BookingLoginState>(IDLE);
+  const [verifying, setVerifying] = useState(false);
+  const [result, setResult] = useState<{ tone: StatusTone; message: string } | null>(null);
+
+  const dirty = isBookingDirty(settings, values);
+  const busy = isLoginBusy(login) || verifying;
+  const configured = settings.booking.recgov_configured;
+
+  // An unrecognised state reads as "unknown" rather than blanking the row: a
+  // server that grows a state must not leave the user with no session line.
+  const sessionRow = statusPending
+    ? CHECKING_ROW
+    : (status && SESSION_ROW[status.session]) || UNKNOWN_ROW;
+
+  /** Applies a login answer to the machine and to the one status slot. */
+  const applyLogin = (answer: RecgovLoginResponse, from: BookingLoginState) => {
+    if (answer.status === 'mfa_required' && answer.challenge_id) {
+      setLogin(nextLoginState(from, { type: 'mfa_required', challengeId: answer.challenge_id }));
+      setResult({ tone: 'warn', message: settingsErrorMessage('mfa_required') });
+      return;
+    }
+    if (answer.status === 'ok') {
+      setLogin(nextLoginState(from, { type: 'succeeded' }));
+      setResult({ tone: 'ok', message: 'Signed in to recreation.gov.' });
+      return;
+    }
+    setLogin(nextLoginState(from, { type: 'failed', code: answer.error ?? '' }));
+    setResult({ tone: 'error', message: settingsErrorMessage(answer.error) });
+  };
+
+  const failFrom = (from: BookingLoginState, err: unknown) => {
+    const code = (err as { code?: string } | null)?.code;
+    setLogin(nextLoginState(from, { type: 'failed', code: code ?? '' }));
+    setResult({ tone: 'error', message: settingsErrorMessage(code) });
+  };
+
+  const startLogin = async () => {
+    if (busy || dirty) return;
+    const started = nextLoginState(login, { type: 'login_started' });
+    setLogin(started);
+    setResult(null);
+    try {
+      applyLogin(await onLogin(), started);
+    } catch (err) {
+      failFrom(started, err);
+    }
+  };
+
+  const submitCode = async (code: string) => {
+    if (busy) return;
+    const submitting = nextLoginState(login, { type: 'code_submitted' });
+    if (submitting === login) return;
+    setLogin(submitting);
+    setResult(null);
+    try {
+      applyLogin(await onSubmitMfa(code), submitting);
+    } catch (err) {
+      failFrom(submitting, err);
+    }
+  };
+
+  const runVerify = async () => {
+    if (busy) return;
+    setVerifying(true);
+    setResult(null);
+    try {
+      const answer = await onVerify();
+      setResult(
+        answer.ok
+          ? { tone: 'ok', message: 'Session verified.' }
+          : { tone: 'error', message: settingsErrorMessage(answer.error) },
+      );
+    } catch (err) {
+      setResult({ tone: 'error', message: settingsErrorMessage((err as { code?: string } | null)?.code) });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  return (
+    <div className="rt-account-panel">
+      <SeededTextField
+        id="settings-recgov-username"
+        name="recgov_username"
+        label="Recreation.gov email"
+        type="email"
+        seed={values.recgov_username}
+        onChange={(e) =>
+          onChange({ ...values, recgov_username: (e.target as HTMLInputElement).value })
+        }
+      />
+
+      <SecretField
+        id="settings-recgov-password"
+        name="recgov_password"
+        label="Recreation.gov password"
+        hint={settings.booking.recgov_password_hint}
+        help={PASSWORD_HELP}
+        value={values.recgov_password}
+        onChange={(recgov_password) => onChange({ ...values, recgov_password })}
+      />
+
+      <div className="rt-account-row">
+        <span className="rt-account-row-label">Session</span>
+        <AccountStatusText tone={sessionRow.tone}>{sessionRow.text}</AccountStatusText>
+      </div>
+
+      <div className="rt-notif-field">
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={busy || dirty || !configured}
+          onClick={() => void startLogin()}
+        >
+          Test login
+        </Button>
+        <Button size="sm" variant="secondary" disabled={busy || !configured} onClick={() => void runVerify()}>
+          Verify session
+        </Button>
+        {result && <AccountStatusText tone={result.tone}>{result.message}</AccountStatusText>}
+      </div>
+
+      {dirty && <span className="rt-secret-field-help">{SAVE_FIRST_HELP}</span>}
+
+      {(login.kind === 'mfa_pending' || login.kind === 'submitting') && (
+        <MfaStep
+          busy={busy}
+          onSubmit={(code) => void submitCode(code)}
+          onCancel={() => {
+            setLogin(nextLoginState(login, { type: 'cancelled' }));
+            setResult(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The inline code step.
+ *
+ * Conditionally rendered, so the field is `SeededTextField` rather than a
+ * `defaultValue` from the parent's snapshot: it seeds at its own mount, which
+ * is the only way an appearing-and-disappearing field shows what it submits.
+ */
+function MfaStep({
+  busy,
+  onSubmit,
+  onCancel,
+}: {
+  busy: boolean;
+  onSubmit: (code: string) => void;
+  onCancel: () => void;
+}) {
+  const [code, setCode] = useState('');
+  return (
+    <div className="rt-notif-field">
+      <SeededTextField
+        id="settings-recgov-mfa"
+        name="recgov_mfa_code"
+        label="Verification code"
+        type="text"
+        autoComplete="one-time-code"
+        seed={code}
+        onChange={(e) => setCode((e.target as HTMLInputElement).value)}
+      />
+      <Button size="sm" variant="primary" disabled={busy || code.trim() === ''} onClick={() => onSubmit(code.trim())}>
+        Submit code
+      </Button>
+      <Button size="sm" variant="tertiary" disabled={busy} onClick={onCancel}>
+        Cancel
+      </Button>
+    </div>
+  );
+}

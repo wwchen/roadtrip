@@ -120,8 +120,16 @@
   color: var(--rt-success);
 }
 
-.rt-notif-status--err {
+.rt-notif-status--error {
   color: var(--rt-error);
+}
+
+.rt-notif-status--warn {
+  color: var(--rt-warn);
+}
+
+.rt-notif-status--muted {
+  color: var(--rt-muted);
 }
 
 /* ---- secret field ---- */

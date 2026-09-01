@@ -8,6 +8,13 @@ import { useThemeStore } from '@/stores/themeStore';
 import { AccountPanel } from './AccountPanel';
 import { AppearancePanel } from './AppearancePanel';
 import {
+  BookingPanel,
+  bookingValuesOf,
+  buildBookingPayload,
+  isBookingDirty,
+  type BookingValues,
+} from './BookingPanel';
+import {
   NotificationsPanel,
   buildNotificationsPayload,
   isNotificationsDirty,
@@ -24,6 +31,12 @@ import {
 } from './ProfilePanel';
 import {
   useDisconnectSlack,
+  useRecgovLogin,
+  useRecgovMfa,
+  useRecgovStatus,
+  useRecgovVerify,
+  useRemoveRecgov,
+  useSaveBooking,
   useSaveNotifications,
   useSaveProfile,
   useSettings,
@@ -33,6 +46,7 @@ import {
 const TAB_PROFILE = 'profile';
 const TAB_APPEARANCE = 'appearance';
 const TAB_NOTIFICATIONS = 'notifications';
+const TAB_BOOKING = 'booking';
 const TAB_ACCOUNT = 'account';
 
 // Order is the rail's reading order. Appearance sits next to Profile because it
@@ -41,12 +55,20 @@ const TABS = [
   { id: TAB_PROFILE, label: 'Profile' },
   { id: TAB_APPEARANCE, label: 'Appearance' },
   { id: TAB_NOTIFICATIONS, label: 'Notifications' },
+  { id: TAB_BOOKING, label: 'Booking' },
   { id: TAB_ACCOUNT, label: 'Account' },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
 
 const SAVED_MESSAGE = 'Settings saved.';
+
+/** Removal is reported with what it cost: the watches now left without credentials. */
+const removedMessage = (stranded: number): string =>
+  stranded === 0
+    ? 'Recreation.gov credentials removed.'
+    : `Recreation.gov credentials removed. ${stranded} active add-to-cart ` +
+      `${stranded === 1 ? 'watch' : 'watches'} will fail until you add them again.`;
 
 type Notice = { status: 'success' | 'error'; message: string };
 
@@ -93,22 +115,32 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   const saveProfile = useSaveProfile();
   const saveNotifications = useSaveNotifications();
+  const saveBooking = useSaveBooking();
   const disconnectSlack = useDisconnectSlack();
+  const removeRecgov = useRemoveRecgov();
   const { testSlack, testEmail } = useSettingsTests();
+  // Its own query: the only settings read that waits on the booking companion,
+  // so the modal opens without it.
+  const recgovStatus = useRecgovStatus();
+  const recgovLogin = useRecgovLogin();
+  const recgovMfa = useRecgovMfa();
+  const recgovVerify = useRecgovVerify();
 
   // Seeded per loaded document: `version` changes on every successful fetch, so
   // these reset to the server's values rather than keeping stale edits.
   const [profileValues, setProfileValues] = useState<ProfileValues | null>(null);
   const [notificationValues, setNotificationValues] = useState<NotificationValues | null>(null);
+  const [bookingValues, setBookingValues] = useState<BookingValues | null>(null);
   const [seededVersion, setSeededVersion] = useState(0);
 
   if (settings && seededVersion !== version) {
     setSeededVersion(version);
     setProfileValues(profileValuesOf(settings));
     setNotificationValues(notificationValuesOf(settings));
+    setBookingValues(bookingValuesOf(settings));
   }
 
-  const saving = saveProfile.isPending || saveNotifications.isPending;
+  const saving = saveProfile.isPending || saveNotifications.isPending || saveBooking.isPending;
 
   // Each section gates on its own slice: Profile and Appearance share the profile
   // payload, so without the split either one would light up the other's Save.
@@ -122,7 +154,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         isThemeDirty(settings, profileValues)) ||
       (activeTab === TAB_NOTIFICATIONS &&
         notificationValues != null &&
-        isNotificationsDirty(settings, notificationValues)));
+        isNotificationsDirty(settings, notificationValues)) ||
+      (activeTab === TAB_BOOKING && bookingValues != null && isBookingDirty(settings, bookingValues)));
 
   const fail = (err: unknown) =>
     setNotice({
@@ -138,10 +171,21 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         await saveProfile.mutateAsync(buildProfilePayload(profileValues));
       } else if (activeTab === TAB_NOTIFICATIONS && notificationValues) {
         await saveNotifications.mutateAsync(buildNotificationsPayload(notificationValues));
+      } else if (activeTab === TAB_BOOKING && bookingValues) {
+        await saveBooking.mutateAsync(buildBookingPayload(bookingValues));
       } else {
         return;
       }
       setNotice({ status: 'success', message: SAVED_MESSAGE });
+    } catch (err) {
+      fail(err);
+    }
+  };
+
+  const handleRemoveRecgov = async () => {
+    try {
+      const { stranded_atc_watches } = await removeRecgov.mutateAsync();
+      setNotice({ status: 'success', message: removedMessage(stranded_atc_watches) });
     } catch (err) {
       fail(err);
     }
@@ -235,11 +279,25 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     onTestEmail={testEmail}
                   />
                 )}
+                {activeTab === TAB_BOOKING && bookingValues && (
+                  <BookingPanel
+                    key={`booking:${version}`}
+                    settings={settings}
+                    values={bookingValues}
+                    onChange={setBookingValues}
+                    status={recgovStatus.data}
+                    statusPending={recgovStatus.isPending}
+                    onLogin={recgovLogin}
+                    onSubmitMfa={recgovMfa}
+                    onVerify={recgovVerify}
+                  />
+                )}
                 {activeTab === TAB_ACCOUNT && (
                   <AccountPanel
                     settings={settings}
                     onSignOut={signOut}
                     onDisconnectSlack={() => void handleDisconnectSlack()}
+                    onRemoveRecgov={() => void handleRemoveRecgov()}
                   />
                 )}
               </>

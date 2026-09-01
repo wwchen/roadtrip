@@ -17,6 +17,18 @@ const MESSAGES = new Map<string, string>([
   ['slack_send_failed', "Couldn't send to Slack."],
   ['encryption_unavailable', "Secret storage isn't configured on the server."],
   ['email_send_failed', "Couldn't send the test email."],
+  ['login_failed', 'Recreation.gov rejected these credentials.'],
+  ['mfa_required', 'Recreation.gov sent a verification code. Enter it below.'],
+  ['mfa_invalid', 'That code was rejected. Start the login again for a new one.'],
+  ['mfa_challenge_unknown', 'That code request expired. Start the login again.'],
+  [
+    'captcha_required',
+    'Recreation.gov showed a challenge we cannot solve. Try again in a moment.',
+  ],
+  ['login_backoff', 'Too many attempts. Wait a minute before trying again.'],
+  ['recgov_not_configured', 'Save your recreation.gov credentials first.'],
+  ['recgov_not_authenticated', 'The recreation.gov session has expired. Test login again.'],
+  ['companion_unavailable', "The booking service isn't reachable right now."],
 ]);
 
 /**
