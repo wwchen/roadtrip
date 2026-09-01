@@ -1,4 +1,9 @@
-FROM mcr.microsoft.com/playwright:v1.60.0-noble
+# LOCKSTEP: this tag and companion/package.json's exact "playwright" version
+# must move together. The image ships the browser binaries; the npm package
+# decides which build it looks for. A mismatch fails at launchPersistentContext
+# with a missing-executable error, which surfaces as recgov_auth_check_exception
+# on every /login and /verify.
+FROM mcr.microsoft.com/playwright:v1.62.1-noble
 
 WORKDIR /app
 
