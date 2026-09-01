@@ -5,6 +5,7 @@ import { chromium } from 'playwright'
 import path from 'node:path'
 import fs from 'node:fs'
 import os from 'node:os'
+import { createRequire } from 'node:module'
 import { getSetting, setSetting } from './store.js'
 import { extractCookiesFromInput } from './auth.js'
 
@@ -24,8 +25,44 @@ const RECGOV_COOKIES_SETTING = 'recgov_cookies'
 const RECGOV_ORIGIN = 'https://www.recreation.gov'
 export const RECGOV_CAMPSITE_BOOKING_URL_PATTERN =
   'https://www.recreation.gov/camping/campsites/{campsite_id}?startDate={start_date}&endDate={end_date}'
+/**
+ * If the Chromium version cannot be read, the major to claim.
+ *
+ * Keep it beside the `playwright` pin in package.json: they move together.
+ * Playwright 1.62.1 ships Chromium 151.
+ */
+const FALLBACK_CHROME_MAJOR = '151'
+
+/**
+ * The Chrome major version the user agent claims — read from the Chromium
+ * Playwright actually ships, never written down twice.
+ *
+ * A hand-pinned literal is how this went wrong: Playwright moved 1.60 -> 1.62
+ * and the engine moved Chromium 148 -> 151 while the UA string stayed frozen
+ * at 141. `navigator.userAgentData` reports the *real* major, so a stale
+ * literal makes the fingerprint contradict itself for anyone who reads both —
+ * which bot defenses do.
+ */
+function bundledChromeMajor () {
+  try {
+    const require = createRequire(import.meta.url)
+    let dir = path.dirname(require.resolve('playwright-core'))
+    while (dir !== path.dirname(dir) && !fs.existsSync(path.join(dir, 'browsers.json'))) dir = path.dirname(dir)
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'browsers.json'), 'utf8'))
+    const major = manifest.browsers?.find((b) => b.name === 'chromium')?.browserVersion?.split('.')[0]
+    return /^\d+$/.test(major || '') ? major : FALLBACK_CHROME_MAJOR
+  } catch {
+    return FALLBACK_CHROME_MAJOR
+  }
+}
+
+export const CHROME_MAJOR_VERSION = bundledChromeMajor()
+
+// macOS on purpose: the stealth init script below reports `navigator.platform`
+// as MacIntel, so this is the platform the page actually presents. The version
+// is the one thing that must track the engine.
 export const COMPANION_USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+  `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR_VERSION}.0.0.0 Safari/537.36`
 
 export const CHROMIUM_SINGLETON_LOCK_FILES = Object.freeze(['SingletonLock', 'SingletonSocket', 'SingletonCookie'])
 
@@ -60,6 +97,12 @@ export async function launchProfileContext (profileDir, { chromiumFn = chromium 
   if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true })
   clearStaleLocks(profileDir)
   const context = await chromiumFn.launchPersistentContext(profileDir, {
+    // Full Chromium, not the stripped headless shell Playwright substitutes for
+    // `headless: true`. The shell brands itself `HeadlessChrome` in
+    // `navigator.userAgentData` and reports `navigator.languages` as
+    // `["en-US@posix"]` — a Linux locale artifact — both of which contradict
+    // the macOS user agent below. Full Chromium says `Chromium`/`en-US,en`.
+    channel: 'chromium',
     headless: IS_HEADLESS,
     slowMo: IS_HEADLESS ? 0 : 200,
     viewport: { width: 1280, height: 900 },
@@ -89,7 +132,7 @@ export function clearStaleLocksForTest (profileDir) {
 }
 
 async function installStealthInitScript (context) {
-  await context.addInitScript(() => {
+  await context.addInitScript(({ chromeMajor }) => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
     if (!window.chrome) window.chrome = { runtime: {}, loadTimes: () => {}, csi: () => {}, app: {} }
     if (navigator.plugins.length === 0) {
@@ -101,11 +144,50 @@ async function installStealthInitScript (context) {
         ], { item: function (i) { return this[i] }, namedItem: function (n) { return this.find(p => p.name === n) }, refresh: () => {} }),
       })
     }
-    if (!navigator.languages || navigator.languages.length === 0) {
+    // `en-US@posix` is a Linux locale name no macOS Chrome ever reports, and
+    // the headless shell reports exactly that. Belt and braces behind the
+    // `channel: 'chromium'` launch that already fixes it.
+    const languages = navigator.languages || []
+    if (languages.length === 0 || languages.some((l) => l.includes('@'))) {
       Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] })
     }
     if (navigator.platform === 'Linux x86_64' || navigator.platform === '') {
       Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' })
+    }
+    // Client Hints are the other half of the same claim. `navigator.platform`
+    // was spoofed to MacIntel to match the macOS user agent, but
+    // `navigator.userAgentData` kept reporting the real Linux host — so a
+    // reader that asks both got two different answers.
+    //
+    // Brands are passed through untouched: they already carry the engine's own
+    // major, which the user agent is now derived from, so they agree by
+    // construction. Only the platform is restated.
+    const realUad = navigator.userAgentData
+    if (realUad && realUad.platform !== 'macOS') {
+      const macHints = {
+        platform: 'macOS',
+        platformVersion: '15.0.0',
+        architecture: 'x86',
+        bitness: '64',
+        model: '',
+        wow64: false,
+        uaFullVersion: `${chromeMajor}.0.0.0`,
+        fullVersionList: realUad.brands.map((b) => ({ brand: b.brand, version: `${b.version}.0.0.0` })),
+      }
+      const spoofed = {
+        brands: realUad.brands,
+        mobile: false,
+        platform: 'macOS',
+        toJSON: () => ({ brands: realUad.brands, mobile: false, platform: 'macOS' }),
+        getHighEntropyValues: async (hints) => {
+          const answer = { brands: realUad.brands, mobile: false, platform: 'macOS' }
+          for (const hint of hints || []) {
+            if (hint in macHints) answer[hint] = macHints[hint]
+          }
+          return answer
+        },
+      }
+      Object.defineProperty(navigator, 'userAgentData', { get: () => spoofed })
     }
     const origQuery = window.Permissions?.prototype?.query
     if (origQuery) {
@@ -128,7 +210,7 @@ async function installStealthInitScript (context) {
       } catch {}
       return _origFetch.apply(this, args)
     }
-  })
+  }, { chromeMajor: CHROME_MAJOR_VERSION })
 }
 
 export async function clearSession () {
