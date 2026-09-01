@@ -129,10 +129,31 @@ export function createCompanionServer ({
   return companionServer
 }
 
+/**
+ * Runs one route handler, turning a throw into a 500 rather than a process exit.
+ *
+ * The server callback is async, so an unhandled rejection here ends the process:
+ * a single bad request became a restart loop. That matters now that the store
+ * fails loudly on a corrupt file instead of reporting every user signed out —
+ * the loud failure is right, but it has to arrive as a response.
+ *
+ * The error's own `code` is preserved when it carries one, so a caller sees
+ * `store_corrupt` rather than a shrug.
+ */
 async function handleContractRoute (route, req, res, url, runtime, deps) {
   const handler = CONTRACT_ROUTE_HANDLERS[route.operationId]
   if (handler) {
-    await handler({ req, res, url, runtime, deps })
+    try {
+      await handler({ req, res, url, runtime, deps })
+    } catch (error) {
+      runtime.logger(`route ${route.method} ${route.path} threw: ${error.message}`)
+      if (res.headersSent) throw error
+      jsonResponse(res, HTTP_INTERNAL_ERROR, {
+        ok: false,
+        error: error.code || 'route_exception',
+        detail: error.message,
+      })
+    }
     return
   }
   jsonResponse(res, HTTP_INTERNAL_ERROR, {

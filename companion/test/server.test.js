@@ -1346,6 +1346,22 @@ function logCapture () {
   }
 }
 
+test('a handler that throws answers 500 with its code instead of taking the process down', async () => {
+  // store.js now fails loudly on a corrupt store rather than reporting every
+  // user signed out. Nothing awaited the handler's rejection, so that throw
+  // became an unhandled rejection and Node exited — trading data loss for a
+  // restart loop. Any handler throw has always had this shape.
+  const pool = testPool()
+  pool.isBusy = () => {
+    throw Object.assign(new Error('store.json is unreadable'), { code: 'store_corrupt' })
+  }
+
+  const res = await request(testServer({ pool }), { method: 'GET', path: '/health?profile_id=7' })
+
+  assert.equal(res.status, 500)
+  assert.equal(res.json.error, 'store_corrupt')
+})
+
 function testServer (overrides = {}) {
   return createCompanionServer({
     apiToken: TEST_API_TOKEN,
