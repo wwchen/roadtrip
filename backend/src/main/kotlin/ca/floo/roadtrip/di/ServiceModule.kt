@@ -279,6 +279,7 @@ val serviceModule =
                     bookingTargets = get<AvailabilityBookingTargetResolver>(),
                     notifications = get<NotificationFanout>(),
                     targetResolver = get<WatchNotificationTargetResolver>(),
+                    metrics = get<RoadtripMetrics>(),
                 ),
             )
         }

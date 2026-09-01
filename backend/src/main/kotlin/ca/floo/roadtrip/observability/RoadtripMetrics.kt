@@ -71,6 +71,25 @@ interface RoadtripMetrics {
      */
     fun recgovKeepaliveProfile(outcome: KeepaliveOutcome)
 
+    /**
+     * One ATC fire reaching a terminal outcome.
+     *
+     * This is the path where nobody is watching: it runs from a poll sweep,
+     * minutes after a site opened, and its whole value is placing a hold in
+     * seconds. Row-level detail is in the result notification; this is the
+     * rate/trend layer that answers "are holds still landing" and "which
+     * failure is taking them".
+     *
+     * [error] is a `RecGovSessionCodes`-style code — a bounded registry, so it
+     * is safe as an attribute; null becomes `none`. Watch ids and campsite ids
+     * are deliberately absent: unbounded cardinality.
+     */
+    fun recgovAtcFired(
+        outcome: AtcOutcome,
+        error: String? = null,
+        durationMs: Int? = null,
+    )
+
     /** For tests and for any entry point that runs without the agent. */
     object NoOp : RoadtripMetrics {
         override fun availabilityFetchCompleted(
@@ -101,6 +120,12 @@ interface RoadtripMetrics {
         ) = Unit
 
         override fun recgovKeepaliveProfile(outcome: KeepaliveOutcome) = Unit
+
+        override fun recgovAtcFired(
+            outcome: AtcOutcome,
+            error: String?,
+            durationMs: Int?,
+        ) = Unit
     }
 }
 
@@ -121,6 +146,30 @@ enum class KeepaliveOutcome(
 
     /** The companion could not be reached at all. */
     UNAVAILABLE("unavailable"),
+}
+
+/**
+ * How an ATC fire ended. Deliberately separates the three "no hold, and nobody
+ * was told" shapes from an honest vendor refusal, because they have different
+ * causes and different fixes.
+ */
+enum class AtcOutcome(
+    val label: String,
+) {
+    /** The site was held. */
+    HELD("held"),
+
+    /** The vendor was driven and declined — taken, dates not offered, cart refused. */
+    FAILED("failed"),
+
+    /** No booking target resolved for any opening, so no attempt was made. */
+    NO_TARGET("no_target"),
+
+    /** The provider has no add-to-cart capability for this target. */
+    UNSUPPORTED("unsupported"),
+
+    /** The attempt threw before producing a result. */
+    EXCEPTION("exception"),
 }
 
 /** Why a poll cycle issued no upstream call. Observability's own vocabulary, so

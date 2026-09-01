@@ -1,5 +1,6 @@
 import { campsiteUrl } from '../../browser.js'
 import { runAtcOnce } from '../../runAtcOnce.js'
+import { withLogCapture } from '../../logCapture.js'
 import { withTrace } from '../../tracing.js'
 import {
   EXIT_SUCCESS,
@@ -76,12 +77,16 @@ export async function handleAtc (req, res, {
     const { result: code, trace } = await withTrace(
       resolved.context,
       { operation: OPERATION_ATC, failureReason: (c) => (c === EXIT_SUCCESS ? null : `exit_${c}`) },
-      () => runAtcOnceFn({
-        argv: ['--payload-json', raw],
-        stdout,
-        stderr,
-        contextOptions: { getContextFn: async () => resolved.context, profileId },
-      }),
+      () =>
+        withLogCapture(stderr, () =>
+          runAtcOnceFn({
+            argv: ['--payload-json', raw],
+            stdout,
+            stderr,
+            captureConsole: false,
+            contextOptions: { getContextFn: async () => resolved.context, profileId },
+          }),
+        ),
     )
     const baseResult = parseRunResult(stdout.value())
     const resultLine = `recgov atc result ${[

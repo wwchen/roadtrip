@@ -51,6 +51,7 @@ private const val FIELD_STATE = "state"
 
 /** The companion's word for a profile it has never been asked about. */
 private const val STATUS_UNCHECKED = "unchecked"
+private const val FIELD_HAS_STORED_SESSION = "has_stored_session"
 private const val FIELD_RECGOV_AUTH = "recgov_auth"
 private const val FIELD_VERIFY = "verify"
 private const val FIELD_DIAGNOSTICS = "diagnostics"
@@ -136,7 +137,24 @@ internal class CompanionSessionClient(
 
     override suspend fun destroyProfile(profileId: String): CompanionActionResult = actionResult(post(DESTROY_PATH, profileBody(profileId)))
 
-    override suspend fun refresh(profileId: String): CompanionActionResult = actionResult(post(REFRESH_PATH, profileBody(profileId)))
+    /**
+     * The refresh acquires the profile lock and drives a browser, so on the fire
+     * path it takes the short budget like the health check and the unattended
+     * login. Left on the companion timeout it can hold the availability poll
+     * executor for minutes on a wedged profile. The keepalive sweep is not on
+     * anyone's critical path and keeps the full budget.
+     */
+    override suspend fun refresh(
+        profileId: String,
+        unattended: Boolean,
+    ): CompanionActionResult =
+        actionResult(
+            post(
+                REFRESH_PATH,
+                profileBody(profileId),
+                timeout = if (unattended) fireTimeout else timeout,
+            ),
+        )
 
     override suspend fun markKeepWarm(profileIds: Collection<String>): CompanionActionResult =
         actionResult(
@@ -197,7 +215,19 @@ internal class CompanionSessionClient(
             code == RecGovSessionCodes.AUTH_CHECK_EXCEPTION -> CompanionSessionHealth.CheckFailed(code)
             // Only when the companion has genuinely never looked. An explicit
             // `logged_in: false` IS an answer, even with no status beside it.
-            auth == null || status == STATUS_UNCHECKED -> CompanionSessionHealth.NeverLoggedIn
+            //
+            // `unchecked` alone is not that evidence: the per-profile status is
+            // process memory, so every companion restart answers `unchecked` for
+            // every profile. A persisted cookie jar says a session did exist, and
+            // reading that as NeverLoggedIn drops the user out of the keep-warm
+            // sweep on every deploy and tells them "Not logged in yet".
+            auth == null -> CompanionSessionHealth.NeverLoggedIn
+            status == STATUS_UNCHECKED ->
+                if (auth.booleanValue(FIELD_HAS_STORED_SESSION) == true) {
+                    CompanionSessionHealth.Inactive(code)
+                } else {
+                    CompanionSessionHealth.NeverLoggedIn
+                }
             else -> CompanionSessionHealth.Inactive(code)
         }
     }

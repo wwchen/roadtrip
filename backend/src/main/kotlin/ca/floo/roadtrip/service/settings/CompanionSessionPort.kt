@@ -143,7 +143,10 @@ interface CompanionSessionPort {
     suspend fun health(profileId: String): CompanionSessionHealth
 
     /** Force one profile's rec.gov session to renew. The keepalive path. */
-    suspend fun refresh(profileId: String): CompanionActionResult
+    suspend fun refresh(
+        profileId: String,
+        unattended: Boolean = false,
+    ): CompanionActionResult
 
     /**
      * Replaces the armed profile set the companion keeps warm.

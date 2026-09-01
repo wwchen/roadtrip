@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.scheduler
 
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.observability.AtcOutcome
 import ca.floo.roadtrip.observability.KeepaliveOutcome
 import ca.floo.roadtrip.observability.PollSkipReason
 import ca.floo.roadtrip.observability.RoadtripMetrics
@@ -219,7 +220,10 @@ class RecGovKeepaliveJobTest {
             return keepWarmFailure?.let { CompanionActionResult.Failed(it) } ?: CompanionActionResult.Ok
         }
 
-        override suspend fun refresh(profileId: String): CompanionActionResult {
+        override suspend fun refresh(
+            profileId: String,
+            unattended: Boolean,
+        ): CompanionActionResult {
             refreshed += profileId
             return if (profileId in refuseRefreshFor) {
                 CompanionActionResult.Failed(RecGovSessionCodes.NOT_AUTHENTICATED)
@@ -256,6 +260,12 @@ class RecGovKeepaliveJobTest {
         override fun recgovKeepaliveProfile(outcome: KeepaliveOutcome) {
             keepalives += outcome
         }
+
+        override fun recgovAtcFired(
+            outcome: AtcOutcome,
+            error: String?,
+            durationMs: Int?,
+        ) = Unit
 
         override fun availabilityFetchCompleted(
             provider: BookingProvider,

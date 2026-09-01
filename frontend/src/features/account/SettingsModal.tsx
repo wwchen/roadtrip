@@ -67,15 +67,15 @@ const SAVED_MESSAGE = 'Settings saved.';
  * Removal is reported with what it cost: the watches now left without
  * credentials, and whether the saved browser session actually went with them.
  *
- * The local delete succeeds even when the companion is unreachable, so the
- * message must not imply a full wipe that did not happen — the session material
- * is still on the companion host in that case.
+ * A removal that could not clear the session is now REFUSED server-side
+ * (`recgov_profile_wipe_failed`) rather than half-applied, so `profileDestroyed`
+ * false no longer means "the wipe failed" — it means no booking service is
+ * configured, and there was no saved session to erase.
  */
 const removedMessage = (stranded: number, profileDestroyed: boolean): string => {
   const base = profileDestroyed
     ? 'Recreation.gov credentials and saved browser session removed.'
-    : 'Recreation.gov credentials removed, but the saved browser session could not be ' +
-      'erased because the booking service is unreachable. Remove again once it is back.';
+    : 'Recreation.gov credentials removed. There was no saved browser session to erase.';
   if (stranded === 0) return base;
   return (
     `${base} ${stranded} active add-to-cart ` +

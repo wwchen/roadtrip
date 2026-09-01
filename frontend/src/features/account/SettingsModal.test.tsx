@@ -372,10 +372,28 @@ describe('the Booking tab', () => {
 });
 
 describe('remove rec.gov credentials', () => {
-  test('does not claim a wipe that did not happen when the companion is down', async () => {
-    // The local delete succeeds regardless — that contract is deliberate — but
-    // the saved rec.gov session is still sitting on the companion host, and
-    // saying otherwise would be a lie about where a live session lives.
+  test('a refused removal tells the operator the booking service needs attention', async () => {
+    // This copy IS the admin signal: removal now blocks rather than half-applying,
+    // so a stuck companion must be legible from the UI, not only from the logs.
+    getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
+    expect(await screen.findByText('Danger zone')).toBeInTheDocument();
+
+    onPut = () => json({ error: 'recgov_profile_wipe_failed' }, 502);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm removal' }));
+
+    expect(await screen.findByText(/the booking service needs attention/i)).toBeInTheDocument();
+  });
+
+  test('does not claim a session wipe when there was no session to wipe', async () => {
+    // A failed wipe is refused server-side now, so `profile_destroyed: false`
+    // means no booking service is configured — nothing was left behind, and the
+    // copy must not imply a session is still sitting on a companion host.
     getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
     renderSettingsModal();
     await screen.findByLabelText('Display name');
@@ -395,7 +413,7 @@ describe('remove rec.gov credentials', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm removal' }));
 
-    expect(await screen.findByText(/could not be erased/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no saved browser session to erase/i)).toBeInTheDocument();
   });
 
   test('reports how many active add-to-cart watches it stranded', async () => {

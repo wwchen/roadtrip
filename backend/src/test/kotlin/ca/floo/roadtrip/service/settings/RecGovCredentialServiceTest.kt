@@ -130,7 +130,10 @@ private class FakeCompanion(
 
     override suspend fun health(profileId: String): CompanionSessionHealth = healthResult
 
-    override suspend fun refresh(profileId: String): CompanionActionResult {
+    override suspend fun refresh(
+        profileId: String,
+        unattended: Boolean,
+    ): CompanionActionResult {
         refreshed += profileId
         return refreshResult
     }
@@ -169,49 +172,109 @@ class RecGovCredentialServiceTest {
     // ── storage ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `saving seals the password and keeps only a last-4 hint`() {
-        val repo = FakeSettingsRepo()
+    fun `saving seals the password and keeps only a last-4 hint`() =
+        runBlocking {
+            val repo = FakeSettingsRepo()
 
-        val dto = service(repo).save(testUserId, UpdateRecgovRequest("ada@example.com", "hunter2-secret"))
+            val dto = service(repo).save(testUserId, UpdateRecgovRequest("ada@example.com", "hunter2-secret"))
 
-        assertTrue(dto.recgovConfigured)
-        assertEquals("ada@example.com", dto.recgovUsername)
-        assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
-    }
-
-    @Test
-    fun `a null password leaves the stored one untouched`() {
-        val repo = configuredRepo()
-
-        val dto = service(repo).save(testUserId, UpdateRecgovRequest("grace@example.com", null))
-
-        assertEquals("grace@example.com", dto.recgovUsername)
-        assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
-    }
-
-    @Test
-    fun `a blank username is rejected before anything is written`() {
-        val repo = FakeSettingsRepo()
-
-        assertFailsWith<SettingsError.InvalidField> {
-            service(repo).save(testUserId, UpdateRecgovRequest("  ", "hunter2"))
+            assertTrue(dto.recgovConfigured)
+            assertEquals("ada@example.com", dto.recgovUsername)
+            assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
         }
-        assertNull(repo.settings)
-    }
 
     @Test
-    fun `a first save without a password is rejected`() {
-        assertFailsWith<SettingsError.InvalidField> {
-            service().save(testUserId, UpdateRecgovRequest("ada@example.com", null))
+    fun `a null password leaves the stored one untouched`() =
+        runBlocking {
+            val repo = configuredRepo()
+
+            val dto = service(repo).save(testUserId, UpdateRecgovRequest("grace@example.com", null))
+
+            assertEquals("grace@example.com", dto.recgovUsername)
+            assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
         }
-    }
 
     @Test
-    fun `storing a password needs the encryption key`() {
-        assertFailsWith<SettingsError.EncryptionUnavailable> {
-            service(withCipher = null).save(testUserId, UpdateRecgovRequest("ada@example.com", "hunter2"))
+    fun `a blank username is rejected before anything is written`() =
+        runBlocking {
+            val repo = FakeSettingsRepo()
+
+            assertFailsWith<SettingsError.InvalidField> {
+                service(repo).save(testUserId, UpdateRecgovRequest("  ", "hunter2"))
+            }
+            assertNull(repo.settings)
         }
-    }
+
+    @Test
+    fun `a first save without a password is rejected`() =
+        runBlocking {
+            assertFailsWith<SettingsError.InvalidField> {
+                service().save(testUserId, UpdateRecgovRequest("ada@example.com", null))
+            }
+            Unit
+        }
+
+    @Test
+    fun `storing a password needs the encryption key`() =
+        runBlocking {
+            assertFailsWith<SettingsError.EncryptionUnavailable> {
+                service(withCipher = null).save(testUserId, UpdateRecgovRequest("ada@example.com", "hunter2"))
+            }
+            Unit
+        }
+
+    @Test
+    fun `saving a different username destroys the previous account's browser profile`() =
+        runBlocking {
+            // A credential swap invalidates the old session's legitimacy exactly
+            // as a removal does. Without a destroy the profile keeps the previous
+            // account's cookie jar, refresh-first login revives it, and the hold
+            // is placed on an account the user has already replaced.
+            val repo = configuredRepo()
+            val companion = FakeCompanion()
+
+            service(repo, companion).save(testUserId, UpdateRecgovRequest("grace@example.com", "a-different-secret"))
+
+            assertEquals(
+                listOf(PROFILE_ID),
+                companion.destroyCalls,
+                "the replaced account's cookie jar must not survive the swap",
+            )
+        }
+
+    @Test
+    fun `rotating the password for the same username keeps the browser profile`() =
+        runBlocking {
+            // Same account, new password: the live session is still that user's
+            // own, and destroying it would force a needless re-login.
+            val repo = configuredRepo()
+            val companion = FakeCompanion()
+
+            service(repo, companion).save(testUserId, UpdateRecgovRequest("ada@example.com", "rotated-secret"))
+
+            assertTrue(companion.destroyCalls.isEmpty(), "a password rotation should not evict the session")
+        }
+
+    @Test
+    fun `a credential swap is refused when the previous profile cannot be destroyed`() =
+        runBlocking {
+            // Correctness over convenience: a half-applied swap stores the new
+            // account against the old account's live session, which books under
+            // the wrong account. Refusing leaves the old credentials working and
+            // tells the operator to go look.
+            val repo = configuredRepo()
+            val companion =
+                FakeCompanion().also {
+                    it.destroyResult = CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, "refused")
+                }
+
+            assertFailsWith<SettingsError.RecgovProfileWipeFailed> {
+                service(repo, companion).save(testUserId, UpdateRecgovRequest("grace@example.com", "a-different-secret"))
+            }
+
+            assertEquals("ada@example.com", repo.settings!!.recgovUsername, "the row must be untouched")
+            assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
+        }
 
     // ── removal ──────────────────────────────────────────────────────────────
 
@@ -246,25 +309,27 @@ class RecGovCredentialServiceTest {
         }
 
     @Test
-    fun `removal reports honestly when the profile could not be destroyed`() =
+    fun `removal is refused when the profile cannot be destroyed`() =
         runBlocking {
-            // The local delete still succeeds — that contract is deliberate —
-            // but the response must not imply a wipe that did not happen.
+            // Clearing the row while the cookie jar survives would report a
+            // deletion that did not happen.
+            val repo = configuredRepo()
             val companion =
-                FakeCompanion(
-                    logoutResult = CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, "refused"),
-                )
-            companion.destroyResult = CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, "refused")
+                FakeCompanion().also {
+                    it.destroyResult = CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, "refused")
+                }
 
-            val dto = service(configuredRepo(), companion).remove(testUserId)
+            assertFailsWith<SettingsError.RecgovProfileWipeFailed> {
+                service(repo, companion).remove(testUserId)
+            }
 
-            assertTrue(dto.removed, "the credentials are gone from the database regardless")
-            assertFalse(dto.profileDestroyed, "session material may still be on the companion host")
+            assertEquals("ada@example.com", repo.settings!!.recgovUsername, "credentials must survive a failed wipe")
         }
 
     @Test
-    fun `removal succeeds locally when the companion is down`() =
+    fun `a failed sign-out does not block removal, only a failed wipe does`() =
         runBlocking {
+            // logout is the graceful half; destroy is the load-bearing one.
             val repo = configuredRepo()
             val companion =
                 FakeCompanion(

@@ -252,6 +252,10 @@ class AspiraAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-07-27"),
                 )
             }
+            // assertFailsWith returns the exception it caught, which would make
+            // this method's return type non-Unit — and JUnit silently skips a
+            // non-void @Test, so this assertion never ran at all.
+            Unit
         }
 
     @Test

@@ -18,6 +18,8 @@ private const val METRIC_POLL_SKIPPED = "roadtrip.availability.poll.skipped"
 private const val METRIC_WATCH_TRIGGER = "roadtrip.watch.trigger"
 private const val METRIC_INGEST_RUN = "roadtrip.ingest.run"
 private const val METRIC_RECGOV_KEEPALIVE = "roadtrip.recgov.keepalive"
+private const val METRIC_RECGOV_ATC = "roadtrip.recgov.atc"
+private const val METRIC_RECGOV_ATC_DURATION = "roadtrip.recgov.atc.duration"
 
 private const val UNIT_MILLISECONDS = "ms"
 private const val UNIT_CALLS = "{call}"
@@ -25,6 +27,10 @@ private const val UNIT_RUNS = "{run}"
 private const val UNIT_CYCLES = "{cycle}"
 private const val UNIT_TRIGGERS = "{trigger}"
 private const val UNIT_PROFILES = "{profile}"
+private const val UNIT_FIRES = "{fire}"
+
+/** Attribute value when a terminal outcome carries no error code. */
+private const val ERROR_NONE = "none"
 
 // Attribute keys are allocated once; building them per-call would allocate on
 // every fetch.
@@ -32,6 +38,7 @@ private val attrProvider = AttributeKey.stringKey("provider")
 private val attrOutcome = AttributeKey.stringKey("outcome")
 private val attrStatus = AttributeKey.stringKey("status")
 private val attrReason = AttributeKey.stringKey("reason")
+private val attrError = AttributeKey.stringKey("error")
 private val attrKinds = AttributeKey.stringKey("kinds")
 private val attrDelivered = AttributeKey.booleanKey("delivered")
 private val attrTarget = AttributeKey.stringKey("target")
@@ -114,6 +121,21 @@ internal class OtelRoadtripMetrics(
             .setUnit(UNIT_PROFILES)
             .build()
 
+    private val recgovAtcFires =
+        meter
+            .counterBuilder(METRIC_RECGOV_ATC)
+            .setDescription("ATC fires reaching a terminal outcome, by outcome and error code")
+            .setUnit(UNIT_FIRES)
+            .build()
+
+    private val recgovAtcDuration =
+        meter
+            .histogramBuilder(METRIC_RECGOV_ATC_DURATION)
+            .ofLongs()
+            .setDescription("End-to-end ATC fire latency, preflight through cart run")
+            .setUnit(UNIT_MILLISECONDS)
+            .build()
+
     override fun availabilityFetchCompleted(
         provider: BookingProvider,
         outcome: String,
@@ -159,6 +181,16 @@ internal class OtelRoadtripMetrics(
 
     override fun recgovKeepaliveProfile(outcome: KeepaliveOutcome) {
         recgovKeepalives.add(1, Attributes.of(attrOutcome, outcome.label))
+    }
+
+    override fun recgovAtcFired(
+        outcome: AtcOutcome,
+        error: String?,
+        durationMs: Int?,
+    ) {
+        val attributes = Attributes.of(attrOutcome, outcome.label, attrError, error ?: ERROR_NONE)
+        recgovAtcFires.add(1, attributes)
+        durationMs?.let { recgovAtcDuration.record(it.toLong(), attributes) }
     }
 
     override fun ingestRunFinished(

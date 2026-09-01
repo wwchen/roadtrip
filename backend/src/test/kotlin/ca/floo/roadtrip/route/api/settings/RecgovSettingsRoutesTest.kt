@@ -72,7 +72,7 @@ private class StubRecgovService(
     val savedRequests = mutableListOf<UpdateRecgovRequest>()
     val mfaCodes = mutableListOf<String>()
 
-    override fun save(
+    override suspend fun save(
         userId: UserId,
         req: UpdateRecgovRequest,
     ): BookingSettingsDto {

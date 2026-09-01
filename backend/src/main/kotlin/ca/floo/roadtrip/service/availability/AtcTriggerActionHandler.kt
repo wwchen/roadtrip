@@ -4,6 +4,8 @@ import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.observability.AtcOutcome
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.notification.common.NotificationSender
@@ -16,6 +18,7 @@ internal class AtcTriggerActionHandler(
     private val bookingTargets: AvailabilityBookingTargetResolver,
     private val notifications: NotificationSender,
     private val targetResolver: WatchNotificationTargetResolver,
+    private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
 ) : TriggerActionHandler {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -51,6 +54,9 @@ internal class AtcTriggerActionHandler(
             }
         if (pending.isEmpty()) {
             log.warn("ATC trigger unsupported for watch_id={} openings={}", watch.id, openings.size)
+            // Counted, because this exit notifies nobody: on a dashboard it is
+            // otherwise indistinguishable from no watch having fired at all.
+            metrics.recgovAtcFired(AtcOutcome.NO_TARGET)
             return false
         }
         if (pending.size > 1) {
@@ -58,6 +64,7 @@ internal class AtcTriggerActionHandler(
         }
 
         val next = pending.first()
+        val startedAt = System.nanoTime()
         val result =
             runCatching { bookings.addToCart(next.request) }
                 .onFailure {
@@ -86,6 +93,7 @@ internal class AtcTriggerActionHandler(
                     request = result.request,
                     response = result.response,
                 )
+                metrics.recgovAtcFired(AtcOutcome.HELD, durationMs = elapsedMsSince(startedAt))
                 true
             }
             is AddToCartResult.Failed -> {
@@ -110,6 +118,7 @@ internal class AtcTriggerActionHandler(
                     error = result.error,
                     detail = result.detail,
                 )
+                metrics.recgovAtcFired(AtcOutcome.FAILED, result.error, elapsedMsSince(startedAt))
                 false
             }
             AddToCartResult.Unsupported -> {
@@ -119,11 +128,17 @@ internal class AtcTriggerActionHandler(
                     next.request.target.providerId,
                     next.request.target.campsiteId,
                 )
+                metrics.recgovAtcFired(AtcOutcome.UNSUPPORTED, durationMs = elapsedMsSince(startedAt))
                 false
             }
-            null -> false
+            null -> {
+                metrics.recgovAtcFired(AtcOutcome.EXCEPTION, durationMs = elapsedMsSince(startedAt))
+                false
+            }
         }
     }
+
+    private fun elapsedMsSince(startedAtNanos: Long): Int = ((System.nanoTime() - startedAtNanos) / NANOS_PER_MILLI).toInt()
 
     /**
      * Sends the outcome and says so when nobody heard it.
@@ -196,6 +211,7 @@ internal class AtcTriggerActionHandler(
 
     companion object {
         const val KIND = AvailabilityTriggerKinds.ATC
+        private const val NANOS_PER_MILLI = 1_000_000L
         private const val ATC_RESULT_COMPLETED = "completed"
         private const val ATC_RESULT_FAILED = "failed"
     }

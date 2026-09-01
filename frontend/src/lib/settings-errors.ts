@@ -30,6 +30,12 @@ const MESSAGES = new Map<string, string>([
   ['profile_busy', 'Another operation is using your rec.gov session — try again shortly.'],
   ['browser_cap_reached', 'The booking service is at capacity — try again shortly.'],
   ['recgov_not_configured', 'Save your recreation.gov credentials first.'],
+  // Refusal, not a partial success: the save/removal was rolled back because the
+  // old session could not be cleared. Says who can act, since the user cannot.
+  [
+    'recgov_profile_wipe_failed',
+    'We could not clear your existing recreation.gov session, so nothing was changed. Try again shortly — if it keeps failing, the booking service needs attention.',
+  ],
   ['recgov_not_authenticated', 'The recreation.gov session has expired. Test login again.'],
   ['companion_unavailable', "The booking service isn't reachable right now."],
   // The companion reached rec.gov but threw on the way. Nothing the user did.

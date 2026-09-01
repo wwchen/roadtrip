@@ -17,6 +17,8 @@ import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.auth.UserStatus
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.observability.AtcOutcome
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.UserRepo
@@ -610,6 +612,75 @@ class TriggerActionHandlerTest {
             assertFalse(delivered)
             assertTrue(bookingProvider.requests.isEmpty())
             assertTrue(notifications.atcResults.isEmpty())
+        }
+
+    /** Records what the handler reported, so the silent exits become assertable. */
+    private class RecordingMetrics : RoadtripMetrics by RoadtripMetrics.NoOp {
+        val fires = mutableListOf<Triple<AtcOutcome, String?, Int?>>()
+
+        override fun recgovAtcFired(
+            outcome: AtcOutcome,
+            error: String?,
+            durationMs: Int?,
+        ) {
+            fires += Triple(outcome, error, durationMs)
+        }
+    }
+
+    @Test
+    fun `an ATC fire with no resolvable booking target is counted, not just logged`() =
+        runBlocking {
+            // This exit tells nobody: no reportResult, no notification. Without a
+            // metric it is indistinguishable on a dashboard from "no watch fired".
+            val bookingProvider = RecordingBookingProvider()
+            val registry = BookingAdapterRegistry(listOf(bookingProvider))
+            val metrics = RecordingMetrics()
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    targetResolver = resolver(),
+                    notifications = CapturingNotifications(result = true),
+                    metrics = metrics,
+                )
+
+            handler.fire(
+                fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                openings = listOf(triggerOpening(parentRef = BookingProviderRef.Campflare("campflare-1"))),
+            )
+
+            assertEquals(listOf(AtcOutcome.NO_TARGET), metrics.fires.map { it.first })
+        }
+
+    @Test
+    fun `a held site is counted with its latency`() =
+        runBlocking {
+            val bookingProvider = RecordingBookingProvider()
+            val registry = BookingAdapterRegistry(listOf(bookingProvider))
+            val metrics = RecordingMetrics()
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    targetResolver = resolver(),
+                    notifications = CapturingNotifications(result = true),
+                    metrics = metrics,
+                )
+
+            handler.fire(
+                fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                openings = listOf(triggerOpening()),
+            )
+
+            val fire = metrics.fires.single()
+            assertEquals(AtcOutcome.HELD, fire.first)
+            // assertNotNull returns the unwrapped value, so asserting last would
+            // make this method's return type Int — and JUnit silently skips a
+            // non-void @Test. Keep a Unit-returning assertion last.
+            assertTrue(
+                fire.third != null,
+                "a fire without a duration cannot answer 'are holds still fast enough'",
+            )
         }
 
     /** In-memory [UserSettingsRepo] returning a fixed [Settings] for owner id 1

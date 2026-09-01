@@ -331,6 +331,179 @@ groups:
                     type: last
                     params: []
 
+  - orgId: 1
+    name: recgov-atc
+    folder: Roadtrip
+    interval: 1m
+    rules:
+      # ATC is the one path with nobody watching: it fires from a poll sweep and
+      # its whole value is placing a hold within seconds. These four say, in
+      # order: nobody was told, the vendor is refusing, we are too slow to win a
+      # race, and the sessions ATC depends on are lapsing.
+      - uid: roadtrip-atc-silent-exits
+        title: ATC fires ending with nobody told
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'An ATC fire ended with no hold AND no notification (no booking target, unsupported provider, or a thrown attempt). The owner saw nothing: /d/recgov-atc/recgov-add-to-cart'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(roadtrip_recgov_atc_total{outcome=~"no_target|unsupported|exception"}[1h])) or vector(0)
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
+      - uid: roadtrip-atc-failures-elevated
+        title: ATC holds being refused
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 5 refused ATC holds in 1h. Check which error code dominates before assuming a race: /d/recgov-atc/recgov-add-to-cart'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(roadtrip_recgov_atc_total{outcome="failed"}[1h])) or vector(0)
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [5]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
+      - uid: roadtrip-atc-preflight-over-budget
+        title: ATC fires exceeding the preflight budget
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'ATC p95 latency is over the 30s fire budget. This path runs inline in the availability poll executor, so it is delaying every other watch: /d/recgov-atc/recgov-add-to-cart'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: (histogram_quantile(0.95, sum by (le) (rate(roadtrip_recgov_atc_duration_milliseconds_bucket[30m]))) and on() (sum(rate(roadtrip_recgov_atc_duration_milliseconds_count[30m])) > 0)) or vector(0)
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [30000]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
+      - uid: roadtrip-atc-keepalive-failing
+        title: rec.gov sessions failing to keep warm
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 10 failed keepalive refreshes in 1h. A lapsed session cannot hold anything, so this precedes ATC auth failures: /d/recgov-atc/recgov-add-to-cart'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(roadtrip_recgov_keepalive_total{outcome="failed"}[1h])) or vector(0)
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [10]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
 contactPoints:
   - orgId: 1
     name: slack

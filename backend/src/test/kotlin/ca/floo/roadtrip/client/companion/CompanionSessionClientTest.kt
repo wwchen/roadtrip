@@ -68,6 +68,30 @@ class CompanionSessionClientTest {
         }
 
     @Test
+    fun `unchecked with a stored jar reads as expired, not never-logged-in`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/health" to
+                            TestResponse(
+                                body =
+                                    """{"ok":true,"recgov_auth":{"login_status":"unchecked","has_stored_session":true}}""",
+                            ),
+                    ),
+                ).use { server ->
+                    // A companion restart resets every profile to `unchecked`.
+                    // Reading that as NeverLoggedIn drops signed-in users out of
+                    // the keep-warm sweep after each deploy and tells them
+                    // "Not logged in yet" while their jar still holds a session.
+                    assertEquals<CompanionSessionHealth>(
+                        CompanionSessionHealth.Inactive(null),
+                        clientFor(server.baseUrl).health(PROFILE_ID),
+                    )
+                }
+        }
+
+    @Test
     fun `a companion whose own auth check threw is not reported as an expired session`() =
         runBlocking {
             CompanionTestServer
@@ -174,6 +198,27 @@ class CompanionSessionClientTest {
                 listOf(Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(180)),
                 recorder.timeouts,
             )
+        }
+
+    @Test
+    fun `the fire path's cookie refresh runs on the short budget`() =
+        runBlocking {
+            // The refresh is the recovery step on every fire whose session reads
+            // dead, and it drives a browser. On the long budget it can stall the
+            // availability poll executor for minutes.
+            val config =
+                RecGovAtcConfig(
+                    companionBaseUrl = "http://companion.invalid",
+                    companionTimeout = Duration.ofSeconds(180),
+                    fireTimeout = Duration.ofSeconds(5),
+                )
+            val recorder = RecordingTimeoutClient()
+            val client = CompanionSessionClient(config, recorder)
+
+            client.refresh(PROFILE_ID, unattended = true)
+            client.refresh(PROFILE_ID)
+
+            assertEquals(listOf(Duration.ofSeconds(5), Duration.ofSeconds(180)), recorder.timeouts)
         }
 
     @Test

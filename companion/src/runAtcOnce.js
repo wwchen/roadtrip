@@ -24,6 +24,7 @@ export async function runAtcOnce ({
   argv = process.argv.slice(2),
   stdout = process.stdout,
   stderr = process.stderr,
+  captureConsole = true,
   addToCartFn = addToCart,
   // Which browser profile runs the automation. The HTTP route resolves the
   // requested profile_id to its pooled context; the CLI entrypoint keeps the
@@ -51,7 +52,9 @@ export async function runAtcOnce ({
   }
 
   let result
-  const restoreConsole = redirectConsoleLog(stderr)
+  // The server wraps this call in an AsyncLocalStorage capture scope instead:
+  // swapping the console global is unsafe when two profiles run at once.
+  const restoreConsole = captureConsole ? redirectConsoleLog(stderr) : () => {}
   try {
     result = await addToCartFn(match, contextOptions)
   } catch (err) {

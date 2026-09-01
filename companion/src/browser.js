@@ -3,6 +3,7 @@
 
 import { chromium } from 'playwright'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import { createRequire } from 'node:module'
@@ -98,14 +99,109 @@ const liveProfileDirs = new Set()
  * The cross-host case is not hypothetical. The browser-session volume is
  * shared between the macOS host, where the headed operator runbook logs in,
  * and the Linux container that serves requests. Each leaves locks naming a
- * host and pid the other cannot interpret, so every lock either side finds is
- * one it must be willing to sweep.
+ * host and pid the other cannot interpret.
+ *
+ * That is why sweeping cannot key off Chromium's own lock contents, and why it
+ * used to sweep unconditionally — an assumption that held only while the other
+ * side was dead. The keepalive sweep and the host-mint runbook both break it on
+ * a timer. So a sweep now consults `OWNER_FILE`, a wall-clock lease that either
+ * side can interpret without reading the other's pid namespace, and refuses
+ * with [ProfileDirBusyError] while that lease is being refreshed.
  */
+export const OWNER_FILE = 'roadtrip-owner.json'
+
+/**
+ * How often a live owner refreshes its lease, and how long a lease survives
+ * without a refresh before it is treated as abandoned.
+ *
+ * The stale window is several heartbeats wide so a busy or paused process is not
+ * mistaken for a dead one; it is the delay an operator waits after a hard kill
+ * before the directory frees up.
+ */
+export const OWNER_HEARTBEAT_MS = Number(process.env.COMPANION_OWNER_HEARTBEAT_MS || 5_000)
+export const OWNER_STALE_AFTER_MS = Number(process.env.COMPANION_OWNER_STALE_AFTER_MS || 30_000)
+
+/** Raised instead of sweeping a lock another live process is holding. */
+export class ProfileDirBusyError extends Error {
+  constructor (profileDir, heldForMs) {
+    super(
+      `profile directory ${profileDir} is held by another live process ` +
+        `(lease refreshed ${heldForMs}ms ago). Stop the other side before launching: ` +
+        'the host runbook and the container share this volume.',
+    )
+    this.name = 'ProfileDirBusyError'
+    this.code = 'profile_dir_busy'
+  }
+}
+
+const heartbeats = new Map()
+
+function ownerPath (profileDir) {
+  return path.join(profileDir, OWNER_FILE)
+}
+
+function readOwner (profileDir) {
+  try {
+    return JSON.parse(fs.readFileSync(ownerPath(profileDir), 'utf8'))
+  } catch {
+    // Absent, unreadable or corrupt: no interpretable claim, so not a live one.
+    return null
+  }
+}
+
+function writeHeartbeat (profileDir, owner) {
+  try {
+    fs.writeFileSync(ownerPath(profileDir), JSON.stringify({ owner, heartbeatAt: Date.now() }))
+  } catch {}
+}
+
+/**
+ * Publishes this process's claim on a profile directory.
+ *
+ * The lease is a wall-clock heartbeat rather than a pid because the two
+ * claimants live in different pid namespaces — the macOS host running the
+ * headed runbook and the Linux container serving requests — so neither can
+ * evaluate the other's pid, which is precisely why the old lock sweep had to
+ * assume the other side was dead.
+ */
+export function claimProfileDir (profileDir) {
+  const owner = `${os.hostname()}:${process.pid}:${randomUUID()}`
+  liveProfileDirs.add(profileDir)
+  writeHeartbeat(profileDir, owner)
+  const timer = setInterval(() => writeHeartbeat(profileDir, owner), OWNER_HEARTBEAT_MS)
+  // Never hold the event loop open on a heartbeat.
+  if (typeof timer.unref === 'function') timer.unref()
+  heartbeats.set(profileDir, timer)
+}
+
+/** Drops this process's claim, so the next launch anywhere may sweep. */
+export function releaseProfileDir (profileDir) {
+  const timer = heartbeats.get(profileDir)
+  if (timer) clearInterval(timer)
+  heartbeats.delete(profileDir)
+  liveProfileDirs.delete(profileDir)
+  try { fs.rmSync(ownerPath(profileDir), { force: true }) } catch {}
+}
+
 export function clearStaleLocks (profileDir) {
   if (liveProfileDirs.has(profileDir)) return
+
+  // A lease this process did not write, still being refreshed, means a live
+  // Chromium on the other side of the shared volume owns this directory.
+  // Sweeping its singleton locks is what attaches a second browser to one
+  // profile and corrupts it, so refuse loudly instead.
+  const owner = readOwner(profileDir)
+  if (owner && Number.isFinite(owner.heartbeatAt)) {
+    const heldForMs = Date.now() - owner.heartbeatAt
+    if (heldForMs < OWNER_STALE_AFTER_MS) throw new ProfileDirBusyError(profileDir, heldForMs)
+  }
+
   for (const name of CHROMIUM_SINGLETON_LOCK_FILES) {
     try { fs.rmSync(path.join(profileDir, name), { force: true }) } catch {}
   }
+  // The lease that got us here is abandoned; leaving it would re-block the next
+  // sweep for another stale window.
+  try { fs.rmSync(ownerPath(profileDir), { force: true }) } catch {}
 }
 
 export async function getContext () {
@@ -140,12 +236,12 @@ export async function launchProfileContext (profileDir, { chromiumFn = chromium 
   // Register before any further await: from here on a real browser owns this
   // directory, and a concurrent cold launch must not sweep its singleton
   // locks and attach a second Chromium to it.
-  liveProfileDirs.add(profileDir)
-  context.once('close', () => liveProfileDirs.delete(profileDir))
+  claimProfileDir(profileDir)
+  context.once('close', () => releaseProfileDir(profileDir))
   try {
     await installStealthInitScript(context)
   } catch (error) {
-    liveProfileDirs.delete(profileDir)
+    releaseProfileDir(profileDir)
     await context.close().catch(() => {})
     throw error
   }
@@ -259,6 +355,19 @@ function parseCookieString (str) {
 // a rec.gov cookie jar is a session, and sharing one is sharing an account.
 export function recgovCookieSettingKey (profileId = null) {
   return profileId ? `${RECGOV_COOKIES_SETTING}:${profileId}` : RECGOV_COOKIES_SETTING
+}
+
+/**
+ * Whether this profile has a persisted rec.gov cookie jar.
+ *
+ * The per-profile auth status lives in process memory, so a container restart
+ * answers `unchecked` for every profile and the backend cannot tell "never
+ * signed in" from "signed in, but the companion restarted" — which silently
+ * drops those users out of the keep-warm sweep. The jar is the durable evidence
+ * that a session once existed, so health reports it alongside the status.
+ */
+export function hasStoredSession (profileId) {
+  return Boolean(getSetting(recgovCookieSettingKey(profileId)))
 }
 
 export async function injectStoredCookies (context, rawInput = null, profileId = null) {

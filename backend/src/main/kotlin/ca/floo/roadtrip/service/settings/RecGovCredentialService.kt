@@ -58,7 +58,7 @@ internal fun bookingSettingsDto(
  * Port: the contract the rec.gov settings routes depend on.
  */
 interface RecGovCredentialPort {
-    fun save(
+    suspend fun save(
         userId: UserId,
         req: UpdateRecgovRequest,
     ): BookingSettingsDto
@@ -117,7 +117,22 @@ class RecGovCredentialService(
      */
     private val mfaInFlight = ConcurrentHashMap.newKeySet<Long>()
 
-    override fun save(
+    /**
+     * Stores credentials, **evicting the browser session when the account
+     * changes.**
+     *
+     * A swap to a different username invalidates the old session's legitimacy
+     * exactly as a removal does. The profile is keyed by user, not by account,
+     * so without this the previous account's cookie jar survives; [login] is
+     * refresh-first and revives it, and the hold lands on the account the user
+     * has already replaced while the UI reads the new username from the row.
+     *
+     * The wipe runs *before* the write and a failed wipe **refuses the save**
+     * ([SettingsError.RecgovProfileWipeFailed]). Storing the new username over a
+     * session we could not clear is the bad state itself; the old credentials
+     * keep working meanwhile, so a refusal costs the user only a retry.
+     */
+    override suspend fun save(
         userId: UserId,
         req: UpdateRecgovRequest,
     ): BookingSettingsDto {
@@ -132,12 +147,41 @@ class RecGovCredentialService(
 
         // Validate before persisting so a rejected save leaves the row untouched.
         val sealed = password?.let { (cipher ?: throw encryptionUnavailable()).seal(it) }
+
+        val previous = stored?.recgovUsername
+        if (previous != null && previous != username) wipeProfileOrRefuse(userId)
+
         settingsRepo.saveRecgovCredentials(
             userId = userId,
             username = username,
             passwordCipher = sealed,
         )
         return bookingSettingsDto(settingsRepo.find(userId), cipher)
+    }
+
+    /**
+     * Clears the profile's session material, or refuses the whole operation.
+     *
+     * Shared by the two callers that invalidate a stored account — a swap and a
+     * removal — because both have the same failure posture: a local row written
+     * against session material that is still on disk is a lie, so neither may
+     * be half-applied. The caller must invoke this **before** its own write.
+     *
+     * Returns false only when no companion is configured at all: there is then
+     * no session to clear and nothing to leave inconsistent.
+     */
+    private suspend fun wipeProfileOrRefuse(userId: UserId): Boolean {
+        val client = companion ?: return false
+        if (client.destroyProfile(profileId(userId)) != CompanionActionResult.Ok) {
+            log.error(
+                "rec.gov profile wipe failed for user={}; refusing the operation so the stored " +
+                    "account and the on-disk session cannot disagree — investigate the companion",
+                userId.value,
+            )
+            throw SettingsError.RecgovProfileWipeFailed()
+        }
+        pendingChallenges.remove(userId.value)
+        return true
     }
 
     /**
@@ -149,12 +193,13 @@ class RecGovCredentialService(
      * left their rec.gov session material on disk. The destroy step is what
      * makes this a true wipe.
      *
-     * The local delete happens first and unconditionally: a user removing their
-     * password must not be blocked by an unreachable browser service. That
-     * contract has a cost the response has to be honest about — when the
-     * companion is down the credentials are gone but the session material is
-     * not, so [RecgovRemovedDto.profileDestroyed] is reported separately rather
-     * than folded into one "removed" flag.
+     * The wipe happens first and the local delete is **conditional on it**: if
+     * the profile cannot be destroyed the removal is refused with
+     * [SettingsError.RecgovProfileWipeFailed] and the row is left intact. This
+     * reverses an earlier contract that deleted locally regardless — that
+     * version reported a deletion which had not happened, leaving the cookie jar
+     * on disk after the credentials were gone. Refusing keeps the two halves
+     * consistent and puts the failure in front of an operator.
      *
      * The response also reports how many of the owner's active `atc` watches
      * this strands — those keep the trigger kind and fail loudly on the next
@@ -162,21 +207,13 @@ class RecGovCredentialService(
      */
     override suspend fun remove(userId: UserId): RecgovRemovedDto {
         val stranded = watchRepo.countByTriggerKind(userId.value, WatchStatus.ACTIVE, AvailabilityTriggerKinds.ATC)
-        settingsRepo.clearRecgov(userId)
-        pendingChallenges.remove(userId.value)
 
-        val profile = profileId(userId)
         // Sign out first: it is the graceful half, and it tells rec.gov the
         // session is finished rather than merely abandoning it.
-        val signedOut = companion?.logout(profile) == CompanionActionResult.Ok
-        val destroyed = companion?.destroyProfile(profile) == CompanionActionResult.Ok
-        if (!destroyed) {
-            log.warn(
-                "rec.gov credentials removed for user={} but the browser profile was not destroyed; " +
-                    "session material may remain on the companion host",
-                userId.value,
-            )
-        }
+        val signedOut = companion?.logout(profileId(userId)) == CompanionActionResult.Ok
+        val destroyed = wipeProfileOrRefuse(userId)
+
+        settingsRepo.clearRecgov(userId)
         return RecgovRemovedDto(
             removed = true,
             strandedAtcWatches = stranded,
@@ -289,7 +326,7 @@ class RecGovCredentialService(
         companion?.health(profileId(userId)) ?: CompanionSessionHealth.Unavailable(null)
 
     override suspend fun refreshSession(userId: UserId): CompanionActionResult =
-        companion?.refresh(profileId(userId))
+        companion?.refresh(profileId(userId), unattended = true)
             ?: CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, null)
 
     /**
@@ -320,7 +357,7 @@ class RecGovCredentialService(
 
         // Cookies before credentials here too: a refresh costs one API call and
         // cannot hit a bot wall, where the credential login can.
-        if (client.refresh(profileId(userId)) == CompanionActionResult.Ok) return CompanionActionResult.Ok
+        if (client.refresh(profileId(userId), unattended = true) == CompanionActionResult.Ok) return CompanionActionResult.Ok
 
         return when (
             val result =

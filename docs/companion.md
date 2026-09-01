@@ -202,11 +202,26 @@ deletes the profile directory.
 - **Never the legacy unkeyed jar.** That belongs to the operator's CLI profile,
   not to any user.
 
-The backend calls it from `DELETE /api/settings/recgov` after the sign-out. The
-local credential delete succeeds even when the companion is unreachable, so the
-response reports `profile_destroyed` separately from `companion_signed_out`:
-when the companion is down the credentials are gone but the session material is
-not, and the UI says so rather than implying a full wipe.
+The backend calls it from `DELETE /api/settings/recgov` after the sign-out, and
+**the local credential delete is conditional on the destroy succeeding.** If the
+profile cannot be destroyed the removal is refused with
+`502 recgov_profile_wipe_failed` and the credential row is left intact, rather
+than reporting a deletion that did not happen while the cookie jar stays on
+disk. The same rule guards a credential *swap*: `PUT /api/settings/recgov` with a
+different username destroys the replaced account's profile first and refuses the
+save if it cannot, because the profile is keyed by user rather than by account —
+without it the previous account's session survives, refresh-first login revives
+it, and a hold lands on the account the user just replaced.
+
+`profile_destroyed: false` therefore no longer means "the wipe failed"; it means
+no companion is configured at all, so there was no saved session to erase. A
+failed sign-out alone does not block removal — `logout` is the graceful half and
+`destroy` is the load-bearing one — so `companion_signed_out` is still reported
+separately.
+
+The cost of this posture is deliberate: while the companion is unreachable a user
+cannot remove or switch credentials, and the error tells them the booking service
+needs attention.
 
 ### Session durability
 
@@ -358,6 +373,16 @@ launched on demand and kept warm by the armed set instead. A consequence:
 accurate rather than degraded — there is no companion-wide session to report.
 Per-profile health (`?profile_id=`) is the answer callers want.
 
+Per-profile auth status is **process memory**, so a restart — every deploy, every
+Tilt rebuild — answers `login_status: "unchecked"` for profiles that do hold a
+live session. Read alone that is indistinguishable from "never signed in", which
+silently drops those users out of the keep-warm sweep and tells them "Not logged
+in yet". So per-profile health also carries `has_stored_session`, true when the
+profile's cookie jar is persisted: durable evidence a session existed. The
+backend maps `unchecked` **with** a stored jar to an expired session (worth
+refreshing, worth keeping warm) and only `unchecked` **without** one to
+never-logged-in.
+
 ## Operator CLI
 
 These drive the single legacy profile directly (not the pool), for the
@@ -383,6 +408,18 @@ COMPANION_BROWSER_PROFILE=$HOME/.campsite-companion/browser-session/profiles/7 \
 The profile id is the directory's own name; `COMPANION_PROFILE_ID` overrides
 it. Point it anywhere else and the run stays an unkeyed legacy session — the
 probe prints which it resolved.
+
+**The container may be serving while you do this, but not that same profile.**
+Host and container share this volume, and Chromium's singleton lock is the only
+cross-process guard against two browsers writing one profile directory — which
+is exactly the corruption that loses a real user's session. Neither side can
+read the other's pid, so a launch publishes a heartbeat lease
+(`roadtrip-owner.json`) in the profile directory and refuses to sweep a lock
+whose lease is still being refreshed, failing with `profile_dir_busy` rather
+than attaching a second browser. If you hit that, the profile is resident in the
+container: `docker compose stop recgov-companion` (or wait for keep-warm to drop
+it) and retry. A lease left by a hard-killed process goes stale on its own —
+`COMPANION_OWNER_STALE_AFTER_MS`, 30s by default — and then sweeps normally.
 
 `recgov:atc` writes browser logs to stderr and one JSON result to stdout:
 exit `0` means `cart_added=true`, `1` means the browser ran but confirmed no

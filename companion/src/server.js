@@ -4,7 +4,7 @@
 
 import http from 'node:http'
 import { pathToFileURL } from 'node:url'
-import { IS_HEADLESS } from './browser.js'
+import { IS_HEADLESS, hasStoredSession } from './browser.js'
 import { testChromium } from './cart.js'
 import {
   getRecgovSessionStatus,
@@ -13,6 +13,7 @@ import {
 } from './recgovSession.js'
 import { createRecgovScreenshotDeps } from './recgovScreenshot.js'
 import { runAtcOnce } from './runAtcOnce.js'
+import { installLogCapture } from './logCapture.js'
 import {
   COMPANION_OPENAPI_SPEC,
 } from './openapi.js'
@@ -196,6 +197,9 @@ function profileHealthStatus (profileId, status) {
   } = getRecgovSessionStatus(profileId)
   return {
     login_status: authStatus.state,
+    // Durable evidence that a session once existed, so a restart's `unchecked`
+    // is distinguishable from a profile that was never signed in.
+    has_stored_session: hasStoredSession(profileId),
     ...sessionStatus,
     ...authStatus,
   }
@@ -230,5 +234,7 @@ if (entrypointUrl && import.meta.url === entrypointUrl) {
   // bare console.* calls in cart.js/recgovSession.js — reaches Loki with a
   // `level` label. No-op on a TTY; see jsonConsole.js.
   installJsonConsole()
+  // After installJsonConsole, so captured lines still reach Loki with a level.
+  installLogCapture()
   installShutdownHandlers(startServer())
 }
