@@ -44,6 +44,7 @@ class SecretRegistryDriftTest {
             "ROADTRIP_BUILD_BRANCH",
             "ROADTRIP_WEB_ROOT_URL",
             "RECGOV_KEEPALIVE_INTERVAL",
+            "RECGOV_FIRE_TIMEOUT",
         )
 
     @Test

@@ -21,6 +21,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
+import java.time.Duration
 
 // ── Companion routes ─────────────────────────────────────────────────────────
 private const val LOGIN_PATH = "/login"
@@ -81,6 +82,9 @@ internal class CompanionSessionClient(
     private val log = LoggerFactory.getLogger(javaClass)
     private val baseUrl = requireNotNull(config.companionBaseUrl) { "companion base URL is required" }.trimEnd('/')
     private val timeout = config.companionTimeout
+
+    /** The shorter budget the pre-hold checks run under; see [RecGovAtcConfig.fireTimeout]. */
+    private val fireTimeout = config.fireTimeout
     private val apiToken = config.companionApiToken
 
     override suspend fun login(
@@ -97,6 +101,10 @@ internal class CompanionSessionClient(
                 put(FIELD_PASSWORD, password)
                 if (unattended) put(FIELD_UNATTENDED, true)
             },
+            // An unattended login is the fire path's one recovery attempt, so
+            // it runs on the short budget. An interactive one is a person
+            // waiting at a browser and gets the full companion timeout.
+            timeout = if (unattended) fireTimeout else timeout,
         )
 
     override suspend fun completeMfa(
@@ -147,7 +155,10 @@ internal class CompanionSessionClient(
 
     override suspend fun health(profileId: String): CompanionSessionHealth {
         val query = "$FIELD_PROFILE_ID=${URLEncoder.encode(profileId, StandardCharsets.UTF_8)}"
-        return when (val exchange = get(HEALTH_PATH, query)) {
+        // Lock-free and cheap on the companion side, and both callers — the ATC
+        // preflight and the settings status row — would rather hear
+        // "unavailable" quickly than block.
+        return when (val exchange = get(HEALTH_PATH, query, timeout = fireTimeout)) {
             is Exchange.Unreachable -> CompanionSessionHealth.Unavailable(exchange.detail)
             is Exchange.Answered -> {
                 if (!exchange.succeeded) return CompanionSessionHealth.Unavailable(exchange.body.stringValue(FIELD_ERROR))
@@ -167,8 +178,9 @@ internal class CompanionSessionClient(
     private suspend fun loginExchange(
         profileId: String,
         body: JsonObject,
+        timeout: Duration = this.timeout,
     ): CompanionLoginResult =
-        when (val exchange = post(LOGIN_PATH, body)) {
+        when (val exchange = post(LOGIN_PATH, body, timeout)) {
             is Exchange.Unreachable -> {
                 log.warn("companion login unreachable profile={} detail={}", profileId, exchange.detail)
                 CompanionLoginResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, exchange.detail)
@@ -243,9 +255,10 @@ internal class CompanionSessionClient(
     private suspend fun post(
         path: String,
         body: JsonObject,
+        timeout: Duration = this.timeout,
     ): Exchange =
         send(
-            requestBuilder(path, query = null)
+            requestBuilder(path, query = null, timeout)
                 .header(HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON)
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                 .build(),
@@ -254,11 +267,13 @@ internal class CompanionSessionClient(
     private suspend fun get(
         path: String,
         query: String?,
-    ): Exchange = send(requestBuilder(path, query).GET().build())
+        timeout: Duration = this.timeout,
+    ): Exchange = send(requestBuilder(path, query, timeout).GET().build())
 
     private fun requestBuilder(
         path: String,
         query: String?,
+        timeout: Duration,
     ): HttpRequest.Builder =
         HttpRequest
             .newBuilder(URI.create("$baseUrl$path" + if (query == null) "" else "?$query"))

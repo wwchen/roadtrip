@@ -175,10 +175,13 @@ the session is live; `401` carries `verify.error`
 | `HEADLESS` | true in Docker | Headed Chromium for operator login. |
 | `RECGOV_LOGIN_TIMEOUT_MS` | `120000` | Manual-login wait. |
 
-The **backend** side of the keepalive has one knob of its own,
-`RECGOV_KEEPALIVE_INTERVAL` (default 15m), which sets how often it re-pushes
-the armed set and refreshes those profiles. See
-[observability.md](observability.md) for the metric it emits.
+The **backend** side has two knobs of its own. `RECGOV_KEEPALIVE_INTERVAL`
+(default 15m) sets how often it re-pushes the armed set and refreshes those
+profiles — see [observability.md](observability.md) for the metric it emits.
+`RECGOV_FIRE_TIMEOUT` (default 30s) budgets the checks that run *before* a
+hold — the session preflight and the one unattended re-login — separately from
+the 180s a browser-driven cart run gets, so an ATC racing other users does not
+spend the cart budget twice before it starts.
 
 ## Running it
 

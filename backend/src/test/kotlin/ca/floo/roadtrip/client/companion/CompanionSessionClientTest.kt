@@ -7,7 +7,19 @@ import ca.floo.roadtrip.service.settings.CompanionSessionHealth
 import ca.floo.roadtrip.service.settings.RecGovSessionCodes
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
+import java.net.Authenticator
+import java.net.CookieHandler
+import java.net.ProxySelector
+import java.net.http.HttpClient
+import java.net.http.HttpHeaders
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.time.Duration
+import java.util.Optional
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executor
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLParameters
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -52,6 +64,31 @@ class CompanionSessionClientTest {
                     // for a user who is sitting right there waiting to type a code.
                     assertFalse(server.bodies.single().contains("unattended"), server.bodies.single())
                 }
+        }
+
+    @Test
+    fun `the pre-hold checks run on the short budget, not the ATC one`() =
+        runBlocking {
+            // A fire that spent the full cart-run timeout on a health check and
+            // again on a re-login would reach the browser minutes late, by which
+            // point the site is somebody else's.
+            val config =
+                RecGovAtcConfig(
+                    companionBaseUrl = "http://companion.invalid",
+                    companionTimeout = Duration.ofSeconds(180),
+                    fireTimeout = Duration.ofSeconds(5),
+                )
+            val recorder = RecordingTimeoutClient()
+            val client = CompanionSessionClient(config, recorder)
+
+            client.health(PROFILE_ID)
+            client.login(PROFILE_ID, "ada@example.com", "hunter2", unattended = true)
+            client.login(PROFILE_ID, "ada@example.com", "hunter2")
+
+            assertEquals(
+                listOf(Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(180)),
+                recorder.timeouts,
+            )
         }
 
     @Test
@@ -373,4 +410,73 @@ class CompanionSessionClientTest {
         const val HEALTH_LOGGED_IN =
             """{"ok":true,"busy":false,"profile_id":"42","recgov_auth":{"login_status":"ok","logged_in":true}}"""
     }
+}
+
+/**
+ * Records the per-request timeout and answers an empty JSON object.
+ *
+ * A loopback server cannot see the timeout the caller chose, and the choice —
+ * short budget for the pre-hold checks, full budget for a browser-driven run —
+ * is the behaviour under test.
+ */
+private class RecordingTimeoutClient : HttpClient() {
+    val timeouts = mutableListOf<Duration?>()
+
+    override fun <T : Any?> sendAsync(
+        request: HttpRequest,
+        responseBodyHandler: HttpResponse.BodyHandler<T>,
+    ): CompletableFuture<HttpResponse<T>> {
+        timeouts += request.timeout().orElse(null)
+        @Suppress("UNCHECKED_CAST")
+        return CompletableFuture.completedFuture(EmptyJsonResponse(request) as HttpResponse<T>)
+    }
+
+    override fun <T : Any?> sendAsync(
+        request: HttpRequest,
+        responseBodyHandler: HttpResponse.BodyHandler<T>,
+        pushPromiseHandler: HttpResponse.PushPromiseHandler<T>?,
+    ): CompletableFuture<HttpResponse<T>> = sendAsync(request, responseBodyHandler)
+
+    override fun <T : Any?> send(
+        request: HttpRequest,
+        responseBodyHandler: HttpResponse.BodyHandler<T>,
+    ): HttpResponse<T> = sendAsync(request, responseBodyHandler).join()
+
+    override fun cookieHandler(): Optional<CookieHandler> = Optional.empty()
+
+    override fun connectTimeout(): Optional<Duration> = Optional.empty()
+
+    override fun followRedirects(): HttpClient.Redirect = HttpClient.Redirect.NEVER
+
+    override fun proxy(): Optional<ProxySelector> = Optional.empty()
+
+    override fun sslContext(): SSLContext = SSLContext.getDefault()
+
+    override fun sslParameters(): SSLParameters = SSLParameters()
+
+    override fun authenticator(): Optional<Authenticator> = Optional.empty()
+
+    override fun version(): HttpClient.Version = HttpClient.Version.HTTP_1_1
+
+    override fun executor(): Optional<Executor> = Optional.empty()
+}
+
+private class EmptyJsonResponse(
+    private val request: HttpRequest,
+) : HttpResponse<String> {
+    override fun statusCode(): Int = 200
+
+    override fun request(): HttpRequest = request
+
+    override fun previousResponse(): Optional<HttpResponse<String>> = Optional.empty()
+
+    override fun headers(): HttpHeaders = HttpHeaders.of(emptyMap()) { _, _ -> true }
+
+    override fun body(): String = "{}"
+
+    override fun sslSession(): Optional<javax.net.ssl.SSLSession> = Optional.empty()
+
+    override fun uri(): java.net.URI = request.uri()
+
+    override fun version(): HttpClient.Version = HttpClient.Version.HTTP_1_1
 }
