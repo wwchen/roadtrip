@@ -62,6 +62,8 @@ const SESSION_ROW: Record<RecgovStatus['session'], { tone: StatusTone; text: str
 const CHECKING_ROW = { tone: 'muted' as StatusTone, text: 'Checking session…' };
 const UNKNOWN_ROW = SESSION_ROW.companion_unavailable;
 
+const PROFILE_BUSY_CODE = 'profile_busy';
+
 const SAVE_FIRST_HELP = 'Save your changes first — a test login uses the saved credentials.';
 const PASSWORD_HELP =
   'Used only to sign in to recreation.gov on your behalf. Add-to-cart stops at a cart hold; it never checks out.';
@@ -146,6 +148,16 @@ export function BookingPanel({
     if (answer.status === 'ok') {
       setLogin(nextLoginState(from, { type: 'succeeded' }));
       setResult({ tone: 'ok', message: 'Signed in to recreation.gov.' });
+      return;
+    }
+    // `profile_busy` while the server still reports a challenge is that challenge
+    // holding the profile lock — so it is a pointer back to the code step, not a
+    // dead end. Cancel abandons the step client-side but leaves the challenge
+    // alive, and the resume effect is edge-triggered and cannot fire twice, so
+    // without this the user was locked out for the rest of the TTL.
+    if (answer.error === PROFILE_BUSY_CODE && serverHasChallenge) {
+      setLogin(nextLoginState(from, { type: 'mfa_required', challengeId: null }));
+      setResult({ tone: 'warn', message: settingsErrorMessage('mfa_required') });
       return;
     }
     setLogin(nextLoginState(from, { type: 'failed', code: answer.error ?? '' }));

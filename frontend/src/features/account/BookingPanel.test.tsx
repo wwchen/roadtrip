@@ -334,6 +334,27 @@ describe('the MFA step', () => {
     expect(testLogin()).toBeDisabled();
   });
 
+  test('Cancel does not lock the user out of a challenge the server still holds', async () => {
+    // Cancel abandons the code step client-side; the server keeps the challenge
+    // for the rest of its TTL. The resume effect is edge-triggered, so it cannot
+    // fire again, and every Test login then answers profile_busy — the user had
+    // no way back short of closing and reopening the modal.
+    renderPanel(settings(CONFIGURED), {
+      status: { ...activeStatus, session: 'expired', mfa_pending: true },
+      onLogin: async () => ({ status: 'failed', error: 'profile_busy' }),
+    });
+    await screen.findByLabelText('Verification code');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByLabelText('Verification code')).not.toBeInTheDocument();
+
+    // profile_busy IS the server saying that same challenge is still open, so
+    // asking to log in again should put the code step back, not dead-end.
+    await userEvent.click(testLogin());
+
+    expect(await screen.findByLabelText('Verification code')).toBeInTheDocument();
+  });
+
   test('a resumed code is submitted like any other', async () => {
     const onSubmitMfa = vi.fn(async (): Promise<RecgovLoginResponse> => ({ status: 'ok' }));
     renderPanel(settings(CONFIGURED), {
