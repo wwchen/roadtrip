@@ -70,17 +70,26 @@ export function supportsWatchAlerts(capabilities: WatchCapabilities): boolean {
 }
 
 /**
- * Whether "add to cart" can be offered.
+ * Whether this inventory has a cart at all.
  *
- * Needs *both* the booking action and the trigger: the action says the provider has
- * a cart, the trigger says our poller may drive it. One without the other is a
- * button that fails.
+ * A property of the scope alone, independent of who is asking — so it stays true
+ * for a signed-out visitor and for a signed-in user with no rec.gov credentials.
+ * That is what lets the editor say "add your credentials" instead of pretending
+ * the campground cannot be held.
+ */
+export function scopeSupportsAddToCart(capabilities: WatchCapabilities): boolean {
+  return capabilities.bookingActions.has(BOOKING_ACTION_ADD_TO_CART);
+}
+
+/**
+ * Whether "add to cart" can be offered as a working trigger *right now*.
+ *
+ * Needs both halves: the booking action says the provider has a cart, the trigger
+ * says this caller may drive it — which since per-user profiles also means they
+ * have credentials stored. One without the other is a button that fails.
  */
 export function supportsAddToCart(capabilities: WatchCapabilities): boolean {
-  return (
-    capabilities.bookingActions.has(BOOKING_ACTION_ADD_TO_CART) &&
-    capabilities.triggerKinds.has(TRIGGER_KIND_ATC)
-  );
+  return scopeSupportsAddToCart(capabilities) && capabilities.triggerKinds.has(TRIGGER_KIND_ATC);
 }
 
 /**

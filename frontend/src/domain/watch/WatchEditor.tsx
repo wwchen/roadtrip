@@ -13,7 +13,8 @@ import {
   type TriggerPayload,
   type TriggerState,
 } from '@/lib/watch-triggers';
-import type { WatchCapabilities } from '@/lib/watch-windows';
+import { scopeSupportsAddToCart, type WatchCapabilities } from '@/lib/watch-windows';
+import { useMe } from '@/queries/auth';
 import './watch-editor.css';
 
 export interface WatchEditorProps {
@@ -76,6 +77,11 @@ export function WatchEditor({
   const canSlack = capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY) || state.slackNotify;
   const canEmail = capabilities.triggerKinds.has(TRIGGER_KIND_EMAIL_NOTIFY) || state.emailNotify;
   const canAtc = capabilities.triggerKinds.has(TRIGGER_KIND_ATC);
+  // The scope has a cart but this caller cannot drive it — the state per-user
+  // credentials create. Shown disabled rather than hidden, because "you could
+  // have this" is worth more here than a silently missing row.
+  const cartWithoutCredentials = !canAtc && scopeSupportsAddToCart(capabilities);
+  const signedIn = Boolean(useMe().data?.user);
 
   return (
     <div className="rt-watch-editor" role="group" aria-label="Availability watch editor">
@@ -119,17 +125,17 @@ export function WatchEditor({
           />
         ) : null}
 
-        {canAtc || state.addToCart ? (
+        {canAtc || state.addToCart || cartWithoutCredentials ? (
           <ToggleRow
             name="atc"
             title="Add to cart"
-            help={canAtc ? 'Try to hold a matching site.' : 'Unavailable for this watch scope.'}
+            help={atcHelp(canAtc, cartWithoutCredentials, signedIn)}
             checked={state.addToCart}
-            // Enabled even when the provider no longer supports it, so a watch that
-            // already has it set can be turned OFF. The original wrote
-            // `busy || (!canAtc && !state.addToCart)` here, which cannot fire: that
-            // second clause is exactly the case where the row is not rendered at all.
-            disabled={busy}
+            // A watch that already has ATC set stays switchable so it can be
+            // turned OFF even where the provider no longer supports it. The
+            // credentials case is the one that is genuinely inert: there is
+            // nothing to turn off and nothing that would work if turned on.
+            disabled={busy || (!canAtc && !state.addToCart)}
             onChange={(addToCart) => patch({ addToCart })}
           />
         ) : null}
@@ -172,6 +178,20 @@ export function WatchEditor({
       </div>
     </div>
   );
+}
+
+/**
+ * The three things "Add to cart" can mean, in the order they are ruled out.
+ *
+ * The credentials and sign-in copy exist because per-user rec.gov profiles made
+ * "this scope has a cart" and "you can use it" separate facts; collapsing them
+ * back into one message would tell a signed-in user their campground is
+ * unbookable when what they actually need is two minutes in Settings.
+ */
+function atcHelp(canAtc: boolean, cartWithoutCredentials: boolean, signedIn: boolean): string {
+  if (canAtc) return 'Try to hold a matching site.';
+  if (!cartWithoutCredentials) return 'Unavailable for this watch scope.';
+  return signedIn ? 'Add rec.gov credentials in Settings' : 'Sign in to enable add-to-cart';
 }
 
 interface ToggleRowProps {
