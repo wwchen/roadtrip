@@ -34,6 +34,9 @@ roadtrip:
     # How stale the last availability observation may be and still let a direct
     # add-to-cart through its freshness gate. Follows the poller cadence.
     freshness-max-age: ${BOOKING_FRESHNESS_MAX_AGE:5m}
+    # Upper bound on the keepalive set (armed watches first, then any
+    # credentialed user with a live session).
+    max-keep-warm-profiles: ${BOOKING_MAX_KEEP_WARM_PROFILES:25}
     recgov-atc:
       companion-base-url:
       companion-timeout: 180s

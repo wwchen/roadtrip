@@ -104,12 +104,17 @@ ALTER TABLE user_settings
   are one browser process per profile directory, so resident profiles are a
   real memory cost — governed by a global concurrent-browser cap (env-driven,
   named-constant default).
-- **Keep-warm:** profiles backing at least one active `atc` watch stay
-  launched, and a backend keepalive job periodically calls `POST /refresh` for
-  exactly those profiles, so a 3 a.m. firing never pays Chromium cold-start or
-  re-login inside the seconds-critical window. Credential-only profiles with
-  no armed watch are torn down when idle. **Armed profiles are exempt from
-  the concurrency cap** — the cap governs on-demand launches (logins,
+- **Keep-warm:** the backend keepalive job periodically calls `POST /refresh`
+  for the profiles worth keeping alive, so a 3 a.m. firing never pays Chromium
+  cold-start or re-login inside the seconds-critical window. The set is
+  **owners of active `atc` watches, plus every user with rec.gov credentials
+  whose profile has been signed in at least once** — armed owners first,
+  never-signed-in profiles skipped, truncated to an env-tunable cap
+  (`BOOKING_MAX_KEEP_WARM_PROFILES`, named-constant default). Armed watches
+  alone proved too narrow: a rec.gov session lapses within the hour, so a user
+  who signed in without an `atc` watch had nothing refreshing them and their
+  next action walked into the automated-login wall. **Armed profiles are
+  exempt from the concurrency cap** — the cap governs on-demand launches (logins,
   verifies, cold ATCs); when armed profiles alone exceed it, the companion
   logs and health reports the overflow rather than evicting an armed profile.
 - **Per-profile busy lock:** no two mutating operations run concurrently on

@@ -369,8 +369,10 @@ val serviceModule =
                         watchRepo = get<AvailabilityWatchRepo>(),
                         companion = it,
                         profiles = get<RecGovCredentialService>(),
+                        credentials = get<UserSettingsRepo>()::userIdsWithRecgovCredentials,
                         metrics = get<RoadtripMetrics>(),
                         interval = config.booking.recgovAtc.keepaliveInterval,
+                        maxProfiles = config.booking.maxKeepWarmProfiles,
                     ).also { job -> job.start(get<CoroutineScope>()) }
                 },
             )

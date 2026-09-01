@@ -156,6 +156,22 @@ open class UserSettingsRepo(
         insert.execute()
     }
 
+    /**
+     * Every user with rec.gov credentials stored, for the keepalive sweep.
+     *
+     * Both columns, because "configured" has always meant both: a username with
+     * no sealed password cannot log in, so keeping its profile warm would keep
+     * a browser alive for an account that can never be used.
+     */
+    open fun userIdsWithRecgovCredentials(): List<Long> =
+        ctx
+            .select(USER_SETTINGS.USER_ID)
+            .from(USER_SETTINGS)
+            .where(USER_SETTINGS.RECGOV_USERNAME.isNotNull)
+            .and(USER_SETTINGS.RECGOV_PASSWORD_CIPHER.isNotNull)
+            .fetch(USER_SETTINGS.USER_ID)
+            .filterNotNull()
+
     open fun clearRecgov(userId: UserId) {
         ctx
             .update(USER_SETTINGS)

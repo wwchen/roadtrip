@@ -7,6 +7,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.settings.CompanionActionResult
+import ca.floo.roadtrip.service.settings.CompanionSessionHealth
 import ca.floo.roadtrip.service.settings.CompanionSessionPort
 import ca.floo.roadtrip.service.settings.RecGovProfileSessionPort
 import ca.floo.roadtrip.service.settings.RecGovSessionCodes
@@ -18,8 +19,22 @@ import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.time.Duration
 
+/** Every user with rec.gov credentials stored. */
+internal fun interface RecGovCredentialedUsers {
+    fun userIdsWithRecgovCredentials(): List<Long>
+}
+
 /**
- * Keeps the browser profiles behind armed `atc` watches warm.
+ * How many profiles may be kept warm at once.
+ *
+ * Comfortably above one, and above the companion's own default browser cap:
+ * armed profiles are exempt from that cap, so this is the bound on how many
+ * sessions we are willing to *ask* it to hold, not on how many it will launch.
+ */
+internal const val DEFAULT_MAX_KEEP_WARM_PROFILES = 25
+
+/**
+ * Keeps warm the browser profiles worth keeping warm.
  *
  * An ATC fires inside a seconds-critical window — the site is gone by the time
  * a cold Chromium has launched and logged in. So the profiles that *might* fire
@@ -48,8 +63,11 @@ internal class RecGovKeepaliveJob(
     private val companion: CompanionSessionPort,
     /** Owns the user-id → profile-id mapping, so it is not restated here. */
     private val profiles: RecGovProfileSessionPort,
+    /** Who has credentials stored — the widened half of the keep-warm set. */
+    private val credentials: RecGovCredentialedUsers,
     private val metrics: RoadtripMetrics,
     private val interval: Duration,
+    private val maxProfiles: Int = DEFAULT_MAX_KEEP_WARM_PROFILES,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private var loop: Job? = null
@@ -71,7 +89,7 @@ internal class RecGovKeepaliveJob(
     suspend fun sweepOnce() {
         val armed =
             try {
-                armedProfileIds()
+                keepWarmProfileIds()
             } catch (e: Exception) {
                 log.error("recgov keepalive could not read the armed watch set: {}", e.message, e)
                 return
@@ -112,13 +130,50 @@ internal class RecGovKeepaliveJob(
     }
 
     /**
-     * One armed profile per *owner*, not per watch: five `atc` watches for one
-     * user are still one browser profile.
+     * Who to keep warm: armed watches **plus** anyone signed in with credentials.
+     *
+     * Armed-only was too narrow, and it showed up as the bug this widening
+     * fixes: a user who logged in headed had their session lapse ~30 minutes
+     * later because they had no active `atc` watch, so nothing refreshed them,
+     * and Test login then walked into the bot wall. A session is worth keeping
+     * alive for anyone who established one — the whole point is that a live
+     * session cannot be re-established cheaply once it dies.
+     *
+     * Bounded, in this order:
+     *
+     *  1. **Armed profiles first.** They have a watch that may fire in seconds;
+     *     everyone else merely has a session worth not losing.
+     *  2. Credentialed users whose profile the companion has actually signed in
+     *     at some point. `NeverLoggedIn` is skipped — there is no session to
+     *     keep alive, and launching a browser to discover that again every
+     *     cadence is pure cost.
+     *  3. Truncated to [maxProfiles], so a large user base cannot ask the
+     *     companion for more resident browsers than it can hold.
      */
-    private fun armedProfileIds(): List<String> =
-        watchRepo
-            .distinctOwnersByTriggerKind(WatchStatus.ACTIVE, AvailabilityTriggerKinds.ATC)
-            .map { profiles.profileId(UserId(it)) }
+    private suspend fun keepWarmProfileIds(): List<String> {
+        val armed =
+            watchRepo
+                .distinctOwnersByTriggerKind(WatchStatus.ACTIVE, AvailabilityTriggerKinds.ATC)
+                .map(::UserId)
+        val armedIds = armed.map { it.value }.toSet()
+        val credentialed = credentials.userIdsWithRecgovCredentials().filterNot { it in armedIds }.map(::UserId)
+
+        val ordered = armed + credentialed.filter { hasSessionWorthKeeping(it) }
+        if (ordered.size > maxProfiles) {
+            log.info("recgov keepalive set truncated to {} of {} eligible profiles", maxProfiles, ordered.size)
+        }
+        return ordered.take(maxProfiles).map(profiles::profileId)
+    }
+
+    /**
+     * Whether this profile has ever been signed in.
+     *
+     * An unreachable companion answers "yes": the alternative is silently
+     * dropping every profile from the armed set during a blip, which is exactly
+     * when losing sessions hurts most. The refresh below will report the
+     * outage itself.
+     */
+    private suspend fun hasSessionWorthKeeping(userId: UserId): Boolean = profiles.health(userId) !is CompanionSessionHealth.NeverLoggedIn
 
     private fun outcomeFor(code: String): KeepaliveOutcome =
         if (code == RecGovSessionCodes.COMPANION_UNAVAILABLE) KeepaliveOutcome.UNAVAILABLE else KeepaliveOutcome.FAILED

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.config
 
+import ca.floo.roadtrip.service.scheduler.DEFAULT_MAX_KEEP_WARM_PROFILES
 import java.time.Duration
 
 data class BookingConfig(
@@ -14,8 +15,17 @@ data class BookingConfig(
      * cadence, which is itself tunable.
      */
     val freshnessMaxAge: Duration = defaultFreshnessMaxAge,
+    /**
+     * How many profiles the keepalive job may ask the companion to keep warm.
+     *
+     * A bound on what we *ask* for, not on what the companion launches — armed
+     * profiles are exempt from its own browser cap, so an unbounded set here
+     * would push that overflow onto it.
+     */
+    val maxKeepWarmProfiles: Int = DEFAULT_MAX_KEEP_WARM_PROFILES,
 ) {
     init {
+        require(maxKeepWarmProfiles > 0) { "booking maxKeepWarmProfiles must be positive" }
         require(!freshnessMaxAge.isZero && !freshnessMaxAge.isNegative) { "booking freshnessMaxAge must be positive" }
     }
 
@@ -27,6 +37,8 @@ data class BookingConfig(
             BookingConfig(
                 recgovAtc = RecGovAtcConfig.fromConfig(config.section("recgov-atc")),
                 freshnessMaxAge = config.duration("freshness-max-age", defaultFreshnessMaxAge),
+                maxKeepWarmProfiles =
+                    config.value("max-keep-warm-profiles")?.toIntOrNull() ?: DEFAULT_MAX_KEEP_WARM_PROFILES,
             )
     }
 }

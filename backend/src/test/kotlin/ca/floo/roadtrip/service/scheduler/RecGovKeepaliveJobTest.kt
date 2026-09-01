@@ -88,6 +88,54 @@ class RecGovKeepaliveJobTest {
         }
 
     @Test
+    fun `a credentialed user with a live session is kept warm even with no watch`() =
+        runBlocking {
+            // The live bug: a headed login lapsed ~30 minutes later because this
+            // user had no active atc watch, so nothing refreshed them.
+            val companion = FakeCompanion()
+            job(owners = emptyList(), companion = companion, credentialed = listOf(9L)).sweepOnce()
+
+            assertEquals(listOf(listOf("9")), companion.keepWarmPushes)
+            assertEquals(listOf("9"), companion.refreshed)
+        }
+
+    @Test
+    fun `a credentialed user the companion never signed in is skipped`() =
+        runBlocking {
+            // Nothing to keep alive, and launching a browser to rediscover that
+            // every cadence is pure cost.
+            val companion = FakeCompanion()
+            job(companion = companion, credentialed = listOf(9L), neverLoggedIn = setOf(9L)).sweepOnce()
+
+            assertEquals(listOf(emptyList<String>()), companion.keepWarmPushes)
+        }
+
+    @Test
+    fun `armed profiles come first and survive the cap`() =
+        runBlocking {
+            // Armed watches may fire in seconds; everyone else merely has a
+            // session worth not losing. The cap must not cost an armed profile.
+            val companion = FakeCompanion()
+            job(
+                owners = listOf(4L),
+                companion = companion,
+                credentialed = listOf(7L, 8L, 9L),
+                maxProfiles = 2,
+            ).sweepOnce()
+
+            assertEquals(listOf(listOf("4", "7")), companion.keepWarmPushes)
+        }
+
+    @Test
+    fun `an armed owner who is also credentialed is kept warm once`() =
+        runBlocking {
+            val companion = FakeCompanion()
+            job(owners = listOf(4L), companion = companion, credentialed = listOf(4L)).sweepOnce()
+
+            assertEquals(listOf(listOf("4")), companion.keepWarmPushes)
+        }
+
+    @Test
     fun `a database failure ends the sweep instead of the loop`() =
         runBlocking {
             val companion = FakeCompanion()
@@ -95,7 +143,8 @@ class RecGovKeepaliveJobTest {
                 RecGovKeepaliveJob(
                     watchRepo = ThrowingWatchRepo(),
                     companion = companion,
-                    profiles = FakeProfiles,
+                    profiles = FakeProfiles(),
+                    credentials = { emptyList() },
                     metrics = RecordingMetrics(),
                     interval = sweepInterval,
                 )
@@ -110,20 +159,31 @@ class RecGovKeepaliveJobTest {
         repo: AvailabilityWatchRepo = FakeWatchRepo(owners),
         companion: CompanionSessionPort,
         metrics: RoadtripMetrics = RecordingMetrics(),
+        credentialed: List<Long> = emptyList(),
+        neverLoggedIn: Set<Long> = emptySet(),
+        maxProfiles: Int = DEFAULT_MAX_KEEP_WARM_PROFILES,
     ) = RecGovKeepaliveJob(
         watchRepo = repo,
         companion = companion,
-        profiles = FakeProfiles,
+        profiles = FakeProfiles(neverLoggedIn),
+        credentials = { credentialed },
         metrics = metrics,
         interval = sweepInterval,
+        maxProfiles = maxProfiles,
     )
 
-    private object FakeProfiles : RecGovProfileSessionPort {
+    private class FakeProfiles(
+        /** Users the companion has never signed in — nothing to keep alive. */
+        private val neverLoggedIn: Set<Long> = emptySet(),
+    ) : RecGovProfileSessionPort {
         override fun profileId(userId: UserId): String = userId.value.toString()
 
-        override suspend fun health(userId: UserId): CompanionSessionHealth = CompanionSessionHealth.Active
+        override suspend fun health(userId: UserId): CompanionSessionHealth =
+            if (userId.value in neverLoggedIn) CompanionSessionHealth.NeverLoggedIn else CompanionSessionHealth.Active
 
         override suspend fun reLogin(userId: UserId): CompanionActionResult = CompanionActionResult.Ok
+
+        override suspend fun refreshSession(userId: UserId): CompanionActionResult = CompanionActionResult.Ok
     }
 
     private open class FakeWatchRepo(
