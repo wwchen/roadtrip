@@ -20,13 +20,25 @@ internal class AtcTriggerActionHandler(
 
     override val kinds: Set<String> = setOf(KIND)
 
-    /** ATC only notifies Slack, and carries the `atc` kind rather than
-     *  `slack_notify`, so it takes the owner-scoped Slack target directly (not via
-     *  the kind-gated [WatchNotificationTargetResolver.resolve]). Empty when the
-     *  owner has no owner-controlled channel — the alert simply doesn't fire, and
-     *  never falls back to the shared default. */
-    private fun slackTargets(watch: AvailabilityWatchRepo.Watch): List<NotificationTarget> =
-        listOfNotNull(targetResolver.resolveSlackTarget(watch))
+    /**
+     * Who hears about this ATC.
+     *
+     * ATC carries the `atc` kind rather than `slack_notify`/`email_notify`, so
+     * it resolves both targets directly instead of through the kind-gated
+     * [WatchNotificationTargetResolver.resolve] — a user who opted into holding
+     * a site has, by that act, asked to be told whether it worked.
+     *
+     * **Email is the one that usually lands.** The Slack target is fail-closed
+     * on the owner having BOTH a personal token and a channel, so for most
+     * owners it is null and the result would otherwise be announced to nobody.
+     * Email resolves the same way watch openings do: the owner's
+     * `notification_email`, falling back to their login email.
+     */
+    private fun atcTargets(watch: AvailabilityWatchRepo.Watch): List<NotificationTarget> =
+        listOfNotNull(
+            targetResolver.resolveSlackTarget(watch),
+            targetResolver.resolveEmailTarget(watch),
+        )
 
     override suspend fun fire(
         watch: AvailabilityWatchRepo.Watch,
@@ -72,7 +84,7 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_COMPLETED,
                     request = result.request,
                     response = result.response,
-                    targets = slackTargets(watch),
+                    targets = atcTargets(watch),
                 )
                 true
             }
@@ -92,7 +104,7 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_FAILED,
                     request = result.request,
                     response = result.response,
-                    targets = slackTargets(watch),
+                    targets = atcTargets(watch),
                 )
                 false
             }

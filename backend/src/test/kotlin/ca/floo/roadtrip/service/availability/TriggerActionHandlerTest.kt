@@ -388,7 +388,71 @@ class TriggerActionHandlerTest {
             assertEquals(42L, result.watchId)
             assertEquals("recgov", result.vendor)
             assertEquals("completed", result.status)
-            assertEquals(listOf(NotificationTarget.Slack("#custom", "xoxb-owner-token")), result.targets)
+            assertEquals(
+                listOf(
+                    NotificationTarget.Slack("#custom", "xoxb-owner-token"),
+                    NotificationTarget.Email(listOf("owner@example.test")),
+                ),
+                result.targets,
+            )
+        }
+
+    @Test
+    fun `AtcTriggerActionHandler emails the owner even with no Slack configured`() =
+        runBlocking {
+            // The Slack card is fail-closed on a personal token; without an email
+            // target an ATC outcome would reach nobody at all.
+            val registry = BookingAdapterRegistry(listOf(RecordingBookingProvider()))
+            val notifications = CapturingNotifications(result = true)
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    targetResolver = resolver(),
+                    notifications = notifications,
+                )
+
+            handler.fire(
+                fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                openings = listOf(triggerOpening()),
+            )
+
+            assertEquals(
+                listOf(NotificationTarget.Email(listOf("owner@example.test"))),
+                notifications.atcResults.single().targets,
+            )
+        }
+
+    @Test
+    fun `AtcTriggerActionHandler prefers the owner's notification email over their login email`() =
+        runBlocking {
+            val registry = BookingAdapterRegistry(listOf(RecordingBookingProvider()))
+            val notifications = CapturingNotifications(result = true)
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    targetResolver =
+                        resolver(
+                            UserSettingsRepo.Settings(
+                                notificationEmail = "alerts@example.test",
+                                slackChannel = null,
+                                slackTokenCipher = null,
+                                slackTokenHint = null,
+                            ),
+                        ),
+                    notifications = notifications,
+                )
+
+            handler.fire(
+                fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                openings = listOf(triggerOpening()),
+            )
+
+            assertEquals(
+                listOf(NotificationTarget.Email(listOf("alerts@example.test"))),
+                notifications.atcResults.single().targets,
+            )
         }
 
     @Test
