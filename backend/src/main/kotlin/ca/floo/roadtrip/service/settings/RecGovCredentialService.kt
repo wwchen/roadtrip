@@ -16,6 +16,9 @@ import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.security.SecretCipher
 import org.slf4j.LoggerFactory
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -78,6 +81,13 @@ interface RecGovCredentialPort {
 }
 
 /**
+ * Used only when the companion reports `mfa_required` with no deadline of its
+ * own; its configured TTL is the authority whenever it sends one.
+ */
+@Suppress("TopLevelPropertyNaming")
+private val FALLBACK_MFA_CHALLENGE_TTL: Duration = Duration.ofMinutes(5)
+
+/**
  * Per-user rec.gov credentials: storage, and the interactive companion flows
  * Settings drives.
  *
@@ -96,6 +106,7 @@ class RecGovCredentialService(
     private val watchRepo: AvailabilityWatchRepo,
     private val cipher: SecretCipher?,
     private val companion: CompanionSessionPort?,
+    private val clock: Clock = Clock.systemUTC(),
 ) : RecGovCredentialPort,
     RecGovCredentialsConfigured,
     RecGovProfileSessionPort {
@@ -107,8 +118,15 @@ class RecGovCredentialService(
      * The companion holds the rec.gov prompt page and expires the challenge on
      * its own minutes-scale TTL, so this map is a pointer with a shorter useful
      * life than the process; a lost entry costs one restarted login.
+     *
+     * The deadline is stored with it. The companion reports one on every
+     * `mfa_required`, and without keeping it this map outlived the page it points
+     * at: `status` went on advertising `mfa_pending` for a challenge the companion
+     * had dropped, dropping a returning user into a code step that could only
+     * fail. Honouring the companion's own value rather than a second TTL here is
+     * deliberate — two independently configured timeouts would drift.
      */
-    private val pendingChallenges = ConcurrentHashMap<Long, String>()
+    private val pendingChallenges = ConcurrentHashMap<Long, PendingChallenge>()
 
     /**
      * Users with a code submission in flight, so exactly one reaches the held
@@ -116,6 +134,29 @@ class RecGovCredentialService(
      * `finally`, which is what keeps a sequential retry unblocked.
      */
     private val mfaInFlight = ConcurrentHashMap.newKeySet<Long>()
+
+    private data class PendingChallenge(
+        val id: String,
+        val expiresAt: Instant,
+    )
+
+    /**
+     * The challenge id if the companion could still be holding it, else null —
+     * and the dead entry is dropped on the way out, so a read is enough to
+     * correct the state.
+     */
+    private fun liveChallengeId(userId: UserId): String? {
+        val pending = pendingChallenges[userId.value] ?: return null
+        if (clock.instant() < pending.expiresAt) return pending.id
+        pendingChallenges.remove(userId.value, pending)
+        return null
+    }
+
+    /** The companion's deadline, or a bounded default when it reported none. */
+    private fun challengeDeadline(reported: String?): Instant =
+        reported
+            ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+            ?: clock.instant().plus(FALLBACK_MFA_CHALLENGE_TTL)
 
     /**
      * Stores credentials, **evicting the browser session when the account
@@ -265,9 +306,19 @@ class RecGovCredentialService(
             return failedLogin(RecGovSessionCodes.PROFILE_BUSY, "a verification code is already being submitted")
         }
         try {
-            val challengeId =
+            val pending =
                 pendingChallenges[userId.value]
                     ?: return failedLogin(RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN, "no login is waiting for a code")
+            // Told apart deliberately: `unknown` says the request was never ours,
+            // which is the wrong story for a code the user simply typed too late.
+            if (clock.instant() >= pending.expiresAt) {
+                pendingChallenges.remove(userId.value, pending)
+                return failedLogin(
+                    RecGovSessionCodes.MFA_CHALLENGE_EXPIRED,
+                    "the code request expired before the code was entered",
+                )
+            }
+            val challengeId = pending.id
             val client = companion ?: return companionUnavailableLogin()
             return recordLogin(userId, client.completeMfa(profileId(userId), challengeId, code))
         } finally {
@@ -314,7 +365,7 @@ class RecGovCredentialService(
             username = stored.recgovUsername,
             session = session,
             detail = detail,
-            mfaPending = pendingChallenges.containsKey(userId.value),
+            mfaPending = liveChallengeId(userId) != null,
         )
     }
 
@@ -417,7 +468,7 @@ class RecGovCredentialService(
                 RecgovLoginResponseDto(status = RecgovLoginStatus.OK)
             }
             is CompanionLoginResult.MfaRequired -> {
-                pendingChallenges[userId.value] = result.challengeId
+                pendingChallenges[userId.value] = PendingChallenge(result.challengeId, challengeDeadline(result.expiresAt))
                 RecgovLoginResponseDto(
                     status = RecgovLoginStatus.MFA_REQUIRED,
                     challengeId = result.challengeId,

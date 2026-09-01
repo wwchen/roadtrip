@@ -16,11 +16,26 @@ import kotlinx.coroutines.withTimeout
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
 import org.junit.jupiter.api.Test
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
+/** A clock the test moves by hand, so a TTL is crossed without sleeping. */
+private class TestClock(
+    var now: Instant,
+) : Clock() {
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId?): Clock = this
+
+    override fun instant(): Instant = now
+}
 
 private val detachedCtx = DSL.using(SQLDialect.POSTGRES)
 private val testUserId = UserId(7L)
@@ -149,11 +164,13 @@ class RecGovCredentialServiceTest {
         companion: CompanionSessionPort? = FakeCompanion(),
         withCipher: SecretCipher? = cipher,
         activeAtcWatches: Int = 0,
+        clock: Clock = Clock.systemUTC(),
     ) = RecGovCredentialService(
         settingsRepo = repo,
         watchRepo = FakeWatchRepo(activeAtcWatches),
         cipher = withCipher,
         companion = companion,
+        clock = clock,
     )
 
     private fun configuredRepo(password: String = "hunter2-secret"): FakeSettingsRepo =
@@ -425,6 +442,47 @@ class RecGovCredentialServiceTest {
 
             assertEquals(RecgovLoginStatus.OK, dto.status)
             assertEquals(listOf(Triple(PROFILE_ID, "chal-1", "123456")), companion.mfaCalls)
+        }
+
+    @Test
+    fun `status stops advertising a challenge past the companion's own expiry`() =
+        runBlocking {
+            // The companion holds the prompt page on its own TTL and reports when
+            // it ends. Ignoring that, the backend kept saying mfa_pending forever
+            // and dropped a returning user into a code step that could only fail.
+            val clock = TestClock(Instant.parse("2026-09-01T00:00:00Z"))
+            val companion =
+                FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", "2026-09-01T00:05:00Z"))
+            val svc = service(configuredRepo(), companion, clock = clock)
+            svc.login(testUserId)
+
+            assertTrue(svc.status(testUserId).mfaPending, "a live challenge is pending")
+
+            clock.now = Instant.parse("2026-09-01T00:05:01Z")
+
+            assertFalse(
+                svc.status(testUserId).mfaPending,
+                "a challenge the companion has already dropped must not read as pending",
+            )
+        }
+
+    @Test
+    fun `a code submitted after the challenge expired is refused as expired, not unknown`() =
+        runBlocking {
+            // `unknown` tells the user the request was never ours; `expired` tells
+            // them what actually happened and that the deadline is the thing to beat.
+            val clock = TestClock(Instant.parse("2026-09-01T00:00:00Z"))
+            val companion =
+                FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", "2026-09-01T00:05:00Z"))
+            val svc = service(configuredRepo(), companion, clock = clock)
+            svc.login(testUserId)
+            clock.now = Instant.parse("2026-09-01T00:05:01Z")
+
+            val dto = svc.completeMfa(testUserId, "123456")
+
+            assertEquals(RecgovLoginStatus.FAILED, dto.status)
+            assertEquals(RecGovSessionCodes.MFA_CHALLENGE_EXPIRED, dto.error)
+            assertTrue(companion.mfaCalls.isEmpty(), "an expired challenge must not reach the companion")
         }
 
     @Test
