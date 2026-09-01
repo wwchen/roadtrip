@@ -21,8 +21,12 @@ import {
 import { truncateLogField } from '../logging.js'
 import {
   badRequest,
+  profileBusyResponse,
   requireProfileId,
+  resolveProfileContext,
 } from '../requestInput.js'
+
+const OPERATION_SCREENSHOT = 'screenshot'
 
 export async function handleDiagnosticImage (url, res) {
   const filename = diagnosticFilename(url)
@@ -46,7 +50,7 @@ export async function handleDiagnosticImage (url, res) {
   await serveScreenshotImage(imagePath, res, 'diagnostic_not_found')
 }
 
-export async function handleLiveScreenshot (url, res, { runtime, recgovScreenshotDeps }) {
+export async function handleLiveScreenshot (url, res, { runtime, pool, recgovScreenshotDeps }) {
   const profile = requireProfileId(Object.fromEntries(url.searchParams.entries()))
   if (!profile.ok) {
     const rejection = badRequest(profile.error, 'profile_id identifies the browser profile to screenshot')
@@ -64,20 +68,40 @@ export async function handleLiveScreenshot (url, res, { runtime, recgovScreensho
     return
   }
 
-  runtime.logger('recgov screenshot start', `profile=${profile.profileId}`, `target=${target.href}`)
+  const profileId = profile.profileId
+  // A screenshot drives the browser and mutates the context's cookies, so it
+  // is a mutating operation and takes the lock like every other one.
+  const lock = pool.acquire(profileId, OPERATION_SCREENSHOT)
+  if (!lock) {
+    const rejection = profileBusyResponse(profileId, pool.busyOperation(profileId))
+    jsonResponse(res, rejection.status, rejection.body)
+    return
+  }
+
+  runtime.logger('recgov screenshot start', `profile=${profileId}`, `target=${target.href}`)
   const startedAt = Date.now()
   try {
-    const { image, recaccountPresent } = await captureRecgovScreenshot(target, recgovScreenshotDeps, { profileId: profile.profileId })
-    runtime.logger('recgov screenshot result ok', `profile=${profile.profileId}`, `target=${target.href}`, `recaccount=${recaccountPresent}`, `duration_ms=${Date.now() - startedAt}`)
+    // Resolve the profile's browser here so a refused launch answers with the
+    // cap's own status instead of surfacing as a capture failure. The deps'
+    // getContextFn then returns that same resident context.
+    const resolved = await resolveProfileContext(pool, profileId)
+    if (!resolved.ok) {
+      jsonResponse(res, resolved.rejection.status, resolved.rejection.body)
+      return
+    }
+    const { image, recaccountPresent } = await captureRecgovScreenshot(target, recgovScreenshotDeps, { profileId })
+    runtime.logger('recgov screenshot result ok', `profile=${profileId}`, `target=${target.href}`, `recaccount=${recaccountPresent}`, `duration_ms=${Date.now() - startedAt}`)
     imageResponse(res, HTTP_OK, image, PNG_CONTENT_TYPE)
   } catch (error) {
-    runtime.logger('recgov screenshot result fail', `target=${target.href}`, `detail="${truncateLogField(error.message, LOG_DETAIL_MAX_CHARS)}"`, `duration_ms=${Date.now() - startedAt}`)
+    runtime.logger('recgov screenshot result fail', `profile=${profileId}`, `target=${target.href}`, `detail="${truncateLogField(error.message, LOG_DETAIL_MAX_CHARS)}"`, `duration_ms=${Date.now() - startedAt}`)
     jsonResponse(res, HTTP_INTERNAL_ERROR, {
       ok: false,
       error: 'screenshot_failed',
       detail: error.message,
       target_url: target.href,
     })
+  } finally {
+    lock.release()
   }
 }
 

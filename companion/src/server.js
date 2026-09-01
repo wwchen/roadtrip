@@ -6,7 +6,10 @@ import http from 'node:http'
 import { pathToFileURL } from 'node:url'
 import { IS_HEADLESS } from './browser.js'
 import { testChromium } from './cart.js'
-import { logoutRecgovBrowserSession } from './recgovSession.js'
+import {
+  logoutRecgovBrowserSession,
+  runRecgovProfileLogin,
+} from './recgovSession.js'
 import { createRecgovScreenshotDeps } from './recgovScreenshot.js'
 import { runAtcOnce } from './runAtcOnce.js'
 import {
@@ -79,6 +82,7 @@ export function createCompanionServer ({
   apiToken = companionApiToken(),
   pool = profilePool,
   verifyRecgovSessionFn = verifyRecgovSession,
+  credentialLoginFn = runRecgovProfileLogin,
   ...screenshotOverrides
 } = {}) {
   const runtime = createServerRuntime()
@@ -87,6 +91,7 @@ export function createCompanionServer ({
     testChromiumFn,
     runAtcOnceFn,
     verifyRecgovSessionFn,
+    credentialLoginFn,
     logoutRecgovSessionFn: ({ getContextFn }) => logoutRecgovSessionFn({
       getContextFn: screenshotOverrides.getContextFn || getContextFn,
       isSpaLoggedInFn: screenshotOverrides.isSpaLoggedInFn,

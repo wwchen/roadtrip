@@ -3,7 +3,6 @@ import { runAtcOnce } from '../../runAtcOnce.js'
 import {
   EXIT_SUCCESS,
   EXIT_USAGE,
-  HTTP_BAD_REQUEST,
   HTTP_INTERNAL_ERROR,
   HTTP_OK,
   HTTP_UNPROCESSABLE_ENTITY,
@@ -11,10 +10,12 @@ import {
 } from '../constants.js'
 import { jsonResponse, readBody } from '../http.js'
 import {
-  ERROR_INVALID_REQUEST,
   badRequest,
+  invalidJsonRejection,
+  parseJsonBody,
   profileBusyResponse,
   requireProfileId,
+  resolveProfileContext,
 } from '../requestInput.js'
 import {
   captureStdout,
@@ -31,19 +32,17 @@ export async function handleAtc (req, res, {
   runAtcOnceFn = runAtcOnce,
 }) {
   let raw
+  let fields
   try {
     raw = await readBody(req)
+    fields = atcRequestFields(req, raw)
   } catch (error) {
-    jsonResponse(res, error.status || HTTP_BAD_REQUEST, {
-      ok: false,
-      cart_added: false,
-      error: ERROR_INVALID_REQUEST,
-      detail: error.message,
-    })
+    const rejection = invalidJsonRejection(error)
+    jsonResponse(res, rejection.status, { ...rejection.body, cart_added: false })
     return
   }
 
-  const profile = requireProfileId(atcRequestFields(req, raw))
+  const profile = requireProfileId(fields)
   if (!profile.ok) {
     const rejection = badRequest(profile.error, 'profile_id identifies the browser profile that holds the cart')
     jsonResponse(res, rejection.status, { ...rejection.body, cart_added: false })
@@ -63,6 +62,11 @@ export async function handleAtc (req, res, {
   const startedAt = Date.now()
   let atcStartLine = null
   try {
+    const resolved = await resolveProfileContext(pool, profileId)
+    if (!resolved.ok) {
+      jsonResponse(res, resolved.rejection.status, { ...resolved.rejection.body, cart_added: false })
+      return
+    }
     atcStartLine = `recgov atc start profile=${profileId} ${payloadSummary(raw)}`
     runtime.logger(atcStartLine)
     await runtime.waitForStartupAuthCheck()
@@ -70,7 +74,7 @@ export async function handleAtc (req, res, {
       argv: ['--payload-json', raw],
       stdout,
       stderr,
-      contextOptions: { getContextFn: () => pool.context(profileId) },
+      contextOptions: { getContextFn: async () => resolved.context, profileId },
     })
     const baseResult = parseRunResult(stdout.value())
     const resultLine = `recgov atc result ${[
@@ -114,13 +118,10 @@ export async function handleAtc (req, res, {
 function atcRequestFields (req, raw) {
   const url = new URL(req.url || '/', 'http://companion.local')
   const fields = Object.fromEntries(url.searchParams.entries())
-  try {
-    const payload = JSON.parse(raw)
-    const body = payload?.payload || payload
-    return { ...fields, ...(body && typeof body === 'object' ? body : {}) }
-  } catch {
-    return fields
-  }
+  if (!raw.trim()) return fields
+  const payload = parseJsonBody(raw)
+  const body = payload?.payload || payload
+  return { ...fields, ...(body && typeof body === 'object' ? body : {}) }
 }
 
 function payloadSummary (raw) {

@@ -7,11 +7,12 @@ import {
 } from '../constants.js'
 import { jsonResponse } from '../http.js'
 import {
-  ERROR_INVALID_REQUEST,
   badRequest,
+  invalidJsonRejection,
   profileBusyResponse,
   readRequestFields,
   requireProfileId,
+  resolveProfileContext,
 } from '../requestInput.js'
 
 const OPERATION_VERIFY = 'verify'
@@ -22,11 +23,8 @@ export async function handleVerify (req, res, { runtime, pool, verifyRecgovSessi
   try {
     input = await readRequestFields(req, new URL(req.url || '/', 'http://companion.local'))
   } catch (error) {
-    jsonResponse(res, error.status || HTTP_BAD_REQUEST, {
-      ok: false,
-      error: ERROR_INVALID_REQUEST,
-      detail: error.message,
-    })
+    const rejection = invalidJsonRejection(error)
+    jsonResponse(res, rejection.status, rejection.body)
     return
   }
 
@@ -48,7 +46,15 @@ export async function handleVerify (req, res, { runtime, pool, verifyRecgovSessi
   const startedAt = Date.now()
   try {
     runtime.logger('recgov verify start', `profile=${profileId}`)
-    const verify = await verifyRecgovSessionFn({ getContextFn: () => pool.context(profileId) })
+    const resolved = await resolveProfileContext(pool, profileId)
+    if (!resolved.ok) {
+      jsonResponse(res, resolved.rejection.status, resolved.rejection.body)
+      return
+    }
+    const verify = await verifyRecgovSessionFn({
+      getContextFn: async () => resolved.context,
+      profileId,
+    })
     pool.setAuthStatus(profileId, verifyAuthStatus(verify))
     runtime.logger(
       'recgov verify result',

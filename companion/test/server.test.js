@@ -211,14 +211,14 @@ test('GET /docs returns Swagger UI for the companion OpenAPI spec', async () => 
   assert.match(response.text, /url: '\/openapi\.json'/)
 })
 
-test('POST /login passes request-scoped credentials to the auth check', async () => {
-  let authOptions = null
+test('POST /login passes request-scoped credentials to the profile login', async () => {
+  let loginCall = null
   const response = await request(testServer({
-    testChromiumFn: async (_rawCookieInput, options) => {
-      authOptions = options
+    credentialLoginFn: async (call) => {
+      loginCall = call
       return {
-        ok: true,
-        loggedIn: true,
+        state: 'ok',
+        logged_in: true,
         diagnostic: {
           reason: 'login_success',
           screenshot_url: '/screenshot/diagnostics/recgov-login-success.png',
@@ -242,12 +242,13 @@ test('POST /login passes request-scoped credentials to the auth check', async ()
 
   assert.equal(response.status, 200)
   assert.equal(response.json.ok, true)
-  assert.deepEqual(authOptions.credentials, {
+  assert.deepEqual(loginCall.credentials, {
     email: 'camper@example.test',
     password: 'secret',
     mfaCode: '123456',
   })
-  assert.equal(authOptions.allowManualLogin, false)
+  assert.equal(loginCall.profileId, PROFILE_ID)
+  assert.match((await loginCall.getContextFn()).dir, new RegExp(`/profiles/${PROFILE_ID}$`))
   assert.equal(response.json.recgov_auth.diagnostic, undefined)
   assert.deepEqual(response.json.diagnostics, {
     reason: 'login_success',
@@ -257,9 +258,10 @@ test('POST /login passes request-scoped credentials to the auth check', async ()
 
 test('POST /login HTML response renders a failed login diagnostic screenshot', async () => {
   const response = await request(testServer({
-    testChromiumFn: async () => ({
-      ok: true,
-      loggedIn: false,
+    credentialLoginFn: async () => ({
+      state: 'failed',
+      logged_in: false,
+      reason: 'login_error',
       diagnostic: {
         reason: 'login_error',
         screenshot_url: '/screenshot/diagnostics/recgov-login-error.png',
@@ -618,16 +620,10 @@ test('a mutating route is refused while the same profile is busy, and never for 
 
 test('POST /login opens an MFA challenge and a second call completes it', async () => {
   const pool = testPool()
-  const seen = []
+  const resumedCodes = []
   const server = testServer({
     pool,
-    testChromiumFn: async (_raw, options) => {
-      seen.push(options.credentials)
-      if (!options.credentials.mfaCode) {
-        return { ok: true, loggedIn: false, diagnostic: { reason: 'mfa_required' } }
-      }
-      return { ok: true, loggedIn: true }
-    },
+    credentialLoginFn: mfaChallengeLogin({ resumedCodes }),
   })
 
   const challenged = await request(server, {
@@ -656,7 +652,7 @@ test('POST /login opens an MFA challenge and a second call completes it', async 
 
   assert.equal(completed.status, 200)
   assert.equal(completed.json.ok, true)
-  assert.equal(seen.at(-1).mfaCode, '123456')
+  assert.deepEqual(resumedCodes, ['123456'])
   assert.equal(pool.isBusy(PROFILE_ID), false)
 })
 
@@ -665,7 +661,7 @@ test('an expired MFA challenge is refused and the lock is released', async () =>
   const pool = testPool({ now: () => clock })
   const server = testServer({
     pool,
-    testChromiumFn: async () => ({ ok: true, loggedIn: false, diagnostic: { reason: 'mfa_required' } }),
+    credentialLoginFn: mfaChallengeLogin(),
   })
 
   const challenged = await request(server, {
@@ -694,7 +690,10 @@ test('an expired MFA challenge is refused and the lock is released', async () =>
 
 test('a failed credential login backs the profile off before the next attempt', async () => {
   const pool = testPool()
-  const server = testServer({ pool, testChromiumFn: async () => ({ ok: true, loggedIn: false }) })
+  const server = testServer({
+    pool,
+    credentialLoginFn: async () => ({ state: 'failed', logged_in: false, reason: 'login_error' }),
+  })
   const loginRequest = {
     method: 'POST',
     path: '/login',
@@ -858,6 +857,30 @@ function testServer (overrides = {}) {
     apiToken: TEST_API_TOKEN,
     pool: overrides.pool || testPool(),
     ...overrides,
+  })
+}
+
+// A credential login that stops at the 2FA prompt and hands back a resume
+// closure, the way runRecgovProfileLogin does with the page held open.
+function mfaChallengeLogin ({ acceptCode = '123456', resumedCodes = [] } = {}) {
+  return async () => ({
+    state: 'mfa_required',
+    logged_in: false,
+    diagnostic: { reason: 'mfa_required' },
+    resume: async (code) => {
+      resumedCodes.push(code)
+      if (code === acceptCode) return { state: 'ok', logged_in: true }
+      return { state: 'failed', logged_in: false, reason: 'mfa_invalid', detail: 'code rejected' }
+    },
+  })
+}
+
+async function beginLogin (server) {
+  return request(server, {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ profile_id: PROFILE_ID, username: 'camper@example.test', password: 'secret' }),
   })
 }
 
