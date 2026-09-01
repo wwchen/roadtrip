@@ -233,35 +233,16 @@ function parseCookieString (str) {
   }).filter(Boolean)
 }
 
-// Stored cookies are per profile. The unkeyed setting is the legacy
-// single-profile CLI/operator value; see `storedCookiesFor` for the one narrow
-// way it still reaches a profile.
+// Stored cookies are per profile. The unkeyed setting belongs to the legacy
+// single-profile CLI session and must never be handed to a user's profile:
+// a rec.gov cookie jar is a session, and sharing one is sharing an account.
 export function recgovCookieSettingKey (profileId = null) {
   return profileId ? `${RECGOV_COOKIES_SETTING}:${profileId}` : RECGOV_COOKIES_SETTING
 }
 
-/**
- * The stored jar to launch a profile with.
- *
- * A profile's own key wins. When it is empty the operator-set legacy global
- * `recgov_cookies` — the documented Akamai cookie-paste workaround — is used
- * instead, because keying injection per profile without this orphaned every
- * environment that had the paste set.
- *
- * The fallback reaches ONLY the operator's global value, never another
- * profile's saved jar: `saveProfileCookies` refuses a null profile id, so
- * nothing this code writes can ever land in the global key. And it stops the
- * first time this profile saves a jar of its own — the paste bootstraps a
- * profile, it does not keep feeding it.
- */
-function storedCookiesFor (profileId) {
-  const own = getSetting(recgovCookieSettingKey(profileId)) || ''
-  if (own || !profileId) return own
-  return getSetting(recgovCookieSettingKey(null)) || ''
-}
-
 export async function injectStoredCookies (context, rawInput = null, profileId = null) {
-  const cookieStr = extractCookiesFromInput(rawInput || storedCookiesFor(profileId))
+  const stored = getSetting(recgovCookieSettingKey(profileId)) || ''
+  const cookieStr = extractCookiesFromInput(rawInput || stored)
   if (!cookieStr) return 0
   const cookies = parseCookieString(cookieStr)
   if (!cookies.length) return 0

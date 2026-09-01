@@ -21,10 +21,12 @@ const LEGACY_COOKIES = 'legacy=operator'
 const PROFILE_A = 'user-a'
 const PROFILE_B = 'user-b'
 
-test('a profile with no jar of its own bootstraps from the operator paste', async () => {
-  // Keying injection per profile with no fallback orphaned every environment
-  // that had the documented Akamai cookie-paste set: the value was still in
-  // the store and silently stopped being injected.
+test('the legacy global cookie value never reaches a per-profile context', async () => {
+  // A rec.gov cookie jar is a session, so the operator's unkeyed value must not
+  // be injected into a user's profile — that is sharing an account. A read-only
+  // "bootstrap once" fallback was tried and reverted: the premise for it (that
+  // prod's working logins rode a pasted Akamai jar) was measured false, so it
+  // bought nothing and re-opened this hole.
   const { setSetting } = await import('../src/store.js')
   const { injectStoredCookies, recgovCookieSettingKey } = await import('../src/browser.js')
   setSetting('recgov_cookies', LEGACY_COOKIES)
@@ -33,25 +35,11 @@ test('a profile with no jar of its own bootstraps from the operator paste', asyn
 
   const injected = await injectStoredCookies(context, null, PROFILE_A)
 
-  assert.equal(injected, 1)
-  assert.deepEqual(context.cookies.map((c) => c.name), ['legacy'])
+  assert.equal(injected, 0)
+  assert.deepEqual(context.cookies, [])
 })
 
-test('a profile that has its own jar stops consulting the operator paste', async () => {
-  // The paste bootstraps a profile once; it must not keep overriding, or
-  // reviving, a session the profile has since minted for itself.
-  const { setSetting } = await import('../src/store.js')
-  const { injectStoredCookies, recgovCookieSettingKey } = await import('../src/browser.js')
-  setSetting('recgov_cookies', LEGACY_COOKIES)
-  setSetting(recgovCookieSettingKey(PROFILE_A), 'own=1')
-  const context = fakeContext()
-
-  await injectStoredCookies(context, null, PROFILE_A)
-
-  assert.deepEqual(context.cookies.map((c) => c.name), ['own'])
-})
-
-test('one profile never gets another profile saved jar, fallback or not', async () => {
+test('one profile never gets another profile saved jar', async () => {
   // The security property the per-profile keying exists for: a rec.gov cookie
   // jar IS a session, so B must not be reachable from A by any path.
   const { setSetting } = await import('../src/store.js')

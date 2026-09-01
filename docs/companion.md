@@ -64,9 +64,9 @@ a request without it is rejected with `400 profile_id_required`.
   callers for one profile share a single launch: two Chromiums on one
   user-data directory corrupt the profile.
 - Anything stored per session — the `recgov_cookies` cookie jar included — is
-  keyed by profile id (`recgov_cookies:<profile_id>`). See
-  [Session durability](#session-durability) for the round trip and the one
-  narrow case where the unkeyed legacy value is still read.
+  keyed by profile id (`recgov_cookies:<profile_id>`). The unkeyed legacy value
+  belongs to the CLI's single profile and never enters a user's profile. See
+  [Session durability](#session-durability) for the save/inject round trip.
 - Playwright persistent contexts are one browser process per directory, so
   residency is a real memory cost. `COMPANION_MAX_CONCURRENT_BROWSERS`
   (default 3) caps on-demand launches; the least recently used idle profile is
@@ -192,11 +192,11 @@ So the round trip is explicit:
   `recreation.gov` cookies to `recgov_cookies:<profile_id>`. Failure paths
   deliberately do not: a failed attempt's jar would overwrite a good one.
 - **Inject.** `launchProfileContext` re-injects that key on every launch.
-- **Bootstrap.** When a profile's own key is empty, the unkeyed legacy
-  `recgov_cookies` — the operator's documented cookie paste — is injected
-  instead, once. It stops being consulted as soon as that profile saves a jar
-  of its own, and nothing ever writes back to the unkeyed key. One profile's
-  *saved* jar is never reachable from another profile.
+- **Never shared.** A profile only ever gets its own key. The unkeyed legacy
+  `recgov_cookies` — the operator's documented cookie paste — belongs to the
+  CLI's single profile and is never injected into a user's profile, and nothing
+  writes the unkeyed key. A cookie jar is a session; sharing one is sharing an
+  account.
 
 The store file must live on the mounted volume. The container sets
 `COMPANION_DIR=/var/lib/campsite-companion`, and Compose mounts the operator's
