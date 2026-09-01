@@ -879,6 +879,60 @@ test('GET /health without profile_id keeps answering the companion-wide check', 
   assert.deepEqual(response.json.pool.keep_warm, [])
 })
 
+test('POST /keep-warm replaces the armed set wholesale', async () => {
+  const pool = testPool()
+  const server = testServer({ pool })
+
+  const armed = await request(server, {
+    method: 'POST',
+    path: '/keep-warm',
+    body: JSON.stringify({ profile_ids: [PROFILE_ID, OTHER_PROFILE_ID] }),
+    headers: { 'content-type': 'application/json' },
+  })
+  const disarmed = await request(server, {
+    method: 'POST',
+    path: '/keep-warm',
+    body: JSON.stringify({ profile_ids: [OTHER_PROFILE_ID] }),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(armed.status, 200)
+  assert.deepEqual(armed.json.keep_warm.toSorted(), [PROFILE_ID, OTHER_PROFILE_ID].toSorted())
+  // Replaced, not merged: a paused watch has to be able to disarm its profile.
+  assert.deepEqual(disarmed.json.keep_warm, [OTHER_PROFILE_ID])
+  assert.deepEqual(pool.snapshot().keep_warm, [OTHER_PROFILE_ID])
+})
+
+test('POST /keep-warm answers while a profile is mid-operation', async () => {
+  const pool = testPool()
+  const server = testServer({ pool })
+  pool.acquire(PROFILE_ID, 'login')
+
+  const response = await request(server, {
+    method: 'POST',
+    path: '/keep-warm',
+    body: JSON.stringify({ profile_ids: [PROFILE_ID] }),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(response.status, 200, 'marking profiles must never queue behind browser work')
+  assert.deepEqual(response.json.keep_warm, [PROFILE_ID])
+})
+
+test('POST /keep-warm refuses a body that is not an array of profile ids', async () => {
+  const server = testServer()
+
+  const response = await request(server, {
+    method: 'POST',
+    path: '/keep-warm',
+    body: JSON.stringify({ profile_ids: PROFILE_ID }),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(response.status, 400)
+  assert.equal(response.json.error, 'invalid_request')
+})
+
 test('every route rejects a request without the shared-secret header', async () => {
   const server = testServer()
 

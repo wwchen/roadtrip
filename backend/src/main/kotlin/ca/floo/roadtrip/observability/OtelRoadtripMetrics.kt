@@ -17,12 +17,14 @@ private const val METRIC_RUN_DURATION = "roadtrip.availability.run.duration"
 private const val METRIC_POLL_SKIPPED = "roadtrip.availability.poll.skipped"
 private const val METRIC_WATCH_TRIGGER = "roadtrip.watch.trigger"
 private const val METRIC_INGEST_RUN = "roadtrip.ingest.run"
+private const val METRIC_RECGOV_KEEPALIVE = "roadtrip.recgov.keepalive"
 
 private const val UNIT_MILLISECONDS = "ms"
 private const val UNIT_CALLS = "{call}"
 private const val UNIT_RUNS = "{run}"
 private const val UNIT_CYCLES = "{cycle}"
 private const val UNIT_TRIGGERS = "{trigger}"
+private const val UNIT_PROFILES = "{profile}"
 
 // Attribute keys are allocated once; building them per-call would allocate on
 // every fetch.
@@ -105,6 +107,13 @@ internal class OtelRoadtripMetrics(
             .setUnit(UNIT_RUNS)
             .build()
 
+    private val recgovKeepalives =
+        meter
+            .counterBuilder(METRIC_RECGOV_KEEPALIVE)
+            .setDescription("Armed rec.gov profiles touched by a keepalive sweep, by outcome")
+            .setUnit(UNIT_PROFILES)
+            .build()
+
     override fun availabilityFetchCompleted(
         provider: BookingProvider,
         outcome: String,
@@ -146,6 +155,10 @@ internal class OtelRoadtripMetrics(
                 delivered,
             ),
         )
+    }
+
+    override fun recgovKeepaliveProfile(outcome: KeepaliveOutcome) {
+        recgovKeepalives.add(1, Attributes.of(attrOutcome, outcome.label))
     }
 
     override fun ingestRunFinished(

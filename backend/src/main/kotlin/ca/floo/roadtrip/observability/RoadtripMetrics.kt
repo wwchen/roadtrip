@@ -62,6 +62,15 @@ interface RoadtripMetrics {
         status: String,
     )
 
+    /**
+     * One armed rec.gov profile touched by a keepalive sweep. Counting per
+     * profile rather than per sweep makes the armed-set size the sum over a
+     * sweep, and makes "some profiles are failing to refresh" visible as a
+     * ratio rather than an all-or-nothing sweep outcome. Profile ids are
+     * deliberately NOT an attribute — unbounded cardinality.
+     */
+    fun recgovKeepaliveProfile(outcome: KeepaliveOutcome)
+
     /** For tests and for any entry point that runs without the agent. */
     object NoOp : RoadtripMetrics {
         override fun availabilityFetchCompleted(
@@ -90,7 +99,28 @@ interface RoadtripMetrics {
             kind: String,
             status: String,
         ) = Unit
+
+        override fun recgovKeepaliveProfile(outcome: KeepaliveOutcome) = Unit
     }
+}
+
+/**
+ * What a keepalive sweep managed for one armed rec.gov profile.
+ *
+ * Observability's own vocabulary, bounded by construction, so the port does not
+ * import a service type to name its own attribute.
+ */
+enum class KeepaliveOutcome(
+    val label: String,
+) {
+    /** The companion renewed the profile's session. */
+    REFRESHED("refreshed"),
+
+    /** The companion answered, but the profile could not be refreshed. */
+    FAILED("failed"),
+
+    /** The companion could not be reached at all. */
+    UNAVAILABLE("unavailable"),
 }
 
 /** Why a poll cycle issued no upstream call. Observability's own vocabulary, so

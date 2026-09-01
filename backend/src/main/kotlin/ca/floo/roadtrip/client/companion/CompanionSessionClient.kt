@@ -9,6 +9,8 @@ import ca.floo.roadtrip.service.settings.RecGovSessionCodes
 import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
@@ -24,10 +26,13 @@ import java.nio.charset.StandardCharsets
 private const val LOGIN_PATH = "/login"
 private const val LOGOUT_PATH = "/logout"
 private const val VERIFY_PATH = "/verify"
+private const val REFRESH_PATH = "/refresh"
+private const val KEEP_WARM_PATH = "/keep-warm"
 private const val HEALTH_PATH = "/health"
 
 // ── Wire fields ──────────────────────────────────────────────────────────────
 private const val FIELD_PROFILE_ID = "profile_id"
+private const val FIELD_PROFILE_IDS = "profile_ids"
 private const val FIELD_USERNAME = "username"
 private const val FIELD_PASSWORD = "password"
 private const val FIELD_CHALLENGE_ID = "challenge_id"
@@ -105,19 +110,19 @@ internal class CompanionSessionClient(
             },
         )
 
-    override suspend fun logout(profileId: String): CompanionActionResult =
-        when (val exchange = post(LOGOUT_PATH, profileBody(profileId))) {
-            is Exchange.Unreachable -> unavailableAction(exchange.detail)
-            is Exchange.Answered ->
-                if (exchange.succeeded) {
-                    CompanionActionResult.Ok
-                } else {
-                    CompanionActionResult.Failed(
-                        exchange.body.stringValue(FIELD_ERROR) ?: RecGovSessionCodes.LOGIN_FAILED,
-                        exchange.body.stringValue(FIELD_DETAIL),
-                    )
-                }
-        }
+    override suspend fun logout(profileId: String): CompanionActionResult = actionResult(post(LOGOUT_PATH, profileBody(profileId)))
+
+    override suspend fun refresh(profileId: String): CompanionActionResult = actionResult(post(REFRESH_PATH, profileBody(profileId)))
+
+    override suspend fun markKeepWarm(profileIds: Collection<String>): CompanionActionResult =
+        actionResult(
+            post(
+                KEEP_WARM_PATH,
+                buildJsonObject {
+                    put(FIELD_PROFILE_IDS, buildJsonArray { profileIds.forEach { add(JsonPrimitive(it)) } })
+                },
+            ),
+        )
 
     override suspend fun verify(profileId: String): CompanionActionResult =
         when (val exchange = post(VERIFY_PATH, profileBody(profileId))) {
@@ -197,6 +202,21 @@ internal class CompanionSessionClient(
         body.stringValue(FIELD_DETAIL) ?: body.objectValue(FIELD_RECGOV_AUTH)?.stringValue(FIELD_DETAIL)
 
     private fun profileBody(profileId: String): JsonObject = buildJsonObject { put(FIELD_PROFILE_ID, profileId) }
+
+    /** The plain succeeded-or-here-is-why shape the non-login routes answer with. */
+    private fun actionResult(exchange: Exchange): CompanionActionResult =
+        when (exchange) {
+            is Exchange.Unreachable -> unavailableAction(exchange.detail)
+            is Exchange.Answered ->
+                if (exchange.succeeded) {
+                    CompanionActionResult.Ok
+                } else {
+                    CompanionActionResult.Failed(
+                        exchange.body.stringValue(FIELD_ERROR) ?: RecGovSessionCodes.LOGIN_FAILED,
+                        exchange.body.stringValue(FIELD_DETAIL),
+                    )
+                }
+        }
 
     private fun unavailableAction(detail: String?): CompanionActionResult =
         CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, detail)

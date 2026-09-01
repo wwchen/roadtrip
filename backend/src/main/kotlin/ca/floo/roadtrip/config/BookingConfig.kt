@@ -19,21 +19,30 @@ data class RecGovAtcConfig(
     // Shared secret the companion requires on every route. Blank means the
     // companion answers 503 and ATC cannot run.
     val companionApiToken: String? = null,
+    /**
+     * How often the keepalive job re-arms and refreshes the profiles backing an
+     * active `atc` watch. Tunable because it trades companion load against how
+     * stale a session can get before a 3 a.m. firing has to pay for a re-login.
+     */
+    val keepaliveInterval: Duration = defaultKeepaliveInterval,
 ) {
     init {
         require(companionTimeout.isPositive()) { "recgov ATC companionTimeout must be positive" }
+        require(keepaliveInterval.isPositive()) { "recgov ATC keepaliveInterval must be positive" }
     }
 
     val companionEnabled: Boolean get() = companionBaseUrl != null
 
     companion object {
         private val defaultCompanionTimeout: Duration = Duration.ofSeconds(180)
+        private val defaultKeepaliveInterval: Duration = Duration.ofMinutes(15)
 
         fun fromConfig(config: ConfigSection): RecGovAtcConfig =
             RecGovAtcConfig(
                 companionBaseUrl = config.value("companion-base-url")?.trimEnd('/'),
                 companionTimeout = config.duration("companion-timeout", defaultCompanionTimeout),
                 companionApiToken = config.value("companion-api-token"),
+                keepaliveInterval = config.duration("keepalive-interval", defaultKeepaliveInterval),
             )
     }
 }

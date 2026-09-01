@@ -229,6 +229,31 @@ open class AvailabilityWatchRepo(
             .fetchOne(0, Int::class.java) ?: 0
 
     /**
+     * The owners of every watch in [status] carrying [triggerKind] — the "armed
+     * set" the companion keepalive job keeps warm.
+     *
+     * DISTINCT because a user with five `atc` watches is still one browser
+     * profile. Same `@>` array containment as [countByTriggerKind]: a watch
+     * usually carries a notify kind alongside `atc`.
+     */
+    open fun distinctOwnersByTriggerKind(
+        status: WatchStatus,
+        triggerKind: String,
+    ): List<Long> =
+        ctx
+            .selectDistinct(AVAILABILITY_WATCH.OWNER_USER_ID)
+            .from(AVAILABILITY_WATCH)
+            .where(AVAILABILITY_WATCH.STATUS.eq(status.wireValue))
+            .and(
+                DSL.condition(
+                    "{0} @> {1}",
+                    AVAILABILITY_WATCH.TRIGGER_KINDS,
+                    DSL.value(arrayOf<String?>(triggerKind), AVAILABILITY_WATCH.TRIGGER_KINDS.dataType),
+                ),
+            ).fetch(AVAILABILITY_WATCH.OWNER_USER_ID)
+            .filterNotNull()
+
+    /**
      * How many of one owner's watches in [status] carry [triggerKind].
      *
      * `trigger_kinds` is a `text[]`, so this is array containment (`@>`) rather

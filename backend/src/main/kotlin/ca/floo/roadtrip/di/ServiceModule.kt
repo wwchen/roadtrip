@@ -74,6 +74,8 @@ import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import ca.floo.roadtrip.service.scheduler.PollerBackfill
+import ca.floo.roadtrip.service.scheduler.RecGovKeepalive
+import ca.floo.roadtrip.service.scheduler.RecGovKeepaliveJob
 import ca.floo.roadtrip.service.scheduler.WatchReaper
 import ca.floo.roadtrip.service.scheduler.framework.Scheduler
 import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
@@ -334,6 +336,27 @@ val serviceModule =
         }
         single(createdAtStart = true) {
             WatchReaper(get<AvailabilityPollerRepo>()).also { it.start(get<CoroutineScope>()) }
+        }
+        single(createdAtStart = true) {
+            // Optional by construction: with no companion there is no profile to
+            // keep warm, so the job is simply not started rather than sweeping
+            // against nothing. Koin cannot hold a null single, hence the wrapper.
+            val config: AppConfig = get()
+            val companion: CompanionSessionPort? =
+                config.booking.recgovAtc
+                    .takeIf { it.companionEnabled }
+                    ?.let(::CompanionSessionClient)
+            RecGovKeepalive(
+                companion?.let {
+                    RecGovKeepaliveJob(
+                        watchRepo = get<AvailabilityWatchRepo>(),
+                        companion = it,
+                        profiles = get<RecGovCredentialService>(),
+                        metrics = get<RoadtripMetrics>(),
+                        interval = config.booking.recgovAtc.keepaliveInterval,
+                    ).also { job -> job.start(get<CoroutineScope>()) }
+                },
+            )
         }
         single(createdAtStart = true) {
             PollerBackfill(get<DSLContext>(), get<AvailabilityPollerMembership>()).also { it.run() }

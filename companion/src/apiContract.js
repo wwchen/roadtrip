@@ -100,6 +100,29 @@ export const COMPANION_API_ROUTES = [
   },
   {
     method: 'POST',
+    path: '/keep-warm',
+    operationId: 'postKeepWarm',
+    summary: 'Replace the armed (keep-warm) profile set',
+    description:
+      'The backend owns which profiles back an active `atc` watch and pushes the whole set on ' +
+      'each keepalive sweep; this replaces it wholesale rather than merging. Armed profiles are ' +
+      'exempt from the concurrent-browser cap, so an overflow is reported rather than evicting one. ' +
+      'Lock-free and profile-agnostic: it marks profiles, it does not drive browsers.',
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: { $ref: '#/components/schemas/KeepWarmRequest' },
+        },
+      },
+    },
+    responses: {
+      200: jsonResponse('The armed set as the companion now holds it', 'KeepWarmResponse'),
+      400: jsonResponse('The request body is not valid JSON or profile_ids is not an array', 'ErrorResponse'),
+    },
+  },
+  {
+    method: 'POST',
     path: '/verify',
     operationId: 'postVerify',
     summary: 'Dry-run session check for one browser profile',
@@ -321,6 +344,29 @@ export const COMPANION_API_SCHEMAS = {
       challenge_id: {
         type: 'string',
         description: 'Challenge id returned by a phase-one login that hit an MFA prompt',
+      },
+    },
+  },
+  KeepWarmRequest: {
+    type: 'object',
+    required: ['profile_ids'],
+    properties: {
+      profile_ids: {
+        type: 'array',
+        items: PROFILE_ID_SCHEMA,
+        description: 'The complete armed set. An empty array disarms every profile.',
+      },
+    },
+  },
+  KeepWarmResponse: {
+    type: 'object',
+    required: ['ok', 'keep_warm', 'keep_warm_overflow'],
+    properties: {
+      ok: { type: 'boolean' },
+      keep_warm: { type: 'array', items: PROFILE_ID_SCHEMA },
+      keep_warm_overflow: {
+        type: 'integer',
+        description: 'Armed profiles beyond the cap. Reported, never resolved by eviction.',
       },
     },
   },

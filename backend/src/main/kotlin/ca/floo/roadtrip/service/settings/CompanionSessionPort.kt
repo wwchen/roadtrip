@@ -97,4 +97,15 @@ interface CompanionSessionPort {
     suspend fun verify(profileId: String): CompanionActionResult
 
     suspend fun health(profileId: String): CompanionSessionHealth
+
+    /** Force one profile's rec.gov session to renew. The keepalive path. */
+    suspend fun refresh(profileId: String): CompanionActionResult
+
+    /**
+     * Replaces the armed profile set the companion keeps warm.
+     *
+     * Wholesale, not a merge: pausing or deleting the last `atc` watch for a
+     * user has to actually disarm their profile. An empty set disarms everyone.
+     */
+    suspend fun markKeepWarm(profileIds: Collection<String>): CompanionActionResult
 }

@@ -109,6 +109,10 @@ private class FakeCompanion(
     override suspend fun verify(profileId: String): CompanionActionResult = verifyResult
 
     override suspend fun health(profileId: String): CompanionSessionHealth = healthResult
+
+    override suspend fun refresh(profileId: String): CompanionActionResult = CompanionActionResult.Ok
+
+    override suspend fun markKeepWarm(profileIds: Collection<String>): CompanionActionResult = CompanionActionResult.Ok
 }
 
 class RecGovCredentialServiceTest {

@@ -37,6 +37,9 @@ roadtrip:
       # Shared secret for the companion channel. The companion requires it on
       # every route; blank means every companion call is refused.
       companion-api-token: ${COMPANION_API_TOKEN:}
+      # How often the keepalive job re-arms the profiles backing an active
+      # `atc` watch and refreshes their sessions.
+      keepalive-interval: ${RECGOV_KEEPALIVE_INTERVAL:15m}
   security:
     # AES-256-GCM key for per-user secret storage (SecretCipher), base64 of
     # 32 bytes. Absent or blank disables secret storage: SecretsConfig returns

@@ -50,6 +50,7 @@ import {
   companionApiToken,
 } from './server/apiToken.js'
 import { handleVerify } from './server/routes/verify.js'
+import { handleKeepWarm } from './server/routes/keepWarm.js'
 import { verifyRecgovSession } from './recgovVerify.js'
 import {
   normalizeProfileId,
@@ -150,6 +151,7 @@ const CONTRACT_ROUTE_HANDLERS = {
   postRefresh: async ({ req, res, runtime, deps }) => handleRefresh(req, res, { runtime, ...deps }),
   postAtc: async ({ req, res, runtime, deps }) => handleAtc(req, res, { runtime, ...deps }),
   postVerify: async ({ req, res, runtime, deps }) => handleVerify(req, res, { runtime, ...deps }),
+  postKeepWarm: async ({ req, res, runtime, deps }) => handleKeepWarm(req, res, { runtime, ...deps }),
 }
 
 // Health is deliberately lock-free: the settings status row must answer while
