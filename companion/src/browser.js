@@ -73,11 +73,38 @@ let sharedContext = null
 // attach to the same user-data directory and corrupt the profile.
 const liveProfileDirs = new Set()
 
-function clearStaleLocks (profileDir) {
+/**
+ * Removes the singleton locks of a profile directory nobody is using.
+ *
+ * `liveProfileDirs` is the whole safety argument: if this process has a
+ * browser on the directory the locks are real and we return untouched.
+ * Otherwise there is no live browser of ours behind them, so they are debris.
+ *
+ * **The locks are symlinks, and they always dangle.** Chromium writes
+ * `SingletonLock` pointing at the literal string `<hostname>-<pid>`
+ * (`firebolt.local-35740`) — a name that exists as a file nowhere — and
+ * `SingletonSocket` at a path under the creating machine's own temp
+ * directory. `fs.existsSync` follows the link and answers false for both, so
+ * an `existsSync` guard never fires and the lock survives forever. Chromium
+ * then refuses to start:
+ *
+ *   "The profile appears to be in use by another Chromium process (35740) on
+ *    another computer (firebolt.local). Chromium has locked the profile so
+ *    that it doesn't get corrupted."
+ *
+ * That refusal is why `rmSync` is used rather than a guarded `unlinkSync`: it
+ * removes the link itself and treats a genuinely absent one as a no-op.
+ *
+ * The cross-host case is not hypothetical. The browser-session volume is
+ * shared between the macOS host, where the headed operator runbook logs in,
+ * and the Linux container that serves requests. Each leaves locks naming a
+ * host and pid the other cannot interpret, so every lock either side finds is
+ * one it must be willing to sweep.
+ */
+export function clearStaleLocks (profileDir) {
   if (liveProfileDirs.has(profileDir)) return
   for (const name of CHROMIUM_SINGLETON_LOCK_FILES) {
-    const f = path.join(profileDir, name)
-    try { if (fs.existsSync(f)) fs.unlinkSync(f) } catch {}
+    try { fs.rmSync(path.join(profileDir, name), { force: true }) } catch {}
   }
 }
 
@@ -123,12 +150,6 @@ export async function launchProfileContext (profileDir, { chromiumFn = chromium 
     throw error
   }
   return context
-}
-
-// Test seam for the lock sweep, which is otherwise only reachable through a
-// real launch.
-export function clearStaleLocksForTest (profileDir) {
-  clearStaleLocks(profileDir)
 }
 
 async function installStealthInitScript (context) {
