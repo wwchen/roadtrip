@@ -55,6 +55,7 @@ import ca.floo.roadtrip.service.availability.provider.CampflareAvailabilityProvi
 import ca.floo.roadtrip.service.availability.provider.RecGovAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.ReserveAmericaAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.ReserveCaliforniaAvailabilityProvider
+import ca.floo.roadtrip.service.booking.BookingActionService
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
 import ca.floo.roadtrip.service.health.ReadinessService
@@ -224,6 +225,24 @@ val serviceModule =
         }
         single { BookingAdapterRegistry(get(named("bookingAdapters"))) }
         single { AvailabilityBookingTargetResolver(get<BookingAdapterRegistry>()) }
+        single {
+            // The user-initiated half of the booking seam. Same adapter and the
+            // same credential gate the `atc` trigger uses.
+            BookingActionService(
+                campsites = get<CampsiteRepo>()::findById,
+                availabilityTargets = get<DbAvailabilityTargetResolver>(),
+                bookingTargets = get<AvailabilityBookingTargetResolver>(),
+                credentials = get<RecGovCredentialService>(),
+                availability = { campsiteId, nights ->
+                    get<AvailabilityRepo>()
+                        .readCurrent(listOf(campsiteId), nights)
+                        .filter { it.available }
+                        .map { it.targetDate }
+                        .toSet()
+                },
+                bookings = get<BookingAdapterRegistry>(),
+            )
+        }
 
         single {
             val config: AppConfig = get()
