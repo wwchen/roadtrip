@@ -338,10 +338,10 @@ groups:
     rules:
       # ATC is the one path with nobody watching: it fires from a poll sweep and
       # its whole value is placing a hold within seconds. These four say, in
-      # order: nobody was told, the vendor is refusing, we are too slow to win a
-      # race, and the sessions ATC depends on are lapsing.
-      - uid: roadtrip-atc-silent-exits
-        title: ATC fires ending with nobody told
+      # order: the fire never reached the vendor, the vendor is refusing, we are
+      # too slow to win a race, and the sessions ATC depends on are lapsing.
+      - uid: roadtrip-atc-blocked-before-vendor
+        title: ATC fires blocked before the vendor
         condition: C
         for: 5m
         noDataState: OK
@@ -349,7 +349,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: 'An ATC fire ended with no hold AND no notification (no booking target, unsupported provider, or a thrown attempt). The owner saw nothing: /d/recgov-atc/recgov-add-to-cart'
+          summary: 'An ATC fire ended with no hold and never reached the vendor (no booking target, unsupported provider, or a thrown attempt). The owner is told why, but the watch is armed for a hold it cannot place: /d/recgov-atc/recgov-add-to-cart'
         data:
           - refId: A
             datasourceUid: roadtrip-prometheus

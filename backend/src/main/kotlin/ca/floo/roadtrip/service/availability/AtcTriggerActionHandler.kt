@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.observability.AtcOutcome
 import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.service.booking.BookingActionCodes
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
@@ -54,8 +55,17 @@ internal class AtcTriggerActionHandler(
             }
         if (pending.isEmpty()) {
             log.warn("ATC trigger unsupported for watch_id={} openings={}", watch.id, openings.size)
-            // Counted, because this exit notifies nobody: on a dashboard it is
-            // otherwise indistinguishable from no watch having fired at all.
+            reportResult(
+                watch = watch,
+                // No booking provider was reached, so the vendor the owner saw
+                // the opening under is the only honest thing to name.
+                vendor = openings.firstOrNull()?.watchOpening?.vendor ?: VENDOR_UNKNOWN,
+                status = ATC_RESULT_FAILED,
+                request = noCompanionRequest,
+                response = null,
+                error = BookingActionCodes.UNSUPPORTED_TARGET,
+                detail = NO_TARGET_DETAIL,
+            )
             metrics.recgovAtcFired(AtcOutcome.NO_TARGET)
             return false
         }
@@ -64,6 +74,7 @@ internal class AtcTriggerActionHandler(
         }
 
         val next = pending.first()
+        val nextTarget = next.request.target
         val startedAt = System.nanoTime()
         val result =
             runCatching { bookings.addToCart(next.request) }
@@ -71,7 +82,7 @@ internal class AtcTriggerActionHandler(
                     log.error(
                         "failed to execute ATC booking action for watch_id={} campsite_id={} date={}",
                         watch.id,
-                        next.request.target.campsiteId,
+                        nextTarget.campsiteId,
                         next.request.arrivalDate,
                         it,
                     )
@@ -83,7 +94,7 @@ internal class AtcTriggerActionHandler(
                     "ATC completed: watch_id={} provider={} campsite_id={} date={}",
                     watch.id,
                     result.providerId,
-                    next.request.target.campsiteId,
+                    nextTarget.campsiteId,
                     next.request.arrivalDate,
                 )
                 reportResult(
@@ -101,7 +112,7 @@ internal class AtcTriggerActionHandler(
                     "ATC failed: watch_id={} provider={} campsite_id={} date={} error={} detail={}",
                     watch.id,
                     result.providerId,
-                    next.request.target.campsiteId,
+                    nextTarget.campsiteId,
                     next.request.arrivalDate,
                     result.error,
                     result.detail,
@@ -125,13 +136,33 @@ internal class AtcTriggerActionHandler(
                 log.warn(
                     "ATC booking action unsupported for watch_id={} provider={} campsite_id={}",
                     watch.id,
-                    next.request.target.providerId,
-                    next.request.target.campsiteId,
+                    nextTarget.providerId,
+                    nextTarget.campsiteId,
+                )
+                reportResult(
+                    watch = watch,
+                    vendor = nextTarget.providerId.vendorSlug(),
+                    status = ATC_RESULT_FAILED,
+                    request = noCompanionRequest,
+                    response = null,
+                    error = BookingActionCodes.UNSUPPORTED_TARGET,
+                    detail = UNSUPPORTED_DETAIL,
                 )
                 metrics.recgovAtcFired(AtcOutcome.UNSUPPORTED, durationMs = elapsedMsSince(startedAt))
                 false
             }
             null -> {
+                // The throwable is already logged above with its stack; the
+                // owner gets a reason they can read instead of internal wording.
+                reportResult(
+                    watch = watch,
+                    vendor = nextTarget.providerId.vendorSlug(),
+                    status = ATC_RESULT_FAILED,
+                    request = noCompanionRequest,
+                    response = null,
+                    error = BookingActionCodes.ATC_EXCEPTION,
+                    detail = ATC_EXCEPTION_DETAIL,
+                )
                 metrics.recgovAtcFired(AtcOutcome.EXCEPTION, durationMs = elapsedMsSince(startedAt))
                 false
             }
@@ -146,6 +177,12 @@ internal class AtcTriggerActionHandler(
      * The delivery result was previously discarded, which made "the hold
      * happened but the owner was never told" indistinguishable from a clean
      * run in the logs — the exact failure this whole path exists to prevent.
+     *
+     * [request] is the payload sent to the booking provider and [response] what
+     * came back. An exit that never got that far passes [noCompanionRequest]
+     * and a null response rather than a plausible-looking payload that was
+     * never sent; the reason travels in [error]/[detail], which is what both
+     * renderers read first.
      */
     private suspend fun reportResult(
         watch: AvailabilityWatchRepo.Watch,
@@ -213,6 +250,27 @@ internal class AtcTriggerActionHandler(
         const val KIND = AvailabilityTriggerKinds.ATC
         private const val NANOS_PER_MILLI = 1_000_000L
         private const val ATC_RESULT_COMPLETED = "completed"
+
+        /**
+         * Held or not held — the only distinction either renderer draws from
+         * status. Every cause that is not a vendor refusal travels in
+         * `error`/`detail` instead, so a third status value would be a token
+         * both renderers handle only by falling through.
+         */
         private const val ATC_RESULT_FAILED = "failed"
+
+        /** Nothing was sent, so there is no payload to show. */
+        private val noCompanionRequest = JsonObject(emptyMap())
+
+        /** No provider was reached and the opening named no vendor either. */
+        private const val VENDOR_UNKNOWN = "unknown"
+
+        private const val NO_TARGET_DETAIL =
+            "no bookable site could be resolved for this opening — the campground's booking details " +
+                "may have changed since the watch was saved"
+
+        private const val UNSUPPORTED_DETAIL = "the booking provider for this campground cannot hold sites"
+
+        private const val ATC_EXCEPTION_DETAIL = "an unexpected error stopped the hold — nothing you did"
     }
 }

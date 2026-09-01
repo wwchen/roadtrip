@@ -149,9 +149,9 @@ enum class KeepaliveOutcome(
 }
 
 /**
- * How an ATC fire ended. Deliberately separates the three "no hold, and nobody
- * was told" shapes from an honest vendor refusal, because they have different
- * causes and different fixes.
+ * How an ATC fire ended. Deliberately separates the three shapes that never
+ * reached the vendor from an honest vendor refusal, because they have different
+ * causes and different fixes. All five now report to the owner.
  */
 enum class AtcOutcome(
     val label: String,

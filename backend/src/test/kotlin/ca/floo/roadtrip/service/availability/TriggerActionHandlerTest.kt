@@ -24,6 +24,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.availability.provider.testCampground
+import ca.floo.roadtrip.service.booking.BookingActionCodes
 import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.booking.RECGOV_SESSION_EXPIRED_DETAIL
@@ -590,7 +591,7 @@ class TriggerActionHandlerTest {
         }
 
     @Test
-    fun `AtcTriggerActionHandler leaves unsupported openings inert`() =
+    fun `an ATC fire with no resolvable booking target tells the owner`() =
         runBlocking {
             val bookingProvider = RecordingBookingProvider()
             val registry = BookingAdapterRegistry(listOf(bookingProvider))
@@ -611,10 +612,80 @@ class TriggerActionHandlerTest {
 
             assertFalse(delivered)
             assertTrue(bookingProvider.requests.isEmpty())
-            assertTrue(notifications.atcResults.isEmpty())
+            val result = notifications.atcResults.single()
+            assertEquals("failed", result.status)
+            assertEquals(BookingActionCodes.UNSUPPORTED_TARGET, result.error)
+            assertEquals(JsonObject(emptyMap()), result.request, "no companion call was made, so there is no payload")
+            assertEquals(null, result.response)
+            assertTrue(result.targets.isNotEmpty(), "an ATC-only watch has no other handler to speak for it")
+            assertTrue(result.detail!!.isNotBlank(), "the reason is what the owner reads first")
         }
 
-    /** Records what the handler reported, so the silent exits become assertable. */
+    @Test
+    fun `an ATC target the provider can no longer hold tells the owner`() =
+        runBlocking {
+            // Write-time validation resolved a target; by fire time the adapter
+            // no longer claims the capability, so the registry answers
+            // Unsupported. Two registries is how that drift is reproduced.
+            val resolvable = BookingAdapterRegistry(listOf(RecordingBookingProvider()))
+            val atFireTime = BookingAdapterRegistry(listOf(RecordingBookingProvider(canAddToCart = false)))
+            val notifications = CapturingNotifications(result = true)
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = atFireTime,
+                    bookingTargets = AvailabilityBookingTargetResolver(resolvable),
+                    targetResolver = resolver(),
+                    notifications = notifications,
+                )
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertFalse(delivered)
+            val result = notifications.atcResults.single()
+            assertEquals("failed", result.status)
+            assertEquals(BookingActionCodes.UNSUPPORTED_TARGET, result.error)
+            assertEquals("recgov", result.vendor)
+            assertEquals(JsonObject(emptyMap()), result.request)
+            assertTrue(result.detail!!.isNotBlank())
+        }
+
+    @Test
+    fun `an ATC attempt that throws tells the owner instead of ending in silence`() =
+        runBlocking {
+            val bookingProvider = RecordingBookingProvider(resultFactory = { error("companion client blew up") })
+            val registry = BookingAdapterRegistry(listOf(bookingProvider))
+            val notifications = CapturingNotifications(result = true)
+            val metrics = RecordingMetrics()
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    targetResolver = resolver(),
+                    notifications = notifications,
+                    metrics = metrics,
+                )
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertFalse(delivered)
+            assertEquals(listOf(AtcOutcome.EXCEPTION), metrics.fires.map { it.first })
+            val result = notifications.atcResults.single()
+            assertEquals("failed", result.status)
+            assertEquals(BookingActionCodes.ATC_EXCEPTION, result.error)
+            // The throwable's own message stays in the log: it is internal
+            // wording the owner cannot act on.
+            assertTrue(result.detail!!.isNotBlank())
+        }
+
+    /** Records what the handler counted, so every exit's outcome is assertable. */
     private class RecordingMetrics : RoadtripMetrics by RoadtripMetrics.NoOp {
         val fires = mutableListOf<Triple<AtcOutcome, String?, Int?>>()
 
@@ -772,6 +843,7 @@ class TriggerActionHandlerTest {
             val watchId: Long,
             val vendor: String,
             val status: String,
+            val request: JsonObject,
             val response: JsonObject?,
             val error: String?,
             val detail: String?,
@@ -814,7 +886,7 @@ class TriggerActionHandlerTest {
             detail: String?,
             targets: List<NotificationTarget>,
         ): Boolean {
-            atcResults += AtcResult(watchId, vendor, status, response, error, detail, targets)
+            atcResults += AtcResult(watchId, vendor, status, request, response, error, detail, targets)
             return result
         }
     }
@@ -843,6 +915,7 @@ class TriggerActionHandlerTest {
 
     private class RecordingBookingProvider(
         private val resultFactory: ((AddToCartRequest) -> AddToCartResult)? = null,
+        private val canAddToCart: Boolean = true,
     ) : BookingAdapter {
         val requests = mutableListOf<AddToCartRequest>()
 
@@ -866,7 +939,8 @@ class TriggerActionHandlerTest {
             action: BookingAction,
             target: BookingTarget,
         ): Boolean =
-            action == BookingAction.ADD_TO_CART &&
+            canAddToCart &&
+                action == BookingAction.ADD_TO_CART &&
                 target.providerId == BookingProvider.RECGOV &&
                 target.parentRef is BookingProviderRef.RecGov
 

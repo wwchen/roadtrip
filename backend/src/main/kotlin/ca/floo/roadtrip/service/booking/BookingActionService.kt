@@ -12,10 +12,20 @@ import ca.floo.roadtrip.service.settings.RecGovCredentialsConfigured
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
-/** Refusals a caller can act on, kept apart from the codes the companion emits. */
+/** Outcome codes the booking surfaces speak, kept apart from the codes the companion emits. */
 object BookingActionCodes {
     /** Nothing in this scope can be added to a cart by any adapter we have. */
     const val UNSUPPORTED_TARGET = "unsupported_target"
+
+    /**
+     * The attempt threw before any adapter produced a result.
+     *
+     * Not a refusal: it names a bug on our side, so the owner-facing copy has to
+     * point at us rather than at the vendor or at their credentials. Distinct
+     * from the adapter's own `companion_exception`, which means the companion
+     * call itself threw — this one is the backend above it.
+     */
+    const val ATC_EXCEPTION = "atc_exception"
 
     /** The caller has no rec.gov credentials, so no cart to hold it in. */
     const val CREDENTIALS_REQUIRED = "credentials_required"

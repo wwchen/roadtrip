@@ -246,7 +246,7 @@
         "type": "prometheus",
         "uid": "roadtrip-prometheus"
       },
-      "description": "Fires that ended with no hold AND no notification: no booking target resolved, the provider cannot add to cart, or the attempt threw. These are invisible to the owner, so any non-zero value is worth chasing.",
+      "description": "Fires that ended with no hold and never reached the vendor: no booking target resolved, the provider cannot add to cart, or the attempt threw. The owner is emailed the reason for each of these, so this is not a silence count — it is watches armed for a hold they cannot place, and any non-zero value is worth chasing.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -302,12 +302,12 @@
           },
           "editorMode": "code",
           "expr": "sum(increase(roadtrip_recgov_atc_total{outcome=~\"no_target|unsupported|exception\"}[$__range])) or on() vector(0)",
-          "legendFormat": "Silent exits (nobody told)",
+          "legendFormat": "Blocked before the vendor",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Silent exits (nobody told)",
+      "title": "Blocked before the vendor",
       "type": "stat"
     },
     {
