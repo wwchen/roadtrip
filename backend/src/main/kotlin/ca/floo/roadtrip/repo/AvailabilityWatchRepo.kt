@@ -19,7 +19,7 @@ import java.time.OffsetDateTime
 private const val DEFAULT_LIST_LIMIT = 100
 private const val MAX_LIST_LIMIT = 500
 
-class AvailabilityWatchRepo(
+open class AvailabilityWatchRepo(
     private val ctx: DSLContext,
 ) {
     private val targetsRepo = AvailabilityWatchTargetRepo(ctx)
@@ -227,6 +227,30 @@ class AvailabilityWatchRepo(
             .from(AVAILABILITY_WATCH)
             .where(scopeConditions(status, poiId, campsiteId, ownerUserId))
             .fetchOne(0, Int::class.java) ?: 0
+
+    /**
+     * How many of one owner's watches in [status] carry [triggerKind].
+     *
+     * `trigger_kinds` is a `text[]`, so this is array containment (`@>`) rather
+     * than equality — a watch usually carries a notify kind alongside.
+     */
+    open fun countByTriggerKind(
+        ownerUserId: Long,
+        status: WatchStatus,
+        triggerKind: String,
+    ): Int =
+        ctx
+            .selectCount()
+            .from(AVAILABILITY_WATCH)
+            .where(AVAILABILITY_WATCH.OWNER_USER_ID.eq(ownerUserId))
+            .and(AVAILABILITY_WATCH.STATUS.eq(status.wireValue))
+            .and(
+                DSL.condition(
+                    "{0} @> {1}",
+                    AVAILABILITY_WATCH.TRIGGER_KINDS,
+                    DSL.value(arrayOf<String?>(triggerKind), AVAILABILITY_WATCH.TRIGGER_KINDS.dataType),
+                ),
+            ).fetchOne(0, Int::class.java) ?: 0
 
     /**
      * `poiId`/`campsiteId` filters now match "watch's target set contains
