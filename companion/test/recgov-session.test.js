@@ -6,6 +6,7 @@ import {
   logoutRecgovBrowserSession,
   recgovLoginCredentialsFromInput,
   resolveRecaccount,
+  runRecgovProfileLogin,
 } from '../src/recgovSession.js'
 
 const JWT_HEADER = { alg: 'none' }
@@ -295,6 +296,84 @@ test('logoutRecgovBrowserSession clicks the Rec.gov logout control and verifies 
   assert.equal(getRecgovSessionStatus().next_refresh_at, null)
 })
 
+test('runRecgovProfileLogin holds the MFA page open and resumes on it', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-held' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    mfaRequired: true,
+    expectedMfaCode: '123456',
+    loggedIn: true,
+  })
+
+  const pending = await runRecgovProfileLogin({
+    getContextFn: async () => page.context(),
+    credentials: { username: 'user@example.com', password: 'secret' },
+    options: { loginTimeoutMs: '1', allowManualLogin: false },
+  })
+
+  assert.equal(pending.state, 'mfa_required')
+  assert.equal(pending.logged_in, false)
+  assert.equal(typeof pending.resume, 'function')
+  assert.equal(page.closed, false, 'the pending login page stays open')
+  assert.equal(page.credentialSubmitClicks, 1)
+
+  const gotosBeforeResume = page.gotos.length
+  const completed = await pending.resume('123456')
+
+  assert.equal(completed.state, 'ok')
+  assert.equal(completed.logged_in, true)
+  // The whole point: phase two types the code into the page that is already
+  // sitting on the prompt. It must not navigate again or re-POST credentials,
+  // which would make Rec.gov issue a new code and invalidate the user's.
+  assert.equal(page.credentialSubmitClicks, 1)
+  assert.equal(page.mfaSubmitClicks, 1)
+  assert.equal(page.gotos.length, gotosBeforeResume)
+  assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret', '123456'])
+  assert.equal(page.closed, true, 'the held page closes once the challenge resolves')
+})
+
+test('runRecgovProfileLogin reports a rejected MFA code without re-submitting credentials', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-held' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    mfaRequired: true,
+    expectedMfaCode: '123456',
+  })
+
+  const pending = await runRecgovProfileLogin({
+    getContextFn: async () => page.context(),
+    credentials: { username: 'user@example.com', password: 'secret' },
+    options: { loginTimeoutMs: '1', allowManualLogin: false, credentialSessionTimeoutMs: '1' },
+  })
+  const rejected = await pending.resume('000000')
+
+  assert.equal(rejected.state, 'failed')
+  assert.equal(rejected.logged_in, false)
+  assert.equal(page.credentialSubmitClicks, 1)
+  assert.equal(page.mfaSubmitClicks, 1)
+})
+
+test('runRecgovProfileLogin returns the existing session without touching the login form', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-existing' }),
+  })
+  const page = fakePage({ rawRecaccount: JSON.stringify(recaccount), loggedIn: true })
+
+  const outcome = await runRecgovProfileLogin({
+    getContextFn: async () => page.context(),
+    credentials: { username: 'user@example.com', password: 'secret' },
+  })
+
+  assert.equal(outcome.state, 'ok')
+  assert.equal(outcome.logged_in, true)
+  assert.equal(page.credentialSubmitClicks, 0)
+  assert.equal(page.closed, true)
+})
+
 function fakePage ({
   rawRecaccount,
   rawRecaccountAfterClear = null,
@@ -316,6 +395,7 @@ function fakePage ({
   const context = {
     cookies: [],
     pages: () => [page],
+    newPage: async () => page,
     addCookies: async (cookies) => {
       context.cookies.push(...cookies)
     },

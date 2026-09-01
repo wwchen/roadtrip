@@ -9,6 +9,7 @@ import {
   IS_HEADLESS,
   getContext,
   injectFingerprintCookie,
+  injectStoredCookies,
   isSpaLoggedIn,
   readRecaccount,
 } from './browser.js'
@@ -43,6 +44,9 @@ const LOGIN_SUBMIT_TIMEOUT_MS = 5_000
 const LOGIN_BLOCKER_TIMEOUT_MS = 1_000
 const LOGIN_MFA_PROMPT_TIMEOUT_MS = 5_000
 const DIAGNOSTIC_REASON_MAX_CHARS = 60
+export const MFA_REQUIRED_REASON = 'mfa_required'
+export const MFA_INVALID_REASON = 'mfa_invalid'
+const MFA_PROMPT_LOST_REASON = 'mfa_prompt_not_found'
 const RECGOV_LOGOUT_MENU_SETTLE_MS = 500
 const RECGOV_LOGOUT_VERIFY_TIMEOUT_MS = 5_000
 const RECGOV_LOGOUT_POLL_MS = 500
@@ -215,6 +219,63 @@ export async function logoutRecgovBrowserSession ({
   }
 }
 
+// Two-phase credential login for one browser profile.
+//
+// Returns `{ state: 'ok' | 'failed' }`, or `{ state: 'mfa_required', resume }`
+// with the page left open on the 2FA prompt — `resume(code)` finishes on that
+// same page and closes it. The caller (the /login route) holds the profile's
+// busy lock for as long as a resume is outstanding.
+export async function runRecgovProfileLogin ({
+  getContextFn = getContext,
+  credentials = {},
+  options = {},
+  injectStoredCookiesFn = injectStoredCookies,
+  profileId = null,
+} = {}) {
+  const context = await getContextFn()
+  await injectStoredCookiesFn(context, null, profileId)
+  const page = await context.newPage()
+  let pageHeldForMfa = false
+  try {
+    const existing = await recaccountFromBrowser(page, options)
+    if (existing.recaccount) return loginOutcome('ok', { recaccount: existing.recaccount })
+
+    const credentialState = recgovLoginCredentialsFromInput(credentials)
+    const attempt = await credentialLoginAttempt(page, options, credentialState)
+    if (attempt.recaccount) return loginOutcome('ok', { recaccount: attempt.recaccount })
+    if (attempt.pendingMfa) {
+      pageHeldForMfa = true
+      return loginOutcome('mfa_required', {
+        reason: MFA_REQUIRED_REASON,
+        resume: async (mfaCode) => {
+          try {
+            const completion = await completeRecgovMfaLogin(page, mfaCode, options)
+            if (completion.recaccount) return loginOutcome('ok', { recaccount: completion.recaccount })
+            return loginOutcome('failed', completion.failure)
+          } finally {
+            await page.close().catch(() => {})
+          }
+        },
+      })
+    }
+    return loginOutcome('failed', attempt.failure)
+  } finally {
+    if (!pageHeldForMfa) await page.close().catch(() => {})
+  }
+}
+
+function loginOutcome (state, { recaccount = null, reason = null, detail = null, resume = null } = {}) {
+  return {
+    state,
+    logged_in: state === 'ok',
+    recaccount,
+    reason,
+    detail,
+    diagnostic: getRecgovSessionStatus().last_login_diagnostic || null,
+    ...(resume ? { resume } : {}),
+  }
+}
+
 export function recgovLoginCredentialsFromInput (input = {}) {
   const email = String(input?.email || input?.username || '').trim()
   const password = String(input?.password || '')
@@ -297,11 +358,20 @@ async function recaccountFromManualLogin (page, options) {
 }
 
 async function recaccountFromCredentialLogin (page, options, credentialState) {
+  const attempt = await credentialLoginAttempt(page, options, credentialState)
+  return attempt.recaccount || null
+}
+
+// The credential flow, as a resumable attempt. It returns `{ recaccount }`,
+// `{ pendingMfa: true }` (the page is left sitting on the 2FA prompt, ready
+// for completeRecgovMfaLogin), or `{ failure }`. Diagnostics are captured
+// here so both the one-shot and two-phase callers record the same evidence.
+async function credentialLoginAttempt (page, options, credentialState) {
   if (!credentialState.configured) {
     if (credentialState.reason === 'credentials_incomplete') {
       console.log('Cart: Recreation.gov credential login not attempted — username/email and password are required')
     }
-    return null
+    return { failure: { reason: credentialState.reason || 'credentials_not_configured' } }
   }
 
   const credentialSessionTimeoutMs = recgovCredentialSessionTimeoutMs(options)
@@ -317,7 +387,7 @@ async function recaccountFromCredentialLogin (page, options, credentialState) {
   if (!await openLoginIfPossible(page)) {
     console.log('Cart: Recreation.gov credential login failed reason=login_link_not_found')
     await captureLoginDiagnostic(page, 'login_link_not_found')
-    return null
+    return { failure: { reason: 'login_link_not_found' } }
   }
   console.log('Cart: Recreation.gov login form opened')
 
@@ -325,7 +395,7 @@ async function recaccountFromCredentialLogin (page, options, credentialState) {
   if (!formResult.ok) {
     console.log(`Cart: Recreation.gov credential login failed reason=${formResult.reason}`)
     await captureLoginDiagnostic(page, formResult.reason)
-    return null
+    return { failure: { reason: formResult.reason } }
   }
   console.log('Cart: submitted Recreation.gov username/password')
 
@@ -333,7 +403,9 @@ async function recaccountFromCredentialLogin (page, options, credentialState) {
   const completion = await waitForCredentialLoginCompletion(page, credentialSessionTimeoutMs, credentialState)
   if (completion.browserSession) {
     await captureLoginDiagnostic(completion.browserSession.page, 'login_success')
-    return activateBrowserRecaccount(completion.browserSession.page, completion.browserSession.raw, options)
+    return {
+      recaccount: await activateBrowserRecaccount(completion.browserSession.page, completion.browserSession.raw, options),
+    }
   }
 
   const blocker = completion.failure || { reason: 'recaccount_not_observed' }
@@ -342,13 +414,49 @@ async function recaccountFromCredentialLogin (page, options, credentialState) {
     `Cart: Recreation.gov credential login failed reason=${blocker.reason}` +
     (blocker.detail ? ` detail="${blocker.detail}"` : '')
   )
-  return null
+  if (blocker.reason === MFA_REQUIRED_REASON) return { pendingMfa: true, failure: blocker }
+  return { failure: blocker }
 }
 
-async function waitForCredentialLoginCompletion (page, timeoutMs, credentials) {
+// Types a code into the 2FA prompt the page is already sitting on. It never
+// navigates and never re-submits credentials: Rec.gov issues a new code on a
+// fresh login, which would invalidate the one the user is holding.
+export async function completeRecgovMfaLogin (page, mfaCode, options = {}) {
+  const credentialSessionTimeoutMs = recgovCredentialSessionTimeoutMs(options)
+  const submission = await submitMfaCodeIfPrompted(page, { mfaCode }, LOGIN_MFA_PROMPT_TIMEOUT_MS)
+  if (!submission.ok) {
+    await captureLoginDiagnostic(page, submission.reason)
+    return { failure: { reason: submission.reason } }
+  }
+  if (!submission.submitted) {
+    await captureLoginDiagnostic(page, MFA_PROMPT_LOST_REASON)
+    return { failure: { reason: MFA_PROMPT_LOST_REASON } }
+  }
+  console.log('Cart: submitted Recreation.gov 2FA code for a held login')
+
+  const completion = await waitForCredentialLoginCompletion(
+    page,
+    credentialSessionTimeoutMs,
+    { mfaCode },
+    { mfaSubmitted: true },
+  )
+  if (completion.browserSession) {
+    await captureLoginDiagnostic(completion.browserSession.page, 'login_success')
+    return {
+      recaccount: await activateBrowserRecaccount(completion.browserSession.page, completion.browserSession.raw, options),
+    }
+  }
+
+  const blocker = completion.failure || { reason: MFA_INVALID_REASON }
+  await captureLoginDiagnostic(page, blocker.reason, blocker.detail)
+  console.log(`Cart: Recreation.gov 2FA completion failed reason=${blocker.reason}`)
+  return { failure: blocker }
+}
+
+async function waitForCredentialLoginCompletion (page, timeoutMs, credentials, { mfaSubmitted: initialMfaSubmitted = false } = {}) {
   const deadline = Date.now() + timeoutMs
   const startedAt = Date.now()
-  let mfaSubmitted = false
+  let mfaSubmitted = initialMfaSubmitted
   while (Date.now() < deadline) {
     const browserSession = await readRecaccountFromOpenPages(page)
     if (browserSession) return { browserSession, mfaSubmitted }

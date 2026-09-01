@@ -429,6 +429,130 @@ test('GET /screenshot path suffix is not an undocumented API route', async () =>
   assert.equal(response.json.error, 'unsupported_route')
 })
 
+test('GET /screenshot takes the profile lock like the other browser routes', async () => {
+  const pool = testPool()
+  const image = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+  const server = testServer({
+    pool,
+    getContextFn: async () => ({ newPage: async () => fakeScreenshotPage(image) }),
+    injectStoredCookiesFn: async () => 0,
+    resolveRecaccountFn: async () => null,
+    injectRecaccountFn: async () => {},
+    injectBearerRouteFn: async () => true,
+  })
+  pool.acquire(PROFILE_ID, 'login')
+
+  const blocked = await request(server, { path: `/screenshot?profile_id=${PROFILE_ID}&path=/` })
+
+  assert.equal(blocked.status, 409)
+  assert.equal(blocked.json.error, 'profile_busy')
+
+  const free = await request(server, { path: `/screenshot?profile_id=${OTHER_PROFILE_ID}&path=/` })
+
+  assert.equal(free.status, 200)
+  assert.equal(pool.isBusy(OTHER_PROFILE_ID), false, 'the screenshot must release the lock it took')
+})
+
+test('the concurrent-browser cap surfaces as a structured 503, not an opaque 500', async () => {
+  const pool = testPool({ maxConcurrentBrowsers: 1 })
+  const server = testServer({
+    pool,
+    testChromiumFn: async () => ({ ok: true, loggedIn: true }),
+    verifyRecgovSessionFn: async ({ getContextFn }) => {
+      await getContextFn()
+      return { ok: true, logged_in: true, checked_at: new Date().toISOString() }
+    },
+  })
+  // One resident profile, locked, so nothing is evictable.
+  await pool.context(PROFILE_ID)
+  pool.acquire(PROFILE_ID, 'login')
+
+  for (const testCase of [
+    { method: 'POST', path: `/verify?profile_id=${OTHER_PROFILE_ID}` },
+    { method: 'POST', path: `/refresh?profile_id=${OTHER_PROFILE_ID}` },
+    { method: 'GET', path: `/screenshot?profile_id=${OTHER_PROFILE_ID}&path=/` },
+  ]) {
+    const response = await request(server, { headers: { accept: 'application/json' }, ...testCase })
+
+    assert.equal(response.status, 503, `${testCase.path} must map the cap to 503`)
+    assert.equal(response.json.error, 'browser_cap_reached')
+    assert.equal(pool.isBusy(OTHER_PROFILE_ID), false, 'a refused launch must not strand the lock')
+  }
+})
+
+test('an empty MFA code does not consume the pending challenge', async () => {
+  const pool = testPool()
+  const server = testServer({
+    pool,
+    credentialLoginFn: mfaChallengeLogin(),
+  })
+  const challenged = await beginLogin(server)
+
+  const empty = await request(server, {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ profile_id: PROFILE_ID, challenge_id: challenged.json.challenge_id }),
+  })
+
+  assert.equal(empty.status, 400)
+  assert.equal(empty.json.error, 'mfa_required')
+  assert.equal(pool.isBusy(PROFILE_ID), true, 'the challenge still holds its lock')
+
+  const completed = await request(server, {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ profile_id: PROFILE_ID, challenge_id: challenged.json.challenge_id, mfa_code: '123456' }),
+  })
+
+  assert.equal(completed.status, 200, 'the challenge survived the empty-code attempt')
+})
+
+test('a mistyped MFA code reports mfa_invalid and never arms the credential backoff', async () => {
+  const pool = testPool()
+  const server = testServer({
+    pool,
+    credentialLoginFn: mfaChallengeLogin({ acceptCode: '123456' }),
+  })
+  const challenged = await beginLogin(server)
+
+  const wrong = await request(server, {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ profile_id: PROFILE_ID, challenge_id: challenged.json.challenge_id, mfa_code: '000000' }),
+  })
+
+  assert.equal(wrong.status, 401)
+  assert.equal(wrong.json.error, 'mfa_invalid')
+  assert.equal(pool.loginBackoff(PROFILE_ID).blocked, false, 'a wrong code is not a failed credential login')
+  assert.equal(pool.isBusy(PROFILE_ID), false)
+
+  const retried = await beginLogin(server)
+
+  assert.equal(retried.status, 401)
+  assert.equal(retried.json.error, 'mfa_required')
+})
+
+test('a malformed JSON body never echoes its content back', async () => {
+  const server = testServer()
+
+  for (const path of ['/login', '/verify', '/atc']) {
+    const response = await request(server, {
+      method: 'POST',
+      path,
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: '{"profile_id":"user-7","password":"hunter2-and-a-half',
+    })
+
+    assert.equal(response.status, 400, path)
+    assert.equal(response.json.error, 'invalid_request')
+    assert.equal(response.json.detail, 'request body is not valid JSON')
+    assert.doesNotMatch(JSON.stringify(response.json), /hunter2/, `${path} must not echo body content`)
+  }
+})
+
 test('every profile-scoped route rejects a request without profile_id', async () => {
   const server = testServer()
   const cases = [
