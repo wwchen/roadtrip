@@ -30,6 +30,18 @@ interface RecGovProfileSessionPort {
     suspend fun health(userId: UserId): CompanionSessionHealth
 
     /**
+     * Renew the profile's session from its own cookies — no credentials, no
+     * login form, no bot wall.
+     *
+     * This is the cheap recovery and it must be tried before any credential
+     * login: rec.gov's JWT lapses in well under an hour, and a headed login the
+     * operator did by hand is recoverable this way long after the token itself
+     * expired. Going straight to a credential login instead throws away that
+     * session and walks into the automated-login wall.
+     */
+    suspend fun refreshSession(userId: UserId): CompanionActionResult
+
+    /**
      * One unattended re-login with the stored credentials. Fails — never
      * prompts — when rec.gov asks for an MFA code or shows a captcha.
      */

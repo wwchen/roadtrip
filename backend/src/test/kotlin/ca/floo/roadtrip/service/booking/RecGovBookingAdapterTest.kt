@@ -199,6 +199,61 @@ class RecGovBookingAdapterTest {
         }
 
     @Test
+    fun `a cookie refresh recovers the session before any credential login`() =
+        runBlocking {
+            // A rec.gov JWT lapses in well under an hour, so a session that
+            // worked minutes ago reads as dead. The refresh is one API call
+            // with no login form and no bot wall — it must come first.
+            val executor = RecordingAtcExecutor(completedOutcome())
+            val session =
+                FakeProfileSession(
+                    health = CompanionSessionHealth.Inactive(RecGovSessionCodes.NOT_AUTHENTICATED),
+                    refreshSession = CompanionActionResult.Ok,
+                )
+            val provider = provider(executor, session)
+
+            val result = provider.addToCart(request(recgovTarget()))
+
+            assertTrue(result is AddToCartResult.Completed)
+            assertEquals(listOf(TEST_OWNER_USER_ID.toString()), session.refreshes)
+            assertTrue(session.reLogins.isEmpty(), "a recoverable session must never reach the credential login")
+        }
+
+    @Test
+    fun `an interactive caller gets the refresh even though it never gets a credential login`() =
+        runBlocking {
+            // Fast and often enough, so the person watching the spinner gets it.
+            val executor = RecordingAtcExecutor(completedOutcome())
+            val session =
+                FakeProfileSession(
+                    health = CompanionSessionHealth.Inactive(RecGovSessionCodes.NOT_AUTHENTICATED),
+                    refreshSession = CompanionActionResult.Ok,
+                )
+            val provider = provider(executor, session)
+
+            val result = provider.addToCart(request(recgovTarget()).copy(allowUnattendedRelogin = false))
+
+            assertTrue(result is AddToCartResult.Completed)
+            assertEquals(listOf(TEST_OWNER_USER_ID.toString()), session.refreshes)
+            assertTrue(session.reLogins.isEmpty())
+        }
+
+    @Test
+    fun `an interactive caller whose refresh cannot help still fails fast`() =
+        runBlocking {
+            val session = FakeProfileSession(health = CompanionSessionHealth.NeverLoggedIn)
+            val provider = provider(session = session)
+
+            val failed =
+                provider.addToCart(request(recgovTarget()).copy(allowUnattendedRelogin = false))
+                    as AddToCartResult.Failed
+
+            assertEquals(RECGOV_SESSION_EXPIRED_ERROR, failed.error)
+            assertEquals(listOf(TEST_OWNER_USER_ID.toString()), session.refreshes)
+            assertTrue(session.reLogins.isEmpty())
+        }
+
+    @Test
     fun `an unreachable companion fails the ATC without attempting a re-login`() =
         runBlocking {
             val executor = RecordingAtcExecutor(completedOutcome())
@@ -257,9 +312,12 @@ class RecGovBookingAdapterTest {
     private class FakeProfileSession(
         private val health: CompanionSessionHealth = CompanionSessionHealth.Active,
         private val reLogin: CompanionActionResult = CompanionActionResult.Ok,
+        /** Cookie-based recovery, tried before credentials on every path. */
+        private val refreshSession: CompanionActionResult = CompanionActionResult.Failed("recgov_refresh_failed"),
     ) : RecGovProfileSessionPort {
         val healthChecks = mutableListOf<String>()
         val reLogins = mutableListOf<String>()
+        val refreshes = mutableListOf<String>()
 
         override fun profileId(userId: UserId): String = userId.value.toString()
 
@@ -271,6 +329,11 @@ class RecGovBookingAdapterTest {
         override suspend fun reLogin(userId: UserId): CompanionActionResult {
             reLogins += profileId(userId)
             return reLogin
+        }
+
+        override suspend fun refreshSession(userId: UserId): CompanionActionResult {
+            refreshes += profileId(userId)
+            return refreshSession
         }
     }
 

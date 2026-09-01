@@ -95,13 +95,33 @@ internal class RecGovBookingAdapter(
                 PreflightBlocker(health.code ?: RecGovSessionCodes.AUTH_CHECK_EXCEPTION, COMPANION_ERROR_DETAIL)
             // Never signed in, or signed out: both are exactly what the one
             // unattended re-login exists for.
-            // A caller who is waiting is told now; only an unattended fire pays
-            // for the recovery attempt.
-            is CompanionSessionHealth.NeverLoggedIn ->
-                if (allowRelogin) reLogin(client, owner, null) else sessionExpired()
-            is CompanionSessionHealth.Inactive ->
-                if (allowRelogin) reLogin(client, owner, health.code) else sessionExpired()
+            // Cookies first, for both callers. A refresh is one API call with
+            // no bot wall, and a lapsed JWT is the usual reason a session that
+            // worked minutes ago reads as dead — so the interactive caller gets
+            // it too, even though it will not pay for a credential login.
+            is CompanionSessionHealth.NeverLoggedIn -> recover(client, owner, null, allowRelogin)
+            is CompanionSessionHealth.Inactive -> recover(client, owner, health.code, allowRelogin)
         }
+    }
+
+    /**
+     * Refresh, then — only for an unattended fire — a credential login.
+     *
+     * A person watching a spinner still gets the refresh: it is fast and often
+     * enough. What they do not get is the credential login, which MFA would
+     * block anyway and which would cost them a minute to learn nothing.
+     */
+    private suspend fun recover(
+        client: RecGovProfileSessionPort,
+        owner: UserId,
+        healthCode: String?,
+        allowRelogin: Boolean,
+    ): PreflightBlocker? {
+        if (client.refreshSession(owner) == CompanionActionResult.Ok) {
+            log.info("recgov session refreshed from cookies for owner user_id={}", owner.value)
+            return null
+        }
+        return if (allowRelogin) reLogin(client, owner, healthCode) else sessionExpired()
     }
 
     private suspend fun reLogin(

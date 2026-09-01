@@ -162,9 +162,27 @@ class RecGovCredentialService(
         return RecgovRemovedDto(removed = true, strandedAtcWatches = stranded, companionSignedOut = signedOut)
     }
 
+    /**
+     * Test login: **refresh first, credentials only if that cannot help.**
+     *
+     * A rec.gov JWT lapses in far less than an hour, so a session the operator
+     * established by hand looks dead to `health` long before it is beyond
+     * saving. `POST /refresh` renews it from the profile's own cookies — an API
+     * call, no login form, no bot wall — and that is nearly always what "Test
+     * login" should actually do. Reaching for the credential form first threw
+     * away a recoverable session and walked into the automated-login wall,
+     * which is exactly what was seen live ~30 minutes after a headed login.
+     */
     override suspend fun login(userId: UserId): RecgovLoginResponseDto {
         val credentials = requireCredentials(userId)
         val client = companion ?: return companionUnavailableLogin()
+
+        if (client.refresh(profileId(userId)) == CompanionActionResult.Ok) {
+            log.info("rec.gov session refreshed without credentials for user={}", userId.value)
+            pendingChallenges.remove(userId.value)
+            return RecgovLoginResponseDto(status = RecgovLoginStatus.OK)
+        }
+
         return recordLogin(userId, client.login(profileId(userId), credentials.username, credentials.password))
     }
 
@@ -222,7 +240,12 @@ class RecGovCredentialService(
             when (health) {
                 is CompanionSessionHealth.Active -> RecgovSessionState.ACTIVE to null
                 is CompanionSessionHealth.NeverLoggedIn -> RecgovSessionState.NOT_LOGGED_IN to null
-                is CompanionSessionHealth.Inactive -> RecgovSessionState.EXPIRED to health.code
+                // The distinction the status row can honestly draw: the profile
+                // HAS been logged in (otherwise health says NeverLoggedIn), so
+                // this is a lapsed session, and the fix is a person — not the
+                // `recgov_login_failed` a doomed automated attempt would report.
+                is CompanionSessionHealth.Inactive ->
+                    RecgovSessionState.EXPIRED to (health.code ?: RecGovSessionCodes.SESSION_LAPSED)
                 is CompanionSessionHealth.CheckFailed -> RecgovSessionState.CHECK_FAILED to health.code
                 is CompanionSessionHealth.Unavailable -> RecgovSessionState.COMPANION_UNAVAILABLE to health.detail
             }
@@ -241,6 +264,10 @@ class RecGovCredentialService(
 
     override suspend fun health(userId: UserId): CompanionSessionHealth =
         companion?.health(profileId(userId)) ?: CompanionSessionHealth.Unavailable(null)
+
+    override suspend fun refreshSession(userId: UserId): CompanionActionResult =
+        companion?.refresh(profileId(userId))
+            ?: CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, null)
 
     /**
      * One unattended login with the stored credentials, for a profile whose
@@ -267,6 +294,10 @@ class RecGovCredentialService(
                 return CompanionActionResult.Failed(RecGovSessionCodes.NOT_CONFIGURED, e.message)
             }
         val client = companion ?: return CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, null)
+
+        // Cookies before credentials here too: a refresh costs one API call and
+        // cannot hit a bot wall, where the credential login can.
+        if (client.refresh(profileId(userId)) == CompanionActionResult.Ok) return CompanionActionResult.Ok
 
         return when (
             val result =

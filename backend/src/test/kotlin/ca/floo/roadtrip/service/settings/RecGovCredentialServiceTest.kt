@@ -80,8 +80,16 @@ private class FakeCompanion(
     val mfaCalls = mutableListOf<Triple<String, String, String>>()
     val logoutCalls = mutableListOf<String>()
 
+    val refreshed = mutableListOf<String>()
+
     /** When set, [completeMfa] parks inside the companion until it completes. */
     var mfaGate: CompletableDeferred<Unit>? = null
+
+    /**
+     * Cookie refresh is tried before credentials everywhere; default it to
+     * "cannot help" so the existing tests still exercise the login path.
+     */
+    var refreshResult: CompanionActionResult = CompanionActionResult.Failed("recgov_refresh_failed")
 
     override suspend fun login(
         profileId: String,
@@ -113,7 +121,10 @@ private class FakeCompanion(
 
     override suspend fun health(profileId: String): CompanionSessionHealth = healthResult
 
-    override suspend fun refresh(profileId: String): CompanionActionResult = CompanionActionResult.Ok
+    override suspend fun refresh(profileId: String): CompanionActionResult {
+        refreshed += profileId
+        return refreshResult
+    }
 
     override suspend fun markKeepWarm(profileIds: Collection<String>): CompanionActionResult = CompanionActionResult.Ok
 }
@@ -579,6 +590,45 @@ class RecGovCredentialServiceTest {
         }
 
     // ── fire-time re-login ───────────────────────────────────────────────────
+
+    @Test
+    fun `the profile id is the bare user id, the one shape every caller must agree on`() {
+        // The companion keys the Chromium profile directory AND the stored
+        // cookie jar by whatever string arrives here. Two shapes for one user
+        // ("7" vs "user-7") would save a session under a key the launch path
+        // never reads — indistinguishable from "sessions do not persist".
+        assertEquals("7", service().profileId(testUserId))
+        assertEquals("12345", service().profileId(UserId(12345L)))
+    }
+
+    @Test
+    fun `Test login refreshes from cookies before it ever reaches the login form`() =
+        runBlocking {
+            // The live bug: a headed session lapsed after ~30 minutes and Test
+            // login went straight to a credential login, into the bot wall. A
+            // cookie refresh has no form and no wall.
+            val companion = FakeCompanion()
+            companion.refreshResult = CompanionActionResult.Ok
+            val svc = service(configuredRepo(), companion)
+
+            val answer = svc.login(testUserId)
+
+            assertEquals(RecgovLoginStatus.OK, answer.status)
+            assertEquals(listOf("7"), companion.refreshed)
+            assertTrue(companion.loginCalls.isEmpty(), "a recoverable session must never reach the login form")
+        }
+
+    @Test
+    fun `Test login falls through to credentials when the refresh cannot help`() =
+        runBlocking {
+            val companion = FakeCompanion()
+            val svc = service(configuredRepo(), companion)
+
+            assertEquals(RecgovLoginStatus.OK, svc.login(testUserId).status)
+
+            assertEquals(listOf("7"), companion.refreshed)
+            assertEquals(1, companion.loginCalls.size, "an unrecoverable session still gets the credential path")
+        }
 
     @Test
     fun `a fire-time re-login tells the companion nobody is waiting on it`() =

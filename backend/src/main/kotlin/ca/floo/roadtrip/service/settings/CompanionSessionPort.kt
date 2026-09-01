@@ -36,6 +36,13 @@ object RecGovSessionCodes {
 
     /** The profile's session is dead and only the user can revive it. */
     const val SESSION_EXPIRED = "recgov_session_expired"
+
+    /**
+     * The profile was signed in and its session has lapsed beyond what a cookie
+     * refresh can restore. Distinct from [LOGIN_FAILED], which is what a doomed
+     * automated re-login reports and which reads as "your password is wrong".
+     */
+    const val SESSION_LAPSED = "recgov_session_lapsed"
 }
 
 /** Result of a credential login or of completing an MFA challenge. */

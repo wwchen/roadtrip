@@ -649,6 +649,7 @@ class TriggerActionHandlerTest {
     /** A profile whose session is dead and whose recovery answers [reLogin]. */
     private class DeadSession(
         private val reLogin: CompanionActionResult,
+        private val refreshSession: CompanionActionResult = CompanionActionResult.Failed("recgov_refresh_failed"),
     ) : RecGovProfileSessionPort {
         override fun profileId(userId: UserId): String = userId.value.toString()
 
@@ -656,6 +657,8 @@ class TriggerActionHandlerTest {
             CompanionSessionHealth.Inactive(RecGovSessionCodes.NOT_AUTHENTICATED)
 
         override suspend fun reLogin(userId: UserId): CompanionActionResult = reLogin
+
+        override suspend fun refreshSession(userId: UserId): CompanionActionResult = refreshSession
     }
 
     private class RecordingEmailClient : EmailDeliveryClient {
