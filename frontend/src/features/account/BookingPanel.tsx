@@ -279,6 +279,15 @@ export function BookingPanel({
           {/* The destructive action for this page, on this page. It was in
               Account, which meant removing a credential you were looking at
               required leaving the tab that shows it. */}
+          {/* Say what is destroyed BEFORE the first click, not in the notice
+              after it. Removal erases the saved browser session too, which is
+              the part a user cannot guess from "remove credentials" — and the
+              part they cannot undo without logging in again from scratch. */}
+          <p className="rt-account-danger-note">
+            Removes your Recreation.gov username and password, and erases the saved browser
+            session on the booking service. You will have to sign in again to use add-to-cart,
+            and any active add-to-cart watches will fail until you do.
+          </p>
           <ConfirmButton
             variant="tertiary"
             hue="red"

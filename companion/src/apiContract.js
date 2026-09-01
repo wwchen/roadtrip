@@ -92,6 +92,20 @@ export const COMPANION_API_ROUTES = [
   },
   {
     method: 'POST',
+    path: '/destroy',
+    operationId: 'postDestroy',
+    summary: 'Erase one browser profile: close it, delete its directory and its stored cookie jar',
+    parameters: [profileIdQueryParameter()],
+    requestBody: profileRequestBody(),
+    responses: {
+      200: jsonResponse('Profile destroyed, or already absent', 'ProfileDestroyResponse'),
+      400: jsonResponse('Missing or malformed profile_id', 'ErrorResponse'),
+      409: jsonResponse('The profile is already running work', 'ErrorResponse'),
+      500: jsonResponse('Destroy failed unexpectedly', 'ErrorResponse'),
+    },
+  },
+  {
+    method: 'POST',
     path: '/refresh',
     operationId: 'postRefresh',
     summary: 'Force refresh one profile stored Rec.gov browser session',
@@ -394,6 +408,22 @@ export const COMPANION_API_SCHEMAS = {
       keep_warm_overflow: {
         type: 'integer',
         description: 'Armed profiles beyond the cap. Reported, never resolved by eviction.',
+      },
+    },
+  },
+  ProfileDestroyResponse: {
+    type: 'object',
+    required: ['ok', 'profile_id', 'directory_removed', 'cookie_jar_removed'],
+    properties: {
+      ok: { type: 'boolean' },
+      profile_id: PROFILE_ID_SCHEMA,
+      directory_removed: {
+        type: 'boolean',
+        description: 'False when the profile had no directory. Still a success — the caller asked for it to be gone.',
+      },
+      cookie_jar_removed: {
+        type: 'boolean',
+        description: 'Whether a stored per-profile rec.gov cookie jar was deleted.',
       },
     },
   },

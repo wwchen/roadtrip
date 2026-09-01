@@ -372,6 +372,32 @@ describe('the Booking tab', () => {
 });
 
 describe('remove rec.gov credentials', () => {
+  test('does not claim a wipe that did not happen when the companion is down', async () => {
+    // The local delete succeeds regardless — that contract is deliberate — but
+    // the saved rec.gov session is still sitting on the companion host, and
+    // saying otherwise would be a lie about where a live session lives.
+    getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
+    expect(await screen.findByText('Danger zone')).toBeInTheDocument();
+
+    onPut = () =>
+      json({
+        removed: true,
+        stranded_atc_watches: 0,
+        companion_signed_out: false,
+        profile_destroyed: false,
+      });
+    getSettings = () => json(settingsBody());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm removal' }));
+
+    expect(await screen.findByText(/could not be erased/i)).toBeInTheDocument();
+  });
+
   test('reports how many active add-to-cart watches it stranded', async () => {
     getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
     renderSettingsModal();
@@ -381,7 +407,13 @@ describe('remove rec.gov credentials', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
     expect(await screen.findByText('Danger zone')).toBeInTheDocument();
 
-    onPut = () => json({ removed: true, stranded_atc_watches: 2, companion_signed_out: false });
+    onPut = () =>
+      json({
+        removed: true,
+        stranded_atc_watches: 2,
+        companion_signed_out: true,
+        profile_destroyed: true,
+      });
     getSettings = () => json(settingsBody());
 
     await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
@@ -389,7 +421,8 @@ describe('remove rec.gov credentials', () => {
 
     expect(
       await screen.findByText(
-        'Recreation.gov credentials removed. 2 active add-to-cart watches will fail until you add them again.',
+        'Recreation.gov credentials and saved browser session removed. 2 active add-to-cart ' +
+          'watches will fail until you add them again.',
       ),
     ).toBeInTheDocument();
     await waitFor(() =>

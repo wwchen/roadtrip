@@ -26,6 +26,7 @@ import java.time.Duration
 // ── Companion routes ─────────────────────────────────────────────────────────
 private const val LOGIN_PATH = "/login"
 private const val LOGOUT_PATH = "/logout"
+private const val DESTROY_PATH = "/destroy"
 private const val VERIFY_PATH = "/verify"
 private const val REFRESH_PATH = "/refresh"
 private const val KEEP_WARM_PATH = "/keep-warm"
@@ -132,6 +133,8 @@ internal class CompanionSessionClient(
         )
 
     override suspend fun logout(profileId: String): CompanionActionResult = actionResult(post(LOGOUT_PATH, profileBody(profileId)))
+
+    override suspend fun destroyProfile(profileId: String): CompanionActionResult = actionResult(post(DESTROY_PATH, profileBody(profileId)))
 
     override suspend fun refresh(profileId: String): CompanionActionResult = actionResult(post(REFRESH_PATH, profileBody(profileId)))
 

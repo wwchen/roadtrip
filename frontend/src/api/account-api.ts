@@ -110,6 +110,8 @@ export interface RecgovRemovedResponse {
   removed: boolean;
   stranded_atc_watches: number;
   companion_signed_out: boolean;
+  /** False when the companion was unreachable: the saved browser session may remain on its host. */
+  profile_destroyed: boolean;
 }
 
 export interface UpdateBookingFields {
@@ -222,7 +224,7 @@ export async function removeRecgov(
   options: RequestOptions = {},
 ): Promise<RecgovRemovedResponse> {
   const body = await jsonDeleteOk<RecgovRemovedResponse>(RECGOV_URL, options);
-  return body ?? { removed: true, stranded_atc_watches: 0, companion_signed_out: false };
+  return body ?? { removed: true, stranded_atc_watches: 0, companion_signed_out: false, profile_destroyed: false };
 }
 
 /**

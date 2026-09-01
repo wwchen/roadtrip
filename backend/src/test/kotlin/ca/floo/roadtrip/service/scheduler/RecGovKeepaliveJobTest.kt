@@ -243,6 +243,8 @@ class RecGovKeepaliveJobTest {
 
         override suspend fun logout(profileId: String): CompanionActionResult = CompanionActionResult.Ok
 
+        override suspend fun destroyProfile(profileId: String): CompanionActionResult = CompanionActionResult.Ok
+
         override suspend fun verify(profileId: String): CompanionActionResult = CompanionActionResult.Ok
 
         override suspend fun health(profileId: String): CompanionSessionHealth = CompanionSessionHealth.Active

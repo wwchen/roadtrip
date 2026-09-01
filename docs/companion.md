@@ -55,8 +55,8 @@ gated.
 ## Browser-profile pool
 
 `profile_id` — the roadtrip user id, an opaque string here — is **required**
-on `POST /login`, `POST /logout`, `POST /refresh`, `POST /atc`,
-`POST /verify` and `GET /screenshot`. There is no shared fallback profile:
+on `POST /login`, `POST /logout`, `POST /destroy`, `POST /refresh`,
+`POST /atc`, `POST /verify` and `GET /screenshot`. There is no shared fallback profile:
 a request without it is rejected with `400 profile_id_required`.
 
 - Each profile id maps to its own persistent Chromium user-data directory at
@@ -110,7 +110,8 @@ are authoritative; this is the shape.
 | `GET /` | Operator page (profile id + token fields, login, ATC, screenshot). |
 | `GET /health` | Companion health. With `?profile_id=` it reports that profile's `recgov_auth`, busy flag and pool residency. Lock-free; tokenless from loopback only. |
 | `POST /login` | Two-phase credential login for one profile. |
-| `POST /logout` | Click through the rec.gov logout flow in one profile. |
+| `POST /logout` | Click through the rec.gov logout flow in one profile. Leaves the profile directory and stored cookie jar in place. |
+| `POST /destroy` | Erase one profile: close the browser, delete its directory and its stored cookie jar. Takes the busy lock. Idempotent. |
 | `POST /refresh` | Force a session refresh for one profile. The keepalive job calls it for each armed profile. |
 | `POST /keep-warm` | Replace the armed profile set (`{ "profile_ids": [...] }`). Lock-free; marks profiles, never drives a browser. |
 | `POST /verify` | Dry-run session check. Never places a hold. |
@@ -175,6 +176,37 @@ the fingerprint cookie and Akamai without needing a campsite target. It
 **never clicks Reserve**, so no test ever costs a real cart hold. `200` means
 the session is live; `401` carries `verify.error`
 (`recgov_not_authenticated` or `recgov_cart_unreachable`).
+
+### Destroying a profile
+
+`POST /destroy` is **the only operation that deletes profile state.** Everything
+else preserves it on purpose: `logout` clicks through rec.gov's sign-out flow
+and leaves both the Chromium user-data directory and the saved
+`recgov_cookies:<profile_id>` jar exactly where they were, which is right for a
+logout and wrong for a removal. A "remove my credentials" built on `logout`
+alone leaves the user's rec.gov session material on this host.
+
+It takes the per-profile busy lock, so it can never delete a user-data
+directory out from under a live login, verify or ATC. In order it closes and
+evicts the context, drops the profile from the keep-warm set (so the keepalive
+sweep stops asking for it), deletes the profile's stored cookie jar, and
+deletes the profile directory.
+
+- **Idempotent.** Destroying a profile that was never launched, or was already
+  destroyed, is `200` with `directory_removed: false`. The caller asked for it
+  to be gone and it is gone.
+- **Exactly one profile.** No prefix or wildcard match, and an id whose
+  directory would resolve outside the profiles root is refused with
+  `400 invalid_profile_id` — checked against the resolved path, not just the id
+  pattern, because the operation is a recursive delete.
+- **Never the legacy unkeyed jar.** That belongs to the operator's CLI profile,
+  not to any user.
+
+The backend calls it from `DELETE /api/settings/recgov` after the sign-out. The
+local credential delete succeeds even when the companion is unreachable, so the
+response reports `profile_destroyed` separately from `companion_signed_out`:
+when the companion is down the credentials are gone but the session material is
+not, and the UI says so rather than implying a full wipe.
 
 ### Session durability
 

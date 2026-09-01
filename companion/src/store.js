@@ -46,6 +46,22 @@ export function setSetting (key, value) {
   write(data)
 }
 
+/**
+ * Deletes a key outright rather than nulling it.
+ *
+ * `setSetting(key, null)` leaves the key present with a null value, which for
+ * a rec.gov cookie jar is the difference between "this session is gone" and
+ * "this session is gone, and the file no longer records that it ever existed".
+ * Removing credentials should leave nothing behind.
+ */
+export function removeSetting (key) {
+  const data = read()
+  if (!(key in data)) return false
+  delete data[key]
+  write(data)
+  return true
+}
+
 export function getAll () {
   return read()
 }

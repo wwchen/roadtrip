@@ -79,6 +79,7 @@ private class FakeCompanion(
     val unattendedFlags = mutableListOf<Boolean>()
     val mfaCalls = mutableListOf<Triple<String, String, String>>()
     val logoutCalls = mutableListOf<String>()
+    val destroyCalls = mutableListOf<String>()
 
     val refreshed = mutableListOf<String>()
 
@@ -90,6 +91,9 @@ private class FakeCompanion(
      * "cannot help" so the existing tests still exercise the login path.
      */
     var refreshResult: CompanionActionResult = CompanionActionResult.Failed("recgov_refresh_failed")
+
+    /** A true wipe needs this to succeed; default it to working. */
+    var destroyResult: CompanionActionResult = CompanionActionResult.Ok
 
     override suspend fun login(
         profileId: String,
@@ -115,6 +119,11 @@ private class FakeCompanion(
     override suspend fun logout(profileId: String): CompanionActionResult {
         logoutCalls += profileId
         return logoutResult
+    }
+
+    override suspend fun destroyProfile(profileId: String): CompanionActionResult {
+        destroyCalls += profileId
+        return destroyResult
     }
 
     override suspend fun verify(profileId: String): CompanionActionResult = verifyResult
@@ -220,6 +229,37 @@ class RecGovCredentialServiceTest {
             assertEquals(listOf(PROFILE_ID), companion.logoutCalls)
             assertNull(repo.settings!!.recgovUsername)
             assertNull(repo.settings!!.recgovPasswordCipher)
+        }
+
+    @Test
+    fun `removal destroys the browser profile, not just the credentials`() =
+        runBlocking {
+            // A sign-out is not a removal: `logout` leaves the Chromium profile
+            // directory and the saved rec.gov cookie jar on the companion host,
+            // so removing credentials used to leave the session behind.
+            val companion = FakeCompanion()
+
+            val dto = service(configuredRepo(), companion).remove(testUserId)
+
+            assertTrue(dto.profileDestroyed)
+            assertEquals(listOf(PROFILE_ID), companion.destroyCalls)
+        }
+
+    @Test
+    fun `removal reports honestly when the profile could not be destroyed`() =
+        runBlocking {
+            // The local delete still succeeds — that contract is deliberate —
+            // but the response must not imply a wipe that did not happen.
+            val companion =
+                FakeCompanion(
+                    logoutResult = CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, "refused"),
+                )
+            companion.destroyResult = CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, "refused")
+
+            val dto = service(configuredRepo(), companion).remove(testUserId)
+
+            assertTrue(dto.removed, "the credentials are gone from the database regardless")
+            assertFalse(dto.profileDestroyed, "session material may still be on the companion host")
         }
 
     @Test

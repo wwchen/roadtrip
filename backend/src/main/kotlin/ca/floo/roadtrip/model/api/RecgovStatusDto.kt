@@ -112,4 +112,14 @@ data class RecgovRemovedDto(
     @SerialName("stranded_atc_watches") val strandedAtcWatches: Int,
     /** False when the companion could not be reached; the local delete still happened. */
     @SerialName("companion_signed_out") val companionSignedOut: Boolean,
+    /**
+     * Whether the browser profile — its Chromium directory and its saved
+     * rec.gov cookie jar — was actually erased.
+     *
+     * Reported separately from [companionSignedOut] because the two can differ and
+     * the UI must not imply a full wipe that did not happen: when the companion
+     * is unreachable the credentials are gone from the database but the saved
+     * session material is still on the companion host.
+     */
+    @SerialName("profile_destroyed") val profileDestroyed: Boolean,
 )

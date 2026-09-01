@@ -93,6 +93,16 @@
   letter-spacing: 0.04em;
 }
 
+/* What the destructive action actually destroys, said before the first click
+   rather than in the notice after it. */
+.rt-account-danger-note {
+  margin: 0 0 10px;
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--rt-muted);
+}
+
 /* ---- notifications ----
    Each field pairs an input with its test button and an inline result. The label
    column is the input's own; only the row assembly lives here. */

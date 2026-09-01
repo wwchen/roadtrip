@@ -141,25 +141,48 @@ class RecGovCredentialService(
     }
 
     /**
-     * Clears the stored credentials, then best-effort signs the companion
-     * profile out.
+     * Removes the credentials **and the browser session they created.**
+     *
+     * A sign-out alone was not a removal. `logout` clicks through rec.gov's
+     * sign-out flow and leaves the profile's Chromium directory and its saved
+     * cookie jar on the companion host, so a user who removed their credentials
+     * left their rec.gov session material on disk. The destroy step is what
+     * makes this a true wipe.
      *
      * The local delete happens first and unconditionally: a user removing their
-     * password must not be blocked by an unreachable browser service. The
-     * response reports how many of their active `atc` watches this strands —
-     * those keep the trigger kind and fail loudly on the next fire rather than
-     * being mutated behind the user's back.
+     * password must not be blocked by an unreachable browser service. That
+     * contract has a cost the response has to be honest about — when the
+     * companion is down the credentials are gone but the session material is
+     * not, so [RecgovRemovedDto.profileDestroyed] is reported separately rather
+     * than folded into one "removed" flag.
+     *
+     * The response also reports how many of the owner's active `atc` watches
+     * this strands — those keep the trigger kind and fail loudly on the next
+     * fire rather than being mutated behind the user's back.
      */
     override suspend fun remove(userId: UserId): RecgovRemovedDto {
         val stranded = watchRepo.countByTriggerKind(userId.value, WatchStatus.ACTIVE, AvailabilityTriggerKinds.ATC)
         settingsRepo.clearRecgov(userId)
         pendingChallenges.remove(userId.value)
 
-        val signedOut = companion?.logout(profileId(userId)) == CompanionActionResult.Ok
-        if (!signedOut) {
-            log.info("rec.gov credentials removed for user={} without a companion sign-out", userId.value)
+        val profile = profileId(userId)
+        // Sign out first: it is the graceful half, and it tells rec.gov the
+        // session is finished rather than merely abandoning it.
+        val signedOut = companion?.logout(profile) == CompanionActionResult.Ok
+        val destroyed = companion?.destroyProfile(profile) == CompanionActionResult.Ok
+        if (!destroyed) {
+            log.warn(
+                "rec.gov credentials removed for user={} but the browser profile was not destroyed; " +
+                    "session material may remain on the companion host",
+                userId.value,
+            )
         }
-        return RecgovRemovedDto(removed = true, strandedAtcWatches = stranded, companionSignedOut = signedOut)
+        return RecgovRemovedDto(
+            removed = true,
+            strandedAtcWatches = stranded,
+            companionSignedOut = signedOut,
+            profileDestroyed = destroyed,
+        )
     }
 
     /**

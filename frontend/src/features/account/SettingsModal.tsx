@@ -63,12 +63,25 @@ type TabId = (typeof TABS)[number]['id'];
 
 const SAVED_MESSAGE = 'Settings saved.';
 
-/** Removal is reported with what it cost: the watches now left without credentials. */
-const removedMessage = (stranded: number): string =>
-  stranded === 0
-    ? 'Recreation.gov credentials removed.'
-    : `Recreation.gov credentials removed. ${stranded} active add-to-cart ` +
-      `${stranded === 1 ? 'watch' : 'watches'} will fail until you add them again.`;
+/**
+ * Removal is reported with what it cost: the watches now left without
+ * credentials, and whether the saved browser session actually went with them.
+ *
+ * The local delete succeeds even when the companion is unreachable, so the
+ * message must not imply a full wipe that did not happen — the session material
+ * is still on the companion host in that case.
+ */
+const removedMessage = (stranded: number, profileDestroyed: boolean): string => {
+  const base = profileDestroyed
+    ? 'Recreation.gov credentials and saved browser session removed.'
+    : 'Recreation.gov credentials removed, but the saved browser session could not be ' +
+      'erased because the booking service is unreachable. Remove again once it is back.';
+  if (stranded === 0) return base;
+  return (
+    `${base} ${stranded} active add-to-cart ` +
+    `${stranded === 1 ? 'watch' : 'watches'} will fail until you add them again.`
+  );
+};
 
 type Notice = { status: 'success' | 'error'; message: string };
 
@@ -184,8 +197,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   const handleRemoveRecgov = async () => {
     try {
-      const { stranded_atc_watches } = await removeRecgov.mutateAsync();
-      setNotice({ status: 'success', message: removedMessage(stranded_atc_watches) });
+      const { stranded_atc_watches, profile_destroyed } = await removeRecgov.mutateAsync();
+      setNotice({
+        status: 'success',
+        message: removedMessage(stranded_atc_watches, profile_destroyed),
+      });
     } catch (err) {
       fail(err);
     }

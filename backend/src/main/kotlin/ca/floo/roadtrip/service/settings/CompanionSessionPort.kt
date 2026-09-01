@@ -128,6 +128,16 @@ interface CompanionSessionPort {
 
     suspend fun logout(profileId: String): CompanionActionResult
 
+    /**
+     * Erase the profile: close its browser, delete its user-data directory and
+     * its stored rec.gov cookie jar.
+     *
+     * Distinct from [logout], which clicks through rec.gov's sign-out flow and
+     * leaves both on disk. Only this makes "remove my credentials" a true wipe.
+     * Destroying a profile that does not exist is a success.
+     */
+    suspend fun destroyProfile(profileId: String): CompanionActionResult
+
     suspend fun verify(profileId: String): CompanionActionResult
 
     suspend fun health(profileId: String): CompanionSessionHealth

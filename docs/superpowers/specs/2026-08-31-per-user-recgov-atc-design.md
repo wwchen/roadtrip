@@ -166,9 +166,15 @@ The channel today is plain HTTP with no auth and will now carry passwords.
   `SettingsRoutes.kt`:
   - `PUT /api/settings/recgov` — username + write-only password
     (`SecretField` semantics: null = unchanged).
-  - `DELETE /api/settings/recgov` — clears the columns and best-effort
-    destroys the companion profile. **Local delete succeeds even when the
-    companion is down**; profile destruction is retried opportunistically.
+  - `DELETE /api/settings/recgov` — clears the columns, then signs the
+    companion profile out and **destroys it**: `POST /destroy` closes the
+    browser, deletes the profile's Chromium directory and deletes its stored
+    rec.gov cookie jar. A sign-out alone is not a removal — `logout` leaves
+    both on disk, so a removal built on it left the user's session material
+    behind. **Local delete succeeds even when the companion is down**, and
+    destruction is *not* retried in the background: the response carries
+    `profile_destroyed` so the UI can say plainly that the session material
+    still exists and the user should remove again once the companion is back.
     The response (and the FE confirm copy) reports how many active `atc`
     watches the deletion strands — those watches keep the kind and fail with
     a notification on future fires; nothing mutates them behind the user's

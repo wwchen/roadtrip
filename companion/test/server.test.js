@@ -1000,6 +1000,72 @@ test('POST /keep-warm refuses a body that is not an array of profile ids', async
   assert.equal(response.json.error, 'invalid_request')
 })
 
+test('POST /destroy erases the profile and answers ok', async () => {
+  // "Remove my credentials" must be a true wipe: logout leaves the Chromium
+  // directory and the saved cookie jar on disk, this is what deletes them.
+  setSetting(recgovCookieSettingKey(PROFILE_ID), 'r1s-fingerprint=live-session')
+  const server = testServer()
+
+  const response = await request(server, {
+    method: 'POST',
+    path: '/destroy',
+    body: JSON.stringify({ profile_id: PROFILE_ID }),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.json.ok, true)
+  assert.equal(response.json.profile_id, PROFILE_ID)
+  assert.equal(getSetting(recgovCookieSettingKey(PROFILE_ID)), null)
+})
+
+test('POST /destroy queues behind live work on the same profile', async () => {
+  // It deletes the user-data directory out from under a browser, so it must
+  // never race a login, verify or ATC mid-flight.
+  const pool = testPool()
+  const server = testServer({ pool })
+  pool.acquire(PROFILE_ID, 'login')
+
+  const response = await request(server, {
+    method: 'POST',
+    path: '/destroy',
+    body: JSON.stringify({ profile_id: PROFILE_ID }),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(response.status, 409)
+  assert.equal(response.json.error, 'profile_busy')
+})
+
+test('POST /destroy refuses a profile id that could escape the profiles root', async () => {
+  const server = testServer()
+
+  for (const bad of ['../../etc', '/etc/passwd', '.']) {
+    const response = await request(server, {
+      method: 'POST',
+      path: '/destroy',
+      body: JSON.stringify({ profile_id: bad }),
+      headers: { 'content-type': 'application/json' },
+    })
+    assert.equal(response.status, 400, `${bad} must be refused`)
+    assert.equal(response.json.error, 'invalid_profile_id')
+  }
+})
+
+test('POST /destroy requires a profile id', async () => {
+  const server = testServer()
+
+  const response = await request(server, {
+    method: 'POST',
+    path: '/destroy',
+    body: JSON.stringify({}),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(response.status, 400)
+  assert.equal(response.json.error, 'profile_id_required')
+})
+
 test('every data route rejects a request without the shared-secret header', async () => {
   const server = testServer()
 
@@ -1010,9 +1076,10 @@ test('every data route rejects a request without the shared-secret header', asyn
     assert.equal(response.json.error, 'unauthorized')
   }
 
-  const posted = await request(server, { method: 'POST', path: '/atc', token: null })
-
-  assert.equal(posted.status, 401)
+  for (const path of ['/atc', '/destroy']) {
+    const posted = await request(server, { method: 'POST', path, token: null })
+    assert.equal(posted.status, 401, `${path} must require the companion token`)
+  }
 })
 
 test('a failed login writes no trace by default, but keeps its screenshot', async () => {

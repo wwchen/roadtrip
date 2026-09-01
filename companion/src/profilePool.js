@@ -13,11 +13,14 @@
 // challenge, the failed-login backoff marker, and the last auth status.
 
 import path from 'node:path'
+import fs from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import {
   launchProfileContext,
+  recgovCookieSettingKey,
   resolveSessionDir,
 } from './browser.js'
+import { removeSetting } from './store.js'
 import { log } from './server/logging.js'
 
 export const PROFILE_DIR_SEGMENT = 'profiles'
@@ -233,6 +236,60 @@ export function createProfilePool ({
       const state = profiles.get(profileId)
       if (!state) return
       await closeState(state)
+    },
+
+    /**
+     * Erases every trace of one profile: browser, directory, stored jar.
+     *
+     * This is the ONLY operation that deletes profile state. `logout` clicks
+     * through rec.gov's sign-out flow in the browser and leaves the user-data
+     * directory and the saved cookie jar exactly where they were, so a
+     * "remove my credentials" built on logout alone left the user's rec.gov
+     * session material on disk — which is the bug this exists to fix.
+     *
+     * Idempotent: a profile that was never launched, or was already destroyed,
+     * is a success. The caller asked for it to be gone and it is gone.
+     *
+     * Acts on exactly the one id it is given — no prefix or wildcard match —
+     * and refuses any id whose directory would resolve outside the pool root.
+     * `normalizeProfileId` already rejects separators and leading dots at the
+     * HTTP boundary; this is the second lock on a function whose whole job is
+     * recursive deletion, and it is checked against the RESOLVED path so a
+     * future loosening of that pattern cannot turn into an escape.
+     */
+    async destroyProfile (profileId) {
+      const parsed = normalizeProfileId(profileId)
+      if (!parsed.ok) return { ok: false, error: parsed.error }
+
+      const root = path.resolve(profilesDir)
+      const target = path.resolve(profileDir(parsed.profileId))
+      if (target === root || !target.startsWith(root + path.sep)) {
+        logger('recgov profile destroy refused', `profile=${parsed.profileId}`, 'reason=outside_profiles_root')
+        return { ok: false, error: ERROR_PROFILE_ID_INVALID }
+      }
+
+      const state = profiles.get(parsed.profileId)
+      if (state) {
+        dropChallenge(state)
+        await closeState(state)
+      }
+      keepWarmIds.delete(parsed.profileId)
+      const jarRemoved = removeSetting(recgovCookieSettingKey(parsed.profileId))
+
+      const dirExisted = fs.existsSync(target)
+      fs.rmSync(target, { recursive: true, force: true })
+      // Last, so the busy lock the caller holds still guards everything above:
+      // the entry owns the lock, and a fresh one would let a second operation
+      // in mid-delete.
+      profiles.delete(parsed.profileId)
+
+      logger(
+        'recgov profile destroyed',
+        `profile=${parsed.profileId}`,
+        `dir_removed=${dirExisted}`,
+        `cookie_jar_removed=${jarRemoved}`,
+      )
+      return { ok: true, profile_id: parsed.profileId, directory_removed: dirExisted, cookie_jar_removed: jarRemoved }
     },
 
     setKeepWarmProfiles (ids = []) {

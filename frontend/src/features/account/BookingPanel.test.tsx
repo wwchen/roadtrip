@@ -155,6 +155,18 @@ describe('the credential slice', () => {
     expect(onRemoveRecgov).toHaveBeenCalledTimes(1);
   });
 
+  test('the danger zone says the browser session goes too, before the first click', () => {
+    // "Remove credentials" does not tell a user their saved rec.gov browser
+    // session is erased as well, and that is the part they cannot undo without
+    // signing in from scratch.
+    renderPanel(settings(CONFIGURED));
+
+    const note = screen.getByText(/erases the saved browser session/i);
+    expect(note).toBeInTheDocument();
+    expect(note).toHaveTextContent(/username and password/i);
+    expect(note).toHaveTextContent(/add-to-cart watches will fail/i);
+  });
+
   test('nothing stored means nothing to remove', () => {
     renderPanel(settings());
 
