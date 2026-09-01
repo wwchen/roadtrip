@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, SecretField, SeededTextField } from '@ui';
 import type {
   RecgovLoginResponse,
@@ -102,6 +102,15 @@ export function BookingPanel({
   const dirty = isBookingDirty(settings, values);
   const busy = isLoginBusy(login) || verifying;
   const configured = settings.booking.recgov_configured;
+  const awaitingCode = login.kind === 'mfa_pending' || login.kind === 'submitting';
+
+  // A challenge the server is still holding outlives this component: a reload or
+  // a reopened modal has to find the code step, not a Test login button that
+  // would collide with the profile lock that challenge holds.
+  const serverHasChallenge = status?.mfa_pending === true;
+  useEffect(() => {
+    if (serverHasChallenge) setLogin((current) => nextLoginState(current, { type: 'resumed' }));
+  }, [serverHasChallenge]);
 
   // An unrecognised state reads as "unknown" rather than blanking the row: a
   // server that grows a state must not leave the user with no session line.
@@ -132,7 +141,7 @@ export function BookingPanel({
   };
 
   const startLogin = async () => {
-    if (busy || dirty) return;
+    if (busy || dirty || awaitingCode) return;
     const started = nextLoginState(login, { type: 'login_started' });
     setLogin(started);
     setResult(null);
@@ -206,7 +215,9 @@ export function BookingPanel({
         <Button
           size="sm"
           variant="secondary"
-          disabled={busy || dirty || !configured}
+          // Not while a challenge is open: the companion answers profile_busy,
+          // because that very challenge holds the profile's lock.
+          disabled={busy || dirty || !configured || awaitingCode}
           onClick={() => void startLogin()}
         >
           Test login
@@ -219,7 +230,7 @@ export function BookingPanel({
 
       {dirty && <span className="rt-secret-field-help">{SAVE_FIRST_HELP}</span>}
 
-      {(login.kind === 'mfa_pending' || login.kind === 'submitting') && (
+      {awaitingCode && (
         <MfaStep
           busy={busy}
           onSubmit={(code) => void submitCode(code)}

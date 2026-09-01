@@ -88,6 +88,32 @@ describe('the code step', () => {
   });
 });
 
+describe('resuming a challenge the server is still holding', () => {
+  test('idle → mfa_pending, with no id the client was never told', () => {
+    expect(nextLoginState(IDLE, { type: 'resumed' })).toEqual({
+      kind: 'mfa_pending',
+      challengeId: null,
+    });
+  });
+
+  test('a resumed step submits and completes like any other', () => {
+    const resumed = nextLoginState(IDLE, { type: 'resumed' });
+    const submitting = nextLoginState(resumed, { type: 'code_submitted' });
+
+    expect(submitting).toEqual({ kind: 'submitting', challengeId: null });
+    expect(nextLoginState(submitting, { type: 'succeeded' })).toEqual({ kind: 'ok' });
+  });
+
+  test('resuming never disturbs a flow already under way', () => {
+    const inFlight: BookingLoginState = { kind: 'logging_in' };
+    expect(nextLoginState(inFlight, { type: 'resumed' })).toBe(inFlight);
+    expect(nextLoginState(mfaPending, { type: 'resumed' })).toBe(mfaPending);
+
+    const done: BookingLoginState = { kind: 'ok' };
+    expect(nextLoginState(done, { type: 'resumed' })).toBe(done);
+  });
+});
+
 describe('derived questions the panel asks', () => {
   test('busy exactly while a request is out', () => {
     expect(isLoginBusy(IDLE)).toBe(false);
@@ -102,6 +128,7 @@ describe('derived questions the panel asks', () => {
     expect(pendingChallengeId(mfaPending)).toBe('chal-1');
     expect(pendingChallengeId({ kind: 'submitting', challengeId: 'chal-1' })).toBe('chal-1');
     expect(pendingChallengeId(IDLE)).toBeNull();
+    expect(pendingChallengeId({ kind: 'mfa_pending', challengeId: null })).toBeNull();
     expect(pendingChallengeId({ kind: 'ok' })).toBeNull();
   });
 });

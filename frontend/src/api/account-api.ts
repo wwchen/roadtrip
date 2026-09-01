@@ -73,6 +73,12 @@ export interface RecgovStatus {
   password_hint: string | null;
   session: 'not_configured' | 'active' | 'expired' | 'companion_unavailable';
   detail?: string | null;
+  /**
+   * True while a login of this user's is waiting on a verification code. The
+   * companion holds the prompt page for minutes, so a panel that remounted can
+   * resume the step rather than orphan a challenge holding the profile's lock.
+   */
+  mfa_pending?: boolean;
 }
 
 /** Mirrors RecgovLoginResponseDto. A blocked login is a 200 with a code. */

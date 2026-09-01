@@ -15,6 +15,30 @@ describe('settingsErrorMessage', () => {
     expect(settingsErrorMessage('email_send_failed')).toBe("Couldn't send the test email.");
   });
 
+  test('maps the rec.gov booking codes', () => {
+    expect(settingsErrorMessage('login_failed')).toBe(
+      'Recreation.gov rejected these credentials.',
+    );
+    expect(settingsErrorMessage('mfa_invalid')).toBe(
+      'That code was rejected. Start the login again for a new one.',
+    );
+    expect(settingsErrorMessage('captcha_required')).toBe(
+      'Recreation.gov showed a challenge we cannot solve. Try again in a moment.',
+    );
+    expect(settingsErrorMessage('companion_unavailable')).toBe(
+      "The booking service isn't reachable right now.",
+    );
+  });
+
+  test('the transient companion codes read as "try again", not as failures', () => {
+    expect(settingsErrorMessage('profile_busy')).toBe(
+      'Another operation is using your rec.gov session — try again shortly.',
+    );
+    expect(settingsErrorMessage('browser_cap_reached')).toBe(
+      'The booking service is at capacity — try again shortly.',
+    );
+  });
+
   test('falls back for an unknown code', () => {
     expect(settingsErrorMessage('brand_new_code')).toBe(DEFAULT);
   });

@@ -9,17 +9,24 @@
 /** A challenge id from the server, meaningful only to the backend. */
 type ChallengeId = string;
 
+/**
+ * `challengeId` is null for a challenge this client did not open — a panel that
+ * remounted and learned from the status row that one is still pending. The
+ * server holds the id either way; the code step does not need it to submit.
+ */
 export type BookingLoginState =
   | { kind: 'idle' }
   | { kind: 'logging_in' }
-  | { kind: 'mfa_pending'; challengeId: ChallengeId }
-  | { kind: 'submitting'; challengeId: ChallengeId }
+  | { kind: 'mfa_pending'; challengeId: ChallengeId | null }
+  | { kind: 'submitting'; challengeId: ChallengeId | null }
   | { kind: 'ok' }
   | { kind: 'failed'; code: string };
 
 export type BookingLoginEvent =
   | { type: 'login_started' }
   | { type: 'mfa_required'; challengeId: ChallengeId }
+  /** The server says a challenge is open that this client never saw. */
+  | { type: 'resumed' }
   | { type: 'code_submitted' }
   | { type: 'cancelled' }
   | { type: 'succeeded' }
@@ -58,6 +65,10 @@ export function nextLoginState(
       return state.kind === 'logging_in'
         ? { kind: 'mfa_pending', challengeId: event.challengeId }
         : state;
+    case 'resumed':
+      // Only from rest: a flow already under way knows better than the status
+      // row, which may have been fetched before it started.
+      return state.kind === 'idle' ? { kind: 'mfa_pending', challengeId: null } : state;
     case 'code_submitted':
       return state.kind === 'mfa_pending'
         ? { kind: 'submitting', challengeId: state.challengeId }

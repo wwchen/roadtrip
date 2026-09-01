@@ -255,6 +255,42 @@ describe('the MFA step', () => {
     expect(screen.queryByLabelText('Verification code')).not.toBeInTheDocument();
   });
 
+  test('Test login is disabled while a challenge is open', async () => {
+    // Pressing it again would hit the companion's profile lock, which the
+    // pending challenge itself holds.
+    renderPanel(settings(CONFIGURED), { status: activeStatus, onLogin: mfaLogin });
+    await userEvent.click(testLogin());
+    await screen.findByLabelText('Verification code');
+
+    expect(testLogin()).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(testLogin()).toBeEnabled();
+  });
+
+  test('a remounted panel resumes a challenge the server is still holding', async () => {
+    renderPanel(settings(CONFIGURED), {
+      status: { ...activeStatus, session: 'expired', mfa_pending: true },
+    });
+
+    expect(await screen.findByLabelText('Verification code')).toBeInTheDocument();
+    expect(testLogin()).toBeDisabled();
+  });
+
+  test('a resumed code is submitted like any other', async () => {
+    const onSubmitMfa = vi.fn(async (): Promise<RecgovLoginResponse> => ({ status: 'ok' }));
+    renderPanel(settings(CONFIGURED), {
+      status: { ...activeStatus, session: 'expired', mfa_pending: true },
+      onSubmitMfa,
+    });
+
+    await userEvent.type(await screen.findByLabelText('Verification code'), '654321');
+    await userEvent.click(screen.getByRole('button', { name: 'Submit code' }));
+
+    expect(onSubmitMfa).toHaveBeenCalledWith('654321');
+    expect(await screen.findByText('Signed in to recreation.gov.')).toBeInTheDocument();
+  });
+
   test('submit stays disabled until a code is typed', async () => {
     renderPanel(settings(CONFIGURED), { status: activeStatus, onLogin: mfaLogin });
     await userEvent.click(testLogin());

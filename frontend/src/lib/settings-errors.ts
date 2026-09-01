@@ -26,6 +26,9 @@ const MESSAGES = new Map<string, string>([
     'Recreation.gov showed a challenge we cannot solve. Try again in a moment.',
   ],
   ['login_backoff', 'Too many attempts. Wait a minute before trying again.'],
+  // Transient by nature: the work is queued behind something, not refused.
+  ['profile_busy', 'Another operation is using your rec.gov session — try again shortly.'],
+  ['browser_cap_reached', 'The booking service is at capacity — try again shortly.'],
   ['recgov_not_configured', 'Save your recreation.gov credentials first.'],
   ['recgov_not_authenticated', 'The recreation.gov session has expired. Test login again.'],
   ['companion_unavailable', "The booking service isn't reachable right now."],
