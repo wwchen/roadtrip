@@ -200,8 +200,10 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
     if (outcome.state === LOGIN_STATE_MFA_REQUIRED) {
       const challenge = pool.openMfaChallenge(profileId, {
         lock,
-        // The resume closure owns the page Rec.gov is showing the prompt on.
+        // The resume closure owns the page Rec.gov is showing the prompt on;
+        // abandon closes it when the user never comes back.
         complete: (mfaCode) => outcome.resume(mfaCode),
+        abandon: () => outcome.abandon?.(),
       })
       challengeHoldsLock = true
       runtime.logger('recgov auth login mfa challenge', `profile=${profileId}`, `expires_at=${challenge.expires_at}`)
@@ -279,11 +281,13 @@ function loginStatus (pool, profileId, outcome) {
     diagnostic: outcome?.diagnostic || null,
   }
   if (base.logged_in) return pool.setAuthStatus(profileId, base)
+  // `error` stays the documented, stable code. The internal blocker — which
+  // selector went missing, which challenge appeared — rides in `reason`.
   const failure = recgovAuthenticationFailure({ attemptedLogin: true })
   return pool.setAuthStatus(profileId, {
     ...base,
     ...failure,
-    ...(outcome?.reason ? { error: outcome.reason } : {}),
+    ...(outcome?.reason ? { reason: outcome.reason } : {}),
     ...(outcome?.detail ? { detail: outcome.detail } : {}),
   })
 }

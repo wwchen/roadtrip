@@ -199,6 +199,15 @@ function sessionStatusFor (key) {
   return sessionStatuses.get(key)
 }
 
+// The single write sink for session status, and the one place the async
+// scope is read.
+//
+// Caveat for future edits: an EventEmitter callback — a Playwright
+// `page.on('response')` handler, a timer, anything not on an awaited chain
+// from a `withRecgovProfileScope` entry point — runs with the ALS context of
+// whoever emitted it, not of whoever registered it. A status write from such
+// a listener would silently land on the legacy row. Keep writes on the
+// awaited path.
 function updateSessionStatus (patch) {
   const key = activeSessionStatusKey()
   sessionStatuses.set(key, { ...sessionStatusFor(key), ...patch })
@@ -301,6 +310,12 @@ async function profileLogin ({
             await page.close().catch(() => {})
           }
         }),
+        // Called when the challenge expires unanswered. Without it the page
+        // stays open on rec.gov forever and every later login and verify has
+        // to scan past it.
+        abandon: async () => {
+          await page.close().catch(() => {})
+        },
       })
     }
     return loginOutcome('failed', attempt.failure)
@@ -309,7 +324,7 @@ async function profileLogin ({
   }
 }
 
-function loginOutcome (state, { recaccount = null, reason = null, detail = null, resume = null } = {}) {
+function loginOutcome (state, { recaccount = null, reason = null, detail = null, resume = null, abandon = null } = {}) {
   return {
     state,
     logged_in: state === 'ok',
@@ -318,6 +333,7 @@ function loginOutcome (state, { recaccount = null, reason = null, detail = null,
     detail,
     diagnostic: getRecgovSessionStatus().last_login_diagnostic || null,
     ...(resume ? { resume } : {}),
+    ...(abandon ? { abandon } : {}),
   }
 }
 

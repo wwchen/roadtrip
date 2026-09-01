@@ -660,6 +660,72 @@ test('POST /login opens an MFA challenge and a second call completes it', async 
   assert.equal(pool.isBusy(PROFILE_ID), false)
 })
 
+test('POST /logout runs in the requesting profile scope', async () => {
+  let received = null
+  const response = await request(testServer({
+    logoutRecgovSessionFn: async (options) => {
+      received = options
+      return { ok: true, logged_in: false, clicked: true }
+    },
+  }), {
+    method: 'POST',
+    path: `/logout?profile_id=${PROFILE_ID}`,
+    headers: { accept: 'application/json' },
+  })
+
+  assert.equal(response.status, 200)
+  // Without this the logout writes the companion-wide session row instead of
+  // the user's, and their own row keeps a stale refresh window.
+  assert.equal(received.profileId, PROFILE_ID)
+})
+
+test('an abandoned MFA challenge closes its held page when it expires', async () => {
+  let clock = Date.now()
+  const pool = testPool({ now: () => clock })
+  let abandoned = 0
+  const server = testServer({
+    pool,
+    credentialLoginFn: async () => ({
+      state: 'mfa_required',
+      logged_in: false,
+      diagnostic: { reason: 'mfa_required' },
+      resume: async () => ({ state: 'ok', logged_in: true }),
+      abandon: async () => { abandoned += 1 },
+    }),
+  })
+
+  await beginLogin(server)
+  clock += MFA_CHALLENGE_TTL_OVERSHOOT_MS
+  await request(server, { path: `/health?profile_id=${PROFILE_ID}` })
+
+  assert.equal(abandoned, 1)
+  assert.equal(pool.isBusy(PROFILE_ID), false)
+})
+
+test('a failed login keeps the documented error code and carries the internal reason', async () => {
+  const response = await request(testServer({
+    credentialLoginFn: async () => ({
+      state: 'failed',
+      logged_in: false,
+      reason: 'login_link_not_found',
+      detail: 'the login control never appeared',
+    }),
+  }), {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ profile_id: PROFILE_ID, username: 'camper@example.test', password: 'secret' }),
+  })
+
+  assert.equal(response.status, 401)
+  // The stable code recgovAuthenticationFailure has always produced for an
+  // attempted login — never an internal blocker name.
+  assert.equal(response.json.recgov_auth.error, 'recgov_login_failed')
+  assert.equal(response.json.recgov_auth.reason, 'login_link_not_found')
+  assert.equal(response.json.recgov_auth.detail, 'the login control never appeared')
+  assert.ok(response.json.recgov_auth.corrective_action)
+})
+
 test('an expired MFA challenge is refused and the lock is released', async () => {
   let clock = Date.now()
   const pool = testPool({ now: () => clock })

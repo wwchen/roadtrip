@@ -188,6 +188,63 @@ test('a pending MFA challenge holds the lock until it is completed', async () =>
   assert.equal(pool.isBusy(PROFILE_A), false)
 })
 
+test('an expired MFA challenge closes the page it was holding open', () => {
+  const clock = fakeClock()
+  const pool = testPool({ now: clock.now })
+  const held = pool.acquire(PROFILE_A, 'login')
+  let abandoned = 0
+  const challenge = pool.openMfaChallenge(PROFILE_A, {
+    lock: held,
+    complete: async () => null,
+    abandon: () => { abandoned += 1 },
+  })
+
+  clock.advance(DEFAULT_MFA_CHALLENGE_TTL_MS + 1)
+
+  assert.equal(
+    pool.takeMfaChallenge(PROFILE_A, challenge.challenge_id).error,
+    ERROR_MFA_CHALLENGE_EXPIRED,
+  )
+  assert.equal(abandoned, 1, 'the held Playwright page must be closed, not leaked')
+  assert.equal(pool.isBusy(PROFILE_A), false)
+})
+
+test('the background sweep also closes an abandoned challenge page', () => {
+  const clock = fakeClock()
+  const pool = testPool({ now: clock.now })
+  const held = pool.acquire(PROFILE_A, 'login')
+  let abandoned = 0
+  pool.openMfaChallenge(PROFILE_A, {
+    lock: held,
+    complete: async () => null,
+    abandon: () => { abandoned += 1 },
+  })
+
+  clock.advance(DEFAULT_MFA_CHALLENGE_TTL_MS + 1)
+  // Any lock-aware read sweeps; the user simply never comes back.
+  pool.isBusy(PROFILE_A)
+  pool.snapshot()
+
+  assert.equal(abandoned, 1, 'abandoning must happen once, not once per sweep')
+})
+
+test('completing a challenge does not abandon the page the resume owns', () => {
+  const pool = testPool()
+  const held = pool.acquire(PROFILE_A, 'login')
+  let abandoned = 0
+  const challenge = pool.openMfaChallenge(PROFILE_A, {
+    lock: held,
+    complete: async () => 'completed',
+    abandon: () => { abandoned += 1 },
+  })
+
+  const taken = pool.takeMfaChallenge(PROFILE_A, challenge.challenge_id)
+  taken.challenge.release()
+
+  assert.equal(taken.ok, true)
+  assert.equal(abandoned, 0)
+})
+
 test('an unknown MFA challenge id is rejected without dropping the pending one', () => {
   const pool = testPool()
   const held = pool.acquire(PROFILE_A, 'login')

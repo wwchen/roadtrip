@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   CHROMIUM_SINGLETON_LOCK_FILES,
+  clearStaleLocksForTest,
   launchProfileContext,
 } from '../src/browser.js'
 
@@ -32,6 +33,38 @@ test('a second launch never unlinks the singleton locks of a live browser', asyn
   for (const lock of locks) assert.equal(fs.existsSync(lock), true)
 })
 
+test('a launch that fails after the browser starts closes it and frees the directory', async () => {
+  const dir = tempProfileDir()
+  const chromium = fakeChromium({ failInitScript: true })
+
+  await assert.rejects(() => launchProfileContext(dir, { chromiumFn: chromium }))
+
+  // The half-built browser must be closed, not left running unregistered —
+  // an unregistered live browser is the double-attach race all over again.
+  assert.equal(chromium.contexts[0].closed, true)
+  const locks = writeSingletonLocks(dir)
+  await launchProfileContext(dir, { chromiumFn: fakeChromium() })
+  for (const lock of locks) assert.equal(fs.existsSync(lock), false)
+})
+
+test('a live browser is registered before its init scripts run', async () => {
+  const dir = tempProfileDir()
+  let locksDuringInit = null
+  const chromium = fakeChromium({
+    onInitScript: () => {
+      // A concurrent cold launch at this moment must not sweep the locks of
+      // the browser that is still setting itself up.
+      const locks = writeSingletonLocks(dir)
+      clearStaleLocksForTest(dir)
+      locksDuringInit = locks.map((lock) => fs.existsSync(lock))
+    },
+  })
+
+  await launchProfileContext(dir, { chromiumFn: chromium })
+
+  assert.deepEqual(locksDuringInit, [true, true, true])
+})
+
 test('closing the only live context makes the directory cold again', async () => {
   const dir = tempProfileDir()
   const chromium = fakeChromium()
@@ -56,22 +89,31 @@ function writeSingletonLocks (dir) {
   })
 }
 
-function fakeChromium () {
+function fakeChromium ({ failInitScript = false, onInitScript = null } = {}) {
   const launchedDirs = []
+  const contexts = []
   return {
     launchedDirs,
+    contexts,
     launchPersistentContext: async (dir) => {
       launchedDirs.push(dir)
       const listeners = []
-      return {
-        addInitScript: async () => {},
+      const context = {
+        closed: false,
+        addInitScript: async () => {
+          onInitScript?.()
+          if (failInitScript) throw new Error('init script rejected')
+        },
         once: (event, handler) => listeners.push({ event, handler }),
         close: async () => {
+          context.closed = true
           for (const listener of listeners) {
             if (listener.event === 'close') listener.handler()
           }
         },
       }
+      contexts.push(context)
+      return context
     },
   }
 }

@@ -66,6 +66,28 @@ export async function launchProfileContext (profileDir, { chromiumFn = chromium 
     args: ['--disable-blink-features=AutomationControlled'],
     ignoreDefaultArgs: ['--enable-automation'],
   })
+  // Register before any further await: from here on a real browser owns this
+  // directory, and a concurrent cold launch must not sweep its singleton
+  // locks and attach a second Chromium to it.
+  liveProfileDirs.add(profileDir)
+  context.once('close', () => liveProfileDirs.delete(profileDir))
+  try {
+    await installStealthInitScript(context)
+  } catch (error) {
+    liveProfileDirs.delete(profileDir)
+    await context.close().catch(() => {})
+    throw error
+  }
+  return context
+}
+
+// Test seam for the lock sweep, which is otherwise only reachable through a
+// real launch.
+export function clearStaleLocksForTest (profileDir) {
+  clearStaleLocks(profileDir)
+}
+
+async function installStealthInitScript (context) {
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
     if (!window.chrome) window.chrome = { runtime: {}, loadTimes: () => {}, csi: () => {}, app: {} }
@@ -106,9 +128,6 @@ export async function launchProfileContext (profileDir, { chromiumFn = chromium 
       return _origFetch.apply(this, args)
     }
   })
-  liveProfileDirs.add(profileDir)
-  context.once('close', () => liveProfileDirs.delete(profileDir))
-  return context
 }
 
 export async function clearSession () {

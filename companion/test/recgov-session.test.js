@@ -334,6 +334,57 @@ test('runRecgovProfileLogin holds the MFA page open and resumes on it', async ()
   assert.equal(page.closed, true, 'the held page closes once the challenge resolves')
 })
 
+test('an abandoned MFA login closes the page it was holding open', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-abandon' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    mfaRequired: true,
+    expectedMfaCode: '123456',
+  })
+
+  const pending = await runRecgovProfileLogin({
+    getContextFn: async () => page.context(),
+    credentials: { username: 'user@example.com', password: 'secret' },
+    options: { loginTimeoutMs: '1', allowManualLogin: false, credentialSessionTimeoutMs: '1' },
+  })
+
+  assert.equal(typeof pending.abandon, 'function')
+  assert.equal(page.closed, false)
+
+  await pending.abandon()
+
+  assert.equal(page.closed, true)
+})
+
+test('logging out records against the requesting profile and leaves the legacy row alone', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-logout' }),
+  })
+  // Seed both rows with a refresh window: the legacy one outside any scope,
+  // the profile one inside its scope.
+  await resolveRecaccount(fakePage({ rawRecaccount: JSON.stringify(recaccount) }))
+  await runRecgovProfileLogin({
+    getContextFn: async () => fakePage({ rawRecaccount: JSON.stringify(recaccount) }).context(),
+    credentials: { username: 'user@example.com', password: 'secret' },
+    profileId: 'logout-user',
+  })
+  assert.ok(Date.parse(getRecgovSessionStatus('logout-user').next_refresh_at) > 0)
+  const legacyBefore = getRecgovSessionStatus().next_refresh_at
+  assert.ok(Date.parse(legacyBefore) > 0)
+
+  const page = fakePage({ rawRecaccount: null, loggedIn: true, logoutSelectorVisible: true })
+  await logoutRecgovBrowserSession({
+    getContextFn: async () => page.context(),
+    isSpaLoggedInFn: async () => page.loggedIn,
+    profileId: 'logout-user',
+  })
+
+  assert.equal(getRecgovSessionStatus('logout-user').next_refresh_at, null)
+  assert.equal(getRecgovSessionStatus().next_refresh_at, legacyBefore, 'the legacy row is not another user to clobber')
+})
+
 test('runRecgovProfileLogin reports a rejected MFA code without re-submitting credentials', async () => {
   const recaccount = testRecaccount({
     token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-held' }),

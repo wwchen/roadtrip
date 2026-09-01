@@ -99,10 +99,19 @@ export function createProfilePool ({
     }
   }
 
+  // An abandoned challenge still owns a browser page sitting on rec.gov with
+  // the user's credentials typed in. Dropping it without closing that page
+  // leaks it into context.pages(), which every later login and verify scans.
   function dropChallenge (state) {
     const challenge = state.challenge
     state.challenge = null
-    if (challenge?.lock) releaseLock(state, challenge.lock)
+    if (!challenge) return
+    if (challenge.lock) releaseLock(state, challenge.lock)
+    try {
+      challenge.abandon?.()
+    } catch (error) {
+      logger('recgov profile mfa challenge abandon failed', `profile=${state.profileId}`, error.message)
+    }
   }
 
   function releaseLock (state, token) {
@@ -231,7 +240,7 @@ export function createProfilePool ({
       return profiles.get(profileId)?.lock?.operation ?? null
     },
 
-    openMfaChallenge (profileId, { lock, complete }) {
+    openMfaChallenge (profileId, { lock, complete, abandon = null }) {
       const state = entry(profileId)
       const challengeId = randomBytes(MFA_CHALLENGE_ID_BYTES).toString('hex')
       const expiresAt = now() + challengeTtlMs
@@ -239,6 +248,7 @@ export function createProfilePool ({
         id: challengeId,
         expiresAt,
         complete,
+        abandon,
         lock: lock?.token ?? null,
       }
       return {

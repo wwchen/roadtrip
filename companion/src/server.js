@@ -93,9 +93,12 @@ export function createCompanionServer ({
     runAtcOnceFn,
     verifyRecgovSessionFn,
     credentialLoginFn,
-    logoutRecgovSessionFn: ({ getContextFn }) => logoutRecgovSessionFn({
+    logoutRecgovSessionFn: ({ getContextFn, profileId }) => logoutRecgovSessionFn({
       getContextFn: screenshotOverrides.getContextFn || getContextFn,
       isSpaLoggedInFn: screenshotOverrides.isSpaLoggedInFn,
+      // Dropping this here made every logout write the companion-wide
+      // session row instead of the user's own.
+      profileId,
     }),
     recgovScreenshotDeps: createRecgovScreenshotDeps({
       getContextFn: (profileId) => pool.context(profileId),

@@ -77,6 +77,11 @@ a request without it is rejected with `400 profile_id_required`.
 - Session state that health reports — the refresh window, the last login
   diagnostic, the last auth result — is recorded per profile, so one user's
   failed login never appears on another user's status row.
+- Failure codes are stable: `recgov_auth.error` is one of
+  `recgov_login_failed`, `recgov_refresh_failed`, `recgov_not_authenticated`.
+  The internal blocker (`mfa_required`, `captcha_required`,
+  `login_link_not_found`, …) rides alongside in `recgov_auth.reason`, which is
+  diagnostic — callers branch on `error`.
 
 ## Routes
 
@@ -114,7 +119,9 @@ are authoritative; this is the shape.
    - A missing `mfa_code` is refused with `400 mfa_required` and leaves the
      challenge and its held page intact.
    - An unknown id is `mfa_challenge_unknown`; a lapsed one is
-     `mfa_challenge_expired`, and the lock is released.
+     `mfa_challenge_expired`. Expiry releases the lock **and closes the held
+     page** — an abandoned login must not leave a page sitting on rec.gov with
+     credentials typed into it.
 
 Because a pending challenge keeps its profile resident and locked, it occupies
 a slot against the concurrency cap for up to the TTL. That is the accepted

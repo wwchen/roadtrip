@@ -90,11 +90,6 @@ export function getRecgovAuthStatus () {
   return recgovAuthStatus
 }
 
-export function setRecgovAuthStatus (status) {
-  recgovAuthStatus = status
-  return recgovAuthStatus
-}
-
 export function getRecgovHealthStatus () {
   const {
     last_login_diagnostic: _lastLoginDiagnostic,

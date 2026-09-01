@@ -266,7 +266,15 @@ export const COMPANION_API_SCHEMAS = {
       last_refresh_at: { type: 'string', format: 'date-time', nullable: true },
       last_refresh_expires_at: { type: 'string', format: 'date-time', nullable: true },
       next_refresh_at: { type: 'string', format: 'date-time', nullable: true },
-      error: { type: 'string' },
+      error: {
+        type: 'string',
+        description: 'Stable failure code: recgov_login_failed, recgov_refresh_failed, recgov_not_authenticated, ...',
+      },
+      reason: {
+        type: 'string',
+        example: 'mfa_required',
+        description: 'The internal blocker behind `error` — which challenge appeared or which control was missing. Diagnostic; do not branch on it.',
+      },
       detail: { type: 'string' },
       corrective_action: { type: 'string' },
     },
