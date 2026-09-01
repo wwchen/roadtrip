@@ -111,8 +111,23 @@ test('recgovAuthenticationFailure reports failed login attempts distinctly', () 
   })
 
   assert.equal(failure.error, 'recgov_login_failed')
-  assert.match(failure.detail, /MFA code/)
+  assert.match(failure.detail, /did not produce a browser session/)
   assert.match(failure.corrective_action, /companion root page/)
+})
+
+test('the login failure detail names the actual blocker, not always MFA', () => {
+  // One detail line used to end "submit a current MFA code" for every reason,
+  // so a captcha — which no code can clear — sent the operator to type one.
+  const captcha = recgovAuthenticationFailure({ headless: true, attemptedLogin: true, reason: 'captcha_required' })
+  assert.match(captcha.detail, /challenge the companion cannot solve/)
+  assert.doesNotMatch(captcha.detail, /verification code/)
+
+  const mfa = recgovAuthenticationFailure({ headless: true, attemptedLogin: true, reason: 'mfa_required' })
+  assert.match(mfa.detail, /verification code/)
+
+  // An unrecognised reason falls back to the bare line rather than guessing.
+  const unknown = recgovAuthenticationFailure({ headless: true, attemptedLogin: true, reason: 'something_new' })
+  assert.equal(unknown.detail, 'Recreation.gov credential login did not produce a browser session.')
 })
 
 test('cartHoldCompletionObserved ignores pre-confirmation cart and multi responses', () => {

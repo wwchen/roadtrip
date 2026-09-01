@@ -202,7 +202,21 @@ const HEADLESS_NO_SESSION_DETAIL =
 const HEADED_NO_SESSION_DETAIL =
   'No Recreation.gov browser session is available in the companion profile.'
 const LOGIN_FAILED_DETAIL =
-  'Recreation.gov credential login did not produce a browser session. If Recreation.gov prompts for 2FA, submit a current MFA code on the companion root page.'
+  'Recreation.gov credential login did not produce a browser session.'
+/**
+ * What to say about the specific thing that blocked the login.
+ *
+ * The single detail line used to end "...submit a current MFA code on the
+ * companion root page" for EVERY reason, so a captcha — which no code can
+ * clear — told the operator to go type a code.
+ */
+const LOGIN_BLOCKER_DETAIL = {
+  captcha_required:
+    'Recreation.gov presented a challenge the companion cannot solve. Retrying often passes; otherwise log in headed once.',
+  mfa_required: 'Recreation.gov asked for a verification code. Submit a current one on the companion root page.',
+  mfa_invalid: 'Recreation.gov rejected the verification code. Start the login again to get a new one.',
+  login_link_not_found: 'The Recreation.gov login control was not found on the page — the site layout may have changed.',
+}
 const REFRESH_FAILED_DETAIL =
   'Recreation.gov browser session refresh failed. The stored session may be expired or rejected.'
 const SPA_LOGGED_OUT_DETAIL =
@@ -266,11 +280,17 @@ export function verifyCartContainsMatch (cart, match) {
   return { ok: false, reason: CART_VERIFY_MISSING_ITEM, best_match: bestMatch, ...base }
 }
 
-export function recgovAuthenticationFailure ({ headless = IS_HEADLESS, attemptedLogin = false, attemptedRefresh = false } = {}) {
+export function recgovAuthenticationFailure ({
+  headless = IS_HEADLESS,
+  attemptedLogin = false,
+  attemptedRefresh = false,
+  reason = null,
+} = {}) {
   if (attemptedLogin) {
+    const blocker = LOGIN_BLOCKER_DETAIL[reason]
     return {
       error: ERROR_RECGOV_LOGIN_FAILED,
-      detail: LOGIN_FAILED_DETAIL,
+      detail: blocker ? `${LOGIN_FAILED_DETAIL} ${blocker}` : LOGIN_FAILED_DETAIL,
       corrective_action: LOGIN_ON_COMPANION_ACTION,
       auth: authFields(headless),
     }
