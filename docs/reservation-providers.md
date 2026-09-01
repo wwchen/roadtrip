@@ -102,6 +102,7 @@ service/availability/
 ├── ProviderCooldownTracker.kt           # in-process demote-on-failure for BookingProvider
 ├── CatalogAvailabilityBatcher.kt        # groups resolved targets by (provider, parentRef, dateContext)
 ├── TriggerActionHandler.kt              # fire-side registry (notification/ATC kinds; unknown kinds inert)
+├── AtcTriggerActionHandler.kt           # `atc` → booking adapter, then the owner's Slack + email
 ├── NotifyTriggerActionHandler.kt        # `slack_notify` / `email_notify` → notification targets
 └── alert/
     ├── AlertProvider.kt                 # who detects openings for a watch
@@ -203,12 +204,23 @@ detected an opening. A handler may cover multiple kind slugs: for example,
 `NotifyTriggerActionHandler` handles both `slack_notify` and `email_notify` by
 turning the watch config into a list of notification targets and sending one
 aggregate alert. `TriggerActionRegistry.forKinds(kinds)` drops unknown slugs —
-inert by design, matching today's `atc` behavior.
+inert by design. `atc` is *not* one of them: `AtcTriggerActionHandler` drives
+the booking seam below and then reports the outcome.
 
 Registering a new kind is one file under `service/availability/` plus one
 entry in the registry list. The `stopWhenTriggered` DONE transition still
 gates on `fire()` returning true, so a handler that fails to deliver
-leaves the watch active for the next poll.
+leaves the watch active for the next poll — an ATC that could not hold the
+site leaves the watch running for the next opening.
+
+**ATC result delivery.** `atc` carries neither `slack_notify` nor
+`email_notify`, so it resolves its own targets rather than going through the
+kind-gated resolver: a user who asked us to hold a site has, by that act,
+asked to hear whether it worked. Both channels fire — the owner-scoped Slack
+card when they have a personal token *and* a channel, and **email always**,
+resolved exactly as watch openings are (`user_settings.notification_email`,
+falling back to the owner's login email). Email is the one that usually lands;
+the Slack target is deliberately fail-closed.
 
 ## Booking provider seam
 
@@ -247,27 +259,49 @@ Booking targets compose two identities:
 - Parent booking context from the campground/facility provider ref.
 - Concrete campsite/site/unit ref, which is the item added to cart.
 
-Provider implementations own fulfillment. Rec.gov currently fulfills
-`ADD_TO_CART` by calling the companion HTTP executor; a future Aspira
-implementation may call a backend HTTP API instead. Companion configuration is
-runtime readiness for companion-backed providers, not durable booking
-capability.
+Provider implementations own fulfillment. Rec.gov fulfills `ADD_TO_CART` by
+calling the companion HTTP executor; a future Aspira implementation may call a
+backend HTTP API instead. Companion configuration is runtime readiness for
+companion-backed providers, not durable booking capability.
+
+**Fulfillment is per user.** A cart hold lands in a real recreation.gov
+account, so `AddToCartRequest` carries the watch's `ownerUserId` and
+`RecGovBookingAdapter` sends it to the companion as `profile_id` — one browser
+profile per user (see [companion.md](companion.md)). Before driving the
+browser the adapter checks *that profile's* session health, and if it is dead
+attempts exactly one unattended re-login with the owner's stored credentials.
+MFA or a captcha ends the attempt: the ATC fails and the owner's failure
+notification says "session expired — re-login in Settings". The health check
+lives in the adapter rather than the executor because that is the layer where
+credential custody is reachable, and so there is one health authority rather
+than two readers of the same route.
+
+A `RecGovKeepaliveJob` under `service/scheduler/` keeps the cost of that path
+low: on an env-tunable cadence it pushes the *armed set* — the distinct owners
+of active `atc` watches — to the companion's keep-warm marking and refreshes
+each of those profiles, so a 3 a.m. firing rarely pays a cold start.
 
 Watch create/update validates `atc` trigger support against the booking-adapter
-registry after resolving the watch scope to concrete campsites. Unsupported
-targets fail the mutation instead of creating an active watch that can never
-fulfill its trigger.
+registry after resolving the watch scope to concrete campsites, **and** against
+whether the owner has rec.gov credentials stored. Either failure fails the
+mutation with `unsupported_trigger` instead of creating an active watch that
+can never fulfill its trigger.
 
 The campsite availability API exposes proposed-watch capabilities for the
-current POI scope as provider-neutral `watch_capabilities`:
-`trigger_kinds` includes configured notification triggers such as
+current POI scope as provider-neutral `watch_capabilities`. `booking_actions`
+is a property of the scope alone. `trigger_kinds` is a property of the scope
+*and the caller*: it includes configured notification triggers such as
 `slack_notify` and `email_notify`, and includes `atc` only when the resolved
-watch scope supports `BookingAction.ADD_TO_CART`. Email notification recipients
-resolve at delivery time from the watch owner's `user_settings.notification_email`,
-falling back to the owner's login email; watches cannot override or persist a
-recipient. The FE renders the Email and Add to cart toggles from this contract;
-create/update validation still uses the same capability service and
-trigger-config validator as the authoritative gate.
+watch scope supports `BookingAction.ADD_TO_CART` **and** the requesting user
+has rec.gov credentials configured. Gating is on *configured*, not *proven
+working*. For anonymous and magic-link readers `atc` is simply absent, never an
+error — while `booking_actions` still reports the cart, which is what lets the
+frontend distinguish "this campground cannot be held" from "add your
+credentials in Settings". Email notification recipients resolve at delivery
+time from the watch owner's `user_settings.notification_email`, falling back to
+the owner's login email; watches cannot override or persist a recipient. The FE
+renders the Email and Add to cart toggles from this contract; create/update
+validation is the authoritative gate.
 
 ## Capabilities
 
@@ -299,9 +333,13 @@ drawer can hide affordances the provider doesn't support.
 | Record availability history | poller writes status-run rows to the `availability` interval table | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |
 | Notify on match | poller dispatches via configured notification triggers (`slack_notify`, `email_notify`; push future) | Channels and email recipients are not provider-specific. See `docs/superpowers/specs/2026-07-03-availability-alerts-design.md`. |
 
-Availability providers do not model cart automation, payment, or booking on
-the user's behalf. Watch flows produce matches, notifications, and
-availability history only.
+Availability *providers* model observation only — matches, notifications and
+availability history. Acting on an opening is the booking seam's job and never
+an `AvailabilityProvider` method, which is what keeps the two separable: the
+vendor that tells us a site is free need not be the vendor that holds it.
+Today that seam reaches exactly one action, `ADD_TO_CART` on rec.gov. Payment
+and checkout remain out of scope at every layer — the action stops at a cart
+hold.
 
 ## Today's adapter matrix
 

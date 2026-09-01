@@ -65,10 +65,14 @@ a request without it is rejected with `400 profile_id_required`.
   evicted to make room. When every resident profile is busy the launch is
   refused with `503 browser_cap_reached` rather than evicting live work.
 - **Keep-warm (armed) profiles are exempt from the cap.** These are the
-  profiles backing at least one active `atc` watch. The backend pushes the
-  armed set; the companion defaults to none. When armed profiles alone exceed
-  the cap, the companion logs and `GET /health` reports
-  `pool.keep_warm_overflow` rather than evicting an armed profile.
+  profiles backing at least one active `atc` watch. The companion cannot derive
+  that — the watches live in the backend's database — so the backend's keepalive
+  job pushes the whole set to `POST /keep-warm` on each sweep and the companion
+  defaults to none. The push **replaces** rather than merges, which is what
+  disarms a profile whose last `atc` watch was paused or deleted; an empty array
+  disarms everyone. When armed profiles alone exceed the cap, the companion logs
+  and `GET /health` reports `pool.keep_warm_overflow` rather than evicting an
+  armed profile.
 - **Per-profile busy lock:** no two mutating operations run concurrently on
   one profile (`409 profile_busy`). That includes `GET /screenshot`, which
   drives the browser and mutates the context's cookies. Different profiles
@@ -94,7 +98,8 @@ are authoritative; this is the shape.
 | `GET /health` | Companion health. With `?profile_id=` it reports that profile's `recgov_auth`, busy flag and pool residency. Lock-free; tokenless from loopback only. |
 | `POST /login` | Two-phase credential login for one profile. |
 | `POST /logout` | Click through the rec.gov logout flow in one profile. |
-| `POST /refresh` | Force a session refresh for one profile (the keepalive path). |
+| `POST /refresh` | Force a session refresh for one profile. The keepalive job calls it for each armed profile. |
+| `POST /keep-warm` | Replace the armed profile set (`{ "profile_ids": [...] }`). Lock-free; marks profiles, never drives a browser. |
 | `POST /verify` | Dry-run session check. Never places a hold. |
 | `POST /atc` | One-shot add-to-cart in one profile. |
 | `GET /screenshot` | Live PNG of a recreation.gov page from one profile. |
@@ -162,6 +167,11 @@ the session is live; `401` carries `verify.error`
 | `HEADLESS` | true in Docker | Headed Chromium for operator login. |
 | `RECGOV_LOGIN_TIMEOUT_MS` | `120000` | Manual-login wait. |
 
+The **backend** side of the keepalive has one knob of its own,
+`RECGOV_KEEPALIVE_INTERVAL` (default 15m), which sets how often it re-pushes
+the armed set and refreshes those profiles. See
+[observability.md](observability.md) for the metric it emits.
+
 ## Running it
 
 ```sh
@@ -180,6 +190,17 @@ RECGOV_COMPANION_BROWSER_PROFILE=$HOME/.campsite-companion/browser-session \
 
 The container name lives under the `roadtrip-*` Compose project, so Alloy's
 Docker log discovery ships its stdout/stderr to Loki.
+
+### No auth check at boot
+
+The companion runs **no** rec.gov auth check when it starts. It used to, and
+that check signed in the single legacy profile — a browser process that,
+once every route became profile-scoped, belonged to nobody. Profiles are
+launched on demand and kept warm by the armed set instead. A consequence:
+`GET /health` without a `profile_id` reports `recgov_auth.login_status:
+"unchecked"` until something explicitly runs an unscoped check. That is
+accurate rather than degraded — there is no companion-wide session to report.
+Per-profile health (`?profile_id=`) is the answer callers want.
 
 ## Operator CLI
 
