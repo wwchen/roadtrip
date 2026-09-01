@@ -11,6 +11,7 @@ import ca.floo.roadtrip.service.settings.CompanionSessionHealth
 import ca.floo.roadtrip.service.settings.CompanionSessionPort
 import ca.floo.roadtrip.service.settings.RecGovProfileSessionPort
 import ca.floo.roadtrip.service.settings.RecGovSessionCodes
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -85,15 +86,25 @@ internal class RecGovKeepaliveJob(
         }
     }
 
-    /** One sweep. Public so tests can run it without the loop. */
+    /**
+     * One sweep. Public so tests can run it without the loop.
+     *
+     * Guarded whole, following [WatchReaper]: this runs on a bare `launch`, so
+     * anything thrown here would end the loop for the process lifetime and
+     * leave every later fire paying a cold start, silently.
+     */
     suspend fun sweepOnce() {
-        val armed =
-            try {
-                keepWarmProfileIds()
-            } catch (e: Exception) {
-                log.error("recgov keepalive could not read the armed watch set: {}", e.message, e)
-                return
-            }
+        try {
+            sweep()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.error("recgov keepalive sweep failed: {}", e.message, e)
+        }
+    }
+
+    private suspend fun sweep() {
+        val armed = keepWarmProfileIds()
 
         when (val marked = companion.markKeepWarm(armed)) {
             is CompanionActionResult.Ok ->
@@ -109,7 +120,22 @@ internal class RecGovKeepaliveJob(
             }
         }
 
-        armed.forEach { profileId -> refresh(profileId) }
+        armed.forEach { profileId -> refreshGuarded(profileId) }
+    }
+
+    /**
+     * One profile's refresh, guarded separately: a sweep is best-effort, so one
+     * profile's failure must not cost the remaining profiles theirs.
+     */
+    private suspend fun refreshGuarded(profileId: String) {
+        try {
+            refresh(profileId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            log.error("recgov keepalive refresh failed for profile={}: {}", profileId, e.message, e)
+            metrics.recgovKeepaliveProfile(KeepaliveOutcome.FAILED)
+        }
     }
 
     private suspend fun refresh(profileId: String) {

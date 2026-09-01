@@ -122,6 +122,36 @@ test('the cap refuses a launch when every resident profile is locked', async () 
   )
 })
 
+test('an in-flight launch holds its slot, so concurrent cold profiles cannot exceed the cap', async () => {
+  // state.context is assigned only once Chromium is up. Counting residency
+  // alone, two cold callers for two different profiles both saw a free slot
+  // and both launched — the cap held only while launches happened to be serial.
+  let launches = 0
+  let release = null
+  const pending = new Promise((resolve) => { release = resolve })
+  const pool = testPool({
+    launchContextFn: async () => {
+      launches += 1
+      await pending
+      return fakeContext()
+    },
+    maxConcurrentBrowsers: 1,
+  })
+
+  const first = pool.context(PROFILE_A)
+  // Nothing is evictable — the only slot is held by a launch, not a browser.
+  // Caught inline rather than with assert.rejects: B must be settled before
+  // the gate opens, and an unreverted regression would otherwise deadlock the
+  // assertion instead of failing it.
+  const second = pool.context(PROFILE_B).catch((error) => error)
+
+  release()
+  await first
+
+  assert.equal((await second)?.code, ERROR_BROWSER_CAP_REACHED)
+  assert.equal(launches, 1)
+})
+
 test('keep-warm profiles are exempt from the cap and the overflow is reported', async () => {
   const launcher = fakeLauncher()
   const pool = testPool({ launchContextFn: launcher.launch, maxConcurrentBrowsers: 1 })

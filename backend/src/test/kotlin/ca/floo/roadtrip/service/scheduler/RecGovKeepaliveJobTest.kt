@@ -155,6 +155,31 @@ class RecGovKeepaliveJobTest {
             assertTrue(companion.keepWarmPushes.isEmpty())
         }
 
+    @Test
+    fun `a throwing companion ends the sweep instead of the loop`() =
+        runBlocking {
+            // markKeepWarm sat outside the old guard, so this ended the launched
+            // coroutine for the process lifetime — every later fire then paid a
+            // cold start, silently.
+            val companion = FakeCompanion(throwOnMarkKeepWarm = true)
+
+            job(owners = listOf(4L), companion = companion).sweepOnce()
+
+            assertTrue(companion.refreshed.isEmpty())
+        }
+
+    @Test
+    fun `one profile's throwing refresh does not cost the others theirs`() =
+        runBlocking {
+            val metrics = RecordingMetrics()
+            val companion = FakeCompanion(throwRefreshFor = setOf("4"))
+
+            job(owners = listOf(4L, 7L), companion = companion, metrics = metrics).sweepOnce()
+
+            assertEquals(listOf("4", "7"), companion.refreshed)
+            assertEquals(listOf(KeepaliveOutcome.FAILED, KeepaliveOutcome.REFRESHED), metrics.keepalives)
+        }
+
     private fun job(
         owners: List<Long> = emptyList(),
         repo: AvailabilityWatchRepo = FakeWatchRepo(owners),
@@ -211,11 +236,15 @@ class RecGovKeepaliveJobTest {
     private class FakeCompanion(
         private val keepWarmFailure: String? = null,
         private val refuseRefreshFor: Set<String> = emptySet(),
+        /** Throws rather than answering — e.g. a malformed companion base URL. */
+        private val throwOnMarkKeepWarm: Boolean = false,
+        private val throwRefreshFor: Set<String> = emptySet(),
     ) : CompanionSessionPort {
         val keepWarmPushes = mutableListOf<List<String>>()
         val refreshed = mutableListOf<String>()
 
         override suspend fun markKeepWarm(profileIds: Collection<String>): CompanionActionResult {
+            if (throwOnMarkKeepWarm) throw IllegalArgumentException("bad companion base url")
             keepWarmPushes += profileIds.toList()
             return keepWarmFailure?.let { CompanionActionResult.Failed(it) } ?: CompanionActionResult.Ok
         }
@@ -225,6 +254,7 @@ class RecGovKeepaliveJobTest {
             unattended: Boolean,
         ): CompanionActionResult {
             refreshed += profileId
+            if (profileId in throwRefreshFor) throw IllegalArgumentException("bad companion base url")
             return if (profileId in refuseRefreshFor) {
                 CompanionActionResult.Failed(RecGovSessionCodes.NOT_AUTHENTICATED)
             } else {

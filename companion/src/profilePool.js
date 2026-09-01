@@ -156,15 +156,33 @@ export function createProfilePool ({
     return [...profiles.values()].filter((state) => state.context)
   }
 
-  function onDemandResidents () {
-    return residentStates().filter((state) => !isKeepWarm(state.profileId))
+  /**
+   * On-demand profiles holding a browser slot: launched, or launching.
+   *
+   * An in-flight launch has to count. `state.context` is assigned only once
+   * Chromium is up, so counting residency alone let N concurrent cold callers
+   * for N *different* profiles all observe the same pre-launch count, all pass
+   * the cap check, and all launch — the cap held only while launches happened
+   * to be serial. [profileId] is the caller asking for a slot, excluded so it
+   * never counts itself once its own launch is in flight.
+   */
+  function onDemandOccupants (profileId) {
+    return [...profiles.values()].filter(
+      (state) =>
+        (state.context || state.launching) &&
+        !isKeepWarm(state.profileId) &&
+        state.profileId !== profileId,
+    )
   }
 
   async function evictForLaunch (profileId) {
     if (isKeepWarm(profileId)) return
-    while (onDemandResidents().length >= browserCap) {
-      const candidate = onDemandResidents()
-        .filter((state) => !state.lock && state.profileId !== profileId)
+    while (onDemandOccupants(profileId).length >= browserCap) {
+      // Only a launched profile can be evicted: closing an in-flight launch
+      // would not free anything, so a cap held entirely by launches is a
+      // refusal rather than a spin.
+      const candidate = onDemandOccupants(profileId)
+        .filter((state) => state.context && !state.lock)
         .toSorted((a, b) => a.lastUsedAt - b.lastUsedAt)[0]
       if (!candidate) {
         throw Object.assign(

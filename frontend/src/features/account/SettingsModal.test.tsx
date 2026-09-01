@@ -371,6 +371,54 @@ describe('the Booking tab', () => {
   });
 });
 
+describe('rec.gov MFA challenge', () => {
+  test('Cancel then Test login returns to the code step instead of locking the user out', async () => {
+    // The lockout this guards: the panel finds its way back to a live challenge
+    // through the status row's `mfa_pending`. When the login did not refetch
+    // that row, `mfa_pending` stayed false for the challenge's whole TTL, so the
+    // `profile_busy` answer — which IS this user's own challenge holding the
+    // profile lock — read as a generic failure, and the resume effect is
+    // edge-triggered and could not re-fire. Exercised through the real query
+    // rather than an injected `status` prop, which is what hid it.
+    getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
+    let challengeOpen = false;
+    getRecgovStatus = () =>
+      json({
+        configured: true,
+        username: 'ada@example.test',
+        session: 'expired',
+        mfa_pending: challengeOpen,
+      });
+    onPut = (url) => {
+      if (url === `${RECGOV_URL}/login`) {
+        if (challengeOpen) return json({ status: 'failed', error: 'profile_busy' });
+        challengeOpen = true;
+        return json({ status: 'mfa_required', challenge_id: 'challenge-1' });
+      }
+      return json(settingsBody({}, CONFIGURED_BOOKING));
+    };
+
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Test login' }));
+    expect(await screen.findByLabelText('Verification code')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Verification code')).not.toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Test login' }));
+
+    expect(await screen.findByLabelText('Verification code')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Another operation is using your rec.gov session/i),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe('remove rec.gov credentials', () => {
   test('a refused removal tells the operator the booking service needs attention', async () => {
     // This copy IS the admin signal: removal now blocks rather than half-applying,
