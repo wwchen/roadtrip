@@ -254,6 +254,23 @@ every deploy — would sign every profile out. Host and container therefore name
 the same `store.json`, which is also what lets a headed mint on the host reach
 the container.
 
+**Sharing the file means two writers, so the store commits by rename.** A
+mutation writes a temp file beside `store.json`, fsyncs it and renames it over
+the top, so no reader ever sees a half-written store and no crash leaves one.
+Mutations also take `store.json.lock` — a wall-clock claim, since host and
+container cannot read each other's pids — so neither side's read-modify-write
+cycle can drop the key the other just saved. A write that cannot get the lock
+fails with `store_busy` instead of clobbering, and a lock left by a killed
+process goes stale on its own (`COMPANION_STORE_LOCK_STALE_AFTER_MS`, 60s by
+default).
+
+**An unparseable `store.json` is a hard failure, not an empty store.** Reads and
+writes both raise `store_corrupt`, and nothing will write over the file: calling
+it empty would report every user as signed out and then commit that emptiness
+over every jar, which is how one torn write becomes permanent loss. Look at the
+file, and move it aside if it is truly unrecoverable — the next write then
+starts a fresh store, at the cost of every session that was in it.
+
 **Treat `recgov_cookies*` as credential material.** The value is not a hint or
 a cache: it *is* a live rec.gov session, and anyone holding it is signed in as
 that account. It never leaves the companion host, never appears in traces or
