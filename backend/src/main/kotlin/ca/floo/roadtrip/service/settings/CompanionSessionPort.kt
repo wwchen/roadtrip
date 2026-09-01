@@ -11,6 +11,9 @@ object RecGovSessionCodes {
     const val LOGIN_FAILED = "login_failed"
     const val MFA_REQUIRED = "mfa_required"
     const val MFA_INVALID = "mfa_invalid"
+
+    /** No challenge is in flight for this user — the login has to start again. */
+    const val MFA_CHALLENGE_UNKNOWN = "mfa_challenge_unknown"
     const val CAPTCHA_REQUIRED = "captcha_required"
     const val LOGIN_BACKOFF = "login_backoff"
     const val NOT_AUTHENTICATED = "recgov_not_authenticated"
