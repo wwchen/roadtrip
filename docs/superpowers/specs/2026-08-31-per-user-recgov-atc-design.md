@@ -424,16 +424,27 @@ trip:
 | 0 | the window is a positive number of nights | 400 `invalid_window` |
 | 1 | `CampsiteRepo` → `DbAvailabilityTargetResolver` → `AvailabilityBookingTargetResolver.targetFor(ADD_TO_CART, …)` | 422 `unsupported_target` |
 | 2 | `RecGovCredentialService.isConfigured(caller)` | 403 `credentials_required` |
-| 3 | every night currently `available` **and observed within `booking.freshness-max-age`** | 409 `not_available` |
+| 3 | **no** night was observed *not*-bookable within `booking.freshness-max-age` | 409 `not_available` |
 | 4 | adapter `addToCart` with `profile_id` = caller | the companion's own code, below |
 
-Gate 3 is a cheap stale-grid guard, **not** a vendor call: it reads what the
-poller last saw, through `AvailabilityRepo.availableDates`. The age bound
-matters as much as the status — `readCurrent` will happily return a year-old
-`available`, since it is still the newest row, and a gate that trusted it would
-drive a browser on last season's observation. Default is the poller's own
-default cadence (5m), env-tunable via `BOOKING_FRESHNESS_MAX_AGE`. The
-companion is the authority and gets the last word at gate 4.
+Gate 3 is a cheap "do we already know this is taken" guard, **not** a vendor
+call: it reads what the poller last saw, through
+`AvailabilityRepo.freshlyUnavailableDates`. It is deliberately asymmetric and
+may veto only on **positive, recent evidence of unavailability** — a stale
+observation, or no observation at all, passes through to the vendor.
+
+This gate was originally specified the other way round (every night must be
+*known available and fresh*) and that was wrong. The `availability` table is
+filled by the **watch poller**, so any campsite without an active watch has no
+recent rows at all; fail-closed refused genuinely bookable sites within minutes
+of the grid loading, which is exactly the browse-then-hold flow this feature
+exists for. Observed live: a bookable site refused as `not_available` on the
+strength of an eight-minute-old observation that said *available*.
+
+So `freshness-max-age` decides what still counts as evidence worth blocking on,
+never what counts as permission to proceed. Default is the poller's own cadence
+(5m), env-tunable via `BOOKING_FRESHNESS_MAX_AGE`. The companion is the
+authority and gets the last word at gate 4.
 
 Gate 4 is the same seam `AtcTriggerActionHandler` uses, with **one deliberate
 difference**: `AddToCartRequest.allowUnattendedRelogin` is false here. A watch
@@ -447,7 +458,9 @@ Gate-4 codes and their statuses:
 | --- | --- | --- |
 | `recgov_session_expired` | 403 | caller-actionable, like `credentials_required` |
 | `profile_busy`, `browser_cap_reached` | 409 | transient contention; retry |
-| `cart_not_added`, `recgov_confirmation_disabled` | 409 | rec.gov declined — somebody else took it |
+| `cart_not_added`, `recgov_confirmation_disabled` | 409 | a hold was attempted and not confirmed — somebody else likely took it; retrying can help |
+| `recgov_dates_not_offered` | 409 | rec.gov's calendar refused the arrival date. Nothing was attempted, so retrying cannot help |
+| `recgov_no_reserve_button` | 409 | rec.gov showed the site but offered no Reserve/Add-to-Cart control for those dates |
 | `companion_unavailable`, anything else | 502 | the booking service failed |
 
 Success is `200 {status:"completed", cart_url}`.

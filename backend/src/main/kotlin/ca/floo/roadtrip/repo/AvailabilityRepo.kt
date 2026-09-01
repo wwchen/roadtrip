@@ -186,16 +186,23 @@ class AvailabilityRepo(
     }
 
     /**
-     * Of [dates], the ones this campsite currently reads as bookable **and**
-     * were observed within [maxAge].
+     * Of [dates], the ones a **recent** observation says are NOT bookable.
      *
-     * The age bound is the point. `readCurrent` happily returns a year-old
-     * `available` — the newest row is still the newest row — and a booking gate
-     * that trusted it would drive a browser on the strength of an observation
-     * from last season. A cell older than the bound is treated as unknown,
-     * which for a gate means unavailable.
+     * Deliberately asymmetric, and the asymmetry is the whole point. This table
+     * is filled by the watch poller, so a campsite nobody watches has no recent
+     * rows at all — which is the normal state for the browse-then-hold flow,
+     * not a warning sign. Answering "which nights are known-available" and
+     * refusing everything else made the direct add-to-cart unusable within
+     * minutes of loading the grid: a genuinely bookable site was refused as
+     * "not available" on the strength of an eight-minute-old observation that
+     * actually said *available*.
+     *
+     * So only positive, fresh evidence of unavailability blocks. Silence —
+     * a stale cell, or no cell at all — is not evidence, and the vendor is the
+     * real arbiter anyway. [maxAge] decides what still counts as evidence, not
+     * what counts as permission to proceed.
      */
-    fun availableDates(
+    fun freshlyUnavailableDates(
         campsiteId: Long,
         dates: List<LocalDate>,
         maxAge: Duration,
@@ -204,7 +211,7 @@ class AvailabilityRepo(
         if (dates.isEmpty()) return emptySet()
         val freshAfter = now.minus(maxAge)
         return readCurrent(listOf(campsiteId), dates)
-            .filter { it.available && it.observedAt.isAfter(freshAfter) }
+            .filter { !it.available && it.observedAt.isAfter(freshAfter) }
             .map { it.targetDate }
             .toSet()
     }

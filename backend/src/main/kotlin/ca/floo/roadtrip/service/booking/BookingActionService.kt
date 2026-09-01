@@ -20,7 +20,7 @@ object BookingActionCodes {
     /** The caller has no rec.gov credentials, so no cart to hold it in. */
     const val CREDENTIALS_REQUIRED = "credentials_required"
 
-    /** The grid the caller clicked is stale, or the companion says it is gone. */
+    /** A recent observation says this site is taken. Not merely unknown. */
     const val NOT_AVAILABLE = "not_available"
 
     /** The window was not a positive number of nights. */
@@ -31,6 +31,12 @@ object BookingActionCodes {
 
     /** Rec.gov offered the site but not a bookable confirmation control. */
     const val CONFIRMATION_DISABLED = "recgov_confirmation_disabled"
+
+    /** Rec.gov's calendar refused the requested arrival date outright. */
+    const val DATES_NOT_OFFERED = "recgov_dates_not_offered"
+
+    /** Rec.gov showed the site but offered no Reserve/Add-to-Cart control. */
+    const val NO_RESERVE_BUTTON = "recgov_no_reserve_button"
 }
 
 /**
@@ -47,8 +53,8 @@ internal fun interface BookingCampsiteLookup {
 }
 
 internal fun interface CurrentAvailabilityLookup {
-    /** Of [nights], the ones currently observed as bookable. */
-    fun availableNights(
+    /** Of [nights], the ones a recent observation says are NOT bookable. */
+    fun freshlyUnavailableNights(
         campsiteId: Long,
         nights: List<LocalDate>,
     ): Set<LocalDate>
@@ -132,11 +138,11 @@ internal class BookingActionService(
         //    the same gate the `atc` trigger uses.
         if (!credentials.isConfigured(caller)) return AddToCartOutcome.Refused(BookingActionCodes.CREDENTIALS_REQUIRED)
 
-        // 3. Is the grid the caller clicked still true? A read of what the
-        //    poller last saw, not a vendor call: this exists to catch a stale
-        //    tab cheaply, not to be authoritative. The companion is the
-        //    authority and gets the last word below.
-        if (!currentlyAvailable(campsiteId, startDate, endDate)) return AddToCartOutcome.Refused(BookingActionCodes.NOT_AVAILABLE)
+        // 3. Do we already KNOW this is taken? Only a recent observation
+        //    saying "not bookable" stops us here. This is a cheap way to catch
+        //    a stale tab, not an authority — so it may only veto on evidence,
+        //    never on the absence of it.
+        if (knownTaken(campsiteId, startDate, endDate)) return AddToCartOutcome.Refused(BookingActionCodes.NOT_AVAILABLE)
 
         val request =
             AddToCartRequest(
@@ -175,17 +181,21 @@ internal class BookingActionService(
     }
 
     /**
-     * Every night in `[startDate, endDate)` currently reads as bookable.
+     * Some night in `[startDate, endDate)` was recently observed as taken.
      *
-     * A missing cell counts as unavailable: never having observed a night is
-     * not evidence that it is free.
+     * A missing or stale cell is **not** evidence of anything. The availability
+     * table is filled by the watch poller, so a campsite nobody watches simply
+     * has no recent rows — treating that silence as "unavailable" refused
+     * genuinely bookable sites and made this feature unusable for the
+     * browse-then-hold flow it exists for. When we do not know, we ask the
+     * vendor, which is the only thing that actually knows.
      */
-    private fun currentlyAvailable(
+    private fun knownTaken(
         campsiteId: Long,
         startDate: LocalDate,
         endDate: LocalDate,
     ): Boolean {
         val nights = generateSequence(startDate) { it.plusDays(1) }.takeWhile { it.isBefore(endDate) }.toList()
-        return availability.availableNights(campsiteId, nights).containsAll(nights)
+        return availability.freshlyUnavailableNights(campsiteId, nights).isNotEmpty()
     }
 }

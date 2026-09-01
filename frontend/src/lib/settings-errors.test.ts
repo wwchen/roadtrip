@@ -53,6 +53,22 @@ describe('settingsErrorMessage', () => {
     }
   });
 
+  test('the three add-to-cart misses read differently from each other', () => {
+    // They all used to be "cart_not_added — someone else likely took it",
+    // which is wrong advice for two of them: if rec.gov never offered the
+    // dates or the button, retrying cannot help.
+    const dates = settingsErrorMessage('recgov_dates_not_offered');
+    const button = settingsErrorMessage('recgov_no_reserve_button');
+    const raced = settingsErrorMessage('cart_not_added');
+
+    expect(dates).toMatch(/does not offer those dates/i);
+    expect(button).toMatch(/no way to book/i);
+    expect(raced).toMatch(/try again/i);
+    expect(new Set([dates, button, raced]).size).toBe(3);
+    // Only the genuine race invites a retry.
+    expect(dates).not.toMatch(/try again/i);
+  });
+
   test('falls back for a missing code', () => {
     expect(settingsErrorMessage(undefined)).toBe(DEFAULT);
     expect(settingsErrorMessage(null)).toBe(DEFAULT);

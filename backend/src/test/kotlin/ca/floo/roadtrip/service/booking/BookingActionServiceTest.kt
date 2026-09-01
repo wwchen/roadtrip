@@ -84,26 +84,47 @@ class BookingActionServiceTest {
         }
 
     @Test
-    fun `a stale grid is caught without a vendor call`() =
+    fun `a site we recently saw taken is refused without a vendor call`() =
         runBlocking {
             val adapter = RecordingAdapter()
             val outcome =
-                service(adapter = adapter, availableNights = setOf(arrival))
+                service(adapter = adapter, freshlyUnavailableNights = setOf(arrival.plusDays(1)))
                     .addToCart(caller, TEST_CAMPSITE_ID, arrival, checkout)
 
-            // The 5th is booked; the caller's tab was showing an older grid.
+            // Positive, recent evidence the second night is booked.
             assertEquals(AddToCartOutcome.Refused(BookingActionCodes.NOT_AVAILABLE), outcome)
             assertTrue(adapter.requests.isEmpty())
         }
 
     @Test
-    fun `a night never observed counts as unavailable`() =
+    fun `a night never observed proceeds to the vendor`() =
         runBlocking {
+            // The availability table is filled by the WATCH poller, so a site
+            // nobody watches has no rows at all. Refusing on that made the grid
+            // button unusable for exactly the browse-then-hold flow it exists
+            // for. No evidence is not evidence of absence.
+            val adapter = RecordingAdapter()
             val outcome =
-                service(availableNights = emptySet())
+                service(adapter = adapter, freshlyUnavailableNights = emptySet())
                     .addToCart(caller, TEST_CAMPSITE_ID, arrival, checkout)
 
-            assertEquals(AddToCartOutcome.Refused(BookingActionCodes.NOT_AVAILABLE), outcome)
+            assertTrue(outcome is AddToCartOutcome.Held, "the vendor is the arbiter, so it must be asked")
+            assertEquals(1, adapter.requests.size)
+        }
+
+    @Test
+    fun `a stale observation does not block the hold`() =
+        runBlocking {
+            // The live bug: a bookable site was refused as "not available"
+            // because its AVAILABLE observation was eight minutes old. A stale
+            // cell contributes nothing to the blocking set by construction.
+            val adapter = RecordingAdapter()
+            val outcome =
+                service(adapter = adapter, freshlyUnavailableNights = emptySet())
+                    .addToCart(caller, TEST_CAMPSITE_ID, arrival, checkout)
+
+            assertTrue(outcome is AddToCartOutcome.Held)
+            assertEquals(1, adapter.requests.size)
         }
 
     @Test
@@ -145,7 +166,7 @@ class BookingActionServiceTest {
         configured: Boolean = true,
         campsite: Campsite? = campsite(),
         parentRef: BookingProviderRef = BookingProviderRef.RecGov("232447"),
-        availableNights: Set<LocalDate> = setOf(arrival, arrival.plusDays(1)),
+        freshlyUnavailableNights: Set<LocalDate> = emptySet(),
     ): BookingActionService {
         val registry = BookingAdapterRegistry(listOf(adapter))
         return BookingActionService(
@@ -153,7 +174,7 @@ class BookingActionServiceTest {
             availabilityTargets = FakeTargetResolver(campsite, parentRef),
             bookingTargets = AvailabilityBookingTargetResolver(registry),
             credentials = { configured },
-            availability = { _, nights -> nights.filter { it in availableNights }.toSet() },
+            availability = { _, nights -> nights.filter { it in freshlyUnavailableNights }.toSet() },
             bookings = registry,
         )
     }

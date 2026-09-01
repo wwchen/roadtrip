@@ -41,7 +41,19 @@ const MESSAGES = new Map<string, string>([
   // the second is rec.gov itself declining after we drove the browser — which
   // in practice means somebody beat this user to it by seconds.
   ['not_available', 'Could not hold the site — it is no longer available.'],
-  ['cart_not_added', 'Recreation.gov would not add it — someone else likely took it.'],
+  // Three distinct misses that all used to read as "cart_not_added". The user
+  // can act on the difference: the first two mean rec.gov never offered this
+  // booking at all, so retrying is pointless; only the last is a race worth
+  // trying again.
+  [
+    'recgov_dates_not_offered',
+    'Recreation.gov does not offer those dates for this site — try a different night or check its page directly.',
+  ],
+  [
+    'recgov_no_reserve_button',
+    'Recreation.gov showed no way to book this site for those dates — it may be taken or not bookable online.',
+  ],
+  ['cart_not_added', 'Recreation.gov would not add it — someone else likely took it. Try again.'],
   ['recgov_confirmation_disabled', 'Recreation.gov would not add it — someone else likely took it.'],
   ['unsupported_target', 'This campground cannot be held from Roadtrip.'],
   ['credentials_required', 'Add your recreation.gov credentials in Settings first.'],

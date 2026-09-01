@@ -234,7 +234,8 @@ val serviceModule =
                 bookingTargets = get<AvailabilityBookingTargetResolver>(),
                 credentials = get<RecGovCredentialService>(),
                 availability = { campsiteId, nights ->
-                    get<AvailabilityRepo>().availableDates(campsiteId, nights, get<AppConfig>().booking.freshnessMaxAge)
+                    get<AvailabilityRepo>()
+                        .freshlyUnavailableDates(campsiteId, nights, get<AppConfig>().booking.freshnessMaxAge)
                 },
                 bookings = get<BookingAdapterRegistry>(),
             )

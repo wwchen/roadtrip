@@ -52,32 +52,7 @@ class AvailabilityRepoTest : SharedDbTest() {
     }
 
     @Test
-    fun `availableDates drops a cell older than the age bound`() {
-        // readCurrent happily returns a year-old `available` — it is still the
-        // newest row. A booking gate that trusted it would drive a browser on
-        // the strength of last season's observation.
-        val campsiteId = seedCampsite("100")
-        val repo = AvailabilityRepo(ctx)
-        val observedAt = Instant.parse("2026-06-18T10:00:00Z")
-        val now = OffsetDateTime.parse("2026-06-18T10:20:00Z")
-        repo.recordObservations(
-            runId = null,
-            listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, observedAt)),
-        )
-
-        assertEquals(
-            setOf(date),
-            repo.availableDates(campsiteId, listOf(date), Duration.ofMinutes(30), now),
-        )
-        assertEquals(
-            emptySet(),
-            repo.availableDates(campsiteId, listOf(date), Duration.ofMinutes(5), now),
-            "20 minutes old against a 5 minute bound is not evidence the site is free",
-        )
-    }
-
-    @Test
-    fun `availableDates drops a fresh cell that is not bookable`() {
+    fun `a fresh not-bookable cell is the only thing that blocks`() {
         val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val observedAt = Instant.parse("2026-06-18T10:00:00Z")
@@ -87,18 +62,89 @@ class AvailabilityRepoTest : SharedDbTest() {
         )
 
         assertEquals(
-            emptySet(),
-            repo.availableDates(campsiteId, listOf(date), Duration.ofMinutes(30), OffsetDateTime.parse("2026-06-18T10:05:00Z")),
+            setOf(date),
+            repo.freshlyUnavailableDates(
+                campsiteId,
+                listOf(date),
+                Duration.ofMinutes(30),
+                OffsetDateTime.parse("2026-06-18T10:05:00Z"),
+            ),
         )
     }
 
     @Test
-    fun `availableDates counts a night never observed as unavailable`() {
+    fun `a stale not-bookable cell no longer blocks`() {
+        // The age bound decides what still counts as EVIDENCE, not what counts
+        // as permission. Twenty minutes on against a five minute bound, we no
+        // longer know, so the vendor decides.
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        repo.recordObservations(
+            runId = null,
+            listOf(
+                AvailabilityRepo.Observation(
+                    campsiteId,
+                    date,
+                    AvailabilityStatus.RESERVED,
+                    Instant.parse("2026-06-18T10:00:00Z"),
+                ),
+            ),
+        )
+
+        assertEquals(
+            emptySet(),
+            repo.freshlyUnavailableDates(
+                campsiteId,
+                listOf(date),
+                Duration.ofMinutes(5),
+                OffsetDateTime.parse("2026-06-18T10:20:00Z"),
+            ),
+        )
+    }
+
+    @Test
+    fun `a stale AVAILABLE cell does not block — the live bug`() {
+        // A genuinely bookable site was refused as "not available" because its
+        // observation, which said AVAILABLE, was eight minutes old. This table
+        // is filled by the watch poller, so an unwatched site is stale within
+        // minutes of the grid loading; silence must never read as "taken".
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        repo.recordObservations(
+            runId = null,
+            listOf(
+                AvailabilityRepo.Observation(
+                    campsiteId,
+                    date,
+                    AvailabilityStatus.AVAILABLE,
+                    Instant.parse("2026-06-18T10:00:00Z"),
+                ),
+            ),
+        )
+
+        assertEquals(
+            emptySet(),
+            repo.freshlyUnavailableDates(
+                campsiteId,
+                listOf(date),
+                Duration.ofMinutes(5),
+                OffsetDateTime.parse("2026-06-18T10:20:00Z"),
+            ),
+        )
+    }
+
+    @Test
+    fun `a night never observed does not block`() {
         val campsiteId = seedCampsite("100")
 
         assertEquals(
             emptySet(),
-            AvailabilityRepo(ctx).availableDates(campsiteId, listOf(date), Duration.ofMinutes(30), OffsetDateTime.now()),
+            AvailabilityRepo(ctx).freshlyUnavailableDates(
+                campsiteId,
+                listOf(date),
+                Duration.ofMinutes(30),
+                OffsetDateTime.now(),
+            ),
         )
     }
 

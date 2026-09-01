@@ -88,7 +88,7 @@ async function clickCalendarDate (page, dateStr) {
   return false
 }
 
-async function enterDates (page, firstDate, checkoutDate) {
+export async function enterDates (page, firstDate, checkoutDate) {
   const ENTER_DATES = 'button:has-text("Enter Dates"), button:has-text("Change Dates")'
   const GRID_SEL = '[role="gridcell"], [role="grid"], td[aria-label]'
 
@@ -104,7 +104,7 @@ async function enterDates (page, firstDate, checkoutDate) {
       console.log(`Cart: dates already pre-selected (${firstDate} → ${checkoutDate}) — closing picker via Escape`)
       await page.keyboard.press('Escape')
       await page.waitForTimeout(500)
-      return
+      return DATES_ACCEPTED
     }
   }
 
@@ -146,20 +146,40 @@ async function enterDates (page, firstDate, checkoutDate) {
       await clickCalendarDate(page, checkoutDate)
       await page.locator('button:has-text("Done"), button:has-text("Apply"), button:has-text("Search"), button:has-text("Check Availability")')
         .first().click({ timeout: 2000 }).catch(() => {})
-      return
+      // A fiber click fires the handler directly, so "it did not throw" says
+      // nothing about whether the calendar accepted the date. Only the
+      // rendered selection does.
+      if (await dateSelectionAccepted(page, firstMonthDay)) return DATES_ACCEPTED
+      console.log(`Cart: fiber click for ${firstDate} did not take — the date is genuinely not offered`)
+      return DATES_REFUSED
     }
 
-    console.log(`Cart: arrival date ${firstDate} fiber click failed — closing picker, relying on URL params`)
+    // aria-disabled and no handler to call: rec.gov means it.
+    console.log(`Cart: arrival date ${firstDate} is not selectable and the fiber fallback found no handler`)
     await page.keyboard.press('Escape')
-    await page.waitForTimeout(800)
-    return
+    await page.waitForTimeout(300)
+    return DATES_REFUSED
   }
 
   await clickCalendarDate(page, firstDate)
   await clickCalendarDate(page, checkoutDate)
   await page.locator('button:has-text("Done"), button:has-text("Apply"), button:has-text("Search"), button:has-text("Check Availability")')
     .first().click({ timeout: 2000 }).catch(() => {})
+  return DATES_ACCEPTED
 }
+
+/** Whether the calendar is now rendering that date as the chosen arrival. */
+export async function dateSelectionAccepted (page, monthDay) {
+  return page
+    .locator(`[aria-label*="${monthDay}"].is-selected, [aria-label*="${monthDay}"].is-range-start`)
+    .first()
+    .isVisible()
+    .catch(() => false)
+}
+
+/** What the date picker did with the requested range. */
+export const DATES_ACCEPTED = 'dates_accepted'
+export const DATES_REFUSED = 'dates_refused'
 
 const RESERVE_SELECTORS = [
   'button:has-text("Add to Cart")',
@@ -198,6 +218,15 @@ const ERROR_RECGOV_LOGIN_FAILED = 'recgov_login_failed'
 const ERROR_RECGOV_REFRESH_FAILED = 'recgov_refresh_failed'
 const ERROR_RECGOV_SPA_LOGGED_OUT = 'recgov_spa_logged_out'
 const ERROR_RECGOV_CONFIRMATION_DISABLED = 'recgov_confirmation_disabled'
+// Two ways an add-to-cart can miss that `cart_not_added` used to blur together.
+// The user can act on the difference: one means the site is not offered for
+// those dates at all, the other means we tried to hold it and could not.
+const ERROR_RECGOV_DATES_NOT_OFFERED = 'recgov_dates_not_offered'
+const ERROR_RECGOV_NO_RESERVE_BUTTON = 'recgov_no_reserve_button'
+const DATES_NOT_OFFERED_DETAIL =
+  'Recreation.gov did not offer the requested arrival date for this site — its calendar refused the selection.'
+const NO_RESERVE_BUTTON_DETAIL =
+  'Recreation.gov showed the site but offered no Reserve or Add to Cart control for those dates.'
 const HEADLESS_NO_SESSION_DETAIL =
   'This profile has no Recreation.gov session — test login in Settings, or run the companion headed to log in once.'
 const HEADED_NO_SESSION_DETAIL =
@@ -774,8 +803,20 @@ async function runAddToCart (match, contextOptions) {
     }
 
     if (await page.locator(ENTER_DATES_SEL).first().isVisible().catch(() => false)) {
-      await enterDates(page, firstDate, checkout)
+      const dateStatus = await enterDates(page, firstDate, checkout)
       await screenshots.capture('dates-entered')
+      // Fail here rather than spending the rest of the budget waiting for a
+      // Reserve button that cannot appear for dates the site will not accept.
+      if (dateStatus === DATES_REFUSED) {
+        console.log(`Cart: site ${site} does not offer ${firstDate} → ${checkout}`)
+        await screenshots.capture('dates-not-offered')
+        return withScreenshots({
+          ok: false,
+          page,
+          error: ERROR_RECGOV_DATES_NOT_OFFERED,
+          detail: DATES_NOT_OFFERED_DETAIL,
+        }, screenshots)
+      }
       await page.waitForSelector(RESERVE_COMBINED, { timeout: 12000 }).catch(() => {})
       const datedReserveClick = await clickReserveButton(page, { screenshots })
       if (datedReserveClick.failure) return withScreenshots({ ok: false, page, ...datedReserveClick.failure }, screenshots)
@@ -801,7 +842,14 @@ async function runAddToCart (match, contextOptions) {
       console.log(`Cart: no Reserve button for Site ${site} — buttons: [${btnStr}]`)
     }
     await screenshots.capture('no-reserve-button')
-    return withScreenshots({ ok: false, page }, screenshots)
+    // Distinct from `cart_not_added`: nothing was ever attempted, because
+    // rec.gov offered no control to attempt it with.
+    return withScreenshots({
+      ok: false,
+      page,
+      error: ERROR_RECGOV_NO_RESERVE_BUTTON,
+      detail: NO_RESERVE_BUTTON_DETAIL,
+    }, screenshots)
   } catch (err) {
     console.error('Cart automation error:', err.message)
     await screenshots.capture('automation-error')

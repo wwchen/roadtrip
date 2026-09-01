@@ -49,6 +49,11 @@ private val transientConflictCodes =
         // A conflict, not a broken service.
         BookingActionCodes.CART_NOT_ADDED,
         BookingActionCodes.CONFIRMATION_DISABLED,
+        // Rec.gov never offered the booking. Still a conflict rather than a
+        // broken service — the site's own availability moved, or it is not
+        // bookable online — and the caller is the one who acts next.
+        BookingActionCodes.DATES_NOT_OFFERED,
+        BookingActionCodes.NO_RESERVE_BUTTON,
     )
 
 /**
