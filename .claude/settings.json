@@ -26,8 +26,25 @@
   },
   "worktree": {
     "sparsePaths": [
-      "/*",
-      "!/data/raw/"
+      ".agents",
+      ".claude",
+      ".githooks",
+      ".github",
+      "backend",
+      "caddy",
+      "companion",
+      "config",
+      "data/pricing-cache",
+      "deploy",
+      "detekt-rules",
+      "docs",
+      "frontend",
+      "gradle",
+      "grafana",
+      "postgres-init",
+      "rfcs",
+      "scripts",
+      "secrets"
     ]
   },
   "permissions": {

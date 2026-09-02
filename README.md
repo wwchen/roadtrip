@@ -156,7 +156,10 @@ provider is documented in
 become a new immutable data image when committed. Production materializes that
 image into `roadtrip-data-<data-tree-sha>`. The Docker volume survives container
 replacement, is traceable to Git, and is reconstructible; sandboxes share it
-read-only. Generated `data/etl-out/` remains ignored.
+read-only. Generated `data/etl-out/` remains ignored. Claude Code worktrees
+leave `data/raw/` out via `worktree.sparsePaths` in `.claude/settings.json`;
+that list is cone-mode, so it enumerates every directory to include and
+`scripts/check-worktree-sparse-paths.mjs` keeps it from drifting.
 
 ### `/api/docs` — interactive API browser
 

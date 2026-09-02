@@ -127,6 +127,20 @@ jobs:
           fi
           echo "No applied migrations were modified."
 
+  # Claude Code creates worktrees with `git sparse-checkout set --cone`, which can
+  # only enumerate directories to include — it cannot subtract one. So the list in
+  # .claude/settings.json has to name every directory we want, and a new top-level
+  # directory that nobody adds there just goes missing from worktrees. Deliberately
+  # unfiltered: the change that needs catching is a directory no path filter knows
+  # about yet.
+  worktree-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate Claude worktree sparsePaths
+        run: node scripts/check-worktree-sparse-paths.mjs
+
   lint:
     needs: changes
     if: needs.changes.outputs.scripts == 'true'
@@ -540,6 +554,7 @@ jobs:
     needs:
       - changes
       - migration-guard
+      - worktree-guard
       - lint
       - gradle-lint
       - frontend-tests

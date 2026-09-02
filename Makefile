@@ -100,6 +100,7 @@ test: _ensure-hooks
 	node scripts/check-color-tokens.mjs
 	node scripts/check-css-blocks.mjs
 	node scripts/check-token-usage.mjs
+	node scripts/check-worktree-sparse-paths.mjs
 	cd companion && npm ci --ignore-scripts && npm test
 	ruff check --isolated --target-version py39 --select E4,E7,E9,F,B,UP secrets/ scripts/
 	python3 -m unittest discover -s scripts -p 'test_*.py'
