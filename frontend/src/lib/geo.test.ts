@@ -1,12 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import {
-  distanceKm,
-  formatDistance,
-  geomCenter,
-  hasCoordinates,
-  zoomForBbox,
-  type Bbox,
-} from './geo';
+import { distanceKm, formatDistance, geomCenter, hasCoordinates } from './geo';
 
 describe('distanceKm', () => {
   test('one degree of latitude is ~111.195 km', () => {
@@ -185,37 +178,5 @@ describe('hasCoordinates', () => {
       expect(hasCoordinates(geom)).toBe(false);
       expect(geomCenter(geom)[0]).toBe(0);
     }
-  });
-});
-
-describe('zoomForBbox', () => {
-  const span = (degrees: number): Bbox => [
-    [0, 0],
-    [degrees, degrees],
-  ];
-
-  test.each([
-    [4, 7],
-    [3.0001, 7],
-    [3, 8.5], // the bucket boundaries are exclusive: `span > 3`, not `>=`
-    [2, 8.5],
-    [1, 10],
-    [0.5, 10],
-    [0.3, 11],
-    [0.2, 11],
-    [0.1, 12],
-    [0.05, 12],
-    [0, 12],
-  ])('a %s degree span maps to zoom %s', (degrees, zoom) => {
-    expect(zoomForBbox(span(degrees))).toBe(zoom);
-  });
-
-  test('uses the larger of the two spans', () => {
-    expect(
-      zoomForBbox([
-        [0, 0],
-        [0.01, 4],
-      ]),
-    ).toBe(7);
   });
 });

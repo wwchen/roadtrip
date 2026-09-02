@@ -106,13 +106,11 @@ export function resetTokenCache(): void {
 }
 
 /** Search-result kind → pin color token name. */
-export const KIND_TOKEN: Readonly<Record<'PLACE' | 'ADDR' | 'CG' | 'SC' | 'NP' | 'SP' | 'PF', string>> = {
+export const KIND_TOKEN: Readonly<Record<'PLACE' | 'ADDR' | 'CG' | 'SC' | 'PF', string>> = {
   PLACE: '--rt-kind-place',
   ADDR: '--rt-kind-address',
   CG: '--rt-layer-cg',
   SC: '--rt-layer-supercharger',
-  NP: '--rt-layer-np',
-  SP: '--rt-layer-sp',
   PF: '--rt-layer-pf',
 };
 
