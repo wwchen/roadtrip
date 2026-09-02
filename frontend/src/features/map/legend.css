@@ -182,18 +182,6 @@
   color: var(--rt-text);
 }
 
-.rt-legend__basemap-reset {
-  justify-self: start;
-  padding: 0;
-  margin-top: -2px;
-  background: none;
-  border: 0;
-  color: var(--rt-brand);
-  font-size: 11px;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
 .rt-legend__satellite {
   display: flex;
   align-items: flex-start;

@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { useThemeStore } from '@/stores/themeStore';
-import { BASEMAPS, BASEMAP_STORAGE_KEY, DARK_BASEMAP, DEFAULT_BASEMAP } from './basemaps';
+import { BASEMAPS, BASEMAP_STORAGE_KEY, DEFAULT_BASEMAP } from './basemaps';
 
 interface StyleLayer {
   id: string;
@@ -20,6 +20,9 @@ class FakeMap {
   addedSources = new Set<string>();
   addedLayers: Array<{ id: string; before?: string }> = [];
   removed = false;
+  /** Fire `style.load` inside `setStyle`, as the real map does for a style it
+   *  need not fetch. See the note on `setStyle`. */
+  loadsStyleSynchronously = false;
   styleLayers: StyleLayer[] = [
     { id: 'background', type: 'background' },
     { id: 'roads', type: 'line' },
@@ -54,15 +57,20 @@ class FakeMap {
    * inside this very call. Verified against the real library on :8765 — setStyle at
    * t=4611.3ms, style.load at t=4615.7ms, same synchronous block.
    *
-   * That matters because the dark default (`carto-dark`) is inline: the reset and
-   * the reload then land in ONE React batch, so any signal that cannot represent
-   * "loaded again" is indistinguishable from "never changed".
+   * That matters because the reload then lands in ONE React batch with whatever
+   * triggered it, so any signal that cannot represent "loaded again" is
+   * indistinguishable from "never changed".
+   *
+   * Every basemap is a style URL now, so no registry entry reaches the synchronous
+   * path any more; `loadsStyleSynchronously` reproduces it directly rather than
+   * leaving the regression uncovered until some future basemap goes inline again.
    */
   setStyle(style: unknown, options: unknown) {
     this.setStyleCalls.push({ style, options });
     this.addedSources.clear();
     this.addedLayers = [];
-    if (typeof style === 'object' && style !== null) this.emit('style.load');
+    if (this.loadsStyleSynchronously || (typeof style === 'object' && style !== null))
+      this.emit('style.load');
   }
 
   getStyle() {
@@ -157,10 +165,10 @@ describe('setup', () => {
   });
 
   test('opens on the remembered basemap', () => {
-    window.localStorage.setItem(BASEMAP_STORAGE_KEY, 'osm');
+    window.localStorage.setItem(BASEMAP_STORAGE_KEY, 'carto-voyager');
     renderMap();
-    expect(ctx.basemapKey).toBe('osm');
-    expect(instance.options.style).toBe(BASEMAPS.osm.style);
+    expect(ctx.basemapKey).toBe('terrain');
+    expect(instance.options.style).toBe(BASEMAPS.terrain.style.light);
   });
 
   test('opens on the default when nothing is remembered', () => {
@@ -190,11 +198,11 @@ describe('changing basemap', () => {
     await loadStyle();
 
     await act(async () => {
-      ctx.setBasemap('carto-dark');
+      ctx.setBasemap('terrain');
     });
 
     expect(instance.setStyleCalls).toHaveLength(1);
-    expect(instance.setStyleCalls[0].style).toBe(BASEMAPS['carto-dark'].style);
+    expect(instance.setStyleCalls[0].style).toBe(BASEMAPS.terrain.style.light);
     // diff:false is load-bearing: the default merge keeps our sources but never
     // fires style.load, so the reinstall would never run.
     expect(instance.setStyleCalls[0].options).toEqual({ diff: false });
@@ -208,7 +216,7 @@ describe('changing basemap', () => {
     expect(screen.getByTestId('ready')).toHaveTextContent('true');
 
     await act(async () => {
-      ctx.setBasemap('openfreemap-bright');
+      ctx.setBasemap('outdoors');
     });
     expect(screen.getByTestId('ready')).toHaveTextContent('false');
 
@@ -221,10 +229,10 @@ describe('changing basemap', () => {
     await loadStyle();
 
     await act(async () => {
-      ctx.setBasemap('carto-dark');
+      ctx.setBasemap('terrain');
     });
 
-    expect(window.localStorage.getItem(BASEMAP_STORAGE_KEY)).toBe('carto-dark');
+    expect(window.localStorage.getItem(BASEMAP_STORAGE_KEY)).toBe('terrain');
   });
 
   test('does not recreate the map', async () => {
@@ -233,7 +241,7 @@ describe('changing basemap', () => {
     const first = instance;
 
     await act(async () => {
-      ctx.setBasemap('osm');
+      ctx.setBasemap('outdoors');
     });
 
     expect(instance).toBe(first);
@@ -242,35 +250,34 @@ describe('changing basemap', () => {
 });
 
 describe('following the theme', () => {
-  test('opens on the dark default when dark mode has nothing remembered', () => {
+  test('opens on the same cartography in dark, with its dark tiles', () => {
     useThemeStore.getState().setChoice('dark');
     renderMap();
-    expect(ctx.basemapKey).toBe(DARK_BASEMAP);
-    expect(instance.options.style).toBe(BASEMAPS[DARK_BASEMAP].style);
+    expect(ctx.basemapKey).toBe(DEFAULT_BASEMAP);
+    expect(instance.options.style).toBe(BASEMAPS[DEFAULT_BASEMAP].style.dark);
   });
 
-  test('reports auto until a basemap is explicitly picked', () => {
-    renderMap();
-    expect(ctx.isAutoBasemap).toBe(true);
-  });
-
-  test('re-styles to the dark default when the mode changes after mount', async () => {
+  // The bug: brightness used to be a basemap, so switching theme swapped the whole
+  // cartography. It must now swap only the tiles of the map you already chose.
+  test('a mode change keeps the cartography and re-styles to its other tiles', async () => {
     renderMap();
     await loadStyle();
-    expect(instance.setStyleCalls).toHaveLength(0);
+    await act(async () => {
+      ctx.setBasemap('terrain');
+    });
+    await loadStyle();
+    const before = instance.setStyleCalls.length;
 
     await act(async () => {
       useThemeStore.getState().setChoice('dark');
     });
 
-    expect(instance.setStyleCalls).toHaveLength(1);
-    expect(instance.setStyleCalls[0].style).toBe(BASEMAPS[DARK_BASEMAP].style);
-    expect(ctx.basemapKey).toBe(DARK_BASEMAP);
+    expect(ctx.basemapKey).toBe('terrain');
+    expect(instance.setStyleCalls).toHaveLength(before + 1);
+    expect(instance.setStyleCalls[before].style).toBe(BASEMAPS.terrain.style.dark);
   });
 
-  // A mode change resolves a key, it does not choose one — persisting it would
-  // pin "auto" to whatever mode was active the first time it fired.
-  test('does not persist the key the mode effect resolves', async () => {
+  test('a mode change does not persist anything', async () => {
     renderMap();
     await loadStyle();
 
@@ -279,44 +286,22 @@ describe('following the theme', () => {
     });
 
     expect(window.localStorage.getItem(BASEMAP_STORAGE_KEY)).toBeNull();
-    expect(ctx.isAutoBasemap).toBe(true);
   });
 
-  // An explicit pick outranks the mode: it must survive a later mode change
-  // rather than being overwritten by the mode's default.
   test('an explicit pick survives a mode change', async () => {
     renderMap();
     await loadStyle();
 
     await act(async () => {
-      ctx.setBasemap('osm');
+      ctx.setBasemap('terrain');
     });
-    expect(ctx.isAutoBasemap).toBe(false);
 
     await act(async () => {
       useThemeStore.getState().setChoice('dark');
     });
 
-    expect(ctx.basemapKey).toBe('osm');
-    expect(window.localStorage.getItem(BASEMAP_STORAGE_KEY)).toBe('osm');
-  });
-
-  test('resetBasemap forgets the explicit pick and returns to the mode default', async () => {
-    renderMap();
-    await loadStyle();
-
-    await act(async () => {
-      ctx.setBasemap('osm');
-    });
-    expect(ctx.isAutoBasemap).toBe(false);
-
-    await act(async () => {
-      ctx.resetBasemap();
-    });
-
-    expect(window.localStorage.getItem(BASEMAP_STORAGE_KEY)).toBeNull();
-    expect(ctx.isAutoBasemap).toBe(true);
-    expect(ctx.basemapKey).toBe(DEFAULT_BASEMAP);
+    expect(ctx.basemapKey).toBe('terrain');
+    expect(window.localStorage.getItem(BASEMAP_STORAGE_KEY)).toBe('terrain');
   });
 });
 
@@ -363,7 +348,7 @@ describe('satellite underlay', () => {
     expect(instance.getLayer(SATELLITE_LAYER_ID)).toBeDefined();
 
     await act(async () => {
-      ctx.setBasemap('openfreemap-bright');
+      ctx.setBasemap('outdoors');
     });
     // The fake's setStyle destroyed everything the app added, as the real one does.
     expect(instance.getLayer(SATELLITE_LAYER_ID)).toBeUndefined();
@@ -387,29 +372,31 @@ describe('satellite underlay', () => {
    * it therefore skipped the reinstall, after `diff: false` had already destroyed
    * the layers.
    *
-   * The dark default reached this path when it was a raster inline style; it is a
-   * Carto vector style URL now, so `osm` is the remaining inline style that can.
+   * The dark default reached this path when it was a raster inline style. Nothing
+   * in the registry does any more, so the fake is told to load synchronously.
    *
    * The satellite underlay stands in for the overlay hooks here: it is the one
    * consumer of the signal that lives in this component, and it reinstalls through
    * exactly the same effect-dependency mechanism they do.
    */
-  test('reinstalls itself when a basemap pick loads an inline style synchronously', async () => {
+  test('reinstalls itself when a style loads synchronously', async () => {
     renderMap();
     await loadStyle();
     await act(async () => {
       ctx.setSatellite(true);
     });
     expect(instance.getLayer(SATELLITE_LAYER_ID)).toBeDefined();
+    const before = instance.setStyleCalls.length;
 
+    instance.loadsStyleSynchronously = true;
     await act(async () => {
-      ctx.setBasemap('osm');
+      ctx.setBasemap('terrain');
     });
 
-    // No hand-fired style.load: the inline style already announced itself inside
-    // setStyle. If the reinstall needs a nudge from the test, it is broken.
-    expect(instance.setStyleCalls).toHaveLength(1);
-    expect(instance.setStyleCalls[0].style).toBe(BASEMAPS.osm.style);
+    // No hand-fired style.load: the style already announced itself inside setStyle.
+    // If the reinstall needs a nudge from the test, it is broken.
+    expect(instance.setStyleCalls).toHaveLength(before + 1);
+    expect(instance.setStyleCalls[before].style).toBe(BASEMAPS.terrain.style.light);
     expect(instance.getLayer(SATELLITE_LAYER_ID)).toBeDefined();
   });
 });
