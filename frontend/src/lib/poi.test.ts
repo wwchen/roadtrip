@@ -60,25 +60,6 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
     },
   },
 
-  nationalPark: {
-    id: 900,
-    properties: {
-      category: 'national-park',
-      name: 'Lassen Volcanic',
-      region: 'CA',
-      raw: { acres: 106589, official_name: 'Lassen Volcanic National Park', designation: 'NPS' },
-    },
-  },
-
-  // PAD-US field names already present — they must win over the ETL keys.
-  statePark: {
-    id: 901,
-    properties: {
-      category: 'state-park',
-      raw: { Unit_Nm: 'Castle Crags', State_Nm: 'CA', Loc_Nm: 'Shasta', GIS_Acres: 4350, Mang_Name: 'STAT' },
-    },
-  },
-
   // A charger as `/api/pois/{id}` sends it: its canonical columns are named
   // fields on `detail`, same as a campground or a gym.
   supercharger: {
@@ -226,27 +207,6 @@ describe('campground promotion', () => {
   });
 });
 
-describe('park field mapping', () => {
-  test('maps ETL keys onto the PAD-US names the layers read', () => {
-    expect(flatten('nationalPark')).toMatchObject({
-      Unit_Nm: 'Lassen Volcanic',
-      State_Nm: 'CA',
-      Loc_Nm: 'Lassen Volcanic National Park',
-      GIS_Acres: 106589,
-      Mang_Name: 'NPS',
-    });
-  });
-
-  test('existing PAD-US fields win over the ETL keys', () => {
-    expect(flatten('statePark')).toMatchObject({
-      Unit_Nm: 'Castle Crags',
-      Loc_Nm: 'Shasta',
-      GIS_Acres: 4350,
-      Mang_Name: 'STAT',
-    });
-  });
-});
-
 describe('a charger, whose facts all arrive named', () => {
   test('carries its canonical columns straight through', () => {
     expect(flatten('supercharger')).toMatchObject({
@@ -351,23 +311,5 @@ describe('re-flattening', () => {
     const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));
     const twice = flattenHydratedPoi(structuredClone(once));
     expect(twice).toEqual(once);
-  });
-
-  test.each([
-    ['nationalPark', 'GIS_Acres', 106589, null],
-    ['nationalPark', 'Mang_Name', 'NPS', ''],
-    ['nationalPark', 'Loc_Nm', 'Lassen Volcanic National Park', ''],
-  ] as const)('drops %s.%s on a second pass', (key, field, first, second) => {
-    const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));
-    const twice = flattenHydratedPoi(structuredClone(once));
-    expect(once.properties[field]).toEqual(first);
-    expect(twice.properties[field]).toEqual(second);
-  });
-
-  test('park fields that do have a flat fallback survive', () => {
-    const once = flattenHydratedPoi(structuredClone(FIXTURES.nationalPark!));
-    const twice = flattenHydratedPoi(structuredClone(once));
-    expect(twice.properties.Unit_Nm).toBe('Lassen Volcanic'); // falls back to p.name
-    expect(twice.properties.State_Nm).toBe('CA'); // falls back to p.region
   });
 });

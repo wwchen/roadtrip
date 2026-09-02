@@ -5,13 +5,8 @@
 // the popups, drawer, and campground card read directly, so rendering code never
 // has to know which shape a POI arrived in.
 //
-// Re-flattening is a no-op for the address, name, campground, and supercharger
-// paths, and the tests pin that. It is NOT a no-op for the fields derived
-// solely from `raw` with no flat fallback, because the first pass consumes
-// `raw` and deletes it: a park's `Loc_Nm`/`GIS_Acres`/`Mang_Name` reset on a
-// second pass. core.js's blanket "Idempotent" note overstated this; the
-// behavior is carried over byte-for-byte (a parity suite pins it against the
-// original) and only the claim is corrected. Call it once per hydration.
+// Re-flattening is a no-op for every path here, and the tests pin that. Call
+// it once per hydration all the same — nothing downstream needs a second pass.
 //
 // The provider-specific branches at the bottom are deliberately kept as-is
 // rather than reshaped into a registry. They encode which upstream field names
@@ -20,8 +15,6 @@
 // the diff reviewable against the original.
 
 const CATEGORY_CAMPGROUND = 'campground';
-const CATEGORY_NATIONAL_PARK = 'national-park';
-const CATEGORY_STATE_PARK = 'state-park';
 
 type Props = Record<string, unknown>;
 
@@ -108,17 +101,6 @@ export function flattenHydratedPoi(f: PoiFeature): FlatPoiFeature {
 
   if (p.category === CATEGORY_CAMPGROUND && p.subcategory) {
     flat.category = p.subcategory;
-  }
-  if (p.category === CATEGORY_NATIONAL_PARK || p.category === CATEGORY_STATE_PARK) {
-    // Park layers + popups read Unit_Nm / Loc_Nm / State_Nm / GIS_Acres /
-    // Mang_Name — the field names PAD-US used. The new ETL stores the facts
-    // under different keys (acres, official_name, designation, region, source);
-    // map them here so the rendering code stays put.
-    flat.Unit_Nm = raw.Unit_Nm || p.unit_name || p.name;
-    flat.State_Nm = raw.State_Nm || p.region || '';
-    flat.Loc_Nm = raw.Loc_Nm || raw.official_name || '';
-    flat.GIS_Acres = raw.GIS_Acres ?? raw.acres ?? null;
-    flat.Mang_Name = raw.Mang_Name || raw.designation || '';
   }
   flat.name = p.name || raw.name || flat.name;
   return { ...f, properties: flat };

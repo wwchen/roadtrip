@@ -8,7 +8,6 @@ import type { PoiTypeComponent } from './common';
 import { CampgroundPoiPage } from './campground';
 import { ChargerPoiPage } from './charger';
 import { ParkGroupPoiPage } from './group';
-import { ParkPoiPage } from './park';
 import { PlacePoiPage, type PlaceTypeSpec } from './place';
 
 /**
@@ -99,8 +98,6 @@ const place = (key: keyof typeof PLACE_TYPES): PoiTypeComponent => {
  */
 const BY_CATEGORY = new Map<string, PoiTypeComponent>([
   ['campground', CampgroundPoiPage],
-  ['national-park', ParkPoiPage],
-  ['state-park', ParkPoiPage],
   // The group page: one park, and its campgrounds against the same nights.
   ['park-group', ParkGroupPoiPage],
   ['planet_fitness_location', place('gym')],

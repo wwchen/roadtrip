@@ -3,7 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import type { FlatPoiFeature } from '@/lib/poi';
 import { COPIED_STATE_MS } from '@/lib/share-links';
 import { SharePoiButton } from './fields';
-import { ParkPoiPage } from './types/park';
+import { ChargerPoiPage } from './types/charger';
 
 const ORIGIN = window.location.origin;
 const COPY_LABEL = 'Copy link to this place';
@@ -95,14 +95,14 @@ describe('SharePoiButton', () => {
 describe('the actions row', () => {
   test('carries the share button on a real type page', () => {
     render(
-      <ParkPoiPage
+      <ChargerPoiPage
         variant="page"
         feature={
           {
             type: 'Feature',
             id: 51,
             geometry: { type: 'Point', coordinates: [-119.59, 37.74] },
-            properties: { category: 'national-park', Unit_Nm: 'Yosemite National Park' },
+            properties: { category: 'tesla_supercharger', name: 'Yosemite Supercharger' },
           } as FlatPoiFeature
         }
       />,
