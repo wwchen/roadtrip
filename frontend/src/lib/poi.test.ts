@@ -109,12 +109,16 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
     },
   },
 
-  // The sparse end: an element that tagged nothing, so those keys are absent.
+  // The sparse end: an element that tagged nothing. `brand` is still there — it
+  // is a constant of the source, not something the element had to tag.
   planetFitnessBare: {
     id: 'pf-2',
     properties: {
       category: 'planet_fitness_location',
-      detail: { raw: { location_id: 'node-9', name: 'Planet Fitness', payload: { type: 'node', id: 9 } } },
+      detail: {
+        brand: 'Planet Fitness',
+        raw: { location_id: 'node-9', name: 'Planet Fitness', payload: { type: 'node', id: 9 } },
+      },
     },
   },
 
@@ -270,12 +274,12 @@ describe('a gym, whose facts all arrive named', () => {
     expect(flatten('planetFitness').website).toBe('https://www.planetfitness.com/gyms/ankeny-ia');
   });
 
-  test('a record the source tagged nothing about carries none of them', () => {
+  test('a record the source tagged nothing about carries no hours and no table', () => {
     const p = flatten('planetFitnessBare');
     expect(p.opening_hours).toBeUndefined();
-    expect(p.brand).toBeUndefined();
     expect(p.upstream).toBeUndefined();
     expect(p.website).toBe('');
+    expect(p.brand).toBe('Planet Fitness');
   });
 });
 

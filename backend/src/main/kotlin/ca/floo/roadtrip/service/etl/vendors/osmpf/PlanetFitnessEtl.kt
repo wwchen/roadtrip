@@ -89,8 +89,6 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationUps
             address = addressJson(address),
             infoUrl = tags["website"]?.takeIf { it.isNotBlank() },
             openingHours = tags["opening_hours"]?.takeIf { it.isNotBlank() },
-            // `operator` is OSM's other spelling for the chain.
-            brand = (tags["brand"] ?: tags["operator"])?.takeIf { it.isNotBlank() },
             // OSM stores the interesting per-element data as tags (key/value
             // strings). Surface the full tag map via extras so the drawer's
             // "Upstream data" accordion has all of it.

@@ -88,10 +88,10 @@ class PlanetFitnessEtlTest {
         }
     }
 
-    // Hours and brand used to survive the import only inside `payload.tags`, and
-    // everything that reads a gym reads columns — so no caller ever saw them.
+    // Hours used to survive the import only inside `payload.tags`, and everything
+    // that reads a gym reads columns — so no caller ever saw them.
     @Test
-    fun `transform promotes opening hours and brand out of the tag bag`() {
+    fun `transform promotes opening hours out of the tag bag`() {
         val envelope = RawCaptureStore.parseEnvelope(fixtureFile())
         val etl = PlanetFitnessEtl()
         val dto = parsedDto(etl, bundle(envelope))
@@ -106,9 +106,6 @@ class PlanetFitnessEtlTest {
             withHours.any { it.openingHours!!.contains("Mo") },
             "expected the OSM opening_hours expression through verbatim, unparsed",
         )
-        for (p in locations) {
-            assertEquals("Planet Fitness", p.brand, "every fixture element tags brand=Planet Fitness")
-        }
     }
 
     @Test

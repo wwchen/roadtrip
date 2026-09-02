@@ -217,18 +217,18 @@ class PoiServiceTest : SharedDbTest() {
 
     @Test
     fun `a gym the source tagged nothing about sends no hours and no upstream table`() {
-        val poiId = seedGym(openingHours = null, brand = null, tagsJson = null)
+        val poiId = seedGym(openingHours = null, tagsJson = null)
 
         val detail = poiService().poiDetail(poiId)!!.properties.detail
 
         assertNull(detail.openingHours)
-        assertNull(detail.brand)
         assertNull(detail.upstream, "an empty tag map must drop the table, not render it blank")
+        // The table is single-brand by construction, so this never goes missing.
+        assertEquals("Planet Fitness", detail.brand)
     }
 
     private fun seedGym(
         openingHours: String? = "Mo-Su 05:00-22:00",
-        brand: String? = "Planet Fitness",
         tagsJson: String? = """"tags":{"brand":"Planet Fitness","opening_hours":"Mo-Su 05:00-22:00"},""",
     ): Long {
         PlanetFitnessLocationRepo(ctx).upsertPlanetFitnessLocationBatch(
@@ -240,7 +240,6 @@ class PoiServiceTest : SharedDbTest() {
                     longitude = -123.1,
                     country = "US",
                     openingHours = openingHours,
-                    brand = brand,
                     payload = Json.parseToJsonElement("""{${tagsJson ?: ""}"type":"node","id":448794721}"""),
                 ),
             ),

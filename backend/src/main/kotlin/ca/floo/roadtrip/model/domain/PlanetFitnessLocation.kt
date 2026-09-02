@@ -16,7 +16,6 @@ data class PlanetFitnessLocation(
     val phone: String?,
     val infoUrl: String?,
     val openingHours: String?,
-    val brand: String?,
     val amenities: JsonElement,
     val payload: JsonElement,
     val createdAt: Instant,

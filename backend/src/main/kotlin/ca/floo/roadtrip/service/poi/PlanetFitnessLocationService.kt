@@ -29,7 +29,7 @@ internal class PlanetFitnessLocationService(
                     phone = location.phone,
                     infoUrl = location.infoUrl,
                     openingHours = location.openingHours,
-                    brand = location.brand,
+                    brand = BRAND,
                     address = location.address,
                     upstream = upstreamTags(location.payload),
                     raw = raw,
@@ -47,6 +47,10 @@ internal class PlanetFitnessLocationService(
 
     companion object {
         const val POI_TYPE = "planet_fitness_location"
+
+        // A constant of the source, not a fact about the row: the Overpass query
+        // is `nwr["brand"="Planet Fitness"]`, so every row in this table matches it.
+        private const val BRAND = "Planet Fitness"
         private const val PAYLOAD_TAGS_KEY = "tags"
     }
 }
