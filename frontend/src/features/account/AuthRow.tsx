@@ -2,9 +2,9 @@
 // hosted redirects and keeps auth0-js out of the bundle.
 import { useState } from 'react';
 import { signIn } from '@/api/auth-api';
-import { SettingsModal } from './SettingsModal';
 import { useAcctClearance } from './useAcctClearance';
 import { useMe } from '@/queries/auth';
+import { useSettingsStore } from '@/stores/settingsStore';
 import './auth-row.css';
 
 /** "Roan Carter" -> "RC"; a single name falls back to its first letter. */
@@ -16,12 +16,13 @@ function initialsOf(name: string): string {
 /**
  * The account control: a floating top-right pill, matching the layers panel's
  * corner treatment. Signed out it is a "Sign in" button; signed in it is an
- * avatar-and-name button that opens `SettingsModal`, where sign-out lives
- * (behind a confirm, on the Account tab) so this control does not need its own.
+ * avatar-and-name button that asks the settings store to open the modal, where
+ * sign-out lives (behind a confirm, on the Account tab) so this control does not
+ * need its own. `SettingsHost` does the rendering — see `app/SettingsHost.tsx`.
  */
 export function AuthRow() {
   const me = useMe().data;
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const openSettings = useSettingsStore((state) => state.openSettings);
   const [pillNode, setPillNode] = useState<HTMLButtonElement | null>(null);
   useAcctClearance(pillNode);
 
@@ -52,20 +53,17 @@ export function AuthRow() {
   const firstName = label.split(/\s+/)[0];
 
   return (
-    <>
-      <button
-        ref={setPillNode}
-        type="button"
-        className="acct-pill"
-        title={me.user?.email ?? ''}
-        onClick={() => setSettingsOpen(true)}
-      >
-        <span className="acct-avatar" aria-hidden="true">
-          {initialsOf(label)}
-        </span>
-        <span className="acct-name">{firstName}</span>
-      </button>
-      {settingsOpen ? <SettingsModal onClose={() => setSettingsOpen(false)} /> : null}
-    </>
+    <button
+      ref={setPillNode}
+      type="button"
+      className="acct-pill"
+      title={me.user?.email ?? ''}
+      onClick={() => openSettings()}
+    >
+      <span className="acct-avatar" aria-hidden="true">
+        {initialsOf(label)}
+      </span>
+      <span className="acct-name">{firstName}</span>
+    </button>
   );
 }

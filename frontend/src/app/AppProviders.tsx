@@ -3,6 +3,7 @@ import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { ToastProvider } from '@ui';
 import { createQueryClient } from '@/queries/client';
 import { PageErrorBoundary } from './PageErrorBoundary';
+import { SettingsHost } from './SettingsHost';
 
 export interface AppProvidersProps {
   children: ReactNode;
@@ -24,7 +25,10 @@ export function AppProviders({ children, client }: AppProvidersProps) {
   return (
     <PageErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          {children}
+          <SettingsHost />
+        </ToastProvider>
       </QueryClientProvider>
     </PageErrorBoundary>
   );
