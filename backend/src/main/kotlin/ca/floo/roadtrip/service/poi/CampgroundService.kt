@@ -83,9 +83,8 @@ internal class CampgroundService(
                             reserveUrl = campground.reservationUrl,
                             infoUrl = infoUrl,
                         ),
-                    // The vendor record verbatim, for the drawer's provenance table. The FE
-                    // used to synthesise this from three Campflare keys, which meant every
-                    // recreation.gov pin showed nothing.
+                    // Provenance table. Still also sent as `raw`, which the FE reads
+                    // for its campground promotion until #709 removes that.
                     upstream = raw,
                     raw = raw,
                 ),

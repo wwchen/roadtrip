@@ -59,9 +59,6 @@ export function flattenHydratedPoi(f: PoiFeature): FlatPoiFeature {
           id: f.id,
           ...p,
           ...detailProps,
-          // Served by the backend now. It used to be synthesised here from three
-          // Campflare keys — one of them renamed to a recreation.gov field name —
-          // so a RIDB pin, whose record has none of them, showed an empty table.
           upstream: p.upstream || detailProps.upstream,
         }
       : { id: f.id, ...raw, ...p, ...detailProps };
