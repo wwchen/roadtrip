@@ -168,6 +168,15 @@ post the approval. Pushing more commits does not silently re-approve — a new
 `lgtm` is needed after any change once review has started. There is no
 self-merge and no auto-approval from CI passing alone.
 
+For work that builds on an unmerged branch, use GitHub's stacked pull requests
+rather than rebasing by hand. Merging one PR in a stack rebases and force-pushes
+the branches above it automatically, and retargets the next PR at `master`; a
+rebased PR needs a fresh `lgtm`, since the force-push dismisses the previous
+approval. Auto-merge is not available on stacked PRs — merge them from the PR
+page. For conflicts, `gh extension install github/gh-stack`, then `gh stack
+checkout <n>` / `gh stack rebase` / `gh stack push`. See
+[rfcs/0002-pr-process.md](rfcs/0002-pr-process.md) for the details.
+
 ## Docs index
 
 - [README.md](README.md) — architecture overview, local dev, deploy.
