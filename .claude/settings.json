@@ -24,6 +24,12 @@
     "superpowers@claude-plugins-official": true,
     "ecc@ecc": true
   },
+  "worktree": {
+    "sparsePaths": [
+      "/*",
+      "!/data/raw/"
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash(actionlint *)",
