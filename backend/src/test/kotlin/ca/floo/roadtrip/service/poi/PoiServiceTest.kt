@@ -431,9 +431,10 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals("info@example.test", detail.email)
     }
 
-    // Mirrors the charger NULL-coercion pin below: nothing in this repo's ETL
-    // ever writes these four columns for a recgov campground, so they must
-    // come back null, not the primitive-class zero value (0.0 / false).
+    // Mirrors the charger NULL-coercion pin below: the recgov ETL never writes
+    // these four columns (only Campflare's does), so a recgov row has them
+    // NULL and they must come back null, not the primitive-class zero value
+    // (0.0 / false).
     @Test
     fun `campground with no rig-size data serves null, not zero or false`() {
         val fixture =
