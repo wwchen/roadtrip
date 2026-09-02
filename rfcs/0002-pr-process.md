@@ -16,6 +16,9 @@
 | 5 | 2026-06-05 | **Comment author must be `wwchen`.** | Guards against Dependabot, future collaborators, or AI bots auto-stamping. |
 | 6 | 2026-06-05 | **Auto-merge enabled per PR via `gh pr merge --auto --squash`** rather than always-on. | Per-PR opt-in lets me hold back work that needs manual coordination (e.g. requires a deploy first). |
 | 7 | 2026-06-05 | **Squash-merge** as the merge strategy. | Branch commit history is messy AI-iteration noise; the PR title + body are the durable artifact. |
+| 8 | 2026-09-02 | **Stacked PRs use GitHub's native stacks.** The home-grown `auto-rebase.yml` and `record-pre-squash-sha.yml` workflows are deleted. | GitHub now tracks stack membership as first-class PR metadata and, on merge, rebases and force-pushes the branches above server-side. The workflows reconstructed that boundary by regex-parsing bot comments for pre-squash SHAs — storing stack topology in comment bodies, with an author-login check as the only trust boundary. |
+| 9 | 2026-09-02 | **Auto-merge is not armed on stacked PRs**; they are merged from the PR page. | GitHub does not support auto-merge for stacked pull requests. Decision 6 still stands for standalone PRs. |
+| 10 | 2026-09-02 | **Stack conflicts are resolved locally with `gh stack`.** | The server-side rebase handles the clean case; a conflict needs a working tree. `gh stack` is an extension, not built into `gh`: `gh extension install github/gh-stack`. |
 
 ## Summary
 
@@ -74,7 +77,30 @@ branch → push → PR opened → CI runs → re-read diff → "lgtm" comment
 - The App's name appears as the approving reviewer
 
 ### Auto-merge
-Enabled per-PR by the author via `gh pr merge <num> --auto --squash` immediately after opening. Once approval and CI are green, GitHub squash-merges automatically.
+Enabled per-PR by the author via `gh pr merge <num> --auto --squash` immediately after opening. Once approval and CI are green, GitHub squash-merges automatically. This applies to standalone PRs only — GitHub does not support auto-merge for stacked pull requests.
+
+### Stacked pull requests
+Stacks are GitHub's own feature, not something this repo automates. A stack is
+first-class metadata on the PR (`stack.id`, `position`, `size`), which is what
+makes the rest of this work without a workflow:
+
+- **Merging one PR rebases the rest.** When a PR in the stack merges, GitHub
+  rebases each unmerged branch onto its base bottom-up and force-pushes it,
+  then retargets the next PR at `master`. Squash is supported and is still the
+  merge method here.
+- **Branch protection is evaluated against the stack base**, so the `lgtm`
+  approval and required checks behave as if every PR targeted `master`.
+- **A non-linear stack surfaces a "Rebase stack" button** in the merge box,
+  which runs the same server-side rebase on demand. Conflicts need a working
+  tree: `gh stack checkout <n>`, `gh stack rebase`, `gh stack push`.
+- **The force-push dismisses the approval** (`dismiss_stale_reviews` is on), so
+  a rebased PR needs a fresh `lgtm`. That is the intended behavior, not a
+  side effect to work around.
+
+Server-side rebases produce unsigned commits. `master` does not require signed
+commits, so this costs nothing here; it would need revisiting if that changed.
+
+Stacks require all branches in one repo — cross-fork stacks are unsupported.
 
 ## Author flow (the actual day-to-day)
 
@@ -170,6 +196,12 @@ branch** — `issue_comment` triggers ignore the PR's own copy of the workflow.
 - **Use a PAT from a second GitHub account** — works, but requires maintaining a second account. App is cleaner.
 - **Manual `gh pr review --approve`** before `--auto` — would work, but defeats the "approver ≠ author" invariant since I'd be running the review command from my own account, and GitHub blocks that anyway.
 - **Label trigger (`approved`)** — was considered. Comment is faster to type and leaves a clearer history.
+- **A repo workflow that rebases stacked PRs** — this existed as `auto-rebase.yml`
+  plus `record-pre-squash-sha.yml` until 2026-09-02. Squash-merge collapses a
+  parent's commits into a new SHA, so a child's inherited commits look like new
+  content and patch-id dedup fails; the workflow worked around that by recording
+  each merged PR's pre-squash tip in a bot comment and grepping it back out.
+  Native stacks know the boundary without inference. Don't rebuild this.
 
 ## Edge cases
 
