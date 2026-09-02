@@ -486,6 +486,27 @@ class PoiServiceTest : SharedDbTest() {
         )
     }
 
+    // `stall_count`/`max_power_kw` read via `Int::class.java` (a JVM primitive)
+    // instead of `Int::class.javaObjectType`, so jOOQ silently turned a NULL
+    // hardware spec into 0 rather than surfacing "unknown". Neither column is
+    // written by `seedCatalogPoi`, so they are SQL NULL here without an UPDATE.
+    @Test
+    fun `charger with unknown hardware specs serves null, not zero`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "no-hardware-specs",
+                name = "Somewhere",
+                lon = -122.3917,
+                lat = 40.5865,
+                poiType = "tesla_supercharger",
+            )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertNull(detail.stallCount)
+        assertNull(detail.powerKilowatt)
+    }
+
     // The bug this pins: a gym's hours lived only in `payload.tags`, and every
     // reader goes through `to_jsonb(planet_fitness_locations)`, which carries
     // columns. Hours reached no caller, so the drawer's chip was dead on every
