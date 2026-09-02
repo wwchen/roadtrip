@@ -23,7 +23,6 @@ import { token } from '@tokens';
 
 const SUPERCHARGER_COLOR_TOKEN = '--rt-layer-supercharger';
 const DEFAULT_SUPERCHARGER_STATUS = 'OPEN';
-const DEFAULT_PRICE_CURRENCY = 'USD';
 
 const CATEGORY_CAMPGROUND = 'campground';
 const CATEGORY_NATIONAL_PARK = 'national-park';
@@ -54,18 +53,16 @@ export function flattenHydratedPoi(f: PoiFeature): FlatPoiFeature {
   const raw = parseObject(p.raw) || parseObject(detail.raw) || {};
   const detailProps: Props = { ...detail };
   delete detailProps.raw;
-  const address = detailProps.address || p.address;
   const flat: Props =
     p.category === CATEGORY_CAMPGROUND
       ? {
           id: f.id,
           ...p,
           ...detailProps,
-          upstream:
-            p.upstream ||
-            detailProps.upstream ||
-            raw.upstream ||
-            canonicalCampgroundUpstream(raw, address),
+          // Served by the backend now. It used to be synthesised here from three
+          // Campflare keys — one of them renamed to a recreation.gov field name —
+          // so a RIDB pin, whose record has none of them, showed an empty table.
+          upstream: p.upstream || detailProps.upstream,
         }
       : { id: f.id, ...raw, ...p, ...detailProps };
   delete flat.detail;
@@ -268,33 +265,6 @@ function campgroundPhotoUrl(photos: unknown): string {
     if (url) return url;
   }
   return '';
-}
-
-function canonicalCampgroundUpstream(raw: Props, address: unknown): Props | null {
-  const location = (raw.location && typeof raw.location === 'object' ? raw.location : {}) as Props;
-  const addr = address as Props | null | undefined;
-  const upstream: Props = {};
-  const directions = firstText(addr?.directions, location.directions);
-  const status = firstText(raw.status_description, raw.status);
-  const price = priceLabel(raw.price);
-  if (directions) upstream.FacilityDirections = directions;
-  if (status) upstream.Status = status;
-  if (price) upstream.Price = price;
-  return Object.keys(upstream).length ? upstream : null;
-}
-
-function priceLabel(price: unknown): string {
-  if (!price || typeof price !== 'object') return '';
-  const p = price as Props;
-  const min = Number(p.minimum);
-  const max = Number(p.maximum);
-  const currency = firstText(p.currency_code, p.currency) || DEFAULT_PRICE_CURRENCY;
-  if (!Number.isFinite(min) && !Number.isFinite(max)) return '';
-  const format = (n: number): string => `${currency} ${n.toFixed(Number.isInteger(n) ? 0 : 2)}`;
-  if (Number.isFinite(min) && Number.isFinite(max) && min !== max) {
-    return `${format(min)}-${format(max)}`;
-  }
-  return format(Number.isFinite(min) ? min : max);
 }
 
 /** First non-blank string, trimmed; `''` when there is none. */

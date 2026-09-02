@@ -83,6 +83,10 @@ internal class CampgroundService(
                             reserveUrl = campground.reservationUrl,
                             infoUrl = infoUrl,
                         ),
+                    // The vendor record verbatim, for the drawer's provenance table. The FE
+                    // used to synthesise this from three Campflare keys, which meant every
+                    // recreation.gov pin showed nothing.
+                    upstream = raw,
                     raw = raw,
                 ),
         )
