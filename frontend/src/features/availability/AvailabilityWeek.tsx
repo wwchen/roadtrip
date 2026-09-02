@@ -8,10 +8,14 @@ import { copyShareUrl } from '@/lib/share-links';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import { addToCart } from '@/api/booking-api';
 import { isCartActionPending } from './cart-action';
+import { signIn } from '@/api/auth-api';
+import { useMe } from '@/queries/auth';
+import { useSettingsStore } from '@/stores/settingsStore';
+import { bookingCopy, upstreamCopy } from '@/lib/strings';
 import { DayDetail, type WatchUnavailableReason } from './DayDetail';
 import { CalendarPopover } from './CalendarPopover';
 import { SiteList } from './SiteList';
-import { SiteMatrix, SiteMatrixSkeleton } from './SiteMatrix';
+import { SiteMatrix, SiteMatrixSkeleton, type WatchGate } from './SiteMatrix';
 import { WatchPopover } from './WatchPopover';
 import { WeekNav } from './WeekNav';
 import { GENERIC_AVAILABILITY_ERROR, classifyAvailabilityErrorCode } from './availability-errors';
@@ -33,6 +37,7 @@ import { WatchAuthError, usePoiWatches, useWatchMutations, watchForDate } from '
 import {
   NO_WATCH_CAPABILITIES,
   stayEndDate,
+  cartGate,
   supportsAddToCart,
   supportsWatchAlerts,
   watchedDates as watchedDatesOf,
@@ -92,6 +97,7 @@ function AvailabilityWeekView({
   // and "Earliest" returns to it — which is not the same as "today" for a campground
   // that only opens a booking window months out.
   const earliestDate = useMemo(() => featureEarliestDate(feature), [feature]);
+  const openSettings = useSettingsStore((state) => state.openSettings);
   const { state, actions } = useAvailabilityController(earliestDate);
   const {
     weekStart,
@@ -142,7 +148,8 @@ function AvailabilityWeekView({
         : watches.access === 'error'
           ? 'failed'
           : null;
-  const canWatch = watchUnavailable === null;
+  const watchGate: WatchGate =
+    watchUnavailable === null ? 'ready' : watchUnavailable === 'signed-out' ? 'signed-out' : 'blocked';
 
   const onSelectDate = useCallback(
     (date: string) => {
@@ -155,7 +162,10 @@ function AvailabilityWeekView({
   // The same condition that enables the watch editor's ATC toggle: the scope
   // supports a cart AND this caller has credentials. One source of truth, so a
   // user can never be offered a hold the write path would refuse.
-  const canAddToCart = supportsAddToCart(capabilities);
+  // The scope's cart and this caller's ability to drive it are separate facts, and
+  // the gate is what lets the grid say which of the two is missing.
+  const signedIn = Boolean(useMe().data?.user);
+  const cart = cartGate(capabilities, signedIn);
 
   const holdSite = useCallback(
     (campsiteId: string, date: string) => {
@@ -165,8 +175,8 @@ function AvailabilityWeekView({
       if (isCartActionPending(cartAction)) {
         toast({
           status: 'warning',
-          title: 'One hold at a time',
-          children: 'A hold is already running — wait for it to finish before holding another site.',
+          title: bookingCopy.holdBusyTitle,
+          children: bookingCopy.holdBusyBody,
         });
         return;
       }
@@ -177,12 +187,12 @@ function AvailabilityWeekView({
           actions.cartActionChanged({ type: 'held', cell, cartUrl: answer.cart_url });
           toast({
             status: 'success',
-            title: 'Site held in your rec.gov cart',
+            title: bookingCopy.heldTitle,
             children: (
               <>
-                Check out on recreation.gov within 15 minutes.{' '}
+                {bookingCopy.checkOutSoon}{' '}
                 <a href={answer.cart_url} target="_blank" rel="noreferrer noopener">
-                  Open rec.gov cart ↗
+                  {bookingCopy.openCart}
                 </a>
               </>
             ),
@@ -309,7 +319,7 @@ function AvailabilityWeekView({
         weekNav={weekNav}
         onOpenWatch={(anchor) => actions.openWatch(anchor, selectedDate ?? localYmd(weekStart))}
         onReport={() => {
-          const detail = `Recreation.gov error for ${poiName} (POI ${poiId}): ${week.error?.message ?? 'unknown'}`;
+          const detail = upstreamCopy.reportDetail(poiName, poiId, week.error?.message ?? 'unknown');
           // `copyShareUrl` rather than `navigator.clipboard` directly: the async
           // clipboard is absent in a non-secure context and rejects when the document
           // is not focused, and the helper's textarea fallback covers both. A bare
@@ -337,8 +347,8 @@ function AvailabilityWeekView({
               selectedSiteId,
               armedBook,
               watchedDates: watchedDatesOf(watches.byWindow),
-              canWatch,
-              canAddToCart,
+              watchGate,
+              cartGate: cart,
               cartAction,
             }}
             events={{
@@ -348,6 +358,8 @@ function AvailabilityWeekView({
               bookingArmed: actions.armBooking,
               bookingOpened: openBooking,
               cartRequested: holdSite,
+              signInRequested: () => signIn(),
+              settingsRequested: () => openSettings('booking'),
               dateSelected: onSelectDate,
               watchOpened: actions.openWatch,
             }}
@@ -362,7 +374,7 @@ function AvailabilityWeekView({
       {isCartActionPending(cartAction) ? (
         <div className="cg-availability-cart-chip" role="status">
           <CartChipSpinner />
-          Holding site… usually under a minute; can take a few
+          {bookingCopy.holdRunning}
         </div>
       ) : null}
 
@@ -380,6 +392,7 @@ function AvailabilityWeekView({
           busy={mutations.saving}
           onToggleWatch={(anchor) => void toggleDayWatch(anchor)}
           onRetryWatches={watches.retry}
+          onSignIn={() => signIn()}
         />
       ) : null}
 
@@ -403,6 +416,9 @@ function AvailabilityWeekView({
           watch={watchForDate(watches, watchTarget.date)}
           capabilities={capabilities}
           supportsAddToCart={supportsAddToCart(capabilities)}
+          gate={watchGate === 'signed-out' ? 'signed-out' : undefined}
+          onSignIn={() => signIn()}
+          onOpenSettings={() => openSettings('booking')}
           onSave={async (payload) => {
             try {
               await mutations.save(watchTarget.date, payload, watchForDate(watches, watchTarget.date));
@@ -486,7 +502,7 @@ function WeekSurface({
       return (
         <EmptyState
           icon="lock"
-          title="Recreation.gov is limiting our checks"
+          title={upstreamCopy.rateLimitedTitle}
           body={
             hasStaleData
               ? `They've throttled us, so we're holding off. The availability below is from ${ageMin} minute${ageMin === 1 ? '' : 's'} ago and won't update until they let us back in.`
@@ -517,7 +533,7 @@ function WeekSurface({
       return (
         <EmptyState
           icon="warning-fill"
-          title="Recreation.gov returned an error"
+          title={upstreamCopy.erroredTitle}
           body="Their end failed on this request. Your dates are fine — this one is theirs."
           actions={
             <>
@@ -542,7 +558,7 @@ function WeekSurface({
       return (
         <EmptyState
           icon="warning"
-          title="We can't reach Recreation.gov"
+          title={upstreamCopy.unreachableTitle}
           body="The request timed out. Outages like this usually clear within a few minutes."
           actions={
             <>

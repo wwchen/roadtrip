@@ -7,7 +7,8 @@
 // The message below is the whole point of the component, and each branch exists
 // because every other one would be a lie:
 //   - a watch toggle, when there is inventory to monitor and someone to notify;
-//   - "sign in", when the campground *could* alert this user but does not know them;
+//   - "sign in", when the campground *could* alert this user but does not know them —
+//     an offer, not a notice, so it carries the button that starts the flow;
 //   - "checking", while we do not yet know which of those two it is;
 //   - "couldn't check", when asking failed — with the retry that implies;
 //   - "not available for this campground", when the provider cannot alert anyone;
@@ -15,6 +16,7 @@
 import { Button, LinkButton } from '@ui';
 import { availabilityStatusMeta, normalizeAvailabilityStatus } from '@/lib/availability-status';
 import { availableCount, campsiteCount } from '@/lib/day-fields';
+import { dayCopy, gateCopy } from '@/lib/strings';
 import type { FusedDay } from './fuse';
 import { longDayLabel } from './week-labels';
 
@@ -51,6 +53,8 @@ export interface DayDetailProps {
   onToggleWatch: (anchor: HTMLElement) => void;
   /** Re-ask for the watch list, offered with the `failed` message. */
   onRetryWatches: () => void;
+  /** Starts the hosted sign-in flow from the `signed-out` message. */
+  onSignIn: () => void;
 }
 
 export function DayDetail({
@@ -60,6 +64,7 @@ export function DayDetail({
   busy,
   onToggleWatch,
   onRetryWatches,
+  onSignIn,
 }: DayDetailProps) {
   return (
     <div className="cg-day-detail">
@@ -77,6 +82,7 @@ export function DayDetail({
           busy={busy}
           onToggleWatch={onToggleWatch}
           onRetryWatches={onRetryWatches}
+          onSignIn={onSignIn}
         />
       </div>
     </div>
@@ -101,6 +107,7 @@ function DayAction({
   busy,
   onToggleWatch,
   onRetryWatches,
+  onSignIn,
 }: DayDetailProps) {
   const status = normalizeAvailabilityStatus(day.status);
   // Closed and unknown days are excluded: there is no inventory state to monitor
@@ -118,31 +125,36 @@ function DayAction({
         disabled={busy}
         onClick={(event) => onToggleWatch(event.currentTarget as HTMLElement)}
       >
-        {busy ? 'Working…' : watching ? 'Watching - tap to remove' : 'Set watch'}
+        {busy ? dayCopy.working : watching ? dayCopy.watching : dayCopy.setWatch}
       </Button>
     );
   }
 
   switch (unavailable) {
     case 'signed-out':
-      return <span className="cg-day-detail-meta">Sign in to set availability alerts.</span>;
+      return (
+        <span className="cg-day-detail-meta">
+          <LinkButton onClick={onSignIn}>{gateCopy.signIn}</LinkButton>
+          {gateCopy.daySignedOutSuffix}
+        </span>
+      );
     case 'loading':
-      return <span className="cg-day-detail-meta">Checking your availability alerts…</span>;
+      return <span className="cg-day-detail-meta">{dayCopy.checking}</span>;
     case 'failed':
       return (
         <span className="cg-day-detail-meta">
-          Couldn&apos;t check your availability alerts.{' '}
+          {dayCopy.checkFailed}{' '}
           <LinkButton className="cg-retry" onClick={onRetryWatches}>
-            Retry
+            {dayCopy.retry}
           </LinkButton>
         </span>
       );
     case 'unsupported':
       return (
-        <span className="cg-day-detail-meta">Watches are not available for this campground.</span>
+        <span className="cg-day-detail-meta">{dayCopy.unsupported}</span>
       );
     // Nothing is in the way: the day itself has nothing to wait for.
     case null:
-      return <span className="cg-day-detail-meta">No online openings to watch for this day.</span>;
+      return <span className="cg-day-detail-meta">{dayCopy.nothingToWatch}</span>;
   }
 }

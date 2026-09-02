@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@ui';
 import { signIn } from '@/api/auth-api';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { getWatch, updateWatch, type Watch } from '@/api/watches-api';
 import { useQuery } from '@tanstack/react-query';
 import { WatchEditor } from '@/domain/watch/WatchEditor';
@@ -241,6 +242,7 @@ function RowActions({
  * triggers the provider can service.
  */
 function AlertEditorRow({ watchId, onClose }: { watchId: number; onClose: () => void }) {
+  const openSettings = useSettingsStore((state) => state.openSettings);
   const query = useQuery({
     queryKey: queryKeys.watches.detail(watchId),
     queryFn: ({ signal }) => getWatch(watchId, { signal }),
@@ -272,6 +274,8 @@ function AlertEditorRow({ watchId, onClose }: { watchId: number; onClose: () => 
           subtitle={watchWindow(watch)}
           watch={watch}
           capabilities={normalizeWatchCapabilities(query.data.watch_capabilities)}
+          onSignIn={() => signIn()}
+          onOpenSettings={() => openSettings('booking')}
           onSave={async (payload: TriggerPayload) => {
             await updateWatch(watch.id, payload);
             onClose();

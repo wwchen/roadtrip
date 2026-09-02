@@ -325,7 +325,7 @@ describe('the week"s states', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText('Recreation.gov is limiting our checks')).toBeInTheDocument(),
+      expect(screen.getByText('rec.gov is limiting our checks')).toBeInTheDocument(),
     );
     expect(screen.getByText("They've throttled us, so we're holding off.")).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Show what we last saw' })).toBeNull();
@@ -341,7 +341,7 @@ describe('the week"s states', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText('Recreation.gov returned an error')).toBeInTheDocument(),
+      expect(screen.getByText('rec.gov returned an error')).toBeInTheDocument(),
     );
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Report it' })).toBeInTheDocument();
@@ -380,7 +380,7 @@ describe('the week"s states', () => {
       </AppProviders>,
     );
 
-    await waitFor(() => expect(screen.getByText("We can't reach Recreation.gov")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("We can't reach rec.gov")).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: "Tell me when it's back" })).toBeInTheDocument();
   });
@@ -575,10 +575,35 @@ describe('watches', () => {
       screen.getAllByRole('columnheader')[2]!.querySelector('button')!.click();
     });
 
-    expect(screen.getByText('Sign in to set availability alerts.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
     // The grid itself is unaffected.
     expect(screen.getByText(/Sites by date/)).toBeInTheDocument();
+  });
+
+  test('a signed-out visitor can open a watch from a reserved cell', async () => {
+    stubs.watches = () => json({ error: 'unauthorized' }, 401);
+    await mount();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /Site 1 2026-08-11:.*tap to sign in/i }),
+    );
+
+    expect(screen.getByRole('group', { name: 'Availability watch sign-in' })).toBeInTheDocument();
+    expect(screen.getByText('Sign in to get an alert when a site opens up that night.')).toBeInTheDocument();
+  });
+
+  test('a reserved cell stays inert when the provider cannot alert anyone', async () => {
+    stubs.availability = () =>
+      json(
+        availabilityBody(
+          [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
+          { trigger_kinds: [], booking_actions: [] },
+        ),
+      );
+    await mount();
+
+    expect(screen.queryByRole('button', { name: /Site 1 2026-08-11:/ })).toBeNull();
   });
 
   test('says it is still checking while the watch list is in flight', async () => {
@@ -589,7 +614,7 @@ describe('watches', () => {
     });
 
     expect(screen.getByText('Checking your availability alerts…')).toBeInTheDocument();
-    expect(screen.queryByText('Sign in to set availability alerts.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
   });
 
@@ -601,7 +626,7 @@ describe('watches', () => {
     });
 
     expect(screen.getByText(/Couldn't check your availability alerts/)).toBeInTheDocument();
-    expect(screen.queryByText('Sign in to set availability alerts.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
 
     stubs.watches = () => json({ watches: [], total: 0 });
     await act(async () => {
@@ -689,7 +714,7 @@ describe('watches', () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByText('Sign in to set availability alerts.')).toBeInTheDocument(),
+      expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument(),
     );
     expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
   });
@@ -1035,7 +1060,7 @@ describe('holding a site straight from the grid', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
 
     expect(
-      await screen.findByText('Your recreation.gov session expired — test login in Settings.'),
+      await screen.findByText('Your rec.gov session expired — test login in Settings.'),
     ).toBeInTheDocument();
     expect(screen.queryByText(/recgov_spa_logged_out/)).toBeNull();
   });

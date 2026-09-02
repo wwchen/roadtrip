@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { HttpError } from '@/api/http';
 import type { Watch } from '@/api/watches-api';
@@ -90,14 +91,26 @@ describe('what the form offers', () => {
     const atc = toggle('Add to cart');
     expect(atc).toBeDisabled();
     expect(atc).not.toBeChecked();
-    expect(screen.getByText('Add rec.gov credentials in Settings')).toBeInTheDocument();
+    expect(screen.getByText(/in Settings to hold sites/)).toBeInTheDocument();
   });
 
-  test('an anonymous viewer is asked to sign in instead', () => {
-    open({ capabilities: caps(['slack_notify'], ['add_to_cart']) }, { signedIn: false });
+  test('the Settings hint is the control that opens Settings', async () => {
+    const onOpenSettings = vi.fn();
+    open({ capabilities: caps(['slack_notify'], ['add_to_cart']), onOpenSettings });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add your rec.gov login' }));
+
+    expect(onOpenSettings).toHaveBeenCalledOnce();
+  });
+
+  test('an anonymous viewer is asked to sign in instead', async () => {
+    const onSignIn = vi.fn();
+    open({ capabilities: caps(['slack_notify'], ['add_to_cart']), onSignIn }, { signedIn: false });
 
     expect(toggle('Add to cart')).toBeDisabled();
-    expect(screen.getByText('Sign in to enable add-to-cart')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    expect(onSignIn).toHaveBeenCalledOnce();
   });
 
   test('a scope with no cart at all keeps the unavailable copy', () => {
@@ -107,7 +120,7 @@ describe('what the form offers', () => {
     });
 
     expect(screen.getByText('Unavailable for this watch scope.')).toBeInTheDocument();
-    expect(screen.queryByText('Add rec.gov credentials in Settings')).toBeNull();
+    expect(screen.queryByText(/in Settings to hold sites/)).toBeNull();
   });
 
   test('hides add to cart entirely when nothing uses it', () => {

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { createTestQueryClient } from '@/test/query-client';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
@@ -38,7 +39,10 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  useSettingsStore.getState().closeSettings();
+});
 
 const mount = () =>
   render(

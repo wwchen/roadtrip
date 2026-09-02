@@ -145,3 +145,17 @@ export function watchedDates(watchesByWindow: ReadonlyMap<string, Watch>): Set<s
   }
   return out;
 }
+
+/**
+ * Why add-to-cart is unavailable, or `ready` when it is not.
+ *
+ * `signed-out` and `no-credentials` are the two actionable causes and they need
+ * different sentences: one is a sign-in, the other two minutes in Settings.
+ */
+export type CartGate = 'ready' | 'signed-out' | 'no-credentials' | 'unsupported';
+
+export function cartGate(capabilities: WatchCapabilities, signedIn: boolean): CartGate {
+  if (!scopeSupportsAddToCart(capabilities)) return 'unsupported';
+  if (supportsAddToCart(capabilities)) return 'ready';
+  return signedIn ? 'no-credentials' : 'signed-out';
+}

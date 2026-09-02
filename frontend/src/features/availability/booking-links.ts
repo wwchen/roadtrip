@@ -3,6 +3,7 @@
 // The backend hands us a per-campsite URL template because it depends on the stay window the
 // user picked — so a booking link cannot be built until a date is selected, and
 // this module is the only thing that knows that.
+import { VENDOR, bookingCopy } from '@/lib/strings';
 import type { Campsite } from '@/api/campsite-api';
 
 /** Substitutions a template may ask for. A template with none is already a URL. */
@@ -18,8 +19,8 @@ const MS_PER_DAY = 86_400_000;
  * registries in this codebase are — the key comes from a URL.
  */
 const AGENCY_BY_HOST = new Map<string, string>([
-  ['recreation.gov', 'Recreation.gov'],
-  ['www.recreation.gov', 'Recreation.gov'],
+  ['recreation.gov', VENDOR],
+  ['www.recreation.gov', VENDOR],
   ['reservation.pc.gc.ca', 'Parks Canada'],
   ['camping.bcparks.ca', 'BC Parks'],
   ['discovercamping.ca', 'BC Parks'],
@@ -28,7 +29,7 @@ const AGENCY_BY_HOST = new Map<string, string>([
 
 /** Vendor slug → display name, for rows whose template we cannot parse. */
 const AGENCY_BY_VENDOR = new Map<string, string>([
-  ['recgov', 'Recreation.gov'],
+  ['recgov', VENDOR],
   ['campflare', 'Campflare'],
   ['aspira', 'Aspira'],
 ]);
@@ -87,13 +88,13 @@ export function hasReservationUrlTemplate(
   return !!reservationUrlTemplate(row, reservationUrlTemplates);
 }
 
-/** "Book on Recreation.gov", or plain "Book" when the provider is unrecognised. */
+/** "Book on rec.gov", or plain "Book" when the provider is unrecognised. */
 export function bookingLabel(
   row: Partial<Campsite> | null | undefined,
   reservationUrlTemplates: ReservationUrlTemplates,
 ): string {
   const agency = agencyLabel(row, reservationUrlTemplates);
-  return agency ? `Book on ${agency}` : 'Book';
+  return agency ? `Book on ${agency}` : bookingCopy.book;
 }
 
 /**

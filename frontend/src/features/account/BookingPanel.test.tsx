@@ -103,7 +103,7 @@ describe('the credential slice', () => {
     const s = settings(CONFIGURED);
     const { state } = renderPanel(s);
 
-    await userEvent.type(screen.getByLabelText('Recreation.gov email'), '!');
+    await userEvent.type(screen.getByLabelText('rec.gov email'), '!');
 
     expect(state.values.recgov_username).toBe('ada@example.test!');
     expect(isBookingDirty(s, state.values)).toBe(true);
@@ -115,7 +115,7 @@ describe('the credential slice', () => {
     // are a fixed-length placeholder and the input itself holds nothing.
     renderPanel(settings(CONFIGURED));
 
-    const password = screen.getByLabelText('Recreation.gov password');
+    const password = screen.getByLabelText('rec.gov password');
     expect(password).toHaveValue('');
     expect(password).toHaveAttribute('placeholder', '••••••••••');
     expect(password).toHaveAttribute('type', 'password');
@@ -124,7 +124,7 @@ describe('the credential slice', () => {
   test('an unconfigured account gets a plain empty password field', () => {
     renderPanel(settings());
 
-    expect(screen.getByLabelText('Recreation.gov password')).not.toHaveAttribute('placeholder');
+    expect(screen.getByLabelText('rec.gov password')).not.toHaveAttribute('placeholder');
   });
 
   test('the three not-active session states read differently', () => {
@@ -177,7 +177,7 @@ describe('the credential slice', () => {
     const s = settings();
     const { state } = renderPanel(s);
 
-    await userEvent.type(screen.getByLabelText('Recreation.gov password'), 'hunter2');
+    await userEvent.type(screen.getByLabelText('rec.gov password'), 'hunter2');
 
     expect(buildBookingPayload(state.values).recgov_password).toBe('hunter2');
     expect(isBookingDirty(s, state.values)).toBe(true);
@@ -217,7 +217,7 @@ describe('the session row', () => {
     renderPanel(settings(CONFIGURED), { statusPending: true });
 
     expect(screen.getByText('Checking session…')).toBeInTheDocument();
-    expect(screen.getByLabelText('Recreation.gov email')).toBeInTheDocument();
+    expect(screen.getByLabelText('rec.gov email')).toBeInTheDocument();
   });
 });
 
@@ -232,7 +232,7 @@ describe('test login', () => {
     renderPanel(settings(CONFIGURED), { status: activeStatus });
     expect(testLogin()).toBeEnabled();
 
-    await userEvent.type(screen.getByLabelText('Recreation.gov email'), '!');
+    await userEvent.type(screen.getByLabelText('rec.gov email'), '!');
 
     expect(testLogin()).toBeDisabled();
     expect(
@@ -247,7 +247,7 @@ describe('test login', () => {
     await userEvent.click(testLogin());
 
     expect(onLogin).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText('Signed in to recreation.gov.')).toBeInTheDocument();
+    expect(await screen.findByText('Signed in to rec.gov.')).toBeInTheDocument();
   });
 
   test('a captcha is explained rather than shown as a generic failure', async () => {
@@ -260,7 +260,7 @@ describe('test login', () => {
 
     expect(
       await screen.findByText(
-        'Recreation.gov showed a challenge we cannot solve. Try again in a moment.',
+        'rec.gov showed a challenge we cannot solve. Try again in a moment.',
       ),
     ).toBeInTheDocument();
   });
@@ -295,7 +295,7 @@ describe('the MFA step', () => {
 
     expect(await screen.findByLabelText('Verification code')).toBeInTheDocument();
     expect(
-      screen.getByText('Recreation.gov sent a verification code. Enter it below.'),
+      screen.getByText('rec.gov sent a verification code. Enter it below.'),
     ).toBeInTheDocument();
   });
 
@@ -308,7 +308,7 @@ describe('the MFA step', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Submit code' }));
 
     expect(onSubmitMfa).toHaveBeenCalledWith('123456');
-    expect(await screen.findByText('Signed in to recreation.gov.')).toBeInTheDocument();
+    expect(await screen.findByText('Signed in to rec.gov.')).toBeInTheDocument();
     expect(screen.queryByLabelText('Verification code')).not.toBeInTheDocument();
   });
 
@@ -366,7 +366,7 @@ describe('the MFA step', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Submit code' }));
 
     expect(onSubmitMfa).toHaveBeenCalledWith('654321');
-    expect(await screen.findByText('Signed in to recreation.gov.')).toBeInTheDocument();
+    expect(await screen.findByText('Signed in to rec.gov.')).toBeInTheDocument();
   });
 
   test('submit stays disabled until a code is typed', async () => {
@@ -425,7 +425,7 @@ describe('verify session', () => {
     await userEvent.click(verify());
 
     expect(
-      await screen.findByText('The recreation.gov session has expired. Test login again.'),
+      await screen.findByText('The rec.gov session has expired. Test login again.'),
     ).toBeInTheDocument();
   });
 

@@ -57,6 +57,46 @@ features, features and pages may import domains, and domains never import featur
 compose multiple features to exercise a page, but production composition belongs in
 `pages/`.
 
+## Where copy lives
+
+User-facing copy for the availability, watch and booking surfaces is in
+`frontend/src/lib/strings.ts`, not inline. Not for locale — there is none planned
+— but because copy is reviewed as copy, and because a set of messages has to read
+as one voice. Anything that varies is a function there, so a caller cannot
+assemble a sentence out of fragments and get the word order wrong.
+
+`VENDOR` is the one name for recreation.gov, and it is **rec.gov**. The product
+used to say "Recreation.gov", "recreation.gov" and "rec.gov" for the same vendor
+across banners, field labels and booking rows.
+
+Aria labels stay next to the control that computes them: they describe state, not
+prose. The account and POI surfaces still hold their own copy; move a surface in
+when you next touch it rather than in one sweep.
+
+## Capability gates: show the control, name the step
+
+A capability the current caller cannot use is **not** a reason to hide the control.
+Hiding it is indistinguishable from the campground not having the feature, and the
+two states need different sentences. So a gated control keeps its shape and its
+action becomes the one step that unlocks it.
+
+- `cartGate` in `@/lib/watch-windows` turns the week response's capability block
+  plus "is anyone signed in" into `ready | signed-out | no-credentials |
+  unsupported`. It needs no extra request: the scope's `add_to_cart` booking
+  action and this caller's `atc` trigger kind are separate facts already on the
+  wire, and the gap between them *is* "you have no rec.gov credentials".
+- `SiteMatrix`'s `watchGate` is the same idea for watches: `ready | signed-out |
+  blocked`. A watchable cell is a button in the first two, and the popover it
+  opens carries `WatchSignInGate` instead of `WatchEditor`.
+- Only `unsupported` / `blocked` fall back to inert text, because there really is
+  nothing the visitor could do.
+
+`SettingsHost` (`src/app/SettingsHost.tsx`) is the settings modal's one mount
+point, on every page, driven by `stores/settingsStore`. Anything that wants to
+send a user to a settings section calls `openSettings('booking')`. The account
+pill is only a trigger now — it renders on the map page alone, and the surfaces
+that link into Settings do not.
+
 ## The POI page (`src/domain/poi/`)
 
 Every pin opens the same page. The type decides which blocks appear, and nothing

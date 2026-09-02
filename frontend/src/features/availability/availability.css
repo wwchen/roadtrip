@@ -1019,6 +1019,31 @@
   height: 16px;
 }
 
+/* A gated row is the plain row plus a second line naming the step that unlocks it.
+   It deliberately does NOT take the brand tint: that tint is the badge of the row
+   that actually holds a site, and two branded rows would make the choice ambiguous. */
+.cg-cell-book-pop-row--gated {
+  height: auto;
+  min-height: 52px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  border-top: 1px solid var(--rt-border);
+  text-align: left;
+}
+
+.cg-cell-book-pop-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cg-cell-book-pop-hint {
+  color: var(--rt-muted);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
 /* ---- the cell while a hold is running ---- */
 
 .cg-site-matrix-cell-available .cg-site-matrix-cell-button.is-cart-pending {

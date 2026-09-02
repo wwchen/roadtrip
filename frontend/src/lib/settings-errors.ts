@@ -10,6 +10,8 @@
  * is typed `string`, so that would be a type lie reaching the UI. A Map has no
  * prototype keys to collide with.
  */
+import { VENDOR, accountCopy } from './strings';
+
 const MESSAGES = new Map<string, string>([
   ['invalid_field', 'Please check the highlighted fields.'],
   ['slack_invalid_auth', 'Slack rejected this token.'],
@@ -17,8 +19,8 @@ const MESSAGES = new Map<string, string>([
   ['slack_send_failed', "Couldn't send to Slack."],
   ['encryption_unavailable', "Secret storage isn't configured on the server."],
   ['email_send_failed', "Couldn't send the test email."],
-  ['login_failed', 'Recreation.gov rejected these credentials.'],
-  ['mfa_required', 'Recreation.gov sent a verification code. Enter it below.'],
+  ['login_failed', accountCopy.credentialsRejected],
+  ['mfa_required', accountCopy.mfaSent],
   ['mfa_invalid', 'That code was rejected. Start the login again for a new one.'],
   ['mfa_challenge_unknown', 'That code request expired. Start the login again.'],
   // Sibling of `mfa_challenge_unknown`, worded apart on purpose. Both end the
@@ -34,26 +36,26 @@ const MESSAGES = new Map<string, string>([
   ],
   [
     'captcha_required',
-    'Recreation.gov showed a challenge we cannot solve. Try again in a moment.',
+    `${VENDOR} showed a challenge we cannot solve. Try again in a moment.`,
   ],
   ['login_backoff', 'Too many attempts. Wait a minute before trying again.'],
   // Transient by nature: the work is queued behind something, not refused.
   ['profile_busy', 'Another operation is using your rec.gov session — try again shortly.'],
   ['browser_cap_reached', 'The booking service is at capacity — try again shortly.'],
-  ['recgov_not_configured', 'Save your recreation.gov credentials first.'],
+  ['recgov_not_configured', `Save your ${VENDOR} credentials first.`],
   // Refusal, not a partial success: the save/removal was rolled back because the
   // old session could not be cleared. Says who can act, since the user cannot.
   [
     'recgov_profile_wipe_failed',
-    'We could not clear your existing recreation.gov session, so nothing was changed. Try again shortly — if it keeps failing, the booking service needs attention.',
+    `We could not clear your existing ${VENDOR} session, so nothing was changed. Try again shortly — if it keeps failing, the booking service needs attention.`,
   ],
-  ['recgov_not_authenticated', 'The recreation.gov session has expired. Test login again.'],
+  ['recgov_not_authenticated', `The ${VENDOR} session has expired. Test login again.`],
   // Signed in, but rec.gov's own cart endpoint would not answer. Deliberately
   // NOT the session copy above: the session is fine, so "test login again"
   // would send the user round a loop that cannot fix anything.
   [
     'recgov_cart_unreachable',
-    "You're signed in, but recreation.gov's cart could not be read — try again shortly.",
+    `You're signed in, but ${VENDOR}'s cart could not be read — try again shortly.`,
   ],
   ['companion_unavailable', "The booking service isn't reachable right now."],
   // The companion reached rec.gov but threw on the way. Nothing the user did.
@@ -71,17 +73,17 @@ const MESSAGES = new Map<string, string>([
   // trying again.
   [
     'recgov_dates_not_offered',
-    'Recreation.gov does not offer those dates for this site — try a different night or check its page directly.',
+    `${VENDOR} does not offer those dates for this site — try a different night or check its page directly.`,
   ],
   [
     'recgov_no_reserve_button',
-    'Recreation.gov showed no way to book this site for those dates — it may be taken or not bookable online.',
+    `${VENDOR} showed no way to book this site for those dates — it may be taken or not bookable online.`,
   ],
-  ['cart_not_added', 'Recreation.gov would not add it — someone else likely took it. Try again.'],
-  ['recgov_confirmation_disabled', 'Recreation.gov would not add it — someone else likely took it.'],
+  ['cart_not_added', `${VENDOR} would not add it — someone else likely took it. Try again.`],
+  ['recgov_confirmation_disabled', `${VENDOR} would not add it — someone else likely took it.`],
   ['unsupported_target', 'This campground cannot be held from Roadtrip.'],
-  ['credentials_required', 'Add your recreation.gov credentials in Settings first.'],
-  ['recgov_session_expired', 'Your recreation.gov session expired — test login in Settings.'],
+  ['credentials_required', `Add your ${VENDOR} credentials in Settings first.`],
+  ['recgov_session_expired', `Your ${VENDOR} session expired — test login in Settings.`],
   // The same user condition as `recgov_session_expired`, reached by a different
   // layer. The grid's add-to-cart preflights session health, then drives a
   // browser for ~30s against sub-hour rec.gov tokens — so the session can die
@@ -90,8 +92,8 @@ const MESSAGES = new Map<string, string>([
   // thing the user can do. Wording them apart would be false precision, and
   // leaving them unmapped split one condition across mapped-403 and
   // raw-code-502 depending only on which layer saw it first.
-  ['recgov_spa_logged_out', 'Your recreation.gov session expired — test login in Settings.'],
-  ['recgov_refresh_failed', 'Your recreation.gov session expired — test login in Settings.'],
+  ['recgov_spa_logged_out', `Your ${VENDOR} session expired — test login in Settings.`],
+  ['recgov_refresh_failed', `Your ${VENDOR} session expired — test login in Settings.`],
   // The exception in that family, and the reason it is not folded into the two
   // above: here the companion *did* sign in again with the saved credentials
   // and rec.gov refused. So a changed password is on the table in a way it is
@@ -99,7 +101,7 @@ const MESSAGES = new Map<string, string>([
   // credentials rather than at the session.
   [
     'recgov_login_failed',
-    'Recreation.gov would not sign you back in — check your credentials in Settings.',
+    `${VENDOR} would not sign you back in — check your credentials in Settings.`,
   ],
 ]);
 
