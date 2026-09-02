@@ -83,6 +83,9 @@ internal class CampgroundService(
                             reserveUrl = campground.reservationUrl,
                             infoUrl = infoUrl,
                         ),
+                    // Provenance table. Still also sent as `raw`, which the FE reads
+                    // for its campground promotion until #709 removes that.
+                    upstream = raw,
                     raw = raw,
                 ),
         )
