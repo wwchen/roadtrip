@@ -59,6 +59,16 @@ class DockerComposeRestartPolicyTest(unittest.TestCase):
                 )
 
 
+class TiltDependencyTest(unittest.TestCase):
+    def test_companion_does_not_wait_for_backend_or_telemetry(self):
+        tiltfile = (ROOT / "Tiltfile").read_text()
+        companion_block = tiltfile.split("    'recgov-companion',", 1)[1].split(")", 1)[0]
+
+        self.assertIn("resource_deps=['compose-cleanup']", companion_block)
+        self.assertNotIn("'backend'", companion_block)
+        self.assertNotIn("'alloy'", companion_block)
+
+
 class BackendAuthProviderPassthroughTest(unittest.TestCase):
     """RFC 0009's rollback is `AUTH_PROVIDER=auth0`. That only works if the
     selector actually reaches the backend process — application.yaml reads it,
