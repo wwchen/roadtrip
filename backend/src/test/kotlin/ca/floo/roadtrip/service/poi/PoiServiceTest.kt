@@ -316,7 +316,7 @@ class PoiServiceTest : SharedDbTest() {
             32.0,
             28.0,
             true,
-            true,
+            false,
             """[{"url":"https://example.test"}]""",
             """[{"message":"road closed"}]""",
             """{"power":"30/50 amp"}""",
@@ -358,7 +358,7 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals(32.0, detail.maxRvLength)
         assertEquals(28.0, detail.maxTrailerLength)
         assertEquals(true, detail.hasPullThroughSites)
-        assertEquals(true, detail.bigRigFriendly)
+        assertEquals(false, detail.bigRigFriendly)
         assertEquals(
             "https://example.test",
             detail.links!!
