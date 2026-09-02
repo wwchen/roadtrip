@@ -39,8 +39,10 @@ export interface WatchPopoverProps {
   supportsAddToCart: boolean;
   /** Renders the sign-in gate in the editor's place. */
   gate?: 'signed-out';
-  /** Starts the hosted sign-in flow, from the gate. */
+  /** Starts the hosted sign-in flow, from the gate or the add-to-cart row. */
   onSignIn: () => void;
+  /** Opens Settings on Booking, from the add-to-cart row. */
+  onOpenSettings: () => void;
   onSave: (payload: TriggerPayload) => Promise<void>;
   onRemove: () => Promise<void>;
   onClose: () => void;
@@ -55,6 +57,7 @@ export function WatchPopover({
   supportsAddToCart,
   gate,
   onSignIn,
+  onOpenSettings,
   onSave,
   onRemove,
   onClose,
@@ -126,6 +129,8 @@ export function WatchPopover({
           subtitle={longDayLabel(date)}
           watch={watch ?? null}
           capabilities={editorCapabilities}
+          onSignIn={onSignIn}
+          onOpenSettings={onOpenSettings}
           onSave={async (payload) => {
             await onSave(payload);
             onClose();

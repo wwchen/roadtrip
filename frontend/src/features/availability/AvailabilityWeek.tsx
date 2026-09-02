@@ -9,6 +9,8 @@ import { settingsErrorMessage } from '@/lib/settings-errors';
 import { addToCart } from '@/api/booking-api';
 import { isCartActionPending } from './cart-action';
 import { signIn } from '@/api/auth-api';
+import { useMe } from '@/queries/auth';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { DayDetail, type WatchUnavailableReason } from './DayDetail';
 import { CalendarPopover } from './CalendarPopover';
 import { SiteList } from './SiteList';
@@ -34,6 +36,7 @@ import { WatchAuthError, usePoiWatches, useWatchMutations, watchForDate } from '
 import {
   NO_WATCH_CAPABILITIES,
   stayEndDate,
+  cartGate,
   supportsAddToCart,
   supportsWatchAlerts,
   watchedDates as watchedDatesOf,
@@ -93,6 +96,7 @@ function AvailabilityWeekView({
   // and "Earliest" returns to it — which is not the same as "today" for a campground
   // that only opens a booking window months out.
   const earliestDate = useMemo(() => featureEarliestDate(feature), [feature]);
+  const openSettings = useSettingsStore((state) => state.openSettings);
   const { state, actions } = useAvailabilityController(earliestDate);
   const {
     weekStart,
@@ -157,7 +161,10 @@ function AvailabilityWeekView({
   // The same condition that enables the watch editor's ATC toggle: the scope
   // supports a cart AND this caller has credentials. One source of truth, so a
   // user can never be offered a hold the write path would refuse.
-  const canAddToCart = supportsAddToCart(capabilities);
+  // The scope's cart and this caller's ability to drive it are separate facts, and
+  // the gate is what lets the grid say which of the two is missing.
+  const signedIn = Boolean(useMe().data?.user);
+  const cart = cartGate(capabilities, signedIn);
 
   const holdSite = useCallback(
     (campsiteId: string, date: string) => {
@@ -340,7 +347,7 @@ function AvailabilityWeekView({
               armedBook,
               watchedDates: watchedDatesOf(watches.byWindow),
               watchGate,
-              canAddToCart,
+              cartGate: cart,
               cartAction,
             }}
             events={{
@@ -350,6 +357,8 @@ function AvailabilityWeekView({
               bookingArmed: actions.armBooking,
               bookingOpened: openBooking,
               cartRequested: holdSite,
+              signInRequested: () => signIn(),
+              settingsRequested: () => openSettings('booking'),
               dateSelected: onSelectDate,
               watchOpened: actions.openWatch,
             }}
@@ -408,6 +417,7 @@ function AvailabilityWeekView({
           supportsAddToCart={supportsAddToCart(capabilities)}
           gate={watchGate === 'signed-out' ? 'signed-out' : undefined}
           onSignIn={() => signIn()}
+          onOpenSettings={() => openSettings('booking')}
           onSave={async (payload) => {
             try {
               await mutations.save(watchTarget.date, payload, watchForDate(watches, watchTarget.date));

@@ -1,6 +1,7 @@
 // Unsupported triggers stay visible when an existing watch already uses them so
 // opening the editor can never silently strip its configuration.
-import { useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
+import { LinkButton } from '@ui';
 import { HttpError } from '@/api/http';
 import type { Watch } from '@/api/watches-api';
 import {
@@ -27,6 +28,9 @@ export interface WatchEditorProps {
   /** Omitted when there is nothing to remove. */
   onRemove?: (() => Promise<void>) | null;
   onClose?: () => void;
+  /** Offered from the add-to-cart row when the caller cannot drive the cart. */
+  onSignIn?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function WatchEditor({
@@ -37,6 +41,8 @@ export function WatchEditor({
   onSave,
   onRemove,
   onClose,
+  onSignIn,
+  onOpenSettings,
 }: WatchEditorProps) {
   const [state, setState] = useState<TriggerState>(() => initialState(watch, capabilities));
   const [busy, setBusy] = useState(false);
@@ -114,7 +120,7 @@ export function WatchEditor({
           <ToggleRow
             name="atc"
             title="Add to cart"
-            help={atcHelp(canAtc, cartWithoutCredentials, signedIn)}
+            help={atcHelp(canAtc, cartWithoutCredentials, signedIn, onSignIn, onOpenSettings)}
             checked={state.addToCart}
             // A watch that already has ATC set stays switchable so it can be
             // turned OFF even where the provider no longer supports it. The
@@ -173,16 +179,38 @@ export function WatchEditor({
  * back into one message would tell a signed-in user their campground is
  * unbookable when what they actually need is two minutes in Settings.
  */
-function atcHelp(canAtc: boolean, cartWithoutCredentials: boolean, signedIn: boolean): string {
+function atcHelp(
+  canAtc: boolean,
+  cartWithoutCredentials: boolean,
+  signedIn: boolean,
+  onSignIn?: () => void,
+  onOpenSettings?: () => void,
+): ReactNode {
   if (canAtc) return 'Try to hold a matching site.';
   if (!cartWithoutCredentials) return 'Unavailable for this watch scope.';
-  return signedIn ? 'Add rec.gov credentials in Settings' : 'Sign in to enable add-to-cart';
+  if (signedIn) {
+    return onOpenSettings ? (
+      <>
+        <LinkButton onClick={onOpenSettings}>Add your rec.gov login</LinkButton> in Settings to
+        hold sites.
+      </>
+    ) : (
+      'Add your rec.gov login in Settings to hold sites.'
+    );
+  }
+  return onSignIn ? (
+    <>
+      <LinkButton onClick={onSignIn}>Sign in</LinkButton> to enable add-to-cart.
+    </>
+  ) : (
+    'Sign in to enable add-to-cart.'
+  );
 }
 
 interface ToggleRowProps {
   name: string;
   title: string;
-  help: string;
+  help: ReactNode;
   checked: boolean;
   disabled: boolean;
   onChange: (checked: boolean) => void;
@@ -196,24 +224,40 @@ interface ToggleRowProps {
  * these toggles drive conditional fields — flipping Email has to reveal the address
  * input in the same render.
  */
+/**
+ * The row is no longer one big `<label>`.
+ *
+ * The help line can now carry a control of its own — "add your rec.gov login" is a
+ * button — and an interactive element inside a label is dropped from the
+ * accessibility tree and toggles the checkbox when clicked. So the label covers the
+ * title and the switch, and the help is tied to the input with `aria-describedby`.
+ */
 function ToggleRow({ name, title, help, checked, disabled, onChange }: ToggleRowProps) {
+  const inputId = useId();
+  const helpId = `${inputId}-help`;
   return (
-    <label className="rt-watch-editor-toggle">
+    <div className="rt-watch-editor-toggle">
       <span className="rt-watch-editor-toggle-text">
-        <span className="rt-watch-editor-toggle-title">{title}</span>
-        <span className="rt-watch-editor-toggle-help">{help}</span>
+        <label className="rt-watch-editor-toggle-title" htmlFor={inputId}>
+          {title}
+        </label>
+        <span className="rt-watch-editor-toggle-help" id={helpId}>
+          {help}
+        </span>
       </span>
-      <span className="rt-watch-editor-switch">
+      <label className="rt-watch-editor-switch">
         <input
+          id={inputId}
           type="checkbox"
           name={name}
           checked={checked}
           disabled={disabled}
+          aria-describedby={helpId}
           onChange={(event) => onChange(event.target.checked)}
         />
         <span className="rt-watch-editor-switch-track" aria-hidden="true" />
-      </span>
-    </label>
+      </label>
+    </div>
   );
 }
 

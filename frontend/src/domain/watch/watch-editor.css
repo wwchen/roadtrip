@@ -52,7 +52,7 @@
   gap: 12px;
 }
 .rt-watch-editor-toggle-text { display: grid; gap: 2px; min-width: 0; }
-.rt-watch-editor-toggle-title { font-weight: 600; }
+.rt-watch-editor-toggle-title { font-weight: 600; cursor: pointer; }
 .rt-watch-editor-toggle-help { color: var(--rt-muted); font-size: 11px; line-height: 1.25; }
 .rt-watch-editor-switch { position: relative; display: inline-grid; flex: 0 0 auto; }
 .rt-watch-editor-switch input { position: absolute; opacity: 0; pointer-events: none; }

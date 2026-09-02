@@ -43,6 +43,7 @@ import { dayOfMonthLabel, dowLabel } from './week-labels';
 import { clampSiteColumnWidth, saveSiteColumnWidth } from './site-column';
 import { CellBookPopover } from './CellBookPopover';
 import { cartActionFor, isCartActionPending, type CartAction } from './cart-action';
+import type { CartGate } from '@/lib/watch-windows';
 
 /** Width of one date column, matching `.cg-site-matrix-date` in the stylesheet. */
 const DATE_COLUMN_WIDTH_PX = 66;
@@ -82,7 +83,7 @@ export interface SiteMatrixProps {
     watchGate: WatchGate;
     /** True when this caller could actually hold a site — the same condition
      *  that enables the watch editor's ATC toggle. */
-    canAddToCart: boolean;
+    cartGate: CartGate;
     cartAction: CartAction | null;
   };
   events: {
@@ -92,6 +93,9 @@ export interface SiteMatrixProps {
     bookingArmed: (armed: ArmedBook | null) => void;
     bookingOpened: (campsiteId: string, date: string) => void;
     cartRequested: (campsiteId: string, date: string) => void;
+    /** Offered from a gated cart row, in place of a hold. */
+    signInRequested: () => void;
+    settingsRequested: () => void;
     dateSelected: (date: string) => void;
     watchOpened: (anchor: HTMLElement, date: string) => void;
   };
@@ -208,9 +212,11 @@ export function SiteMatrix(props: SiteMatrixProps) {
                 armedBook={view.armedBook}
                 onArmBook={events.bookingArmed}
                 onOpenBooking={events.bookingOpened}
-                canAddToCart={view.canAddToCart}
+                cartGate={view.cartGate}
                 cartAction={view.cartAction}
                 onAddToCart={events.cartRequested}
+                onSignIn={events.signInRequested}
+                onOpenSettings={events.settingsRequested}
                 watchedDates={view.watchedDates}
                 watchGate={view.watchGate}
                 onOpenWatch={events.watchOpened}
@@ -562,9 +568,11 @@ function MatrixRow({
   armedBook,
   onArmBook,
   onOpenBooking,
-  canAddToCart,
+  cartGate,
   cartAction,
   onAddToCart,
+  onSignIn,
+  onOpenSettings,
   watchedDates,
   watchGate,
   onOpenWatch,
@@ -604,9 +612,11 @@ function MatrixRow({
             armedBook={armedBook}
             onArmBook={onArmBook}
             onOpenBooking={onOpenBooking}
-            canAddToCart={canAddToCart}
+            cartGate={cartGate}
             cartAction={cartAction}
             onAddToCart={onAddToCart}
+            onSignIn={onSignIn}
+            onOpenSettings={onOpenSettings}
             watchedDates={watchedDates}
             watchGate={watchGate}
             onOpenWatch={onOpenWatch}
@@ -642,9 +652,12 @@ interface MatrixCellProps {
   armedBook: ArmedBook | null;
   onArmBook: (armed: ArmedBook | null) => void;
   onOpenBooking: (campsiteId: string, date: string) => void;
-  canAddToCart: boolean;
+  cartGate: CartGate;
   cartAction: CartAction | null;
   onAddToCart: (campsiteId: string, date: string) => void;
+  /** Offered from a gated cart row. */
+  onSignIn: () => void;
+  onOpenSettings: () => void;
   watchedDates: ReadonlySet<string>;
   watchGate: WatchGate;
   onOpenWatch: (anchor: HTMLElement, date: string) => void;
@@ -659,9 +672,11 @@ function MatrixCell({
   armedBook,
   onArmBook,
   onOpenBooking,
-  canAddToCart,
+  cartGate,
   cartAction,
   onAddToCart,
+  onSignIn,
+  onOpenSettings,
   watchedDates,
   watchGate,
   onOpenWatch,
@@ -746,7 +761,10 @@ function MatrixCell({
     );
   }
 
-  const openPopover = armed && canAddToCart;
+  // The popover opens wherever the scope has a cart: the gate decides what the
+  // second row says, not whether there is a choice to make.
+  const hasCartRow = cartGate !== 'unsupported';
+  const openPopover = armed && hasCartRow;
 
   return (
     <td className={cellClass}>
@@ -756,7 +774,7 @@ function MatrixCell({
         className={`cg-site-matrix-cell-button${armed ? ' is-armed' : ''}`}
         aria-label={
           armed
-            ? canAddToCart
+            ? hasCartRow
               ? `${aria}; choose how to book`
               : `${aria}; Book, click to open booking page`
             : `${aria}; click to book`
@@ -765,7 +783,7 @@ function MatrixCell({
           // Without the capability this is exactly the two-tap flip it always
           // was — that population sees no change at all.
           if (!armed) onArmBook({ campsiteId: id, date: day.date });
-          else if (!canAddToCart) onOpenBooking(id, day.date);
+          else if (!hasCartRow) onOpenBooking(id, day.date);
         }}
       >
         {armed ? 'Book' : state.label}
@@ -774,8 +792,17 @@ function MatrixCell({
         <CellBookPopover
           anchor={cellAnchor}
           onOpenBooking={() => onOpenBooking(id, day.date)}
-          onAddToCart={() => onAddToCart(id, day.date)}
-          cartBusy={isCartActionPending(cartAction)}
+          cart={
+            cartGate === 'ready'
+              ? {
+                  state: 'ready',
+                  onAddToCart: () => onAddToCart(id, day.date),
+                  busy: isCartActionPending(cartAction),
+                }
+              : cartGate === 'signed-out'
+                ? { state: 'signed-out', onSignIn }
+                : { state: 'no-credentials', onOpenSettings }
+          }
           onClose={() => onArmBook(null)}
         />
       ) : null}
