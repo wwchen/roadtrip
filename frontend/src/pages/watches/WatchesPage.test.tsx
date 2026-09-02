@@ -6,7 +6,15 @@ import userEvent from '@testing-library/user-event';
 import type { Watch } from '@/api/watches-api';
 import { AppProviders } from '@/app/AppProviders';
 import { queryKeys } from '@/queries/keys';
+import { signIn } from '@/api/auth-api';
 import { WatchesPage } from './WatchesPage';
+
+// `signIn` is a full-page navigation, which jsdom cannot follow. Partial mock so
+// the rest of the auth module keeps its real behaviour.
+vi.mock('@/api/auth-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/auth-api')>()),
+  signIn: vi.fn(),
+}));
 
 const watch = (fields: Partial<Watch> = {}): Watch => ({
   id: 1,
@@ -211,6 +219,16 @@ describe('signed out', () => {
 
     expect(await screen.findByText('Sign in to manage your alerts')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create' })).not.toBeInTheDocument();
+  });
+
+  test('the prompt carries a control that starts sign-in', async () => {
+    stubApi(watchListFails(401, { error: 'unauthenticated' }));
+    renderPage();
+    await screen.findByText('Sign in to manage your alerts');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    expect(signIn).toHaveBeenCalledOnce();
   });
 
   test('a 500 shows an error, not a sign-in prompt', async () => {

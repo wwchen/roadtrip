@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Banner, EmptyState, Link, Skeleton } from '@ui';
+import { Banner, Button, EmptyState, Link, Skeleton } from '@ui';
+import { signIn } from '@/api/auth-api';
 import type { Watch, WatchStatus } from '@/api/watches-api';
 import { HttpError } from '@/api/http';
 import {
@@ -227,7 +228,12 @@ function WatchesListPage() {
       {isSignedOut ? (
         <EmptyState
           title="Sign in to manage your alerts"
-          body="Sign in to create and manage your availability alerts."
+          body="Availability alerts are saved to your account."
+          actions={
+            <Button variant="primary" onClick={() => signIn()}>
+              Sign in
+            </Button>
+          }
         />
       ) : (
         <>
