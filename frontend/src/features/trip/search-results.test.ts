@@ -34,8 +34,6 @@ const geocodeRow = (over: Record<string, unknown> = {}) => ({
 describe('kindForCategory', () => {
   test('maps the categories the backend returns', () => {
     expect(kindForCategory('campground')).toBe('CG');
-    expect(kindForCategory('national-park')).toBe('NP');
-    expect(kindForCategory('state-park')).toBe('SP');
   });
 
   test('accepts both spellings of the aliased categories', () => {

@@ -40,8 +40,6 @@ export interface SearchResult {
  */
 const KIND_BY_CATEGORY = new Map<string, SearchKind>([
   ['campground', 'CG'],
-  ['national-park', 'NP'],
-  ['state-park', 'SP'],
   ['planet_fitness_location', 'PF'],
   ['planet-fitness', 'PF'],
   ['tesla_supercharger', 'SC'],
