@@ -18,6 +18,11 @@ services:
   postgres:
     profiles: [pois]
     image: postgis/postgis:16-3.4
+    # The image may run its entrypoint as `postgres`. Starting the entrypoint
+    # as root lets it fix ownership on a freshly-created bind mount before it
+    # drops privileges to the postgres user for the server itself. This is
+    # required by `make reset-db`, which removes the host directory first.
+    user: root
     # This base file is what the deploy host runs, where the database must come
     # back on its own after a reboot — otherwise every other service restarts
     # and the site stays down until someone runs `make run env=prod` by hand.
@@ -48,7 +53,11 @@ services:
       - ${POSTGRES_DATA:-$HOME/.roadtrip-map/postgres}:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-roadtrip} -d $${POSTGRES_DB:-roadtrip}"]
+      # During initdb, the temporary server accepts Unix-socket connections
+      # before POSTGRES_DB has been created. Probe over TCP so this only passes
+      # once the entrypoint has finished initialization and started the real
+      # server, with the configured application database available.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER:-roadtrip} -d $${POSTGRES_DB:-roadtrip}"]
       interval: 5s
       timeout: 3s
       retries: 10

@@ -29,6 +29,24 @@ class DockerComposeRestartPolicyTest(unittest.TestCase):
 
         self.assertEqual("no", postgres.get("restart"))
 
+    def test_postgres_entrypoint_can_repair_a_fresh_bind_mount(self):
+        postgres = compose("docker-compose.yml")["services"]["postgres"]
+
+        self.assertEqual(
+            "root",
+            postgres.get("user"),
+            "postgres must start as root so its entrypoint can chown a fresh "
+            "bind-mounted data directory before dropping privileges",
+        )
+
+    def test_postgres_healthcheck_waits_for_the_configured_database(self):
+        postgres = compose("docker-compose.yml")["services"]["postgres"]
+        healthcheck = postgres["healthcheck"]["test"][1]
+
+        self.assertIn("-h 127.0.0.1", healthcheck)
+        self.assertIn("POSTGRES_DB", healthcheck)
+        self.assertIn("-d $${POSTGRES_DB", healthcheck)
+
     def test_local_override_opts_every_service_out_of_auto_restart(self):
         local = compose("docker-compose.local.yml")["services"]
 
