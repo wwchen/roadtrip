@@ -42,24 +42,11 @@ import {
   useSettings,
   useSettingsTests,
 } from './useSettings';
-
-const TAB_PROFILE = 'profile';
-const TAB_APPEARANCE = 'appearance';
-const TAB_NOTIFICATIONS = 'notifications';
-const TAB_BOOKING = 'booking';
-const TAB_ACCOUNT = 'account';
-
-// Order is the rail's reading order. Appearance sits next to Profile because it
-// saves the same document; Account last because it only fires actions.
-const TABS = [
-  { id: TAB_PROFILE, label: 'Profile' },
-  { id: TAB_APPEARANCE, label: 'Appearance' },
-  { id: TAB_NOTIFICATIONS, label: 'Notifications' },
-  { id: TAB_BOOKING, label: 'Booking' },
-  { id: TAB_ACCOUNT, label: 'Account' },
-] as const;
-
-type TabId = (typeof TABS)[number]['id'];
+import {
+  DEFAULT_SETTINGS_TAB,
+  SETTINGS_TABS,
+  type SettingsTab,
+} from '@/lib/settings-tabs';
 
 const SAVED_MESSAGE = 'Settings saved.';
 
@@ -87,6 +74,8 @@ type Notice = { status: 'success' | 'error'; message: string };
 
 export interface SettingsModalProps {
   onClose: () => void;
+  /** The section to land on. Defaults to Profile. */
+  initialTab?: SettingsTab;
 }
 
 /**
@@ -103,7 +92,7 @@ export interface SettingsModalProps {
  * dataUpdatedAt keys editable panels so a save remounts fields from the server's
  * answer, including a newly generated Slack-token hint.
  */
-export function SettingsModal({ onClose }: SettingsModalProps) {
+export function SettingsModal({ onClose, initialTab }: SettingsModalProps) {
   const settingsQuery = useSettings();
   const settings = settingsQuery.data;
   const version = settingsQuery.dataUpdatedAt;
@@ -123,7 +112,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     [],
   );
 
-  const [activeTab, setActiveTab] = useState<TabId>(TAB_PROFILE);
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? DEFAULT_SETTINGS_TAB);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const saveProfile = useSaveProfile();
@@ -159,16 +148,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   // payload, so without the split either one would light up the other's Save.
   const dirty =
     settings != null &&
-    ((activeTab === TAB_PROFILE &&
+    ((activeTab === 'profile' &&
       profileValues != null &&
       isDisplayNameDirty(settings, profileValues)) ||
-      (activeTab === TAB_APPEARANCE &&
+      (activeTab === 'appearance' &&
         profileValues != null &&
         isThemeDirty(settings, profileValues)) ||
-      (activeTab === TAB_NOTIFICATIONS &&
+      (activeTab === 'notifications' &&
         notificationValues != null &&
         isNotificationsDirty(settings, notificationValues)) ||
-      (activeTab === TAB_BOOKING && bookingValues != null && isBookingDirty(settings, bookingValues)));
+      (activeTab === 'booking' && bookingValues != null && isBookingDirty(settings, bookingValues)));
 
   const fail = (err: unknown) =>
     setNotice({
@@ -180,11 +169,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     if (!settings || saving || !dirty) return;
     setNotice(null);
     try {
-      if ((activeTab === TAB_PROFILE || activeTab === TAB_APPEARANCE) && profileValues) {
+      if ((activeTab === 'profile' || activeTab === 'appearance') && profileValues) {
         await saveProfile.mutateAsync(buildProfilePayload(profileValues));
-      } else if (activeTab === TAB_NOTIFICATIONS && notificationValues) {
+      } else if (activeTab === 'notifications' && notificationValues) {
         await saveNotifications.mutateAsync(buildNotificationsPayload(notificationValues));
-      } else if (activeTab === TAB_BOOKING && bookingValues) {
+      } else if (activeTab === 'booking' && bookingValues) {
         await saveBooking.mutateAsync(buildBookingPayload(bookingValues));
       } else {
         return;
@@ -230,7 +219,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       actions={
         // Account has nothing to save, so it gets no button rather than a
         // permanently disabled one.
-        activeTab === TAB_ACCOUNT ? undefined : (
+        activeTab === 'account' ? undefined : (
           <Button variant="primary" disabled={!dirty || saving} onClick={() => void save()}>
             Save
           </Button>
@@ -246,7 +235,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
         <div className="rt-settings-body">
           <nav className="rt-settings-rail" aria-label="Settings sections">
-            {TABS.map((tab) => (
+            {SETTINGS_TABS.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
@@ -270,7 +259,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               </Banner>
             ) : (
               <>
-                {activeTab === TAB_PROFILE && profileValues && (
+                {activeTab === 'profile' && profileValues && (
                   <ProfilePanel
                     key={`profile:${version}`}
                     profile={settings.profile}
@@ -278,14 +267,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     onChange={setProfileValues}
                   />
                 )}
-                {activeTab === TAB_APPEARANCE && profileValues && (
+                {activeTab === 'appearance' && profileValues && (
                   <AppearancePanel
                     key={`appearance:${version}`}
                     values={profileValues}
                     onChange={setProfileValues}
                   />
                 )}
-                {activeTab === TAB_NOTIFICATIONS && notificationValues && (
+                {activeTab === 'notifications' && notificationValues && (
                   <NotificationsPanel
                     key={`notifications:${version}`}
                     settings={settings}
@@ -295,7 +284,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     onTestEmail={testEmail}
                   />
                 )}
-                {activeTab === TAB_BOOKING && bookingValues && (
+                {activeTab === 'booking' && bookingValues && (
                   <BookingPanel
                     key={`booking:${version}`}
                     settings={settings}
@@ -309,7 +298,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     onRemoveRecgov={() => void handleRemoveRecgov()}
                   />
                 )}
-                {activeTab === TAB_ACCOUNT && (
+                {activeTab === 'account' && (
                   <AccountPanel
                     settings={settings}
                     onSignOut={signOut}

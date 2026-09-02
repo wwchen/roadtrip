@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
 import type { SettingsResponse } from '@/api/account-api';
 import { useThemeStore } from '@/stores/themeStore';
+import type { SettingsTab } from '@/lib/settings-tabs';
 import { SettingsModal } from './SettingsModal';
 
 const settingsBody = (
@@ -90,9 +91,15 @@ interface RenderOptions {
    * save triggers to echo it, not the fixed default.
    */
   profile?: SettingsResponse['profile'];
+  /** The section the modal should land on. */
+  initialTab?: SettingsTab;
 }
 
-function renderSettingsModal({ onClose = vi.fn(), profile: profileOverride }: RenderOptions = {}) {
+function renderSettingsModal({
+  onClose = vi.fn(),
+  profile: profileOverride,
+  initialTab,
+}: RenderOptions = {}) {
   if (profileOverride) {
     const doc: SettingsResponse = { ...settingsBody(), profile: profileOverride };
     getSettings = () => json(doc);
@@ -105,7 +112,7 @@ function renderSettingsModal({ onClose = vi.fn(), profile: profileOverride }: Re
   }
   return render(
     <AppProviders client={client}>
-      <SettingsModal onClose={onClose} />
+      <SettingsModal onClose={onClose} initialTab={initialTab} />
     </AppProviders>,
   );
 }
@@ -568,5 +575,23 @@ describe('theme preview on close', () => {
 
     expect(useThemeStore.getState().choice).toBe('dark');
     expect(document.documentElement.classList.contains('mode-dark')).toBe(true);
+  });
+});
+
+describe('initial tab', () => {
+  test('opens on Profile by default', async () => {
+    renderSettingsModal();
+    expect(await screen.findByRole('button', { name: 'Profile' })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+  });
+
+  test('opens on the section it was given', async () => {
+    renderSettingsModal({ initialTab: 'booking' });
+    expect(await screen.findByRole('button', { name: 'Booking' })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
   });
 });
