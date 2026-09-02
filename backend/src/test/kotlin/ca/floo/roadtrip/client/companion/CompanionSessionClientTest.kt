@@ -1,11 +1,17 @@
 package ca.floo.roadtrip.client.companion
 
 import ca.floo.roadtrip.config.RecGovAtcConfig
+import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
 import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionLoginResult
 import ca.floo.roadtrip.service.settings.CompanionSessionHealth
 import ca.floo.roadtrip.service.settings.RecGovSessionCodes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
 import java.net.Authenticator
 import java.net.CookieHandler
@@ -17,11 +23,13 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.Optional
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLParameters
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val PROFILE_ID = "42"
@@ -534,33 +542,101 @@ class CompanionSessionClientTest {
                 }
         }
 
+    // ── the ATC fire path ────────────────────────────────────────────────────
+
+    @Test
+    fun `add-to-cart posts the payload and issues no preflight of its own`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/atc" to TestResponse(body = CART_HELD)))
+                .use { server ->
+                    val outcome = clientFor(server.baseUrl).addToCart(atcPayload())
+
+                    assertTrue(outcome is RecGovAtcOutcome.Completed)
+                    // Exactly one call: the session preflight belongs to the
+                    // adapter, which is the layer that can recover a dead one.
+                    assertEquals(listOf("/atc"), server.paths)
+                    assertEquals(atcPayload().toString(), server.bodies.single())
+                }
+        }
+
+    @Test
+    fun `a companion that declined the hold reports its own code`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/atc" to
+                            TestResponse(
+                                status = 500,
+                                body = """{"ok":false,"cart_added":false,"error":"cart_not_added","detail":"no hold"}""",
+                            ),
+                    ),
+                ).use { server ->
+                    val failed = clientFor(server.baseUrl).addToCart(atcPayload()) as RecGovAtcOutcome.Failed
+
+                    assertEquals("cart_not_added", failed.error)
+                    assertEquals("no hold", failed.detail)
+                }
+        }
+
+    @Test
+    fun `an unreadable body never fabricates a hold`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/atc" to TestResponse(body = "not json")))
+                .use { server ->
+                    val failed = clientFor(server.baseUrl).addToCart(atcPayload()) as RecGovAtcOutcome.Failed
+
+                    assertEquals("companion_request_failed", failed.error)
+                    assertTrue(failed.detail.orEmpty().contains("not json"), failed.detail.orEmpty())
+                    assertNull(failed.response)
+                }
+        }
+
+    @Test
+    fun `cancelling a call propagates instead of reading as an unreachable companion`() =
+        runBlocking {
+            // A swallowed CancellationException turned every in-flight call at
+            // shutdown into a fake companion outage: one bogus `unavailable`
+            // metric per profile in the keepalive sweep, and a cancelled fire
+            // emailed to its owner as a companion failure.
+            val hanging = HangingClient()
+            val client = CompanionSessionClient(RecGovAtcConfig("http://companion.invalid", timeout), hanging)
+            val outcomes = mutableListOf<RecGovAtcOutcome>()
+
+            val job = launch(Dispatchers.Default) { outcomes += client.addToCart(atcPayload()) }
+            hanging.issued.await()
+            job.cancelAndJoin()
+
+            assertTrue(job.isCancelled)
+            assertTrue(outcomes.isEmpty(), "cancellation must not come back as an outcome: $outcomes")
+        }
+
     private companion object {
         const val LOGGED_IN = """{"ok":true,"recgov_auth":{"login_status":"ok","logged_in":true},"diagnostics":null}"""
         const val LOGGED_OUT = """{"ok":true,"recgov_auth":{"login_status":"logged_out","logged_in":false}}"""
         const val HEALTH_LOGGED_IN =
             """{"ok":true,"busy":false,"profile_id":"42","recgov_auth":{"login_status":"ok","logged_in":true}}"""
+        const val CART_HELD = """{"ok":true,"cart_added":true}"""
+
+        fun atcPayload() =
+            buildJsonObject {
+                put("profile_id", PROFILE_ID)
+                put("start_date", "2026-07-19")
+                put("end_date", "2026-07-20")
+                put("campsite_id", "102524")
+            }
     }
 }
 
 /**
- * Records the per-request timeout and answers an empty JSON object.
+ * The `java.net.http.HttpClient` surface a stub has to fill in but never uses.
  *
- * A loopback server cannot see the timeout the caller chose, and the choice —
- * short budget for the pre-hold checks, full budget for a browser-driven run —
- * is the behaviour under test.
+ * Subclasses override `sendAsync` and nothing else; everything below it is the
+ * abstract class's own boilerplate, which two stubs had already copied.
  */
-private class RecordingTimeoutClient : HttpClient() {
-    val timeouts = mutableListOf<Duration?>()
-
-    override fun <T : Any?> sendAsync(
-        request: HttpRequest,
-        responseBodyHandler: HttpResponse.BodyHandler<T>,
-    ): CompletableFuture<HttpResponse<T>> {
-        timeouts += request.timeout().orElse(null)
-        @Suppress("UNCHECKED_CAST")
-        return CompletableFuture.completedFuture(EmptyJsonResponse(request) as HttpResponse<T>)
-    }
-
+private abstract class StubHttpClient : HttpClient() {
     override fun <T : Any?> sendAsync(
         request: HttpRequest,
         responseBodyHandler: HttpResponse.BodyHandler<T>,
@@ -589,6 +665,43 @@ private class RecordingTimeoutClient : HttpClient() {
     override fun version(): HttpClient.Version = HttpClient.Version.HTTP_1_1
 
     override fun executor(): Optional<Executor> = Optional.empty()
+}
+
+/**
+ * Records the per-request timeout and answers an empty JSON object.
+ *
+ * A loopback server cannot see the timeout the caller chose, and the choice —
+ * short budget for the pre-hold checks, full budget for a browser-driven run —
+ * is the behaviour under test.
+ */
+private class RecordingTimeoutClient : StubHttpClient() {
+    val timeouts = mutableListOf<Duration?>()
+
+    override fun <T : Any?> sendAsync(
+        request: HttpRequest,
+        responseBodyHandler: HttpResponse.BodyHandler<T>,
+    ): CompletableFuture<HttpResponse<T>> {
+        timeouts += request.timeout().orElse(null)
+        @Suppress("UNCHECKED_CAST")
+        return CompletableFuture.completedFuture(EmptyJsonResponse(request) as HttpResponse<T>)
+    }
+}
+
+/**
+ * Answers a future that never completes, so the only way out of the call is
+ * cancellation. [issued] releases once the request is genuinely in flight —
+ * without it the test could cancel before the call started and pass vacuously.
+ */
+private class HangingClient : StubHttpClient() {
+    val issued = CountDownLatch(1)
+
+    override fun <T : Any?> sendAsync(
+        request: HttpRequest,
+        responseBodyHandler: HttpResponse.BodyHandler<T>,
+    ): CompletableFuture<HttpResponse<T>> {
+        issued.countDown()
+        return CompletableFuture()
+    }
 }
 
 private class EmptyJsonResponse(

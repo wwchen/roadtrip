@@ -10,6 +10,7 @@ import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.auth.User
@@ -27,7 +28,6 @@ import ca.floo.roadtrip.service.availability.provider.testCampground
 import ca.floo.roadtrip.service.booking.BookingActionCodes
 import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
-import ca.floo.roadtrip.service.booking.RECGOV_SESSION_EXPIRED_DETAIL
 import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
 import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
@@ -60,6 +60,9 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+
+/** What the companion says when rec.gov stops an unattended login for a code. */
+private const val MFA_BLOCKED_DETAIL = "rec.gov asked for a verification code"
 
 class TriggerActionHandlerTest {
     private val testCipher = SecretCipher(ByteArray(32) { it.toByte() })
@@ -470,18 +473,29 @@ class TriggerActionHandlerTest {
         }
 
     @Test
-    fun `a session-expired preflight tells the owner how to recover, in the delivered email`() =
+    fun `a blocked preflight tells the owner what actually blocked it, in the delivered email`() =
         runBlocking {
             // End to end through the real adapter, the real fanout and the real
             // email renderer. The renderer's own tests hand-build a response
             // object; this one proves the producer and the renderer agree, which
             // is exactly where the recovery message was being dropped.
+            //
+            // The reason has to be the companion's own: this owner was asked for
+            // a verification code, and the mail used to tell them their session
+            // had expired and to re-login — which would only ask for the code again.
             val emailClient = RecordingEmailClient()
             val adapter =
                 RecGovBookingAdapter(
                     // Never reached: the preflight fails before any browser is driven.
                     companionAtc = { RecGovAtcOutcome.Failed("companion_should_not_be_called", null) },
-                    session = DeadSession(reLogin = CompanionActionResult.Failed(RecGovSessionCodes.MFA_REQUIRED)),
+                    session =
+                        DeadSession(
+                            reLogin =
+                                CompanionActionResult.Failed(
+                                    RecGovSessionCodes.MFA_REQUIRED,
+                                    MFA_BLOCKED_DETAIL,
+                                ),
+                        ),
                 )
             val registry = BookingAdapterRegistry(listOf(adapter))
             val handler =
@@ -501,8 +515,8 @@ class TriggerActionHandlerTest {
             assertFalse(delivered)
             val sent = emailClient.messages.single()
             assertEquals("owner@example.test", sent.to)
-            assertTrue(sent.text.contains(RECGOV_SESSION_EXPIRED_DETAIL), sent.text)
-            assertTrue(sent.html.contains("re-login in Settings"), sent.html)
+            assertTrue(sent.text.contains(MFA_BLOCKED_DETAIL), sent.text)
+            assertTrue(sent.html.contains(MFA_BLOCKED_DETAIL), sent.html)
         }
 
     @Test
@@ -515,6 +529,7 @@ class TriggerActionHandlerTest {
                             providerId = BookingProvider.RECGOV,
                             error = "cart_not_added",
                             detail = "cart automation did not confirm a cart hold",
+                            category = BookingFailureCategory.RETRY_LATER,
                             request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                             response =
                                 buildJsonObject {
@@ -554,6 +569,7 @@ class TriggerActionHandlerTest {
                             providerId = BookingProvider.RECGOV,
                             error = "recgov_not_authenticated",
                             detail = "run make recgov-login",
+                            category = BookingFailureCategory.CALLER_ACTION,
                             request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                             response =
                                 buildJsonObject {

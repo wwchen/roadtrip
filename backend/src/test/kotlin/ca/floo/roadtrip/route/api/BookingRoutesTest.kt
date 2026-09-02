@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.route.api
 
 import ca.floo.roadtrip.model.api.RECGOV_CART_URL
+import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.route.auth.SESSION_COOKIE
@@ -146,19 +147,31 @@ class BookingRoutesTest {
     }
 
     @Test
-    fun `a busy profile is a conflict the caller can retry, not a bad gateway`() =
-        testApplication {
-            mount(StubBookingActions(AddToCartOutcome.Failed(RecGovSessionCodes.PROFILE_BUSY, "held")))
+    fun `each failure category gets its own status, whatever the provider called it`() {
+        // The route classifies nothing: it used to keep two sets of rec.gov codes
+        // and answer 502 for anything in neither. Which code lands in which
+        // category is the adapter's business, and is tested there.
+        val expected =
+            mapOf(
+                BookingFailureCategory.CALLER_ACTION to HttpStatusCode.Forbidden,
+                BookingFailureCategory.RETRY_LATER to HttpStatusCode.Conflict,
+                BookingFailureCategory.UPSTREAM to HttpStatusCode.BadGateway,
+            )
+        for ((category, status) in expected) {
+            testApplication {
+                mount(StubBookingActions(AddToCartOutcome.Failed("provider_said_no", "why", category)))
 
-            val resp =
-                client.post(ADD_TO_CART) {
-                    asUser()
-                    contentType(ContentType.Application.Json)
-                    setBody(VALID_BODY)
-                }
+                val resp =
+                    client.post(ADD_TO_CART) {
+                        asUser()
+                        contentType(ContentType.Application.Json)
+                        setBody(VALID_BODY)
+                    }
 
-            assertEquals(HttpStatusCode.Conflict, resp.status)
+                assertEquals(status, resp.status, "$category")
+            }
         }
+    }
 
     @Test
     fun `a quoted campsite_id still decodes to the same Long`() =
@@ -184,72 +197,17 @@ class BookingRoutesTest {
         }
 
     @Test
-    fun `an expired session is the caller's to fix, not a bad gateway`() =
-        testApplication {
-            mount(StubBookingActions(AddToCartOutcome.Failed(RecGovSessionCodes.SESSION_EXPIRED, "re-login")))
-
-            val resp =
-                client.post(ADD_TO_CART) {
-                    asUser()
-                    contentType(ContentType.Application.Json)
-                    setBody(VALID_BODY)
-                }
-
-            // Same shape as credentials_required: nothing upstream is broken.
-            assertEquals(HttpStatusCode.Forbidden, resp.status)
-        }
-
-    @Test
-    fun `every session-death code is the caller's to fix, not a bad gateway`() {
-        // The companion has three more ways to say "your session is gone" than
-        // recgov_session_expired, and they arrive verbatim on the fire path. All
-        // four send the user to the same place — Settings — so answering 502 for
-        // three of them tells the UI an upstream broke when nothing did.
-        for (
-        code in
-        listOf(
-            RecGovSessionCodes.SPA_LOGGED_OUT,
-            RecGovSessionCodes.REFRESH_FAILED,
-            RecGovSessionCodes.COMPANION_LOGIN_FAILED,
-        )
-        ) {
-            testApplication {
-                mount(StubBookingActions(AddToCartOutcome.Failed(code, "re-login")))
-
-                val resp =
-                    client.post(ADD_TO_CART) {
-                        asUser()
-                        contentType(ContentType.Application.Json)
-                        setBody(VALID_BODY)
-                    }
-
-                assertEquals(HttpStatusCode.Forbidden, resp.status, "$code is the user's to fix in Settings")
-            }
-        }
-    }
-
-    @Test
-    fun `a vendor-side miss is a conflict the caller can retry`() {
-        for (code in listOf(BookingActionCodes.CART_NOT_ADDED, BookingActionCodes.CONFIRMATION_DISABLED)) {
-            testApplication {
-                mount(StubBookingActions(AddToCartOutcome.Failed(code, null)))
-
-                val resp =
-                    client.post(ADD_TO_CART) {
-                        asUser()
-                        contentType(ContentType.Application.Json)
-                        setBody(VALID_BODY)
-                    }
-
-                assertEquals(HttpStatusCode.Conflict, resp.status, "$code is somebody else taking the site")
-            }
-        }
-    }
-
-    @Test
     fun `a broken booking service is a bad gateway, with its own code intact`() =
         testApplication {
-            mount(StubBookingActions(AddToCartOutcome.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, "refused")))
+            mount(
+                StubBookingActions(
+                    AddToCartOutcome.Failed(
+                        RecGovSessionCodes.COMPANION_UNAVAILABLE,
+                        "refused",
+                        BookingFailureCategory.UPSTREAM,
+                    ),
+                ),
+            )
 
             val resp =
                 client.post(ADD_TO_CART) {

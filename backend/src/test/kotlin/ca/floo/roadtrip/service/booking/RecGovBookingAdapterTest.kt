@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.booking
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -150,22 +152,54 @@ class RecGovBookingAdapterTest {
         }
 
     @Test
-    fun `an MFA-blocked re-login fails the ATC and says how to recover`() =
+    fun `a refusal the companion did not explain still reads as a sentence`() =
         runBlocking {
-            val executor = RecordingAtcExecutor(completedOutcome())
+            // The owner's email renders `detail ?: error`, so a null detail used
+            // to reach them as the bare word `mfa_required`.
             val session =
                 FakeProfileSession(
                     health = CompanionSessionHealth.Inactive(RecGovSessionCodes.NOT_AUTHENTICATED),
                     reLogin = CompanionActionResult.Failed(RecGovSessionCodes.MFA_REQUIRED),
                 )
-            val provider = provider(executor, session)
 
-            val failed = provider.addToCart(request(recgovTarget())) as AddToCartResult.Failed
+            val failed = provider(session = session).addToCart(request(recgovTarget())) as AddToCartResult.Failed
 
-            assertEquals(RECGOV_SESSION_EXPIRED_ERROR, failed.error)
-            assertEquals(RECGOV_SESSION_EXPIRED_DETAIL, failed.detail)
-            assertNull(executor.payload)
-            assertEquals(1, session.reLogins.size)
+            assertEquals(RecGovSessionCodes.MFA_REQUIRED, failed.error)
+            val detail = assertNotNull(failed.detail)
+            assertTrue(detail.contains("Settings"), detail)
+            assertTrue(detail.contains(RecGovSessionCodes.MFA_REQUIRED), "the code stays, for support: $detail")
+        }
+
+    @Test
+    fun `a refused re-login reports why it was refused, not a blanket expiry`() =
+        runBlocking {
+            // Every refusal used to be rewritten to recgov_session_expired with
+            // "re-login in Settings" — told to the user who had just REMOVED
+            // their credentials, and to the one whose companion was simply full.
+            val refusals =
+                mapOf(
+                    RecGovSessionCodes.MFA_REQUIRED to BookingFailureCategory.CALLER_ACTION,
+                    RecGovSessionCodes.NOT_CONFIGURED to BookingFailureCategory.CALLER_ACTION,
+                    RecGovSessionCodes.BROWSER_CAP_REACHED to BookingFailureCategory.RETRY_LATER,
+                    RecGovSessionCodes.PROFILE_BUSY to BookingFailureCategory.RETRY_LATER,
+                    RecGovSessionCodes.COMPANION_UNAVAILABLE to BookingFailureCategory.UPSTREAM,
+                )
+            for ((code, category) in refusals) {
+                val executor = RecordingAtcExecutor(completedOutcome())
+                val session =
+                    FakeProfileSession(
+                        health = CompanionSessionHealth.Inactive(RecGovSessionCodes.NOT_AUTHENTICATED),
+                        reLogin = CompanionActionResult.Failed(code, "companion said so"),
+                    )
+
+                val failed = provider(executor, session).addToCart(request(recgovTarget())) as AddToCartResult.Failed
+
+                assertEquals(code, failed.error, "the companion's own code must survive the recovery path")
+                assertEquals("companion said so", failed.detail)
+                assertEquals(category, failed.category, "$code")
+                assertNull(executor.payload, "a blocked preflight never drives the browser")
+                assertEquals(1, session.reLogins.size)
+            }
         }
 
     @Test

@@ -6,6 +6,7 @@ import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.WatchStatus
+import ca.floo.roadtrip.service.booking.RecentAtcFires
 import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionSessionHealth
 import ca.floo.roadtrip.service.settings.CompanionSessionPort
@@ -66,6 +67,8 @@ internal class RecGovKeepaliveJob(
     private val profiles: RecGovProfileSessionPort,
     /** Who has credentials stored — the widened half of the keep-warm set. */
     private val credentials: RecGovCredentialedUsers,
+    /** Which profiles the fire path is currently holding; the sweep yields to them. */
+    private val recentFires: RecentAtcFires,
     private val metrics: RoadtripMetrics,
     private val interval: Duration,
     private val maxProfiles: Int = DEFAULT_MAX_KEEP_WARM_PROFILES,
@@ -120,7 +123,17 @@ internal class RecGovKeepaliveJob(
             }
         }
 
-        armed.forEach { profileId -> refreshGuarded(profileId) }
+        armed.forEach { profileId ->
+            // A refresh drives a browser behind the same per-profile lock a hold
+            // needs. Losing this refresh costs a staler session; taking the lock
+            // from a fire costs the hold outright — the companion answers
+            // `profile_busy` and nothing retries inside the window.
+            if (recentFires.firedRecently(profileId)) {
+                log.info("recgov keepalive skipped profile={}: an ATC hold is in flight", profileId)
+            } else {
+                refreshGuarded(profileId)
+            }
+        }
     }
 
     /**

@@ -43,7 +43,8 @@ that carry nothing:
   `COMPANION_API_TOKEN_FILE` (default `/run/secrets/companion_api_token`),
   which is how Compose delivers it.
 - The backend reads it from `roadtrip.booking.recgov-atc.companion-api-token`
-  and sends it from `client/companion/HttpRecGovAtcExecutor.kt`.
+  and sends it from `client/companion/CompanionSessionClient.kt`, its only
+  client to the companion — session routes and the ATC POST alike.
 - **Unset fails closed:** every non-loopback-health request answers `503
   companion_auth_unconfigured`. Local development must export
   `COMPANION_API_TOKEN` before `npm start`.
@@ -398,10 +399,14 @@ visibility matters most and nobody is watching.
 The **backend** side has two knobs of its own. `RECGOV_KEEPALIVE_INTERVAL`
 (default 15m) sets how often it re-pushes the armed set and refreshes those
 profiles — see [observability.md](observability.md) for the metric it emits.
-`RECGOV_FIRE_TIMEOUT` (default 30s) budgets the checks that run *before* a
-hold — the session preflight and the one unattended re-login — separately from
-the 180s a browser-driven cart run gets, so an ATC racing other users does not
-spend the cart budget twice before it starts.
+`RECGOV_FIRE_TIMEOUT` budgets the checks that run *before* a hold — the session
+preflight and the one unattended re-login — separately from the 180s a
+browser-driven cart run gets, so an ATC racing other users does not spend the
+cart budget twice before it starts. It defaults to a **third of
+`companion-timeout`** (60s at the default) rather than a fixed number: as a
+standalone 30s it sat below the companion's own refresh ceiling — a browser
+launch, then navigation retries — so the recovery it pays for was cut off from
+the backend side and reported as an unreachable companion.
 
 ## Running it
 

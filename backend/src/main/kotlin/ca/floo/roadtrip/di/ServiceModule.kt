@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.client.companion.CompanionSessionClient
-import ca.floo.roadtrip.client.companion.HttpRecGovAtcExecutor
 import ca.floo.roadtrip.client.slack.SlackClient
 import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.AppConfig
@@ -58,6 +57,7 @@ import ca.floo.roadtrip.service.availability.provider.ReserveCaliforniaAvailabil
 import ca.floo.roadtrip.service.booking.BookingActionService
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
+import ca.floo.roadtrip.service.booking.RecentAtcFires
 import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.health.ReadinessServiceImpl
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
@@ -208,18 +208,19 @@ val serviceModule =
         single(named("alertProviders")) { listOf(InternalPollerAlertProvider(get<AvailabilityPollerMembership>())) }
         single { AlertProviderRegistry(get(named("alertProviders"))) }
 
+        single {
+            // One view of "who is mid-hold", written by the adapter and read by
+            // the keepalive sweep so the two stop fighting over profile locks.
+            // The window is the ATC run's own budget, not a number of its own.
+            RecentAtcFires(get<AppConfig>().booking.recgovAtc.companionTimeout)
+        }
         single(named("bookingAdapters")) {
-            val config: AppConfig = get()
-            val atcExecutor =
-                config.booking.recgovAtc
-                    .takeIf { it.companionEnabled }
-                    ?.let(::HttpRecGovAtcExecutor)
             listOfNotNull(
-                atcExecutor?.let { executor ->
+                get<CompanionChannel>().atc?.let { executor ->
                     // The credential service is the fire path's session authority:
                     // it answers per-profile health and owns the one unattended
                     // re-login, because it is where the sealed password lives.
-                    RecGovBookingAdapter(executor, get<RecGovCredentialService>())
+                    RecGovBookingAdapter(executor, get<RecGovCredentialService>(), get<RecentAtcFires>())
                 },
             )
         }
@@ -372,6 +373,7 @@ val serviceModule =
                         companion = it,
                         profiles = get<RecGovCredentialService>(),
                         credentials = get<UserSettingsRepo>()::userIdsWithRecgovCredentials,
+                        recentFires = get<RecentAtcFires>(),
                         metrics = get<RoadtripMetrics>(),
                         interval = config.booking.recgovAtc.keepaliveInterval,
                         maxProfiles = config.booking.maxKeepWarmProfiles,

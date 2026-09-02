@@ -8,6 +8,7 @@ import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.auth.UserId
@@ -145,6 +146,7 @@ class BookingActionServiceTest {
                             providerId = BookingProvider.RECGOV,
                             error = RecGovSessionCodes.PROFILE_BUSY,
                             detail = "another operation holds this profile",
+                            category = BookingFailureCategory.RETRY_LATER,
                             request = buildJsonObject { },
                             response = null,
                         )
@@ -154,7 +156,11 @@ class BookingActionServiceTest {
             val outcome = service(adapter = adapter).addToCart(caller, TEST_CAMPSITE_ID, arrival, checkout)
 
             assertEquals(
-                AddToCartOutcome.Failed(RecGovSessionCodes.PROFILE_BUSY, "another operation holds this profile"),
+                AddToCartOutcome.Failed(
+                    RecGovSessionCodes.PROFILE_BUSY,
+                    "another operation holds this profile",
+                    BookingFailureCategory.RETRY_LATER,
+                ),
                 outcome,
             )
         }

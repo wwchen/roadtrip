@@ -1,11 +1,14 @@
 package ca.floo.roadtrip.client.companion
 
 import ca.floo.roadtrip.config.RecGovAtcConfig
+import ca.floo.roadtrip.service.booking.RecGovAtcExecutor
+import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
 import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionLoginResult
 import ca.floo.roadtrip.service.settings.CompanionSessionHealth
 import ca.floo.roadtrip.service.settings.CompanionSessionPort
 import ca.floo.roadtrip.service.settings.RecGovSessionCodes
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -24,6 +27,7 @@ import java.nio.charset.StandardCharsets
 import java.time.Duration
 
 // ── Companion routes ─────────────────────────────────────────────────────────
+private const val ATC_PATH = "/atc"
 private const val LOGIN_PATH = "/login"
 private const val LOGOUT_PATH = "/logout"
 private const val DESTROY_PATH = "/destroy"
@@ -48,6 +52,7 @@ private const val FIELD_REASON = "reason"
 private const val FIELD_LOGGED_IN = "logged_in"
 private const val FIELD_LOGIN_STATUS = "login_status"
 private const val FIELD_STATE = "state"
+private const val FIELD_CART_ADDED = "cart_added"
 
 /** The companion's word for a profile it has never been asked about. */
 private const val STATUS_UNCHECKED = "unchecked"
@@ -63,6 +68,8 @@ private const val DIAGNOSTICS_CAPTURED_NOTE = "diagnostics captured"
 // ── Companion-internal codes this adapter translates ─────────────────────────
 private const val COMPANION_LOGIN_FAILED = "recgov_login_failed"
 private const val COMPANION_INVALID_RESPONSE = "companion_invalid_response"
+private const val COMPANION_REQUEST_FAILED = "companion_request_failed"
+private const val CART_NOT_ADDED = "cart_not_added"
 
 private const val CONTENT_TYPE_JSON = "application/json"
 private const val HEADER_ACCEPT = "Accept"
@@ -73,24 +80,24 @@ private const val MAX_ERROR_BODY_CHARS = 500
 private val successStatusRange = 200..299
 
 /**
- * The companion's per-profile session routes, as the settings layer sees them.
+ * Every route the backend calls on the companion, over one transport.
  *
- * Sits beside [HttpRecGovAtcExecutor] because it is the same service and the
- * same shared secret; it is separate from it because the ATC fire path and the
- * interactive settings flows have nothing to share but transport. Base URL,
- * timeout and token all come from the existing [RecGovAtcConfig] rather than a
- * second copy of the same three settings.
+ * The ATC fire path used to have a client of its own, which re-implemented this
+ * one's request builder, token header, JSON reader and success range — and
+ * drifted, so a bug fixed here stayed alive there. There is one companion, one
+ * shared secret and one set of connection settings, so there is one client.
  *
- * **Nothing throws.** Every failure — transport, malformed body, an upstream
- * refusal — comes back as a typed result, because the settings status row must
- * answer even when the companion is down. Companion-internal blockers (which
- * ride in `recgov_auth.reason`) are translated here into the small vocabulary in
- * [RecGovSessionCodes]; no vendor shape crosses the port.
+ * **Nothing throws** except cancellation. Every failure — transport, malformed
+ * body, an upstream refusal — comes back as a typed result, because the settings
+ * status row must answer even when the companion is down. Companion-internal
+ * blockers (which ride in `recgov_auth.reason`) are translated here into the
+ * small vocabulary in [RecGovSessionCodes]; no vendor shape crosses the port.
  */
 internal class CompanionSessionClient(
     config: RecGovAtcConfig,
-    private val httpClient: HttpClient = HttpRecGovAtcExecutor.defaultClient(),
-) : CompanionSessionPort {
+    private val httpClient: HttpClient = defaultClient(),
+) : CompanionSessionPort,
+    RecGovAtcExecutor {
     private val log = LoggerFactory.getLogger(javaClass)
     private val baseUrl = requireNotNull(config.companionBaseUrl) { "companion base URL is required" }.trimEnd('/')
     private val timeout = config.companionTimeout
@@ -98,6 +105,31 @@ internal class CompanionSessionClient(
     /** The shorter budget the pre-hold checks run under; see [RecGovAtcConfig.fireTimeout]. */
     private val fireTimeout = config.fireTimeout
     private val apiToken = config.companionApiToken
+
+    /**
+     * The hold itself: one POST that drives a real browser, on the full budget.
+     *
+     * Session readiness is **not** checked here. The per-profile preflight lives
+     * one layer up in `RecGovBookingAdapter`, which is where credential custody
+     * is reachable and so where an expired session can actually be recovered.
+     * `cart_added` is the only evidence of a hold; `ok` alone is not.
+     */
+    override suspend fun addToCart(payload: JsonObject): RecGovAtcOutcome {
+        log.info("recgov companion ATC POST {}{}", baseUrl, ATC_PATH)
+        return when (val exchange = post(ATC_PATH, payload)) {
+            is Exchange.Unreachable -> RecGovAtcOutcome.Failed(COMPANION_REQUEST_FAILED, exchange.detail)
+            is Exchange.Answered ->
+                if (exchange.succeeded && exchange.body.booleanValue(FIELD_CART_ADDED) == true) {
+                    RecGovAtcOutcome.Completed(exchange.body)
+                } else {
+                    RecGovAtcOutcome.Failed(
+                        error = exchange.body.stringValue(FIELD_ERROR) ?: "${CART_NOT_ADDED}_http_${exchange.status}",
+                        detail = exchange.body.stringValue(FIELD_DETAIL),
+                        response = exchange.body,
+                    )
+                }
+        }
+    }
 
     override suspend fun login(
         profileId: String,
@@ -351,10 +383,28 @@ internal class CompanionSessionClient(
             .header(HEADER_ACCEPT, CONTENT_TYPE_JSON)
             .apply { apiToken?.let { header(HEADER_COMPANION_TOKEN, it) } }
 
+    /**
+     * The one place a companion call can fail in transit.
+     *
+     * The cancellation arm is the whole point: a bare `catch (e: Exception)`
+     * swallowed [CancellationException], so a shutdown or a cancelled poll run
+     * read as an unreachable companion — the keepalive sweep bumped its
+     * `unavailable` metric once per profile, and a cancelled fire was emailed to
+     * its owner as a companion failure.
+     *
+     * Everything *else* is still caught, deliberately. Narrowing to
+     * [java.io.IOException] would let a `RejectedExecutionException` from a
+     * closing executor escape into the settings status row, which catches only
+     * `SettingsError` and would answer 500 on the one read that has to degrade.
+     * The order is the contract, as in the availability adapters'
+     * `mapUpstreamErrors`: cancellation is never an upstream failure.
+     */
     private suspend fun send(request: HttpRequest): Exchange {
         val response =
             try {
                 httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).await()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 return Exchange.Unreachable(e.message)
             }
@@ -367,7 +417,26 @@ internal class CompanionSessionClient(
         return Exchange.Answered(response.statusCode(), parsed)
     }
 
-    private companion object {
+    companion object {
         private val json = Json { ignoreUnknownKeys = true }
+        private val defaultConnectTimeout: Duration = Duration.ofSeconds(10)
+
+        /**
+         * One client for every companion caller.
+         *
+         * Each `java.net.http.HttpClient` owns a selector thread and its own
+         * connection pool, and there is exactly one companion behind all of
+         * them. Built lazily so a deployment with no companion never allocates
+         * one; tests inject their own.
+         */
+        private val sharedClient: HttpClient by lazy {
+            HttpClient
+                .newBuilder()
+                .connectTimeout(defaultConnectTimeout)
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build()
+        }
+
+        fun defaultClient(): HttpClient = sharedClient
     }
 }

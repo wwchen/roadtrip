@@ -9,6 +9,7 @@ import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.WatchStatus
+import ca.floo.roadtrip.service.booking.RecentAtcFires
 import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionLoginResult
 import ca.floo.roadtrip.service.settings.CompanionSessionHealth
@@ -24,6 +25,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 private val sweepInterval: Duration = Duration.ofMinutes(15)
+
+/** Long enough that a fire recorded in a test is still "in flight" when the sweep runs. */
+private val fireWindow: Duration = Duration.ofMinutes(3)
 
 class RecGovKeepaliveJobTest {
     @Test
@@ -146,6 +150,7 @@ class RecGovKeepaliveJobTest {
                     companion = companion,
                     profiles = FakeProfiles(),
                     credentials = { emptyList() },
+                    recentFires = RecentAtcFires(fireWindow),
                     metrics = RecordingMetrics(),
                     interval = sweepInterval,
                 )
@@ -180,6 +185,23 @@ class RecGovKeepaliveJobTest {
             assertEquals(listOf(KeepaliveOutcome.FAILED, KeepaliveOutcome.REFRESHED), metrics.keepalives)
         }
 
+    @Test
+    fun `a profile mid-hold keeps its arming but is not refreshed under it`() =
+        runBlocking {
+            // The refresh drives a browser behind the same per-profile lock the
+            // hold needs. Taking it costs the hold — the companion answers
+            // profile_busy and nothing retries inside the window — while losing
+            // the refresh costs only a slightly staler session.
+            val companion = FakeCompanion()
+            val recentFires = RecentAtcFires(fireWindow)
+            recentFires.record("4")
+
+            job(owners = listOf(4L, 7L), companion = companion, recentFires = recentFires).sweepOnce()
+
+            assertEquals(listOf("7"), companion.refreshed, "the firing profile must be left alone")
+            assertEquals(listOf(listOf("4", "7")), companion.keepWarmPushes, "but it stays armed")
+        }
+
     private fun job(
         owners: List<Long> = emptyList(),
         repo: AvailabilityWatchRepo = FakeWatchRepo(owners),
@@ -188,11 +210,13 @@ class RecGovKeepaliveJobTest {
         credentialed: List<Long> = emptyList(),
         neverLoggedIn: Set<Long> = emptySet(),
         maxProfiles: Int = DEFAULT_MAX_KEEP_WARM_PROFILES,
+        recentFires: RecentAtcFires = RecentAtcFires(fireWindow),
     ) = RecGovKeepaliveJob(
         watchRepo = repo,
         companion = companion,
         profiles = FakeProfiles(neverLoggedIn),
         credentials = { credentialed },
+        recentFires = recentFires,
         metrics = metrics,
         interval = sweepInterval,
         maxProfiles = maxProfiles,

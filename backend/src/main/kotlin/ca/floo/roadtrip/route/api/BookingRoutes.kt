@@ -3,6 +3,7 @@ package ca.floo.roadtrip.route.api
 import ca.floo.roadtrip.model.api.AddToCartRequestDto
 import ca.floo.roadtrip.model.api.AddToCartResponseDto
 import ca.floo.roadtrip.model.api.BookingActionStatus
+import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.RouteBodyResult
@@ -16,7 +17,6 @@ import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.service.booking.AddToCartOutcome
 import ca.floo.roadtrip.service.booking.BookingActionCodes
 import ca.floo.roadtrip.service.booking.BookingActionPort
-import ca.floo.roadtrip.service.settings.RecGovSessionCodes
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
@@ -31,48 +31,6 @@ private const val TAG_BOOKING = "booking"
 
 private const val ERROR_INVALID_BODY = "invalid_body"
 private const val ERROR_BAD_DATE = "bad_date_window"
-
-/**
- * Codes that mean "try again shortly", not "this cannot work".
- *
- * They map to 409 rather than 502 because nothing upstream is broken — another
- * operation holds the profile, or the browser pool is full. The caller's own
- * retry is the fix.
- */
-private val transientConflictCodes =
-    setOf(
-        RecGovSessionCodes.PROFILE_BUSY,
-        RecGovSessionCodes.BROWSER_CAP_REACHED,
-        BookingActionCodes.NOT_AVAILABLE,
-        // The browser reached rec.gov and rec.gov declined: almost always
-        // somebody else took the site between the grid read and the click.
-        // A conflict, not a broken service.
-        BookingActionCodes.CART_NOT_ADDED,
-        BookingActionCodes.CONFIRMATION_DISABLED,
-        // Rec.gov never offered the booking. Still a conflict rather than a
-        // broken service — the site's own availability moved, or it is not
-        // bookable online — and the caller is the one who acts next.
-        BookingActionCodes.DATES_NOT_OFFERED,
-        BookingActionCodes.NO_RESERVE_BUTTON,
-    )
-
-/**
- * Codes the caller can act on themselves.
- *
- * `recgov_session_expired` belongs here, not in the 502s: nothing upstream is
- * broken, the user simply has to log in again in Settings — exactly like
- * `credentials_required`.
- */
-private val callerActionableCodes =
-    setOf(
-        RecGovSessionCodes.SESSION_EXPIRED,
-        // The companion's three other ways of saying the same thing, which reach
-        // the fire path verbatim. Answering 502 for these claimed an upstream
-        // broke when the user simply has to sign in again.
-        RecGovSessionCodes.SPA_LOGGED_OUT,
-        RecGovSessionCodes.REFRESH_FAILED,
-        RecGovSessionCodes.COMPANION_LOGIN_FAILED,
-    )
 
 /**
  * Direct add-to-cart, from the availability grid.
@@ -128,16 +86,25 @@ private suspend fun ApplicationCall.respondOutcome(outcome: AddToCartOutcome) =
         is AddToCartOutcome.Failed ->
             respondApiError(
                 error = outcome.code,
-                status = failureStatus(outcome.code),
+                status = outcome.category.status(),
                 detail = outcome.detail,
             )
     }
 
-private fun failureStatus(code: String): HttpStatusCode =
-    when (code) {
-        in callerActionableCodes -> HttpStatusCode.Forbidden
-        in transientConflictCodes -> HttpStatusCode.Conflict
-        else -> HttpStatusCode.BadGateway
+/**
+ * Three categories, three statuses — and no vendor codes in the HTTP shell.
+ *
+ * The provider's own code still goes out in the body, because that is what the
+ * frontend turns into a sentence. What the route no longer does is *interpret*
+ * it: two hand-kept sets of rec.gov codes lived here, so the route had to import
+ * `RecGovSessionCodes` to build them, and any code missing from both silently
+ * became a 502.
+ */
+private fun BookingFailureCategory.status(): HttpStatusCode =
+    when (this) {
+        BookingFailureCategory.CALLER_ACTION -> HttpStatusCode.Forbidden
+        BookingFailureCategory.RETRY_LATER -> HttpStatusCode.Conflict
+        BookingFailureCategory.UPSTREAM -> HttpStatusCode.BadGateway
     }
 
 private fun refusalStatus(code: String): HttpStatusCode =

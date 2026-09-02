@@ -47,9 +47,15 @@ roadtrip:
       # `atc` watch and refreshes their sessions.
       keepalive-interval: ${RECGOV_KEEPALIVE_INTERVAL:15m}
       # Budget for the session preflight and the one unattended re-login that
-      # run before a hold. Short: an ATC racing other users cannot spend the
-      # full companion timeout twice before it even starts.
-      fire-timeout: ${RECGOV_FIRE_TIMEOUT:30s}
+      # run before a hold. Shorter than the cart run — an ATC racing other users
+      # cannot spend the full companion timeout twice before it even starts —
+      # but it still has to clear the companion's own refresh ceiling (a browser
+      # launch, then navigation retries), or the recovery it pays for is cut off
+      # from this side and reported as an unreachable companion.
+      #
+      # Left blank on purpose: it then defaults to a third of companion-timeout,
+      # so the two move together. Set RECGOV_FIRE_TIMEOUT to override.
+      fire-timeout: ${RECGOV_FIRE_TIMEOUT:}
   security:
     # AES-256-GCM key for per-user secret storage (SecretCipher), base64 of
     # 32 bytes. Absent or blank disables secret storage: SecretsConfig returns

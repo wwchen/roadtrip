@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.booking
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -11,6 +12,7 @@ import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionSessionHealth
 import ca.floo.roadtrip.service.settings.RecGovProfileSessionPort
 import ca.floo.roadtrip.service.settings.RecGovSessionCodes
+import ca.floo.roadtrip.support.runCatchingCancellable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -27,6 +29,69 @@ internal const val COMPANION_ERROR_DETAIL = "the booking service hit an internal
 
 private const val FIELD_PROFILE_ID = "profile_id"
 
+/**
+ * Every companion code this adapter can surface, and who has to act on it.
+ *
+ * This table is the whole reason the layers above can stay vendor-agnostic: the
+ * route used to keep two sets of these codes itself, and the recovery path used
+ * to erase them all into `recgov_session_expired` — which told a user who had
+ * just removed their credentials, or whose companion was down, to "re-login in
+ * Settings". Anything absent here is [BookingFailureCategory.UPSTREAM], which is
+ * the safe default: an unfamiliar failure is ours until someone classifies it.
+ */
+private val failureCategories: Map<String, BookingFailureCategory> =
+    buildMap {
+        // The caller signs in, saves credentials, or completes a challenge.
+        listOf(
+            RecGovSessionCodes.SESSION_EXPIRED,
+            RecGovSessionCodes.SESSION_LAPSED,
+            RecGovSessionCodes.SPA_LOGGED_OUT,
+            RecGovSessionCodes.REFRESH_FAILED,
+            RecGovSessionCodes.COMPANION_LOGIN_FAILED,
+            RecGovSessionCodes.LOGIN_FAILED,
+            RecGovSessionCodes.NOT_AUTHENTICATED,
+            RecGovSessionCodes.NOT_CONFIGURED,
+            RecGovSessionCodes.MFA_REQUIRED,
+        ).forEach { put(it, BookingFailureCategory.CALLER_ACTION) }
+
+        // Nothing is broken: something else holds the profile, the pool is full,
+        // rec.gov is throttling us, or the site went in the seconds it took to
+        // drive the browser.
+        listOf(
+            RecGovSessionCodes.PROFILE_BUSY,
+            RecGovSessionCodes.BROWSER_CAP_REACHED,
+            RecGovSessionCodes.LOGIN_BACKOFF,
+            RecGovSessionCodes.CAPTCHA_REQUIRED,
+            BookingActionCodes.CART_NOT_ADDED,
+            BookingActionCodes.CONFIRMATION_DISABLED,
+            BookingActionCodes.DATES_NOT_OFFERED,
+            BookingActionCodes.NO_RESERVE_BUTTON,
+        ).forEach { put(it, BookingFailureCategory.RETRY_LATER) }
+    }
+
+private fun categoryOf(code: String): BookingFailureCategory = failureCategories[code] ?: BookingFailureCategory.UPSTREAM
+
+/**
+ * A sentence for a refusal the companion did not explain.
+ *
+ * The owner's email renders `detail ?: error`, so a companion answer with no
+ * `detail` used to reach them as the bare word `mfa_required`. One line per
+ * category rather than one per code: the copy has to stay true for every member
+ * of its category, and what the owner can actually do about it is a
+ * category-level fact. The code rides along because it is the one thing that
+ * makes a support report actionable — the same bargain `settings-errors.ts`
+ * strikes for an unmapped code.
+ */
+private fun undetailed(
+    code: String,
+    category: BookingFailureCategory,
+): String =
+    when (category) {
+        BookingFailureCategory.CALLER_ACTION -> "$code — this needs your attention in Settings"
+        BookingFailureCategory.RETRY_LATER -> "$code — the hold could not be made this time"
+        BookingFailureCategory.UPSTREAM -> COMPANION_ERROR_DETAIL
+    }
+
 internal class RecGovBookingAdapter(
     private val companionAtc: RecGovAtcExecutor,
     /**
@@ -34,6 +99,11 @@ internal class RecGovBookingAdapter(
      * custodian — the preflight is then skipped rather than failing every hold.
      */
     private val session: RecGovProfileSessionPort? = null,
+    /**
+     * Told about every hold that reaches the browser, so the keepalive sweep can
+     * stay off a profile the fire path is using. Null where there is no sweep.
+     */
+    private val recentFires: RecentAtcFires? = null,
 ) : BookingAdapter {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -65,7 +135,13 @@ internal class RecGovBookingAdapter(
     override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
         if (!can(BookingAction.ADD_TO_CART, request.target)) return AddToCartResult.Unsupported
         val owner = UserId(request.ownerUserId)
-        val payload = request.toAtcPayload(profileIdFor(owner))
+        val profileId = profileIdFor(owner)
+        val payload = request.toAtcPayload(profileId)
+        // Claimed before the preflight, not just before the POST: a preflight
+        // that has to refresh or re-log-in drives a browser behind the same
+        // per-profile lock. The whole run is the stretch the keepalive stays out
+        // of, and a fire that ends at the preflight costs it one skipped refresh.
+        recentFires?.record(profileId)
         preflight(owner, request.allowUnattendedRelogin)?.let { blocker -> return blocker.toFailure(payload) }
         return request.addToCartViaCompanion(payload)
     }
@@ -124,6 +200,16 @@ internal class RecGovBookingAdapter(
         return if (allowRelogin) reLogin(client, owner, healthCode) else sessionExpired()
     }
 
+    /**
+     * The re-login's own answer, not a stand-in for it.
+     *
+     * Every refusal used to be rewritten to `recgov_session_expired` with
+     * "re-login in Settings" — so a user with no credentials stored, a companion
+     * at its browser cap, and a profile busy behind someone else's MFA challenge
+     * were all told to do the one thing that could not help. The companion
+     * already answers with the reason; passing it through is both less code and
+     * the truth.
+     */
     private suspend fun reLogin(
         client: RecGovProfileSessionPort,
         owner: UserId,
@@ -142,7 +228,7 @@ internal class RecGovBookingAdapter(
                     recovery.code,
                     recovery.detail,
                 )
-                PreflightBlocker(RECGOV_SESSION_EXPIRED_ERROR, RECGOV_SESSION_EXPIRED_DETAIL)
+                PreflightBlocker(recovery.code, recovery.detail)
             }
         }
 
@@ -150,24 +236,39 @@ internal class RecGovBookingAdapter(
 
     private fun profileIdFor(owner: UserId): String = session?.profileId(owner) ?: owner.value.toString()
 
+    /**
+     * The one place this adapter turns a companion code into a failure: the
+     * category and the fallback sentence are decided together, so neither can be
+     * forgotten at a call site.
+     */
+    private fun failed(
+        code: String,
+        detail: String?,
+        payload: JsonObject,
+        response: JsonObject?,
+    ): AddToCartResult.Failed {
+        val category = categoryOf(code)
+        return AddToCartResult.Failed(
+            providerId = id,
+            error = code,
+            detail = detail ?: undetailed(code, category),
+            category = category,
+            request = payload,
+            response = response,
+        )
+    }
+
     private data class PreflightBlocker(
         val error: String,
         val detail: String?,
     )
 
-    private fun PreflightBlocker.toFailure(payload: JsonObject): AddToCartResult.Failed =
-        AddToCartResult.Failed(
-            providerId = id,
-            error = error,
-            detail = detail,
-            request = payload,
-            response = null,
-        )
+    private fun PreflightBlocker.toFailure(payload: JsonObject): AddToCartResult.Failed = failed(error, detail, payload, response = null)
 
     private suspend fun AddToCartRequest.addToCartViaCompanion(payload: JsonObject): AddToCartResult =
         when (
             val outcome =
-                runCatching { companionAtc.addToCart(payload) }
+                runCatchingCancellable { companionAtc.addToCart(payload) }
                     .getOrElse { RecGovAtcOutcome.Failed(error = ERROR_COMPANION_EXCEPTION, detail = it.message) }
         ) {
             is RecGovAtcOutcome.Completed ->
@@ -176,14 +277,7 @@ internal class RecGovBookingAdapter(
                     request = payload,
                     response = outcome.response,
                 )
-            is RecGovAtcOutcome.Failed ->
-                AddToCartResult.Failed(
-                    providerId = id,
-                    error = outcome.error,
-                    detail = outcome.detail,
-                    request = payload,
-                    response = outcome.response,
-                )
+            is RecGovAtcOutcome.Failed -> failed(outcome.error, outcome.detail, payload, outcome.response)
         }
 
     private fun AddToCartRequest.toAtcPayload(profileId: String): JsonObject =

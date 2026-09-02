@@ -59,12 +59,19 @@ data class RecGovAtcConfig(
      * The budget for the checks that run *before* a hold: the session
      * preflight and the one unattended re-login.
      *
-     * Much shorter than [companionTimeout], which sizes a full browser-driven
-     * cart run. These two are cheap when the profile is warm, and an ATC racing
-     * other users cannot afford to spend the ATC budget twice over before it
-     * even starts — by then the site is gone.
+     * Shorter than [companionTimeout], which sizes a full browser-driven cart
+     * run: these are cheap when the profile is warm, and an ATC racing other
+     * users cannot afford to spend the ATC budget twice over before it even
+     * starts — by then the site is gone.
+     *
+     * Derived from [companionTimeout] rather than fixed, because it is a
+     * *fraction* of the cart-run budget and the two have to move together. As a
+     * standalone 30s constant it sat below the companion's own refresh ceiling
+     * (a browser launch, then navigation retries), so the recovery it exists to
+     * pay for was cut off from this side before the companion could finish it —
+     * and the client reported that as an unreachable companion.
      */
-    val fireTimeout: Duration = defaultFireTimeout,
+    val fireTimeout: Duration = companionTimeout.dividedBy(FIRE_TIMEOUT_SHARE_OF_RUN),
 ) {
     init {
         require(companionTimeout.isPositive()) { "recgov ATC companionTimeout must be positive" }
@@ -77,16 +84,24 @@ data class RecGovAtcConfig(
     companion object {
         private val defaultCompanionTimeout: Duration = Duration.ofSeconds(180)
         private val defaultKeepaliveInterval: Duration = Duration.ofMinutes(15)
-        private val defaultFireTimeout: Duration = Duration.ofSeconds(30)
 
-        fun fromConfig(config: ConfigSection): RecGovAtcConfig =
-            RecGovAtcConfig(
+        /**
+         * A third of the cart-run budget: enough for a browser launch and the
+         * companion's navigation retries, and still leaving two thirds of the
+         * run for the hold the checks exist to make possible.
+         */
+        const val FIRE_TIMEOUT_SHARE_OF_RUN = 3L
+
+        fun fromConfig(config: ConfigSection): RecGovAtcConfig {
+            val companionTimeout = config.duration("companion-timeout", defaultCompanionTimeout)
+            return RecGovAtcConfig(
                 companionBaseUrl = config.value("companion-base-url")?.trimEnd('/'),
-                companionTimeout = config.duration("companion-timeout", defaultCompanionTimeout),
+                companionTimeout = companionTimeout,
                 companionApiToken = config.value("companion-api-token"),
                 keepaliveInterval = config.duration("keepalive-interval", defaultKeepaliveInterval),
-                fireTimeout = config.duration("fire-timeout", defaultFireTimeout),
+                fireTimeout = config.duration("fire-timeout", companionTimeout.dividedBy(FIRE_TIMEOUT_SHARE_OF_RUN)),
             )
+        }
     }
 }
 

@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.api.RECGOV_CART_URL
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
@@ -87,10 +88,17 @@ internal sealed interface AddToCartOutcome {
         val code: String,
     ) : AddToCartOutcome
 
-    /** The adapter ran and did not get a hold. [code] is the companion's own. */
+    /**
+     * The adapter ran and did not get a hold.
+     *
+     * [code] is the provider's own, for the sentence the user reads; [category]
+     * is the adapter's verdict on who has to act, which is what the route turns
+     * into a status. The route never inspects the code.
+     */
     data class Failed(
         val code: String,
         val detail: String?,
+        val category: BookingFailureCategory,
     ) : AddToCartOutcome
 }
 
@@ -182,7 +190,7 @@ internal class BookingActionService(
                     result.error,
                     result.detail,
                 )
-                AddToCartOutcome.Failed(result.error, result.detail)
+                AddToCartOutcome.Failed(result.error, result.detail, result.category)
             }
             // The registry disagreeing with the resolver means the two are out
             // of step; report it as the same "we cannot book this" the gate does.

@@ -11,6 +11,7 @@ import ca.floo.roadtrip.service.booking.BookingActionCodes
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
+import ca.floo.roadtrip.support.runCatchingCancellable
 import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
 
@@ -77,7 +78,7 @@ internal class AtcTriggerActionHandler(
         val nextTarget = next.request.target
         val startedAt = System.nanoTime()
         val result =
-            runCatching { bookings.addToCart(next.request) }
+            runCatchingCancellable { bookings.addToCart(next.request) }
                 .onFailure {
                     log.error(
                         "failed to execute ATC booking action for watch_id={} campsite_id={} date={}",
