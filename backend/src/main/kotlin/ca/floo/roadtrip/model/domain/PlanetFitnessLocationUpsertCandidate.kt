@@ -12,6 +12,7 @@ data class PlanetFitnessLocationUpsertCandidate(
     val country: String? = null,
     val phone: String? = null,
     val infoUrl: String? = null,
+    val openingHours: String? = null,
     val amenities: JsonElement? = null,
     val payload: JsonElement? = null,
 )

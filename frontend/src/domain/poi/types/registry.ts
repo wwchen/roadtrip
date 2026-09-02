@@ -19,68 +19,71 @@ import { PlacePoiPage, type PlaceTypeSpec } from './place';
  * page — identity, one action, provenance — rather than an error.
  */
 const PLACE_TYPES: Record<string, PlaceTypeSpec> = {
+  // Generic: `name`, `brand` and `website` all arrive from the ETL, so nothing
+  // here names a chain and a second one is a catalog row. No spec block — hours,
+  // phone, address and website are all shown above the rule already.
   gym: {
-    eyebrow: 'Gym · Planet Fitness',
-    fallbackName: 'Planet Fitness',
+    // Not 'Gym · <chain>': the title is already the chain, so it printed twice.
+    eyebrow: 'Gym',
+    fallbackName: 'Gym',
     kind: 'PF',
-    heading: 'This location',
-    fields: [
-      { label: 'Hours', key: 'opening_hours' },
-      { label: 'Phone', key: 'phone' },
-    ],
-    websiteLabel: 'Planet Fitness page',
-    fallbackSearch: (p) =>
-      `https://www.planetfitness.com/gyms?q=${encodeURIComponent(
-        [p.city, p.state].filter((part) => typeof part === 'string' && part).join(' '),
-      )}`,
+    websiteLabel: 'Gym page',
     call: true,
   },
   trailhead: {
     eyebrow: 'Trailhead',
     fallbackName: 'Trailhead',
     kind: 'TH',
-    heading: 'The hike',
-    fields: [
-      { label: 'Distance', key: 'trail_distance' },
-      { label: 'Gain', key: 'trail_gain' },
-      { label: 'Parking', key: 'trail_parking' },
-      { label: 'Permit', key: 'trail_permit' },
-    ],
+    specs: {
+      heading: 'The hike',
+      fields: [
+        { label: 'Distance', key: 'trail_distance' },
+        { label: 'Gain', key: 'trail_gain' },
+        { label: 'Parking', key: 'trail_parking' },
+        { label: 'Permit', key: 'trail_permit' },
+      ],
+    },
     websiteLabel: 'Trail page',
   },
   town: {
     eyebrow: 'Town stop',
     fallbackName: 'Town',
     kind: 'TOWN',
-    heading: 'On the way',
-    fields: [
-      { label: 'Fuel', key: 'fuel' },
-      { label: 'Groceries', key: 'groceries' },
-      { label: 'Cell', key: 'cell_service' },
-      { label: 'Last stop', key: 'last_stop' },
-    ],
+    specs: {
+      heading: 'On the way',
+      fields: [
+        { label: 'Fuel', key: 'fuel' },
+        { label: 'Groceries', key: 'groceries' },
+        { label: 'Cell', key: 'cell_service' },
+        { label: 'Last stop', key: 'last_stop' },
+      ],
+    },
   },
   pin: {
     eyebrow: 'Dropped pin',
     fallbackName: 'Dropped pin',
     kind: 'PLACE',
-    heading: 'What we know',
-    fields: [
-      { label: 'Inside', key: 'inside_region' },
-      { label: 'Nearest', key: 'nearest_place' },
-      { label: 'Elevation', key: 'elevation' },
-    ],
+    specs: {
+      heading: 'What we know',
+      fields: [
+        { label: 'Inside', key: 'inside_region' },
+        { label: 'Nearest', key: 'nearest_place' },
+        { label: 'Elevation', key: 'elevation' },
+      ],
+    },
   },
   state: {
     eyebrow: 'State',
     fallbackName: 'State',
     kind: 'PLACE',
-    heading: 'Camping here',
-    fields: [
-      { label: 'Units', key: 'unit_count' },
-      { label: 'With camping', key: 'camping_unit_count' },
-      { label: 'Agencies', key: 'agencies' },
-    ],
+    specs: {
+      heading: 'Camping here',
+      fields: [
+        { label: 'Units', key: 'unit_count' },
+        { label: 'With camping', key: 'camping_unit_count' },
+        { label: 'Agencies', key: 'agencies' },
+      ],
+    },
   },
 };
 

@@ -219,19 +219,37 @@ export const State: Story = {
 };
 
 /** OSM-imported, so the record is sparse — and renders sparse rather than as a page
- *  of empty headings. */
+ *  of empty headings. `brand` names the button, so no chain is hard-coded. */
 export const Gym: Story = {
   render: () => (
     <TypePage
       properties={{
         category: 'planet_fitness_location',
         name: 'Planet Fitness',
+        brand: 'Planet Fitness',
         street: '1205 Southeast 16th Court',
         city: 'Ankeny',
         state: 'IA',
         postcode: '50021',
         opening_hours: 'Mo-Fr 05:00-22:00',
         phone: '+1 515-555-0113',
+        website: 'https://www.planetfitness.com/gyms/ankeny-ia',
+      }}
+    />
+  ),
+};
+
+/** The common case: most OSM gym elements tag no website and no hours. */
+export const GymSparse: Story = {
+  render: () => (
+    <TypePage
+      properties={{
+        category: 'planet_fitness_location',
+        name: 'Planet Fitness',
+        brand: 'Planet Fitness',
+        street: '1205 Southeast 16th Court',
+        city: 'Ankeny',
+        state: 'IA',
       }}
     />
   ),

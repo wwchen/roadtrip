@@ -28,7 +28,6 @@ const DEFAULT_PRICE_CURRENCY = 'USD';
 const CATEGORY_CAMPGROUND = 'campground';
 const CATEGORY_NATIONAL_PARK = 'national-park';
 const CATEGORY_STATE_PARK = 'state-park';
-const PLANET_FITNESS_CATEGORIES = ['planet_fitness_location', 'planet-fitness'];
 const SUPERCHARGER_CATEGORIES = ['tesla_supercharger', 'supercharger'];
 
 type Props = Record<string, unknown>;
@@ -136,9 +135,6 @@ export function flattenHydratedPoi(f: PoiFeature): FlatPoiFeature {
     flat.Loc_Nm = raw.Loc_Nm || raw.official_name || '';
     flat.GIS_Acres = raw.GIS_Acres ?? raw.acres ?? null;
     flat.Mang_Name = raw.Mang_Name || raw.designation || '';
-  }
-  if (PLANET_FITNESS_CATEGORIES.includes(p.category as string)) {
-    flat.opening_hours = raw.opening_hours || '';
   }
   if (SUPERCHARGER_CATEGORIES.includes(p.category as string)) {
     promoteSuperchargerFields(flat, p, raw);

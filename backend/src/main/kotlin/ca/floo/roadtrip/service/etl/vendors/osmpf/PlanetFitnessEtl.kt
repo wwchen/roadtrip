@@ -88,6 +88,7 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationUps
             phone = tags["phone"]?.takeIf { it.isNotBlank() },
             address = addressJson(address),
             infoUrl = tags["website"]?.takeIf { it.isNotBlank() },
+            openingHours = tags["opening_hours"]?.takeIf { it.isNotBlank() },
             // OSM stores the interesting per-element data as tags (key/value
             // strings). Surface the full tag map via extras so the drawer's
             // "Upstream data" accordion has all of it.

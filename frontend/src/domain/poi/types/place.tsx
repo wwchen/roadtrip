@@ -33,8 +33,6 @@ import {
 import { PoiPageShell, type PoiBlockSlots } from '../PoiPageShell';
 import { presentSpecs, type PoiTypeProps } from './common';
 
-type Props = Record<string, unknown>;
-
 /** One labelled row of the type's spec block, and the flat property that fills it. */
 export interface PlaceField {
   label: string;
@@ -48,14 +46,19 @@ export interface PlaceTypeSpec {
   fallbackName: string;
   /** The trip store's pin kind, which decides the marker colour once it is a stop. */
   kind: string;
-  /** The heading on the type's one spec block. */
-  heading: string;
-  /** The fields that block shows, in order. Absent properties drop out. */
-  fields: readonly PlaceField[];
-  /** Label for the record's own `website`, when it has one. */
+  /**
+   * The type's one spec block, or nothing. One member rather than two, so a type
+   * cannot carry fields with no heading to put them under — that combination
+   * renders nothing at all. Omitting it is a real answer: a gym shows every fact
+   * it has above the rule.
+   */
+  specs?: {
+    heading: string;
+    /** The fields the block shows, in order. Absent properties drop out. */
+    fields: readonly PlaceField[];
+  };
+  /** Fallback label for the record's `website`. `brand` wins when the API sends one. */
   websiteLabel?: string;
-  /** A search URL to fall back to when it does not. */
-  fallbackSearch?: (p: Props) => string;
   /** Whether to offer `tel:` buttons for the record's phone numbers. */
   call?: boolean;
 }
@@ -90,11 +93,14 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
     .join(', ');
 
   const mapsUrl = googleMapsUrl(name, lng, lat);
-  const website = text(p.website) || (spec.fallbackSearch ? spec.fallbackSearch(p) : '');
+  // No fallback search: a button promising a page must not land on a locator.
+  const website = text(p.website);
+  const brand = text(p.brand);
+  const websiteLabel = brand ? `${brand} page` : spec.websiteLabel;
   const photo = text(p.photo_url);
 
   const specs = presentSpecs(
-    spec.fields.map((field) => {
+    (spec.specs?.fields ?? []).map((field) => {
       const value = text(p[field.key]);
       return value ? { label: field.label, value } : null;
     }),
@@ -122,9 +128,9 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
             Open in Google Maps
           </Button>
         ) : null}
-        {website && spec.websiteLabel ? (
+        {website && websiteLabel ? (
           <Button variant="secondary" href={website} target="_blank" rel="noreferrer">
-            {spec.websiteLabel}
+            {websiteLabel}
           </Button>
         ) : null}
         {spec.call ? <CallButtons phone={p.phone} /> : null}
@@ -132,7 +138,9 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
       </PoiActions>
     ),
     ...(tags.length > 0 ? { glance: <PoiGlance tags={tags} /> } : null),
-    ...(specs.length > 0 ? { specs: <PoiSpecs list={{ heading: spec.heading, rows: specs }} /> } : null),
+    ...(spec.specs && specs.length > 0
+      ? { specs: <PoiSpecs list={{ heading: spec.specs.heading, rows: specs }} /> }
+      : null),
     ...(links.length > 0 ? { links: <PoiLinks links={links} /> } : null),
     ...(p.upstream
       ? {

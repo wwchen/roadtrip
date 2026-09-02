@@ -85,9 +85,41 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
     properties: { category: 'supercharger' },
   },
 
+  // A gym as `/api/pois/{id}` sends it: hours, brand and the tag map are named
+  // fields on `detail`. Nothing reaches into `payload.tags` any more.
   planetFitness: {
     id: 'pf-1',
-    properties: { category: 'planet-fitness', raw: { opening_hours: 'Mo-Su 00:00-24:00' } },
+    properties: {
+      category: 'planet-fitness',
+      name: 'Planet Fitness',
+      detail: {
+        phone: '+1 515-555-0113',
+        info_url: 'https://www.planetfitness.com/gyms/ankeny-ia',
+        opening_hours: 'Mo-Su 00:00-24:00',
+        brand: 'Planet Fitness',
+        upstream: { brand: 'Planet Fitness', opening_hours: 'Mo-Su 00:00-24:00' },
+        raw: {
+          location_id: 'node-123',
+          name: 'Planet Fitness',
+          opening_hours: 'Mo-Su 00:00-24:00',
+          brand: 'Planet Fitness',
+          payload: { type: 'node', id: 123 },
+        },
+      },
+    },
+  },
+
+  // The sparse end: an element that tagged nothing. `brand` is still there — it
+  // is a constant of the source, not something the element had to tag.
+  planetFitnessBare: {
+    id: 'pf-2',
+    properties: {
+      category: 'planet_fitness_location',
+      detail: {
+        brand: 'Planet Fitness',
+        raw: { location_id: 'node-9', name: 'Planet Fitness', payload: { type: 'node', id: 9 } },
+      },
+    },
   },
 
   nestedAddress: {
@@ -230,6 +262,27 @@ describe('supercharger promotion', () => {
   });
 });
 
+describe('a gym, whose facts all arrive named', () => {
+  test('carries hours, brand and the upstream table straight through', () => {
+    const p = flatten('planetFitness');
+    expect(p.opening_hours).toBe('Mo-Su 00:00-24:00');
+    expect(p.brand).toBe('Planet Fitness');
+    expect(p.upstream).toMatchObject({ brand: 'Planet Fitness', opening_hours: 'Mo-Su 00:00-24:00' });
+  });
+
+  test('takes its website from the canonical info_url, like every other category', () => {
+    expect(flatten('planetFitness').website).toBe('https://www.planetfitness.com/gyms/ankeny-ia');
+  });
+
+  test('a record the source tagged nothing about carries no hours and no table', () => {
+    const p = flatten('planetFitnessBare');
+    expect(p.opening_hours).toBeUndefined();
+    expect(p.upstream).toBeUndefined();
+    expect(p.website).toBe('');
+    expect(p.brand).toBe('Planet Fitness');
+  });
+});
+
 describe('address flattening', () => {
   test('reads a doubly-nested address object', () => {
     expect(flatten('nestedAddress')).toMatchObject({
@@ -286,6 +339,8 @@ describe('re-flattening', () => {
     ['nestedAddress'],
     ['malformedDetail'],
     ['noProperties'],
+    // Was NOT a no-op while hours were dug out of `raw`, which the first pass eats.
+    ['planetFitness'],
   ] as const)('is a no-op for %s', (key) => {
     const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));
     const twice = flattenHydratedPoi(structuredClone(once));
@@ -298,7 +353,6 @@ describe('re-flattening', () => {
     ['nationalPark', 'Loc_Nm', 'Lassen Volcanic National Park', ''],
     ['supercharger', 'stallCount', 12, 0],
     ['supercharger', 'powerKilowatt', 250, 0],
-    ['planetFitness', 'opening_hours', 'Mo-Su 00:00-24:00', ''],
   ] as const)('drops %s.%s on a second pass', (key, field, first, second) => {
     const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));
     const twice = flattenHydratedPoi(structuredClone(once));

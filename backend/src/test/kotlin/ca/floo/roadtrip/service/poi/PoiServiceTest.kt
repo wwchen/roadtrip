@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.poi
 
 import ca.floo.roadtrip.model.api.poi.PoiCategoryDetailSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
+import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -194,6 +195,68 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals(emptyList(), features)
     }
 
+    // The bug this pins: a gym's hours lived only in `payload.tags`, and every
+    // reader goes through `to_jsonb(planet_fitness_locations)`, which carries
+    // columns. Hours reached no caller, so the drawer's chip was dead on every
+    // gym in production.
+    @Test
+    fun `gym detail carries hours, brand and the upstream tag table`() {
+        val poiId = seedGym()
+
+        val detail = poiService().poiDetail(poiId)!!.properties.detail
+
+        assertEquals("Mo-Su 05:00-22:00", detail.openingHours)
+        assertEquals("Planet Fitness", detail.brand)
+        assertEquals(
+            "Mo-Su 05:00-22:00",
+            detail.upstream!!
+                .jsonObject["opening_hours"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `a gym the source tagged nothing about sends no hours and no upstream table`() {
+        val poiId = seedGym(openingHours = null, tagsJson = null)
+
+        val detail = poiService().poiDetail(poiId)!!.properties.detail
+
+        assertNull(detail.openingHours)
+        assertNull(detail.upstream, "an empty tag map must drop the table, not render it blank")
+        // The table is single-brand by construction, so this never goes missing.
+        assertEquals("Planet Fitness", detail.brand)
+    }
+
+    private fun seedGym(
+        openingHours: String? = "Mo-Su 05:00-22:00",
+        tagsJson: String? = """"tags":{"brand":"Planet Fitness","opening_hours":"Mo-Su 05:00-22:00"},""",
+    ): Long {
+        PlanetFitnessLocationRepo(ctx).upsertPlanetFitnessLocationBatch(
+            listOf(
+                PlanetFitnessLocationUpsertCandidate(
+                    locationId = GYM_LOCATION_ID,
+                    name = "Planet Fitness",
+                    latitude = 49.1,
+                    longitude = -123.1,
+                    country = "US",
+                    openingHours = openingHours,
+                    payload = Json.parseToJsonElement("""{${tagsJson ?: ""}"type":"node","id":448794721}"""),
+                ),
+            ),
+        )
+        return ctx
+            .fetchOne(
+                """
+                SELECT ppf.poi_id
+                FROM poi_planet_fitness_locations ppf
+                JOIN planet_fitness_locations pfl ON pfl.id = ppf.planet_fitness_location_id
+                WHERE pfl.location_id = ?
+                """.trimIndent(),
+                GYM_LOCATION_ID,
+            )!!
+            .get("poi_id", Long::class.java)
+    }
+
     private fun seedPoi(
         providerRefJson: String,
         propertiesJson: String = "{}",
@@ -237,6 +300,7 @@ class PoiServiceTest : SharedDbTest() {
 
     private companion object {
         const val SOURCE = "aspira"
+        const val GYM_LOCATION_ID = "node-448794721"
         val vancouverBbox = Bbox(west = -125.0, south = 47.0, east = -120.0, north = 51.0)
     }
 }
