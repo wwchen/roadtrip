@@ -5,6 +5,7 @@ import {
   indexWatchesByWindow,
   normalizeWatchCapabilities,
   stayEndDate,
+  cartGate,
   scopeSupportsAddToCart,
   supportsAddToCart,
   supportsWatchAlerts,
@@ -146,5 +147,28 @@ describe('indexing the user"s watches', () => {
     );
 
     expect([...watchedDates(index)].sort()).toEqual(['2026-08-11', '2026-08-14']);
+  });
+});
+
+describe('cartGate', () => {
+  const caps = (bookingActions: string[], triggerKinds: string[]) => ({
+    bookingActions: new Set(bookingActions),
+    triggerKinds: new Set(triggerKinds),
+  });
+
+  test('is unsupported when the scope has no cart', () => {
+    expect(cartGate(caps([], ['slack_notify']), true)).toBe('unsupported');
+  });
+
+  test('is ready when the scope has a cart and the caller may drive it', () => {
+    expect(cartGate(caps(['add_to_cart'], ['atc']), true)).toBe('ready');
+  });
+
+  test('is signed-out when the scope has a cart and nobody is signed in', () => {
+    expect(cartGate(caps(['add_to_cart'], []), false)).toBe('signed-out');
+  });
+
+  test('is no-credentials when signed in without the atc trigger', () => {
+    expect(cartGate(caps(['add_to_cart'], ['slack_notify']), true)).toBe('no-credentials');
   });
 });
