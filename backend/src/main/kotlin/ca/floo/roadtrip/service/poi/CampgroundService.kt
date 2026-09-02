@@ -33,10 +33,12 @@ internal class CampgroundService(
         val detail = campgroundRepo.findPoiDetailByPoi(poi.id) ?: return null
         val campground = detail.campground
         val raw = Json.parseToJsonElement(detail.propertiesJson)
-        val rawObject = raw as? JsonObject ?: JsonObject(emptyMap())
         val infoUrl = campground.links.firstObjectStringProperty(URL_KEY)
-        val description = rawObject.stringProperty("description")
-        val photoUrl = rawObject.stringProperty("photo_url")
+        val description =
+            campground.mediumDescription
+                ?: campground.shortDescription
+                ?: campground.longDescription
+        val photoUrl = campground.photos.firstObjectStringProperty(URL_KEY)
         val dateContext =
             dateResolver.context(
                 lat = campground.location.doubleProperty(LATITUDE_KEY),
@@ -96,12 +98,6 @@ internal class CampgroundService(
         const val MIN_POI_ZOOM: Int = 6
     }
 }
-
-private fun JsonObject.stringProperty(key: String): String? =
-    (this[key] as? JsonPrimitive)
-        ?.contentOrNull
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
 
 private fun JsonElement.stringProperty(key: String): String? =
     ((this as? JsonObject)?.get(key) as? JsonPrimitive)

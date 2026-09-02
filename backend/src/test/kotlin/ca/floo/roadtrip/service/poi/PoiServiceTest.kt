@@ -222,6 +222,33 @@ class PoiServiceTest : SharedDbTest() {
         )
     }
 
+    @Test
+    fun `campground detail reads description and photo from canonical columns`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "232869",
+                name = "Cold Creek",
+                lon = -120.31,
+                lat = 39.54,
+                source = "recgov",
+            )
+        ctx.execute(
+            """
+            UPDATE campgrounds
+            SET medium_description = ?, photos = ?::jsonb
+            WHERE id = ?
+            """.trimIndent(),
+            "Camp among redwoods.",
+            """[{"url":"https://example.test/large.jpg"}]""",
+            fixture.catalogId,
+        )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals("Camp among redwoods.", detail.description)
+        assertEquals("https://example.test/large.jpg", detail.photoUrl)
+    }
+
     // The bug this pins: a gym's hours lived only in `payload.tags`, and every
     // reader goes through `to_jsonb(planet_fitness_locations)`, which carries
     // columns. Hours reached no caller, so the drawer's chip was dead on every
