@@ -162,8 +162,8 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
 const flatten = (key: keyof typeof FIXTURES) =>
   flattenHydratedPoi(structuredClone(FIXTURES[key]!)).properties;
 
-describe('campground promotion', () => {
-  test('promotes management, contact, and location facts to flat names', () => {
+describe('a campground, whose facts all arrive named', () => {
+  test('carries management, contact, and location facts through from `detail`', () => {
     const p = flatten('campgroundNested');
     expect(p.agency).toBe('National Park Service');
     expect(p.phone).toBe('530.336.5521');
@@ -208,8 +208,9 @@ describe('campground promotion', () => {
 });
 
 describe('a charger, whose facts all arrive named', () => {
-  test('carries its canonical columns straight through', () => {
-    expect(flatten('supercharger')).toMatchObject({
+  test('carries its canonical columns, and the upstream index/detail captures, straight through', () => {
+    const p = flatten('supercharger');
+    expect(p).toMatchObject({
       stall_count: 12,
       power_kilowatt: 250,
       status: 'CONSTRUCTION',
@@ -218,10 +219,7 @@ describe('a charger, whose facts all arrive named', () => {
       twenty_four_seven: true,
       open_to_non_teslas: false,
     });
-  });
-
-  test('nests the index and detail captures under upstream', () => {
-    const upstream = flatten('supercharger').upstream as Record<string, unknown>;
+    const upstream = p.upstream as Record<string, unknown>;
     expect(upstream.index).toEqual({ supercharger_function: { site_status: 'CONSTRUCTION' } });
     expect(upstream.detail).toEqual({ commonSiteName: 'Downtown Redding' });
   });
@@ -301,11 +299,14 @@ describe('re-flattening', () => {
   test.each([
     ['campgroundNested'],
     ['campgroundJsonStrings'],
+    ['campgroundUpstream'],
     ['nestedAddress'],
     ['malformedDetail'],
     ['noProperties'],
+    ['empty'],
     // Was NOT a no-op while hours were dug out of `raw`, which the first pass eats.
     ['planetFitness'],
+    ['planetFitnessBare'],
     ['supercharger'],
   ] as const)('is a no-op for %s', (key) => {
     const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));

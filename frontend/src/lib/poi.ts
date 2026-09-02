@@ -7,12 +7,6 @@
 //
 // Re-flattening is a no-op for every path here, and the tests pin that. Call
 // it once per hydration all the same — nothing downstream needs a second pass.
-//
-// The provider-specific branches at the bottom are deliberately kept as-is
-// rather than reshaped into a registry. They encode which upstream field names
-// each vendor actually ships, they are the highest-risk part of this port, and
-// Phase 4 rewrites their consumers anyway — a behavior-faithful move now keeps
-// the diff reviewable against the original.
 
 const CATEGORY_CAMPGROUND = 'campground';
 
