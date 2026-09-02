@@ -399,6 +399,59 @@ class PoiServiceTest : SharedDbTest() {
         )
     }
 
+    // Campflare's shape, not recgov's: photos carry `original_url` (never
+    // `url`), and contact carries `primary_phone`/`primary_email` (never
+    // `phone`/`email`). A fixture seeded with recgov's keys can't catch a
+    // regression in the Campflare key-preference list.
+    @Test
+    fun `campground detail reads photo, phone and email from Campflare's keys`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "campflare-447",
+                name = "Upper Pines",
+                lon = -119.565,
+                lat = 37.739,
+                source = "campflare",
+            )
+        ctx.execute(
+            """
+            UPDATE campgrounds
+            SET photos = ?::jsonb, contact = ?::jsonb
+            WHERE id = ?
+            """.trimIndent(),
+            """[{"original_url":"https://cdn.example/p.jpg"}]""",
+            """{"primary_phone":"555-0100","primary_email":"info@example.test"}""",
+            fixture.catalogId,
+        )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals("https://cdn.example/p.jpg", detail.photoUrl)
+        assertEquals("555-0100", detail.phone)
+        assertEquals("info@example.test", detail.email)
+    }
+
+    // Mirrors the charger NULL-coercion pin below: nothing in this repo's ETL
+    // ever writes these four columns for a recgov campground, so they must
+    // come back null, not the primitive-class zero value (0.0 / false).
+    @Test
+    fun `campground with no rig-size data serves null, not zero or false`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "no-rig-data",
+                name = "Somewhere",
+                lon = -119.565,
+                lat = 37.739,
+            )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertNull(detail.maxRvLength)
+        assertNull(detail.maxTrailerLength)
+        assertNull(detail.hasPullThroughSites)
+        assertNull(detail.bigRigFriendly)
+    }
+
     // Charger fields are whole-column reads too: a wrong RHS (e.g.
     // `trailerFriendly = supercharger.twentyFourSeven`) still compiles and still
     // passes a type-blind test, so this asserts each field against a distinct
