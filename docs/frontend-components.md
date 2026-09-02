@@ -57,6 +57,30 @@ features, features and pages may import domains, and domains never import featur
 compose multiple features to exercise a page, but production composition belongs in
 `pages/`.
 
+## Capability gates: show the control, name the step
+
+A capability the current caller cannot use is **not** a reason to hide the control.
+Hiding it is indistinguishable from the campground not having the feature, and the
+two states need different sentences. So a gated control keeps its shape and its
+action becomes the one step that unlocks it.
+
+- `cartGate` in `@/lib/watch-windows` turns the week response's capability block
+  plus "is anyone signed in" into `ready | signed-out | no-credentials |
+  unsupported`. It needs no extra request: the scope's `add_to_cart` booking
+  action and this caller's `atc` trigger kind are separate facts already on the
+  wire, and the gap between them *is* "you have no rec.gov credentials".
+- `SiteMatrix`'s `watchGate` is the same idea for watches: `ready | signed-out |
+  blocked`. A watchable cell is a button in the first two, and the popover it
+  opens carries `WatchSignInGate` instead of `WatchEditor`.
+- Only `unsupported` / `blocked` fall back to inert text, because there really is
+  nothing the visitor could do.
+
+`SettingsHost` (`src/app/SettingsHost.tsx`) is the settings modal's one mount
+point, on every page, driven by `stores/settingsStore`. Anything that wants to
+send a user to a settings section calls `openSettings('booking')`. The account
+pill is only a trigger now — it renders on the map page alone, and the surfaces
+that link into Settings do not.
+
 ## The POI page (`src/domain/poi/`)
 
 Every pin opens the same page. The type decides which blocks appear, and nothing
