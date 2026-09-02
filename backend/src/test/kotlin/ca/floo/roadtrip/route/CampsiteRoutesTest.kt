@@ -38,6 +38,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.Route
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -54,6 +55,26 @@ import kotlin.test.assertTrue
 
 private const val UNKNOWN_POI_ID = 999_999L
 private const val DEFAULT_WINDOW_DAYS = 7
+
+// Every nullable campsite column the recgov ETL leaves unwritten, in the wire
+// names `Campsite` serializes them under.
+private val unwrittenCampsiteFields =
+    listOf(
+        "latitude",
+        "longitude",
+        "firepit",
+        "picnic_table",
+        "ada_accessible",
+        "water_hookups",
+        "electric_hookups",
+        "sewer_hookups",
+        "max_people",
+        "max_cars",
+        "pull_through",
+        "driveway_length",
+        "max_rv_length",
+        "max_trailer_length",
+    )
 
 class CampsiteRoutesTest : SharedDbTest() {
     @BeforeEach
@@ -139,6 +160,34 @@ class CampsiteRoutesTest : SharedDbTest() {
                     .jsonObject["id"]!!
                     .jsonPrimitive.long,
             )
+        }
+
+    // The recgov ETL never writes these columns. Reading them with the JVM
+    // primitive class turned every absent fact into "no firepit", "sleeps 0",
+    // "at null island" — served as if the source had said so.
+    @Test
+    fun `GET campsites serves unwritten facts as null, not zero or false`() =
+        testApplication {
+            application { routeTestApplication { campsiteRoutesUnderTest() } }
+            val (poiId, _) = seedRecgovPoiWithCampsite()
+
+            val resp = client.get("/api/pois/$poiId/campsites")
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val campsite =
+                Json
+                    .parseToJsonElement(resp.bodyAsText())
+                    .jsonObject["campsites"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            // `explicitNulls = false` on the wire, so an absent fact is an absent key.
+            val fabricated =
+                unwrittenCampsiteFields.filter { field ->
+                    val value = campsite[field]
+                    value != null && value != JsonNull
+                }
+            assertEquals(emptyList(), fabricated, "facts the recgov source never asserted")
         }
 
     @Test

@@ -271,7 +271,10 @@ class AvailabilityRepo(
         val fromStatusRaw = r.get("from_status", String::class.java)
         return StatusRun(
             campsiteId = r.get("campsite_id", Long::class.java),
-            runId = r.get("run_id", Long::class.java),
+            // `availability.run_id` is nullable (ON DELETE SET NULL), and
+            // `Long::class.java` is the primitive class — jOOQ would coerce that
+            // NULL to 0 rather than leaving the run unattributed.
+            runId = r.get("run_id", Long::class.javaObjectType),
             targetDate = r.get("target_date", LocalDate::class.java),
             fromStatus = fromStatusRaw?.let { AvailabilityStatus.parse(it) },
             toStatus = toStatus,
