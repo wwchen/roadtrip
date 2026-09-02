@@ -10,6 +10,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AvailabilityRepoTest : SharedDbTest() {
@@ -146,6 +147,27 @@ class AvailabilityRepoTest : SharedDbTest() {
                 OffsetDateTime.now(),
             ),
         )
+    }
+
+    // `availability.run_id` is nullable, so reading it with the JVM primitive
+    // class reports run 0 instead of "no run".
+    @Test
+    fun `an observation recorded outside a run reports no run id, not run zero`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        repo.recordObservations(
+            runId = null,
+            listOf(
+                AvailabilityRepo.Observation(
+                    campsiteId,
+                    date,
+                    AvailabilityStatus.AVAILABLE,
+                    Instant.parse("2026-06-18T10:00:00Z"),
+                ),
+            ),
+        )
+
+        assertNull(repo.listForCampsite(campsiteId).single().runId)
     }
 
     @Test
