@@ -65,10 +65,6 @@ export function flattenHydratedPoi(f: PoiFeature): FlatPoiFeature {
   delete flat.detail;
   delete flat.raw;
 
-  if (p.category === CATEGORY_CAMPGROUND) {
-    promoteCanonicalCampgroundFields(flat, p, raw);
-  }
-
   // Address arrives as a nested object from /api/pois/{id} (the JSONB column).
   // Flatten its parts onto the top of properties for every category that
   // surfaces an address — popups read them directly.
@@ -210,58 +206,6 @@ function promoteSuperchargerFields(flat: Props, p: Props, raw: Props): void {
     ...(indexPayload ? { index: indexPayload } : {}),
     detail: upstreamDetail,
   };
-}
-
-function promoteCanonicalCampgroundFields(flat: Props, p: Props, raw: Props): void {
-  const management = (raw.management && typeof raw.management === 'object' ? raw.management : {}) as Props;
-  const contact = (raw.contact && typeof raw.contact === 'object' ? raw.contact : {}) as Props;
-  const location = (raw.location && typeof raw.location === 'object' ? raw.location : {}) as Props;
-  const metadata = (raw.metadata && typeof raw.metadata === 'object' ? raw.metadata : {}) as Props;
-
-  flat.description = firstText(p.description, flat.description, raw.description);
-  flat.photo_url = firstText(p.photo_url, flat.photo_url, campgroundPhotoUrl(raw.photos));
-  flat.agency = firstText(
-    p.agency,
-    flat.agency,
-    management.agency_name,
-    management.agency,
-    management.name,
-  );
-  flat.phone = firstText(p.phone, flat.phone, contact.primary_phone, contact.phone);
-  flat.email = firstText(p.email, contact.email, contact.primary_email);
-  flat.reserve_url = firstText(p.reserve_url, flat.reserve_url, raw.reservation_url);
-  flat.status = firstText(p.status, flat.status, raw.status);
-  flat.status_description = firstText(p.status_description, flat.status_description);
-  flat.kind = firstText(p.kind, flat.kind, raw.kind);
-  flat.price = p.price ?? raw.price ?? flat.price;
-  flat.schedule = p.schedule ?? raw.default_campsite_schedule ?? flat.schedule;
-  flat.default_campsite_schedule = flat.schedule;
-  flat.amenities = p.amenities ?? raw.amenities ?? flat.amenities;
-  flat.cell_coverage = p.cell_coverage ?? raw.cell_service ?? flat.cell_coverage;
-  flat.last_verified = firstText(p.last_verified, metadata.last_updated, raw.updated_at);
-  flat.max_rv_length = p.max_rv_length ?? raw.max_rv_length ?? flat.max_rv_length;
-  flat.max_trailer_length = p.max_trailer_length ?? raw.max_trailer_length ?? flat.max_trailer_length;
-  flat.has_pull_through_sites =
-    p.has_pull_through_sites ?? raw.has_pull_through_sites ?? flat.has_pull_through_sites;
-  flat.big_rig_friendly = p.big_rig_friendly ?? raw.big_rig_friendly ?? flat.big_rig_friendly;
-  flat.elevation = p.elevation ?? location.elevation ?? flat.elevation;
-  flat.management = p.management ?? raw.management ?? flat.management;
-  flat.contact = p.contact ?? raw.contact ?? flat.contact;
-  flat.links = p.links ?? raw.links ?? flat.links;
-  flat.alerts = p.alerts ?? raw.alerts ?? flat.alerts;
-  flat.connections = p.connections ?? raw.connections ?? flat.connections;
-  flat.metadata = p.metadata ?? raw.metadata ?? flat.metadata;
-}
-
-function campgroundPhotoUrl(photos: unknown): string {
-  if (!Array.isArray(photos)) return '';
-  for (const photo of photos) {
-    if (!photo || typeof photo !== 'object') continue;
-    const p = photo as Props;
-    const url = firstText(p.large_url, p.medium_url, p.small_url, p.original_url);
-    if (url) return url;
-  }
-  return '';
 }
 
 /** First non-blank string, trimmed; `''` when there is none. */

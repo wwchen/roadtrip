@@ -11,32 +11,51 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
     properties: {
       category: 'campground',
       name: 'Manzanita Lake',
-      raw: {
-        description: '  Lakeside sites near the Loomis Museum.  ',
-        management: { agency_name: 'National Park Service' },
-        contact: { primary_phone: '530.336.5521', email: 'lavo_info@nps.gov' },
-        location: { elevation: 1798, directions: 'Hwy 89 north entrance' },
-        metadata: { last_updated: '2026-06-01' },
-        photos: [{ medium_url: 'https://example.test/m.jpg', large_url: '' }],
-        price: { minimum: 26, maximum: 36, currency_code: 'USD' },
+      agency: 'National Park Service',
+      detail: {
+        description: 'Lakeside sites near the Loomis Museum.',
+        photo_url: 'https://example.test/m.jpg',
+        phone: '530.336.5521',
+        email: 'lavo_info@nps.gov',
+        elevation: 1798,
+        cell_coverage: 'weak',
+        reserve_url: 'https://example.test/reserve',
         status: 'Open',
         status_description: 'Open seasonally',
-        reservation_url: 'https://example.test/reserve',
-        default_campsite_schedule: 'May-Oct',
-        cell_service: 'weak',
+        price: { minimum: 26, maximum: 36, currency_code: 'USD' },
+        schedule: 'May-Oct',
+        last_verified: '2026-06-01',
+        // The vendor record verbatim. Inert for a campground — the facts above
+        // are what the drawer actually reads, named, from the backend now.
+        raw: {
+          description: '  Lakeside sites near the Loomis Museum.  ',
+          management: { agency_name: 'National Park Service' },
+          contact: { primary_phone: '530.336.5521', email: 'lavo_info@nps.gov' },
+          location: { elevation: 1798, directions: 'Hwy 89 north entrance' },
+          metadata: { last_updated: '2026-06-01' },
+          photos: [{ medium_url: 'https://example.test/m.jpg', large_url: '' }],
+          price: { minimum: 26, maximum: 36, currency_code: 'USD' },
+          status: 'Open',
+          status_description: 'Open seasonally',
+          reservation_url: 'https://example.test/reserve',
+          default_campsite_schedule: 'May-Oct',
+          cell_service: 'weak',
+        },
       },
       address: { city: 'Mineral', state_code: 'CA', postcode: '96063' },
     },
   },
 
-  // `detail` and `raw` arrive as encoded JSON strings from the JSONB columns.
+  // `detail` arrives as an encoded JSON string from the JSONB column.
   campgroundJsonStrings: {
     id: 'poi-7',
     properties: {
       category: 'campground',
       subcategory: 'rv-park',
+      agency: 'USFS',
       detail: JSON.stringify({
         address: { full: '1 Loop Rd', directions: 'Second left' },
+        email: 'usfs-rvpark@example.test',
         raw: { management: { agency: 'USFS' }, price: { minimum: 20, maximum: 20 } },
       }),
     },
@@ -184,10 +203,8 @@ describe('campground promotion', () => {
     expect(flatten('campgroundNested').photo_url).toBe('https://example.test/m.jpg');
   });
 
-  test('mirrors schedule onto default_campsite_schedule', () => {
-    const p = flatten('campgroundNested');
-    expect(p.schedule).toBe('May-Oct');
-    expect(p.default_campsite_schedule).toBe('May-Oct');
+  test('carries the schedule through under its own name', () => {
+    expect(flatten('campgroundNested').schedule).toBe('May-Oct');
   });
 
   test('takes the upstream table from the backend, whatever the vendor shipped', () => {
@@ -205,7 +222,7 @@ describe('campground promotion', () => {
   });
 
   test('parses detail and raw when they arrive as JSON strings', () => {
-    expect(flatten('campgroundJsonStrings').agency).toBe('USFS');
+    expect(flatten('campgroundJsonStrings').email).toBe('usfs-rvpark@example.test');
   });
 
   test('a campground subcategory overrides the category', () => {
@@ -328,7 +345,7 @@ describe('malformed and empty input', () => {
     const p = flatten('malformedDetail');
     expect(p).not.toHaveProperty('detail');
     expect(p).not.toHaveProperty('raw');
-    expect(p.agency).toBe('');
+    expect(p.agency).toBeUndefined();
   });
 
   test('does not throw on a feature with no properties', () => {
