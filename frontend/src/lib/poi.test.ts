@@ -85,10 +85,8 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
     properties: { category: 'supercharger' },
   },
 
-  // A gym as `/api/pois/{id}` sends it. Hours, brand and the upstream tag map are
-  // named fields on `detail`, promoted by the ETL and the POI service; `raw` stays
-  // what it has always been, `to_jsonb(planet_fitness_locations)`. Nothing here
-  // reaches into `payload.tags` — that shape is the backend's to know.
+  // A gym as `/api/pois/{id}` sends it: hours, brand and the tag map are named
+  // fields on `detail`. Nothing reaches into `payload.tags` any more.
   planetFitness: {
     id: 'pf-1',
     properties: {
@@ -111,8 +109,7 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
     },
   },
 
-  // The sparse end of the same dataset: an OSM element that tagged nothing, so the
-  // service sends no hours, no brand and no upstream table.
+  // The sparse end: an element that tagged nothing, so those keys are absent.
   planetFitnessBare: {
     id: 'pf-2',
     properties: {
@@ -338,8 +335,7 @@ describe('re-flattening', () => {
     ['nestedAddress'],
     ['malformedDetail'],
     ['noProperties'],
-    // Was NOT a no-op while hours were dug out of `raw`: the first pass consumed
-    // `raw` and the second reset them to ''. Named detail fields survive.
+    // Was NOT a no-op while hours were dug out of `raw`, which the first pass eats.
     ['planetFitness'],
   ] as const)('is a no-op for %s', (key) => {
     const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));

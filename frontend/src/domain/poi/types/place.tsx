@@ -47,28 +47,17 @@ export interface PlaceTypeSpec {
   /** The trip store's pin kind, which decides the marker colour once it is a stop. */
   kind: string;
   /**
-   * The type's one spec block: a heading and the fields under it, or nothing.
-   *
-   * One member rather than two, so a type cannot end up with fields and no
-   * heading to put them under — that combination renders nothing at all, and a
-   * block that silently fails to appear is the bug this page has already had
-   * once. Omitting it is a real answer: every fact a gym carries — hours, phone,
-   * address, website — is already shown above the rule, and a "This location"
-   * heading over a lone row that repeats the call button is a heading for its
-   * own sake.
+   * The type's one spec block, or nothing. One member rather than two, so a type
+   * cannot carry fields with no heading to put them under — that combination
+   * renders nothing at all. Omitting it is a real answer: a gym shows every fact
+   * it has above the rule.
    */
   specs?: {
     heading: string;
     /** The fields the block shows, in order. Absent properties drop out. */
     fields: readonly PlaceField[];
   };
-  /**
-   * Label for the record's own `website`, when it has one.
-   *
-   * A fallback. The record's `brand` names the button whenever the API sends one
-   * ("Anytime Fitness page"), for every type — brand is a fact about the place,
-   * so no chain is ever spelled out here or in the registry row.
-   */
+  /** Fallback label for the record's `website`. `brand` wins when the API sends one. */
   websiteLabel?: string;
   /** Whether to offer `tel:` buttons for the record's phone numbers. */
   call?: boolean;
@@ -104,10 +93,7 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
     .join(', ');
 
   const mapsUrl = googleMapsUrl(name, lng, lat);
-  // No fallback when the record carries no page. A synthesised chain-search URL
-  // would need this file to name a chain, and it answered a different question
-  // than the button promises — the button says "Gym page", so it appears only
-  // when there is one.
+  // No fallback search: a button promising a page must not land on a locator.
   const website = text(p.website);
   const brand = text(p.brand);
   const websiteLabel = brand ? `${brand} page` : spec.websiteLabel;

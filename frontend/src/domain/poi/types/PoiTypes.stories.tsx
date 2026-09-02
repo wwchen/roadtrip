@@ -239,8 +239,7 @@ export const Gym: Story = {
   ),
 };
 
-/** The common case, not the exception: most OSM gym elements tag no website and no
- *  hours, so the page is a name, an address and a way to get there. */
+/** The common case: most OSM gym elements tag no website and no hours. */
 export const GymSparse: Story = {
   render: () => (
     <TypePage

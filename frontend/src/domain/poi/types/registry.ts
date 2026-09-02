@@ -19,17 +19,11 @@ import { PlacePoiPage, type PlaceTypeSpec } from './place';
  * page — identity, one action, provenance — rather than an error.
  */
 const PLACE_TYPES: Record<string, PlaceTypeSpec> = {
-  // A generic gym row. The chain is data on the record — `name`, `brand` and
-  // `website` all arrive from the ETL — so nothing here names one, and a second
-  // chain is a catalog row rather than a row here.
-  //
-  // No spec block: the record carries hours, phone, address and a website, and all
-  // four are already shown above the rule (glance, call button, subtitle, action).
-  // A gym is a shower on a long drive; "where, open when, route me, call it" is the
-  // whole job, and the page is honest about having nothing more.
+  // Generic: `name`, `brand` and `website` all arrive from the ETL, so nothing
+  // here names a chain and a second one is a catalog row. No spec block — hours,
+  // phone, address and website are all shown above the rule already.
   gym: {
-    // Not 'Gym · <chain>': the title is the record's `name`, which the ETL already
-    // defaults to the chain, so the brand was printed twice on every gym.
+    // Not 'Gym · <chain>': the title is already the chain, so it printed twice.
     eyebrow: 'Gym',
     fallbackName: 'Gym',
     kind: 'PF',

@@ -19,8 +19,7 @@ const renderPoi = (properties: Record<string, unknown>) => {
 const gym = (extra: Record<string, unknown> = {}) => ({
   category: 'planet_fitness_location',
   name: 'Planet Fitness',
-  // A named field on the detail response, promoted by the ETL. Every real gym
-  // has it: OSM tags `brand` on all of them.
+  // A named field on the detail response; OSM tags `brand` on every real gym.
   brand: 'Planet Fitness',
   street: '1205 SE 16th Ct',
   city: 'Ankeny',

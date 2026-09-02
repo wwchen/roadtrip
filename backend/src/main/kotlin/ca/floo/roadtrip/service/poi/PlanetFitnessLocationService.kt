@@ -38,13 +38,9 @@ internal class PlanetFitnessLocationService(
     }
 
     /**
-     * The OSM tag map, lifted out of the captured Overpass element.
-     *
-     * This is the only place outside `PlanetFitnessEtl` that knows the vendor
-     * keeps its facts as tags, and the knowledge stops here: callers get a plain
-     * key/value object for the drawer's "Upstream data" table. Null for an
-     * element that carried no tags, so the table drops out instead of rendering
-     * empty.
+     * The OSM tag map, lifted out of the captured Overpass element — the only
+     * place outside `PlanetFitnessEtl` that knows this vendor keeps facts as
+     * tags. Null when it tagged nothing, so the table drops out.
      */
     private fun upstreamTags(payload: JsonElement): JsonObject? =
         ((payload as? JsonObject)?.get(PAYLOAD_TAGS_KEY) as? JsonObject)?.takeIf { it.isNotEmpty() }

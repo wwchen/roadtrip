@@ -258,6 +258,69 @@ class FeatureCollectionContractTest {
         assert(out.contains("""\"the\\backslash\""""))
     }
 
+    // The FE reads these keys off `properties.detail` verbatim. A camelCased
+    // `openingHours` would compile, pass every typed test, and render nothing —
+    // the failure this field was added to fix.
+    @Test
+    fun `single feature detail — gym hours, brand and upstream keys are snake_case`() {
+        val out =
+            encodeApiJson(
+                detailFeature(
+                    id = 9,
+                    source = "planet_fitness_location",
+                    sourceId = "node-448794721",
+                    category = "planet_fitness_location",
+                    subcategory = null,
+                    name = "Planet Fitness",
+                    region = "IA",
+                    geometry = """{"type":"Point","coordinates":[0,0]}""",
+                    detail =
+                        PoiCategoryDetailSchema(
+                            openingHours = "Mo-Su 05:00-22:00",
+                            brand = "Planet Fitness",
+                            upstream = json("""{"opening_hours":"Mo-Su 05:00-22:00"}"""),
+                            raw = json("""{}"""),
+                        ),
+                ),
+            )
+        val detail = gymDetail(out)
+        assertEquals("Mo-Su 05:00-22:00", detail["opening_hours"]!!.jsonPrimitive.content)
+        assertEquals("Planet Fitness", detail["brand"]!!.jsonPrimitive.content)
+        assertEquals(
+            "Mo-Su 05:00-22:00",
+            detail["upstream"]!!.jsonObject["opening_hours"]!!.jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `single feature detail — a gym with no hours omits the keys rather than sending null`() {
+        val out =
+            encodeApiJson(
+                detailFeature(
+                    id = 9,
+                    source = "planet_fitness_location",
+                    sourceId = "node-9",
+                    category = "planet_fitness_location",
+                    subcategory = null,
+                    name = "Planet Fitness",
+                    region = null,
+                    geometry = """{"type":"Point","coordinates":[0,0]}""",
+                    detail = PoiCategoryDetailSchema(raw = json("""{}""")),
+                ),
+            )
+        val detail = gymDetail(out)
+        assertEquals(false, detail.containsKey("opening_hours"))
+        assertEquals(false, detail.containsKey("brand"))
+        assertEquals(false, detail.containsKey("upstream"))
+    }
+
+    private fun gymDetail(encoded: String) =
+        Json
+            .parseToJsonElement(encoded)
+            .jsonObject["properties"]!!
+            .jsonObject["detail"]!!
+            .jsonObject
+
     private fun detailFeature(
         id: Long,
         source: String,
