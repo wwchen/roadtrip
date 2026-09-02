@@ -47,22 +47,27 @@ export interface PlaceTypeSpec {
   /** The trip store's pin kind, which decides the marker colour once it is a stop. */
   kind: string;
   /**
-   * The heading on the type's one spec block.
+   * The type's one spec block: a heading and the fields under it, or nothing.
    *
-   * Optional, with `fields`, because a type can legitimately have no spec block:
-   * every fact a gym carries — hours, phone, address, website — is already shown
-   * by a block above the rule, and a "This location" heading over a lone row that
-   * repeats the call button is a heading for its own sake. Omit both, and the
-   * block drops out the same way an absent property drops a row.
+   * One member rather than two, so a type cannot end up with fields and no
+   * heading to put them under — that combination renders nothing at all, and a
+   * block that silently fails to appear is the bug this page has already had
+   * once. Omitting it is a real answer: every fact a gym carries — hours, phone,
+   * address, website — is already shown above the rule, and a "This location"
+   * heading over a lone row that repeats the call button is a heading for its
+   * own sake.
    */
-  heading?: string;
-  /** The fields that block shows, in order. Absent properties drop out. */
-  fields?: readonly PlaceField[];
+  specs?: {
+    heading: string;
+    /** The fields the block shows, in order. Absent properties drop out. */
+    fields: readonly PlaceField[];
+  };
   /**
    * Label for the record's own `website`, when it has one.
    *
-   * A fallback: the record's `brand` wins when it has one, so a chain names its
-   * own button ("Anytime Fitness page") without any chain appearing here.
+   * A fallback. The record's `brand` names the button whenever the API sends one
+   * ("Anytime Fitness page"), for every type — brand is a fact about the place,
+   * so no chain is ever spelled out here or in the registry row.
    */
   websiteLabel?: string;
   /** Whether to offer `tel:` buttons for the record's phone numbers. */
@@ -104,15 +109,12 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
   // than the button promises — the button says "Gym page", so it appears only
   // when there is one.
   const website = text(p.website);
-  // The record's own chain names the button. Only when it carries none does the
-  // type's generic label apply, so no brand is spelled out in this file or in the
-  // registry row that configures it.
   const brand = text(p.brand);
   const websiteLabel = brand ? `${brand} page` : spec.websiteLabel;
   const photo = text(p.photo_url);
 
   const specs = presentSpecs(
-    (spec.fields ?? []).map((field) => {
+    (spec.specs?.fields ?? []).map((field) => {
       const value = text(p[field.key]);
       return value ? { label: field.label, value } : null;
     }),
@@ -150,8 +152,8 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
       </PoiActions>
     ),
     ...(tags.length > 0 ? { glance: <PoiGlance tags={tags} /> } : null),
-    ...(spec.heading && specs.length > 0
-      ? { specs: <PoiSpecs list={{ heading: spec.heading, rows: specs }} /> }
+    ...(spec.specs && specs.length > 0
+      ? { specs: <PoiSpecs list={{ heading: spec.specs.heading, rows: specs }} /> }
       : null),
     ...(links.length > 0 ? { links: <PoiLinks links={links} /> } : null),
     ...(p.upstream

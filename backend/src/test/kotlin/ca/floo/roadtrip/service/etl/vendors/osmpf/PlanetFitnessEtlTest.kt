@@ -88,5 +88,41 @@ class PlanetFitnessEtlTest {
         }
     }
 
+    // Hours and brand used to survive the import only inside `payload.tags`, and
+    // everything that reads a gym reads columns — so no caller ever saw them.
+    @Test
+    fun `transform promotes opening hours and brand out of the tag bag`() {
+        val envelope = RawCaptureStore.parseEnvelope(fixtureFile())
+        val etl = PlanetFitnessEtl()
+        val dto = parsedDto(etl, bundle(envelope))
+        val locations = records(etl.transform(dto, transformCtx))
+
+        val withHours = locations.filter { it.openingHours != null }
+        assertTrue(
+            withHours.isNotEmpty(),
+            "expected at least one fixture element with opening_hours (fixture no longer covers the promotion)",
+        )
+        assertTrue(
+            withHours.any { it.openingHours!!.contains("Mo") },
+            "expected the OSM opening_hours expression through verbatim, unparsed",
+        )
+        for (p in locations) {
+            assertEquals("Planet Fitness", p.brand, "every fixture element tags brand=Planet Fitness")
+        }
+    }
+
+    @Test
+    fun `transform leaves hours null rather than blank when the element has no tag`() {
+        val envelope = RawCaptureStore.parseEnvelope(fixtureFile())
+        val etl = PlanetFitnessEtl()
+        val dto = parsedDto(etl, bundle(envelope))
+        val locations = records(etl.transform(dto, transformCtx))
+
+        assertTrue(
+            locations.any { it.openingHours == null },
+            "expected at least one fixture element without opening_hours (fixture is too clean)",
+        )
+    }
+
     private fun fixtureFile(): File = File(javaClass.classLoader.getResource("etl-fixtures/osm-pf/sample.json")!!.toURI())
 }

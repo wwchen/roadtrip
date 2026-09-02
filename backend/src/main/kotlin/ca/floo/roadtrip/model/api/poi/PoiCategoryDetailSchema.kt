@@ -16,6 +16,13 @@ data class PoiCategoryDetailSchema(
     @SerialName("booking_site") val bookingSite: String? = null,
     val phone: String? = null,
     @SerialName("info_url") val infoUrl: String? = null,
+    // Opening hours as the source states them, unparsed. OSM ships an
+    // opening_hours expression, other vendors ship prose; the FE prints the
+    // string and does not interpret it.
+    @SerialName("opening_hours") val openingHours: String? = null,
+    // The chain that runs this place, when it belongs to one. A fact about the
+    // place, not a display string: the FE decides how to word a button from it.
+    val brand: String? = null,
     val address: JsonElement? = null,
     val description: String? = null,
     @SerialName("photo_url") val photoUrl: String? = null,
@@ -34,4 +41,8 @@ data class PoiCategoryDetailSchema(
     // Used by the drawer footer; null when the pin has no known provider.
     @SerialName("booking_system") val bookingSystem: String? = null,
     val raw: JsonElement,
+    // Free-form upstream key/values for the drawer's "Upstream data" table.
+    // Backend-shaped on purpose: the FE renders whatever pairs arrive and never
+    // reaches into `raw` to find a vendor's own nesting.
+    val upstream: JsonElement? = null,
 )

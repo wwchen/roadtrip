@@ -28,7 +28,6 @@ const DEFAULT_PRICE_CURRENCY = 'USD';
 const CATEGORY_CAMPGROUND = 'campground';
 const CATEGORY_NATIONAL_PARK = 'national-park';
 const CATEGORY_STATE_PARK = 'state-park';
-const PLANET_FITNESS_CATEGORIES = ['planet_fitness_location', 'planet-fitness'];
 const SUPERCHARGER_CATEGORIES = ['tesla_supercharger', 'supercharger'];
 
 type Props = Record<string, unknown>;
@@ -137,39 +136,11 @@ export function flattenHydratedPoi(f: PoiFeature): FlatPoiFeature {
     flat.GIS_Acres = raw.GIS_Acres ?? raw.acres ?? null;
     flat.Mang_Name = raw.Mang_Name || raw.designation || '';
   }
-  if (PLANET_FITNESS_CATEGORIES.includes(p.category as string)) {
-    promotePlanetFitnessFields(flat, raw);
-  }
   if (SUPERCHARGER_CATEGORIES.includes(p.category as string)) {
     promoteSuperchargerFields(flat, p, raw);
   }
   flat.name = p.name || raw.name || flat.name;
   return { ...f, properties: flat };
-}
-
-/**
- * The OSM tag bag, which is where everything interesting about a gym actually is.
- *
- * `raw` for a Planet Fitness pin is `to_jsonb(planet_fitness_locations)` — the row,
- * not the upstream record — so it has `payload`, `phone`, `info_url` and no
- * `opening_hours` at the top level. Overpass ships hours as a tag, and the ETL parks
- * the whole tag map at `payload.tags` (`PlanetFitnessEtl.elementExtras`), so the old
- * `raw.opening_hours` read resolved to `''` on every gym in production and both the
- * glance chip and the "Upstream data" accordion the ETL comment promises were dead.
- * The fixture that made this look fine put `opening_hours` at the top of `raw`,
- * which is a shape the backend never sends.
- */
-function promotePlanetFitnessFields(flat: Props, raw: Props): void {
-  const tags = objectValue(objectValue(raw.payload)?.tags) || {};
-  flat.opening_hours = firstText(raw.opening_hours, tags.opening_hours);
-  // The row carries the location's own page in `info_url`, and OSM repeats it as a
-  // `website` tag. Promoting it is what stops the page synthesising a brand search
-  // URL while the record is holding the exact page — see `types/registry.ts`.
-  flat.website = firstText(flat.website, raw.info_url, tags.website);
-  // The chain, as data. The page prints it, so it must not be a constant in the
-  // page: a second chain is another ETL row, not another `const`.
-  flat.brand = firstText(flat.brand, tags.brand, tags.operator, raw.name);
-  if (!objectValue(flat.upstream) && Object.keys(tags).length > 0) flat.upstream = tags;
 }
 
 function promoteSuperchargerFields(flat: Props, p: Props, raw: Props): void {

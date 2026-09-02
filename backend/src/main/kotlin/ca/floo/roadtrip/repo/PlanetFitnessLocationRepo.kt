@@ -104,6 +104,8 @@ class PlanetFitnessLocationRepo(
             country = record.get("country", String::class.java),
             phone = record.get("phone", String::class.java),
             infoUrl = record.get("info_url", String::class.java),
+            openingHours = record.get("opening_hours", String::class.java),
+            brand = record.get("brand", String::class.java),
             amenities = parseJsonElement(record.get("amenities_text", String::class.java)),
             payload = parseJsonElement(record.get("payload_text", String::class.java)),
             createdAt = record.instant("created_at"),
@@ -132,9 +134,10 @@ class PlanetFitnessLocationRepo(
             .fetchOne(
                 """
                 INSERT INTO planet_fitness_locations (
-                  location_id, name, address, region, country, phone, info_url, amenities, payload
+                  location_id, name, address, region, country, phone, info_url,
+                  opening_hours, brand, amenities, payload
                 ) VALUES (
-                  ?, ?, ?::jsonb, ?, ?, ?, ?, ?::jsonb, ?::jsonb
+                  ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb
                 )
                 RETURNING id
                 """.trimIndent(),
@@ -145,6 +148,8 @@ class PlanetFitnessLocationRepo(
                 record.country,
                 record.phone,
                 record.infoUrl,
+                record.openingHours,
+                record.brand,
                 jsonArray(record.amenities),
                 jsonObject(record.payload),
             )!!
@@ -163,6 +168,8 @@ class PlanetFitnessLocationRepo(
                 country = ?,
                 phone = ?,
                 info_url = ?,
+                opening_hours = ?,
+                brand = ?,
                 amenities = ?::jsonb,
                 payload = ?::jsonb,
                 updated_at = now(),
@@ -175,6 +182,8 @@ class PlanetFitnessLocationRepo(
             record.country,
             record.phone,
             record.infoUrl,
+            record.openingHours,
+            record.brand,
             jsonArray(record.amenities),
             jsonObject(record.payload),
             locationId,
@@ -217,6 +226,8 @@ class PlanetFitnessLocationRepo(
             pfl.country,
             pfl.phone,
             pfl.info_url,
+            pfl.opening_hours,
+            pfl.brand,
             pfl.amenities::text AS amenities_text,
             pfl.payload::text AS payload_text,
             pfl.created_at,

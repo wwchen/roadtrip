@@ -85,36 +85,40 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
     properties: { category: 'supercharger' },
   },
 
-  // `raw` is `to_jsonb(planet_fitness_locations)` — the canonical ROW, not the
-  // upstream record — so the OSM facts sit under `payload.tags` and nothing named
-  // `opening_hours` exists at the top of it. The old fixture put it there, which is
-  // a shape the backend has never sent.
+  // A gym as `/api/pois/{id}` sends it. Hours, brand and the upstream tag map are
+  // named fields on `detail`, promoted by the ETL and the POI service; `raw` stays
+  // what it has always been, `to_jsonb(planet_fitness_locations)`. Nothing here
+  // reaches into `payload.tags` — that shape is the backend's to know.
   planetFitness: {
     id: 'pf-1',
     properties: {
       category: 'planet-fitness',
-      raw: {
-        location_id: 'node-123',
-        name: 'Planet Fitness',
+      name: 'Planet Fitness',
+      detail: {
         phone: '+1 515-555-0113',
         info_url: 'https://www.planetfitness.com/gyms/ankeny-ia',
-        payload: {
-          type: 'node',
-          id: 123,
-          tags: {
-            name: 'Planet Fitness',
-            brand: 'Planet Fitness',
-            opening_hours: 'Mo-Su 00:00-24:00',
-          },
+        opening_hours: 'Mo-Su 00:00-24:00',
+        brand: 'Planet Fitness',
+        upstream: { brand: 'Planet Fitness', opening_hours: 'Mo-Su 00:00-24:00' },
+        raw: {
+          location_id: 'node-123',
+          name: 'Planet Fitness',
+          opening_hours: 'Mo-Su 00:00-24:00',
+          brand: 'Planet Fitness',
+          payload: { type: 'node', id: 123 },
         },
       },
     },
   },
 
-  // An OSM element with no tags at all — the sparse end of the same dataset.
+  // The sparse end of the same dataset: an OSM element that tagged nothing, so the
+  // service sends no hours, no brand and no upstream table.
   planetFitnessBare: {
     id: 'pf-2',
-    properties: { category: 'planet_fitness_location', raw: { payload: { type: 'node', id: 9 } } },
+    properties: {
+      category: 'planet_fitness_location',
+      detail: { raw: { location_id: 'node-9', name: 'Planet Fitness', payload: { type: 'node', id: 9 } } },
+    },
   },
 
   nestedAddress: {
@@ -257,34 +261,24 @@ describe('supercharger promotion', () => {
   });
 });
 
-describe('planet fitness promotion', () => {
-  test('reads opening hours out of the OSM tag bag, not the top of the row', () => {
-    expect(flatten('planetFitness').opening_hours).toBe('Mo-Su 00:00-24:00');
+describe('a gym, whose facts all arrive named', () => {
+  test('carries hours, brand and the upstream table straight through', () => {
+    const p = flatten('planetFitness');
+    expect(p.opening_hours).toBe('Mo-Su 00:00-24:00');
+    expect(p.brand).toBe('Planet Fitness');
+    expect(p.upstream).toMatchObject({ brand: 'Planet Fitness', opening_hours: 'Mo-Su 00:00-24:00' });
   });
 
-  test('surfaces the whole tag map as upstream, which is what the ETL captured it for', () => {
-    expect(flatten('planetFitness').upstream).toMatchObject({
-      brand: 'Planet Fitness',
-      opening_hours: 'Mo-Su 00:00-24:00',
-    });
-  });
-
-  test("promotes the row's own info_url, so the page stops inventing a search URL", () => {
-    // Verified against two live records: the row carries `info_url` and OSM repeats
-    // it as a `website` tag, while the page was synthesising a chain search instead.
+  test('takes its website from the canonical info_url, like every other category', () => {
     expect(flatten('planetFitness').website).toBe('https://www.planetfitness.com/gyms/ankeny-ia');
   });
 
-  test('promotes the chain as data, so no page has to name it', () => {
-    expect(flatten('planetFitness').brand).toBe('Planet Fitness');
-  });
-
-  test('a record with no tags gets empty hours rather than undefined', () => {
+  test('a record the source tagged nothing about carries none of them', () => {
     const p = flatten('planetFitnessBare');
-    expect(p.opening_hours).toBe('');
+    expect(p.opening_hours).toBeUndefined();
+    expect(p.brand).toBeUndefined();
     expect(p.upstream).toBeUndefined();
     expect(p.website).toBe('');
-    expect(p.brand).toBe('');
   });
 });
 
@@ -344,6 +338,9 @@ describe('re-flattening', () => {
     ['nestedAddress'],
     ['malformedDetail'],
     ['noProperties'],
+    // Was NOT a no-op while hours were dug out of `raw`: the first pass consumed
+    // `raw` and the second reset them to ''. Named detail fields survive.
+    ['planetFitness'],
   ] as const)('is a no-op for %s', (key) => {
     const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));
     const twice = flattenHydratedPoi(structuredClone(once));
@@ -356,7 +353,6 @@ describe('re-flattening', () => {
     ['nationalPark', 'Loc_Nm', 'Lassen Volcanic National Park', ''],
     ['supercharger', 'stallCount', 12, 0],
     ['supercharger', 'powerKilowatt', 250, 0],
-    ['planetFitness', 'opening_hours', 'Mo-Su 00:00-24:00', ''],
   ] as const)('drops %s.%s on a second pass', (key, field, first, second) => {
     const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));
     const twice = flattenHydratedPoi(structuredClone(once));
