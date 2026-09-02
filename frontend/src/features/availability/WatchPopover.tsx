@@ -15,6 +15,7 @@ import { TRIGGER_KIND_ATC, TRIGGER_KIND_SLACK_NOTIFY, TRIGGER_KIND_EMAIL_NOTIFY 
 import type { TriggerPayload } from '@/lib/watch-triggers';
 import { WatchEditor } from '@/domain/watch/WatchEditor';
 import { WatchSignInGate } from '@/domain/watch/WatchSignInGate';
+import { watchCopy } from '@/lib/strings';
 import { useDismiss } from '@/lib/use-dismiss';
 import { longDayLabel } from './week-labels';
 import { normalizeWatchCapabilities, type WatchCapabilities } from '@/lib/watch-windows';
@@ -118,14 +119,14 @@ export function WatchPopover({
     >
       {gate === 'signed-out' ? (
         <WatchSignInGate
-          title={`Watch ${poiName}`}
+          title={watchCopy.title(poiName)}
           subtitle={longDayLabel(date)}
           onSignIn={onSignIn}
           onClose={onClose}
         />
       ) : (
         <WatchEditor
-          title={`Watch ${poiName}`}
+          title={watchCopy.title(poiName)}
           subtitle={longDayLabel(date)}
           watch={watch ?? null}
           capabilities={editorCapabilities}

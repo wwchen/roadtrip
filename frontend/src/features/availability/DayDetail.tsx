@@ -16,6 +16,7 @@
 import { Button, LinkButton } from '@ui';
 import { availabilityStatusMeta, normalizeAvailabilityStatus } from '@/lib/availability-status';
 import { availableCount, campsiteCount } from '@/lib/day-fields';
+import { dayCopy, gateCopy } from '@/lib/strings';
 import type { FusedDay } from './fuse';
 import { longDayLabel } from './week-labels';
 
@@ -124,7 +125,7 @@ function DayAction({
         disabled={busy}
         onClick={(event) => onToggleWatch(event.currentTarget as HTMLElement)}
       >
-        {busy ? 'Working…' : watching ? 'Watching - tap to remove' : 'Set watch'}
+        {busy ? dayCopy.working : watching ? dayCopy.watching : dayCopy.setWatch}
       </Button>
     );
   }
@@ -133,26 +134,27 @@ function DayAction({
     case 'signed-out':
       return (
         <span className="cg-day-detail-meta">
-          <LinkButton onClick={onSignIn}>Sign in</LinkButton> to set availability alerts.
+          <LinkButton onClick={onSignIn}>{gateCopy.signIn}</LinkButton>
+          {gateCopy.daySignedOutSuffix}
         </span>
       );
     case 'loading':
-      return <span className="cg-day-detail-meta">Checking your availability alerts…</span>;
+      return <span className="cg-day-detail-meta">{dayCopy.checking}</span>;
     case 'failed':
       return (
         <span className="cg-day-detail-meta">
-          Couldn&apos;t check your availability alerts.{' '}
+          {dayCopy.checkFailed}{' '}
           <LinkButton className="cg-retry" onClick={onRetryWatches}>
-            Retry
+            {dayCopy.retry}
           </LinkButton>
         </span>
       );
     case 'unsupported':
       return (
-        <span className="cg-day-detail-meta">Watches are not available for this campground.</span>
+        <span className="cg-day-detail-meta">{dayCopy.unsupported}</span>
       );
     // Nothing is in the way: the day itself has nothing to wait for.
     case null:
-      return <span className="cg-day-detail-meta">No online openings to watch for this day.</span>;
+      return <span className="cg-day-detail-meta">{dayCopy.nothingToWatch}</span>;
   }
 }

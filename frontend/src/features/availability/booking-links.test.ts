@@ -112,8 +112,8 @@ describe('whether a row could ever be booked', () => {
 describe('naming who takes the booking', () => {
   test('recognises the hosts we integrate with', () => {
     const cases: Array<[string, string]> = [
-      ['https://www.recreation.gov/x', 'Recreation.gov'],
-      ['https://recreation.gov/x', 'Recreation.gov'],
+      ['https://www.recreation.gov/x', 'rec.gov'],
+      ['https://recreation.gov/x', 'rec.gov'],
       ['https://reservation.pc.gc.ca/x', 'Parks Canada'],
       ['https://camping.bcparks.ca/x', 'BC Parks'],
       ['https://discovercamping.ca/x', 'BC Parks'],
@@ -126,7 +126,7 @@ describe('naming who takes the booking', () => {
 
   test('falls back to the row"s vendor when the template is unparseable', () => {
     expect(agencyLabel(site(7, { data_provider: 'aspira' }), { 7: 'not a url' })).toBe('Aspira');
-    expect(agencyLabel(site(7, { data_provider: 'recgov' }), {})).toBe('Recreation.gov');
+    expect(agencyLabel(site(7, { data_provider: 'recgov' }), {})).toBe('rec.gov');
   });
 
   test('humanises an unknown host', () => {
@@ -139,7 +139,7 @@ describe('naming who takes the booking', () => {
 
   test('labels the button, and degrades to plain Book', () => {
     expect(bookingLabel(site(7), { 7: 'https://www.recreation.gov/x' })).toBe(
-      'Book on Recreation.gov',
+      'Book on rec.gov',
     );
     expect(bookingLabel(site(7), {})).toBe('Book');
   });

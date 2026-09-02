@@ -57,6 +57,22 @@ features, features and pages may import domains, and domains never import featur
 compose multiple features to exercise a page, but production composition belongs in
 `pages/`.
 
+## Where copy lives
+
+User-facing copy for the availability, watch and booking surfaces is in
+`frontend/src/lib/strings.ts`, not inline. Not for locale — there is none planned
+— but because copy is reviewed as copy, and because a set of messages has to read
+as one voice. Anything that varies is a function there, so a caller cannot
+assemble a sentence out of fragments and get the word order wrong.
+
+`VENDOR` is the one name for recreation.gov, and it is **rec.gov**. The product
+used to say "Recreation.gov", "recreation.gov" and "rec.gov" for the same vendor
+across banners, field labels and booking rows.
+
+Aria labels stay next to the control that computes them: they describe state, not
+prose. The account and POI surfaces still hold their own copy; move a surface in
+when you next touch it rather than in one sweep.
+
 ## Capability gates: show the control, name the step
 
 A capability the current caller cannot use is **not** a reason to hide the control.

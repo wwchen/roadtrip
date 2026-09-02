@@ -1,3 +1,4 @@
+import { watchCopy } from '@/lib/strings';
 import { Icon } from '@ui';
 
 export interface WatchPanelHeadProps {
@@ -15,7 +16,7 @@ export function WatchPanelHead({ title, subtitle, onClose }: WatchPanelHeadProps
         {subtitle ? <div className="rt-watch-editor-subtitle">{subtitle}</div> : null}
       </div>
       {onClose ? (
-        <button type="button" className="rt-watch-editor-icon" aria-label="Close" onClick={onClose}>
+        <button type="button" className="rt-watch-editor-icon" aria-label={watchCopy.close} onClick={onClose}>
           <Icon name="close" aria-hidden="true" />
         </button>
       ) : null}

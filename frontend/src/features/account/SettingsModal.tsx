@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Banner, Button, Modal, Skeleton } from '@ui';
 import { signOut } from '@/api/auth-api';
 import { coerceChoice } from '@/lib/theme';
+import { accountCopy } from '@/lib/strings';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import { useThemeStore } from '@/stores/themeStore';
 import { AccountPanel } from './AccountPanel';
@@ -61,8 +62,8 @@ const SAVED_MESSAGE = 'Settings saved.';
  */
 const removedMessage = (stranded: number, profileDestroyed: boolean): string => {
   const base = profileDestroyed
-    ? 'Recreation.gov credentials and saved browser session removed.'
-    : 'Recreation.gov credentials removed. There was no saved browser session to erase.';
+    ? accountCopy.removed
+    : accountCopy.removedNoSession;
   if (stranded === 0) return base;
   return (
     `${base} ${stranded} active add-to-cart ` +

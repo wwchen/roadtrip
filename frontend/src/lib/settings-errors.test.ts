@@ -17,13 +17,13 @@ describe('settingsErrorMessage', () => {
 
   test('maps the rec.gov booking codes', () => {
     expect(settingsErrorMessage('login_failed')).toBe(
-      'Recreation.gov rejected these credentials.',
+      'rec.gov rejected these credentials.',
     );
     expect(settingsErrorMessage('mfa_invalid')).toBe(
       'That code was rejected. Start the login again for a new one.',
     );
     expect(settingsErrorMessage('captcha_required')).toBe(
-      'Recreation.gov showed a challenge we cannot solve. Try again in a moment.',
+      'rec.gov showed a challenge we cannot solve. Try again in a moment.',
     );
     expect(settingsErrorMessage('companion_unavailable')).toBe(
       "The booking service isn't reachable right now.",
@@ -64,7 +64,7 @@ describe('settingsErrorMessage', () => {
     // The grid's add-to-cart preflights session health, then the session dies
     // before the click. These three arrive where `recgov_session_expired`
     // would have, so they must not read differently from it.
-    const expected = 'Your recreation.gov session expired — test login in Settings.';
+    const expected = 'Your rec.gov session expired — test login in Settings.';
 
     expect(settingsErrorMessage('recgov_session_expired')).toBe(expected);
     expect(settingsErrorMessage('recgov_spa_logged_out')).toBe(expected);
@@ -77,7 +77,7 @@ describe('settingsErrorMessage', () => {
     const message = settingsErrorMessage('recgov_login_failed');
 
     expect(message).toBe(
-      'Recreation.gov would not sign you back in — check your credentials in Settings.',
+      'rec.gov would not sign you back in — check your credentials in Settings.',
     );
     expect(message).not.toBe(settingsErrorMessage('recgov_spa_logged_out'));
   });
@@ -87,7 +87,7 @@ describe('settingsErrorMessage', () => {
     const message = settingsErrorMessage('recgov_cart_unreachable');
 
     expect(message).toBe(
-      "You're signed in, but recreation.gov's cart could not be read — try again shortly.",
+      "You're signed in, but rec.gov's cart could not be read — try again shortly.",
     );
     expect(message).not.toMatch(/test login/i);
   });

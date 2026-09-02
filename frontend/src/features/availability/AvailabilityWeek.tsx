@@ -11,6 +11,7 @@ import { isCartActionPending } from './cart-action';
 import { signIn } from '@/api/auth-api';
 import { useMe } from '@/queries/auth';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { bookingCopy, upstreamCopy } from '@/lib/strings';
 import { DayDetail, type WatchUnavailableReason } from './DayDetail';
 import { CalendarPopover } from './CalendarPopover';
 import { SiteList } from './SiteList';
@@ -174,8 +175,8 @@ function AvailabilityWeekView({
       if (isCartActionPending(cartAction)) {
         toast({
           status: 'warning',
-          title: 'One hold at a time',
-          children: 'A hold is already running — wait for it to finish before holding another site.',
+          title: bookingCopy.holdBusyTitle,
+          children: bookingCopy.holdBusyBody,
         });
         return;
       }
@@ -186,12 +187,12 @@ function AvailabilityWeekView({
           actions.cartActionChanged({ type: 'held', cell, cartUrl: answer.cart_url });
           toast({
             status: 'success',
-            title: 'Site held in your rec.gov cart',
+            title: bookingCopy.heldTitle,
             children: (
               <>
-                Check out on recreation.gov within 15 minutes.{' '}
+                {bookingCopy.checkOutSoon}{' '}
                 <a href={answer.cart_url} target="_blank" rel="noreferrer noopener">
-                  Open rec.gov cart ↗
+                  {bookingCopy.openCart}
                 </a>
               </>
             ),
@@ -318,7 +319,7 @@ function AvailabilityWeekView({
         weekNav={weekNav}
         onOpenWatch={(anchor) => actions.openWatch(anchor, selectedDate ?? localYmd(weekStart))}
         onReport={() => {
-          const detail = `Recreation.gov error for ${poiName} (POI ${poiId}): ${week.error?.message ?? 'unknown'}`;
+          const detail = upstreamCopy.reportDetail(poiName, poiId, week.error?.message ?? 'unknown');
           // `copyShareUrl` rather than `navigator.clipboard` directly: the async
           // clipboard is absent in a non-secure context and rejects when the document
           // is not focused, and the helper's textarea fallback covers both. A bare
@@ -373,7 +374,7 @@ function AvailabilityWeekView({
       {isCartActionPending(cartAction) ? (
         <div className="cg-availability-cart-chip" role="status">
           <CartChipSpinner />
-          Holding site… usually under a minute; can take a few
+          {bookingCopy.holdRunning}
         </div>
       ) : null}
 
@@ -501,7 +502,7 @@ function WeekSurface({
       return (
         <EmptyState
           icon="lock"
-          title="Recreation.gov is limiting our checks"
+          title={upstreamCopy.rateLimitedTitle}
           body={
             hasStaleData
               ? `They've throttled us, so we're holding off. The availability below is from ${ageMin} minute${ageMin === 1 ? '' : 's'} ago and won't update until they let us back in.`
@@ -532,7 +533,7 @@ function WeekSurface({
       return (
         <EmptyState
           icon="warning-fill"
-          title="Recreation.gov returned an error"
+          title={upstreamCopy.erroredTitle}
           body="Their end failed on this request. Your dates are fine — this one is theirs."
           actions={
             <>
@@ -557,7 +558,7 @@ function WeekSurface({
       return (
         <EmptyState
           icon="warning"
-          title="We can't reach Recreation.gov"
+          title={upstreamCopy.unreachableTitle}
           body="The request timed out. Outages like this usually clear within a few minutes."
           actions={
             <>

@@ -7,6 +7,7 @@ import type {
   SettingsResponse,
   UpdateBookingFields,
 } from '@/api/account-api';
+import { VENDOR, accountCopy } from '@/lib/strings';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import { AccountStatusText, type StatusTone } from './AccountStatusText';
 import {
@@ -66,7 +67,7 @@ const PROFILE_BUSY_CODE = 'profile_busy';
 
 const SAVE_FIRST_HELP = 'Save your changes first — a test login uses the saved credentials.';
 const PASSWORD_HELP =
-  'Used only to sign in to recreation.gov on your behalf. Add-to-cart stops at a cart hold; it never checks out.';
+  `Used only to sign in to ${VENDOR} on your behalf. Add-to-cart stops at a cart hold; it never checks out.`;
 
 /**
  * What a saved password looks like in the untouched field.
@@ -147,7 +148,7 @@ export function BookingPanel({
     }
     if (answer.status === 'ok') {
       setLogin(nextLoginState(from, { type: 'succeeded' }));
-      setResult({ tone: 'ok', message: 'Signed in to recreation.gov.' });
+      setResult({ tone: 'ok', message: `Signed in to ${VENDOR}.` });
       return;
     }
     // `profile_busy` while the server still reports a challenge is that challenge
@@ -219,7 +220,7 @@ export function BookingPanel({
         <SeededTextField
           id="settings-recgov-username"
           name="recgov_username"
-          label="Recreation.gov email"
+          label={accountCopy.emailLabel}
           type="email"
           seed={values.recgov_username}
           onChange={(e) =>
@@ -237,7 +238,7 @@ export function BookingPanel({
         <SeededTextField
           id="settings-recgov-password"
           name="recgov_password"
-          label="Recreation.gov password"
+          label={accountCopy.passwordLabel}
           type="password"
           autoComplete="off"
           placeholder={configured ? SAVED_PASSWORD_PLACEHOLDER : undefined}
@@ -296,14 +297,14 @@ export function BookingPanel({
               the part a user cannot guess from "remove credentials" — and the
               part they cannot undo without logging in again from scratch. */}
           <p className="rt-account-danger-note">
-            Removes your Recreation.gov username and password, and erases the saved browser
+            Removes your rec.gov username and password, and erases the saved browser
             session on the booking service. You will have to sign in again to use add-to-cart,
             and any active add-to-cart watches will fail until you do.
           </p>
           <ConfirmButton
             variant="tertiary"
             hue="red"
-            label="Remove rec.gov credentials"
+            label={accountCopy.removeLabel}
             confirmLabel="Confirm removal"
             onConfirm={onRemoveRecgov}
           />

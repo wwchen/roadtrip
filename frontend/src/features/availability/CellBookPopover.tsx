@@ -10,6 +10,7 @@
 // container that clips anything wider than one 66px column.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { bookingCopy, gateCopy } from '@/lib/strings';
 import { useDismiss } from '@/lib/use-dismiss';
 
 /** Matches `--rt-cell-book-pop-width` in availability.css. */
@@ -118,7 +119,7 @@ export function CellBookPopover({ anchor, onOpenBooking, cart, onClose }: CellBo
         }}
       >
         <ExternalLinkIcon />
-        <span>Book on rec.gov</span>
+        <span>{bookingCopy.openProvider}</span>
       </button>
       <button
         type="button"
@@ -134,12 +135,12 @@ export function CellBookPopover({ anchor, onOpenBooking, cart, onClose }: CellBo
       >
         <CartIcon />
         <span className="cg-cell-book-pop-text">
-          <span>Add to cart</span>
+          <span>{bookingCopy.addToCart}</span>
           {cart.state === 'signed-out' ? (
-            <span className="cg-cell-book-pop-hint">Sign in to hold sites from here</span>
+            <span className="cg-cell-book-pop-hint">{gateCopy.cartSignedOut}</span>
           ) : null}
           {cart.state === 'no-credentials' ? (
-            <span className="cg-cell-book-pop-hint">Add rec.gov login in Settings</span>
+            <span className="cg-cell-book-pop-hint">{gateCopy.cartNoCredentials}</span>
           ) : null}
         </span>
       </button>

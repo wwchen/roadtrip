@@ -325,7 +325,7 @@ describe('the week"s states', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText('Recreation.gov is limiting our checks')).toBeInTheDocument(),
+      expect(screen.getByText('rec.gov is limiting our checks')).toBeInTheDocument(),
     );
     expect(screen.getByText("They've throttled us, so we're holding off.")).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Show what we last saw' })).toBeNull();
@@ -341,7 +341,7 @@ describe('the week"s states', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText('Recreation.gov returned an error')).toBeInTheDocument(),
+      expect(screen.getByText('rec.gov returned an error')).toBeInTheDocument(),
     );
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Report it' })).toBeInTheDocument();
@@ -380,7 +380,7 @@ describe('the week"s states', () => {
       </AppProviders>,
     );
 
-    await waitFor(() => expect(screen.getByText("We can't reach Recreation.gov")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("We can't reach rec.gov")).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: "Tell me when it's back" })).toBeInTheDocument();
   });
@@ -1060,7 +1060,7 @@ describe('holding a site straight from the grid', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
 
     expect(
-      await screen.findByText('Your recreation.gov session expired — test login in Settings.'),
+      await screen.findByText('Your rec.gov session expired — test login in Settings.'),
     ).toBeInTheDocument();
     expect(screen.queryByText(/recgov_spa_logged_out/)).toBeNull();
   });

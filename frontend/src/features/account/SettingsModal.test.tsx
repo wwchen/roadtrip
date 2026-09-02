@@ -301,10 +301,10 @@ describe('the Booking tab', () => {
     await screen.findByLabelText('Display name');
 
     await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
-    expect(await screen.findByLabelText('Recreation.gov email')).toBeInTheDocument();
+    expect(await screen.findByLabelText('rec.gov email')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 
-    await userEvent.type(screen.getByLabelText('Recreation.gov email'), 'ada@example.test');
+    await userEvent.type(screen.getByLabelText('rec.gov email'), 'ada@example.test');
 
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
   });
@@ -313,7 +313,7 @@ describe('the Booking tab', () => {
     renderSettingsModal();
     await screen.findByLabelText('Display name');
     await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
-    await userEvent.type(await screen.findByLabelText('Recreation.gov email'), 'ada@example.test');
+    await userEvent.type(await screen.findByLabelText('rec.gov email'), 'ada@example.test');
 
     await userEvent.click(screen.getByRole('button', { name: 'Notifications' }));
 
@@ -326,7 +326,7 @@ describe('the Booking tab', () => {
     await screen.findByLabelText('Display name');
 
     await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
-    await userEvent.type(await screen.findByLabelText('Recreation.gov email'), '.uk');
+    await userEvent.type(await screen.findByLabelText('rec.gov email'), '.uk');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(putTo(RECGOV_URL)).toBeTruthy());
@@ -341,8 +341,8 @@ describe('the Booking tab', () => {
     await screen.findByLabelText('Display name');
 
     await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
-    await userEvent.type(await screen.findByLabelText('Recreation.gov email'), 'ada@example.test');
-    await userEvent.type(screen.getByLabelText('Recreation.gov password'), 'hunter2-secret');
+    await userEvent.type(await screen.findByLabelText('rec.gov email'), 'ada@example.test');
+    await userEvent.type(screen.getByLabelText('rec.gov password'), 'hunter2-secret');
 
     const stored = () => json(settingsBody({}, CONFIGURED_BOOKING));
     onPut = stored;
@@ -351,7 +351,7 @@ describe('the Booking tab', () => {
 
     // The field stays, emptied, with fixed-length dots as its PLACEHOLDER — so
     // nothing real is in the DOM and the length is not the stored one either.
-    const password = await screen.findByLabelText('Recreation.gov password');
+    const password = await screen.findByLabelText('rec.gov password');
     await waitFor(() => expect(password).toHaveValue(''));
     expect(password).toHaveAttribute('placeholder', '\u2022'.repeat(10));
   });
@@ -371,7 +371,7 @@ describe('the Booking tab', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
 
-    expect(await screen.findByLabelText('Recreation.gov email')).toBeInTheDocument();
+    expect(await screen.findByLabelText('rec.gov email')).toBeInTheDocument();
     expect(
       await screen.findByText('Booking service unavailable \u2014 status unknown'),
     ).toBeInTheDocument();
@@ -494,7 +494,7 @@ describe('remove rec.gov credentials', () => {
 
     expect(
       await screen.findByText(
-        'Recreation.gov credentials and saved browser session removed. 2 active add-to-cart ' +
+        'rec.gov credentials and saved browser session removed. 2 active add-to-cart ' +
           'watches will fail until you add them again.',
       ),
     ).toBeInTheDocument();
