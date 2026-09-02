@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Icon, SecretField, SeededTextField } from '@ui';
+import { Button, SecretField, SeededTextField } from '@ui';
 import type { SettingsResponse } from '@/api/account-api';
 import { settingsErrorMessage } from '@/lib/settings-errors';
+import { AccountStatusText } from './AccountStatusText';
 import './account.css';
 
 /** How long a "Sent" confirmation stays up. */
@@ -175,12 +176,5 @@ export function NotificationsPanel({
 
 function TestStatusText({ status, target }: { status: TestStatus | null; target: TestTarget }) {
   if (!status || status.target !== target) return null;
-  return (
-    <span
-      className={`rt-notif-status ${status.ok ? 'rt-notif-status--ok' : 'rt-notif-status--err'}`}
-      role="status"
-    >
-      <Icon name={status.ok ? 'check' : 'close'} aria-hidden="true" /> {status.message}
-    </span>
-  );
+  return <AccountStatusText tone={status.ok ? 'ok' : 'error'}>{status.message}</AccountStatusText>;
 }

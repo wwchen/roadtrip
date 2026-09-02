@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.di
 
+import ca.floo.roadtrip.client.companion.CompanionSessionClient
 import ca.floo.roadtrip.client.companion.HttpRecGovAtcExecutor
 import ca.floo.roadtrip.client.slack.SlackClient
 import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
@@ -77,6 +78,8 @@ import ca.floo.roadtrip.service.scheduler.WatchReaper
 import ca.floo.roadtrip.service.scheduler.framework.Scheduler
 import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
 import ca.floo.roadtrip.service.security.SecretCipher
+import ca.floo.roadtrip.service.settings.CompanionSessionPort
+import ca.floo.roadtrip.service.settings.RecGovCredentialService
 import ca.floo.roadtrip.service.settings.UserSettingsService
 import kotlinx.coroutines.CoroutineScope
 import org.jooq.DSLContext
@@ -125,6 +128,24 @@ val serviceModule =
                 providerLabel = providerLabel,
                 emailService = get<EmailNotificationService>(),
                 appRootUrl = config.webApp?.rootUrl,
+            )
+        }
+
+        single {
+            // Same optional-dependency shape as the settings service above: a
+            // deployment without an encryption key or without a companion still
+            // boots, with storage or the live session degraded rather than absent.
+            val config: AppConfig = get()
+            val cipher: SecretCipher? = config.secrets?.let { SecretCipher(it.encryptionKey) }
+            val companion: CompanionSessionPort? =
+                config.booking.recgovAtc
+                    .takeIf { it.companionEnabled }
+                    ?.let(::CompanionSessionClient)
+            RecGovCredentialService(
+                settingsRepo = get<UserSettingsRepo>(),
+                watchRepo = get<AvailabilityWatchRepo>(),
+                cipher = cipher,
+                companion = companion,
             )
         }
 

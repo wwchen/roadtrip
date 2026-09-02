@@ -14,6 +14,7 @@ import {
 const settings = (over: {
   profile?: Partial<SettingsResponse['profile']>;
   notifications?: Partial<SettingsResponse['notifications']>;
+  booking?: Partial<SettingsResponse['booking']>;
 } = {}): SettingsResponse => ({
   profile: {
     display_name: 'Ada',
@@ -31,12 +32,17 @@ const settings = (over: {
     slack_token_hint: null,
     ...over.notifications,
   },
+  booking: {
+    recgov_configured: false,
+    recgov_username: null,
+    ...over.booking,
+  },
 });
 
 describe('AccountPanel', () => {
   test('shows who is signed in', () => {
     render(
-      <AccountPanel settings={settings()} onSignOut={vi.fn()} onDisconnectSlack={vi.fn()} />,
+      <AccountPanel settings={settings()} onSignOut={vi.fn()} onDisconnectSlack={vi.fn()} onRemoveRecgov={vi.fn()} />,
     );
     expect(screen.getByText('ada@example.test')).toBeInTheDocument();
   });
@@ -44,7 +50,7 @@ describe('AccountPanel', () => {
   test('signing out takes two clicks', async () => {
     const onSignOut = vi.fn();
     render(
-      <AccountPanel settings={settings()} onSignOut={onSignOut} onDisconnectSlack={vi.fn()} />,
+      <AccountPanel settings={settings()} onSignOut={onSignOut} onDisconnectSlack={vi.fn()} onRemoveRecgov={vi.fn()} />,
     );
 
     await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
@@ -56,7 +62,7 @@ describe('AccountPanel', () => {
 
   test('the danger zone is absent when no Slack token is stored', () => {
     render(
-      <AccountPanel settings={settings()} onSignOut={vi.fn()} onDisconnectSlack={vi.fn()} />,
+      <AccountPanel settings={settings()} onSignOut={vi.fn()} onDisconnectSlack={vi.fn()} onRemoveRecgov={vi.fn()} />,
     );
     expect(screen.queryByText('Danger zone')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Disconnect Slack' })).not.toBeInTheDocument();
@@ -69,6 +75,7 @@ describe('AccountPanel', () => {
         settings={settings({ notifications: { slack_configured: true } })}
         onSignOut={vi.fn()}
         onDisconnectSlack={onDisconnectSlack}
+        onRemoveRecgov={vi.fn()}
       />,
     );
 

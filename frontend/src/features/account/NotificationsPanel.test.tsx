@@ -29,6 +29,10 @@ const settings = (over: Partial<SettingsResponse['notifications']> = {}): Settin
     slack_token_hint: null,
     ...over,
   },
+  booking: {
+    recgov_configured: false,
+    recgov_username: null,
+  },
 });
 
 /** Renders with the parent's state wired up, and exposes the latest values. */

@@ -8,7 +8,10 @@ import type { SettingsResponse } from '@/api/account-api';
 import { useThemeStore } from '@/stores/themeStore';
 import { SettingsModal } from './SettingsModal';
 
-const settingsBody = (over: Partial<SettingsResponse['notifications']> = {}): SettingsResponse => ({
+const settingsBody = (
+  over: Partial<SettingsResponse['notifications']> = {},
+  booking: Partial<SettingsResponse['booking']> = {},
+): SettingsResponse => ({
   profile: {
     display_name: 'Ada',
     login_email: 'ada@example.test',
@@ -24,7 +27,20 @@ const settingsBody = (over: Partial<SettingsResponse['notifications']> = {}): Se
     slack_token_hint: null,
     ...over,
   },
+  booking: {
+    recgov_configured: false,
+    recgov_username: null,
+    ...booking,
+  },
 });
+
+const RECGOV_URL = '/api/settings/recgov';
+const RECGOV_STATUS_URL = '/api/settings/recgov/status';
+
+const CONFIGURED_BOOKING = {
+  recgov_configured: true,
+  recgov_username: 'ada@example.test',
+};
 
 const profile: SettingsResponse['profile'] = settingsBody().profile;
 
@@ -36,6 +52,7 @@ interface Recorded {
 
 const requests: Recorded[] = [];
 let getSettings: () => Response;
+let getRecgovStatus: () => Response;
 let onPut: (url: string, body: unknown) => Response;
 
 const json = (body: unknown, status = 200): Response =>
@@ -51,6 +68,7 @@ function stubApi() {
       const body = typeof raw === 'string' ? (JSON.parse(raw) as unknown) : undefined;
       requests.push({ url, method, body });
       if (url === '/api/settings' && method === 'GET') return getSettings();
+      if (url === RECGOV_STATUS_URL && method === 'GET') return getRecgovStatus();
       if (method === 'PUT' || method === 'POST' || method === 'DELETE') return onPut(url, body);
       throw new Error(`unstubbed ${method} ${url}`);
     }),
@@ -95,6 +113,8 @@ function renderSettingsModal({ onClose = vi.fn(), profile: profileOverride }: Re
 beforeEach(() => {
   requests.length = 0;
   getSettings = () => json(settingsBody());
+  getRecgovStatus = () =>
+    json({ configured: false, username: null, password_hint: null, session: 'not_configured' });
   onPut = () => json(settingsBody());
   client = createTestQueryClient();
   stubApi();
@@ -264,6 +284,115 @@ describe('tabs', () => {
     );
     expect(within(tabs).getByRole('button', { name: 'Account' })).not.toHaveAttribute(
       'aria-current',
+    );
+  });
+});
+
+describe('the Booking tab', () => {
+  test('Save gates on the booking slice alone', async () => {
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
+    expect(await screen.findByLabelText('Recreation.gov email')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('Recreation.gov email'), 'ada@example.test');
+
+    expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
+  });
+
+  test('a booking edit does not light up another tab\u2019s Save', async () => {
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
+    await userEvent.type(await screen.findByLabelText('Recreation.gov email'), 'ada@example.test');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Notifications' }));
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  test('saving PUTs the credentials and omits an untouched password', async () => {
+    getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
+    await userEvent.type(await screen.findByLabelText('Recreation.gov email'), '.uk');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(putTo(RECGOV_URL)).toBeTruthy());
+    const body = putTo(RECGOV_URL)!.body as Record<string, unknown>;
+    expect(body.username).toBe('ada@example.test.uk');
+    expect(body).not.toHaveProperty('password');
+    expect(await screen.findByText('Settings saved.')).toBeInTheDocument();
+  });
+
+  test('after saving a password the masked hint comes from the server', async () => {
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
+    await userEvent.type(await screen.findByLabelText('Recreation.gov email'), 'ada@example.test');
+    await userEvent.type(screen.getByLabelText('Recreation.gov password'), 'hunter2-secret');
+
+    const stored = () => json(settingsBody({}, CONFIGURED_BOOKING));
+    onPut = stored;
+    getSettings = stored;
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    // A fixed-length mask, not the password's last characters and not its length.
+    expect(await screen.findByText('\u2022'.repeat(10))).toBeInTheDocument();
+    expect(screen.queryByLabelText('Recreation.gov password')).not.toBeInTheDocument();
+  });
+
+  test('the session row never blocks the panel when the companion is down', async () => {
+    getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
+    getRecgovStatus = () =>
+      json({
+        configured: true,
+        username: 'ada@example.test',
+        password_hint: '9f2c',
+        session: 'companion_unavailable',
+        detail: 'connection refused',
+      });
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
+
+    expect(await screen.findByLabelText('Recreation.gov email')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Booking service unavailable \u2014 status unknown'),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('remove rec.gov credentials', () => {
+  test('reports how many active add-to-cart watches it stranded', async () => {
+    getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Account' }));
+    expect(await screen.findByText('Danger zone')).toBeInTheDocument();
+
+    onPut = () => json({ removed: true, stranded_atc_watches: 2, companion_signed_out: false });
+    getSettings = () => json(settingsBody());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm removal' }));
+
+    expect(
+      await screen.findByText(
+        'Recreation.gov credentials removed. 2 active add-to-cart watches will fail until you add them again.',
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Remove rec.gov credentials' }),
+      ).not.toBeInTheDocument(),
     );
   });
 });

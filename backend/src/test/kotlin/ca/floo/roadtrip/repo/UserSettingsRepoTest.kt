@@ -54,6 +54,36 @@ class UserSettingsRepoTest : SharedDbTest() {
         assertEquals("3f9a", s.slackTokenHint)
     }
 
+    @Test fun `saveRecgovCredentials stores username and sealed password`() {
+        val u = newUser()
+        val cipher = byteArrayOf(0x7, 0x8)
+        repo.saveRecgovCredentials(u, username = "ada@example.com", passwordCipher = cipher)
+        val s = repo.find(u)!!
+        assertEquals("ada@example.com", s.recgovUsername)
+        assertContentEquals(cipher, s.recgovPasswordCipher)
+    }
+
+    @Test fun `saveRecgovCredentials with null password preserves the stored one`() {
+        val u = newUser()
+        val cipher = byteArrayOf(0x7, 0x8)
+        repo.saveRecgovCredentials(u, "ada@example.com", cipher)
+        repo.saveRecgovCredentials(u, "grace@example.com", passwordCipher = null)
+        val s = repo.find(u)!!
+        assertEquals("grace@example.com", s.recgovUsername)
+        assertContentEquals(cipher, s.recgovPasswordCipher)
+    }
+
+    @Test fun `clearRecgov nulls the credential columns but keeps the Slack token`() {
+        val u = newUser()
+        repo.setSlackToken(u, byteArrayOf(9), "beef")
+        repo.saveRecgovCredentials(u, "ada@example.com", byteArrayOf(1))
+        repo.clearRecgov(u)
+        val s = repo.find(u)!!
+        assertNull(s.recgovUsername)
+        assertNull(s.recgovPasswordCipher)
+        assertContentEquals(byteArrayOf(9), s.slackTokenCipher)
+    }
+
     @Test fun `clearSlack nulls token but keeps channel`() {
         val u = newUser()
         repo.upsertNotifications(u, null, "#c")

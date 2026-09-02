@@ -10,12 +10,23 @@ import {
 } from '@tanstack/react-query';
 import {
   clearSlack,
+  fetchRecgovStatus,
   fetchSettings,
+  removeRecgov,
   sendEmailTest,
   sendSlackTest,
+  startRecgovLogin,
+  submitRecgovMfa,
+  updateBooking,
   updateNotifications,
   updateProfile,
+  verifyRecgovSession,
+  type RecgovLoginResponse,
+  type RecgovRemovedResponse,
+  type RecgovStatus,
+  type RecgovVerifyResponse,
   type SettingsResponse,
+  type UpdateBookingFields,
   type UpdateNotificationsFields,
 } from '@/api/account-api';
 import { coerceChoice } from '@/lib/theme';
@@ -85,6 +96,94 @@ export function useDisconnectSlack() {
     mutationFn: () => clearSlack(),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.settings() }),
   });
+}
+
+/**
+ * Save the rec.gov username and, when one was typed, a new password.
+ *
+ * Resolves to the credential summary rather than the whole document, so it
+ * invalidates instead of seeding — same reasoning as `useDisconnectSlack`. The
+ * refetch is what hands the panel its new password hint.
+ */
+export function useSaveBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateBookingFields) => updateBooking(input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.settings() }),
+  });
+}
+
+/**
+ * Remove the stored rec.gov credentials.
+ *
+ * The response says how many active `atc` watches the removal stranded, which
+ * is what the confirmation reports back to the user.
+ */
+export function useRemoveRecgov() {
+  const queryClient = useQueryClient();
+  return useMutation<RecgovRemovedResponse, unknown, void>({
+    mutationFn: () => removeRecgov(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.settings() }),
+  });
+}
+
+/**
+ * The live rec.gov session state.
+ *
+ * Its own query so the modal renders without it: this is the one settings read
+ * that can sit behind an unreachable companion. Retries are off because the
+ * server already degrades to `companion_unavailable` rather than failing —
+ * a retry would only make the row slower to say so.
+ */
+export function useRecgovStatus(): UseQueryResult<RecgovStatus> {
+  return useQuery({
+    queryKey: queryKeys.recgovStatus(),
+    queryFn: ({ signal }) => fetchRecgovStatus({ signal }),
+    retry: false,
+  });
+}
+
+/**
+ * Refetches the session row after an action that could have changed it.
+ *
+ * Shared by the three session actions below, which are plain functions rather
+ * than mutations: they cache nothing themselves, and the panel's state machine
+ * owns their pending state.
+ */
+function useSessionRefresh(): () => void {
+  const queryClient = useQueryClient();
+  return () => void queryClient.invalidateQueries({ queryKey: queryKeys.recgovStatus() });
+}
+
+/** Begin a login with the SAVED credentials. */
+export function useRecgovLogin(): () => Promise<RecgovLoginResponse> {
+  const refresh = useSessionRefresh();
+  return async () => {
+    const result = await startRecgovLogin();
+    // A pending challenge has not changed the session yet; anything else has.
+    if (result.status !== 'mfa_required') refresh();
+    return result;
+  };
+}
+
+/** Complete the challenge the login opened. */
+export function useRecgovMfa(): (code: string) => Promise<RecgovLoginResponse> {
+  const refresh = useSessionRefresh();
+  return async (code: string) => {
+    const result = await submitRecgovMfa(code);
+    refresh();
+    return result;
+  };
+}
+
+/** Dry-run session check. Never places a cart hold. */
+export function useRecgovVerify(): () => Promise<RecgovVerifyResponse> {
+  const refresh = useSessionRefresh();
+  return async () => {
+    const result = await verifyRecgovSession();
+    refresh();
+    return result;
+  };
 }
 
 /**

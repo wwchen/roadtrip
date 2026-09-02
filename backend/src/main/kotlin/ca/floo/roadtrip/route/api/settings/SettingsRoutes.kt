@@ -10,13 +10,10 @@ import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.decodeOptionalTextJsonBody
 import ca.floo.roadtrip.route.common.decodeTextJsonBody
 import ca.floo.roadtrip.route.common.describeApi
-import ca.floo.roadtrip.route.common.principal
-import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.service.settings.SettingsError
 import ca.floo.roadtrip.service.settings.UserSettingsPort
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.routing.Route
@@ -28,24 +25,11 @@ import io.ktor.server.routing.route
 import kotlinx.serialization.Serializable
 
 // ── Path segments ────────────────────────────────────────────────────────────
-private const val API_SETTINGS = "/api/settings"
 private const val SEGMENT_PROFILE = "/profile"
 private const val SEGMENT_NOTIFICATIONS = "/notifications"
 private const val SLACK_PATH = "/notifications/slack"
 private const val SLACK_TEST_PATH = "/notifications/slack/test"
 private const val EMAIL_TEST_PATH = "/notifications/email/test"
-
-// ── Error codes ──────────────────────────────────────────────────────────────
-private const val ERROR_INVALID_FIELD = "invalid_field"
-private const val ERROR_SLACK_INVALID_AUTH = "slack_invalid_auth"
-private const val ERROR_ENCRYPTION_UNAVAILABLE = "encryption_unavailable"
-private const val ERROR_SLACK_NOT_CONFIGURED = "slack_not_configured"
-private const val ERROR_SLACK_SEND_FAILED = "slack_send_failed"
-private const val ERROR_EMAIL_SEND_FAILED = "email_send_failed"
-private const val ERROR_INVALID_BODY = "invalid_body"
-
-// ── OpenAPI tag ───────────────────────────────────────────────────────────────
-private const val TAG_SETTINGS = "settings"
 
 /** Body for `POST /api/settings/notifications/slack/test`. */
 @Serializable
@@ -74,7 +58,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
             val req =
                 when (val body = call.decodeTextJsonBody<UpdateProfileRequest>(roadtripApiJson)) {
                     is RouteBodyResult.Invalid ->
-                        return@put call.respondApiError(ERROR_INVALID_BODY, HttpStatusCode.BadRequest, body.detail)
+                        return@put call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
             try {
@@ -95,7 +79,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
                         }
                 ) {
                     is RouteBodyResult.Invalid ->
-                        return@put call.respondApiError(ERROR_INVALID_BODY, HttpStatusCode.BadRequest, body.detail)
+                        return@put call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
             try {
@@ -121,7 +105,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
                         call.decodeOptionalTextJsonBody<SlackTestRequest>(roadtripApiJson) { SlackTestRequest() }
                 ) {
                     is RouteBodyResult.Invalid ->
-                        return@post call.respondApiError(ERROR_INVALID_BODY, HttpStatusCode.BadRequest, body.detail)
+                        return@post call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
             try {
@@ -144,36 +128,4 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
     }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * Returns the ambient [Principal.User] or responds with 401 and returns null.
- * The `.access(RouteAccess.User)` interceptor already blocks anonymous requests,
- * so this cast defensive return is a safety net for System principals.
- */
-private suspend fun ApplicationCall.requireUser(): Principal.User? {
-    val p = principal() as? Principal.User
-    if (p == null) respondApiError("unauthenticated", HttpStatusCode.Unauthorized)
-    return p
-}
-
 private suspend fun ApplicationCall.respondSettings(dto: SettingsResponseDto) = respondEncodedJson(dto)
-
-/**
- * Maps a [SettingsError] to the HTTP status code and error code documented in
- * the brief. Must be called from a suspend handler body.
- */
-private suspend fun ApplicationCall.respondSettingsError(e: SettingsError) =
-    when (e) {
-        is SettingsError.InvalidField -> respondApiError(ERROR_INVALID_FIELD, HttpStatusCode.BadRequest, e.message)
-        is SettingsError.SlackRejected -> respondApiError(ERROR_SLACK_INVALID_AUTH, HttpStatusCode.BadRequest, e.message)
-        is SettingsError.EncryptionUnavailable ->
-            respondApiError(
-                ERROR_ENCRYPTION_UNAVAILABLE,
-                HttpStatusCode.ServiceUnavailable,
-                e.message,
-            )
-        is SettingsError.SlackNotConfigured -> respondApiError(ERROR_SLACK_NOT_CONFIGURED, HttpStatusCode.ServiceUnavailable, e.message)
-        is SettingsError.SlackSendFailed -> respondApiError(ERROR_SLACK_SEND_FAILED, HttpStatusCode.BadGateway, e.message)
-        is SettingsError.EmailSendFailed -> respondApiError(ERROR_EMAIL_SEND_FAILED, HttpStatusCode.BadGateway, e.message)
-    }

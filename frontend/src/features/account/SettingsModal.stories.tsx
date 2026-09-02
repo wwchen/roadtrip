@@ -25,6 +25,10 @@ const SETTINGS: SettingsResponse = {
     slack_configured: true,
     slack_token_hint: 'xoxb-…4f2a',
   },
+  booking: {
+    recgov_configured: true,
+    recgov_username: 'ada@example.test',
+  },
 };
 
 /** Serves the settings document and accepts every write, so the catalog entry

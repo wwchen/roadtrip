@@ -239,4 +239,27 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
         assertEquals(2, repo.count(ownerUserId = null))
         assertEquals(1, repo.count(ownerUserId = owner.value))
     }
+
+    @Test
+    fun `countByTriggerKind counts only the owner's active watches carrying that kind`() {
+        val owner = seedAppUser()
+        val other = seedAppUser()
+        val poiId = insertPoi()
+        val target = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiId, campsiteId = null))
+        val repo = AvailabilityWatchRepo(ctx)
+
+        // Carries atc alongside a notify kind — containment, not equality.
+        repo.create(createInput(target, ownerUserId = owner.value).copy(triggerKinds = listOf("email_notify", "atc")))
+        // Same owner, no atc.
+        repo.create(createInput(target, ownerUserId = owner.value).copy(triggerKinds = listOf("email_notify")))
+        // Same owner, atc but paused.
+        val paused = repo.create(createInput(target, ownerUserId = owner.value))
+        repo.update(paused.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
+        // Another owner's active atc watch.
+        repo.create(createInput(target, ownerUserId = other.value))
+
+        assertEquals(1, repo.countByTriggerKind(owner.value, WatchStatus.ACTIVE, "atc"))
+        assertEquals(1, repo.countByTriggerKind(other.value, WatchStatus.ACTIVE, "atc"))
+        assertEquals(2, repo.countByTriggerKind(owner.value, WatchStatus.ACTIVE, "email_notify"))
+    }
 }

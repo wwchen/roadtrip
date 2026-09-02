@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route.api.settings
 
+import ca.floo.roadtrip.model.api.BookingSettingsDto
 import ca.floo.roadtrip.model.api.EmailTestResponseDto
 import ca.floo.roadtrip.model.api.NotificationsDto
 import ca.floo.roadtrip.model.api.ProfileDto
@@ -97,6 +98,7 @@ private fun defaultSettingsDto(slackConfigured: Boolean = false): SettingsRespon
                 slackConfigured = slackConfigured,
                 slackTokenHint = null,
             ),
+        booking = BookingSettingsDto(recgovConfigured = false, recgovUsername = null),
     )
 
 private fun resolve(token: String?): Principal =

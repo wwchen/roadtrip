@@ -12,6 +12,16 @@ export const queryKeys = {
   me: () => ['me'] as const,
   settings: () => ['settings'] as const,
 
+  /**
+   * The rec.gov session status.
+   *
+   * Nested under `settings` on purpose: it is the same document from the user's
+   * point of view, so a credential save or removal invalidates it for free. It
+   * is a separate *request* because it is the only settings read that waits on
+   * the companion, and opening the modal must not.
+   */
+  recgovStatus: () => ['settings', 'recgov-status'] as const,
+
   watches: {
     all: () => ['watches'] as const,
     list: (filters?: Readonly<Record<string, unknown>>) => ['watches', 'list', filters ?? {}] as const,

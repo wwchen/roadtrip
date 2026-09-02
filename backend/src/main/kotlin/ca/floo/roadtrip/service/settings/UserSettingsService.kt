@@ -54,6 +54,10 @@ sealed class SettingsError(
     class EmailSendFailed(
         message: String = "Email delivery failed",
     ) : SettingsError(message)
+
+    class RecgovNotConfigured(
+        message: String = "No rec.gov credentials are stored for this account",
+    ) : SettingsError(message)
 }
 
 /**
@@ -267,6 +271,7 @@ class UserSettingsService(
                     slackConfigured = settings?.slackTokenCipher != null,
                     slackTokenHint = settings?.slackTokenHint,
                 ),
+            booking = bookingSettingsDto(settings, cipher),
         )
     }
 }
