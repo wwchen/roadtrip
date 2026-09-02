@@ -420,7 +420,7 @@ class PoiServiceTest : SharedDbTest() {
             SET site_status = ?, time_zone = ?, amenities = ?::jsonb,
                 stall_count = ?, max_power_kw = ?, pricebooks = ?::jsonb,
                 availability_profile = ?::jsonb,
-                open_to_non_teslas = ?, trailer_friendly = ?, twenty_four_seven = ?,
+                open_to_non_teslas = NULL, trailer_friendly = ?, twenty_four_seven = ?,
                 index_payload = ?::jsonb, detail_payload = ?::jsonb
             WHERE id = ?
             """.trimIndent(),
@@ -431,7 +431,8 @@ class PoiServiceTest : SharedDbTest() {
             250,
             """[{"feeType":"CHARGING"}]""",
             """{"availabilityProfile":{"weekday":"busy"}}""",
-            false,
+            // A literal NULL above, then true, false — three booleans, three
+            // distinct states, so a swapped assignment between any pair fails.
             true,
             false,
             """{"supercharger_function":{"site_status":"INDEX_ONLY_STATUS"}}""",
@@ -465,7 +466,7 @@ class PoiServiceTest : SharedDbTest() {
                 .jsonObject["weekday"]!!
                 .jsonPrimitive.content,
         )
-        assertEquals(false, detail.openToNonTeslas)
+        assertNull(detail.openToNonTeslas)
         assertEquals(true, detail.trailerFriendly)
         assertEquals(false, detail.twentyFourSeven)
         assertEquals(
@@ -478,7 +479,7 @@ class PoiServiceTest : SharedDbTest() {
         )
         assertEquals(
             "Downtown Redding",
-            detail.upstream!!
+            detail.upstream
                 .jsonObject["detail"]!!
                 .jsonObject["commonSiteName"]!!
                 .jsonPrimitive.content,

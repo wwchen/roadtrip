@@ -104,15 +104,11 @@ export const Charger: Story = {
         city: 'Sutherlin',
         state: 'OR',
         postcode: '97479',
-        stallCount: 51,
-        powerKilowatt: 250,
-        v3: 51,
-        dateOpened: '2021-06-14',
-        detailPayload: {
-          accessHours: { twentyFourSeven: true },
-          openToNonTeslas: true,
-          amenities: ['restrooms', 'shopping'],
-        },
+        stall_count: 51,
+        power_kilowatt: 250,
+        twenty_four_seven: true,
+        open_to_non_teslas: true,
+        amenities: ['restrooms', 'shopping'],
       }}
     />
   ),

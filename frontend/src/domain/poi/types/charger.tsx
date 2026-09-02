@@ -39,8 +39,6 @@ export function ChargerPoiPage({ feature, variant, onClose }: PoiTypeProps) {
   const distance = useDistanceTo(lng, lat);
   const name = text(p.name) || 'Supercharger';
 
-  // Tesla's own site payload, verbatim — `upstream.detail.commonSiteName` is the
-  // only place its "where in the parking lot" label lives.
   const upstreamDetail = (p.upstream as { detail?: Record<string, unknown> } | undefined)
     ?.detail;
   const address = [
@@ -88,7 +86,6 @@ export function ChargerPoiPage({ feature, variant, onClose }: PoiTypeProps) {
       ),
     })),
     access ? { label: 'Access', value: access } : null,
-    text(p.dateOpened) ? { label: 'Opened', value: text(p.dateOpened) } : null,
   ]);
 
   const tags: PoiTag[] = [

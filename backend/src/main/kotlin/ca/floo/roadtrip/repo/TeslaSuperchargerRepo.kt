@@ -103,11 +103,15 @@ class TeslaSuperchargerRepo(
             siteStatus = record.get("site_status", String::class.java),
             accessType = record.get("access_type", String::class.java),
             openToPublic = record.get("open_to_public", Boolean::class.java),
-            openToNonTeslas = record.get("open_to_non_teslas", Boolean::class.java),
-            trailerFriendly = record.get("trailer_friendly", Boolean::class.java),
-            twentyFourSeven = record.get("twenty_four_seven", Boolean::class.java),
-            stallCount = record.get("stall_count", Int::class.java),
-            maxPowerKw = record.get("max_power_kw", Int::class.java),
+            // `Boolean::class.java`/`Int::class.java` resolve to the JVM *primitive*
+            // class, not the boxed wrapper — jOOQ converts a NULL column to that
+            // primitive's zero value (false / 0) rather than null. These four columns
+            // are genuinely nullable, so they need the boxed type to come back as null.
+            openToNonTeslas = record.get("open_to_non_teslas", Boolean::class.javaObjectType),
+            trailerFriendly = record.get("trailer_friendly", Boolean::class.javaObjectType),
+            twentyFourSeven = record.get("twenty_four_seven", Boolean::class.javaObjectType),
+            stallCount = record.get("stall_count", Int::class.javaObjectType),
+            maxPowerKw = record.get("max_power_kw", Int::class.javaObjectType),
             address = parseJsonElement(record.get("address_text", String::class.java)),
             region = record.get("region", String::class.java),
             country = record.get("country", String::class.java),
