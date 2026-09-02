@@ -201,7 +201,10 @@ dc_resource(
 )
 dc_resource(
     'recgov-companion',
-    resource_deps=['alloy'],
+    # The companion serves its HTTP API independently of the backend and the
+    # log collector. Waiting on Alloy made its startup look coupled to the
+    # backend's jar build, even though the companion has no such dependency.
+    resource_deps=['compose-cleanup'],
     labels=['app'],
     links=['http://127.0.0.1:8770'],
 )
