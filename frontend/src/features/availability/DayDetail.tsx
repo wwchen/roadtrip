@@ -7,7 +7,8 @@
 // The message below is the whole point of the component, and each branch exists
 // because every other one would be a lie:
 //   - a watch toggle, when there is inventory to monitor and someone to notify;
-//   - "sign in", when the campground *could* alert this user but does not know them;
+//   - "sign in", when the campground *could* alert this user but does not know them —
+//     an offer, not a notice, so it carries the button that starts the flow;
 //   - "checking", while we do not yet know which of those two it is;
 //   - "couldn't check", when asking failed — with the retry that implies;
 //   - "not available for this campground", when the provider cannot alert anyone;
@@ -51,6 +52,8 @@ export interface DayDetailProps {
   onToggleWatch: (anchor: HTMLElement) => void;
   /** Re-ask for the watch list, offered with the `failed` message. */
   onRetryWatches: () => void;
+  /** Starts the hosted sign-in flow from the `signed-out` message. */
+  onSignIn: () => void;
 }
 
 export function DayDetail({
@@ -60,6 +63,7 @@ export function DayDetail({
   busy,
   onToggleWatch,
   onRetryWatches,
+  onSignIn,
 }: DayDetailProps) {
   return (
     <div className="cg-day-detail">
@@ -77,6 +81,7 @@ export function DayDetail({
           busy={busy}
           onToggleWatch={onToggleWatch}
           onRetryWatches={onRetryWatches}
+          onSignIn={onSignIn}
         />
       </div>
     </div>
@@ -101,6 +106,7 @@ function DayAction({
   busy,
   onToggleWatch,
   onRetryWatches,
+  onSignIn,
 }: DayDetailProps) {
   const status = normalizeAvailabilityStatus(day.status);
   // Closed and unknown days are excluded: there is no inventory state to monitor
@@ -125,7 +131,11 @@ function DayAction({
 
   switch (unavailable) {
     case 'signed-out':
-      return <span className="cg-day-detail-meta">Sign in to set availability alerts.</span>;
+      return (
+        <span className="cg-day-detail-meta">
+          <LinkButton onClick={onSignIn}>Sign in</LinkButton> to set availability alerts.
+        </span>
+      );
     case 'loading':
       return <span className="cg-day-detail-meta">Checking your availability alerts…</span>;
     case 'failed':

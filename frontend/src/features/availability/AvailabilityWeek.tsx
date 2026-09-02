@@ -8,6 +8,7 @@ import { copyShareUrl } from '@/lib/share-links';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import { addToCart } from '@/api/booking-api';
 import { isCartActionPending } from './cart-action';
+import { signIn } from '@/api/auth-api';
 import { DayDetail, type WatchUnavailableReason } from './DayDetail';
 import { CalendarPopover } from './CalendarPopover';
 import { SiteList } from './SiteList';
@@ -380,6 +381,7 @@ function AvailabilityWeekView({
           busy={mutations.saving}
           onToggleWatch={(anchor) => void toggleDayWatch(anchor)}
           onRetryWatches={watches.retry}
+          onSignIn={() => signIn()}
         />
       ) : null}
 

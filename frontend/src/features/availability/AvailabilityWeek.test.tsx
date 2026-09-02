@@ -575,7 +575,7 @@ describe('watches', () => {
       screen.getAllByRole('columnheader')[2]!.querySelector('button')!.click();
     });
 
-    expect(screen.getByText('Sign in to set availability alerts.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
     // The grid itself is unaffected.
     expect(screen.getByText(/Sites by date/)).toBeInTheDocument();
@@ -589,7 +589,7 @@ describe('watches', () => {
     });
 
     expect(screen.getByText('Checking your availability alerts…')).toBeInTheDocument();
-    expect(screen.queryByText('Sign in to set availability alerts.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
   });
 
@@ -601,7 +601,7 @@ describe('watches', () => {
     });
 
     expect(screen.getByText(/Couldn't check your availability alerts/)).toBeInTheDocument();
-    expect(screen.queryByText('Sign in to set availability alerts.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
 
     stubs.watches = () => json({ watches: [], total: 0 });
     await act(async () => {
@@ -689,7 +689,7 @@ describe('watches', () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByText('Sign in to set availability alerts.')).toBeInTheDocument(),
+      expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument(),
     );
     expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
   });
