@@ -8,19 +8,15 @@ export interface MapContextValue {
    * number on every `style.load`. Falsy exactly when nothing may touch the map,
    * and the effect dependency that drives overlay reinstalls.
    *
-   * A counter, not a boolean: an inline style fires `style.load` synchronously
-   * inside `setStyle`, so reset and reload land in one React batch, and a
+   * A counter, not a boolean: a style MapLibre need not fetch fires `style.load`
+   * synchronously inside `setStyle`, so reset and reload land in one batch, and a
    * boolean going true -> false -> true in one batch looks unchanged — React
    * bails out and every reinstall is skipped.
    */
   styleEpoch: number;
   basemapKey: string;
   setBasemap: (key: string) => void;
-  /** True when the user has never explicitly picked a basemap — it is following
-   *  the theme rather than pinned to a choice. */
-  isAutoBasemap: boolean;
-  /** Drop the explicit pick and return to following the theme. */
-  resetBasemap: () => void;
+  /** True when the satellite imagery underlay is drawn beneath the basemap. */
   satellite: boolean;
   setSatellite: (on: boolean) => void;
 }

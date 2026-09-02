@@ -396,7 +396,7 @@ describe('painting', () => {
     await waitFor(() => expect(pinIdsIn('sc')).toEqual([1]));
 
     await act(async () => {
-      await userEvent.click(screen.getByRole('radio', { name: 'Transit' }));
+      await userEvent.click(screen.getByRole('radio', { name: 'Terrain' }));
     });
     instance.wipeAppLayers();
     await act(async () => {
@@ -702,7 +702,7 @@ describe('the trip overlay', () => {
     expect(instance.fitBoundsCalls).toHaveLength(1);
 
     await act(async () => {
-      await userEvent.click(screen.getByRole('radio', { name: 'Transit' }));
+      await userEvent.click(screen.getByRole('radio', { name: 'Terrain' }));
     });
     instance.wipeAppLayers();
     await act(async () => {
@@ -725,7 +725,7 @@ describe('the trip overlay', () => {
     expect(draggedFill).not.toContain('"role"');
 
     await act(async () => {
-      await userEvent.click(screen.getByRole('radio', { name: 'Transit' }));
+      await userEvent.click(screen.getByRole('radio', { name: 'Terrain' }));
     });
     instance.wipeAppLayers();
     await act(async () => {

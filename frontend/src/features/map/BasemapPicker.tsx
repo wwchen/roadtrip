@@ -14,13 +14,15 @@ const checkedOf = (e: Event): boolean => (e.target as HTMLInputElement).checked;
  * the choice.
  *
  * A swatch grid rather than a `<select>`: the picker's job is "what will this
- * look like", which a dropdown of names can't answer. `isAutoBasemap` has no tile
- * of its own — there being no user pick maps to whichever swatch the current
- * `basemapKey` resolves to, same as the map itself falls back to it.
+ * look like", which a dropdown of names can't answer.
+ *
+ * Cartography only. Light and Dark used to sit in this grid as if they were peers
+ * of Streets and Terrain, so one control chose two unrelated things and picking a
+ * map could un-darken the UI. Brightness is the app's theme now; every cartography
+ * here has tiles for both modes, and the swatch previews the pair this mode loads.
  */
 export function BasemapPicker() {
-  const { basemapKey, setBasemap, isAutoBasemap, resetBasemap, satellite, setSatellite } =
-    useMapContext();
+  const { basemapKey, setBasemap, satellite, setSatellite } = useMapContext();
 
   return (
     <>
@@ -34,11 +36,6 @@ export function BasemapPicker() {
           />
         ))}
       </div>
-      {!isAutoBasemap && (
-        <button type="button" className="rt-legend__basemap-reset" onClick={resetBasemap}>
-          Match theme automatically
-        </button>
-      )}
       <div className="rt-legend__satellite">
         <div className="rt-legend__satellite-copy">
           <span className="rt-legend__row-title">Satellite overlay</span>

@@ -232,9 +232,11 @@
   --rt-basemap-streets:  linear-gradient(150deg, #efeae2, #d9d3c8);
   --rt-basemap-outdoors: linear-gradient(150deg, #e4ebdd, #c4cfb4);
   --rt-basemap-terrain:  linear-gradient(150deg, #ede3d4, #cbb394);
-  --rt-basemap-light:    #fafbfc;
-  --rt-basemap-dark:     #232a33;
-  --rt-basemap-transit:  linear-gradient(150deg, #deeefe, #b9d8f6);
+
+  /* Dark counterparts. One token per cartography, revalued by mode rather than a
+     second set of names: the swatch has to preview the tiles this mode will
+     actually load, or the grid advertises a light map inside a dark UI — which is
+     precisely the bug the light/dark tiles were split out to fix. */
 
   /* Map geometry — polygon fills, strokes, route lines */
   --rt-map-np-fill:     var(--rt-c-green-600);
@@ -395,3 +397,13 @@
      grid columns, the settings rows) rather than a layout mode, and snapping them
      to 640 would reflow those components on tablets that read fine today. */
 }
+
+/* Basemap swatches in dark mode — see the note in `:root`. Literal two-stop
+   miniatures of each provider's dark tiles, not themed UI surfaces, for the same
+   reason their light counterparts are literals. */
+.mode-dark {
+  --rt-basemap-streets:  linear-gradient(150deg, #2b2b2b, #0c0c0c);
+  --rt-basemap-outdoors: linear-gradient(150deg, #5a678a, #303950);
+  --rt-basemap-terrain:  linear-gradient(150deg, #3a3f46, #1b1e22);
+}
+
