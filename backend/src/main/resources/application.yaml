@@ -34,6 +34,14 @@ roadtrip:
     recgov-atc:
       companion-base-url:
       companion-timeout: 180s
+      # Shared secret for the companion channel. The companion requires it on
+      # every route; blank means every companion call is refused.
+      companion-api-token: ${COMPANION_API_TOKEN:}
+  security:
+    # AES-256-GCM key for per-user secret storage (SecretCipher), base64 of
+    # 32 bytes. Absent or blank disables secret storage: SecretsConfig returns
+    # null and settings that need the cipher answer 503.
+    encryption-key: ${ENCRYPTION_KEY:}
   auth:
     # Selects the active vendor block under `providers` and its claims
     # dialect — the flow is plain OIDC for every value. clerk | auth0 |

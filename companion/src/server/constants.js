@@ -9,7 +9,9 @@ export const HTTP_NOT_FOUND = 404
 export const HTTP_CONFLICT = 409
 export const HTTP_PAYLOAD_TOO_LARGE = 413
 export const HTTP_UNPROCESSABLE_ENTITY = 422
+export const HTTP_TOO_MANY_REQUESTS = 429
 export const HTTP_INTERNAL_ERROR = 500
+export const HTTP_SERVICE_UNAVAILABLE = 503
 
 export const EXIT_SUCCESS = 0
 export const EXIT_USAGE = 2

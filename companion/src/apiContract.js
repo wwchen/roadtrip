@@ -5,6 +5,13 @@ import {
 
 export const OPENAPI_ROUTE = '/openapi.json'
 export const SWAGGER_DOCS_ROUTE = '/docs'
+export const COMPANION_SECURITY_SCHEME = 'companionToken'
+
+const PROFILE_ID_SCHEMA = {
+  type: 'string',
+  description: 'Opaque per-user browser profile id. Required: there is no shared profile.',
+  example: '42',
+}
 
 export const COMPANION_API_ROUTES = [
   {
@@ -20,16 +27,25 @@ export const COMPANION_API_ROUTES = [
     method: 'GET',
     path: '/health',
     operationId: 'getHealth',
-    summary: 'Companion health and Rec.gov auth status',
+    summary: 'Companion health and per-profile Rec.gov auth status',
+    description:
+      'Lock-free: answers while the profile is mid-login. Reachable without the ' +
+      'shared-secret header from localhost only, which is what the Compose healthcheck uses.',
+    parameters: [profileIdQueryParameter({ required: false })],
     responses: {
       200: jsonResponse('Companion health status', 'HealthResponse'),
+      400: jsonResponse('profile_id is malformed', 'ErrorResponse'),
     },
   },
   {
     method: 'POST',
     path: '/login',
     operationId: 'postLogin',
-    summary: 'Submit Rec.gov credentials for the companion browser session',
+    summary: 'Log one browser profile in to Rec.gov, in two phases when MFA is prompted',
+    description:
+      'Phase one posts profile_id + username + password. When Rec.gov prompts for a code the ' +
+      'response is 401 `mfa_required` with a challenge_id that holds the profile lock until it is ' +
+      'completed or expires; phase two posts profile_id + challenge_id + mfa_code.',
     requestBody: {
       required: true,
       content: {
@@ -43,9 +59,11 @@ export const COMPANION_API_ROUTES = [
     },
     responses: {
       200: jsonResponse('Login succeeded', 'AuthResponse'),
-      400: jsonResponse('Invalid or incomplete login request', 'ErrorResponse'),
-      401: jsonResponse('Login failed or Rec.gov rejected the session', 'AuthResponse'),
-      409: jsonResponse('Companion is already running work', 'ErrorResponse'),
+      400: jsonResponse('Invalid request, missing profile_id, or an unknown/expired MFA challenge', 'ErrorResponse'),
+      401: jsonResponse('Login failed, MFA is required and a challenge was opened, or the submitted code was rejected (mfa_invalid)', 'MfaChallengeResponse'),
+      409: jsonResponse('The profile is already running work', 'ErrorResponse'),
+      429: jsonResponse('The profile is in failed-login backoff', 'ErrorResponse'),
+      503: jsonResponse('The concurrent-browser cap is reached and no profile is evictable', 'ErrorResponse'),
       500: jsonResponse('Login check failed unexpectedly', 'ErrorResponse'),
     },
   },
@@ -53,10 +71,14 @@ export const COMPANION_API_ROUTES = [
     method: 'POST',
     path: '/logout',
     operationId: 'postLogout',
-    summary: 'Click through the Rec.gov logout flow in the companion browser',
+    summary: 'Click through the Rec.gov logout flow in one browser profile',
+    parameters: [profileIdQueryParameter()],
+    requestBody: profileRequestBody(),
     responses: {
       200: jsonResponse('Logout succeeded or the browser was already logged out', 'AuthResponse'),
-      409: jsonResponse('Companion is already running work', 'ErrorResponse'),
+      400: jsonResponse('Missing or malformed profile_id', 'ErrorResponse'),
+      409: jsonResponse('The profile is already running work', 'ErrorResponse'),
+      503: jsonResponse('The concurrent-browser cap is reached and no profile is evictable', 'ErrorResponse'),
       500: jsonResponse('Logout failed unexpectedly', 'AuthResponse'),
     },
   },
@@ -64,19 +86,42 @@ export const COMPANION_API_ROUTES = [
     method: 'POST',
     path: '/refresh',
     operationId: 'postRefresh',
-    summary: 'Force refresh the stored Rec.gov browser session',
+    summary: 'Force refresh one profile stored Rec.gov browser session',
+    parameters: [profileIdQueryParameter()],
+    requestBody: profileRequestBody(),
     responses: {
       200: jsonResponse('Refresh succeeded', 'AuthResponse'),
-      401: jsonResponse('Refresh failed; operator login required', 'AuthResponse'),
-      409: jsonResponse('Companion is already running work', 'ErrorResponse'),
+      400: jsonResponse('Missing or malformed profile_id', 'ErrorResponse'),
+      401: jsonResponse('Refresh failed; interactive login required', 'AuthResponse'),
+      409: jsonResponse('The profile is already running work', 'ErrorResponse'),
+      503: jsonResponse('The concurrent-browser cap is reached and no profile is evictable', 'ErrorResponse'),
       500: jsonResponse('Refresh failed unexpectedly', 'ErrorResponse'),
+    },
+  },
+  {
+    method: 'POST',
+    path: '/verify',
+    operationId: 'postVerify',
+    summary: 'Dry-run session check for one browser profile',
+    description:
+      'Loads the Rec.gov account page and reads GET /api/cart/shoppingcart from page context. ' +
+      'It never clicks Reserve and never places a cart hold.',
+    parameters: [profileIdQueryParameter()],
+    requestBody: profileRequestBody(),
+    responses: {
+      200: jsonResponse('The profile session is live', 'VerifyResponse'),
+      400: jsonResponse('Missing or malformed profile_id', 'ErrorResponse'),
+      401: jsonResponse('The profile has no usable Rec.gov session', 'VerifyResponse'),
+      409: jsonResponse('The profile is already running work', 'ErrorResponse'),
+      503: jsonResponse('The concurrent-browser cap is reached and no profile is evictable', 'ErrorResponse'),
+      500: jsonResponse('Verification failed unexpectedly', 'ErrorResponse'),
     },
   },
   {
     method: 'POST',
     path: '/atc',
     operationId: 'postAtc',
-    summary: 'Run one-shot add-to-cart automation',
+    summary: 'Run one-shot add-to-cart automation in one browser profile',
     requestBody: {
       required: true,
       content: {
@@ -87,8 +132,10 @@ export const COMPANION_API_ROUTES = [
     },
     responses: {
       200: jsonResponse('ATC automation completed successfully', 'AtcResult'),
-      409: jsonResponse('Companion is already running an ATC request', 'ErrorResponse'),
+      400: jsonResponse('Missing or malformed profile_id', 'ErrorResponse'),
+      409: jsonResponse('The profile is already running work', 'ErrorResponse'),
       422: jsonResponse('ATC request payload is invalid', 'ErrorResponse'),
+      503: jsonResponse('The concurrent-browser cap is reached and no profile is evictable', 'ErrorResponse'),
       500: jsonResponse('ATC automation failed', 'AtcResult'),
     },
   },
@@ -96,8 +143,9 @@ export const COMPANION_API_ROUTES = [
     method: 'GET',
     path: SCREENSHOT_ROUTE,
     operationId: 'getScreenshot',
-    summary: 'Capture a live Recreation.gov page from the companion browser',
+    summary: 'Capture a live Recreation.gov page from one browser profile',
     parameters: [
+      profileIdQueryParameter(),
       {
         name: 'path',
         in: 'query',
@@ -119,7 +167,9 @@ export const COMPANION_API_ROUTES = [
     ],
     responses: {
       200: pngResponse('PNG screenshot of the top 1000px viewport'),
-      400: jsonResponse('Target is not a Recreation.gov URL or path', 'ErrorResponse'),
+      400: jsonResponse('Target is not a Recreation.gov URL or path, or profile_id is missing', 'ErrorResponse'),
+      409: jsonResponse('The profile is already running work', 'ErrorResponse'),
+      503: jsonResponse('The concurrent-browser cap is reached and no profile is evictable', 'ErrorResponse'),
       500: jsonResponse('Screenshot capture failed', 'ErrorResponse'),
     },
   },
@@ -171,8 +221,38 @@ export const COMPANION_API_SCHEMAS = {
     required: ['ok', 'busy', 'recgov_auth'],
     properties: {
       ok: { type: 'boolean' },
-      busy: { type: 'boolean' },
+      busy: { type: 'boolean', description: 'Busy for the requested profile, or companion-wide when no profile_id is given.' },
+      profile_id: PROFILE_ID_SCHEMA,
       recgov_auth: { $ref: '#/components/schemas/RecgovAuthStatus' },
+      pool: { $ref: '#/components/schemas/ProfilePoolStatus' },
+    },
+  },
+  ProfilePoolStatus: {
+    type: 'object',
+    properties: {
+      resident: { type: 'integer', description: 'Profiles with a launched Chromium process.' },
+      max_concurrent_browsers: { type: 'integer' },
+      keep_warm: { type: 'array', items: PROFILE_ID_SCHEMA },
+      keep_warm_overflow: {
+        type: 'integer',
+        description: 'Armed profiles beyond the cap. Armed profiles are never evicted; the overflow is reported instead.',
+      },
+      mfa_challenge_ttl_ms: { type: 'integer' },
+      profiles: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            profile_id: PROFILE_ID_SCHEMA,
+            resident: { type: 'boolean' },
+            busy: { type: 'boolean' },
+            operation: { type: 'string', nullable: true },
+            keep_warm: { type: 'boolean' },
+            mfa_pending: { type: 'boolean' },
+            login_backoff_ms: { type: 'integer' },
+          },
+        },
+      },
     },
   },
   RecgovAuthStatus: {
@@ -186,7 +266,15 @@ export const COMPANION_API_SCHEMAS = {
       last_refresh_at: { type: 'string', format: 'date-time', nullable: true },
       last_refresh_expires_at: { type: 'string', format: 'date-time', nullable: true },
       next_refresh_at: { type: 'string', format: 'date-time', nullable: true },
-      error: { type: 'string' },
+      error: {
+        type: 'string',
+        description: 'Stable failure code: recgov_login_failed, recgov_refresh_failed, recgov_not_authenticated, ...',
+      },
+      reason: {
+        type: 'string',
+        example: 'mfa_required',
+        description: 'The internal blocker behind `error` — which challenge appeared or which control was missing. Diagnostic; do not branch on it.',
+      },
       detail: { type: 'string' },
       corrective_action: { type: 'string' },
     },
@@ -215,8 +303,9 @@ export const COMPANION_API_SCHEMAS = {
   },
   LoginRequest: {
     type: 'object',
-    required: ['username', 'password'],
+    required: ['profile_id'],
     properties: {
+      profile_id: PROFILE_ID_SCHEMA,
       username: {
         type: 'string',
         format: 'email',
@@ -226,9 +315,56 @@ export const COMPANION_API_SCHEMAS = {
       password: { type: 'string', format: 'password' },
       mfa_code: {
         type: 'string',
-        description: 'Current Recreation.gov MFA code when prompted',
+        description: 'Current Recreation.gov MFA code, sent with challenge_id in phase two',
         example: '123456',
       },
+      challenge_id: {
+        type: 'string',
+        description: 'Challenge id returned by a phase-one login that hit an MFA prompt',
+      },
+    },
+  },
+  ProfileRequest: {
+    type: 'object',
+    required: ['profile_id'],
+    properties: {
+      profile_id: PROFILE_ID_SCHEMA,
+    },
+  },
+  MfaChallengeResponse: {
+    type: 'object',
+    required: ['ok', 'recgov_auth'],
+    properties: {
+      ok: { type: 'boolean', example: false },
+      error: { type: 'string', example: 'mfa_required', description: 'mfa_required opens a challenge; mfa_invalid means the submitted code was rejected.' },
+      challenge_id: { type: 'string' },
+      expires_at: { type: 'string', format: 'date-time' },
+      expires_in_seconds: { type: 'integer' },
+      recgov_auth: { $ref: '#/components/schemas/RecgovAuthStatus' },
+      diagnostics: { $ref: '#/components/schemas/LoginDiagnostic' },
+    },
+  },
+  VerifyResponse: {
+    type: 'object',
+    required: ['ok', 'profile_id', 'verify'],
+    properties: {
+      ok: { type: 'boolean' },
+      profile_id: PROFILE_ID_SCHEMA,
+      verify: {
+        type: 'object',
+        properties: {
+          ok: { type: 'boolean' },
+          logged_in: { type: 'boolean' },
+          account_url: { type: 'string' },
+          cart_status: { type: 'integer', nullable: true },
+          cart_reservation_count: { type: 'integer', nullable: true },
+          token_expires_at: { type: 'string', nullable: true },
+          checked_at: { type: 'string', format: 'date-time' },
+          error: { type: 'string' },
+          detail: { type: 'string' },
+        },
+      },
+      recgov_auth: { $ref: '#/components/schemas/RecgovAuthStatus' },
     },
   },
   AuthResponse: {
@@ -242,8 +378,9 @@ export const COMPANION_API_SCHEMAS = {
   },
   AtcRequest: {
     type: 'object',
-    required: ['start_date', 'end_date', 'campsite_id'],
+    required: ['profile_id', 'start_date', 'end_date', 'campsite_id'],
     properties: {
+      profile_id: PROFILE_ID_SCHEMA,
       start_date: { type: 'string', format: 'date' },
       end_date: { type: 'string', format: 'date' },
       campsite_id: idSchema('102524'),
@@ -351,6 +488,30 @@ function pngResponse (description) {
           type: 'string',
           format: 'binary',
         },
+      },
+    },
+  }
+}
+
+function profileIdQueryParameter ({ required = true } = {}) {
+  return {
+    name: 'profile_id',
+    in: 'query',
+    required,
+    description: 'Browser profile to act on. POST routes also accept it in the body.',
+    schema: PROFILE_ID_SCHEMA,
+  }
+}
+
+function profileRequestBody () {
+  return {
+    required: false,
+    content: {
+      'application/json': {
+        schema: { $ref: '#/components/schemas/ProfileRequest' },
+      },
+      'application/x-www-form-urlencoded': {
+        schema: { $ref: '#/components/schemas/ProfileRequest' },
       },
     },
   }

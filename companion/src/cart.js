@@ -22,6 +22,7 @@ import {
   RECGOV_LOGIN_STATE_SETTLE_MS,
   clearBrowserRecaccount,
   resolveRecaccount,
+  withRecgovProfileScope,
 } from './recgovSession.js'
 import { captureRecgovPageImage } from './recgovScreenshotCapture.js'
 import { SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX } from './recgovScreenshotRoutes.js'
@@ -564,9 +565,9 @@ function truncateText (value, maxLength) {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`
 }
 
-export async function setupAuthPage () {
-  const context = await getContext()
-  await injectStoredCookies(context)
+export async function setupAuthPage ({ getContextFn = getContext, profileId = null } = {}) {
+  const context = await getContextFn()
+  await injectStoredCookies(context, null, profileId)
   const page = await context.newPage()
 
   const recaccount = await resolveRecaccount(page)
@@ -678,7 +679,11 @@ export function bookingUrlForMatch (match) {
   )
 }
 
-export async function addToCart (match) {
+export async function addToCart (match, contextOptions = {}) {
+  return withRecgovProfileScope(contextOptions.profileId ?? null, () => runAddToCart(match, contextOptions))
+}
+
+async function runAddToCart (match, contextOptions) {
   const firstDate = match.first_date
   const availableDates = match.available_dates || (firstDate ? [firstDate] : [])
   const site = match.campsite_site
@@ -686,7 +691,7 @@ export async function addToCart (match) {
   const url = bookingUrlForMatch(match)
   console.log(`Cart: opening ${url}`)
 
-  const { page, recaccount, authFailure } = await setupAuthPage()
+  const { page, recaccount, authFailure } = await setupAuthPage(contextOptions)
   const screenshots = createAtcScreenshotCollector(page)
   await screenshots.capture(recaccount ? 'auth-session-ready' : 'auth-session-missing')
   if (!recaccount) return withScreenshots({ ok: false, page, ...authFailure }, screenshots)
@@ -784,6 +789,10 @@ export async function addToCart (match) {
 }
 
 export async function testChromium (rawCookieInput = null, options = {}) {
+  return withRecgovProfileScope(options.profileId ?? null, () => runTestChromium(rawCookieInput, options))
+}
+
+async function runTestChromium (rawCookieInput, options) {
   const {
     getContextFn = getContext,
     injectStoredCookiesFn = injectStoredCookies,
@@ -796,7 +805,7 @@ export async function testChromium (rawCookieInput = null, options = {}) {
   } = options
 
   const context = await getContextFn()
-  await injectStoredCookiesFn(context, rawCookieInput)
+  await injectStoredCookiesFn(context, rawCookieInput, resolveOptions.profileId ?? null)
   let page = await context.newPage()
   try {
     const first = await resolveAndVerifyRecgovSession(page, resolveOptions, {

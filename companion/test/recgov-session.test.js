@@ -6,6 +6,7 @@ import {
   logoutRecgovBrowserSession,
   recgovLoginCredentialsFromInput,
   resolveRecaccount,
+  runRecgovProfileLogin,
 } from '../src/recgovSession.js'
 
 const JWT_HEADER = { alg: 'none' }
@@ -295,6 +296,165 @@ test('logoutRecgovBrowserSession clicks the Rec.gov logout control and verifies 
   assert.equal(getRecgovSessionStatus().next_refresh_at, null)
 })
 
+test('runRecgovProfileLogin holds the MFA page open and resumes on it', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-held' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    mfaRequired: true,
+    expectedMfaCode: '123456',
+    loggedIn: true,
+  })
+
+  const pending = await runRecgovProfileLogin({
+    getContextFn: async () => page.context(),
+    credentials: { username: 'user@example.com', password: 'secret' },
+    options: { loginTimeoutMs: '1', allowManualLogin: false },
+  })
+
+  assert.equal(pending.state, 'mfa_required')
+  assert.equal(pending.logged_in, false)
+  assert.equal(typeof pending.resume, 'function')
+  assert.equal(page.closed, false, 'the pending login page stays open')
+  assert.equal(page.credentialSubmitClicks, 1)
+
+  const gotosBeforeResume = page.gotos.length
+  const completed = await pending.resume('123456')
+
+  assert.equal(completed.state, 'ok')
+  assert.equal(completed.logged_in, true)
+  // The whole point: phase two types the code into the page that is already
+  // sitting on the prompt. It must not navigate again or re-POST credentials,
+  // which would make Rec.gov issue a new code and invalidate the user's.
+  assert.equal(page.credentialSubmitClicks, 1)
+  assert.equal(page.mfaSubmitClicks, 1)
+  assert.equal(page.gotos.length, gotosBeforeResume)
+  assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret', '123456'])
+  assert.equal(page.closed, true, 'the held page closes once the challenge resolves')
+})
+
+test('an abandoned MFA login closes the page it was holding open', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-abandon' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    mfaRequired: true,
+    expectedMfaCode: '123456',
+  })
+
+  const pending = await runRecgovProfileLogin({
+    getContextFn: async () => page.context(),
+    credentials: { username: 'user@example.com', password: 'secret' },
+    options: { loginTimeoutMs: '1', allowManualLogin: false, credentialSessionTimeoutMs: '1' },
+  })
+
+  assert.equal(typeof pending.abandon, 'function')
+  assert.equal(page.closed, false)
+
+  await pending.abandon()
+
+  assert.equal(page.closed, true)
+})
+
+test('logging out records against the requesting profile and leaves the legacy row alone', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-logout' }),
+  })
+  // Seed both rows with a refresh window: the legacy one outside any scope,
+  // the profile one inside its scope.
+  await resolveRecaccount(fakePage({ rawRecaccount: JSON.stringify(recaccount) }))
+  await runRecgovProfileLogin({
+    getContextFn: async () => fakePage({ rawRecaccount: JSON.stringify(recaccount) }).context(),
+    credentials: { username: 'user@example.com', password: 'secret' },
+    profileId: 'logout-user',
+  })
+  assert.ok(Date.parse(getRecgovSessionStatus('logout-user').next_refresh_at) > 0)
+  const legacyBefore = getRecgovSessionStatus().next_refresh_at
+  assert.ok(Date.parse(legacyBefore) > 0)
+
+  const page = fakePage({ rawRecaccount: null, loggedIn: true, logoutSelectorVisible: true })
+  await logoutRecgovBrowserSession({
+    getContextFn: async () => page.context(),
+    isSpaLoggedInFn: async () => page.loggedIn,
+    profileId: 'logout-user',
+  })
+
+  assert.equal(getRecgovSessionStatus('logout-user').next_refresh_at, null)
+  assert.equal(getRecgovSessionStatus().next_refresh_at, legacyBefore, 'the legacy row is not another user to clobber')
+})
+
+test('runRecgovProfileLogin reports a rejected MFA code without re-submitting credentials', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-held' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    mfaRequired: true,
+    expectedMfaCode: '123456',
+  })
+
+  const pending = await runRecgovProfileLogin({
+    getContextFn: async () => page.context(),
+    credentials: { username: 'user@example.com', password: 'secret' },
+    options: { loginTimeoutMs: '1', allowManualLogin: false, credentialSessionTimeoutMs: '1' },
+  })
+  const rejected = await pending.resume('000000')
+
+  assert.equal(rejected.state, 'failed')
+  assert.equal(rejected.logged_in, false)
+  assert.equal(page.credentialSubmitClicks, 1)
+  assert.equal(page.mfaSubmitClicks, 1)
+})
+
+test('login diagnostics and refresh metadata are recorded per profile', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-scoped' }),
+  })
+  const failing = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    mfaRequired: true,
+  })
+  const succeeding = fakePage({ credentialRawRecaccount: JSON.stringify(recaccount) })
+
+  await runRecgovProfileLogin({
+    getContextFn: async () => failing.context(),
+    credentials: { username: 'a@example.com', password: 'secret' },
+    options: { loginTimeoutMs: '1', allowManualLogin: false, credentialSessionTimeoutMs: '1' },
+    profileId: 'user-a',
+  })
+  await runRecgovProfileLogin({
+    getContextFn: async () => succeeding.context(),
+    credentials: { username: 'b@example.com', password: 'secret' },
+    options: { loginTimeoutMs: '1', allowManualLogin: false },
+    profileId: 'user-b',
+  })
+
+  assert.equal(getRecgovSessionStatus('user-a').last_login_diagnostic.reason, 'mfa_required')
+  assert.equal(getRecgovSessionStatus('user-b').last_login_diagnostic.reason, 'login_success')
+  assert.ok(Date.parse(getRecgovSessionStatus('user-b').next_refresh_at) > 0)
+  assert.equal(getRecgovSessionStatus('user-a').next_refresh_at, null)
+  assert.equal(getRecgovSessionStatus('user-c').last_login_diagnostic, null)
+})
+
+test('runRecgovProfileLogin returns the existing session without touching the login form', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-existing' }),
+  })
+  const page = fakePage({ rawRecaccount: JSON.stringify(recaccount), loggedIn: true })
+
+  const outcome = await runRecgovProfileLogin({
+    getContextFn: async () => page.context(),
+    credentials: { username: 'user@example.com', password: 'secret' },
+  })
+
+  assert.equal(outcome.state, 'ok')
+  assert.equal(outcome.logged_in, true)
+  assert.equal(page.credentialSubmitClicks, 0)
+  assert.equal(page.closed, true)
+})
+
 function fakePage ({
   rawRecaccount,
   rawRecaccountAfterClear = null,
@@ -316,6 +476,7 @@ function fakePage ({
   const context = {
     cookies: [],
     pages: () => [page],
+    newPage: async () => page,
     addCookies: async (cookies) => {
       context.cookies.push(...cookies)
     },

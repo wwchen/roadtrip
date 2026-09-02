@@ -3,8 +3,6 @@ import { runAtcOnce } from '../../runAtcOnce.js'
 import {
   EXIT_SUCCESS,
   EXIT_USAGE,
-  HTTP_BAD_REQUEST,
-  HTTP_CONFLICT,
   HTTP_INTERNAL_ERROR,
   HTTP_OK,
   HTTP_UNPROCESSABLE_ENTITY,
@@ -12,52 +10,71 @@ import {
 } from '../constants.js'
 import { jsonResponse, readBody } from '../http.js'
 import {
+  badRequest,
+  invalidJsonRejection,
+  parseJsonBody,
+  profileBusyResponse,
+  requireProfileId,
+  resolveProfileContext,
+} from '../requestInput.js'
+import {
   captureStdout,
   captureWritable,
   compactLogLines,
   truncateLogField,
 } from '../logging.js'
 
+const OPERATION_ATC = 'atc'
+
 export async function handleAtc (req, res, {
   runtime,
+  pool,
   runAtcOnceFn = runAtcOnce,
 }) {
-  if (runtime.isBusy()) {
-    jsonResponse(res, HTTP_CONFLICT, {
-      ok: false,
-      cart_added: false,
-      error: 'companion_busy',
-      detail: 'companion is already running an ATC request',
-    })
+  let raw
+  let fields
+  try {
+    raw = await readBody(req)
+    fields = atcRequestFields(req, raw)
+  } catch (error) {
+    const rejection = invalidJsonRejection(error)
+    jsonResponse(res, rejection.status, { ...rejection.body, cart_added: false })
     return
   }
 
-  runtime.setBusy(true)
+  const profile = requireProfileId(fields)
+  if (!profile.ok) {
+    const rejection = badRequest(profile.error, 'profile_id identifies the browser profile that holds the cart')
+    jsonResponse(res, rejection.status, { ...rejection.body, cart_added: false })
+    return
+  }
+
+  const profileId = profile.profileId
+  const lock = pool.acquire(profileId, OPERATION_ATC)
+  if (!lock) {
+    const rejection = profileBusyResponse(profileId, pool.busyOperation(profileId))
+    jsonResponse(res, rejection.status, { ...rejection.body, cart_added: false })
+    return
+  }
+
   const stdout = captureStdout()
   const stderr = captureWritable(process.stderr)
   const startedAt = Date.now()
   let atcStartLine = null
   try {
-    let raw
-    try {
-      raw = await readBody(req)
-    } catch (error) {
-      jsonResponse(res, error.status || HTTP_BAD_REQUEST, {
-        ok: false,
-        cart_added: false,
-        error: 'invalid_request',
-        detail: error.message,
-      })
+    const resolved = await resolveProfileContext(pool, profileId)
+    if (!resolved.ok) {
+      jsonResponse(res, resolved.rejection.status, { ...resolved.rejection.body, cart_added: false })
       return
     }
-
-    atcStartLine = `recgov atc start ${payloadSummary(raw)}`
+    atcStartLine = `recgov atc start profile=${profileId} ${payloadSummary(raw)}`
     runtime.logger(atcStartLine)
     await runtime.waitForStartupAuthCheck()
     const code = await runAtcOnceFn({
       argv: ['--payload-json', raw],
       stdout,
       stderr,
+      contextOptions: { getContextFn: async () => resolved.context, profileId },
     })
     const baseResult = parseRunResult(stdout.value())
     const resultLine = `recgov atc result ${[
@@ -94,8 +111,17 @@ export async function handleAtc (req, res, {
       ]),
     })
   } finally {
-    runtime.setBusy(false)
+    lock.release()
   }
+}
+
+function atcRequestFields (req, raw) {
+  const url = new URL(req.url || '/', 'http://companion.local')
+  const fields = Object.fromEntries(url.searchParams.entries())
+  if (!raw.trim()) return fields
+  const payload = parseJsonBody(raw)
+  const body = payload?.payload || payload
+  return { ...fields, ...(body && typeof body === 'object' ? body : {}) }
 }
 
 function payloadSummary (raw) {

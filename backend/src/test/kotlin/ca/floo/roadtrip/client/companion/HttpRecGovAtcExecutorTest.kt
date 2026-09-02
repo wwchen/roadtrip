@@ -148,6 +148,45 @@ class HttpRecGovAtcExecutorTest {
             }
         }
 
+    @Test
+    fun `sends the shared secret header on health and atc`() =
+        runBlocking {
+            TestServer(
+                responses =
+                    mapOf(
+                        "/health" to TestResponse(body = HEALTH_OK),
+                        "/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
+                    ),
+            ).use { server ->
+                val executor =
+                    HttpRecGovAtcExecutor(
+                        RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5), COMPANION_TOKEN),
+                    )
+
+                executor.addToCart(flatAtcPayload())
+
+                assertEquals(listOf<String?>(COMPANION_TOKEN, COMPANION_TOKEN), server.companionTokens)
+            }
+        }
+
+    @Test
+    fun `omits the shared secret header when no token is configured`() =
+        runBlocking {
+            TestServer(
+                responses =
+                    mapOf(
+                        "/health" to TestResponse(body = HEALTH_OK),
+                        "/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
+                    ),
+            ).use { server ->
+                val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
+
+                executor.addToCart(flatAtcPayload())
+
+                assertEquals(listOf<String?>(null, null), server.companionTokens)
+            }
+        }
+
     private data class TestResponse(
         val status: Int = 200,
         val body: String,
@@ -159,6 +198,7 @@ class HttpRecGovAtcExecutorTest {
         private val executor = Executors.newSingleThreadExecutor()
         val paths = mutableListOf<String>()
         val bodies = mutableListOf<String>()
+        val companionTokens = mutableListOf<String?>()
 
         private val server =
             HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
@@ -166,6 +206,7 @@ class HttpRecGovAtcExecutorTest {
                     val path = exchange.requestURI.path
                     val response = responses.getValue(path)
                     paths += path
+                    companionTokens += exchange.requestHeaders.getFirst("x-companion-token")
                     bodies += exchange.requestBody.readAllBytes().toString(Charsets.UTF_8)
                     val bytes = response.body.toByteArray(Charsets.UTF_8)
                     exchange.responseHeaders.add("content-type", "application/json")
@@ -186,6 +227,7 @@ class HttpRecGovAtcExecutorTest {
 
     companion object {
         private const val HEALTH_OK = """{"ok":true,"busy":false,"recgov_auth":{"login_status":"ok","logged_in":true}}"""
+        private const val COMPANION_TOKEN = "shared-companion-secret"
 
         private fun flatAtcPayload() =
             buildJsonObject {

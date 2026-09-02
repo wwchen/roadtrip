@@ -80,6 +80,18 @@ class RegistryParseTest(unittest.TestCase):
         )
         self.assertEqual([], parsed["A_KEY"].services())
 
+    def test_a_consumer_renders_to_its_compose_service_name(self):
+        # The registry names the role; Compose names the container. `companion`
+        # is the recgov-companion service, and the map is what keeps a
+        # consumers entry from silently mounting nowhere.
+        parsed = manage.parse_registry(
+            "A_KEY:\n"
+            "  description: thing\n"
+            "  consumers: [backend, companion]\n"
+            "  required_in: []\n"
+        )
+        self.assertEqual(["backend", "recgov-companion"], parsed["A_KEY"].services())
+
 
 class GeneratorTest(unittest.TestCase):
     """The generator is what makes `consumers` behaviour rather than prose."""

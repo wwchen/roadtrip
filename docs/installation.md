@@ -25,7 +25,7 @@ and hook wiring just rewrites `.git/config`. What it does:
 | --- | --- |
 | `tilt docker openjdk node` | build + run the stack |
 | `sops age` | decrypt the vault — see [secrets.md](secrets.md) |
-| `companion/` npm deps + Chromium | Rec.gov companion and `make qa` |
+| `companion/` npm deps + Chromium | Rec.gov companion (see [companion.md](companion.md)) and `make qa` |
 | git hooks → `.githooks/` | ktlint/detekt pre-commit, secrets guard |
 
 Then create this machine's age identity and get it added to the vault:
@@ -102,7 +102,8 @@ when you're not using it:
 - **Java 25** — `backend/build.gradle.kts` sets `jvmToolchain(25)`; the Gradle
   wrapper handles the rest.
 - **Node 22.9+** — the companion pins `"node": ">=22.9.0"` in
-  `companion/package.json` and the frontend pins `">=22"` in
+  `companion/package.json` (its runtime contract lives in
+  [companion.md](companion.md)) and the frontend pins `">=22"` in
   `frontend/package.json`; CI runs both under Node 22. The frontend is a real
   build step (Vite), so `npm ci && npm run build` in `frontend/` is a
   prerequisite for serving any page.

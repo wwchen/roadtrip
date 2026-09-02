@@ -7,6 +7,7 @@ import {
 import {
   RECGOV_HOME_URL,
   resolveRecaccount,
+  withRecgovProfileScope,
 } from './recgovSession.js'
 import { captureRecgovPageImage } from './recgovScreenshotCapture.js'
 import {
@@ -39,10 +40,14 @@ export function createRecgovScreenshotDeps ({
   }
 }
 
-export async function captureRecgovScreenshot (target, deps = createRecgovScreenshotDeps()) {
+export async function captureRecgovScreenshot (target, deps = createRecgovScreenshotDeps(), { profileId = null } = {}) {
+  return withRecgovProfileScope(profileId, () => captureScreenshot(target, deps, profileId))
+}
+
+async function captureScreenshot (target, deps, profileId) {
   let page = null
-  const context = await deps.getContextFn()
-  await deps.injectStoredCookiesFn(context)
+  const context = await deps.getContextFn(profileId)
+  await deps.injectStoredCookiesFn(context, null, profileId)
   page = await context.newPage()
   try {
     const recaccount = await deps.resolveRecaccountFn(page, { allowManualLogin: false })

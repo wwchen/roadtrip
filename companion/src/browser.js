@@ -20,16 +20,25 @@ export function resolveSessionDir (env = process.env, homeDir = os.homedir()) {
 
 const SESSION_DIR = resolveSessionDir()
 const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
+const RECGOV_COOKIES_SETTING = 'recgov_cookies'
 export const RECGOV_CAMPSITE_BOOKING_URL_PATTERN =
   'https://www.recreation.gov/camping/campsites/{campsite_id}?startDate={start_date}&endDate={end_date}'
 export const COMPANION_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
 
+export const CHROMIUM_SINGLETON_LOCK_FILES = Object.freeze(['SingletonLock', 'SingletonSocket', 'SingletonCookie'])
+
 let sharedContext = null
 
-function clearStaleLocks () {
-  for (const name of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
-    const f = path.join(SESSION_DIR, name)
+// Directories with a live browser on them. A singleton lock there belongs to
+// that browser, not to a crash, and deleting it would let a second Chromium
+// attach to the same user-data directory and corrupt the profile.
+const liveProfileDirs = new Set()
+
+function clearStaleLocks (profileDir) {
+  if (liveProfileDirs.has(profileDir)) return
+  for (const name of CHROMIUM_SINGLETON_LOCK_FILES) {
+    const f = path.join(profileDir, name)
     try { if (fs.existsSync(f)) fs.unlinkSync(f) } catch {}
   }
 }
@@ -38,9 +47,18 @@ export async function getContext () {
   if (sharedContext) {
     try { await sharedContext.pages(); return sharedContext } catch { sharedContext = null }
   }
-  if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true })
-  clearStaleLocks()
-  sharedContext = await chromium.launchPersistentContext(SESSION_DIR, {
+  sharedContext = await launchProfileContext(SESSION_DIR)
+  sharedContext.once('close', () => { sharedContext = null })
+  return sharedContext
+}
+
+// One persistent Chromium profile directory in, one browser process out. The
+// profile pool calls this per profile id; getContext keeps the single legacy
+// profile the CLI entrypoints use.
+export async function launchProfileContext (profileDir, { chromiumFn = chromium } = {}) {
+  if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true })
+  clearStaleLocks(profileDir)
+  const context = await chromiumFn.launchPersistentContext(profileDir, {
     headless: IS_HEADLESS,
     slowMo: IS_HEADLESS ? 0 : 200,
     viewport: { width: 1280, height: 900 },
@@ -48,7 +66,29 @@ export async function getContext () {
     args: ['--disable-blink-features=AutomationControlled'],
     ignoreDefaultArgs: ['--enable-automation'],
   })
-  await sharedContext.addInitScript(() => {
+  // Register before any further await: from here on a real browser owns this
+  // directory, and a concurrent cold launch must not sweep its singleton
+  // locks and attach a second Chromium to it.
+  liveProfileDirs.add(profileDir)
+  context.once('close', () => liveProfileDirs.delete(profileDir))
+  try {
+    await installStealthInitScript(context)
+  } catch (error) {
+    liveProfileDirs.delete(profileDir)
+    await context.close().catch(() => {})
+    throw error
+  }
+  return context
+}
+
+// Test seam for the lock sweep, which is otherwise only reachable through a
+// real launch.
+export function clearStaleLocksForTest (profileDir) {
+  clearStaleLocks(profileDir)
+}
+
+async function installStealthInitScript (context) {
+  await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined })
     if (!window.chrome) window.chrome = { runtime: {}, loadTimes: () => {}, csi: () => {}, app: {} }
     if (navigator.plugins.length === 0) {
@@ -88,8 +128,6 @@ export async function getContext () {
       return _origFetch.apply(this, args)
     }
   })
-  sharedContext.once('close', () => { sharedContext = null })
-  return sharedContext
 }
 
 export async function clearSession () {
@@ -112,8 +150,16 @@ function parseCookieString (str) {
   }).filter(Boolean)
 }
 
-export async function injectStoredCookies (context, rawInput = null) {
-  const cookieStr = extractCookiesFromInput(rawInput || getSetting('recgov_cookies') || '')
+// Stored cookies are per profile. The unkeyed setting belongs to the legacy
+// single-profile CLI session and must never be handed to a user's profile:
+// a rec.gov cookie jar is a session, and sharing one is sharing an account.
+export function recgovCookieSettingKey (profileId = null) {
+  return profileId ? `${RECGOV_COOKIES_SETTING}:${profileId}` : RECGOV_COOKIES_SETTING
+}
+
+export async function injectStoredCookies (context, rawInput = null, profileId = null) {
+  const stored = getSetting(recgovCookieSettingKey(profileId)) || ''
+  const cookieStr = extractCookiesFromInput(rawInput || stored)
   if (!cookieStr) return 0
   const cookies = parseCookieString(cookieStr)
   if (!cookies.length) return 0

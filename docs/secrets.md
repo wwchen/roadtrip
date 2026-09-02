@@ -70,6 +70,7 @@ nor the host process table.
 | grafana | `GF_SECURITY_ADMIN_PASSWORD__FILE`; provisioning uses `$__file{}` |
 | backend | `SecretsBootstrap` copies `/run/secrets/*` into system properties before Ktor parses config, so they never become environment variables |
 | cloudflared | `TUNNEL_TOKEN_FILE` — not `--token`, which would put it on the command line |
+| companion | `COMPANION_API_TOKEN_FILE` (the `recgov-companion` service; see [companion.md](companion.md)) |
 | host scripts | environment injection from `exec`; there is nowhere to mount a file outside a container |
 
 **What this does and doesn't protect.** It removes the durable plaintext
@@ -150,3 +151,26 @@ job. It lists all of them at once; `manage.py ls` shows where each is set.
 
 **`docker-compose.secrets.yml is stale`** — the registry changed without
 regenerating. `./secrets/manage.py generate`.
+
+## ENCRYPTION_KEY rotation
+
+`ENCRYPTION_KEY` seals per-user secrets in `user_settings` (`*_cipher`
+columns). Rotating it orphans every existing blob: decryption fails
+per-user and degrades gracefully (no Slack alert / no stored rec.gov
+password) rather than throwing, and affected users must re-enter their
+stored secrets. Rotate deliberately, not routinely.
+
+## COMPANION_API_TOKEN
+
+The shared secret on the backend-to-companion channel, which carries rec.gov
+passwords and drives a logged-in browser. One registered value, two consumers
+(`backend`, `companion`): the backend sends it as the `x-companion-token`
+header, and the companion requires it on every route except the localhost
+healthcheck.
+
+It is `required_in: []` on purpose — `recgov-companion` is an opt-in Compose
+profile, so a deployment that never enables it owes no value. Absence is not
+a silent degradation: the companion answers `503
+companion_auth_unconfigured` on every route and the backend's ATC preflight
+fails loudly. Rotation is a plain `set` plus a restart of both services; no
+data is sealed with it. See [companion.md](companion.md).

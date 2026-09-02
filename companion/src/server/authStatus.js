@@ -21,51 +21,61 @@ export const LOGOUT_CORRECTIVE_ACTION = 'Open the companion root page and verify
 
 let recgovAuthStatus = { state: 'unchecked' }
 
+// The companion-wide slot, owned by the startup check. Profile-scoped callers
+// pass the pool's per-profile store instead, so one user's login never lands
+// on another user's row — or on the global one.
+const globalAuthStatusStore = {
+  get: () => recgovAuthStatus,
+  set: (status) => {
+    recgovAuthStatus = status
+    return status
+  },
+}
+
 export async function runRecgovAuthCheck ({
   operation = 'check',
   options = {},
   testChromiumFn = testChromium,
   authFailureFn = recgovAuthenticationFailure,
   logger = log,
+  statusStore = globalAuthStatusStore,
 } = {}) {
-  recgovAuthStatus = {
+  statusStore.set({
     state: 'checking',
     operation,
     checked_at: new Date().toISOString(),
-  }
+  })
   logger('recgov auth', operation, 'start')
 
   try {
     const result = await testChromiumFn(null, options)
+    const profileDiagnostic = getRecgovSessionStatus(options.profileId ?? null).last_login_diagnostic
     if (result?.loggedIn === true) {
-      const diagnostic = result?.diagnostic || getRecgovSessionStatus().last_login_diagnostic || null
-      recgovAuthStatus = {
+      const status = statusStore.set({
         state: 'ok',
         logged_in: true,
         operation,
         checked_at: new Date().toISOString(),
-        diagnostic,
-      }
+        diagnostic: result?.diagnostic || profileDiagnostic || null,
+      })
       logger('recgov auth', operation, 'ok')
-      return recgovAuthStatus
+      return status
     }
 
-    const failure = authFailureFn()
-    const diagnostic = result?.diagnostic || getRecgovSessionStatus().last_login_diagnostic || null
-    recgovAuthStatus = {
+    const status = statusStore.set({
       state: 'failed',
       logged_in: false,
       operation,
       checked_at: new Date().toISOString(),
-      diagnostic,
-      ...failure,
-    }
-    logger('recgov auth', operation, 'fail', ...authLogFields(recgovAuthStatus))
-    return recgovAuthStatus
+      diagnostic: result?.diagnostic || profileDiagnostic || null,
+      ...authFailureFn(),
+    })
+    logger('recgov auth', operation, 'fail', ...authLogFields(status))
+    return status
   } catch (error) {
-    recgovAuthStatus = authExceptionStatus(operation, error)
+    const status = statusStore.set(authExceptionStatus(operation, error))
     logger('recgov auth', operation, 'exception', `detail="${truncateLogField(error.message, LOG_DETAIL_MAX_CHARS)}"`)
-    return recgovAuthStatus
+    return status
   }
 }
 
@@ -77,11 +87,6 @@ export async function runStartupAuthCheck (options = {}) {
 }
 
 export function getRecgovAuthStatus () {
-  return recgovAuthStatus
-}
-
-export function setRecgovAuthStatus (status) {
-  recgovAuthStatus = status
   return recgovAuthStatus
 }
 

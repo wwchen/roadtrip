@@ -36,11 +36,18 @@
 <body>
   <h1>{{LOGIN_FORM_TITLE}}</h1>
   {{STATUS_HTML}}
+  <section class="panel">
+    <label for="profile_id">Profile ID</label>
+    <input id="profile_id" name="profile_id" autocomplete="off" placeholder="roadtrip user id">
+    <label for="api_token">Companion token</label>
+    <input id="api_token" name="api_token" type="password" autocomplete="off" placeholder="COMPANION_API_TOKEN">
+  </section>
   <section class="session-preview">
     <h2>Companion browser</h2>
-    <img id="session-screenshot" src="/screenshot?path=/" alt="Companion Playwright screenshot of Recreation.gov home page">
+    <img id="session-screenshot" alt="Companion Playwright screenshot of Recreation.gov home page">
   </section>
   <div class="row">
+    <button id="load-screenshot" class="secondary" type="button">Load screenshot</button>
     <button id="health-json" class="secondary" type="button">Health JSON</button>
     <button id="toggle-atc" class="toggle secondary" type="button" aria-expanded="false" aria-controls="atc-panel">ATC</button>
     <button id="refresh-session" class="secondary" type="button">Refresh session</button>
@@ -55,6 +62,8 @@
       <input id="password" name="password" type="password" autocomplete="current-password" required>
       <label for="mfa_code">MFA code</label>
       <input id="mfa_code" name="mfa_code" inputmode="numeric" autocomplete="one-time-code">
+      <label for="challenge_id">MFA challenge ID (filled in after an mfa_required response)</label>
+      <input id="challenge_id" name="challenge_id" autocomplete="off">
       <button type="submit">Submit login</button>
     </form>
   </section>
@@ -93,6 +102,10 @@
     const healthButton = document.getElementById('health-json')
     const logoutButton = document.getElementById('logout-session')
     const sessionScreenshot = document.getElementById('session-screenshot')
+    const profileInput = document.getElementById('profile_id')
+    const tokenInput = document.getElementById('api_token')
+    const challengeInput = document.getElementById('challenge_id')
+    const screenshotButton = document.getElementById('load-screenshot')
     const statusMessage = document.getElementById('status-message')
     const jsonOutput = document.getElementById('json-output')
     const diagnostic = document.getElementById('diagnostic')
@@ -138,15 +151,40 @@
       await runAction('Logging out...', 'Logout', '/logout', { method: 'POST' })
     })
 
+    screenshotButton.addEventListener('click', async () => {
+      await loadScreenshot()
+    })
+
+    // Every route is profile-scoped and token-authenticated, so both travel on
+    // every call the page makes.
+    function withProfile (url) {
+      const target = new URL(url, window.location.origin)
+      target.searchParams.set('profile_id', profileInput.value.trim())
+      return target.pathname + target.search
+    }
+
+    function authHeaders (extra = {}) {
+      return {
+        accept: 'application/json',
+        'x-companion-token': tokenInput.value.trim(),
+        ...extra,
+      }
+    }
+
+    async function loadScreenshot () {
+      try {
+        const response = await fetch(withProfile('/screenshot?path=/'), { headers: authHeaders() })
+        if (!response.ok) return
+        sessionScreenshot.src = URL.createObjectURL(await response.blob())
+      } catch {}
+    }
+
     async function runAction (loadingLabel, actionLabel, url, options = {}) {
       setLoading(true, loadingLabel)
       try {
-        const response = await fetch(url, {
+        const response = await fetch(withProfile(url), {
           ...options,
-          headers: {
-            accept: 'application/json',
-            ...(options.headers || {}),
-          },
+          headers: authHeaders(options.headers || {}),
         })
         const body = await response.json().catch(() => ({
           ok: false,
@@ -183,7 +221,8 @@
       statusMessage.textContent = ok ? actionLabel + ' succeeded.' : actionLabel + ' failed: ' + detail
       jsonOutput.classList.remove('hidden')
       jsonOutput.textContent = JSON.stringify(body, null, 2)
-      sessionScreenshot.src = '/screenshot?path=/&_=' + Date.now()
+      if (body?.challenge_id) challengeInput.value = body.challenge_id
+      loadScreenshot()
       renderDiagnostic(body?.diagnostics || body?.recgov_auth?.diagnostic || body?.recgov_auth?.last_login_diagnostic)
     }
 

@@ -126,6 +126,12 @@ services:
       - HEADLESS=${COMPANION_HEADLESS:-true}
       - COMPANION_BROWSER_PROFILE=/var/lib/campsite-companion/browser-session
       - RECGOV_LOGIN_TIMEOUT_MS=${RECGOV_LOGIN_TIMEOUT_MS:-120000}
+      # Shared secret for the backend channel, mounted as a file by
+      # docker-compose.secrets.yml rather than passed as a value.
+      - COMPANION_API_TOKEN_FILE=/run/secrets/companion_api_token
+      - COMPANION_MAX_CONCURRENT_BROWSERS=${COMPANION_MAX_CONCURRENT_BROWSERS:-3}
+      - COMPANION_MFA_CHALLENGE_TTL_MS=${COMPANION_MFA_CHALLENGE_TTL_MS:-300000}
+      - COMPANION_FAILED_LOGIN_BACKOFF_MS=${COMPANION_FAILED_LOGIN_BACKOFF_MS:-60000}
     volumes:
       - ${RECGOV_COMPANION_BROWSER_PROFILE:-$HOME/.campsite-companion/browser-session}:/var/lib/campsite-companion/browser-session
     healthcheck:
