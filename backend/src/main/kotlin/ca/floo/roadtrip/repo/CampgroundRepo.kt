@@ -159,10 +159,6 @@ class CampgroundRepo(
             location = parseJsonElement(record.get("location_text", String::class.java)),
             defaultCampsiteSchedule = parseJsonElement(record.get("default_campsite_schedule_text", String::class.java)),
             amenities = parseJsonElement(record.get("amenities_text", String::class.java)),
-            // `Double::class.java`/`Boolean::class.java` resolve to the JVM *primitive*
-            // class, not the boxed wrapper — jOOQ converts a NULL column to that
-            // primitive's zero value (0.0 / false) rather than null. These four columns
-            // are genuinely nullable, so they need the boxed type to come back as null.
             maxRvLength = record.get("max_rv_length", Double::class.javaObjectType),
             maxTrailerLength = record.get("max_trailer_length", Double::class.javaObjectType),
             hasPullThroughSites = record.get("has_pull_through_sites", Boolean::class.javaObjectType),

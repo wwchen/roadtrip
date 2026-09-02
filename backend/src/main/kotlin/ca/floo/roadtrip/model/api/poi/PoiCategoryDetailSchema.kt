@@ -36,7 +36,7 @@ data class PoiCategoryDetailSchema(
     // flow through ("Recreation.gov", "Aspira NextGen (BC Parks)", …).
     // Used by the drawer footer; null when the pin has no known provider.
     @SerialName("booking_system") val bookingSystem: String? = null,
-    val raw: JsonElement,
+    val raw: JsonElement? = null,
     // Key/values for the drawer's "Upstream data" table. Backend-shaped so the
     // FE never reaches into `raw` for a vendor's own nesting.
     val upstream: JsonElement? = null,

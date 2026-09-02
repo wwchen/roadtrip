@@ -221,6 +221,9 @@ class PoiServiceTest : SharedDbTest() {
                 .jsonObject["StayLimit"]!!
                 .jsonPrimitive.content,
         )
+        // The same blob used to go out as `raw` as well; nothing read it once the
+        // FE stopped promoting out of it.
+        assertNull(detail.raw)
     }
 
     @Test
