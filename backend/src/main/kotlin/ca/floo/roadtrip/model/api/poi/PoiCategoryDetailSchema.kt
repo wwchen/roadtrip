@@ -62,4 +62,14 @@ data class PoiCategoryDetailSchema(
     val email: String? = null,
     val elevation: Double? = null,
     @SerialName("last_verified") val lastVerified: String? = null,
+    // Charger canonical columns, served as named fields for the same reason as
+    // the campground block above. `status`, `time_zone`, and `amenities` are
+    // shared with campgrounds and reused rather than duplicated.
+    @SerialName("stall_count") val stallCount: Int? = null,
+    @SerialName("power_kilowatt") val powerKilowatt: Int? = null,
+    val pricebooks: JsonElement? = null,
+    @SerialName("availability_profile") val availabilityProfile: JsonElement? = null,
+    @SerialName("open_to_non_teslas") val openToNonTeslas: Boolean? = null,
+    @SerialName("trailer_friendly") val trailerFriendly: Boolean? = null,
+    @SerialName("twenty_four_seven") val twentyFourSeven: Boolean? = null,
 )

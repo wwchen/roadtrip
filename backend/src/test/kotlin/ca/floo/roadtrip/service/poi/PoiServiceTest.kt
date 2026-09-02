@@ -399,6 +399,92 @@ class PoiServiceTest : SharedDbTest() {
         )
     }
 
+    // Charger fields are whole-column reads too: a wrong RHS (e.g.
+    // `trailerFriendly = supercharger.twentyFourSeven`) still compiles and still
+    // passes a type-blind test, so this asserts each field against a distinct
+    // seeded value. `hardware_counts` is deliberately absent — no ETL ever
+    // fills it, so it is not served.
+    @Test
+    fun `charger detail serves its own columns as named schema fields`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "redding-ca",
+                name = "Redding, CA",
+                lon = -122.3917,
+                lat = 40.5865,
+                poiType = "tesla_supercharger",
+            )
+        ctx.execute(
+            """
+            UPDATE tesla_superchargers
+            SET site_status = ?, time_zone = ?, amenities = ?::jsonb,
+                stall_count = ?, max_power_kw = ?, pricebooks = ?::jsonb,
+                availability_profile = ?::jsonb,
+                open_to_non_teslas = ?, trailer_friendly = ?, twenty_four_seven = ?,
+                index_payload = ?::jsonb, detail_payload = ?::jsonb
+            WHERE id = ?
+            """.trimIndent(),
+            "CONSTRUCTION",
+            "America/Los_Angeles",
+            """["AMENITIES_WIFI"]""",
+            12,
+            250,
+            """[{"feeType":"CHARGING"}]""",
+            """{"availabilityProfile":{"weekday":"busy"}}""",
+            false,
+            true,
+            false,
+            """{"supercharger_function":{"site_status":"INDEX_ONLY_STATUS"}}""",
+            """{"commonSiteName":"Downtown Redding"}""",
+            fixture.catalogId,
+        )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals("CONSTRUCTION", detail.status)
+        assertEquals("America/Los_Angeles", detail.timeZone)
+        assertEquals(
+            "AMENITIES_WIFI",
+            detail.amenities!!
+                .jsonArray[0]
+                .jsonPrimitive.content,
+        )
+        assertEquals(12, detail.stallCount)
+        assertEquals(250, detail.powerKilowatt)
+        assertEquals(
+            "CHARGING",
+            detail.pricebooks!!
+                .jsonArray[0]
+                .jsonObject["feeType"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "busy",
+            detail.availabilityProfile!!
+                .jsonObject["availabilityProfile"]!!
+                .jsonObject["weekday"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(false, detail.openToNonTeslas)
+        assertEquals(true, detail.trailerFriendly)
+        assertEquals(false, detail.twentyFourSeven)
+        assertEquals(
+            "INDEX_ONLY_STATUS",
+            detail.upstream!!
+                .jsonObject["index"]!!
+                .jsonObject["supercharger_function"]!!
+                .jsonObject["site_status"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "Downtown Redding",
+            detail.upstream!!
+                .jsonObject["detail"]!!
+                .jsonObject["commonSiteName"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
     // The bug this pins: a gym's hours lived only in `payload.tags`, and every
     // reader goes through `to_jsonb(planet_fitness_locations)`, which carries
     // columns. Hours reached no caller, so the drawer's chip was dead on every

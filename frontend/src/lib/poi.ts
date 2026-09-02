@@ -5,29 +5,23 @@
 // the popups, drawer, and campground card read directly, so rendering code never
 // has to know which shape a POI arrived in.
 //
-// Re-flattening is a no-op for the address, name, and campground paths, and the
-// tests pin that. It is NOT a no-op for the fields derived solely from `raw`
-// with no flat fallback, because the first pass consumes `raw` and deletes it:
-// a park's `Loc_Nm`/`GIS_Acres`/`Mang_Name` and a supercharger's
-// `stallCount`/`powerKilowatt` reset on a second pass. core.js's blanket
-// "Idempotent" note overstated this; the behavior is carried over byte-for-byte
-// (a parity suite pins it against the original) and only the claim is
-// corrected. Call it once per hydration.
+// Re-flattening is a no-op for the address, name, campground, and supercharger
+// paths, and the tests pin that. It is NOT a no-op for the fields derived
+// solely from `raw` with no flat fallback, because the first pass consumes
+// `raw` and deletes it: a park's `Loc_Nm`/`GIS_Acres`/`Mang_Name` reset on a
+// second pass. core.js's blanket "Idempotent" note overstated this; the
+// behavior is carried over byte-for-byte (a parity suite pins it against the
+// original) and only the claim is corrected. Call it once per hydration.
 //
 // The provider-specific branches at the bottom are deliberately kept as-is
 // rather than reshaped into a registry. They encode which upstream field names
 // each vendor actually ships, they are the highest-risk part of this port, and
 // Phase 4 rewrites their consumers anyway — a behavior-faithful move now keeps
 // the diff reviewable against the original.
-import { token } from '@tokens';
-
-const SUPERCHARGER_COLOR_TOKEN = '--rt-layer-supercharger';
-const DEFAULT_SUPERCHARGER_STATUS = 'OPEN';
 
 const CATEGORY_CAMPGROUND = 'campground';
 const CATEGORY_NATIONAL_PARK = 'national-park';
 const CATEGORY_STATE_PARK = 'state-park';
-const SUPERCHARGER_CATEGORIES = ['tesla_supercharger', 'supercharger'];
 
 type Props = Record<string, unknown>;
 
@@ -126,86 +120,8 @@ export function flattenHydratedPoi(f: PoiFeature): FlatPoiFeature {
     flat.GIS_Acres = raw.GIS_Acres ?? raw.acres ?? null;
     flat.Mang_Name = raw.Mang_Name || raw.designation || '';
   }
-  if (SUPERCHARGER_CATEGORIES.includes(p.category as string)) {
-    promoteSuperchargerFields(flat, p, raw);
-  }
   flat.name = p.name || raw.name || flat.name;
   return { ...f, properties: flat };
-}
-
-function promoteSuperchargerFields(flat: Props, p: Props, raw: Props): void {
-  const detailPayload = objectValue(
-    raw.detail_payload,
-    raw.detailPayload,
-    flat.detail_payload,
-    flat.detailPayload,
-  );
-  const indexPayload = objectValue(
-    raw.index_payload,
-    raw.indexPayload,
-    flat.index_payload,
-    flat.indexPayload,
-  );
-  const availabilityProfile = objectValue(
-    raw.availability_profile,
-    raw.availabilityProfile,
-    flat.availability_profile,
-    flat.availabilityProfile,
-    detailPayload?.availabilityProfile,
-  );
-  const amenities = arrayValue(raw.amenities, flat.amenities, detailPayload?.amenities);
-  const upstreamDetail: Props = { ...(detailPayload || {}) };
-  if (availabilityProfile) upstreamDetail.availabilityProfile = availabilityProfile;
-  const timeZone = firstText(
-    raw.time_zone,
-    raw.timeZone,
-    flat.time_zone,
-    flat.timeZone,
-    detailPayload?.timeZone,
-  );
-  if (timeZone) upstreamDetail.timeZone = timeZone;
-  if (amenities) upstreamDetail.amenities = amenities;
-  const accessHours = objectValue(upstreamDetail.accessHours) || {};
-  const twentyFourSeven = firstPresent(
-    raw.twenty_four_seven,
-    flat.twenty_four_seven,
-    objectValue(detailPayload?.accessHours)?.twentyFourSeven,
-  );
-  if (twentyFourSeven !== undefined) {
-    upstreamDetail.accessHours = { ...accessHours, twentyFourSeven };
-  }
-  const openToNonTeslas = firstPresent(
-    raw.open_to_non_teslas,
-    flat.open_to_non_teslas,
-    detailPayload?.openToNonTeslas,
-  );
-  if (openToNonTeslas !== undefined) upstreamDetail.openToNonTeslas = openToNonTeslas;
-  const trailerFriendly = firstPresent(
-    raw.trailer_friendly,
-    flat.trailer_friendly,
-    detailPayload?.isTrailerFriendly,
-  );
-  if (trailerFriendly !== undefined) upstreamDetail.isTrailerFriendly = trailerFriendly;
-
-  flat.locationId = p.source_id || raw.location_slug || flat.location_slug;
-  flat.stallCount = raw.stall_count ?? 0;
-  flat.powerKilowatt = raw.max_power_kw ?? 0;
-  flat.color = raw.color || token(SUPERCHARGER_COLOR_TOKEN);
-  flat.status =
-    firstText(
-      raw.status,
-      raw.site_status,
-      objectValue(indexPayload?.supercharger_function)?.site_status,
-    ) || DEFAULT_SUPERCHARGER_STATUS;
-  flat.pricebooks = raw.pricebooks || [];
-  flat.timeZone = timeZone;
-  flat.availabilityProfile = availabilityProfile || null;
-  flat.detailPayload = detailPayload || {};
-  flat.upstream = {
-    ...(objectValue(p.upstream, flat.upstream) || {}),
-    ...(indexPayload ? { index: indexPayload } : {}),
-    detail: upstreamDetail,
-  };
 }
 
 /** First non-blank string, trimmed; `''` when there is none. */
@@ -216,22 +132,6 @@ function firstText(...values: unknown[]): string {
     if (trimmed) return trimmed;
   }
   return '';
-}
-
-/** First value that is neither `undefined` nor `null`. */
-function firstPresent(...values: unknown[]): unknown {
-  for (const value of values) {
-    if (value !== undefined && value !== null) return value;
-  }
-  return undefined;
-}
-
-/** First plain-object value (arrays excluded); `null` when there is none. */
-function objectValue(...values: unknown[]): Props | null {
-  for (const value of values) {
-    if (value && typeof value === 'object' && !Array.isArray(value)) return value as Props;
-  }
-  return null;
 }
 
 /**
@@ -248,11 +148,4 @@ function parseObject(value: unknown): Props | null {
   } catch {
     return null;
   }
-}
-
-function arrayValue(...values: unknown[]): unknown[] | null {
-  for (const value of values) {
-    if (Array.isArray(value)) return value;
-  }
-  return null;
 }

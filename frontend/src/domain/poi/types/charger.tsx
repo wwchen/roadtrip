@@ -39,7 +39,10 @@ export function ChargerPoiPage({ feature, variant, onClose }: PoiTypeProps) {
   const distance = useDistanceTo(lng, lat);
   const name = text(p.name) || 'Supercharger';
 
-  const detail = superchargerDetail(p);
+  // Tesla's own site payload, verbatim — `upstream.detail.commonSiteName` is the
+  // only place its "where in the parking lot" label lives.
+  const upstreamDetail = (p.upstream as { detail?: Record<string, unknown> } | undefined)
+    ?.detail;
   const address = [
     text(p.street),
     text(p.city),
@@ -50,10 +53,8 @@ export function ChargerPoiPage({ feature, variant, onClose }: PoiTypeProps) {
   // Tesla's "where in the parking lot" label ("East Victoria Park - Lot 335"), which
   // is often more useful for navigation than the city-level name. Suppressed when it
   // just repeats the name.
-  const commonSite =
-    text(detail.commonSiteName) && text(detail.commonSiteName) !== name
-      ? text(detail.commonSiteName)
-      : '';
+  const siteLabel = text(upstreamDetail?.commonSiteName);
+  const commonSite = siteLabel && siteLabel !== name ? siteLabel : '';
 
   // Coords AND label, so the dropped pin lands on the charger and Google routes from
   // wherever the user is, on any platform.
@@ -62,33 +63,21 @@ export function ChargerPoiPage({ feature, variant, onClose }: PoiTypeProps) {
       ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}%20${lat},${lng}`
       : '';
 
-  const stalls = num(p.stallCount);
-  const power = num(p.powerKilowatt);
-  const connectors = [
-    num(p.v2) ? `V2×${num(p.v2)}` : '',
-    num(p.v3) ? `V3×${num(p.v3)}` : '',
-    num(p.v4) ? `V4×${num(p.v4)}` : '',
-    num(p.nacs) ? `NACS×${num(p.nacs)}` : '',
-    num(p.tpc) ? `TPC×${num(p.tpc)}` : '',
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const stalls = num(p.stall_count);
+  const power = num(p.power_kilowatt);
 
-  const openAllHours = Boolean(
-    (detail.accessHours as { twentyFourSeven?: unknown } | undefined)?.twentyFourSeven,
-  );
-  const access = [openAllHours ? '24/7' : '', detail.openToNonTeslas ? 'Magic Dock' : '']
+  const openAllHours = Boolean(p.twenty_four_seven);
+  const access = [openAllHours ? '24/7' : '', p.open_to_non_teslas ? 'Magic Dock' : '']
     .filter(Boolean)
     .join(' · ');
 
   const rates = rateRows(p.pricebooks);
-  const busy = busyHours(detail.availabilityProfile, text(detail.timeZone) || undefined);
+  const busy = busyHours(p.availability_profile, text(p.time_zone) || undefined);
 
   const specs = presentSpecs([
     stalls
       ? { label: 'Stalls', value: power ? `${stalls} · up to ${power} kW` : String(stalls) }
       : null,
-    connectors ? { label: 'Connectors', value: connectors } : null,
     ...(rates ?? []).map((row: RateRow) => ({
       label: row.label,
       value: (
@@ -103,8 +92,8 @@ export function ChargerPoiPage({ feature, variant, onClose }: PoiTypeProps) {
   ]);
 
   const tags: PoiTag[] = [
-    ...(detail.isTrailerFriendly ? [{ label: 'Trailer-friendly' }] : []),
-    ...amenityLabels(detail.amenities).map((label) => ({ label })),
+    ...(p.trailer_friendly ? [{ label: 'Trailer-friendly' }] : []),
+    ...amenityLabels(p.amenities).map((label) => ({ label })),
   ];
 
   const blocks: PoiBlockSlots = {
@@ -171,26 +160,6 @@ export function ChargerPoiPage({ feature, variant, onClose }: PoiTypeProps) {
   };
 
   return <PoiPageShell variant={variant} blocks={blocks} />;
-}
-
-/**
- * The Tesla detail bag the page reads.
- *
- * `upstream.detail` is the verbatim capture and wins over the promoted
- * `detailPayload`; the two fields the flattener lifts out (`availabilityProfile`,
- * `timeZone`) are folded back in when the capture itself lacks them.
- */
-function superchargerDetail(p: Record<string, unknown>): Record<string, unknown> {
-  const upstream = p.upstream as { detail?: Record<string, unknown> } | undefined;
-  const detail: Record<string, unknown> = {
-    ...((p.detailPayload as Record<string, unknown>) ?? {}),
-    ...(upstream?.detail ?? {}),
-  };
-  if (p.availabilityProfile && !detail.availabilityProfile) {
-    detail.availabilityProfile = p.availabilityProfile;
-  }
-  if (p.timeZone && !detail.timeZone) detail.timeZone = p.timeZone;
-  return detail;
 }
 
 /** A numeric property, or 0 — every hardware spec is "render when non-zero". */

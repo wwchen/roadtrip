@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'vitest';
-import { token } from '@tokens';
 import { flattenHydratedPoi, type PoiFeature } from './poi';
 
 // One fixture per flattener branch, plus malformed and sparse inputs.
@@ -80,28 +79,29 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
     },
   },
 
+  // A charger as `/api/pois/{id}` sends it: its canonical columns are named
+  // fields on `detail`, same as a campground or a gym.
   supercharger: {
     id: 'sc-1',
     properties: {
       category: 'tesla_supercharger',
-      source_id: 'redding-ca',
-      raw: {
+      name: 'Redding, CA',
+      detail: {
         stall_count: 12,
-        max_power_kw: 250,
+        power_kilowatt: 250,
+        status: 'CONSTRUCTION',
         time_zone: 'America/Los_Angeles',
-        amenities: ['restrooms'],
+        amenities: ['AMENITIES_WIFI'],
         twenty_four_seven: true,
         open_to_non_teslas: false,
-        detail_payload: { availabilityProfile: { weekday: 'busy' }, accessHours: {} },
-        index_payload: { supercharger_function: { site_status: 'CONSTRUCTION' } },
+        pricebooks: [],
+        availability_profile: { availabilityProfile: { weekday: 'busy' } },
+        upstream: {
+          index: { supercharger_function: { site_status: 'CONSTRUCTION' } },
+          detail: { commonSiteName: 'Downtown Redding' },
+        },
       },
     },
-  },
-
-  // No raw at all: exercises the status/stall defaults and the token fallback.
-  superchargerBare: {
-    id: 'sc-2',
-    properties: { category: 'supercharger' },
   },
 
   // A gym as `/api/pois/{id}` sends it: hours, brand and the tag map are named
@@ -247,44 +247,23 @@ describe('park field mapping', () => {
   });
 });
 
-describe('supercharger promotion', () => {
-  test('promotes stall count, power, and the location id', () => {
+describe('a charger, whose facts all arrive named', () => {
+  test('carries its canonical columns straight through', () => {
     expect(flatten('supercharger')).toMatchObject({
-      locationId: 'redding-ca',
-      stallCount: 12,
-      powerKilowatt: 250,
-      timeZone: 'America/Los_Angeles',
+      stall_count: 12,
+      power_kilowatt: 250,
+      status: 'CONSTRUCTION',
+      time_zone: 'America/Los_Angeles',
+      amenities: ['AMENITIES_WIFI'],
+      twenty_four_seven: true,
+      open_to_non_teslas: false,
     });
   });
 
-  test('reads the site status out of the index payload', () => {
-    expect(flatten('supercharger').status).toBe('CONSTRUCTION');
-  });
-
-  test('folds access hours, amenities, and flags into upstream.detail', () => {
+  test('nests the index and detail captures under upstream', () => {
     const upstream = flatten('supercharger').upstream as Record<string, unknown>;
-    expect(upstream.detail).toMatchObject({
-      accessHours: { twentyFourSeven: true },
-      amenities: ['restrooms'],
-      openToNonTeslas: false,
-      timeZone: 'America/Los_Angeles',
-      availabilityProfile: { weekday: 'busy' },
-    });
     expect(upstream.index).toEqual({ supercharger_function: { site_status: 'CONSTRUCTION' } });
-  });
-
-  test('omits flags that are absent upstream rather than inventing false', () => {
-    const detail = (flatten('supercharger').upstream as Record<string, unknown>)
-      .detail as Record<string, unknown>;
-    expect(detail).not.toHaveProperty('isTrailerFriendly');
-  });
-
-  test('falls back to the design token for colour and OPEN for status', () => {
-    const p = flatten('superchargerBare');
-    expect(p.color).toBe(token('--rt-layer-supercharger'));
-    expect(p.status).toBe('OPEN');
-    expect(p.stallCount).toBe(0);
-    expect(p.powerKilowatt).toBe(0);
+    expect(upstream.detail).toEqual({ commonSiteName: 'Downtown Redding' });
   });
 });
 
@@ -367,6 +346,7 @@ describe('re-flattening', () => {
     ['noProperties'],
     // Was NOT a no-op while hours were dug out of `raw`, which the first pass eats.
     ['planetFitness'],
+    ['supercharger'],
   ] as const)('is a no-op for %s', (key) => {
     const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));
     const twice = flattenHydratedPoi(structuredClone(once));
@@ -377,8 +357,6 @@ describe('re-flattening', () => {
     ['nationalPark', 'GIS_Acres', 106589, null],
     ['nationalPark', 'Mang_Name', 'NPS', ''],
     ['nationalPark', 'Loc_Nm', 'Lassen Volcanic National Park', ''],
-    ['supercharger', 'stallCount', 12, 0],
-    ['supercharger', 'powerKilowatt', 250, 0],
   ] as const)('drops %s.%s on a second pass', (key, field, first, second) => {
     const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));
     const twice = flattenHydratedPoi(structuredClone(once));
