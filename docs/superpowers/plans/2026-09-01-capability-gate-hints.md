@@ -8,7 +8,7 @@
 
 **Tech Stack:** React 19 + TypeScript, Vite, Vitest + React Testing Library, zustand v5, LDS design system via `@ui`, `--rt-*` theme tokens.
 
-**Spec:** Design canvas at https://claude.ai/code/artifact/582693ad-0841-4f36-9ecb-6a1e6653d642 (four artboards, screenshot committed to `docs/design-references/capability-gate-hints.png` in Task 9).
+**Spec:** Design canvas at https://claude.ai/code/artifact/582693ad-0841-4f36-9ecb-6a1e6653d642 (four artboards). The rendered screenshot is hosted on the orphan `assets` branch at `design/capability-gate-hints.png`, not in the codebase.
 
 ## Global Constraints
 
@@ -942,7 +942,6 @@ git commit -m "feat(availability): name the unlock step on a gated add-to-cart"
 ### Task 9: Verify, document, and open the PR
 
 **Files:**
-- Create: `docs/design-references/capability-gate-hints.png`
 - Modify: `docs/frontend-components.md`
 
 - [ ] **Step 1: Run the full gate**
@@ -954,7 +953,7 @@ Expected: all green. Fix anything that is not before continuing.
 
 - [ ] **Step 2: Add the screenshot and a short doc note**
 
-Copy the rendered mockup to `docs/design-references/capability-gate-hints.png`. Add a paragraph to `docs/frontend-components.md` recording the rule: gated capabilities show the control and name the unlock step, and `SettingsHost` is the modal's one mount point.
+Push the rendered mockup to the orphan `assets` branch rather than the codebase: a screenshot is PR-description material, not source. Add a paragraph to `docs/frontend-components.md` recording the rule: gated capabilities show the control and name the unlock step, and `SettingsHost` is the modal's one mount point.
 
 - [ ] **Step 3: Commit and push**
 
@@ -969,5 +968,5 @@ git push -u origin feat/gate-hints-signin-recgov
 Use `.github/pull_request_template.md`'s Summary / Test plan / Notes headings, and embed the screenshot with the raw URL for this branch:
 
 ```
-![Capability gate hints](https://raw.githubusercontent.com/wwchen/roadtrip/feat/gate-hints-signin-recgov/docs/design-references/capability-gate-hints.png)
+![Capability gate hints](https://raw.githubusercontent.com/wwchen/roadtrip/assets/design/capability-gate-hints.png)
 ```
