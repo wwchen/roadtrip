@@ -18,6 +18,7 @@ internal const val ERROR_SLACK_NOT_CONFIGURED = "slack_not_configured"
 internal const val ERROR_SLACK_SEND_FAILED = "slack_send_failed"
 internal const val ERROR_EMAIL_SEND_FAILED = "email_send_failed"
 internal const val ERROR_RECGOV_NOT_CONFIGURED = "recgov_not_configured"
+internal const val ERROR_RECGOV_PROFILE_WIPE_FAILED = "recgov_profile_wipe_failed"
 internal const val ERROR_INVALID_BODY = "invalid_body"
 internal const val ERROR_UNAUTHENTICATED = "unauthenticated"
 
@@ -63,4 +64,6 @@ internal suspend fun ApplicationCall.respondSettingsError(e: SettingsError) =
         is SettingsError.SlackSendFailed -> respondApiError(ERROR_SLACK_SEND_FAILED, HttpStatusCode.BadGateway, e.message)
         is SettingsError.EmailSendFailed -> respondApiError(ERROR_EMAIL_SEND_FAILED, HttpStatusCode.BadGateway, e.message)
         is SettingsError.RecgovNotConfigured -> respondApiError(ERROR_RECGOV_NOT_CONFIGURED, HttpStatusCode.Conflict, e.message)
+        is SettingsError.RecgovProfileWipeFailed ->
+            respondApiError(ERROR_RECGOV_PROFILE_WIPE_FAILED, HttpStatusCode.BadGateway, e.message)
     }

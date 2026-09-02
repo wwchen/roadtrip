@@ -38,6 +38,12 @@ interface NotificationService {
 
     /**
      * Reports a backend-owned one-shot ATC result.
+     *
+     * [error] and [detail] carry the failure reason **as its own arguments**,
+     * not buried in [response]. A preflight that never reached the companion —
+     * a dead session, an unreachable companion — has no companion response at
+     * all, and those are precisely the failures the owner can act on. Renderers
+     * must prefer them over anything they can dig out of [response].
      */
     suspend fun sendAtcResult(
         watchId: Long,
@@ -45,6 +51,8 @@ interface NotificationService {
         status: String,
         request: JsonObject,
         response: JsonObject?,
+        error: String? = null,
+        detail: String? = null,
         target: NotificationTarget,
     ): Boolean = false
 }

@@ -8,6 +8,7 @@ import ca.floo.roadtrip.service.notification.common.NotificationService
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
+import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
@@ -52,6 +53,38 @@ class EmailNotificationService(
                 magicLinkUrl = emailTarget.magicLinkUrl,
             )
         return sendContent(content, emailTarget.recipients, failureContext = "watch #$watchId opening alert")
+    }
+
+    /**
+     * The ATC outcome, to the owner's inbox.
+     *
+     * The Slack card is fail-closed on a personal token, so email is what makes
+     * a hold — or a missed one — reach the person whose watch fired at all.
+     * `request` is the companion payload and stays out of the body: it carries
+     * the owner's profile id and nothing the recipient can act on.
+     */
+    override suspend fun sendAtcResult(
+        watchId: Long,
+        vendor: String,
+        status: String,
+        request: JsonObject,
+        response: JsonObject?,
+        error: String?,
+        detail: String?,
+        target: NotificationTarget,
+    ): Boolean {
+        val emailTarget = target as? NotificationTarget.Email ?: return false
+        val content =
+            EmailContentAtcResultRenderer.render(
+                watchId = watchId,
+                vendor = vendor,
+                status = status,
+                response = response,
+                error = error,
+                detail = detail,
+                magicLinkUrl = emailTarget.magicLinkUrl,
+            )
+        return sendContent(content, emailTarget.recipients, failureContext = "watch #$watchId ATC result")
     }
 
     suspend fun sendTestEmail(

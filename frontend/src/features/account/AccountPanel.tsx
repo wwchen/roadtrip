@@ -6,26 +6,24 @@ export interface AccountPanelProps {
   settings: SettingsResponse;
   onSignOut: () => void;
   onDisconnectSlack: () => void;
-  onRemoveRecgov: () => void;
 }
 
 /**
  * Identity summary and irreversible account actions.
  *
- * Credential removal lives here rather than in the panel that edits the
- * credential: Account is where destructive account actions already are, and a
- * delete button inside an editable form is the one that gets hit by accident.
+ * Slack disconnection lives here because Slack has no panel of its own worth
+ * a danger zone. Rec.gov credential removal used to as well, and moved to the
+ * Booking panel: removing a credential from a different tab than the one
+ * showing it is a step the user has no reason to expect.
  */
 export function AccountPanel({
   settings,
   onSignOut,
   onDisconnectSlack,
-  onRemoveRecgov,
 }: AccountPanelProps) {
   // Gated on a token actually being stored: offering to disconnect nothing reads
   // as a broken button.
   const slackConfigured = settings.notifications.slack_configured;
-  const recgovConfigured = settings.booking.recgov_configured;
 
   return (
     <div className="rt-account-panel">
@@ -41,27 +39,16 @@ export function AccountPanel({
         onConfirm={onSignOut}
       />
 
-      {(slackConfigured || recgovConfigured) && (
+      {slackConfigured && (
         <section className="rt-account-danger">
           <h3 className="rt-account-danger-title">Danger zone</h3>
-          {slackConfigured && (
-            <ConfirmButton
-              variant="tertiary"
-              hue="red"
-              label="Disconnect Slack"
-              confirmLabel="Confirm disconnect"
-              onConfirm={onDisconnectSlack}
-            />
-          )}
-          {recgovConfigured && (
-            <ConfirmButton
-              variant="tertiary"
-              hue="red"
-              label="Remove rec.gov credentials"
-              confirmLabel="Confirm removal"
-              onConfirm={onRemoveRecgov}
-            />
-          )}
+          <ConfirmButton
+            variant="tertiary"
+            hue="red"
+            label="Disconnect Slack"
+            confirmLabel="Confirm disconnect"
+            onConfirm={onDisconnectSlack}
+          />
         </section>
       )}
     </div>

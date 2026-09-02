@@ -56,7 +56,7 @@ private val configuredBooking =
 private class StubRecgovService(
     private val onSave: (UserId, UpdateRecgovRequest) -> BookingSettingsDto = { _, _ -> configuredBooking },
     private val onRemove: suspend (UserId) -> RecgovRemovedDto =
-        { RecgovRemovedDto(removed = true, strandedAtcWatches = 0, companionSignedOut = true) },
+        { RecgovRemovedDto(removed = true, strandedAtcWatches = 0, companionSignedOut = true, profileDestroyed = true) },
     private val onLogin: suspend (UserId) -> RecgovLoginResponseDto = { RecgovLoginResponseDto(RecgovLoginStatus.OK) },
     private val onMfa: suspend (UserId, String) -> RecgovLoginResponseDto = { _, _ -> RecgovLoginResponseDto(RecgovLoginStatus.OK) },
     private val onVerify: suspend (UserId) -> RecgovVerifyResponseDto = { RecgovVerifyResponseDto(ok = true) },
@@ -72,7 +72,7 @@ private class StubRecgovService(
     val savedRequests = mutableListOf<UpdateRecgovRequest>()
     val mfaCodes = mutableListOf<String>()
 
-    override fun save(
+    override suspend fun save(
         userId: UserId,
         req: UpdateRecgovRequest,
     ): BookingSettingsDto {
@@ -235,7 +235,14 @@ class RecgovSettingsRoutesTest {
         testApplication {
             mount(
                 StubRecgovService(
-                    onRemove = { RecgovRemovedDto(removed = true, strandedAtcWatches = 2, companionSignedOut = false) },
+                    onRemove = {
+                        RecgovRemovedDto(
+                            removed = true,
+                            strandedAtcWatches = 2,
+                            companionSignedOut = false,
+                            profileDestroyed = false,
+                        )
+                    },
                 ),
             )
 

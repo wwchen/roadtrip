@@ -83,6 +83,15 @@
       <button type="submit">Run ATC</button>
     </form>
   </section>
+  <section class="panel">
+    <h2>Failure diagnostics</h2>
+    <p>
+      Screenshots and Playwright traces from operations that <em>failed</em> — a successful run
+      writes nothing. Open a trace with <code>npx playwright show-trace &lt;file&gt;</code>.
+    </p>
+    <button id="load-diagnostics" class="secondary" type="button">Load diagnostics</button>
+    <ul id="diagnostics-list"></ul>
+  </section>
   <pre id="json-output" class="{{JSON_CLASS}}">{{INITIAL_JSON}}</pre>
   <div id="diagnostic">{{DIAGNOSTIC_HTML}}</div>
   <div id="loading" class="loading" hidden>
@@ -106,6 +115,8 @@
     const tokenInput = document.getElementById('api_token')
     const challengeInput = document.getElementById('challenge_id')
     const screenshotButton = document.getElementById('load-screenshot')
+    const diagnosticsButton = document.getElementById('load-diagnostics')
+    const diagnosticsList = document.getElementById('diagnostics-list')
     const statusMessage = document.getElementById('status-message')
     const jsonOutput = document.getElementById('json-output')
     const diagnostic = document.getElementById('diagnostic')
@@ -155,6 +166,10 @@
       await loadScreenshot()
     })
 
+    diagnosticsButton.addEventListener('click', async () => {
+      await loadDiagnostics()
+    })
+
     // Every route is profile-scoped and token-authenticated, so both travel on
     // every call the page makes.
     function withProfile (url) {
@@ -168,6 +183,65 @@
         accept: 'application/json',
         'x-companion-token': tokenInput.value.trim(),
         ...extra,
+      }
+    }
+
+    /**
+     * Lists the stored failure artifacts.
+     *
+     * Downloads go through fetch + blob rather than a bare href: the route is
+     * token-gated and an anchor cannot carry the header, the same reason the
+     * live screenshot loads this way.
+     */
+    async function loadDiagnostics () {
+      diagnosticsList.textContent = ''
+      let data
+      try {
+        const response = await fetch('/screenshot/diagnostics', { headers: authHeaders() })
+        if (!response.ok) {
+          diagnosticsList.textContent = `Could not list diagnostics (${response.status}) — check the token.`
+          return
+        }
+        data = await response.json()
+      } catch (error) {
+        diagnosticsList.textContent = `Could not list diagnostics — ${error.message}`
+        return
+      }
+      if (!data.artifacts?.length) {
+        diagnosticsList.textContent = 'No failure diagnostics stored.'
+        return
+      }
+      for (const artifact of data.artifacts) {
+        const item = document.createElement('li')
+        item.textContent = `${artifact.modified_at} · ${artifact.operation || '?'} · ${artifact.reason || '?'} · ${artifact.kind} `
+        const download = document.createElement('button')
+        download.type = 'button'
+        download.className = 'secondary'
+        download.textContent = artifact.file
+        download.addEventListener('click', () => downloadArtifact(artifact, download))
+        item.appendChild(download)
+        diagnosticsList.appendChild(item)
+      }
+    }
+
+    async function downloadArtifact (artifact, button) {
+      const restore = button.textContent
+      try {
+        const response = await fetch(artifact.url, { headers: authHeaders() })
+        if (!response.ok) {
+          // Silently doing nothing here is how a dead download route stayed
+          // invisible: the listing offered the file and the click just did not.
+          button.textContent = `${restore} — download failed (${response.status})`
+          return
+        }
+        const href = URL.createObjectURL(await response.blob())
+        const link = document.createElement('a')
+        link.href = href
+        link.download = artifact.file
+        link.click()
+        URL.revokeObjectURL(href)
+      } catch (error) {
+        button.textContent = `${restore} — download failed (${error.message})`
       }
     }
 

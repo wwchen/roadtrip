@@ -27,6 +27,33 @@ object RecGovSessionCodes {
     const val LOGIN_BACKOFF = "login_backoff"
     const val NOT_AUTHENTICATED = "recgov_not_authenticated"
     const val COMPANION_UNAVAILABLE = "companion_unavailable"
+
+    /** No credentials are stored for this user, so nothing can be attempted. */
+    const val NOT_CONFIGURED = "recgov_not_configured"
+
+    /** The companion's own auth check threw. An outage, not a credential problem. */
+    const val AUTH_CHECK_EXCEPTION = "recgov_auth_check_exception"
+
+    /** The profile's session is dead and only the user can revive it. */
+    const val SESSION_EXPIRED = "recgov_session_expired"
+
+    /**
+     * The profile was signed in and its session has lapsed beyond what a cookie
+     * refresh can restore. Distinct from [LOGIN_FAILED], which is what a doomed
+     * automated re-login reports and which reads as "your password is wrong".
+     */
+    const val SESSION_LAPSED = "recgov_session_lapsed"
+
+    /**
+     * The companion's other three ways of saying the session is gone.
+     *
+     * These are emitted by `companion/src/cart.js` on the fire path and reach the
+     * backend verbatim, so they belong in the shared vocabulary rather than as
+     * literals at the call sites that have to classify them.
+     */
+    const val SPA_LOGGED_OUT = "recgov_spa_logged_out"
+    const val REFRESH_FAILED = "recgov_refresh_failed"
+    const val COMPANION_LOGIN_FAILED = "recgov_login_failed"
 }
 
 /** Result of a credential login or of completing an MFA challenge. */
@@ -55,11 +82,25 @@ sealed interface CompanionActionResult {
     ) : CompanionActionResult
 }
 
-/** What the companion says about one profile's live rec.gov session. */
+/**
+ * What the companion says about one profile's live rec.gov session.
+ *
+ * Four *different* not-active answers, because collapsing them told every user
+ * "session expired" — including the ones who had never logged in at all, and
+ * the ones whose companion had thrown on its own health check.
+ */
 sealed interface CompanionSessionHealth {
     data object Active : CompanionSessionHealth
 
+    /** Credentials saved, this profile never signed in. Nothing has gone wrong. */
+    data object NeverLoggedIn : CompanionSessionHealth
+
     data class Inactive(
+        val code: String?,
+    ) : CompanionSessionHealth
+
+    /** The companion answered but its health check itself failed. */
+    data class CheckFailed(
         val code: String?,
     ) : CompanionSessionHealth
 
@@ -77,10 +118,17 @@ sealed interface CompanionSessionHealth {
  * isolation enforceable (see `docs/companion.md`).
  */
 interface CompanionSessionPort {
+    /**
+     * [unattended] tells the companion nobody is waiting on this login, so an
+     * MFA prompt must answer without opening a challenge — a challenge holds
+     * the profile's busy lock for its whole TTL, and the fire path can never
+     * complete one. Only the fire-time re-login sets it.
+     */
     suspend fun login(
         profileId: String,
         username: String,
         password: String,
+        unattended: Boolean = false,
     ): CompanionLoginResult
 
     suspend fun completeMfa(
@@ -91,7 +139,31 @@ interface CompanionSessionPort {
 
     suspend fun logout(profileId: String): CompanionActionResult
 
+    /**
+     * Erase the profile: close its browser, delete its user-data directory and
+     * its stored rec.gov cookie jar.
+     *
+     * Distinct from [logout], which clicks through rec.gov's sign-out flow and
+     * leaves both on disk. Only this makes "remove my credentials" a true wipe.
+     * Destroying a profile that does not exist is a success.
+     */
+    suspend fun destroyProfile(profileId: String): CompanionActionResult
+
     suspend fun verify(profileId: String): CompanionActionResult
 
     suspend fun health(profileId: String): CompanionSessionHealth
+
+    /** Force one profile's rec.gov session to renew. The keepalive path. */
+    suspend fun refresh(
+        profileId: String,
+        unattended: Boolean = false,
+    ): CompanionActionResult
+
+    /**
+     * Replaces the armed profile set the companion keeps warm.
+     *
+     * Wholesale, not a merge: pausing or deleting the last `atc` watch for a
+     * user has to actually disarm their profile. An empty set disarms everyone.
+     */
+    suspend fun markKeepWarm(profileIds: Collection<String>): CompanionActionResult
 }

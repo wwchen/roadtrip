@@ -23,12 +23,16 @@ interface NotificationSender {
         appRootUrl: String? = null,
     ): Boolean
 
+    /** See [NotificationService.sendAtcResult] for why [error]/[detail] are
+     *  first-class arguments rather than fields of [response]. */
     suspend fun sendAtcResult(
         watchId: Long,
         vendor: String,
         status: String,
         request: JsonObject,
         response: JsonObject?,
+        error: String? = null,
+        detail: String? = null,
         targets: List<NotificationTarget>,
     ): Boolean = false
 }

@@ -1,4 +1,9 @@
-FROM mcr.microsoft.com/playwright:v1.60.0-noble
+# LOCKSTEP: this tag and companion/package.json's exact "playwright" version
+# must move together. The image ships the browser binaries; the npm package
+# decides which build it looks for. A mismatch fails at launchPersistentContext
+# with a missing-executable error, which surfaces as recgov_auth_check_exception
+# on every /login and /verify.
+FROM mcr.microsoft.com/playwright:v1.62.1-noble
 
 WORKDIR /app
 
@@ -15,6 +20,10 @@ ENV HEADLESS=true
 ENV COMPANION_HOST=0.0.0.0
 ENV COMPANION_PORT=8770
 ENV COMPANION_BROWSER_PROFILE=/var/lib/campsite-companion/browser-session
+# The JSON store holds the per-profile rec.gov cookie jars. Left at its
+# `$HOME/.campsite-companion` default it lands in the image's ephemeral
+# /root and every restart signs everyone out.
+ENV COMPANION_DIR=/var/lib/campsite-companion
 
 EXPOSE 8770
 

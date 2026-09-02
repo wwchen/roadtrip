@@ -1,14 +1,35 @@
 package ca.floo.roadtrip.client.companion
 
 import ca.floo.roadtrip.config.RecGovAtcConfig
+import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
 import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionLoginResult
 import ca.floo.roadtrip.service.settings.CompanionSessionHealth
 import ca.floo.roadtrip.service.settings.RecGovSessionCodes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
+import java.net.Authenticator
+import java.net.CookieHandler
+import java.net.ProxySelector
+import java.net.http.HttpClient
+import java.net.http.HttpHeaders
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.time.Duration
+import java.util.Optional
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executor
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLParameters
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val PROFILE_ID = "42"
@@ -36,6 +57,187 @@ class CompanionSessionClientTest {
                     assertTrue(body.contains("\"profile_id\":\"$PROFILE_ID\""), body)
                     assertTrue(body.contains("\"username\":\"ada@example.com\""), body)
                     assertTrue(body.contains("\"password\":\"hunter2\""), body)
+                }
+        }
+
+    @Test
+    fun `a profile that has never been asked reads as not-logged-in, not expired`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/health" to TestResponse(body = """{"ok":true,"recgov_auth":{"login_status":"unchecked"}}""")))
+                .use { server ->
+                    // Telling a user who has never logged in that their session
+                    // "expired" sends them looking for a problem that isn't there.
+                    assertEquals<CompanionSessionHealth>(
+                        CompanionSessionHealth.NeverLoggedIn,
+                        clientFor(server.baseUrl).health(PROFILE_ID),
+                    )
+                }
+        }
+
+    @Test
+    fun `unchecked with a stored jar reads as expired, not never-logged-in`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/health" to
+                            TestResponse(
+                                body =
+                                    """{"ok":true,"recgov_auth":{"login_status":"unchecked","has_stored_session":true}}""",
+                            ),
+                    ),
+                ).use { server ->
+                    // A companion restart resets every profile to `unchecked`.
+                    // Reading that as NeverLoggedIn drops signed-in users out of
+                    // the keep-warm sweep after each deploy and tells them
+                    // "Not logged in yet" while their jar still holds a session.
+                    assertEquals<CompanionSessionHealth>(
+                        CompanionSessionHealth.Inactive(null),
+                        clientFor(server.baseUrl).health(PROFILE_ID),
+                    )
+                }
+        }
+
+    @Test
+    fun `a companion whose own auth check threw is not reported as an expired session`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/health" to
+                            TestResponse(
+                                body =
+                                    """{"ok":true,"recgov_auth":{"login_status":"failed","error":"recgov_auth_check_exception"}}""",
+                            ),
+                    ),
+                ).use { server ->
+                    assertEquals<CompanionSessionHealth>(
+                        CompanionSessionHealth.CheckFailed("recgov_auth_check_exception"),
+                        clientFor(server.baseUrl).health(PROFILE_ID),
+                    )
+                }
+        }
+
+    @Test
+    fun `a genuinely lapsed session still reads as inactive`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/health" to
+                            TestResponse(
+                                body =
+                                    """
+                                    {"ok":true,"recgov_auth":{"login_status":"failed","logged_in":false,
+                                     "error":"recgov_not_authenticated"}}
+                                    """.trimIndent(),
+                            ),
+                    ),
+                ).use { server ->
+                    assertEquals<CompanionSessionHealth>(
+                        CompanionSessionHealth.Inactive("recgov_not_authenticated"),
+                        clientFor(server.baseUrl).health(PROFILE_ID),
+                    )
+                }
+        }
+
+    @Test
+    fun `a failure that kept artifacts says so, without carrying filenames`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/login" to
+                            TestResponse(
+                                status = 401,
+                                body =
+                                    """
+                                    {"ok":false,"error":"recgov_login_failed","detail":"password rejected",
+                                     "diagnostics":{"trace":"/screenshot/diagnostics/recgov-login-x.trace.zip"}}
+                                    """.trimIndent(),
+                            ),
+                    ),
+                ).use { server ->
+                    val result = clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "hunter2")
+
+                    val failed = result as CompanionLoginResult.Failed
+                    assertTrue(failed.detail!!.contains("password rejected"), failed.detail!!)
+                    assertTrue(failed.detail!!.contains("diagnostics captured"), failed.detail!!)
+                    // The filename belongs on the operator page, not in a one-line status row.
+                    assertFalse(failed.detail!!.contains(".trace.zip"), failed.detail!!)
+                }
+        }
+
+    @Test
+    fun `an interactive login never marks itself unattended`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/login" to TestResponse(body = LOGGED_IN)))
+                .use { server ->
+                    clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "hunter2")
+
+                    // Present would make the companion refuse to open a challenge
+                    // for a user who is sitting right there waiting to type a code.
+                    assertFalse(server.bodies.single().contains("unattended"), server.bodies.single())
+                }
+        }
+
+    @Test
+    fun `the pre-hold checks run on the short budget, not the ATC one`() =
+        runBlocking {
+            // A fire that spent the full cart-run timeout on a health check and
+            // again on a re-login would reach the browser minutes late, by which
+            // point the site is somebody else's.
+            val config =
+                RecGovAtcConfig(
+                    companionBaseUrl = "http://companion.invalid",
+                    companionTimeout = Duration.ofSeconds(180),
+                    fireTimeout = Duration.ofSeconds(5),
+                )
+            val recorder = RecordingTimeoutClient()
+            val client = CompanionSessionClient(config, recorder)
+
+            client.health(PROFILE_ID)
+            client.login(PROFILE_ID, "ada@example.com", "hunter2", unattended = true)
+            client.login(PROFILE_ID, "ada@example.com", "hunter2")
+
+            assertEquals(
+                listOf(Duration.ofSeconds(5), Duration.ofSeconds(5), Duration.ofSeconds(180)),
+                recorder.timeouts,
+            )
+        }
+
+    @Test
+    fun `the fire path's cookie refresh runs on the short budget`() =
+        runBlocking {
+            // The refresh is the recovery step on every fire whose session reads
+            // dead, and it drives a browser. On the long budget it can stall the
+            // availability poll executor for minutes.
+            val config =
+                RecGovAtcConfig(
+                    companionBaseUrl = "http://companion.invalid",
+                    companionTimeout = Duration.ofSeconds(180),
+                    fireTimeout = Duration.ofSeconds(5),
+                )
+            val recorder = RecordingTimeoutClient()
+            val client = CompanionSessionClient(config, recorder)
+
+            client.refresh(PROFILE_ID, unattended = true)
+            client.refresh(PROFILE_ID)
+
+            assertEquals(listOf(Duration.ofSeconds(5), Duration.ofSeconds(180)), recorder.timeouts)
+        }
+
+    @Test
+    fun `an unattended login says so on the wire`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/login" to TestResponse(body = LOGGED_IN)))
+                .use { server ->
+                    clientFor(server.baseUrl).login(PROFILE_ID, "ada@example.com", "hunter2", unattended = true)
+
+                    assertTrue(server.bodies.single().contains("\"unattended\":true"), server.bodies.single())
                 }
         }
 
@@ -340,10 +542,184 @@ class CompanionSessionClientTest {
                 }
         }
 
+    // ── the ATC fire path ────────────────────────────────────────────────────
+
+    @Test
+    fun `add-to-cart posts the payload and issues no preflight of its own`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/atc" to TestResponse(body = CART_HELD)))
+                .use { server ->
+                    val outcome = clientFor(server.baseUrl).addToCart(atcPayload())
+
+                    assertTrue(outcome is RecGovAtcOutcome.Completed)
+                    // Exactly one call: the session preflight belongs to the
+                    // adapter, which is the layer that can recover a dead one.
+                    assertEquals(listOf("/atc"), server.paths)
+                    assertEquals(atcPayload().toString(), server.bodies.single())
+                }
+        }
+
+    @Test
+    fun `a companion that declined the hold reports its own code`() =
+        runBlocking {
+            CompanionTestServer
+                .of(
+                    mapOf(
+                        "/atc" to
+                            TestResponse(
+                                status = 500,
+                                body = """{"ok":false,"cart_added":false,"error":"cart_not_added","detail":"no hold"}""",
+                            ),
+                    ),
+                ).use { server ->
+                    val failed = clientFor(server.baseUrl).addToCart(atcPayload()) as RecGovAtcOutcome.Failed
+
+                    assertEquals("cart_not_added", failed.error)
+                    assertEquals("no hold", failed.detail)
+                }
+        }
+
+    @Test
+    fun `an unreadable body never fabricates a hold`() =
+        runBlocking {
+            CompanionTestServer
+                .of(mapOf("/atc" to TestResponse(body = "not json")))
+                .use { server ->
+                    val failed = clientFor(server.baseUrl).addToCart(atcPayload()) as RecGovAtcOutcome.Failed
+
+                    assertEquals("companion_request_failed", failed.error)
+                    assertTrue(failed.detail.orEmpty().contains("not json"), failed.detail.orEmpty())
+                    assertNull(failed.response)
+                }
+        }
+
+    @Test
+    fun `cancelling a call propagates instead of reading as an unreachable companion`() =
+        runBlocking {
+            // A swallowed CancellationException turned every in-flight call at
+            // shutdown into a fake companion outage: one bogus `unavailable`
+            // metric per profile in the keepalive sweep, and a cancelled fire
+            // emailed to its owner as a companion failure.
+            val hanging = HangingClient()
+            val client = CompanionSessionClient(RecGovAtcConfig("http://companion.invalid", timeout), hanging)
+            val outcomes = mutableListOf<RecGovAtcOutcome>()
+
+            val job = launch(Dispatchers.Default) { outcomes += client.addToCart(atcPayload()) }
+            hanging.issued.await()
+            job.cancelAndJoin()
+
+            assertTrue(job.isCancelled)
+            assertTrue(outcomes.isEmpty(), "cancellation must not come back as an outcome: $outcomes")
+        }
+
     private companion object {
         const val LOGGED_IN = """{"ok":true,"recgov_auth":{"login_status":"ok","logged_in":true},"diagnostics":null}"""
         const val LOGGED_OUT = """{"ok":true,"recgov_auth":{"login_status":"logged_out","logged_in":false}}"""
         const val HEALTH_LOGGED_IN =
             """{"ok":true,"busy":false,"profile_id":"42","recgov_auth":{"login_status":"ok","logged_in":true}}"""
+        const val CART_HELD = """{"ok":true,"cart_added":true}"""
+
+        fun atcPayload() =
+            buildJsonObject {
+                put("profile_id", PROFILE_ID)
+                put("start_date", "2026-07-19")
+                put("end_date", "2026-07-20")
+                put("campsite_id", "102524")
+            }
     }
+}
+
+/**
+ * The `java.net.http.HttpClient` surface a stub has to fill in but never uses.
+ *
+ * Subclasses override `sendAsync` and nothing else; everything below it is the
+ * abstract class's own boilerplate, which two stubs had already copied.
+ */
+private abstract class StubHttpClient : HttpClient() {
+    override fun <T : Any?> sendAsync(
+        request: HttpRequest,
+        responseBodyHandler: HttpResponse.BodyHandler<T>,
+        pushPromiseHandler: HttpResponse.PushPromiseHandler<T>?,
+    ): CompletableFuture<HttpResponse<T>> = sendAsync(request, responseBodyHandler)
+
+    override fun <T : Any?> send(
+        request: HttpRequest,
+        responseBodyHandler: HttpResponse.BodyHandler<T>,
+    ): HttpResponse<T> = sendAsync(request, responseBodyHandler).join()
+
+    override fun cookieHandler(): Optional<CookieHandler> = Optional.empty()
+
+    override fun connectTimeout(): Optional<Duration> = Optional.empty()
+
+    override fun followRedirects(): HttpClient.Redirect = HttpClient.Redirect.NEVER
+
+    override fun proxy(): Optional<ProxySelector> = Optional.empty()
+
+    override fun sslContext(): SSLContext = SSLContext.getDefault()
+
+    override fun sslParameters(): SSLParameters = SSLParameters()
+
+    override fun authenticator(): Optional<Authenticator> = Optional.empty()
+
+    override fun version(): HttpClient.Version = HttpClient.Version.HTTP_1_1
+
+    override fun executor(): Optional<Executor> = Optional.empty()
+}
+
+/**
+ * Records the per-request timeout and answers an empty JSON object.
+ *
+ * A loopback server cannot see the timeout the caller chose, and the choice —
+ * short budget for the pre-hold checks, full budget for a browser-driven run —
+ * is the behaviour under test.
+ */
+private class RecordingTimeoutClient : StubHttpClient() {
+    val timeouts = mutableListOf<Duration?>()
+
+    override fun <T : Any?> sendAsync(
+        request: HttpRequest,
+        responseBodyHandler: HttpResponse.BodyHandler<T>,
+    ): CompletableFuture<HttpResponse<T>> {
+        timeouts += request.timeout().orElse(null)
+        @Suppress("UNCHECKED_CAST")
+        return CompletableFuture.completedFuture(EmptyJsonResponse(request) as HttpResponse<T>)
+    }
+}
+
+/**
+ * Answers a future that never completes, so the only way out of the call is
+ * cancellation. [issued] releases once the request is genuinely in flight —
+ * without it the test could cancel before the call started and pass vacuously.
+ */
+private class HangingClient : StubHttpClient() {
+    val issued = CountDownLatch(1)
+
+    override fun <T : Any?> sendAsync(
+        request: HttpRequest,
+        responseBodyHandler: HttpResponse.BodyHandler<T>,
+    ): CompletableFuture<HttpResponse<T>> {
+        issued.countDown()
+        return CompletableFuture()
+    }
+}
+
+private class EmptyJsonResponse(
+    private val request: HttpRequest,
+) : HttpResponse<String> {
+    override fun statusCode(): Int = 200
+
+    override fun request(): HttpRequest = request
+
+    override fun previousResponse(): Optional<HttpResponse<String>> = Optional.empty()
+
+    override fun headers(): HttpHeaders = HttpHeaders.of(emptyMap()) { _, _ -> true }
+
+    override fun body(): String = "{}"
+
+    override fun sslSession(): Optional<javax.net.ssl.SSLSession> = Optional.empty()
+
+    override fun uri(): java.net.URI = request.uri()
+
+    override fun version(): HttpClient.Version = HttpClient.Version.HTTP_1_1
 }

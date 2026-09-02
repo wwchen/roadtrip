@@ -58,6 +58,20 @@ sealed class SettingsError(
     class RecgovNotConfigured(
         message: String = "No rec.gov credentials are stored for this account",
     ) : SettingsError(message)
+
+    /**
+     * The companion could not destroy the browser profile, so the operation was
+     * refused rather than half-applied.
+     *
+     * Both callers write the local row only after the session material is gone.
+     * Persisting anyway would leave the stored account and the live session
+     * disagreeing — a hold placed on an account the user has replaced, or
+     * credentials reported deleted while their cookie jar is still on disk.
+     */
+    class RecgovProfileWipeFailed(
+        message: String =
+            "The booking service could not clear the existing rec.gov session, so nothing was changed",
+    ) : SettingsError(message)
 }
 
 /**

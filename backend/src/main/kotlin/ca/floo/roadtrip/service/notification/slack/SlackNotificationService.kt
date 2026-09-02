@@ -76,6 +76,8 @@ class SlackNotificationService(
         status: String,
         request: JsonObject,
         response: JsonObject?,
+        error: String?,
+        detail: String?,
         target: NotificationTarget,
     ): Boolean {
         val slackTarget = target as? NotificationTarget.Slack ?: return false
@@ -91,6 +93,9 @@ class SlackNotificationService(
                     ),
                 ),
             )
+        // A preflight failure carries its reason here and has no companion
+        // response to dig it out of; without this the card said only "failed".
+        atcReason(error, detail)?.let { blocks += SlackBlocks.section("*Reason*\n$it") }
         blocks += jsonReportBlocks("Request body", request)
         if (response != null) {
             blocks += atcDiagnosticBlocks(response)
@@ -167,6 +172,16 @@ class SlackNotificationService(
     override fun close() {
         slackClient?.close()
     }
+
+    /** The failure reason as the caller stated it; null when there was none. */
+    private fun atcReason(
+        error: String?,
+        detail: String?,
+    ): String? =
+        when {
+            detail != null && error != null -> "$error — $detail"
+            else -> detail ?: error
+        }
 
     private fun atcResultColor(status: String): String =
         if (status == ATC_STATUS_COMPLETED) {

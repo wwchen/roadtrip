@@ -1,19 +1,37 @@
-import { test } from 'node:test'
+import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { Readable } from 'node:stream'
+import fs from 'node:fs'
+import fsp from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import {
   HANDLED_OPERATION_IDS,
   createCompanionServer,
   getRecgovAuthStatus,
   getRecgovHealthStatus,
-  runStartupAuthCheck,
+  runRecgovAuthCheck,
 } from '../src/server.js'
 import { COMPANION_API_ROUTES } from '../src/apiContract.js'
 import { COMPANION_API_TOKEN_HEADER } from '../src/server/apiToken.js'
+import { recgovCookieSettingKey } from '../src/browser.js'
+import { getSetting, setSetting } from '../src/store.js'
 import {
   DEFAULT_MFA_CHALLENGE_TTL_MS,
   createProfilePool,
 } from '../src/profilePool.js'
+
+// The cookie-jar assertions below write through store.js, which must never be
+// the developer's real ~/.campsite-companion.
+let storeDir
+before(() => {
+  storeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'companion-server-store-'))
+  process.env.COMPANION_DIR = storeDir
+})
+after(() => {
+  delete process.env.COMPANION_DIR
+  fs.rmSync(storeDir, { recursive: true, force: true })
+})
 
 const TEST_API_TOKEN = 'test-companion-token'
 const CONTAINER_ADDRESS = '172.18.0.4'
@@ -22,10 +40,11 @@ const PROFILE_ID = 'user-7'
 const OTHER_PROFILE_ID = 'user-8'
 const MFA_CHALLENGE_TTL_OVERSHOOT_MS = DEFAULT_MFA_CHALLENGE_TTL_MS + 1_000
 
-test('runStartupAuthCheck records logged-in status', async () => {
+test('an unscoped auth check records logged-in status on the companion-wide row', async () => {
   const log = logCapture()
 
-  const status = await runStartupAuthCheck({
+  const status = await runRecgovAuthCheck({
+    operation: 'check',
     testChromiumFn: async () => ({ ok: true, loggedIn: true }),
     logger: log.write,
   })
@@ -33,8 +52,8 @@ test('runStartupAuthCheck records logged-in status', async () => {
   assert.equal(status.state, 'ok')
   assert.equal(status.logged_in, true)
   assert.equal(getRecgovAuthStatus(), status)
-  assert.match(log.text(), /recgov auth startup check start/)
-  assert.match(log.text(), /recgov auth startup check ok/)
+  assert.match(log.text(), /recgov auth check start/)
+  assert.match(log.text(), /recgov auth check ok/)
 })
 
 test('getRecgovHealthStatus exposes login status and refresh metadata', async () => {
@@ -42,7 +61,8 @@ test('getRecgovHealthStatus exposes login status and refresh metadata', async ()
     reason: 'login_success',
     screenshot_url: '/screenshot/diagnostics/recgov-login-success.png',
   }
-  await runStartupAuthCheck({
+  await runRecgovAuthCheck({
+    operation: 'check',
     testChromiumFn: async () => ({ ok: true, loggedIn: true, diagnostic }),
     logger: () => {},
   })
@@ -58,14 +78,15 @@ test('getRecgovHealthStatus exposes login status and refresh metadata', async ()
   assert.equal('last_login_diagnostic' in health, false)
 })
 
-test('runStartupAuthCheck records actionable auth failure status', async () => {
+test('an unscoped auth check records actionable auth failure status', async () => {
   const log = logCapture()
   const diagnostic = {
     reason: 'captcha_required',
     screenshot_url: '/screenshot/diagnostics/recgov-login-captcha.png',
   }
 
-  const status = await runStartupAuthCheck({
+  const status = await runRecgovAuthCheck({
+    operation: 'check',
     testChromiumFn: async () => ({ ok: true, loggedIn: false, diagnostic }),
     authFailureFn: () => ({
       error: 'recgov_not_authenticated',
@@ -86,16 +107,17 @@ test('runStartupAuthCheck records actionable auth failure status', async () => {
     headless: true,
   })
   assert.deepEqual(status.diagnostic, diagnostic)
-  assert.match(log.text(), /recgov auth startup check fail/)
+  assert.match(log.text(), /recgov auth check fail/)
   assert.match(log.text(), /error=recgov_not_authenticated/)
   assert.match(log.text(), /diagnostic_reason=captcha_required/)
   assert.match(log.text(), /screenshot=\/screenshot\/diagnostics\/recgov-login-captcha\.png/)
 })
 
-test('runStartupAuthCheck records exceptions as startup auth failures', async () => {
+test('an unscoped auth check records exceptions as auth failures', async () => {
   const log = logCapture()
 
-  const status = await runStartupAuthCheck({
+  const status = await runRecgovAuthCheck({
+    operation: 'check',
     testChromiumFn: async () => { throw new Error('browser launch failed') },
     logger: log.write,
   })
@@ -105,7 +127,7 @@ test('runStartupAuthCheck records exceptions as startup auth failures', async ()
   assert.equal(status.error, 'recgov_auth_check_exception')
   assert.equal(status.detail, 'browser launch failed')
   assert.match(status.corrective_action, /recgov-login/)
-  assert.match(log.text(), /recgov auth startup check exception/)
+  assert.match(log.text(), /recgov auth check exception/)
 })
 
 test('GET / returns a simple operator login form', async () => {
@@ -184,7 +206,7 @@ test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
   const loginSchema = response.json.components.schemas.LoginRequest
   assert.deepEqual(
     Object.keys(loginSchema.properties),
-    ['profile_id', 'username', 'password', 'mfa_code', 'challenge_id'],
+    ['profile_id', 'username', 'password', 'mfa_code', 'challenge_id', 'unattended'],
   )
   assert.deepEqual(loginSchema.required, ['profile_id'])
 
@@ -846,7 +868,8 @@ test('GET /health reports per-profile auth without taking the profile lock', asy
 })
 
 test('a profile operation never overwrites another profile or the companion-wide status', async () => {
-  await runStartupAuthCheck({
+  await runRecgovAuthCheck({
+    operation: 'check',
     testChromiumFn: async () => ({ ok: true, loggedIn: true }),
     logger: () => {},
   })
@@ -861,7 +884,7 @@ test('a profile operation never overwrites another profile or the companion-wide
   assert.equal(refreshed.status, 401)
   assert.equal(scoped.json.recgov_auth.login_status, 'failed')
   assert.equal(other.json.recgov_auth.login_status, 'unchecked')
-  assert.equal(companionWide.json.recgov_auth.login_status, 'ok', 'the startup check still owns the global row')
+  assert.equal(companionWide.json.recgov_auth.login_status, 'ok', 'an unscoped check still owns the global row')
 })
 
 test('GET /health without profile_id keeps answering the companion-wide check', async () => {
@@ -874,19 +897,401 @@ test('GET /health without profile_id keeps answering the companion-wide check', 
   assert.deepEqual(response.json.pool.keep_warm, [])
 })
 
-test('every route rejects a request without the shared-secret header', async () => {
+test('an unattended login that hits MFA opens no challenge and frees the profile', async () => {
+  // The fire path has nobody to read a code. Opening a challenge there would
+  // pin the profile's busy lock for the whole 5-minute TTL, wedging the owner's
+  // own Test login, the keepalive refresh and any second ATC.
+  const abandoned = []
+  const pool = testPool()
+  const server = testServer({
+    pool,
+    credentialLoginFn: async () => ({
+      state: 'mfa_required',
+      logged_in: false,
+      diagnostic: { reason: 'mfa_required' },
+      resume: async () => ({ state: 'ok', logged_in: true }),
+      abandon: () => abandoned.push(true),
+    }),
+  })
+
+  const response = await request(server, {
+    method: 'POST',
+    path: '/login',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      profile_id: PROFILE_ID,
+      username: 'camper@example.test',
+      password: 'secret',
+      unattended: true,
+    }),
+  })
+
+  assert.equal(response.status, 401)
+  assert.equal(response.json.error, 'mfa_required')
+  assert.equal(response.json.challenge_id, undefined, 'an unattended caller can never complete a challenge')
+  assert.equal(pool.isBusy(PROFILE_ID), false, 'the lock must be released immediately')
+  assert.equal(pool.snapshot().profiles.find((p) => p.profile_id === PROFILE_ID)?.mfa_pending, false)
+  assert.deepEqual(abandoned, [true], 'the held login page must be closed')
+})
+
+test('an interactive login still opens a challenge and holds the lock', async () => {
+  const pool = testPool()
+  const server = testServer({ pool, credentialLoginFn: mfaChallengeLogin() })
+
+  const response = await beginLogin(server)
+
+  assert.equal(response.status, 401)
+  assert.equal(response.json.error, 'mfa_required')
+  assert.ok(response.json.challenge_id, 'the interactive flow is unchanged')
+  assert.equal(pool.isBusy(PROFILE_ID), true)
+})
+
+test('POST /keep-warm replaces the armed set wholesale', async () => {
+  const pool = testPool()
+  const server = testServer({ pool })
+
+  const armed = await request(server, {
+    method: 'POST',
+    path: '/keep-warm',
+    body: JSON.stringify({ profile_ids: [PROFILE_ID, OTHER_PROFILE_ID] }),
+    headers: { 'content-type': 'application/json' },
+  })
+  const disarmed = await request(server, {
+    method: 'POST',
+    path: '/keep-warm',
+    body: JSON.stringify({ profile_ids: [OTHER_PROFILE_ID] }),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(armed.status, 200)
+  assert.deepEqual(armed.json.keep_warm.toSorted(), [PROFILE_ID, OTHER_PROFILE_ID].toSorted())
+  // Replaced, not merged: a paused watch has to be able to disarm its profile.
+  assert.deepEqual(disarmed.json.keep_warm, [OTHER_PROFILE_ID])
+  assert.deepEqual(pool.snapshot().keep_warm, [OTHER_PROFILE_ID])
+})
+
+test('POST /keep-warm answers while a profile is mid-operation', async () => {
+  const pool = testPool()
+  const server = testServer({ pool })
+  pool.acquire(PROFILE_ID, 'login')
+
+  const response = await request(server, {
+    method: 'POST',
+    path: '/keep-warm',
+    body: JSON.stringify({ profile_ids: [PROFILE_ID] }),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(response.status, 200, 'marking profiles must never queue behind browser work')
+  assert.deepEqual(response.json.keep_warm, [PROFILE_ID])
+})
+
+test('POST /keep-warm refuses a body that is not an array of profile ids', async () => {
   const server = testServer()
 
-  for (const path of ['/', '/docs', '/openapi.json', '/health', '/screenshot', '/screenshot/diagnostics/x.png']) {
+  const response = await request(server, {
+    method: 'POST',
+    path: '/keep-warm',
+    body: JSON.stringify({ profile_ids: PROFILE_ID }),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(response.status, 400)
+  assert.equal(response.json.error, 'invalid_request')
+})
+
+test('POST /destroy erases the profile and answers ok', async () => {
+  // "Remove my credentials" must be a true wipe: logout leaves the Chromium
+  // directory and the saved cookie jar on disk, this is what deletes them.
+  setSetting(recgovCookieSettingKey(PROFILE_ID), 'r1s-fingerprint=live-session')
+  const server = testServer()
+
+  const response = await request(server, {
+    method: 'POST',
+    path: '/destroy',
+    body: JSON.stringify({ profile_id: PROFILE_ID }),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.json.ok, true)
+  assert.equal(response.json.profile_id, PROFILE_ID)
+  assert.equal(getSetting(recgovCookieSettingKey(PROFILE_ID)), null)
+})
+
+test('POST /destroy erases the traces a failed verify kept for that profile', async () => {
+  // The trigger the audit named: a failed /verify keeps a trace, the trace's
+  // network log holds the profile's live session cookies and bearer token, and
+  // the user then removes their credentials. Deleting the jar while that
+  // archive stays on disk erases the copy and keeps the original.
+  const dir = await freshDiagnosticsDir()
+  const pool = tracingPool(dir)
+  const server = testServer({
+    pool,
+    verifyRecgovSessionFn: async () => ({ ok: false, logged_in: false, error: 'recgov_cart_unreachable' }),
+  })
+  const someoneElse = 'recgov-verify-2026-09-01T00-00-00-000Z-profile_user_8-recgov_cart_unreachable.trace.zip'
+  await fsp.writeFile(path.join(dir, someoneElse), 'trace-bytes')
+
+  const verified = await request(server, {
+    method: 'POST',
+    path: `/verify?profile_id=${PROFILE_ID}`,
+    headers: { accept: 'application/json' },
+  })
+  assert.equal(verified.status, 401)
+  const kept = (await fsp.readdir(dir)).filter((name) => name !== someoneElse)
+  assert.equal(kept.length, 1, 'a failed verify keeps its trace')
+  assert.match(kept[0], /-profile_user_7-recgov_cart_unreachable\.trace\.zip$/)
+
+  const destroyed = await request(server, {
+    method: 'POST',
+    path: '/destroy',
+    body: JSON.stringify({ profile_id: PROFILE_ID }),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(destroyed.status, 200)
+  assert.equal(destroyed.json.diagnostics_removed, 1)
+  assert.deepEqual(await fsp.readdir(dir), [someoneElse], "another profile's diagnostics stay")
+})
+
+test('POST /destroy queues behind live work on the same profile', async () => {
+  // It deletes the user-data directory out from under a browser, so it must
+  // never race a login, verify or ATC mid-flight.
+  const pool = testPool()
+  const server = testServer({ pool })
+  pool.acquire(PROFILE_ID, 'login')
+
+  const response = await request(server, {
+    method: 'POST',
+    path: '/destroy',
+    body: JSON.stringify({ profile_id: PROFILE_ID }),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(response.status, 409)
+  assert.equal(response.json.error, 'profile_busy')
+})
+
+test('POST /destroy refuses a profile id that could escape the profiles root', async () => {
+  const server = testServer()
+
+  for (const bad of ['../../etc', '/etc/passwd', '.']) {
+    const response = await request(server, {
+      method: 'POST',
+      path: '/destroy',
+      body: JSON.stringify({ profile_id: bad }),
+      headers: { 'content-type': 'application/json' },
+    })
+    assert.equal(response.status, 400, `${bad} must be refused`)
+    assert.equal(response.json.error, 'invalid_profile_id')
+  }
+})
+
+test('POST /destroy requires a profile id', async () => {
+  const server = testServer()
+
+  const response = await request(server, {
+    method: 'POST',
+    path: '/destroy',
+    body: JSON.stringify({}),
+    headers: { 'content-type': 'application/json' },
+  })
+
+  assert.equal(response.status, 400)
+  assert.equal(response.json.error, 'profile_id_required')
+})
+
+test('every data route rejects a request without the shared-secret header', async () => {
+  const server = testServer()
+
+  for (const path of ['/docs', '/openapi.json', '/health', '/screenshot', '/screenshot/diagnostics/x.png']) {
     const response = await request(server, { path, token: null })
 
     assert.equal(response.status, 401, `${path} must require the companion token`)
     assert.equal(response.json.error, 'unauthorized')
   }
 
-  const posted = await request(server, { method: 'POST', path: '/atc', token: null })
+  for (const path of ['/atc', '/destroy']) {
+    const posted = await request(server, { method: 'POST', path, token: null })
+    assert.equal(posted.status, 401, `${path} must require the companion token`)
+  }
+})
 
-  assert.equal(posted.status, 401)
+test('a failed login writes no trace by default, but keeps its screenshot', async () => {
+  // A login trace records fill params and DOM snapshots, so it contains the
+  // typed password. Off unless the operator asks for it; the screenshot
+  // diagnostic, which holds no password, is unaffected.
+  delete process.env.COMPANION_TRACE_LOGIN
+  const dir = await freshDiagnosticsDir()
+  const server = testServer({
+    pool: tracingPool(dir),
+    credentialLoginFn: async () => ({
+      state: 'failed',
+      logged_in: false,
+      reason: 'captcha_required',
+      diagnostic: { reason: 'captcha_required', screenshot_url: '/screenshot/diagnostics/shot.png' },
+    }),
+  })
+
+  const response = await beginLogin(server)
+
+  assert.equal(response.status, 401)
+  assert.equal(response.json.diagnostics.trace, undefined, 'no trace without the opt-in')
+  assert.equal(response.json.diagnostics.screenshot_url, '/screenshot/diagnostics/shot.png')
+  assert.deepEqual(await fsp.readdir(dir), [], 'nothing containing a password may be written')
+})
+
+test('a failed login keeps a trace when the operator opts in', async () => {
+  process.env.COMPANION_TRACE_LOGIN = 'true'
+  try {
+    const dir = await freshDiagnosticsDir()
+    const server = testServer({
+      pool: tracingPool(dir),
+      credentialLoginFn: async () => ({
+        state: 'failed',
+        logged_in: false,
+        reason: 'captcha_required',
+        diagnostic: { reason: 'captcha_required', screenshot_url: '/screenshot/diagnostics/shot.png' },
+      }),
+    })
+
+    const response = await beginLogin(server)
+
+    assert.match(response.json.diagnostics.trace, /recgov-login-.*-captcha_required\.trace\.zip$/)
+    assert.equal(response.json.diagnostics.screenshot_url, '/screenshot/diagnostics/shot.png')
+    const written = await fsp.readdir(dir)
+    assert.equal(written.length, 1)
+    assert.match(written[0], /\.trace\.zip$/)
+  } finally {
+    delete process.env.COMPANION_TRACE_LOGIN
+  }
+})
+
+test('a successful opted-in login leaves zero trace files behind', async () => {
+  process.env.COMPANION_TRACE_LOGIN = 'true'
+  const dir = await freshDiagnosticsDir()
+  const pool = tracingPool(dir)
+  const server = testServer({
+    pool,
+    credentialLoginFn: async () => ({ state: 'ok', logged_in: true }),
+  })
+
+  const response = await beginLogin(server)
+
+  assert.equal(response.status, 200)
+  assert.equal(response.json.diagnostics, null, 'nothing was kept, so nothing is named')
+  assert.deepEqual(await fsp.readdir(dir), [], 'a success must write no trace at all')
+  delete process.env.COMPANION_TRACE_LOGIN
+})
+
+test('a successful login stores the profile cookie jar so it outlives the browser', async () => {
+  // Rec.gov's session cookies are session-scoped in Chromium: without this
+  // write, a container restart loses the login the user just performed. The
+  // save is best-effort by design, so only asserting on the store catches a
+  // persist path that silently stopped running.
+  setSetting(recgovCookieSettingKey(PROFILE_ID), '')
+  const server = testServer({
+    pool: cookieJarPool([{ name: 'r1s-fingerprint', value: 'fp-abc' }]),
+    credentialLoginFn: async () => ({ state: 'ok', logged_in: true }),
+  })
+
+  const response = await beginLogin(server)
+
+  assert.equal(response.status, 200)
+  assert.equal(getSetting(recgovCookieSettingKey(PROFILE_ID)), 'r1s-fingerprint=fp-abc')
+})
+
+test('a failed login leaves the stored jar alone', async () => {
+  // The failed attempt's context holds nothing worth keeping, and overwriting
+  // a good jar with it destroys the session we are trying to preserve.
+  setSetting(recgovCookieSettingKey(PROFILE_ID), 'r1s-fingerprint=keep-me')
+  const server = testServer({
+    pool: cookieJarPool([{ name: 'r1s-fingerprint', value: 'fp-new' }]),
+    credentialLoginFn: async () => ({ state: 'failed', logged_in: false, reason: 'captcha_required' }),
+  })
+
+  const response = await beginLogin(server)
+
+  assert.equal(response.status, 401)
+  assert.equal(getSetting(recgovCookieSettingKey(PROFILE_ID)), 'r1s-fingerprint=keep-me')
+})
+
+test('a listed trace can actually be downloaded', async () => {
+  // The listing handed out .trace.zip urls that the download route rejected as
+  // invalid_diagnostic_path, so every one of them was a dead link.
+  const dir = await freshDiagnosticsDir()
+  const file = 'recgov-login-2026-09-01T00-00-00-000Z-captcha_required.trace.zip'
+  await fsp.writeFile(path.join(dir, file), 'trace-bytes')
+  const server = testServer()
+
+  const listed = await request(server, { path: '/screenshot/diagnostics' })
+  const artifact = listed.json.artifacts.find((a) => a.file === file)
+  assert.ok(artifact, 'the trace must be listed')
+
+  const downloaded = await request(server, { path: artifact.url })
+
+  assert.equal(downloaded.status, 200)
+  assert.equal(downloaded.headers['content-type'], 'application/zip')
+})
+
+test('a listed screenshot still downloads as a png', async () => {
+  const dir = await freshDiagnosticsDir()
+  const file = 'recgov-verify-2026-09-01T00-00-00-000Z-not_authenticated.png'
+  await fsp.writeFile(path.join(dir, file), 'png-bytes')
+
+  const downloaded = await request(testServer(), { path: `/screenshot/diagnostics/${file}` })
+
+  assert.equal(downloaded.status, 200)
+  assert.equal(downloaded.headers['content-type'], 'image/png')
+})
+
+test('the download route still refuses traversal and anything that is not an artifact', async () => {
+  const server = testServer()
+
+  for (const target of [
+    '/screenshot/diagnostics/..%2F..%2Fetc%2Fpasswd',
+    '/screenshot/diagnostics/nested%2Fpath.png',
+    '/screenshot/diagnostics/companion.env',
+    '/screenshot/diagnostics/notes.txt',
+  ]) {
+    const response = await request(server, { path: target })
+    assert.equal(response.status, 400, `${target} must be refused`)
+    assert.equal(response.json.error, 'invalid_diagnostic_path')
+  }
+})
+
+test('the diagnostics listing is token-gated and reports the prune bound', async () => {
+  const server = testServer()
+
+  const refused = await request(server, { path: '/screenshot/diagnostics', token: null })
+  assert.equal(refused.status, 401, 'diagnostics name real failures on real profiles')
+
+  const listed = await request(server, { path: '/screenshot/diagnostics' })
+  assert.equal(listed.status, 200)
+  assert.equal(listed.json.ok, true)
+  assert.equal(Array.isArray(listed.json.artifacts), true)
+  assert.equal(listed.json.max_artifacts > 0, true)
+})
+
+test('the operator shell loads without a token, because it carries nothing', async () => {
+  // A browser cannot set a header on a navigation, and the compose port mapping
+  // means a request from the host is not in-container loopback — so the page was
+  // unreachable in the one situation it exists for. It is static markup; the
+  // controls on it send the token from their own field.
+  const response = await request(testServer(), { path: '/', token: null })
+
+  assert.equal(response.status, 200)
+  assert.match(response.headers['content-type'], /text\/html/)
+})
+
+test('the un-gated shell does not un-gate the data behind it', async () => {
+  const server = testServer()
+
+  for (const path of ['/screenshot?profile_id=user-7', '/health?profile_id=user-7']) {
+    const response = await request(server, { path, token: null })
+    assert.equal(response.status, 401, `${path} must still require the companion token`)
+  }
 })
 
 test('an unmatched route is refused before it reports whether it exists', async () => {
@@ -941,6 +1346,22 @@ function logCapture () {
   }
 }
 
+test('a handler that throws answers 500 with its code instead of taking the process down', async () => {
+  // store.js now fails loudly on a corrupt store rather than reporting every
+  // user signed out. Nothing awaited the handler's rejection, so that throw
+  // became an unhandled rejection and Node exited — trading data loss for a
+  // restart loop. Any handler throw has always had this shape.
+  const pool = testPool()
+  pool.isBusy = () => {
+    throw Object.assign(new Error('store.json is unreadable'), { code: 'store_corrupt' })
+  }
+
+  const res = await request(testServer({ pool }), { method: 'GET', path: '/health?profile_id=7' })
+
+  assert.equal(res.status, 500)
+  assert.equal(res.json.error, 'store_corrupt')
+})
+
 function testServer (overrides = {}) {
   return createCompanionServer({
     apiToken: TEST_API_TOKEN,
@@ -971,6 +1392,42 @@ async function beginLogin (server) {
     headers: { accept: 'application/json', 'content-type': 'application/json' },
     body: JSON.stringify({ profile_id: PROFILE_ID, username: 'camper@example.test', password: 'secret' }),
   })
+}
+
+/** A pool whose contexts record tracing into `dir`, like a real browser would. */
+function tracingPool (dir) {
+  return testPool({
+    launchContextFn: async () => ({
+      pages: async () => [],
+      close: async () => {},
+      once: () => {},
+      tracing: {
+        start: async () => {},
+        stop: async (options) => {
+          if (options?.path) await fsp.writeFile(options.path, 'trace-bytes')
+        },
+      },
+    }),
+  })
+}
+
+/** A pool whose contexts answer a real cookie jar, the way Playwright's do. */
+function cookieJarPool (cookies) {
+  return testPool({
+    launchContextFn: async (dir) => ({
+      dir,
+      pages: async () => [],
+      close: async () => {},
+      once: () => {},
+      cookies: async () => cookies,
+    }),
+  })
+}
+
+async function freshDiagnosticsDir () {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'companion-server-diag-'))
+  process.env.RECGOV_DIAGNOSTIC_DIR = dir
+  return dir
 }
 
 function testPool (overrides = {}) {

@@ -134,6 +134,11 @@ services:
       - COMPANION_PORT=8770
       - HEADLESS=${COMPANION_HEADLESS:-true}
       - COMPANION_BROWSER_PROFILE=/var/lib/campsite-companion/browser-session
+      # The JSON store holds the per-profile rec.gov cookie jars, which is what
+      # carries a session across a container recreate. Default it and the file
+      # lands in the image's ephemeral /root, so every restart signs everyone
+      # out — the exact symptom this points at the mounted volume to fix.
+      - COMPANION_DIR=/var/lib/campsite-companion
       - RECGOV_LOGIN_TIMEOUT_MS=${RECGOV_LOGIN_TIMEOUT_MS:-120000}
       # Shared secret for the backend channel, mounted as a file by
       # docker-compose.secrets.yml rather than passed as a value.
@@ -142,7 +147,11 @@ services:
       - COMPANION_MFA_CHALLENGE_TTL_MS=${COMPANION_MFA_CHALLENGE_TTL_MS:-300000}
       - COMPANION_FAILED_LOGIN_BACKOFF_MS=${COMPANION_FAILED_LOGIN_BACKOFF_MS:-60000}
     volumes:
-      - ${RECGOV_COMPANION_BROWSER_PROFILE:-$HOME/.campsite-companion/browser-session}:/var/lib/campsite-companion/browser-session
+      # The whole companion data directory, not just the profile pool inside
+      # it: store.json lives here too and is credential material. Host and
+      # container then name the same file, so a headed mint on the host with
+      # `make recgov-login` is visible to the container.
+      - ${RECGOV_COMPANION_DATA_DIR:-$HOME/.campsite-companion}:/var/lib/campsite-companion
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8770/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 5s

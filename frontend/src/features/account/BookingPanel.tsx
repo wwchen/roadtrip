@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, SecretField, SeededTextField } from '@ui';
+import { Button, ConfirmButton, SeededTextField } from '@ui';
 import type {
   RecgovLoginResponse,
   RecgovStatus,
@@ -49,16 +49,33 @@ export function buildBookingPayload(values: BookingValues): UpdateBookingFields 
 const SESSION_ROW: Record<RecgovStatus['session'], { tone: StatusTone; text: string }> = {
   not_configured: { tone: 'muted', text: 'Not configured' },
   active: { tone: 'ok', text: 'Session active' },
+  // Three different not-active answers. Telling someone who has never logged in
+  // that their session "expired" sends them hunting for a problem they do not
+  // have; telling them so when the booking service itself threw sends them to
+  // re-login against something broken.
+  not_logged_in: { tone: 'muted', text: 'Not logged in yet — test login below' },
   expired: { tone: 'warn', text: 'Session expired — test login below' },
+  check_failed: { tone: 'error', text: 'Booking service error — status unknown' },
   companion_unavailable: { tone: 'warn', text: 'Booking service unavailable — status unknown' },
 };
 
 const CHECKING_ROW = { tone: 'muted' as StatusTone, text: 'Checking session…' };
 const UNKNOWN_ROW = SESSION_ROW.companion_unavailable;
 
+const PROFILE_BUSY_CODE = 'profile_busy';
+
 const SAVE_FIRST_HELP = 'Save your changes first — a test login uses the saved credentials.';
 const PASSWORD_HELP =
   'Used only to sign in to recreation.gov on your behalf. Add-to-cart stops at a cart hold; it never checks out.';
+
+/**
+ * What a saved password looks like in the untouched field.
+ *
+ * A **placeholder**, so no real character ever reaches the DOM, and a fixed
+ * length, so neither does the real one. Leaving the field alone submits null
+ * ("unchanged"); clearing credentials is the explicit button at the bottom.
+ */
+const SAVED_PASSWORD_PLACEHOLDER = '••••••••••';
 
 export interface BookingPanelProps {
   settings: SettingsResponse;
@@ -70,6 +87,8 @@ export interface BookingPanelProps {
   onLogin: () => Promise<RecgovLoginResponse>;
   onSubmitMfa: (code: string) => Promise<RecgovLoginResponse>;
   onVerify: () => Promise<RecgovVerifyResponse>;
+  /** Clears the stored credentials. Reports through the modal's notice banner. */
+  onRemoveRecgov: () => void;
 }
 
 /**
@@ -94,6 +113,7 @@ export function BookingPanel({
   onLogin,
   onSubmitMfa,
   onVerify,
+  onRemoveRecgov,
 }: BookingPanelProps) {
   const [login, setLogin] = useState<BookingLoginState>(IDLE);
   const [verifying, setVerifying] = useState(false);
@@ -128,6 +148,16 @@ export function BookingPanel({
     if (answer.status === 'ok') {
       setLogin(nextLoginState(from, { type: 'succeeded' }));
       setResult({ tone: 'ok', message: 'Signed in to recreation.gov.' });
+      return;
+    }
+    // `profile_busy` while the server still reports a challenge is that challenge
+    // holding the profile lock — so it is a pointer back to the code step, not a
+    // dead end. Cancel abandons the step client-side but leaves the challenge
+    // alive, and the resume effect is edge-triggered and cannot fire twice, so
+    // without this the user was locked out for the rest of the TTL.
+    if (answer.error === PROFILE_BUSY_CODE && serverHasChallenge) {
+      setLogin(nextLoginState(from, { type: 'mfa_required', challengeId: null }));
+      setResult({ tone: 'warn', message: settingsErrorMessage('mfa_required') });
       return;
     }
     setLogin(nextLoginState(from, { type: 'failed', code: answer.error ?? '' }));
@@ -185,28 +215,40 @@ export function BookingPanel({
 
   return (
     <div className="rt-account-panel">
-      <SeededTextField
-        id="settings-recgov-username"
-        name="recgov_username"
-        label="Recreation.gov email"
-        type="email"
-        seed={values.recgov_username}
-        onChange={(e) =>
-          onChange({ ...values, recgov_username: (e.target as HTMLInputElement).value })
-        }
-      />
+      <div className="rt-account-field">
+        <SeededTextField
+          id="settings-recgov-username"
+          name="recgov_username"
+          label="Recreation.gov email"
+          type="email"
+          seed={values.recgov_username}
+          onChange={(e) =>
+            onChange({ ...values, recgov_username: (e.target as HTMLInputElement).value })
+          }
+        />
+      </div>
 
-      <SecretField
-        id="settings-recgov-password"
-        name="recgov_password"
-        label="Recreation.gov password"
-        // No hint: a human password's last characters are credential
-        // material, so the mask says only "something is stored".
-        stored={settings.booking.recgov_configured}
-        help={PASSWORD_HELP}
-        value={values.recgov_password}
-        onChange={(recgov_password) => onChange({ ...values, recgov_password })}
-      />
+      <div className="rt-account-field">
+        {/* Two plain stacked fields rather than the SecretField mask-and-Replace
+            row: this is a password a person types, not a token they paste once.
+            Seeded empty and never with the stored value — the dots are a
+            placeholder, so nothing real is ever in the DOM. An untouched field
+            submits null, meaning unchanged. */}
+        <SeededTextField
+          id="settings-recgov-password"
+          name="recgov_password"
+          label="Recreation.gov password"
+          type="password"
+          autoComplete="off"
+          placeholder={configured ? SAVED_PASSWORD_PLACEHOLDER : undefined}
+          help={PASSWORD_HELP}
+          seed=""
+          onChange={(e) => {
+            const typed = (e.target as HTMLInputElement).value;
+            onChange({ ...values, recgov_password: typed === '' ? null : typed });
+          }}
+        />
+      </div>
 
       <div className="rt-account-row">
         <span className="rt-account-row-label">Session</span>
@@ -241,6 +283,31 @@ export function BookingPanel({
             setResult(null);
           }}
         />
+      )}
+
+      {configured && (
+        <section className="rt-account-danger">
+          <h3 className="rt-account-danger-title">Danger zone</h3>
+          {/* The destructive action for this page, on this page. It was in
+              Account, which meant removing a credential you were looking at
+              required leaving the tab that shows it. */}
+          {/* Say what is destroyed BEFORE the first click, not in the notice
+              after it. Removal erases the saved browser session too, which is
+              the part a user cannot guess from "remove credentials" — and the
+              part they cannot undo without logging in again from scratch. */}
+          <p className="rt-account-danger-note">
+            Removes your Recreation.gov username and password, and erases the saved browser
+            session on the booking service. You will have to sign in again to use add-to-cart,
+            and any active add-to-cart watches will fail until you do.
+          </p>
+          <ConfirmButton
+            variant="tertiary"
+            hue="red"
+            label="Remove rec.gov credentials"
+            confirmLabel="Confirm removal"
+            onConfirm={onRemoveRecgov}
+          />
+        </section>
       )}
     </div>
   );

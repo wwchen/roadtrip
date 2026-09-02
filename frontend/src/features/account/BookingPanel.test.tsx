@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
   RecgovLoginResponse,
@@ -45,7 +45,7 @@ const CONFIGURED = {
 const activeStatus: RecgovStatus = {
   configured: true,
   username: 'ada@example.test',
-  password_hint: '9f2c',
+ 
   session: 'active',
 };
 
@@ -55,6 +55,7 @@ interface Handlers {
   onLogin?: () => Promise<RecgovLoginResponse>;
   onSubmitMfa?: (code: string) => Promise<RecgovLoginResponse>;
   onVerify?: () => Promise<RecgovVerifyResponse>;
+  onRemoveRecgov?: () => void;
 }
 
 /** Renders with the parent's state wired up, and exposes the latest values. */
@@ -73,6 +74,7 @@ function renderPanel(s: SettingsResponse, handlers: Handlers = {}) {
       statusPending={handlers.statusPending ?? false}
       onLogin={handlers.onLogin ?? (async () => ({ status: 'ok' }))}
       onSubmitMfa={handlers.onSubmitMfa ?? (async () => ({ status: 'ok' }))}
+      onRemoveRecgov={handlers.onRemoveRecgov ?? vi.fn()}
       onVerify={handlers.onVerify ?? (async () => ({ ok: true }))}
     />
   );
@@ -107,13 +109,68 @@ describe('the credential slice', () => {
     expect(isBookingDirty(s, state.values)).toBe(true);
   });
 
-  test('a stored password shows as an opaque mask that leaks neither characters nor length', () => {
-    // The Slack token shows its last 4 because it is machine-generated. A
-    // human password's last 4 narrow a guess, and so does its length.
+  test('a stored password shows as placeholder dots, never as characters or real length', () => {
+    // The Slack token shows its last 4 because it is machine-generated. A human
+    // password's last 4 narrow a guess, and so does its length — so the dots
+    // are a fixed-length placeholder and the input itself holds nothing.
     renderPanel(settings(CONFIGURED));
 
-    expect(screen.getByText('••••••••••')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Recreation.gov password')).not.toBeInTheDocument();
+    const password = screen.getByLabelText('Recreation.gov password');
+    expect(password).toHaveValue('');
+    expect(password).toHaveAttribute('placeholder', '••••••••••');
+    expect(password).toHaveAttribute('type', 'password');
+  });
+
+  test('an unconfigured account gets a plain empty password field', () => {
+    renderPanel(settings());
+
+    expect(screen.getByLabelText('Recreation.gov password')).not.toHaveAttribute('placeholder');
+  });
+
+  test('the three not-active session states read differently', () => {
+    const row = (session: RecgovStatus['session']) =>
+      renderPanel(settings(CONFIGURED), {
+        status: { configured: true, username: 'ada@example.test', session },
+      });
+
+    row('not_logged_in');
+    expect(screen.getByText('Not logged in yet — test login below')).toBeInTheDocument();
+    cleanup();
+
+    row('expired');
+    expect(screen.getByText('Session expired — test login below')).toBeInTheDocument();
+    cleanup();
+
+    row('check_failed');
+    expect(screen.getByText('Booking service error — status unknown')).toBeInTheDocument();
+  });
+
+  test('removing credentials is offered here, once something is stored', async () => {
+    const onRemoveRecgov = vi.fn();
+    renderPanel(settings(CONFIGURED), { onRemoveRecgov });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm removal' }));
+
+    expect(onRemoveRecgov).toHaveBeenCalledTimes(1);
+  });
+
+  test('the danger zone says the browser session goes too, before the first click', () => {
+    // "Remove credentials" does not tell a user their saved rec.gov browser
+    // session is erased as well, and that is the part they cannot undo without
+    // signing in from scratch.
+    renderPanel(settings(CONFIGURED));
+
+    const note = screen.getByText(/erases the saved browser session/i);
+    expect(note).toBeInTheDocument();
+    expect(note).toHaveTextContent(/username and password/i);
+    expect(note).toHaveTextContent(/add-to-cart watches will fail/i);
+  });
+
+  test('nothing stored means nothing to remove', () => {
+    renderPanel(settings());
+
+    expect(screen.queryByRole('button', { name: 'Remove rec.gov credentials' })).not.toBeInTheDocument();
   });
 
   test('typing a password makes it the payload value', async () => {
@@ -130,7 +187,7 @@ describe('the credential slice', () => {
 describe('the session row', () => {
   test('unconfigured', () => {
     renderPanel(settings(), {
-      status: { configured: false, username: null, password_hint: null, session: 'not_configured' },
+      status: { configured: false, username: null, session: 'not_configured' },
     });
 
     expect(screen.getByText('Not configured')).toBeInTheDocument();
@@ -275,6 +332,27 @@ describe('the MFA step', () => {
 
     expect(await screen.findByLabelText('Verification code')).toBeInTheDocument();
     expect(testLogin()).toBeDisabled();
+  });
+
+  test('Cancel does not lock the user out of a challenge the server still holds', async () => {
+    // Cancel abandons the code step client-side; the server keeps the challenge
+    // for the rest of its TTL. The resume effect is edge-triggered, so it cannot
+    // fire again, and every Test login then answers profile_busy — the user had
+    // no way back short of closing and reopening the modal.
+    renderPanel(settings(CONFIGURED), {
+      status: { ...activeStatus, session: 'expired', mfa_pending: true },
+      onLogin: async () => ({ status: 'failed', error: 'profile_busy' }),
+    });
+    await screen.findByLabelText('Verification code');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByLabelText('Verification code')).not.toBeInTheDocument();
+
+    // profile_busy IS the server saying that same challenge is still open, so
+    // asking to log in again should put the code step back, not dead-end.
+    await userEvent.click(testLogin());
+
+    expect(await screen.findByLabelText('Verification code')).toBeInTheDocument();
   });
 
   test('a resumed code is submitted like any other', async () => {

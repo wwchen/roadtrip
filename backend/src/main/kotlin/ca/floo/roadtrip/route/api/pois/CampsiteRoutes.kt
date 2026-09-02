@@ -3,10 +3,12 @@ package ca.floo.roadtrip.route.api.pois
 import ca.floo.roadtrip.model.api.AvailabilityErrorDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
+import ca.floo.roadtrip.model.domain.auth.userIdOrNull
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalDateQuery
+import ca.floo.roadtrip.route.common.principal
 import ca.floo.roadtrip.route.common.queryValues
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
@@ -91,6 +93,7 @@ internal fun Route.campsiteRoutes(
                                     siteTypes = call.queryValues("site_type", "siteType"),
                                     startDate = startDate,
                                     endDate = endDate,
+                                    requester = call.principal().userIdOrNull(),
                                 ),
                             )
                         } catch (e: AvailabilityServiceError) {

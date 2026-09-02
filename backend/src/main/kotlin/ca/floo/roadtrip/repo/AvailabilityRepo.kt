@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CellTransition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -182,6 +183,37 @@ class AvailabilityRepo(
                     observedAt = r.get("last_observed_at", OffsetDateTime::class.java),
                 )
             }
+    }
+
+    /**
+     * Of [dates], the ones a **recent** observation says are NOT bookable.
+     *
+     * Deliberately asymmetric, and the asymmetry is the whole point. This table
+     * is filled by the watch poller, so a campsite nobody watches has no recent
+     * rows at all — which is the normal state for the browse-then-hold flow,
+     * not a warning sign. Answering "which nights are known-available" and
+     * refusing everything else made the direct add-to-cart unusable within
+     * minutes of loading the grid: a genuinely bookable site was refused as
+     * "not available" on the strength of an eight-minute-old observation that
+     * actually said *available*.
+     *
+     * So only positive, fresh evidence of unavailability blocks. Silence —
+     * a stale cell, or no cell at all — is not evidence, and the vendor is the
+     * real arbiter anyway. [maxAge] decides what still counts as evidence, not
+     * what counts as permission to proceed.
+     */
+    fun freshlyUnavailableDates(
+        campsiteId: Long,
+        dates: List<LocalDate>,
+        maxAge: Duration,
+        now: OffsetDateTime = OffsetDateTime.now(),
+    ): Set<LocalDate> {
+        if (dates.isEmpty()) return emptySet()
+        val freshAfter = now.minus(maxAge)
+        return readCurrent(listOf(campsiteId), dates)
+            .filter { !it.available && it.observedAt.isAfter(freshAfter) }
+            .map { it.targetDate }
+            .toSet()
     }
 
     /**

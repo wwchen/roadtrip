@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
 import { createTestQueryClient } from '@/test/query-client';
 import type { PoiFeature } from '@/lib/poi';
@@ -61,6 +62,8 @@ interface Stubs {
   campsites: () => Response;
   /** May return a pending promise, which is how the loading state is exercised. */
   watches: () => Response | Promise<Response>;
+  /** Pending on purpose in the tests that assert the in-flight cell. */
+  addToCart: () => Response | Promise<Response>;
 }
 
 let stubs: Stubs;
@@ -89,6 +92,7 @@ beforeEach(() => {
     availability: () => json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])])),
     campsites: () => json(catalogBody([catalogRow(1)], { 1: BOOKING_TEMPLATE })),
     watches: () => json({ watches: [], total: 0 }),
+    addToCart: () => json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart' }),
   };
   vi.stubGlobal(
     'fetch',
@@ -98,6 +102,7 @@ beforeEach(() => {
       if (url.includes('/campsites/availability')) return stubs.availability(url);
       if (url.includes('/campsites')) return stubs.campsites();
       if (url.includes('/api/watches')) return stubs.watches();
+      if (url.includes('/api/booking/add-to-cart')) return stubs.addToCart();
       return json({}, 404);
     }),
   );
@@ -843,5 +848,195 @@ describe('the catalog', () => {
     );
 
     expect(requests.filter((url) => url.endsWith('/campsites'))).toHaveLength(before);
+  });
+});
+
+/** The capability block a user who can actually hold a site gets back. */
+const ATC_CAPABILITIES = { trigger_kinds: ['slack_notify', 'atc'], booking_actions: ['add_to_cart'] };
+
+describe('holding a site straight from the grid', () => {
+  const armFirstCell = async () => {
+    await userEvent.click(cell('Site 1', WEEK[0]));
+  };
+
+  test('without the capability an armed cell is the two-tap Book it always was', async () => {
+    // The default fixtures have no `atc` — this is the unchanged population.
+    await mount();
+
+    await armFirstCell();
+
+    expect(screen.queryByRole('group', { name: 'Booking actions' })).toBeNull();
+    await userEvent.click(cell('Site 1', WEEK[0]));
+    expect(window.open).toHaveBeenCalled();
+  });
+
+  test('with the capability an armed cell offers the two actions', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    await mount();
+
+    await armFirstCell();
+
+    const popover = await screen.findByRole('group', { name: 'Booking actions' });
+    expect(within(popover).getByRole('button', { name: /Book on rec\.gov/ })).toBeInTheDocument();
+    expect(within(popover).getByRole('button', { name: /Add to cart/ })).toBeInTheDocument();
+  });
+
+  test('the rec.gov row still opens the provider, as the flip used to', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Book on rec\.gov/ }));
+
+    expect(window.open).toHaveBeenCalled();
+  });
+
+  test('a hold in flight locks the cell and says so at the bottom of the panel', async () => {
+    let release: ((value: Response) => void) | null = null;
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () => new Promise<Response>((resolve) => { release = resolve; });
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    // The cell is no longer a button — nothing to click while it runs.
+    await waitFor(() => expect(screen.queryByRole('button', { name: new RegExp(`^Site 1 ${WEEK[0]}:`) })).toBeNull());
+    expect(screen.getByLabelText(new RegExp(`^Site 1 ${WEEK[0]}:.*holding this site`))).toBeInTheDocument();
+    expect(screen.getByText(/Holding site… usually under a minute/)).toBeInTheDocument();
+
+    await act(async () => {
+      release?.(json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart' }));
+    });
+  });
+
+  test('a held site turns the cell green and points at the cart', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(await screen.findByText('Site held in your rec.gov cart')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open rec\.gov cart/ })).toHaveAttribute(
+      'href',
+      'https://www.recreation.gov/cart',
+    );
+    expect(screen.getByLabelText(new RegExp(`^Site 1 ${WEEK[0]}:.*held in your cart`))).toBeInTheDocument();
+    // The chip is transient: it belongs to the pending state only.
+    expect(screen.queryByText(/Holding site…/)).toBeNull();
+  });
+
+  test('the request carries campsite_id as a NUMBER, matching the backend DTO', async () => {
+    // The grid carries ids as strings; the DTO is a Long. Asserting the
+    // serialized body rather than the argument, because the wire is what the
+    // two dialects actually agree on.
+    let sentBody: string | null = null;
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    const realFetch = globalThis.fetch as unknown as (i: RequestInfo | URL, r?: RequestInit) => Promise<Response>;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/api/booking/add-to-cart')) sentBody = String(init?.body ?? '');
+      return realFetch(input, init);
+    }));
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+    await screen.findByText('Site held in your rec.gov cart');
+
+    expect(sentBody).toContain('"campsite_id":1');
+    expect(sentBody).not.toContain('"campsite_id":"1"');
+  });
+
+  test('a second hold while one runs is refused, with no second request', async () => {
+    let release: ((value: Response) => void) | null = null;
+    let cartRequests = 0;
+    stubs.availability = () =>
+      json(availabilityBody(
+        [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown']),
+         stream(2, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
+        ATC_CAPABILITIES,
+      ));
+    stubs.campsites = () => json(catalogBody([catalogRow(1), catalogRow(2)], { 1: BOOKING_TEMPLATE, 2: BOOKING_TEMPLATE }));
+    stubs.addToCart = () => {
+      cartRequests += 1;
+      return new Promise<Response>((resolve) => { release = resolve; });
+    };
+    await mount();
+    await armFirstCell();
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+    await screen.findByText(/Holding site…/);
+
+    // Arm a different cell while the first is still running.
+    await userEvent.click(cell('Site 2', WEEK[0]));
+    const secondCart = await screen.findByRole('button', { name: /Add to cart/ });
+
+    // Disabled, so the click cannot even reach the handler — one hold at a
+    // time is enforced at the control, not only in the reducer.
+    expect(secondCart).toBeDisabled();
+    await userEvent.click(secondCart);
+    expect(cartRequests).toBe(1);
+
+    await act(async () => {
+      release?.(json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart' }));
+    });
+  });
+
+  test('the popover takes focus, and Escape hands it back to the cell', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    await mount();
+    const armed = cell('Site 1', WEEK[0]);
+    await userEvent.click(armed);
+
+    // A keyboard user lands on the choice, not on a button whose meaning changed.
+    await waitFor(() => expect(screen.getByRole('button', { name: /Book on rec\.gov/ })).toHaveFocus());
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('group', { name: 'Booking actions' })).toBeNull();
+    // Focus returns to where it came from rather than dropping to the body.
+    await waitFor(() => expect(cell('Site 1', WEEK[0])).toHaveFocus());
+  });
+
+  test('a refused hold reverts the cell and names the reason', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () => json({ error: 'not_available' }, 409);
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(await screen.findByText('Could not hold the site — it is no longer available.')).toBeInTheDocument();
+    // Back to a plain, clickable available cell.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: new RegExp(`^Site 1 ${WEEK[0]}:`) })).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/Holding site…/)).toBeNull();
+  });
+
+  test('a session that dies mid-hold names the expiry, not the raw code', async () => {
+    // 502 with the companion's own code passed through: the preflight found the
+    // session healthy and it lapsed before the click. Note the wire shape —
+    // `{ error }`, which `http.ts` maps onto `err.code`. A `{ code }` mock here
+    // would pass without the map ever being consulted.
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () => json({ error: 'recgov_spa_logged_out' }, 502);
+    await mount();
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(
+      await screen.findByText('Your recreation.gov session expired — test login in Settings.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/recgov_spa_logged_out/)).toBeNull();
   });
 });

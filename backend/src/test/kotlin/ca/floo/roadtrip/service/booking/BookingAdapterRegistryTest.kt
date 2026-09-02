@@ -125,7 +125,7 @@ class BookingAdapterRegistryTest {
 
     private fun request(): AddToCartRequest =
         AddToCartRequest(
-            watchId = TEST_WATCH_ID,
+            ownerUserId = 1L,
             target = target(),
             arrivalDate = LocalDate.parse("2026-07-04"),
             checkoutDate = LocalDate.parse("2026-07-05"),

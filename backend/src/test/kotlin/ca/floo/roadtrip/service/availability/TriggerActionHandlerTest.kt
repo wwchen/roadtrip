@@ -1,5 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.client.resend.EmailDeliveryClient
+import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
+import ca.floo.roadtrip.config.EmailConfig
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campsiteFixture
@@ -7,6 +10,7 @@ import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.auth.User
@@ -14,18 +18,29 @@ import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.auth.UserStatus
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.observability.AtcOutcome
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.availability.provider.testCampground
+import ca.floo.roadtrip.service.booking.BookingActionCodes
 import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
+import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
+import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
+import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
+import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.security.SecretCipher
+import ca.floo.roadtrip.service.settings.CompanionActionResult
+import ca.floo.roadtrip.service.settings.CompanionSessionHealth
+import ca.floo.roadtrip.service.settings.RecGovProfileSessionPort
+import ca.floo.roadtrip.service.settings.RecGovSessionCodes
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -45,6 +60,9 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+
+/** What the companion says when rec.gov stops an unattended login for a code. */
+private const val MFA_BLOCKED_DETAIL = "rec.gov asked for a verification code"
 
 class TriggerActionHandlerTest {
     private val testCipher = SecretCipher(ByteArray(32) { it.toByte() })
@@ -327,7 +345,8 @@ class TriggerActionHandlerTest {
 
             assertTrue(delivered)
             val request = bookingProvider.requests.single()
-            assertEquals(42L, request.watchId)
+            // The hold must land in the watch OWNER's cart, not a shared one.
+            assertEquals(1L, request.ownerUserId)
             assertEquals(BookingProvider.RECGOV, request.target.providerId)
             assertEquals(7L, request.target.campsiteId)
             assertEquals("site-7", request.target.vendorSiteId)
@@ -345,7 +364,7 @@ class TriggerActionHandlerTest {
                     resultFactory = { request: AddToCartRequest ->
                         AddToCartResult.Completed(
                             providerId = BookingProvider.RECGOV,
-                            request = buildJsonObject { put("watch_id", request.watchId) },
+                            request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                             response =
                                 buildJsonObject {
                                     put("ok", true)
@@ -386,7 +405,118 @@ class TriggerActionHandlerTest {
             assertEquals(42L, result.watchId)
             assertEquals("recgov", result.vendor)
             assertEquals("completed", result.status)
-            assertEquals(listOf(NotificationTarget.Slack("#custom", "xoxb-owner-token")), result.targets)
+            assertEquals(
+                listOf(
+                    NotificationTarget.Slack("#custom", "xoxb-owner-token"),
+                    NotificationTarget.Email(listOf("owner@example.test")),
+                ),
+                result.targets,
+            )
+        }
+
+    @Test
+    fun `AtcTriggerActionHandler emails the owner even with no Slack configured`() =
+        runBlocking {
+            // The Slack card is fail-closed on a personal token; without an email
+            // target an ATC outcome would reach nobody at all.
+            val registry = BookingAdapterRegistry(listOf(RecordingBookingProvider()))
+            val notifications = CapturingNotifications(result = true)
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    targetResolver = resolver(),
+                    notifications = notifications,
+                )
+
+            handler.fire(
+                fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                openings = listOf(triggerOpening()),
+            )
+
+            assertEquals(
+                listOf(NotificationTarget.Email(listOf("owner@example.test"))),
+                notifications.atcResults.single().targets,
+            )
+        }
+
+    @Test
+    fun `AtcTriggerActionHandler prefers the owner's notification email over their login email`() =
+        runBlocking {
+            val registry = BookingAdapterRegistry(listOf(RecordingBookingProvider()))
+            val notifications = CapturingNotifications(result = true)
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    targetResolver =
+                        resolver(
+                            UserSettingsRepo.Settings(
+                                notificationEmail = "alerts@example.test",
+                                slackChannel = null,
+                                slackTokenCipher = null,
+                                slackTokenHint = null,
+                            ),
+                        ),
+                    notifications = notifications,
+                )
+
+            handler.fire(
+                fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                openings = listOf(triggerOpening()),
+            )
+
+            assertEquals(
+                listOf(NotificationTarget.Email(listOf("alerts@example.test"))),
+                notifications.atcResults.single().targets,
+            )
+        }
+
+    @Test
+    fun `a blocked preflight tells the owner what actually blocked it, in the delivered email`() =
+        runBlocking {
+            // End to end through the real adapter, the real fanout and the real
+            // email renderer. The renderer's own tests hand-build a response
+            // object; this one proves the producer and the renderer agree, which
+            // is exactly where the recovery message was being dropped.
+            //
+            // The reason has to be the companion's own: this owner was asked for
+            // a verification code, and the mail used to tell them their session
+            // had expired and to re-login — which would only ask for the code again.
+            val emailClient = RecordingEmailClient()
+            val adapter =
+                RecGovBookingAdapter(
+                    // Never reached: the preflight fails before any browser is driven.
+                    companionAtc = { RecGovAtcOutcome.Failed("companion_should_not_be_called", null) },
+                    session =
+                        DeadSession(
+                            reLogin =
+                                CompanionActionResult.Failed(
+                                    RecGovSessionCodes.MFA_REQUIRED,
+                                    MFA_BLOCKED_DETAIL,
+                                ),
+                        ),
+                )
+            val registry = BookingAdapterRegistry(listOf(adapter))
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    targetResolver = resolver(),
+                    notifications = NotificationFanout(listOf(emailService(emailClient))),
+                )
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertFalse(delivered)
+            val sent = emailClient.messages.single()
+            assertEquals("owner@example.test", sent.to)
+            assertTrue(sent.text.contains(MFA_BLOCKED_DETAIL), sent.text)
+            assertTrue(sent.html.contains(MFA_BLOCKED_DETAIL), sent.html)
         }
 
     @Test
@@ -399,7 +529,8 @@ class TriggerActionHandlerTest {
                             providerId = BookingProvider.RECGOV,
                             error = "cart_not_added",
                             detail = "cart automation did not confirm a cart hold",
-                            request = buildJsonObject { put("watch_id", request.watchId) },
+                            category = BookingFailureCategory.RETRY_LATER,
+                            request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                             response =
                                 buildJsonObject {
                                     put("ok", false)
@@ -438,7 +569,8 @@ class TriggerActionHandlerTest {
                             providerId = BookingProvider.RECGOV,
                             error = "recgov_not_authenticated",
                             detail = "run make recgov-login",
-                            request = buildJsonObject { put("watch_id", request.watchId) },
+                            category = BookingFailureCategory.CALLER_ACTION,
+                            request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                             response =
                                 buildJsonObject {
                                     put("ok", true)
@@ -475,7 +607,7 @@ class TriggerActionHandlerTest {
         }
 
     @Test
-    fun `AtcTriggerActionHandler leaves unsupported openings inert`() =
+    fun `an ATC fire with no resolvable booking target tells the owner`() =
         runBlocking {
             val bookingProvider = RecordingBookingProvider()
             val registry = BookingAdapterRegistry(listOf(bookingProvider))
@@ -496,7 +628,146 @@ class TriggerActionHandlerTest {
 
             assertFalse(delivered)
             assertTrue(bookingProvider.requests.isEmpty())
-            assertTrue(notifications.atcResults.isEmpty())
+            val result = notifications.atcResults.single()
+            assertEquals("failed", result.status)
+            assertEquals(BookingActionCodes.UNSUPPORTED_TARGET, result.error)
+            assertEquals(JsonObject(emptyMap()), result.request, "no companion call was made, so there is no payload")
+            assertEquals(null, result.response)
+            assertTrue(result.targets.isNotEmpty(), "an ATC-only watch has no other handler to speak for it")
+            assertTrue(result.detail!!.isNotBlank(), "the reason is what the owner reads first")
+        }
+
+    @Test
+    fun `an ATC target the provider can no longer hold tells the owner`() =
+        runBlocking {
+            // Write-time validation resolved a target; by fire time the adapter
+            // no longer claims the capability, so the registry answers
+            // Unsupported. Two registries is how that drift is reproduced.
+            val resolvable = BookingAdapterRegistry(listOf(RecordingBookingProvider()))
+            val atFireTime = BookingAdapterRegistry(listOf(RecordingBookingProvider(canAddToCart = false)))
+            val notifications = CapturingNotifications(result = true)
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = atFireTime,
+                    bookingTargets = AvailabilityBookingTargetResolver(resolvable),
+                    targetResolver = resolver(),
+                    notifications = notifications,
+                )
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertFalse(delivered)
+            val result = notifications.atcResults.single()
+            assertEquals("failed", result.status)
+            assertEquals(BookingActionCodes.UNSUPPORTED_TARGET, result.error)
+            assertEquals("recgov", result.vendor)
+            assertEquals(JsonObject(emptyMap()), result.request)
+            assertTrue(result.detail!!.isNotBlank())
+        }
+
+    @Test
+    fun `an ATC attempt that throws tells the owner instead of ending in silence`() =
+        runBlocking {
+            val bookingProvider = RecordingBookingProvider(resultFactory = { error("companion client blew up") })
+            val registry = BookingAdapterRegistry(listOf(bookingProvider))
+            val notifications = CapturingNotifications(result = true)
+            val metrics = RecordingMetrics()
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    targetResolver = resolver(),
+                    notifications = notifications,
+                    metrics = metrics,
+                )
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertFalse(delivered)
+            assertEquals(listOf(AtcOutcome.EXCEPTION), metrics.fires.map { it.first })
+            val result = notifications.atcResults.single()
+            assertEquals("failed", result.status)
+            assertEquals(BookingActionCodes.ATC_EXCEPTION, result.error)
+            // The throwable's own message stays in the log: it is internal
+            // wording the owner cannot act on.
+            assertTrue(result.detail!!.isNotBlank())
+        }
+
+    /** Records what the handler counted, so every exit's outcome is assertable. */
+    private class RecordingMetrics : RoadtripMetrics by RoadtripMetrics.NoOp {
+        val fires = mutableListOf<Triple<AtcOutcome, String?, Int?>>()
+
+        override fun recgovAtcFired(
+            outcome: AtcOutcome,
+            error: String?,
+            durationMs: Int?,
+        ) {
+            fires += Triple(outcome, error, durationMs)
+        }
+    }
+
+    @Test
+    fun `an ATC fire with no resolvable booking target is counted, not just logged`() =
+        runBlocking {
+            // This exit tells nobody: no reportResult, no notification. Without a
+            // metric it is indistinguishable on a dashboard from "no watch fired".
+            val bookingProvider = RecordingBookingProvider()
+            val registry = BookingAdapterRegistry(listOf(bookingProvider))
+            val metrics = RecordingMetrics()
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    targetResolver = resolver(),
+                    notifications = CapturingNotifications(result = true),
+                    metrics = metrics,
+                )
+
+            handler.fire(
+                fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                openings = listOf(triggerOpening(parentRef = BookingProviderRef.Campflare("campflare-1"))),
+            )
+
+            assertEquals(listOf(AtcOutcome.NO_TARGET), metrics.fires.map { it.first })
+        }
+
+    @Test
+    fun `a held site is counted with its latency`() =
+        runBlocking {
+            val bookingProvider = RecordingBookingProvider()
+            val registry = BookingAdapterRegistry(listOf(bookingProvider))
+            val metrics = RecordingMetrics()
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    targetResolver = resolver(),
+                    notifications = CapturingNotifications(result = true),
+                    metrics = metrics,
+                )
+
+            handler.fire(
+                fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                openings = listOf(triggerOpening()),
+            )
+
+            val fire = metrics.fires.single()
+            assertEquals(AtcOutcome.HELD, fire.first)
+            // assertNotNull returns the unwrapped value, so asserting last would
+            // make this method's return type Int — and JUnit silently skips a
+            // non-void @Test. Keep a Unit-returning assertion last.
+            assertTrue(
+                fire.third != null,
+                "a fire without a duration cannot answer 'are holds still fast enough'",
+            )
         }
 
     /** In-memory [UserSettingsRepo] returning a fixed [Settings] for owner id 1
@@ -533,6 +804,36 @@ class TriggerActionHandlerTest {
             cipher = if (settings?.slackTokenCipher != null) testCipher else null,
         )
 
+    /** A profile whose session is dead and whose recovery answers [reLogin]. */
+    private class DeadSession(
+        private val reLogin: CompanionActionResult,
+        private val refreshSession: CompanionActionResult = CompanionActionResult.Failed("recgov_refresh_failed"),
+    ) : RecGovProfileSessionPort {
+        override fun profileId(userId: UserId): String = userId.value.toString()
+
+        override suspend fun health(userId: UserId): CompanionSessionHealth =
+            CompanionSessionHealth.Inactive(RecGovSessionCodes.NOT_AUTHENTICATED)
+
+        override suspend fun reLogin(userId: UserId): CompanionActionResult = reLogin
+
+        override suspend fun refreshSession(userId: UserId): CompanionActionResult = refreshSession
+    }
+
+    private class RecordingEmailClient : EmailDeliveryClient {
+        val messages = mutableListOf<EmailDeliveryMessage>()
+
+        override suspend fun send(message: EmailDeliveryMessage): Boolean {
+            messages += message
+            return true
+        }
+    }
+
+    private fun emailService(client: EmailDeliveryClient) =
+        EmailNotificationService(
+            config = EmailConfig(resendApiKey = "re_test", from = "Roadtrip Alerts <alerts@example.test>"),
+            emailDeliveryClient = client,
+        )
+
     private class FakeHandler(
         kind: String,
         supportedKinds: Set<String> = setOf(kind),
@@ -558,7 +859,10 @@ class TriggerActionHandlerTest {
             val watchId: Long,
             val vendor: String,
             val status: String,
+            val request: JsonObject,
             val response: JsonObject?,
+            val error: String?,
+            val detail: String?,
             val targets: List<NotificationTarget>,
         )
 
@@ -594,9 +898,11 @@ class TriggerActionHandlerTest {
             status: String,
             request: JsonObject,
             response: JsonObject?,
+            error: String?,
+            detail: String?,
             targets: List<NotificationTarget>,
         ): Boolean {
-            atcResults += AtcResult(watchId, vendor, status, response, targets)
+            atcResults += AtcResult(watchId, vendor, status, request, response, error, detail, targets)
             return result
         }
     }
@@ -625,6 +931,7 @@ class TriggerActionHandlerTest {
 
     private class RecordingBookingProvider(
         private val resultFactory: ((AddToCartRequest) -> AddToCartResult)? = null,
+        private val canAddToCart: Boolean = true,
     ) : BookingAdapter {
         val requests = mutableListOf<AddToCartRequest>()
 
@@ -648,7 +955,8 @@ class TriggerActionHandlerTest {
             action: BookingAction,
             target: BookingTarget,
         ): Boolean =
-            action == BookingAction.ADD_TO_CART &&
+            canAddToCart &&
+                action == BookingAction.ADD_TO_CART &&
                 target.providerId == BookingProvider.RECGOV &&
                 target.parentRef is BookingProviderRef.RecGov
 
@@ -657,7 +965,7 @@ class TriggerActionHandlerTest {
             resultFactory?.let { return it(request) }
             return AddToCartResult.Completed(
                 providerId = BookingProvider.RECGOV,
-                request = buildJsonObject { put("watch_id", request.watchId) },
+                request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                 response =
                     buildJsonObject {
                         put("ok", true)

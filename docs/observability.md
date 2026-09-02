@@ -48,13 +48,40 @@ recover.
 Beyond the agent's auto-instrumentation, the backend emits its own domain
 metrics from `ca.floo.roadtrip.observability` (`RoadtripMetrics`): per-provider
 availability fetch outcomes and latency, poll run status, skipped poll cycles
-(`coverage_fresh` vs `governor_starved`), watch trigger deliveries, and ETL
-ingest runs. These ride the agent's existing OTLP pipeline — the process needs
-no exporter config, and without the agent (plain `make run`) they are a no-op.
+(`coverage_fresh` vs `governor_starved`), watch trigger deliveries, ETL
+ingest runs, and rec.gov keepalive sweeps. These ride the agent's existing OTLP
+pipeline — the process needs no exporter config, and without the agent (plain `make run`) they are a no-op.
 Row-level detail stays in Postgres (`availability_run`,
 `availability_fetch_call`, `ingest_runs`) for drill-down; the metrics are the
 rate/trend/alerting layer. `OtelRoadtripMetricsTest` pins the instrument names
 and label keys the dashboards and alert rules query.
+
+### rec.gov keepalive
+
+`RecGovKeepaliveJob` (`service/scheduler/`) runs on an env-tunable cadence
+(`RECGOV_KEEPALIVE_INTERVAL`, default 15 minutes) whenever a companion is
+configured. Each sweep pushes the *armed set* — the distinct owners of active
+`atc` watches — to the companion's `POST /keep-warm`, then calls
+`POST /refresh` for each of those profiles.
+
+It emits `roadtrip.recgov.keepalive` (`roadtrip_recgov_keepalive_total`), one
+count per armed profile per sweep, labelled `outcome`:
+
+| outcome | meaning |
+| --- | --- |
+| `refreshed` | the companion renewed that profile's rec.gov session |
+| `failed` | the companion answered but could not refresh it — usually a session that needs an interactive login |
+| `unavailable` | the companion could not be reached at all |
+
+Per profile rather than per sweep on purpose: the armed-set size is then the
+sum over one sweep, and "a few users' sessions are rotting" shows up as a
+ratio instead of hiding inside an all-or-nothing sweep result. Profile ids are
+deliberately not a label — unbounded cardinality, and they identify users.
+
+A sweep failing is not an outage: the ATC fire path re-checks the owner's
+session and can re-login once on its own. A *sustained* non-zero `failed` rate
+means those owners will hit "session expired — re-login in Settings" the next
+time their watch fires.
 
 ## Alerting
 

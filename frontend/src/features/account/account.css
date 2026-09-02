@@ -93,6 +93,16 @@
   letter-spacing: 0.04em;
 }
 
+/* What the destructive action actually destroys, said before the first click
+   rather than in the notice after it. */
+.rt-account-danger-note {
+  margin: 0 0 10px;
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--rt-muted);
+}
+
 /* ---- notifications ----
    Each field pairs an input with its test button and an inline result. The label
    column is the input's own; only the row assembly lives here. */
@@ -130,6 +140,20 @@
 
 .rt-notif-status--muted {
   color: var(--rt-muted);
+}
+
+/* ---- stacked credential field ----
+   `rt-notif-field` is a ROW: an input beside its test button, so the input keeps
+   its intrinsic width and the button sits next to it. A credential field has no
+   companion control, so it owns the column instead — which also stops the email
+   and password fields rendering at two different widths. */
+
+.rt-account-field {
+  width: 100%;
+}
+
+.rt-account-field > * {
+  width: 100%;
 }
 
 /* ---- secret field ---- */
@@ -176,6 +200,26 @@
 }
 
 /* ---- settings modal ---- */
+
+/* The notice banner, aligned to the content it is about.
+   A content banner carries its own inline padding (LDS: 16px, 14px on narrow),
+   so dropped straight into the column its TEXT starts ~16px right of the rail
+   and the panel below it, while its fill is the only thing touching the
+   column's edges — it reads as a misaligned slab rather than a message about
+   this form. Pulling the box out by exactly that padding puts its first
+   character on the same axis as the content, and leaves the fill slightly
+   proud, which is what makes it read as a card over the form. The two values
+   mirror `.lds-banner`'s own, including at its breakpoint. */
+
+.rt-settings-modal > .lds-banner {
+  margin-inline: -16px;
+}
+
+@media (max-width: 560px) {
+  .rt-settings-modal > .lds-banner {
+    margin-inline: -14px;
+  }
+}
 
 .rt-settings-modal {
   display: flex;

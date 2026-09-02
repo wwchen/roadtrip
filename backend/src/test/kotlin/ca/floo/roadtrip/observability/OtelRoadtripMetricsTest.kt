@@ -149,4 +149,24 @@ class OtelRoadtripMetricsTest {
             collect().getValue("roadtrip.ingest.run").longSumAttributes(),
         )
     }
+
+    @Test
+    fun `keepalive counts one armed profile per outcome`() {
+        metrics.recgovKeepaliveProfile(KeepaliveOutcome.REFRESHED)
+        metrics.recgovKeepaliveProfile(KeepaliveOutcome.UNAVAILABLE)
+
+        val points =
+            collect()
+                .getValue("roadtrip.recgov.keepalive")
+                .longSumData.points
+                .associate { point ->
+                    point.attributes
+                        .asMap()
+                        .values
+                        .single()
+                        .toString() to point.value
+                }
+
+        assertEquals(mapOf("refreshed" to 1L, "unavailable" to 1L), points)
+    }
 }

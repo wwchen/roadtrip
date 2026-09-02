@@ -22,15 +22,49 @@ const PROFILE_A = 'user-a'
 const PROFILE_B = 'user-b'
 
 test('the legacy global cookie value never reaches a per-profile context', async () => {
+  // A rec.gov cookie jar is a session, so the operator's unkeyed value must not
+  // be injected into a user's profile — that is sharing an account. A read-only
+  // "bootstrap once" fallback was tried and reverted: the premise for it (that
+  // prod's working logins rode a pasted Akamai jar) was measured false, so it
+  // bought nothing and re-opened this hole.
   const { setSetting } = await import('../src/store.js')
-  const { injectStoredCookies } = await import('../src/browser.js')
+  const { injectStoredCookies, recgovCookieSettingKey } = await import('../src/browser.js')
   setSetting('recgov_cookies', LEGACY_COOKIES)
+  setSetting(recgovCookieSettingKey(PROFILE_A), '')
   const context = fakeContext()
 
   const injected = await injectStoredCookies(context, null, PROFILE_A)
 
   assert.equal(injected, 0)
   assert.deepEqual(context.cookies, [])
+})
+
+test('one profile never gets another profile saved jar', async () => {
+  // The security property the per-profile keying exists for: a rec.gov cookie
+  // jar IS a session, so B must not be reachable from A by any path.
+  const { setSetting } = await import('../src/store.js')
+  const { injectStoredCookies, recgovCookieSettingKey } = await import('../src/browser.js')
+  setSetting('recgov_cookies', '')
+  setSetting(recgovCookieSettingKey(PROFILE_A), '')
+  setSetting(recgovCookieSettingKey(PROFILE_B), 'b=2')
+  const context = fakeContext()
+
+  const injected = await injectStoredCookies(context, null, PROFILE_A)
+
+  assert.equal(injected, 0)
+  assert.deepEqual(context.cookies, [])
+})
+
+test('a saved per-profile jar can never land in the shared legacy key', async () => {
+  // The fallback only stays safe while nothing writes the global key.
+  const { setSetting, getSetting } = await import('../src/store.js')
+  const { saveProfileCookies } = await import('../src/browser.js')
+  setSetting('recgov_cookies', '')
+
+  const saved = await saveProfileCookies({ cookies: async () => [{ name: 'x', value: '1' }] }, null)
+
+  assert.equal(saved, 0)
+  assert.equal(getSetting('recgov_cookies') || '', '')
 })
 
 test('a profile only ever gets its own stored cookies', async () => {
@@ -52,6 +86,7 @@ test('the legacy profile still reads the unkeyed setting', async () => {
   const { setSetting } = await import('../src/store.js')
   const { injectStoredCookies } = await import('../src/browser.js')
   setSetting('recgov_cookies', LEGACY_COOKIES)
+  // No profile id at all: the CLI's own single profile.
   const context = fakeContext()
 
   const injected = await injectStoredCookies(context)

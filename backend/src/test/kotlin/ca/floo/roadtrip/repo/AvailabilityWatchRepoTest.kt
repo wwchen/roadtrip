@@ -262,4 +262,26 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
         assertEquals(1, repo.countByTriggerKind(other.value, WatchStatus.ACTIVE, "atc"))
         assertEquals(2, repo.countByTriggerKind(owner.value, WatchStatus.ACTIVE, "email_notify"))
     }
+
+    @Test
+    fun `distinctOwnersByTriggerKind names each armed owner once`() {
+        val owner = seedAppUser()
+        val other = seedAppUser()
+        val quiet = seedAppUser()
+        val poiId = insertPoi()
+        val target = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiId, campsiteId = null))
+        val repo = AvailabilityWatchRepo(ctx)
+
+        // Two active atc watches for one owner are still one browser profile.
+        repo.create(createInput(target, ownerUserId = owner.value).copy(triggerKinds = listOf("email_notify", "atc")))
+        repo.create(createInput(target, ownerUserId = owner.value))
+        repo.create(createInput(target, ownerUserId = other.value))
+        // Paused, so no longer armed.
+        val paused = repo.create(createInput(target, ownerUserId = quiet.value))
+        repo.update(paused.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
+
+        val armed = repo.distinctOwnersByTriggerKind(WatchStatus.ACTIVE, "atc")
+
+        assertEquals(listOf(other.value, owner.value).sorted(), armed.sorted())
+    }
 }

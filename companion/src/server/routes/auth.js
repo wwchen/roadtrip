@@ -1,8 +1,10 @@
 import { recgovAuthenticationFailure } from '../../cart.js'
+import { persistProfileCookies } from '../../browser.js'
 import {
   recgovLoginCredentialsFromInput,
 } from '../../recgovSession.js'
 import { renderLoginPage } from '../../templates.js'
+import { traceLoginEnabled, withTrace } from '../../tracing.js'
 import {
   ERROR_MFA_CHALLENGE_EXPIRED,
   ERROR_MFA_CHALLENGE_UNKNOWN,
@@ -45,7 +47,10 @@ export const ERROR_MFA_REQUIRED = 'mfa_required'
 export const ERROR_MFA_INVALID = 'mfa_invalid'
 export const ERROR_LOGIN_BACKOFF = 'login_backoff'
 
+const UNATTENDED_FIELD = 'unattended'
+
 const OPERATION_LOGIN = 'login'
+const OPERATION_MFA = 'mfa'
 const OPERATION_LOGOUT = 'logout'
 const OPERATION_REFRESH = 'refresh'
 
@@ -57,7 +62,6 @@ export async function handleLogout (req, res, { runtime, pool, logoutRecgovSessi
   const startedAt = Date.now()
   try {
     runtime.logger('recgov auth logout request start', `profile=${profileId}`)
-    await runtime.waitForStartupAuthCheck()
     const resolved = await resolveProfileContext(pool, profileId)
     if (!resolved.ok) {
       respondRejection(req, res, resolved.rejection)
@@ -91,7 +95,6 @@ export async function handleRefresh (req, res, { runtime, pool, testChromiumFn }
   const startedAt = Date.now()
   try {
     runtime.logger('recgov auth refresh request start', `profile=${profileId}`)
-    await runtime.waitForStartupAuthCheck()
     const resolved = await resolveProfileContext(pool, profileId)
     if (!resolved.ok) {
       respondRejection(req, res, resolved.rejection)
@@ -109,6 +112,7 @@ export async function handleRefresh (req, res, { runtime, pool, testChromiumFn }
         getContextFn: async () => resolved.context,
       },
     })
+    if (status.logged_in === true) await persistCookies(runtime, pool, profileId, 'refresh')
     runtime.logger('recgov auth refresh request result', status.state, `profile=${profileId}`, `duration_ms=${Date.now() - startedAt}`)
     respondAuthResult(req, res, authHttpStatus(status), authResponseBody(status))
   } catch (error) {
@@ -136,6 +140,12 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
   }
   const profileId = profile.profileId
   const credentials = loginCredentialsFromFields(input.fields)
+  // The backend's fire-time re-login sets this. Nobody is there to read a code,
+  // so an MFA prompt must not open a challenge: the challenge holds the
+  // profile's busy lock for its whole TTL, which would wedge the owner's own
+  // Test login, the keepalive refresh and any second ATC behind a code that is
+  // never coming. The interactive Settings flow does not send it.
+  const unattended = isUnattended(input.fields)
 
   if (input.fields.challenge_id) {
     await completeMfaChallenge(req, res, {
@@ -183,19 +193,46 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
       `user=${maskLoginUsername(credentialState.email)}`,
       `mfa=${credentialState.mfaConfigured}`,
     )
-    await runtime.waitForStartupAuthCheck()
     const resolved = await resolveProfileContext(pool, profileId)
     if (!resolved.ok) {
       respondRejection(req, res, resolved.rejection)
       return
     }
 
-    const outcome = await credentialLoginFn({
-      getContextFn: async () => resolved.context,
-      credentials,
-      profileId,
-    })
+    // An MFA prompt is not a failure to trace: the login is mid-flight and the
+    // page is still open. Only an outright failure keeps its trace — and only
+    // when the operator opted in, because a login trace holds the typed
+    // password (see traceLoginEnabled).
+    const { result: outcome, trace } = await withTrace(
+      resolved.context,
+      {
+        enabled: traceLoginEnabled(),
+        operation: OPERATION_LOGIN,
+        profileId,
+        failureReason: (o) =>
+          o?.state === LOGIN_STATE_OK || o?.state === LOGIN_STATE_MFA_REQUIRED ? null : o?.reason || 'login_failed',
+      },
+      () => credentialLoginFn({ getContextFn: async () => resolved.context, credentials, profileId }),
+    )
+    if (trace) outcome.trace_url = trace.url
     runtime.logger('recgov auth login request result', outcome.state, `profile=${profileId}`, `duration_ms=${Date.now() - startedAt}`)
+
+    if (outcome.state === LOGIN_STATE_MFA_REQUIRED && unattended) {
+      // Close the page rec.gov is showing the prompt on and let the `finally`
+      // release the lock. The answer names the blocker but carries no
+      // challenge_id, because this caller could never complete one.
+      try {
+        outcome.abandon?.()
+      } catch (error) {
+        runtime.logger('recgov auth unattended mfa abandon failed', `profile=${profileId}`, error.message)
+      }
+      runtime.logger('recgov auth login mfa refused (unattended)', `profile=${profileId}`)
+      respondAuthResult(req, res, HTTP_UNAUTHORIZED, {
+        ...authActionResponseBody(loginStatus(pool, profileId, outcome), false),
+        error: ERROR_MFA_REQUIRED,
+      })
+      return
+    }
 
     if (outcome.state === LOGIN_STATE_MFA_REQUIRED) {
       const challenge = pool.openMfaChallenge(profileId, {
@@ -216,9 +253,16 @@ export async function handleLoginPost (req, res, { runtime, pool, credentialLogi
     }
 
     const status = loginStatus(pool, profileId, outcome)
-    if (status.logged_in !== true) pool.recordLoginFailure(profileId)
-    else pool.clearLoginFailure(profileId)
-    respondAuthResult(req, res, authHttpStatus(status), authResponseBody(status))
+    if (status.logged_in !== true) {
+      pool.recordLoginFailure(profileId)
+    } else {
+      pool.clearLoginFailure(profileId)
+      // Rec.gov's session cookies are session-scoped in Chromium, so without
+      // this the login dies with the browser process. Only on success: a
+      // failed attempt's jar would overwrite a good one.
+      await persistCookies(runtime, pool, profileId, 'login')
+    }
+    respondAuthResult(req, res, authHttpStatus(status), withDiagnostics(authResponseBody(status), outcome.trace_url))
   } catch (error) {
     runtime.logger('recgov auth login request exception', `profile=${profileId}`, error.message)
     const status = pool.setAuthStatus(profileId, authExceptionStatus(OPERATION_LOGIN, error))
@@ -245,21 +289,32 @@ async function completeMfaChallenge (req, res, { runtime, pool, profileId, chall
   const startedAt = Date.now()
   try {
     runtime.logger('recgov auth mfa completion start', `profile=${profileId}`)
-    const outcome = await taken.challenge.complete(mfaCode)
+    const { result: outcome, trace } = await withTrace(
+      pool.liveContext(profileId),
+      {
+        enabled: traceLoginEnabled(),
+        operation: OPERATION_MFA,
+        profileId,
+        failureReason: (o) => (o?.state === LOGIN_STATE_OK ? null : o?.reason || ERROR_MFA_INVALID),
+      },
+      () => taken.challenge.complete(mfaCode),
+    )
+    if (trace) outcome.trace_url = trace.url
     const status = loginStatus(pool, profileId, outcome)
     runtime.logger('recgov auth mfa completion result', status.state, `profile=${profileId}`, `duration_ms=${Date.now() - startedAt}`)
     if (status.logged_in === true) {
       pool.clearLoginFailure(profileId)
+      await persistCookies(runtime, pool, profileId, 'mfa')
       respondAuthResult(req, res, authHttpStatus(status), authResponseBody(status))
       return
     }
     // A wrong code is not a failed credential login: arming the credential
     // backoff here would lock the user out of retrying over a typo.
-    respondAuthResult(req, res, HTTP_UNAUTHORIZED, {
+    respondAuthResult(req, res, HTTP_UNAUTHORIZED, withDiagnostics({
       ...authActionResponseBody(status, false),
       error: ERROR_MFA_INVALID,
       detail: outcome?.detail || outcome?.reason || 'Recreation.gov rejected the code',
-    })
+    }, outcome?.trace_url))
   } catch (error) {
     runtime.logger('recgov auth mfa completion exception', `profile=${profileId}`, error.message)
     const status = pool.setAuthStatus(profileId, authExceptionStatus(OPERATION_LOGIN, error))
@@ -283,13 +338,26 @@ function loginStatus (pool, profileId, outcome) {
   if (base.logged_in) return pool.setAuthStatus(profileId, base)
   // `error` stays the documented, stable code. The internal blocker — which
   // selector went missing, which challenge appeared — rides in `reason`.
-  const failure = recgovAuthenticationFailure({ attemptedLogin: true })
+  const failure = recgovAuthenticationFailure({ attemptedLogin: true, reason: outcome?.reason })
   return pool.setAuthStatus(profileId, {
     ...base,
     ...failure,
     ...(outcome?.reason ? { reason: outcome.reason } : {}),
     ...(outcome?.detail ? { detail: outcome.detail } : {}),
   })
+}
+
+/**
+ * Names the artifacts a failure left behind, so the caller can go find them.
+ *
+ * The screenshot url already rides in `diagnostics` (the login diagnostic
+ * object); this adds the trace beside it under one key rather than inventing a
+ * second top-level field. Absent when nothing was kept — a successful run has
+ * no residue to point at.
+ */
+function withDiagnostics (body, traceUrl) {
+  if (!traceUrl) return body
+  return { ...body, diagnostics: { ...(body.diagnostics || {}), trace: traceUrl } }
 }
 
 function mfaChallengeDetail (error) {
@@ -324,6 +392,21 @@ async function profileRequest (req, res, requestUrl, pool, operation) {
 
 function url (req) {
   return new URL(req.url || '/', 'http://companion.local')
+}
+
+/**
+ * Writes the profile's live cookie jar to its store key after a successful
+ * auth-bearing operation. `pool.liveContext` is the only part of this these
+ * routes own; the rest is shared with `POST /verify`.
+ */
+function persistCookies (runtime, pool, profileId, operation) {
+  return persistProfileCookies(pool.liveContext(profileId), profileId, { logger: runtime.logger, operation })
+}
+
+/** Accepts a JSON boolean or the form-encoded string an operator page would send. */
+function isUnattended (fields) {
+  const raw = fields?.[UNATTENDED_FIELD]
+  return raw === true || raw === 'true'
 }
 
 function loginCredentialsFromFields (fields) {

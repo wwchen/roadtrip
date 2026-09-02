@@ -16,11 +16,26 @@ import kotlinx.coroutines.withTimeout
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
 import org.junit.jupiter.api.Test
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
+/** A clock the test moves by hand, so a TTL is crossed without sleeping. */
+private class TestClock(
+    var now: Instant,
+) : Clock() {
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId?): Clock = this
+
+    override fun instant(): Instant = now
+}
 
 private val detachedCtx = DSL.using(SQLDialect.POSTGRES)
 private val testUserId = UserId(7L)
@@ -76,18 +91,33 @@ private class FakeCompanion(
     var healthResult: CompanionSessionHealth = CompanionSessionHealth.Active,
 ) : CompanionSessionPort {
     val loginCalls = mutableListOf<Triple<String, String, String>>()
+    val unattendedFlags = mutableListOf<Boolean>()
     val mfaCalls = mutableListOf<Triple<String, String, String>>()
     val logoutCalls = mutableListOf<String>()
+    val destroyCalls = mutableListOf<String>()
+
+    val refreshed = mutableListOf<String>()
 
     /** When set, [completeMfa] parks inside the companion until it completes. */
     var mfaGate: CompletableDeferred<Unit>? = null
+
+    /**
+     * Cookie refresh is tried before credentials everywhere; default it to
+     * "cannot help" so the existing tests still exercise the login path.
+     */
+    var refreshResult: CompanionActionResult = CompanionActionResult.Failed("recgov_refresh_failed")
+
+    /** A true wipe needs this to succeed; default it to working. */
+    var destroyResult: CompanionActionResult = CompanionActionResult.Ok
 
     override suspend fun login(
         profileId: String,
         username: String,
         password: String,
+        unattended: Boolean,
     ): CompanionLoginResult {
         loginCalls += Triple(profileId, username, password)
+        unattendedFlags += unattended
         return loginResult
     }
 
@@ -106,9 +136,24 @@ private class FakeCompanion(
         return logoutResult
     }
 
+    override suspend fun destroyProfile(profileId: String): CompanionActionResult {
+        destroyCalls += profileId
+        return destroyResult
+    }
+
     override suspend fun verify(profileId: String): CompanionActionResult = verifyResult
 
     override suspend fun health(profileId: String): CompanionSessionHealth = healthResult
+
+    override suspend fun refresh(
+        profileId: String,
+        unattended: Boolean,
+    ): CompanionActionResult {
+        refreshed += profileId
+        return refreshResult
+    }
+
+    override suspend fun markKeepWarm(profileIds: Collection<String>): CompanionActionResult = CompanionActionResult.Ok
 }
 
 class RecGovCredentialServiceTest {
@@ -119,11 +164,13 @@ class RecGovCredentialServiceTest {
         companion: CompanionSessionPort? = FakeCompanion(),
         withCipher: SecretCipher? = cipher,
         activeAtcWatches: Int = 0,
+        clock: Clock = Clock.systemUTC(),
     ) = RecGovCredentialService(
         settingsRepo = repo,
         watchRepo = FakeWatchRepo(activeAtcWatches),
         cipher = withCipher,
         companion = companion,
+        clock = clock,
     )
 
     private fun configuredRepo(password: String = "hunter2-secret"): FakeSettingsRepo =
@@ -142,49 +189,109 @@ class RecGovCredentialServiceTest {
     // ── storage ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `saving seals the password and keeps only a last-4 hint`() {
-        val repo = FakeSettingsRepo()
+    fun `saving seals the password and keeps only a last-4 hint`() =
+        runBlocking {
+            val repo = FakeSettingsRepo()
 
-        val dto = service(repo).save(testUserId, UpdateRecgovRequest("ada@example.com", "hunter2-secret"))
+            val dto = service(repo).save(testUserId, UpdateRecgovRequest("ada@example.com", "hunter2-secret"))
 
-        assertTrue(dto.recgovConfigured)
-        assertEquals("ada@example.com", dto.recgovUsername)
-        assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
-    }
-
-    @Test
-    fun `a null password leaves the stored one untouched`() {
-        val repo = configuredRepo()
-
-        val dto = service(repo).save(testUserId, UpdateRecgovRequest("grace@example.com", null))
-
-        assertEquals("grace@example.com", dto.recgovUsername)
-        assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
-    }
-
-    @Test
-    fun `a blank username is rejected before anything is written`() {
-        val repo = FakeSettingsRepo()
-
-        assertFailsWith<SettingsError.InvalidField> {
-            service(repo).save(testUserId, UpdateRecgovRequest("  ", "hunter2"))
+            assertTrue(dto.recgovConfigured)
+            assertEquals("ada@example.com", dto.recgovUsername)
+            assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
         }
-        assertNull(repo.settings)
-    }
 
     @Test
-    fun `a first save without a password is rejected`() {
-        assertFailsWith<SettingsError.InvalidField> {
-            service().save(testUserId, UpdateRecgovRequest("ada@example.com", null))
+    fun `a null password leaves the stored one untouched`() =
+        runBlocking {
+            val repo = configuredRepo()
+
+            val dto = service(repo).save(testUserId, UpdateRecgovRequest("grace@example.com", null))
+
+            assertEquals("grace@example.com", dto.recgovUsername)
+            assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
         }
-    }
 
     @Test
-    fun `storing a password needs the encryption key`() {
-        assertFailsWith<SettingsError.EncryptionUnavailable> {
-            service(withCipher = null).save(testUserId, UpdateRecgovRequest("ada@example.com", "hunter2"))
+    fun `a blank username is rejected before anything is written`() =
+        runBlocking {
+            val repo = FakeSettingsRepo()
+
+            assertFailsWith<SettingsError.InvalidField> {
+                service(repo).save(testUserId, UpdateRecgovRequest("  ", "hunter2"))
+            }
+            assertNull(repo.settings)
         }
-    }
+
+    @Test
+    fun `a first save without a password is rejected`() =
+        runBlocking {
+            assertFailsWith<SettingsError.InvalidField> {
+                service().save(testUserId, UpdateRecgovRequest("ada@example.com", null))
+            }
+            Unit
+        }
+
+    @Test
+    fun `storing a password needs the encryption key`() =
+        runBlocking {
+            assertFailsWith<SettingsError.EncryptionUnavailable> {
+                service(withCipher = null).save(testUserId, UpdateRecgovRequest("ada@example.com", "hunter2"))
+            }
+            Unit
+        }
+
+    @Test
+    fun `saving a different username destroys the previous account's browser profile`() =
+        runBlocking {
+            // A credential swap invalidates the old session's legitimacy exactly
+            // as a removal does. Without a destroy the profile keeps the previous
+            // account's cookie jar, refresh-first login revives it, and the hold
+            // is placed on an account the user has already replaced.
+            val repo = configuredRepo()
+            val companion = FakeCompanion()
+
+            service(repo, companion).save(testUserId, UpdateRecgovRequest("grace@example.com", "a-different-secret"))
+
+            assertEquals(
+                listOf(PROFILE_ID),
+                companion.destroyCalls,
+                "the replaced account's cookie jar must not survive the swap",
+            )
+        }
+
+    @Test
+    fun `rotating the password for the same username keeps the browser profile`() =
+        runBlocking {
+            // Same account, new password: the live session is still that user's
+            // own, and destroying it would force a needless re-login.
+            val repo = configuredRepo()
+            val companion = FakeCompanion()
+
+            service(repo, companion).save(testUserId, UpdateRecgovRequest("ada@example.com", "rotated-secret"))
+
+            assertTrue(companion.destroyCalls.isEmpty(), "a password rotation should not evict the session")
+        }
+
+    @Test
+    fun `a credential swap is refused when the previous profile cannot be destroyed`() =
+        runBlocking {
+            // Correctness over convenience: a half-applied swap stores the new
+            // account against the old account's live session, which books under
+            // the wrong account. Refusing leaves the old credentials working and
+            // tells the operator to go look.
+            val repo = configuredRepo()
+            val companion =
+                FakeCompanion().also {
+                    it.destroyResult = CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, "refused")
+                }
+
+            assertFailsWith<SettingsError.RecgovProfileWipeFailed> {
+                service(repo, companion).save(testUserId, UpdateRecgovRequest("grace@example.com", "a-different-secret"))
+            }
+
+            assertEquals("ada@example.com", repo.settings!!.recgovUsername, "the row must be untouched")
+            assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
+        }
 
     // ── removal ──────────────────────────────────────────────────────────────
 
@@ -205,8 +312,41 @@ class RecGovCredentialServiceTest {
         }
 
     @Test
-    fun `removal succeeds locally when the companion is down`() =
+    fun `removal destroys the browser profile, not just the credentials`() =
         runBlocking {
+            // A sign-out is not a removal: `logout` leaves the Chromium profile
+            // directory and the saved rec.gov cookie jar on the companion host,
+            // so removing credentials used to leave the session behind.
+            val companion = FakeCompanion()
+
+            val dto = service(configuredRepo(), companion).remove(testUserId)
+
+            assertTrue(dto.profileDestroyed)
+            assertEquals(listOf(PROFILE_ID), companion.destroyCalls)
+        }
+
+    @Test
+    fun `removal is refused when the profile cannot be destroyed`() =
+        runBlocking {
+            // Clearing the row while the cookie jar survives would report a
+            // deletion that did not happen.
+            val repo = configuredRepo()
+            val companion =
+                FakeCompanion().also {
+                    it.destroyResult = CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, "refused")
+                }
+
+            assertFailsWith<SettingsError.RecgovProfileWipeFailed> {
+                service(repo, companion).remove(testUserId)
+            }
+
+            assertEquals("ada@example.com", repo.settings!!.recgovUsername, "credentials must survive a failed wipe")
+        }
+
+    @Test
+    fun `a failed sign-out does not block removal, only a failed wipe does`() =
+        runBlocking {
+            // logout is the graceful half; destroy is the load-bearing one.
             val repo = configuredRepo()
             val companion =
                 FakeCompanion(
@@ -302,6 +442,47 @@ class RecGovCredentialServiceTest {
 
             assertEquals(RecgovLoginStatus.OK, dto.status)
             assertEquals(listOf(Triple(PROFILE_ID, "chal-1", "123456")), companion.mfaCalls)
+        }
+
+    @Test
+    fun `status stops advertising a challenge past the companion's own expiry`() =
+        runBlocking {
+            // The companion holds the prompt page on its own TTL and reports when
+            // it ends. Ignoring that, the backend kept saying mfa_pending forever
+            // and dropped a returning user into a code step that could only fail.
+            val clock = TestClock(Instant.parse("2026-09-01T00:00:00Z"))
+            val companion =
+                FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", "2026-09-01T00:05:00Z"))
+            val svc = service(configuredRepo(), companion, clock = clock)
+            svc.login(testUserId)
+
+            assertTrue(svc.status(testUserId).mfaPending, "a live challenge is pending")
+
+            clock.now = Instant.parse("2026-09-01T00:05:01Z")
+
+            assertFalse(
+                svc.status(testUserId).mfaPending,
+                "a challenge the companion has already dropped must not read as pending",
+            )
+        }
+
+    @Test
+    fun `a code submitted after the challenge expired is refused as expired, not unknown`() =
+        runBlocking {
+            // `unknown` tells the user the request was never ours; `expired` tells
+            // them what actually happened and that the deadline is the thing to beat.
+            val clock = TestClock(Instant.parse("2026-09-01T00:00:00Z"))
+            val companion =
+                FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", "2026-09-01T00:05:00Z"))
+            val svc = service(configuredRepo(), companion, clock = clock)
+            svc.login(testUserId)
+            clock.now = Instant.parse("2026-09-01T00:05:01Z")
+
+            val dto = svc.completeMfa(testUserId, "123456")
+
+            assertEquals(RecgovLoginStatus.FAILED, dto.status)
+            assertEquals(RecGovSessionCodes.MFA_CHALLENGE_EXPIRED, dto.error)
+            assertTrue(companion.mfaCalls.isEmpty(), "an expired challenge must not reach the companion")
         }
 
     @Test
@@ -569,5 +750,119 @@ class RecGovCredentialServiceTest {
 
             assertFalse(dto.configured)
             assertEquals(RecgovSessionState.NOT_CONFIGURED, dto.session)
+        }
+
+    // ── fire-time re-login ───────────────────────────────────────────────────
+
+    @Test
+    fun `the profile id is the bare user id, the one shape every caller must agree on`() {
+        // The companion keys the Chromium profile directory AND the stored
+        // cookie jar by whatever string arrives here. Two shapes for one user
+        // ("7" vs "user-7") would save a session under a key the launch path
+        // never reads — indistinguishable from "sessions do not persist".
+        assertEquals("7", service().profileId(testUserId))
+        assertEquals("12345", service().profileId(UserId(12345L)))
+    }
+
+    @Test
+    fun `Test login refreshes from cookies before it ever reaches the login form`() =
+        runBlocking {
+            // The live bug: a headed session lapsed after ~30 minutes and Test
+            // login went straight to a credential login, into the bot wall. A
+            // cookie refresh has no form and no wall.
+            val companion = FakeCompanion()
+            companion.refreshResult = CompanionActionResult.Ok
+            val svc = service(configuredRepo(), companion)
+
+            val answer = svc.login(testUserId)
+
+            assertEquals(RecgovLoginStatus.OK, answer.status)
+            assertEquals(listOf("7"), companion.refreshed)
+            assertTrue(companion.loginCalls.isEmpty(), "a recoverable session must never reach the login form")
+        }
+
+    @Test
+    fun `Test login falls through to credentials when the refresh cannot help`() =
+        runBlocking {
+            val companion = FakeCompanion()
+            val svc = service(configuredRepo(), companion)
+
+            assertEquals(RecgovLoginStatus.OK, svc.login(testUserId).status)
+
+            assertEquals(listOf("7"), companion.refreshed)
+            assertEquals(1, companion.loginCalls.size, "an unrecoverable session still gets the credential path")
+        }
+
+    @Test
+    fun `a fire-time re-login tells the companion nobody is waiting on it`() =
+        runBlocking {
+            val companion = FakeCompanion()
+            val svc = service(configuredRepo(), companion)
+
+            assertEquals(CompanionActionResult.Ok, svc.reLogin(testUserId))
+
+            // Without this the companion opens a challenge no one can complete
+            // and holds the profile lock for its whole TTL.
+            assertEquals(listOf(true), companion.unattendedFlags)
+        }
+
+    @Test
+    fun `a busy profile during re-login leaves an interactive MFA challenge intact`() =
+        runBlocking {
+            // The exact trap: the user is mid-MFA in Settings, which holds the
+            // profile lock, so the fire path's re-login answers profile_busy.
+            // Forgetting the challenge here breaks the code they are about to
+            // submit with mfa_challenge_unknown.
+            val companion = FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", null))
+            val svc = service(configuredRepo(), companion)
+            assertEquals(RecgovLoginStatus.MFA_REQUIRED, svc.login(testUserId).status)
+
+            companion.loginResult = CompanionLoginResult.Failed(RecGovSessionCodes.PROFILE_BUSY, "login in flight")
+            val recovery = svc.reLogin(testUserId)
+
+            assertEquals(CompanionActionResult.Failed(RecGovSessionCodes.PROFILE_BUSY, "login in flight"), recovery)
+            companion.mfaResult = CompanionLoginResult.Ok
+            assertEquals(RecgovLoginStatus.OK, svc.completeMfa(testUserId, "123456").status)
+            assertEquals(listOf(Triple("7", "chal-1", "123456")), companion.mfaCalls)
+        }
+
+    @Test
+    fun `a dead-challenge code during re-login does clear the challenge`() =
+        runBlocking {
+            val companion = FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", null))
+            val svc = service(configuredRepo(), companion)
+            svc.login(testUserId)
+
+            companion.loginResult = CompanionLoginResult.Failed(RecGovSessionCodes.CAPTCHA_REQUIRED, null)
+            svc.reLogin(testUserId)
+
+            val answer = svc.completeMfa(testUserId, "123456")
+            assertEquals(RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN, answer.error)
+        }
+
+    @Test
+    fun `a successful re-login clears a challenge nobody is going to complete`() =
+        runBlocking {
+            // The user started an MFA login and walked away. The fire path then
+            // signed the profile in unattended, so the held page is gone and the
+            // remembered id points at nothing — the status row must stop
+            // offering a code step for it.
+            val companion = FakeCompanion(loginResult = CompanionLoginResult.MfaRequired("chal-1", null))
+            val svc = service(configuredRepo(), companion)
+            svc.login(testUserId)
+            assertTrue(svc.status(testUserId).mfaPending)
+
+            companion.loginResult = CompanionLoginResult.Ok
+            assertEquals(CompanionActionResult.Ok, svc.reLogin(testUserId))
+
+            assertFalse(svc.status(testUserId).mfaPending)
+        }
+
+    @Test
+    fun `re-login without stored credentials is a refusal, not an exception`() =
+        runBlocking {
+            val result = service(FakeSettingsRepo()).reLogin(testUserId)
+
+            assertEquals(RecGovSessionCodes.NOT_CONFIGURED, (result as CompanionActionResult.Failed).code)
         }
 }

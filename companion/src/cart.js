@@ -7,6 +7,7 @@ import {
   IS_HEADLESS,
   getContext,
   injectStoredCookies,
+  persistProfileCookies,
   injectFingerprintCookie,
   injectBearerRoute,
   injectRecaccount,
@@ -20,12 +21,14 @@ import {
   RECGOV_HOME_URL,
   RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
   RECGOV_LOGIN_STATE_SETTLE_MS,
+  activeProfileId,
   clearBrowserRecaccount,
   resolveRecaccount,
   withRecgovProfileScope,
 } from './recgovSession.js'
 import { captureRecgovPageImage } from './recgovScreenshotCapture.js'
 import { SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX } from './recgovScreenshotRoutes.js'
+import { diagnosticArtifactName } from './tracing.js'
 
 let lastLoginState = null
 export function getLastLoginState () { return lastLoginState }
@@ -87,7 +90,7 @@ async function clickCalendarDate (page, dateStr) {
   return false
 }
 
-async function enterDates (page, firstDate, checkoutDate) {
+export async function enterDates (page, firstDate, checkoutDate) {
   const ENTER_DATES = 'button:has-text("Enter Dates"), button:has-text("Change Dates")'
   const GRID_SEL = '[role="gridcell"], [role="grid"], td[aria-label]'
 
@@ -103,7 +106,7 @@ async function enterDates (page, firstDate, checkoutDate) {
       console.log(`Cart: dates already pre-selected (${firstDate} → ${checkoutDate}) — closing picker via Escape`)
       await page.keyboard.press('Escape')
       await page.waitForTimeout(500)
-      return
+      return DATES_ACCEPTED
     }
   }
 
@@ -145,20 +148,40 @@ async function enterDates (page, firstDate, checkoutDate) {
       await clickCalendarDate(page, checkoutDate)
       await page.locator('button:has-text("Done"), button:has-text("Apply"), button:has-text("Search"), button:has-text("Check Availability")')
         .first().click({ timeout: 2000 }).catch(() => {})
-      return
+      // A fiber click fires the handler directly, so "it did not throw" says
+      // nothing about whether the calendar accepted the date. Only the
+      // rendered selection does.
+      if (await dateSelectionAccepted(page, firstMonthDay)) return DATES_ACCEPTED
+      console.log(`Cart: fiber click for ${firstDate} did not take — the date is genuinely not offered`)
+      return DATES_REFUSED
     }
 
-    console.log(`Cart: arrival date ${firstDate} fiber click failed — closing picker, relying on URL params`)
+    // aria-disabled and no handler to call: rec.gov means it.
+    console.log(`Cart: arrival date ${firstDate} is not selectable and the fiber fallback found no handler`)
     await page.keyboard.press('Escape')
-    await page.waitForTimeout(800)
-    return
+    await page.waitForTimeout(300)
+    return DATES_REFUSED
   }
 
   await clickCalendarDate(page, firstDate)
   await clickCalendarDate(page, checkoutDate)
   await page.locator('button:has-text("Done"), button:has-text("Apply"), button:has-text("Search"), button:has-text("Check Availability")')
     .first().click({ timeout: 2000 }).catch(() => {})
+  return DATES_ACCEPTED
 }
+
+/** Whether the calendar is now rendering that date as the chosen arrival. */
+export async function dateSelectionAccepted (page, monthDay) {
+  return page
+    .locator(`[aria-label*="${monthDay}"].is-selected, [aria-label*="${monthDay}"].is-range-start`)
+    .first()
+    .isVisible()
+    .catch(() => false)
+}
+
+/** What the date picker did with the requested range. */
+export const DATES_ACCEPTED = 'dates_accepted'
+export const DATES_REFUSED = 'dates_refused'
 
 const RESERVE_SELECTORS = [
   'button:has-text("Add to Cart")',
@@ -184,7 +207,7 @@ const CONFIRMATION_CLICK_TIMEOUT_MS = 3_000
 const POST_CONFIRMATION_CLICK_SETTLE_MS = 2_000
 const CONFIRMATION_DIAGNOSTIC_LIMIT = 8
 const CONFIRMATION_TEXT_LOG_LIMIT = 80
-const ATC_SCREENSHOT_PREFIX = 'recgov-atc'
+const ATC_SCREENSHOT_OPERATION = 'atc'
 const ATC_SCREENSHOT_LABEL_MAX_CHARS = 60
 const CART_URL_CAMPSITE_ID_RE = /\/camping\/campsites\/([^/?#]+)/
 const CART_VERIFY_MATCHED = 'matched'
@@ -197,12 +220,35 @@ const ERROR_RECGOV_LOGIN_FAILED = 'recgov_login_failed'
 const ERROR_RECGOV_REFRESH_FAILED = 'recgov_refresh_failed'
 const ERROR_RECGOV_SPA_LOGGED_OUT = 'recgov_spa_logged_out'
 const ERROR_RECGOV_CONFIRMATION_DISABLED = 'recgov_confirmation_disabled'
+// Two ways an add-to-cart can miss that `cart_not_added` used to blur together.
+// The user can act on the difference: one means the site is not offered for
+// those dates at all, the other means we tried to hold it and could not.
+const ERROR_RECGOV_DATES_NOT_OFFERED = 'recgov_dates_not_offered'
+const ERROR_RECGOV_NO_RESERVE_BUTTON = 'recgov_no_reserve_button'
+const DATES_NOT_OFFERED_DETAIL =
+  'Recreation.gov did not offer the requested arrival date for this site — its calendar refused the selection.'
+const NO_RESERVE_BUTTON_DETAIL =
+  'Recreation.gov showed the site but offered no Reserve or Add to Cart control for those dates.'
 const HEADLESS_NO_SESSION_DETAIL =
-  'No Recreation.gov browser session is available in the companion profile, and the headless companion is not logged in.'
+  'This profile has no Recreation.gov session — test login in Settings, or run the companion headed to log in once.'
 const HEADED_NO_SESSION_DETAIL =
   'No Recreation.gov browser session is available in the companion profile.'
 const LOGIN_FAILED_DETAIL =
-  'Recreation.gov credential login did not produce a browser session. If Recreation.gov prompts for 2FA, submit a current MFA code on the companion root page.'
+  'Recreation.gov credential login did not produce a browser session.'
+/**
+ * What to say about the specific thing that blocked the login.
+ *
+ * The single detail line used to end "...submit a current MFA code on the
+ * companion root page" for EVERY reason, so a captcha — which no code can
+ * clear — told the operator to go type a code.
+ */
+const LOGIN_BLOCKER_DETAIL = {
+  captcha_required:
+    'Recreation.gov presented a challenge the companion cannot solve. Retrying often passes; otherwise log in headed once.',
+  mfa_required: 'Recreation.gov asked for a verification code. Submit a current one on the companion root page.',
+  mfa_invalid: 'Recreation.gov rejected the verification code. Start the login again to get a new one.',
+  login_link_not_found: 'The Recreation.gov login control was not found on the page — the site layout may have changed.',
+}
 const REFRESH_FAILED_DETAIL =
   'Recreation.gov browser session refresh failed. The stored session may be expired or rejected.'
 const SPA_LOGGED_OUT_DETAIL =
@@ -266,11 +312,17 @@ export function verifyCartContainsMatch (cart, match) {
   return { ok: false, reason: CART_VERIFY_MISSING_ITEM, best_match: bestMatch, ...base }
 }
 
-export function recgovAuthenticationFailure ({ headless = IS_HEADLESS, attemptedLogin = false, attemptedRefresh = false } = {}) {
+export function recgovAuthenticationFailure ({
+  headless = IS_HEADLESS,
+  attemptedLogin = false,
+  attemptedRefresh = false,
+  reason = null,
+} = {}) {
   if (attemptedLogin) {
+    const blocker = LOGIN_BLOCKER_DETAIL[reason]
     return {
       error: ERROR_RECGOV_LOGIN_FAILED,
-      detail: LOGIN_FAILED_DETAIL,
+      detail: blocker ? `${LOGIN_FAILED_DETAIL} ${blocker}` : LOGIN_FAILED_DETAIL,
       corrective_action: LOGIN_ON_COMPANION_ACTION,
       auth: authFields(headless),
     }
@@ -565,12 +617,21 @@ function truncateText (value, maxLength) {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`
 }
 
-export async function setupAuthPage ({ getContextFn = getContext, profileId = null } = {}) {
+export async function setupAuthPage ({
+  getContextFn = getContext,
+  profileId = null,
+  resolveRecaccountFn = resolveRecaccount,
+} = {}) {
   const context = await getContextFn()
   await injectStoredCookies(context, null, profileId)
   const page = await context.newPage()
 
-  const recaccount = await resolveRecaccount(page)
+  // Never the manual-login wait: nobody watches an ATC, so parking the request
+  // for RECGOV_LOGIN_TIMEOUT_MS holds the profile lock and loses the hold
+  // anyway — and /atc is traced, so a password typed into that window lands in
+  // the trace past the COMPANION_TRACE_LOGIN gate. Fail fast instead; sessions
+  // get minted headed by `make recgov-login`.
+  const recaccount = await resolveRecaccountFn(page, { allowManualLogin: false })
   const authFailure = recaccount ? null : recgovAuthenticationFailure()
   if (recaccount) {
     console.log(`Cart: session ready (expires ${recaccount.expiration})`)
@@ -621,7 +682,13 @@ function createAtcScreenshotCollector (page) {
     screenshots,
     async capture (label) {
       const capturedAt = new Date().toISOString()
-      const filename = `${ATC_SCREENSHOT_PREFIX}-${capturedAt.replace(/[:.]/g, '-')}-${sanitizeScreenshotLabel(label)}.png`
+      // Named with its profile so `POST /destroy` erases it with the rest of
+      // the profile: these are pictures of that user's signed-in cart.
+      const filename = `${diagnosticArtifactName(
+        ATC_SCREENSHOT_OPERATION,
+        sanitizeScreenshotLabel(label),
+        { profileId: activeProfileId(), capturedAt },
+      )}.png`
       const screenshot = {
         label,
         captured_at: capturedAt,
@@ -753,8 +820,20 @@ async function runAddToCart (match, contextOptions) {
     }
 
     if (await page.locator(ENTER_DATES_SEL).first().isVisible().catch(() => false)) {
-      await enterDates(page, firstDate, checkout)
+      const dateStatus = await enterDates(page, firstDate, checkout)
       await screenshots.capture('dates-entered')
+      // Fail here rather than spending the rest of the budget waiting for a
+      // Reserve button that cannot appear for dates the site will not accept.
+      if (dateStatus === DATES_REFUSED) {
+        console.log(`Cart: site ${site} does not offer ${firstDate} → ${checkout}`)
+        await screenshots.capture('dates-not-offered')
+        return withScreenshots({
+          ok: false,
+          page,
+          error: ERROR_RECGOV_DATES_NOT_OFFERED,
+          detail: DATES_NOT_OFFERED_DETAIL,
+        }, screenshots)
+      }
       await page.waitForSelector(RESERVE_COMBINED, { timeout: 12000 }).catch(() => {})
       const datedReserveClick = await clickReserveButton(page, { screenshots })
       if (datedReserveClick.failure) return withScreenshots({ ok: false, page, ...datedReserveClick.failure }, screenshots)
@@ -780,13 +859,23 @@ async function runAddToCart (match, contextOptions) {
       console.log(`Cart: no Reserve button for Site ${site} — buttons: [${btnStr}]`)
     }
     await screenshots.capture('no-reserve-button')
-    return withScreenshots({ ok: false, page }, screenshots)
+    // Distinct from `cart_not_added`: nothing was ever attempted, because
+    // rec.gov offered no control to attempt it with.
+    return withScreenshots({
+      ok: false,
+      page,
+      error: ERROR_RECGOV_NO_RESERVE_BUTTON,
+      detail: NO_RESERVE_BUTTON_DETAIL,
+    }, screenshots)
   } catch (err) {
     console.error('Cart automation error:', err.message)
     await screenshots.capture('automation-error')
     return withScreenshots({ ok: false, page }, screenshots)
   }
 }
+
+/** Names the persist log line for the CLI/refresh auth probe. */
+const OPERATION_TEST_CHROMIUM = 'test-chromium'
 
 export async function testChromium (rawCookieInput = null, options = {}) {
   return withRecgovProfileScope(options.profileId ?? null, () => runTestChromium(rawCookieInput, options))
@@ -796,6 +885,7 @@ async function runTestChromium (rawCookieInput, options) {
   const {
     getContextFn = getContext,
     injectStoredCookiesFn = injectStoredCookies,
+    persistProfileCookiesFn = persistProfileCookies,
     resolveRecaccountFn = resolveRecaccount,
     clearBrowserRecaccountFn = clearBrowserRecaccount,
     injectRecaccountFn = injectRecaccount,
@@ -804,8 +894,9 @@ async function runTestChromium (rawCookieInput, options) {
     ...resolveOptions
   } = options
 
+  const profileId = resolveOptions.profileId ?? null
   const context = await getContextFn()
-  await injectStoredCookiesFn(context, rawCookieInput, resolveOptions.profileId ?? null)
+  await injectStoredCookiesFn(context, rawCookieInput, profileId)
   let page = await context.newPage()
   try {
     const first = await resolveAndVerifyRecgovSession(page, resolveOptions, {
@@ -816,6 +907,9 @@ async function runTestChromium (rawCookieInput, options) {
     })
     if (first.loggedIn) {
       lastLoginState = true
+      // The headed runbook mints a session on the host; without this it dies
+      // with the browser and never reaches the container.
+      await persistProfileCookiesFn(context, profileId, { operation: OPERATION_TEST_CHROMIUM })
       console.log(`Logged in to recreation.gov ✓ (token expires ${first.recaccount.expiration})`)
       return { ok: true, loggedIn: true }
     }
@@ -839,6 +933,7 @@ async function runTestChromium (rawCookieInput, options) {
     })
     lastLoginState = recovered.loggedIn
     if (recovered.loggedIn) {
+      await persistProfileCookiesFn(context, profileId, { operation: OPERATION_TEST_CHROMIUM })
       console.log(`Logged in to recreation.gov ✓ (token expires ${recovered.recaccount.expiration})`)
     } else {
       console.log('testChromium: no logged-in Recreation.gov browser session found after fallback')

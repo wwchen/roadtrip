@@ -16,6 +16,9 @@ import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.security.SecretCipher
 import org.slf4j.LoggerFactory
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -58,7 +61,7 @@ internal fun bookingSettingsDto(
  * Port: the contract the rec.gov settings routes depend on.
  */
 interface RecGovCredentialPort {
-    fun save(
+    suspend fun save(
         userId: UserId,
         req: UpdateRecgovRequest,
     ): BookingSettingsDto
@@ -76,6 +79,13 @@ interface RecGovCredentialPort {
 
     suspend fun status(userId: UserId): RecgovStatusDto
 }
+
+/**
+ * Used only when the companion reports `mfa_required` with no deadline of its
+ * own; its configured TTL is the authority whenever it sends one.
+ */
+@Suppress("TopLevelPropertyNaming")
+private val FALLBACK_MFA_CHALLENGE_TTL: Duration = Duration.ofMinutes(5)
 
 /**
  * Per-user rec.gov credentials: storage, and the interactive companion flows
@@ -96,7 +106,10 @@ class RecGovCredentialService(
     private val watchRepo: AvailabilityWatchRepo,
     private val cipher: SecretCipher?,
     private val companion: CompanionSessionPort?,
-) : RecGovCredentialPort {
+    private val clock: Clock = Clock.systemUTC(),
+) : RecGovCredentialPort,
+    RecGovCredentialsConfigured,
+    RecGovProfileSessionPort {
     private val log = LoggerFactory.getLogger(javaClass)
 
     /**
@@ -105,8 +118,15 @@ class RecGovCredentialService(
      * The companion holds the rec.gov prompt page and expires the challenge on
      * its own minutes-scale TTL, so this map is a pointer with a shorter useful
      * life than the process; a lost entry costs one restarted login.
+     *
+     * The deadline is stored with it. The companion reports one on every
+     * `mfa_required`, and without keeping it this map outlived the page it points
+     * at: `status` went on advertising `mfa_pending` for a challenge the companion
+     * had dropped, dropping a returning user into a code step that could only
+     * fail. Honouring the companion's own value rather than a second TTL here is
+     * deliberate — two independently configured timeouts would drift.
      */
-    private val pendingChallenges = ConcurrentHashMap<Long, String>()
+    private val pendingChallenges = ConcurrentHashMap<Long, PendingChallenge>()
 
     /**
      * Users with a code submission in flight, so exactly one reaches the held
@@ -115,7 +135,45 @@ class RecGovCredentialService(
      */
     private val mfaInFlight = ConcurrentHashMap.newKeySet<Long>()
 
-    override fun save(
+    private data class PendingChallenge(
+        val id: String,
+        val expiresAt: Instant,
+    )
+
+    /**
+     * The challenge id if the companion could still be holding it, else null —
+     * and the dead entry is dropped on the way out, so a read is enough to
+     * correct the state.
+     */
+    private fun liveChallengeId(userId: UserId): String? {
+        val pending = pendingChallenges[userId.value] ?: return null
+        if (clock.instant() < pending.expiresAt) return pending.id
+        pendingChallenges.remove(userId.value, pending)
+        return null
+    }
+
+    /** The companion's deadline, or a bounded default when it reported none. */
+    private fun challengeDeadline(reported: String?): Instant =
+        reported
+            ?.let { runCatching { Instant.parse(it) }.getOrNull() }
+            ?: clock.instant().plus(FALLBACK_MFA_CHALLENGE_TTL)
+
+    /**
+     * Stores credentials, **evicting the browser session when the account
+     * changes.**
+     *
+     * A swap to a different username invalidates the old session's legitimacy
+     * exactly as a removal does. The profile is keyed by user, not by account,
+     * so without this the previous account's cookie jar survives; [login] is
+     * refresh-first and revives it, and the hold lands on the account the user
+     * has already replaced while the UI reads the new username from the row.
+     *
+     * The wipe runs *before* the write and a failed wipe **refuses the save**
+     * ([SettingsError.RecgovProfileWipeFailed]). Storing the new username over a
+     * session we could not clear is the bad state itself; the old credentials
+     * keep working meanwhile, so a refusal costs the user only a retry.
+     */
+    override suspend fun save(
         userId: UserId,
         req: UpdateRecgovRequest,
     ): BookingSettingsDto {
@@ -130,6 +188,10 @@ class RecGovCredentialService(
 
         // Validate before persisting so a rejected save leaves the row untouched.
         val sealed = password?.let { (cipher ?: throw encryptionUnavailable()).seal(it) }
+
+        val previous = stored?.recgovUsername
+        if (previous != null && previous != username) wipeProfileOrRefuse(userId)
+
         settingsRepo.saveRecgovCredentials(
             userId = userId,
             username = username,
@@ -139,30 +201,89 @@ class RecGovCredentialService(
     }
 
     /**
-     * Clears the stored credentials, then best-effort signs the companion
-     * profile out.
+     * Clears the profile's session material, or refuses the whole operation.
      *
-     * The local delete happens first and unconditionally: a user removing their
-     * password must not be blocked by an unreachable browser service. The
-     * response reports how many of their active `atc` watches this strands —
-     * those keep the trigger kind and fail loudly on the next fire rather than
-     * being mutated behind the user's back.
+     * Shared by the two callers that invalidate a stored account — a swap and a
+     * removal — because both have the same failure posture: a local row written
+     * against session material that is still on disk is a lie, so neither may
+     * be half-applied. The caller must invoke this **before** its own write.
+     *
+     * Returns false only when no companion is configured at all: there is then
+     * no session to clear and nothing to leave inconsistent.
+     */
+    private suspend fun wipeProfileOrRefuse(userId: UserId): Boolean {
+        val client = companion ?: return false
+        if (client.destroyProfile(profileId(userId)) != CompanionActionResult.Ok) {
+            log.error(
+                "rec.gov profile wipe failed for user={}; refusing the operation so the stored " +
+                    "account and the on-disk session cannot disagree — investigate the companion",
+                userId.value,
+            )
+            throw SettingsError.RecgovProfileWipeFailed()
+        }
+        pendingChallenges.remove(userId.value)
+        return true
+    }
+
+    /**
+     * Removes the credentials **and the browser session they created.**
+     *
+     * A sign-out alone was not a removal. `logout` clicks through rec.gov's
+     * sign-out flow and leaves the profile's Chromium directory and its saved
+     * cookie jar on the companion host, so a user who removed their credentials
+     * left their rec.gov session material on disk. The destroy step is what
+     * makes this a true wipe.
+     *
+     * The wipe happens first and the local delete is **conditional on it**: if
+     * the profile cannot be destroyed the removal is refused with
+     * [SettingsError.RecgovProfileWipeFailed] and the row is left intact. This
+     * reverses an earlier contract that deleted locally regardless — that
+     * version reported a deletion which had not happened, leaving the cookie jar
+     * on disk after the credentials were gone. Refusing keeps the two halves
+     * consistent and puts the failure in front of an operator.
+     *
+     * The response also reports how many of the owner's active `atc` watches
+     * this strands — those keep the trigger kind and fail loudly on the next
+     * fire rather than being mutated behind the user's back.
      */
     override suspend fun remove(userId: UserId): RecgovRemovedDto {
         val stranded = watchRepo.countByTriggerKind(userId.value, WatchStatus.ACTIVE, AvailabilityTriggerKinds.ATC)
-        settingsRepo.clearRecgov(userId)
-        pendingChallenges.remove(userId.value)
 
+        // Sign out first: it is the graceful half, and it tells rec.gov the
+        // session is finished rather than merely abandoning it.
         val signedOut = companion?.logout(profileId(userId)) == CompanionActionResult.Ok
-        if (!signedOut) {
-            log.info("rec.gov credentials removed for user={} without a companion sign-out", userId.value)
-        }
-        return RecgovRemovedDto(removed = true, strandedAtcWatches = stranded, companionSignedOut = signedOut)
+        val destroyed = wipeProfileOrRefuse(userId)
+
+        settingsRepo.clearRecgov(userId)
+        return RecgovRemovedDto(
+            removed = true,
+            strandedAtcWatches = stranded,
+            companionSignedOut = signedOut,
+            profileDestroyed = destroyed,
+        )
     }
 
+    /**
+     * Test login: **refresh first, credentials only if that cannot help.**
+     *
+     * A rec.gov JWT lapses in far less than an hour, so a session the operator
+     * established by hand looks dead to `health` long before it is beyond
+     * saving. `POST /refresh` renews it from the profile's own cookies — an API
+     * call, no login form, no bot wall — and that is nearly always what "Test
+     * login" should actually do. Reaching for the credential form first threw
+     * away a recoverable session and walked into the automated-login wall,
+     * which is exactly what was seen live ~30 minutes after a headed login.
+     */
     override suspend fun login(userId: UserId): RecgovLoginResponseDto {
         val credentials = requireCredentials(userId)
         val client = companion ?: return companionUnavailableLogin()
+
+        if (client.refresh(profileId(userId)) == CompanionActionResult.Ok) {
+            log.info("rec.gov session refreshed without credentials for user={}", userId.value)
+            pendingChallenges.remove(userId.value)
+            return RecgovLoginResponseDto(status = RecgovLoginStatus.OK)
+        }
+
         return recordLogin(userId, client.login(profileId(userId), credentials.username, credentials.password))
     }
 
@@ -185,9 +306,19 @@ class RecGovCredentialService(
             return failedLogin(RecGovSessionCodes.PROFILE_BUSY, "a verification code is already being submitted")
         }
         try {
-            val challengeId =
+            val pending =
                 pendingChallenges[userId.value]
                     ?: return failedLogin(RecGovSessionCodes.MFA_CHALLENGE_UNKNOWN, "no login is waiting for a code")
+            // Told apart deliberately: `unknown` says the request was never ours,
+            // which is the wrong story for a code the user simply typed too late.
+            if (clock.instant() >= pending.expiresAt) {
+                pendingChallenges.remove(userId.value, pending)
+                return failedLogin(
+                    RecGovSessionCodes.MFA_CHALLENGE_EXPIRED,
+                    "the code request expired before the code was entered",
+                )
+            }
+            val challengeId = pending.id
             val client = companion ?: return companionUnavailableLogin()
             return recordLogin(userId, client.completeMfa(profileId(userId), challengeId, code))
         } finally {
@@ -219,7 +350,14 @@ class RecGovCredentialService(
         val (session, detail) =
             when (health) {
                 is CompanionSessionHealth.Active -> RecgovSessionState.ACTIVE to null
-                is CompanionSessionHealth.Inactive -> RecgovSessionState.EXPIRED to health.code
+                is CompanionSessionHealth.NeverLoggedIn -> RecgovSessionState.NOT_LOGGED_IN to null
+                // The distinction the status row can honestly draw: the profile
+                // HAS been logged in (otherwise health says NeverLoggedIn), so
+                // this is a lapsed session, and the fix is a person — not the
+                // `recgov_login_failed` a doomed automated attempt would report.
+                is CompanionSessionHealth.Inactive ->
+                    RecgovSessionState.EXPIRED to (health.code ?: RecGovSessionCodes.SESSION_LAPSED)
+                is CompanionSessionHealth.CheckFailed -> RecgovSessionState.CHECK_FAILED to health.code
                 is CompanionSessionHealth.Unavailable -> RecgovSessionState.COMPANION_UNAVAILABLE to health.detail
             }
         return RecgovStatusDto(
@@ -227,8 +365,75 @@ class RecGovCredentialService(
             username = stored.recgovUsername,
             session = session,
             detail = detail,
-            mfaPending = pendingChallenges.containsKey(userId.value),
+            mfaPending = liveChallengeId(userId) != null,
         )
+    }
+
+    // ── ports the watch surfaces and the ATC fire path depend on ─────────────
+
+    override fun isConfigured(userId: UserId): Boolean = bookingSettingsDto(settingsRepo.find(userId), cipher).recgovConfigured
+
+    override suspend fun health(userId: UserId): CompanionSessionHealth =
+        companion?.health(profileId(userId)) ?: CompanionSessionHealth.Unavailable(null)
+
+    override suspend fun refreshSession(userId: UserId): CompanionActionResult =
+        companion?.refresh(profileId(userId), unattended = true)
+            ?: CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, null)
+
+    /**
+     * One unattended login with the stored credentials, for a profile whose
+     * session died between the keepalive sweep and the fire.
+     *
+     * Decryption is [requireCredentials], the same helper the interactive login
+     * uses — the sealed password is opened in exactly one place. The companion
+     * call is marked `unattended`, so an MFA prompt answers without opening a
+     * challenge: nobody is here to read a code, and a challenge would hold the
+     * profile's busy lock for its whole TTL.
+     *
+     * **It must not disturb an interactive challenge.** A user mid-MFA in
+     * Settings holds the profile lock, so this call comes back `profile_busy` —
+     * transient, and emphatically not a reason to forget the challenge id the
+     * user is about to submit a code against. Only the codes that mean the
+     * companion's held page is genuinely gone clear it, exactly as [recordLogin]
+     * decides.
+     */
+    override suspend fun reLogin(userId: UserId): CompanionActionResult {
+        val credentials =
+            try {
+                requireCredentials(userId)
+            } catch (e: SettingsError) {
+                return CompanionActionResult.Failed(RecGovSessionCodes.NOT_CONFIGURED, e.message)
+            }
+        val client = companion ?: return CompanionActionResult.Failed(RecGovSessionCodes.COMPANION_UNAVAILABLE, null)
+
+        // Cookies before credentials here too: a refresh costs one API call and
+        // cannot hit a bot wall, where the credential login can.
+        if (client.refresh(profileId(userId), unattended = true) == CompanionActionResult.Ok) return CompanionActionResult.Ok
+
+        return when (
+            val result =
+                client.login(
+                    profileId = profileId(userId),
+                    username = credentials.username,
+                    password = credentials.password,
+                    unattended = true,
+                )
+        ) {
+            is CompanionLoginResult.Ok -> {
+                // The profile is signed in, so whatever page a remembered
+                // challenge pointed at is gone. Leaving the id would keep the
+                // status row offering a code step that can only fail.
+                pendingChallenges.remove(userId.value)
+                CompanionActionResult.Ok
+            }
+            // The companion opens no challenge for an unattended caller, so
+            // there is nothing to remember even if it somehow answers one.
+            is CompanionLoginResult.MfaRequired -> CompanionActionResult.Failed(RecGovSessionCodes.MFA_REQUIRED, null)
+            is CompanionLoginResult.Failed -> {
+                if (result.code in challengeEndingCodes) pendingChallenges.remove(userId.value)
+                CompanionActionResult.Failed(result.code, result.detail)
+            }
+        }
     }
 
     // ── internals ────────────────────────────────────────────────────────────
@@ -263,7 +468,7 @@ class RecGovCredentialService(
                 RecgovLoginResponseDto(status = RecgovLoginStatus.OK)
             }
             is CompanionLoginResult.MfaRequired -> {
-                pendingChallenges[userId.value] = result.challengeId
+                pendingChallenges[userId.value] = PendingChallenge(result.challengeId, challengeDeadline(result.expiresAt))
                 RecgovLoginResponseDto(
                     status = RecgovLoginStatus.MFA_REQUIRED,
                     challengeId = result.challengeId,
@@ -287,5 +492,5 @@ class RecGovCredentialService(
         SettingsError.EncryptionUnavailable("Encryption key not configured; cannot store rec.gov credentials")
 
     /** The companion's profile id for a user is their user id, as an opaque string. */
-    private fun profileId(userId: UserId): String = userId.value.toString()
+    override fun profileId(userId: UserId): String = userId.value.toString()
 }

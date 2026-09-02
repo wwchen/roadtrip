@@ -62,6 +62,34 @@ interface RoadtripMetrics {
         status: String,
     )
 
+    /**
+     * One armed rec.gov profile touched by a keepalive sweep. Counting per
+     * profile rather than per sweep makes the armed-set size the sum over a
+     * sweep, and makes "some profiles are failing to refresh" visible as a
+     * ratio rather than an all-or-nothing sweep outcome. Profile ids are
+     * deliberately NOT an attribute — unbounded cardinality.
+     */
+    fun recgovKeepaliveProfile(outcome: KeepaliveOutcome)
+
+    /**
+     * One ATC fire reaching a terminal outcome.
+     *
+     * This is the path where nobody is watching: it runs from a poll sweep,
+     * minutes after a site opened, and its whole value is placing a hold in
+     * seconds. Row-level detail is in the result notification; this is the
+     * rate/trend layer that answers "are holds still landing" and "which
+     * failure is taking them".
+     *
+     * [error] is a `RecGovSessionCodes`-style code — a bounded registry, so it
+     * is safe as an attribute; null becomes `none`. Watch ids and campsite ids
+     * are deliberately absent: unbounded cardinality.
+     */
+    fun recgovAtcFired(
+        outcome: AtcOutcome,
+        error: String? = null,
+        durationMs: Int? = null,
+    )
+
     /** For tests and for any entry point that runs without the agent. */
     object NoOp : RoadtripMetrics {
         override fun availabilityFetchCompleted(
@@ -90,7 +118,58 @@ interface RoadtripMetrics {
             kind: String,
             status: String,
         ) = Unit
+
+        override fun recgovKeepaliveProfile(outcome: KeepaliveOutcome) = Unit
+
+        override fun recgovAtcFired(
+            outcome: AtcOutcome,
+            error: String?,
+            durationMs: Int?,
+        ) = Unit
     }
+}
+
+/**
+ * What a keepalive sweep managed for one armed rec.gov profile.
+ *
+ * Observability's own vocabulary, bounded by construction, so the port does not
+ * import a service type to name its own attribute.
+ */
+enum class KeepaliveOutcome(
+    val label: String,
+) {
+    /** The companion renewed the profile's session. */
+    REFRESHED("refreshed"),
+
+    /** The companion answered, but the profile could not be refreshed. */
+    FAILED("failed"),
+
+    /** The companion could not be reached at all. */
+    UNAVAILABLE("unavailable"),
+}
+
+/**
+ * How an ATC fire ended. Deliberately separates the three shapes that never
+ * reached the vendor from an honest vendor refusal, because they have different
+ * causes and different fixes. All five now report to the owner.
+ */
+enum class AtcOutcome(
+    val label: String,
+) {
+    /** The site was held. */
+    HELD("held"),
+
+    /** The vendor was driven and declined — taken, dates not offered, cart refused. */
+    FAILED("failed"),
+
+    /** No booking target resolved for any opening, so no attempt was made. */
+    NO_TARGET("no_target"),
+
+    /** The provider has no add-to-cart capability for this target. */
+    UNSUPPORTED("unsupported"),
+
+    /** The attempt threw before producing a result. */
+    EXCEPTION("exception"),
 }
 
 /** Why a poll cycle issued no upstream call. Observability's own vocabulary, so

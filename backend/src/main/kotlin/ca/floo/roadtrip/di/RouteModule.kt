@@ -16,6 +16,7 @@ import ca.floo.roadtrip.repo.UserSessionRepo
 import ca.floo.roadtrip.route.api.admin.adminIngestRoutes
 import ca.floo.roadtrip.route.api.availability.availabilityDashboardRoutes
 import ca.floo.roadtrip.route.api.availability.availabilityWatchRoutes
+import ca.floo.roadtrip.route.api.bookingRoutes
 import ca.floo.roadtrip.route.api.buildInfoRoutes
 import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
@@ -57,6 +58,7 @@ import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.booking.BookingActionService
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.poi.PoiReader
@@ -94,6 +96,7 @@ internal fun Application.registerKoinRoutes() {
     val ingestController: IngestController by inject()
     val userSettings: UserSettingsService by inject()
     val recgovCredentials: RecGovCredentialService by inject()
+    val bookingActions: BookingActionService by inject()
     val slackInteractivity: SlackInteractivityWiring? = getKoin().getOrNull()
     val readiness: ReadinessService by inject()
     val schedulerScope: CoroutineScope by inject()
@@ -117,6 +120,7 @@ internal fun Application.registerKoinRoutes() {
         authRoutes(wiring = authWiring)
         settingsRoutes(userSettings)
         recgovSettingsRoutes(recgovCredentials)
+        bookingRoutes(bookingActions)
         poiRoutes(poiService)
         availabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
         val campsiteController =

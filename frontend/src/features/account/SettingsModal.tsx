@@ -63,12 +63,25 @@ type TabId = (typeof TABS)[number]['id'];
 
 const SAVED_MESSAGE = 'Settings saved.';
 
-/** Removal is reported with what it cost: the watches now left without credentials. */
-const removedMessage = (stranded: number): string =>
-  stranded === 0
-    ? 'Recreation.gov credentials removed.'
-    : `Recreation.gov credentials removed. ${stranded} active add-to-cart ` +
-      `${stranded === 1 ? 'watch' : 'watches'} will fail until you add them again.`;
+/**
+ * Removal is reported with what it cost: the watches now left without
+ * credentials, and whether the saved browser session actually went with them.
+ *
+ * A removal that could not clear the session is now REFUSED server-side
+ * (`recgov_profile_wipe_failed`) rather than half-applied, so `profileDestroyed`
+ * false no longer means "the wipe failed" — it means no booking service is
+ * configured, and there was no saved session to erase.
+ */
+const removedMessage = (stranded: number, profileDestroyed: boolean): string => {
+  const base = profileDestroyed
+    ? 'Recreation.gov credentials and saved browser session removed.'
+    : 'Recreation.gov credentials removed. There was no saved browser session to erase.';
+  if (stranded === 0) return base;
+  return (
+    `${base} ${stranded} active add-to-cart ` +
+    `${stranded === 1 ? 'watch' : 'watches'} will fail until you add them again.`
+  );
+};
 
 type Notice = { status: 'success' | 'error'; message: string };
 
@@ -184,8 +197,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   const handleRemoveRecgov = async () => {
     try {
-      const { stranded_atc_watches } = await removeRecgov.mutateAsync();
-      setNotice({ status: 'success', message: removedMessage(stranded_atc_watches) });
+      const { stranded_atc_watches, profile_destroyed } = await removeRecgov.mutateAsync();
+      setNotice({
+        status: 'success',
+        message: removedMessage(stranded_atc_watches, profile_destroyed),
+      });
     } catch (err) {
       fail(err);
     }
@@ -290,6 +306,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     onLogin={recgovLogin}
                     onSubmitMfa={recgovMfa}
                     onVerify={recgovVerify}
+                    onRemoveRecgov={() => void handleRemoveRecgov()}
                   />
                 )}
                 {activeTab === TAB_ACCOUNT && (
@@ -297,7 +314,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     settings={settings}
                     onSignOut={signOut}
                     onDisconnectSlack={() => void handleDisconnectSlack()}
-                    onRemoveRecgov={() => void handleRemoveRecgov()}
                   />
                 )}
               </>

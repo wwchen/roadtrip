@@ -21,9 +21,12 @@ export const LOGOUT_CORRECTIVE_ACTION = 'Open the companion root page and verify
 
 let recgovAuthStatus = { state: 'unchecked' }
 
-// The companion-wide slot, owned by the startup check. Profile-scoped callers
-// pass the pool's per-profile store instead, so one user's login never lands
-// on another user's row — or on the global one.
+// The companion-wide slot. Nothing writes it at boot any more: the startup
+// auth check that used to launch the legacy single profile is retired, because
+// every caller is profile-scoped and that browser served no one. It stays
+// `unchecked` unless an explicitly unscoped check writes it. Profile-scoped
+// callers pass the pool's per-profile store, so one user's login never lands on
+// another user's row — or on this one.
 const globalAuthStatusStore = {
   get: () => recgovAuthStatus,
   set: (status) => {
@@ -77,13 +80,6 @@ export async function runRecgovAuthCheck ({
     logger('recgov auth', operation, 'exception', `detail="${truncateLogField(error.message, LOG_DETAIL_MAX_CHARS)}"`)
     return status
   }
-}
-
-export async function runStartupAuthCheck (options = {}) {
-  return runRecgovAuthCheck({
-    operation: 'startup check',
-    ...options,
-  })
 }
 
 export function getRecgovAuthStatus () {

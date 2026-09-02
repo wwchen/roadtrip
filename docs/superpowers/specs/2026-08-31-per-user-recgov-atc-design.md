@@ -104,12 +104,17 @@ ALTER TABLE user_settings
   are one browser process per profile directory, so resident profiles are a
   real memory cost — governed by a global concurrent-browser cap (env-driven,
   named-constant default).
-- **Keep-warm:** profiles backing at least one active `atc` watch stay
-  launched, and a backend keepalive job periodically calls `POST /refresh` for
-  exactly those profiles, so a 3 a.m. firing never pays Chromium cold-start or
-  re-login inside the seconds-critical window. Credential-only profiles with
-  no armed watch are torn down when idle. **Armed profiles are exempt from
-  the concurrency cap** — the cap governs on-demand launches (logins,
+- **Keep-warm:** the backend keepalive job periodically calls `POST /refresh`
+  for the profiles worth keeping alive, so a 3 a.m. firing never pays Chromium
+  cold-start or re-login inside the seconds-critical window. The set is
+  **owners of active `atc` watches, plus every user with rec.gov credentials
+  whose profile has been signed in at least once** — armed owners first,
+  never-signed-in profiles skipped, truncated to an env-tunable cap
+  (`BOOKING_MAX_KEEP_WARM_PROFILES`, named-constant default). Armed watches
+  alone proved too narrow: a rec.gov session lapses within the hour, so a user
+  who signed in without an `atc` watch had nothing refreshing them and their
+  next action walked into the automated-login wall. **Armed profiles are
+  exempt from the concurrency cap** — the cap governs on-demand launches (logins,
   verifies, cold ATCs); when armed profiles alone exceed it, the companion
   logs and health reports the overflow rather than evicting an armed profile.
 - **Per-profile busy lock:** no two mutating operations run concurrently on
@@ -161,9 +166,15 @@ The channel today is plain HTTP with no auth and will now carry passwords.
   `SettingsRoutes.kt`:
   - `PUT /api/settings/recgov` — username + write-only password
     (`SecretField` semantics: null = unchanged).
-  - `DELETE /api/settings/recgov` — clears the columns and best-effort
-    destroys the companion profile. **Local delete succeeds even when the
-    companion is down**; profile destruction is retried opportunistically.
+  - `DELETE /api/settings/recgov` — clears the columns, then signs the
+    companion profile out and **destroys it**: `POST /destroy` closes the
+    browser, deletes the profile's Chromium directory and deletes its stored
+    rec.gov cookie jar. A sign-out alone is not a removal — `logout` leaves
+    both on disk, so a removal built on it left the user's session material
+    behind. **Local delete succeeds even when the companion is down**, and
+    destruction is *not* retried in the background: the response carries
+    `profile_destroyed` so the UI can say plainly that the session material
+    still exists and the user should remove again once the companion is back.
     The response (and the FE confirm copy) reports how many active `atc`
     watches the deletion strands — those watches keep the kind and fail with
     a notification on future fires; nothing mutates them behind the user's
@@ -232,13 +243,21 @@ the Slack token today.
 
 Panel contents, top to bottom:
 
-- **Username** — `SeededTextField`, type email.
-- **Password** — `SecretField` (write-only; `null` = unchanged). A stored
-  password renders as a **fixed-length opaque mask** plus Replace — no hint,
-  and not one dot per character, since the length is information as well.
-  `SecretField` takes an explicit `stored` flag for this; the Slack token keeps
-  its `hint`. Help text notes what the credential is used for and that ATC
-  stops at a cart hold.
+- **Username** — `SeededTextField`, type email, **full width**.
+- **Password** — a plain `SeededTextField`, `type="password"`, **full width**,
+  stacked below the username with its own label. **No `SecretField`, no
+  mask-and-Replace row.** A saved password shows as a fixed-length dot
+  *placeholder* (`••••••••••`): a placeholder, so no real character is ever in
+  the DOM, and fixed-length, so the real length is not either. The field is
+  seeded empty; typing makes the typed value the new password, and leaving it
+  alone submits `null` (unchanged). Clearing is never an empty save — that is
+  the explicit removal button below. Help text notes what the credential is
+  used for and that ATC stops at a cart hold.
+
+  *(User design decision, superseding the `SecretField`/last-4 convention this
+  spec originally copied from the Slack token. `SecretField` itself stays —
+  the Slack bot token still uses it, hint and all, because a machine-generated
+  token is a different thing from a password a person types.)*
 - **Session status row** — driven by a dedicated query on
   `GET /api/settings/recgov/status` (separate from `useSettings` so opening
   the modal never blocks on the companion). States: *Not configured* /
@@ -261,10 +280,14 @@ Panel contents, top to bottom:
 - **Verify session** — secondary `Button` for the dry run; result lands in
   the same status slot ("Session verified" / mapped error).
 
-**Credential removal** lives in `AccountPanel`, not the Booking panel,
-because Account is the established home for destructive account actions
-(Disconnect Slack). "Remove rec.gov credentials" uses the existing
-`ConfirmButton` primitive and reports through the modal notice banner.
+**Credential removal** lives at the bottom of the **Booking panel**, in its own
+danger zone, as the destructive action for the page that owns the credential.
+It uses the existing `ConfirmButton` primitive, keeps the stranded-`atc`-watch
+confirm copy, and reports through the modal notice banner. *(User design
+decision: this spec originally put it in `AccountPanel` beside Disconnect
+Slack. Removing a credential from a different tab than the one displaying it
+is a step nobody expects. Slack disconnection stays in Account — Slack has no
+panel of its own to host a danger zone.)*
 
 **Plumbing:** extend `api/account-api.ts` (settings endpoint group) with the
 booking calls; new hooks in `useSettings.ts` (`useSaveBooking`,
@@ -376,3 +399,99 @@ provider docs drifted before #688).
 - Gating: `atc` offered only to users with credentials configured.
 - No grandfathering: there are no existing `atc` watches; `profile_id` is
   required from day one.
+
+---
+
+### 11. Direct add-to-cart from the grid
+
+*(Added after the slice-4 wave, user-approved design, popover variant.)*
+
+A watch is the right tool for a site that is **not** free yet. For one that is
+free right now, making the user set a watch and wait for it to fire is absurd —
+so the availability grid can hold a site directly.
+
+**Route.** `POST /api/booking/add-to-cart`, `RouteAccess.User`, body
+`{campsite_id, start_date, end_date}` (the same half-open window everything
+else uses). `route/api/BookingRoutes.kt` is the shell over
+`service/booking/BookingActionService`.
+
+**Gate order**, cheapest first, each ruling out a different reason so the caller
+learns the actual blocker rather than a generic failure after a browser round
+trip:
+
+| # | check | refusal |
+| --- | --- | --- |
+| 0 | the window is a positive number of nights | 400 `invalid_window` |
+| 1 | `CampsiteRepo` → `DbAvailabilityTargetResolver` → `AvailabilityBookingTargetResolver.targetFor(ADD_TO_CART, …)` | 422 `unsupported_target` |
+| 2 | `RecGovCredentialService.isConfigured(caller)` | 403 `credentials_required` |
+| 3 | **no** night was observed *not*-bookable within `booking.freshness-max-age` | 409 `not_available` |
+| 4 | adapter `addToCart` with `profile_id` = caller | the companion's own code, below |
+
+Gate 3 is a cheap "do we already know this is taken" guard, **not** a vendor
+call: it reads what the poller last saw, through
+`AvailabilityRepo.freshlyUnavailableDates`. It is deliberately asymmetric and
+may veto only on **positive, recent evidence of unavailability** — a stale
+observation, or no observation at all, passes through to the vendor.
+
+This gate was originally specified the other way round (every night must be
+*known available and fresh*) and that was wrong. The `availability` table is
+filled by the **watch poller**, so any campsite without an active watch has no
+recent rows at all; fail-closed refused genuinely bookable sites within minutes
+of the grid loading, which is exactly the browse-then-hold flow this feature
+exists for. Observed live: a bookable site refused as `not_available` on the
+strength of an eight-minute-old observation that said *available*.
+
+So `freshness-max-age` decides what still counts as evidence worth blocking on,
+never what counts as permission to proceed. Default is the poller's own cadence
+(5m), env-tunable via `BOOKING_FRESHNESS_MAX_AGE`. The companion is the
+authority and gets the last word at gate 4.
+
+Gate 4 is the same seam `AtcTriggerActionHandler` uses, with **one deliberate
+difference**: `AddToCartRequest.allowUnattendedRelogin` is false here. A watch
+firing at 3am should spend up to a minute on a re-login because nobody is
+there; a person watching a spinner should be told "session expired, fix it in
+Settings" in two seconds, especially as MFA would block the re-login anyway.
+
+Gate-4 codes and their statuses:
+
+| code | status | meaning |
+| --- | --- | --- |
+| `recgov_session_expired` | 403 | caller-actionable, like `credentials_required` |
+| `profile_busy`, `browser_cap_reached` | 409 | transient contention; retry |
+| `cart_not_added`, `recgov_confirmation_disabled` | 409 | a hold was attempted and not confirmed — somebody else likely took it; retrying can help |
+| `recgov_dates_not_offered` | 409 | rec.gov's calendar refused the arrival date. Nothing was attempted, so retrying cannot help |
+| `recgov_no_reserve_button` | 409 | rec.gov showed the site but offered no Reserve/Add-to-Cart control for those dates |
+| `companion_unavailable`, anything else | 502 | the booking service failed |
+
+Success is `200 {status:"completed", cart_url}`.
+
+**No notification is sent on this path.** The user is watching the response;
+emailing them what their own screen just said would be noise. That is the only
+behavioural difference from the watch-fired path.
+
+**Popover UX.** An armed available cell today flips to "Book" and a second tap
+opens recreation.gov. When — and only when — `trigger_kinds` contains `atc`
+(the same condition that enables the watch editor's ATC toggle, via the split
+helpers in `lib/watch-windows.ts`), arming instead opens a small anchored
+popover with two 44px rows: *Book on rec.gov* (the existing behaviour) and
+*Add to cart* (brand-tinted). **A user without the capability sees no change at
+all.** Positioning reuses the `WatchPopover` idiom, because the matrix clips
+anything wider than one 66px column.
+
+**State flow.** A pure `cart-action.ts` machine — `idle → pending → held |
+failed(code)` — with the state held in `availability-controller.ts` beside
+`armedBook`, so disarm, week changes and refetch decide in one place what
+survives. One action at a time: the companion serialises per profile, so a
+second concurrent hold could only ever answer `profile_busy`. Answers carry
+their cell and are refused by identity if that cell is no longer pending, which
+is what stops a late response resurrecting a cell the user has moved on from.
+A *running* hold survives navigation (it is real work with a real browser
+behind it); a settled one does not.
+
+While pending the cell is locked, brand-tinted with an inset brand ring and a
+spinner, and a chip reading "Holding site… this can take up to 30 seconds"
+appears at the **bottom of the availability panel** — the same place the toasts
+speak from, never floating over the rows, because a chip pinned mid-grid covers
+the very cells the user is watching for the answer. Success turns the cell
+green with a check and "Cart" until the next refetch, and toasts with a link to
+`cart_url`; failure reverts the cell and toasts the mapped code.

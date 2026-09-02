@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.client.companion.CompanionSessionClient
-import ca.floo.roadtrip.client.companion.HttpRecGovAtcExecutor
 import ca.floo.roadtrip.client.slack.SlackClient
 import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.AppConfig
@@ -55,8 +54,10 @@ import ca.floo.roadtrip.service.availability.provider.CampflareAvailabilityProvi
 import ca.floo.roadtrip.service.availability.provider.RecGovAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.ReserveAmericaAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.ReserveCaliforniaAvailabilityProvider
+import ca.floo.roadtrip.service.booking.BookingActionService
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
+import ca.floo.roadtrip.service.booking.RecentAtcFires
 import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.health.ReadinessServiceImpl
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
@@ -74,11 +75,12 @@ import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import ca.floo.roadtrip.service.scheduler.PollerBackfill
+import ca.floo.roadtrip.service.scheduler.RecGovKeepalive
+import ca.floo.roadtrip.service.scheduler.RecGovKeepaliveJob
 import ca.floo.roadtrip.service.scheduler.WatchReaper
 import ca.floo.roadtrip.service.scheduler.framework.Scheduler
 import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
 import ca.floo.roadtrip.service.security.SecretCipher
-import ca.floo.roadtrip.service.settings.CompanionSessionPort
 import ca.floo.roadtrip.service.settings.RecGovCredentialService
 import ca.floo.roadtrip.service.settings.UserSettingsService
 import kotlinx.coroutines.CoroutineScope
@@ -132,20 +134,27 @@ val serviceModule =
         }
 
         single {
+            // One client for one companion: every caller resolves this rather
+            // than building its own (and its own selector thread and pool).
+            CompanionChannel(
+                get<AppConfig>()
+                    .booking.recgovAtc
+                    .takeIf { it.companionEnabled }
+                    ?.let(::CompanionSessionClient),
+            )
+        }
+
+        single {
             // Same optional-dependency shape as the settings service above: a
             // deployment without an encryption key or without a companion still
             // boots, with storage or the live session degraded rather than absent.
             val config: AppConfig = get()
             val cipher: SecretCipher? = config.secrets?.let { SecretCipher(it.encryptionKey) }
-            val companion: CompanionSessionPort? =
-                config.booking.recgovAtc
-                    .takeIf { it.companionEnabled }
-                    ?.let(::CompanionSessionClient)
             RecGovCredentialService(
                 settingsRepo = get<UserSettingsRepo>(),
                 watchRepo = get<AvailabilityWatchRepo>(),
                 cipher = cipher,
-                companion = companion,
+                companion = get<CompanionChannel>().session,
             )
         }
 
@@ -199,18 +208,39 @@ val serviceModule =
         single(named("alertProviders")) { listOf(InternalPollerAlertProvider(get<AvailabilityPollerMembership>())) }
         single { AlertProviderRegistry(get(named("alertProviders"))) }
 
+        single {
+            // One view of "who is mid-hold", written by the adapter and read by
+            // the keepalive sweep so the two stop fighting over profile locks.
+            // The window is the ATC run's own budget, not a number of its own.
+            RecentAtcFires(get<AppConfig>().booking.recgovAtc.companionTimeout)
+        }
         single(named("bookingAdapters")) {
-            val config: AppConfig = get()
-            val atcExecutor =
-                config.booking.recgovAtc
-                    .takeIf { it.companionEnabled }
-                    ?.let(::HttpRecGovAtcExecutor)
             listOfNotNull(
-                atcExecutor?.let(::RecGovBookingAdapter),
+                get<CompanionChannel>().atc?.let { executor ->
+                    // The credential service is the fire path's session authority:
+                    // it answers per-profile health and owns the one unattended
+                    // re-login, because it is where the sealed password lives.
+                    RecGovBookingAdapter(executor, get<RecGovCredentialService>(), get<RecentAtcFires>())
+                },
             )
         }
         single { BookingAdapterRegistry(get(named("bookingAdapters"))) }
         single { AvailabilityBookingTargetResolver(get<BookingAdapterRegistry>()) }
+        single {
+            // The user-initiated half of the booking seam. Same adapter and the
+            // same credential gate the `atc` trigger uses.
+            BookingActionService(
+                campsites = get<CampsiteRepo>()::findById,
+                availabilityTargets = get<DbAvailabilityTargetResolver>(),
+                bookingTargets = get<AvailabilityBookingTargetResolver>(),
+                credentials = get<RecGovCredentialService>(),
+                availability = { campsiteId, nights ->
+                    get<AvailabilityRepo>()
+                        .freshlyUnavailableDates(campsiteId, nights, get<AppConfig>().booking.freshnessMaxAge)
+                },
+                bookings = get<BookingAdapterRegistry>(),
+            )
+        }
 
         single {
             val config: AppConfig = get()
@@ -218,6 +248,9 @@ val serviceModule =
                 availabilityTargets = get<DbAvailabilityTargetResolver>(),
                 bookingTargets = get<AvailabilityBookingTargetResolver>(),
                 notificationTriggerKinds = notificationTriggerKinds(emailConfigured = config.email != null),
+                // `atc` is offered only to a user whose rec.gov credentials are
+                // stored; the credential service is the one place that knows.
+                recgovCredentials = get<RecGovCredentialService>(),
             )
         }
         single {
@@ -247,6 +280,7 @@ val serviceModule =
                     bookingTargets = get<AvailabilityBookingTargetResolver>(),
                     notifications = get<NotificationFanout>(),
                     targetResolver = get<WatchNotificationTargetResolver>(),
+                    metrics = get<RoadtripMetrics>(),
                 ),
             )
         }
@@ -326,6 +360,26 @@ val serviceModule =
         }
         single(createdAtStart = true) {
             WatchReaper(get<AvailabilityPollerRepo>()).also { it.start(get<CoroutineScope>()) }
+        }
+        single(createdAtStart = true) {
+            // Optional by construction: with no companion there is no profile to
+            // keep warm, so the job is simply not started rather than sweeping
+            // against nothing. Koin cannot hold a null single, hence the wrapper.
+            val config: AppConfig = get()
+            RecGovKeepalive(
+                get<CompanionChannel>().session?.let {
+                    RecGovKeepaliveJob(
+                        watchRepo = get<AvailabilityWatchRepo>(),
+                        companion = it,
+                        profiles = get<RecGovCredentialService>(),
+                        credentials = get<UserSettingsRepo>()::userIdsWithRecgovCredentials,
+                        recentFires = get<RecentAtcFires>(),
+                        metrics = get<RoadtripMetrics>(),
+                        interval = config.booking.recgovAtc.keepaliveInterval,
+                        maxProfiles = config.booking.maxKeepWarmProfiles,
+                    ).also { job -> job.start(get<CoroutineScope>()) }
+                },
+            )
         }
         single(createdAtStart = true) {
             PollerBackfill(get<DSLContext>(), get<AvailabilityPollerMembership>()).also { it.run() }

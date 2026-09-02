@@ -74,7 +74,7 @@ internal class WatchNotificationTargetResolver(
      * Minted here, not at render time, because this is where "the recipient is
      * the owner" is decided — the reason mailing a bearer token is sound.
      */
-    private fun resolveEmailTarget(watch: AvailabilityWatchRepo.Watch): NotificationTarget.Email? {
+    fun resolveEmailTarget(watch: AvailabilityWatchRepo.Watch): NotificationTarget.Email? {
         val ownerId = UserId(watch.ownerUserId)
         val recipient = userSettingsRepo.find(ownerId)?.notificationEmail ?: userRepo.findById(ownerId)?.email ?: return null
         return NotificationTarget.Email(recipients = listOf(recipient), magicLinkUrl = magicLinkUrlFor(watch.id))

@@ -2,11 +2,13 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import {
+  activeProfileId,
   getRecgovSessionStatus,
   logoutRecgovBrowserSession,
   recgovLoginCredentialsFromInput,
   resolveRecaccount,
   runRecgovProfileLogin,
+  withRecgovProfileScope,
 } from '../src/recgovSession.js'
 
 const JWT_HEADER = { alg: 'none' }
@@ -621,6 +623,17 @@ function fakeJwt ({ offsetSeconds, fingerprint }) {
   const exp = Math.floor(Date.now() / 1000) + offsetSeconds
   return `${base64Url(JWT_HEADER)}.${base64Url({ exp, fingerprint })}.${JWT_SIGNATURE}`
 }
+
+test('the active profile is what names diagnostic artifacts', async () => {
+  // Login screenshots and ATC screenshots read the profile off the async scope
+  // rather than threading it through twenty call sites, and the name is what
+  // lets `POST /destroy` erase them.
+  assert.equal(activeProfileId(), null, 'outside a scope nothing is attributed')
+  assert.equal(await withRecgovProfileScope('7', async () => activeProfileId()), '7')
+  // The operator CLI's legacy profile is nobody's user, so it attributes to no
+  // profile — a per-profile wipe must not claim its artifacts.
+  assert.equal(await withRecgovProfileScope(null, async () => activeProfileId()), null)
+})
 
 function base64Url (value) {
   return Buffer.from(JSON.stringify(value)).toString('base64url')

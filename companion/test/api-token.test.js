@@ -36,12 +36,20 @@ test('isLoopbackRequest recognises the compose healthcheck and rejects the netwo
   assert.equal(isLoopbackRequest(fakeRequest({ remoteAddress: undefined })), false)
 })
 
-test('every route requires the shared-secret header', () => {
-  for (const route of [DOCS_ROUTE, ATC_ROUTE, { operationId: 'getOperatorPage', path: '/' }, { operationId: 'getScreenshot', path: '/screenshot' }]) {
+test('every data route requires the shared-secret header', () => {
+  for (const route of [DOCS_ROUTE, ATC_ROUTE, { operationId: 'getScreenshot', path: '/screenshot' }]) {
     const rejection = authorize({ route, headers: {} })
     assert.equal(rejection.status, 401, `${route.path} should require the token`)
     assert.equal(rejection.body.error, ERROR_UNAUTHORIZED)
   }
+})
+
+test('the static operator shell does not, from anywhere', () => {
+  // Not a loopback exemption: a browser on the host reaches the companion
+  // through the compose port mapping, which is not in-container loopback.
+  const shell = { operationId: 'getOperatorPage', path: '/' }
+  assert.equal(authorize({ route: shell, headers: {} }), null)
+  assert.equal(authorize({ route: shell, headers: {}, remoteAddress: '172.18.0.4' }), null)
 })
 
 test('a matching header is accepted and a wrong one is not', () => {

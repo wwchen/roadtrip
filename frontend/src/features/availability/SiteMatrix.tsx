@@ -16,7 +16,7 @@
 // **The frozen first column is a real table column, not an overlay.** `position:
 // sticky` on the `th` inside a scrolling container, sized by a CSS custom property the
 // resize drag updates. See the `.cg-site-matrix-*` rules in availability.css.
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LinkButton } from '@ui';
 import type { Campsite } from '@/api/campsite-api';
 import type { FusedDay } from './fuse';
@@ -41,6 +41,8 @@ import {
 import { hasReservationUrlTemplate, type ReservationUrlTemplates } from './booking-links';
 import { dayOfMonthLabel, dowLabel } from './week-labels';
 import { clampSiteColumnWidth, saveSiteColumnWidth } from './site-column';
+import { CellBookPopover } from './CellBookPopover';
+import { cartActionFor, isCartActionPending, type CartAction } from './cart-action';
 
 /** Width of one date column, matching `.cg-site-matrix-date` in the stylesheet. */
 const DATE_COLUMN_WIDTH_PX = 66;
@@ -69,6 +71,10 @@ export interface SiteMatrixProps {
     armedBook: ArmedBook | null;
     watchedDates: ReadonlySet<string>;
     canWatch: boolean;
+    /** True when this caller could actually hold a site — the same condition
+     *  that enables the watch editor's ATC toggle. */
+    canAddToCart: boolean;
+    cartAction: CartAction | null;
   };
   events: {
     filtersChanged: (filters: MatrixFilters) => void;
@@ -76,6 +82,7 @@ export interface SiteMatrixProps {
     siteSelected: (campsiteId: string | null) => void;
     bookingArmed: (armed: ArmedBook | null) => void;
     bookingOpened: (campsiteId: string, date: string) => void;
+    cartRequested: (campsiteId: string, date: string) => void;
     dateSelected: (date: string) => void;
     watchOpened: (anchor: HTMLElement, date: string) => void;
   };
@@ -192,6 +199,9 @@ export function SiteMatrix(props: SiteMatrixProps) {
                 armedBook={view.armedBook}
                 onArmBook={events.bookingArmed}
                 onOpenBooking={events.bookingOpened}
+                canAddToCart={view.canAddToCart}
+                cartAction={view.cartAction}
+                onAddToCart={events.cartRequested}
                 watchedDates={view.watchedDates}
                 canWatch={view.canWatch}
                 onOpenWatch={events.watchOpened}
@@ -543,6 +553,9 @@ function MatrixRow({
   armedBook,
   onArmBook,
   onOpenBooking,
+  canAddToCart,
+  cartAction,
+  onAddToCart,
   watchedDates,
   canWatch,
   onOpenWatch,
@@ -582,6 +595,9 @@ function MatrixRow({
             armedBook={armedBook}
             onArmBook={onArmBook}
             onOpenBooking={onOpenBooking}
+            canAddToCart={canAddToCart}
+            cartAction={cartAction}
+            onAddToCart={onAddToCart}
             watchedDates={watchedDates}
             canWatch={canWatch}
             onOpenWatch={onOpenWatch}
@@ -617,6 +633,9 @@ interface MatrixCellProps {
   armedBook: ArmedBook | null;
   onArmBook: (armed: ArmedBook | null) => void;
   onOpenBooking: (campsiteId: string, date: string) => void;
+  canAddToCart: boolean;
+  cartAction: CartAction | null;
+  onAddToCart: (campsiteId: string, date: string) => void;
   watchedDates: ReadonlySet<string>;
   canWatch: boolean;
   onOpenWatch: (anchor: HTMLElement, date: string) => void;
@@ -631,10 +650,14 @@ function MatrixCell({
   armedBook,
   onArmBook,
   onOpenBooking,
+  canAddToCart,
+  cartAction,
+  onAddToCart,
   watchedDates,
   canWatch,
   onOpenWatch,
 }: MatrixCellProps) {
+  const [cellAnchor, setCellAnchor] = useState<HTMLElement | null>(null);
   const state = cellState(row, day, availableIds);
   const id = rowId(row);
   const aria = `${siteLabel} ${day.date}: ${state.aria}`;
@@ -681,23 +704,96 @@ function MatrixCell({
 
   const armed =
     armedBook != null && String(armedBook.campsiteId) === id && armedBook.date === day.date;
+  const cellAction = cartActionFor(cartAction, id, day.date);
+
+  // A hold in flight owns the cell: locked, spinning, and not a second request.
+  if (cellAction?.kind === 'pending') {
+    return (
+      <td className={cellClass}>
+        <span
+          className="cg-site-matrix-cell-button is-cart-pending"
+          role="status"
+          aria-label={`${aria}; holding this site in your cart`}
+        >
+          <CellSpinner />
+        </span>
+      </td>
+    );
+  }
+
+  // Held until the next refetch replaces it with the vendor's own answer.
+  if (cellAction?.kind === 'held') {
+    return (
+      <td className={cellClass}>
+        <span className="cg-site-matrix-cell-button is-cart-held" aria-label={`${aria}; held in your cart`}>
+          <CellCheckIcon />
+          Cart
+        </span>
+      </td>
+    );
+  }
+
+  const openPopover = armed && canAddToCart;
 
   return (
     <td className={cellClass}>
       <button
         type="button"
+        ref={setCellAnchor}
         className={`cg-site-matrix-cell-button${armed ? ' is-armed' : ''}`}
         aria-label={
-          armed ? `${aria}; Book, click to open booking page` : `${aria}; click to book`
+          armed
+            ? canAddToCart
+              ? `${aria}; choose how to book`
+              : `${aria}; Book, click to open booking page`
+            : `${aria}; click to book`
         }
         onClick={() => {
-          if (armed) onOpenBooking(id, day.date);
-          else onArmBook({ campsiteId: id, date: day.date });
+          // Without the capability this is exactly the two-tap flip it always
+          // was — that population sees no change at all.
+          if (!armed) onArmBook({ campsiteId: id, date: day.date });
+          else if (!canAddToCart) onOpenBooking(id, day.date);
         }}
       >
         {armed ? 'Book' : state.label}
       </button>
+      {openPopover && cellAnchor ? (
+        <CellBookPopover
+          anchor={cellAnchor}
+          onOpenBooking={() => onOpenBooking(id, day.date)}
+          onAddToCart={() => onAddToCart(id, day.date)}
+          cartBusy={isCartActionPending(cartAction)}
+          onClose={() => onArmBook(null)}
+        />
+      ) : null}
     </td>
+  );
+}
+
+/** The in-cell spinner. Inline because it is one 14px mark, not an icon-set entry. */
+function CellSpinner() {
+  return (
+    <svg className="cg-cell-spinner" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CellCheckIcon() {
+  return (
+    <svg
+      className="cg-cell-held-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m4 12.5 5.5 5.5L20 6" />
+    </svg>
   );
 }
 

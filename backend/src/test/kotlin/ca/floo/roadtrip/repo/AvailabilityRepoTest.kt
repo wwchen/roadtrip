@@ -52,6 +52,103 @@ class AvailabilityRepoTest : SharedDbTest() {
     }
 
     @Test
+    fun `a fresh not-bookable cell is the only thing that blocks`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val observedAt = Instant.parse("2026-06-18T10:00:00Z")
+        repo.recordObservations(
+            runId = null,
+            listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.RESERVED, observedAt)),
+        )
+
+        assertEquals(
+            setOf(date),
+            repo.freshlyUnavailableDates(
+                campsiteId,
+                listOf(date),
+                Duration.ofMinutes(30),
+                OffsetDateTime.parse("2026-06-18T10:05:00Z"),
+            ),
+        )
+    }
+
+    @Test
+    fun `a stale not-bookable cell no longer blocks`() {
+        // The age bound decides what still counts as EVIDENCE, not what counts
+        // as permission. Twenty minutes on against a five minute bound, we no
+        // longer know, so the vendor decides.
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        repo.recordObservations(
+            runId = null,
+            listOf(
+                AvailabilityRepo.Observation(
+                    campsiteId,
+                    date,
+                    AvailabilityStatus.RESERVED,
+                    Instant.parse("2026-06-18T10:00:00Z"),
+                ),
+            ),
+        )
+
+        assertEquals(
+            emptySet(),
+            repo.freshlyUnavailableDates(
+                campsiteId,
+                listOf(date),
+                Duration.ofMinutes(5),
+                OffsetDateTime.parse("2026-06-18T10:20:00Z"),
+            ),
+        )
+    }
+
+    @Test
+    fun `a stale AVAILABLE cell does not block — the live bug`() {
+        // A genuinely bookable site was refused as "not available" because its
+        // observation, which said AVAILABLE, was eight minutes old. This table
+        // is filled by the watch poller, so an unwatched site is stale within
+        // minutes of the grid loading; silence must never read as "taken".
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        repo.recordObservations(
+            runId = null,
+            listOf(
+                AvailabilityRepo.Observation(
+                    campsiteId,
+                    date,
+                    AvailabilityStatus.AVAILABLE,
+                    Instant.parse("2026-06-18T10:00:00Z"),
+                ),
+            ),
+        )
+
+        assertEquals(
+            emptySet(),
+            repo.freshlyUnavailableDates(
+                campsiteId,
+                listOf(date),
+                Duration.ofMinutes(5),
+                OffsetDateTime.parse("2026-06-18T10:20:00Z"),
+            ),
+        )
+    }
+
+    @Test
+    fun `a night never observed does not block`() {
+        val campsiteId = seedCampsite("100")
+
+        assertEquals(
+            emptySet(),
+            AvailabilityRepo(ctx).freshlyUnavailableDates(
+                campsiteId,
+                listOf(date),
+                Duration.ofMinutes(30),
+                OffsetDateTime.now(),
+            ),
+        )
+    }
+
+    @Test
     fun `status change inserts a new row linked by previous_id`() {
         val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)

@@ -160,8 +160,13 @@ export function useRecgovLogin(): () => Promise<RecgovLoginResponse> {
   const refresh = useSessionRefresh();
   return async () => {
     const result = await startRecgovLogin();
-    // A pending challenge has not changed the session yet; anything else has.
-    if (result.status !== 'mfa_required') refresh();
+    // Refetched on every outcome, `mfa_required` included. A pending challenge
+    // has not changed the *session*, but it does change the status row's
+    // `mfa_pending` — and the panel reads that to find its way back to the code
+    // step after a Cancel, or after a reload. Skipping it here left
+    // `mfa_pending` false for the life of the challenge, so the `profile_busy`
+    // recovery could never recognise its own challenge holding the lock.
+    refresh();
     return result;
   };
 }

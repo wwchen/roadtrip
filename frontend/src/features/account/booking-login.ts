@@ -24,7 +24,9 @@ export type BookingLoginState =
 
 export type BookingLoginEvent =
   | { type: 'login_started' }
-  | { type: 'mfa_required'; challengeId: ChallengeId }
+  // Nullable for the same reason the state is: a `profile_busy` answer tells the
+  // panel a challenge is open without naming it.
+  | { type: 'mfa_required'; challengeId: ChallengeId | null }
   /** The server says a challenge is open that this client never saw. */
   | { type: 'resumed' }
   | { type: 'code_submitted' }

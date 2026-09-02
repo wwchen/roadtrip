@@ -41,7 +41,7 @@ const CONFIGURED = settingsWith({
 const activeStatus: RecgovStatus = {
   configured: true,
   username: 'ada@example.test',
-  password_hint: '9f2c',
+ 
   session: 'active',
 };
 
@@ -73,6 +73,7 @@ function Demo({
       onChange={setValues}
       status={status}
       statusPending={statusPending}
+      onRemoveRecgov={() => {}}
       onLogin={onLogin}
       onSubmitMfa={async () => ({ status: 'ok' })}
       onVerify={onVerify}
@@ -104,7 +105,7 @@ export const Unconfigured: Story = {
   render: () => (
     <Demo
       settings={settingsWith({})}
-      status={{ configured: false, username: null, password_hint: null, session: 'not_configured' }}
+      status={{ configured: false, username: null, session: 'not_configured' }}
     />
   ),
 };

@@ -71,8 +71,15 @@ export interface SettingsResponse {
 export interface RecgovStatus {
   configured: boolean;
   username: string | null;
-  password_hint: string | null;
-  session: 'not_configured' | 'active' | 'expired' | 'companion_unavailable';
+  session:
+    | 'not_configured'
+    | 'active'
+    /** Credentials saved, this profile never signed in. Not a failure. */
+    | 'not_logged_in'
+    | 'expired'
+    /** The booking service's own health check threw. Not the user's problem. */
+    | 'check_failed'
+    | 'companion_unavailable';
   detail?: string | null;
   /**
    * True while a login of this user's is waiting on a verification code. The
@@ -103,6 +110,8 @@ export interface RecgovRemovedResponse {
   removed: boolean;
   stranded_atc_watches: number;
   companion_signed_out: boolean;
+  /** False when the companion was unreachable: the saved browser session may remain on its host. */
+  profile_destroyed: boolean;
 }
 
 export interface UpdateBookingFields {
@@ -215,7 +224,7 @@ export async function removeRecgov(
   options: RequestOptions = {},
 ): Promise<RecgovRemovedResponse> {
   const body = await jsonDeleteOk<RecgovRemovedResponse>(RECGOV_URL, options);
-  return body ?? { removed: true, stranded_atc_watches: 0, companion_signed_out: false };
+  return body ?? { removed: true, stranded_atc_watches: 0, companion_signed_out: false, profile_destroyed: false };
 }
 
 /**

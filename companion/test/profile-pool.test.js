@@ -11,6 +11,7 @@ import {
   ERROR_PROFILE_ID_REQUIRED,
   createProfilePool,
   normalizeProfileId,
+  profileIdForSessionDir,
 } from '../src/profilePool.js'
 
 const PROFILE_A = 'user-a'
@@ -119,6 +120,36 @@ test('the cap refuses a launch when every resident profile is locked', async () 
     () => pool.context(PROFILE_B),
     (error) => error.code === ERROR_BROWSER_CAP_REACHED,
   )
+})
+
+test('an in-flight launch holds its slot, so concurrent cold profiles cannot exceed the cap', async () => {
+  // state.context is assigned only once Chromium is up. Counting residency
+  // alone, two cold callers for two different profiles both saw a free slot
+  // and both launched — the cap held only while launches happened to be serial.
+  let launches = 0
+  let release = null
+  const pending = new Promise((resolve) => { release = resolve })
+  const pool = testPool({
+    launchContextFn: async () => {
+      launches += 1
+      await pending
+      return fakeContext()
+    },
+    maxConcurrentBrowsers: 1,
+  })
+
+  const first = pool.context(PROFILE_A)
+  // Nothing is evictable — the only slot is held by a launch, not a browser.
+  // Caught inline rather than with assert.rejects: B must be settled before
+  // the gate opens, and an unreverted regression would otherwise deadlock the
+  // assertion instead of failing it.
+  const second = pool.context(PROFILE_B).catch((error) => error)
+
+  release()
+  await first
+
+  assert.equal((await second)?.code, ERROR_BROWSER_CAP_REACHED)
+  assert.equal(launches, 1)
 })
 
 test('keep-warm profiles are exempt from the cap and the overflow is reported', async () => {
@@ -362,3 +393,30 @@ function fakeClock (start = 1_700_000_000_000) {
     },
   }
 }
+
+test('the host runbook takes its profile id from the pool directory name', () => {
+  // The container and the backend both key a profile by the bare user id, so a
+  // headed mint on the host must land under that same key or the launch path
+  // never reads it.
+  assert.equal(
+    profileIdForSessionDir({ COMPANION_BROWSER_PROFILE: '/var/lib/campsite-companion/browser-session/profiles/7' }),
+    '7',
+  )
+})
+
+test('an explicit profile id beats the directory name', () => {
+  assert.equal(
+    profileIdForSessionDir({
+      COMPANION_BROWSER_PROFILE: '/var/lib/campsite-companion/browser-session/profiles/7',
+      COMPANION_PROFILE_ID: '9',
+    }),
+    '9',
+  )
+})
+
+test('a directory that is not a pool profile mints no profile id', () => {
+  // The legacy single-profile directory has no owner. Guessing one would write
+  // a jar under a key that belongs to somebody else.
+  assert.equal(profileIdForSessionDir({ COMPANION_BROWSER_PROFILE: '/var/lib/campsite-companion/browser-session' }), null)
+  assert.equal(profileIdForSessionDir({ COMPANION_BROWSER_PROFILE: '/tmp/scratch' }), null)
+})

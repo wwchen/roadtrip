@@ -1,18 +1,11 @@
 import { log } from './logging.js'
 
+/**
+ * Per-server state the route handlers share. Today that is only the logger:
+ * the boot-time auth-check gate is gone with the startup check itself.
+ */
 export function createServerRuntime ({
   logger = log,
 } = {}) {
-  let startupAuthCheck = null
-
-  return {
-    logger,
-    setStartupAuthCheck: (promise) => {
-      startupAuthCheck = promise
-    },
-    waitForStartupAuthCheck: async () => {
-      if (!startupAuthCheck) return
-      await startupAuthCheck.catch(() => {})
-    },
-  }
+  return { logger }
 }

@@ -1,9 +1,12 @@
 import { describe, expect, test, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { HttpError } from '@/api/http';
 import type { Watch } from '@/api/watches-api';
 import { WatchEditor } from './WatchEditor';
 import { normalizeWatchCapabilities } from '@/lib/watch-windows';
+import { queryKeys } from '@/queries/keys';
+import { createTestQueryClient } from '@/test/query-client';
 
 const caps = (triggerKinds: string[], bookingActions: string[] = []) =>
   normalizeWatchCapabilities({ trigger_kinds: triggerKinds, booking_actions: bookingActions });
@@ -16,17 +19,33 @@ const watch = (overrides: Partial<Watch> = {}): Partial<Watch> => ({
   ...overrides,
 });
 
-const open = (props: Partial<React.ComponentProps<typeof WatchEditor>> = {}) => {
+/**
+ * The editor reads identity from the `/api/me` query to choose its add-to-cart
+ * copy, so every render needs a client. Seeded rather than fetched: these are
+ * rendering tests, and a pending query would make the copy race the assertion.
+ */
+const open = (
+  props: Partial<React.ComponentProps<typeof WatchEditor>> = {},
+  { signedIn = true }: { signedIn?: boolean } = {},
+) => {
   const onSave = vi.fn(async () => {});
+  const client = createTestQueryClient();
+  client.setQueryData(queryKeys.me(), {
+    authenticated: signedIn,
+    auth_enabled: true,
+    user: signedIn ? { id: 1, email: 'a@b.test', email_verified: true, roles: [] } : null,
+  });
   const view = render(
-    <WatchEditor
-      title="Watch Bowman Bay"
-      subtitle="Tue, Aug 11"
-      watch={null}
-      capabilities={caps(['slack_notify'])}
-      onSave={onSave}
-      {...props}
-    />,
+    <QueryClientProvider client={client}>
+      <WatchEditor
+        title="Watch Bowman Bay"
+        subtitle="Tue, Aug 11"
+        watch={null}
+        capabilities={caps(['slack_notify'])}
+        onSave={onSave}
+        {...props}
+      />
+    </QueryClientProvider>,
   );
   return { ...view, onSave };
 };
@@ -61,6 +80,34 @@ describe('what the form offers', () => {
     // trigger the provider has stopped servicing. The help text says as much.
     expect(atc).not.toBeDisabled();
     expect(screen.getByText('Unavailable for this watch scope.')).toBeInTheDocument();
+  });
+
+  test('a signed-in user whose scope has a cart is pointed at Settings', () => {
+    // booking_actions says the campground can be held; the missing `atc` trigger
+    // says this user has no rec.gov credentials. Disabled, not hidden.
+    open({ capabilities: caps(['slack_notify'], ['add_to_cart']) });
+
+    const atc = toggle('Add to cart');
+    expect(atc).toBeDisabled();
+    expect(atc).not.toBeChecked();
+    expect(screen.getByText('Add rec.gov credentials in Settings')).toBeInTheDocument();
+  });
+
+  test('an anonymous viewer is asked to sign in instead', () => {
+    open({ capabilities: caps(['slack_notify'], ['add_to_cart']) }, { signedIn: false });
+
+    expect(toggle('Add to cart')).toBeDisabled();
+    expect(screen.getByText('Sign in to enable add-to-cart')).toBeInTheDocument();
+  });
+
+  test('a scope with no cart at all keeps the unavailable copy', () => {
+    open({
+      capabilities: caps(['slack_notify']),
+      watch: watch({ trigger_kinds: ['slack_notify', 'atc'] }),
+    });
+
+    expect(screen.getByText('Unavailable for this watch scope.')).toBeInTheDocument();
+    expect(screen.queryByText('Add rec.gov credentials in Settings')).toBeNull();
   });
 
   test('hides add to cart entirely when nothing uses it', () => {

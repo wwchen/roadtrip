@@ -119,6 +119,18 @@ class AppConfigTest {
         assertEquals("http://recgov-companion:8770", config.companionBaseUrl)
         assertEquals(true, config.companionEnabled)
         assertEquals(Duration.ofSeconds(45), config.companionTimeout)
+        // Derived, so shortening the cart run shortens the pre-hold budget with
+        // it. A standalone default sat below the companion's refresh ceiling and
+        // aborted the recovery it existed to pay for.
+        assertEquals(Duration.ofSeconds(15), config.fireTimeout)
+    }
+
+    @Test
+    fun `the pre-hold budget follows the cart-run budget unless it is set outright`() {
+        assertEquals(Duration.ofSeconds(60), appConfig().booking.recgovAtc.fireTimeout)
+
+        val pinned = appConfig(mapOf("roadtrip.booking.recgov-atc.fire-timeout" to "20s")).booking.recgovAtc
+        assertEquals(Duration.ofSeconds(20), pinned.fireTimeout, "an explicit value still wins")
     }
 
     @Test

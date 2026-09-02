@@ -5,6 +5,7 @@ import {
   indexWatchesByWindow,
   normalizeWatchCapabilities,
   stayEndDate,
+  scopeSupportsAddToCart,
   supportsAddToCart,
   supportsWatchAlerts,
   watchWindowKey,
@@ -67,6 +68,18 @@ describe('capabilities', () => {
     expect(supportsAddToCart(both)).toBe(true);
     expect(supportsAddToCart(actionOnly)).toBe(false);
     expect(supportsAddToCart(triggerOnly)).toBe(false);
+  });
+
+  test('scope support is the cart alone, so "no credentials" stays distinguishable', () => {
+    const both = normalizeWatchCapabilities({ trigger_kinds: ['atc'], booking_actions: ['add_to_cart'] });
+    const actionOnly = normalizeWatchCapabilities({ trigger_kinds: [], booking_actions: ['add_to_cart'] });
+    const noCart = normalizeWatchCapabilities({ trigger_kinds: ['slack_notify'], booking_actions: [] });
+
+    expect(scopeSupportsAddToCart(both)).toBe(true);
+    // The state the per-user gating creates: this campground has a cart, but
+    // this caller cannot drive it.
+    expect(scopeSupportsAddToCart(actionOnly)).toBe(true);
+    expect(scopeSupportsAddToCart(noCart)).toBe(false);
   });
 
   test('a cart-only provider still supports no alerts', () => {

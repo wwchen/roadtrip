@@ -1,4 +1,6 @@
 import { verifyRecgovSession } from '../../recgovVerify.js'
+import { traceSessionOpsEnabled, withTrace } from '../../tracing.js'
+import { persistProfileCookies } from '../../browser.js'
 import {
   HTTP_BAD_REQUEST,
   HTTP_INTERNAL_ERROR,
@@ -51,11 +53,27 @@ export async function handleVerify (req, res, { runtime, pool, verifyRecgovSessi
       jsonResponse(res, resolved.rejection.status, resolved.rejection.body)
       return
     }
-    const verify = await verifyRecgovSessionFn({
-      getContextFn: async () => resolved.context,
-      profileId,
-    })
+    // Traced, and the trace kept only if the verify failed — a dry run that
+    // says "not authenticated" is exactly the case where the screenshot alone
+    // does not say why. A kept one holds this profile's live session, so it is
+    // named with the profile and `POST /destroy` erases it.
+    const { result: verify, trace } = await withTrace(
+      resolved.context,
+      {
+        operation: OPERATION_VERIFY,
+        profileId,
+        enabled: traceSessionOpsEnabled(),
+        failureReason: (r) => (r?.ok ? null : r?.error || 'verify_failed'),
+      },
+      () => verifyRecgovSessionFn({ getContextFn: async () => resolved.context, profileId }),
+    )
+    if (trace) verify.trace_url = trace.url
     pool.setAuthStatus(profileId, verifyAuthStatus(verify))
+    // A verify that passed proves the jar in this context is good, and it is
+    // the freshest evidence we will get — worth storing.
+    if (verify?.ok) {
+      await persistProfileCookies(resolved.context, profileId, { logger: runtime.logger, operation: OPERATION_VERIFY })
+    }
     runtime.logger(
       'recgov verify result',
       verify.ok ? 'ok' : 'failed',

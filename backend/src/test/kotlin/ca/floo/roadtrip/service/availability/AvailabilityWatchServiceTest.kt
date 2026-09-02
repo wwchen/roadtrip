@@ -121,6 +121,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 AvailabilityTriggerKinds.SLACK_NOTIFY,
                 AvailabilityTriggerKinds.EMAIL_NOTIFY,
             ),
+        recgovConfigured: Boolean = true,
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
@@ -152,6 +153,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                             availabilityTargets = targets,
                             bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
                             notificationTriggerKinds = notificationTriggerKinds,
+                            recgovCredentials = { recgovConfigured },
                         ),
                 ),
             lifecycleNotifications = ignoredLifecycleNotifications(),
@@ -491,6 +493,24 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
         assertEquals(listOf("atc"), watch.triggerKinds)
         assertEquals(1, AvailabilityPollerRepo(ctx).pollerIdsForWatch(watch.id).size)
+    }
+
+    @Test
+    fun `create rejects an atc watch from an owner with no rec_gov credentials`() {
+        // The write-time gate is the authoritative one: the capability block
+        // already hides `atc` from this user, but nothing stops a direct POST.
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val svc =
+            bookingValidatedService(
+                bookingProviders = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider)),
+                recgovConfigured = false,
+            )
+
+        val error = assertFailsWith<AvailabilityWatchValidationException> { svc.createForTest(poiInput(poiId)) }
+
+        assertEquals("unsupported_trigger", error.error)
+        assertEquals(0, AvailabilityWatchRepo(ctx).count())
     }
 
     @Test

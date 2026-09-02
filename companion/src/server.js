@@ -4,7 +4,7 @@
 
 import http from 'node:http'
 import { pathToFileURL } from 'node:url'
-import { IS_HEADLESS } from './browser.js'
+import { IS_HEADLESS, hasStoredSession } from './browser.js'
 import { testChromium } from './cart.js'
 import {
   getRecgovSessionStatus,
@@ -13,6 +13,7 @@ import {
 } from './recgovSession.js'
 import { createRecgovScreenshotDeps } from './recgovScreenshot.js'
 import { runAtcOnce } from './runAtcOnce.js'
+import { installLogCapture } from './logCapture.js'
 import {
   COMPANION_OPENAPI_SPEC,
 } from './openapi.js'
@@ -27,7 +28,6 @@ import {
   getRecgovAuthStatus,
   getRecgovHealthStatus,
   runRecgovAuthCheck,
-  runStartupAuthCheck,
 } from './server/authStatus.js'
 import {
   handleLoginPost,
@@ -51,6 +51,8 @@ import {
   companionApiToken,
 } from './server/apiToken.js'
 import { handleVerify } from './server/routes/verify.js'
+import { handleKeepWarm } from './server/routes/keepWarm.js'
+import { handleDestroy } from './server/routes/destroy.js'
 import { verifyRecgovSession } from './recgovVerify.js'
 import {
   normalizeProfileId,
@@ -63,6 +65,7 @@ import {
 import { createServerRuntime } from './server/runtime.js'
 import {
   handleDiagnosticImage,
+  handleDiagnosticList,
   handleLiveScreenshot,
 } from './server/routes/screenshot.js'
 
@@ -70,7 +73,6 @@ export {
   getRecgovAuthStatus,
   getRecgovHealthStatus,
   runRecgovAuthCheck,
-  runStartupAuthCheck,
 }
 
 const HOST = process.env.COMPANION_HOST || DEFAULT_HOST
@@ -127,10 +129,31 @@ export function createCompanionServer ({
   return companionServer
 }
 
+/**
+ * Runs one route handler, turning a throw into a 500 rather than a process exit.
+ *
+ * The server callback is async, so an unhandled rejection here ends the process:
+ * a single bad request became a restart loop. That matters now that the store
+ * fails loudly on a corrupt file instead of reporting every user signed out —
+ * the loud failure is right, but it has to arrive as a response.
+ *
+ * The error's own `code` is preserved when it carries one, so a caller sees
+ * `store_corrupt` rather than a shrug.
+ */
 async function handleContractRoute (route, req, res, url, runtime, deps) {
   const handler = CONTRACT_ROUTE_HANDLERS[route.operationId]
   if (handler) {
-    await handler({ req, res, url, runtime, deps })
+    try {
+      await handler({ req, res, url, runtime, deps })
+    } catch (error) {
+      runtime.logger(`route ${route.method} ${route.path} threw: ${error.message}`)
+      if (res.headersSent) throw error
+      jsonResponse(res, HTTP_INTERNAL_ERROR, {
+        ok: false,
+        error: error.code || 'route_exception',
+        detail: error.message,
+      })
+    }
     return
   }
   jsonResponse(res, HTTP_INTERNAL_ERROR, {
@@ -142,6 +165,7 @@ async function handleContractRoute (route, req, res, url, runtime, deps) {
 
 const CONTRACT_ROUTE_HANDLERS = {
   getDiagnosticScreenshot: async ({ url, res }) => handleDiagnosticImage(url, res),
+  listDiagnostics: async ({ res }) => handleDiagnosticList(res),
   getScreenshot: async ({ url, res, runtime, deps }) => handleLiveScreenshot(url, res, { runtime, ...deps }),
   getOpenApiJson: async ({ res }) => jsonResponse(res, HTTP_OK, COMPANION_OPENAPI_SPEC),
   getSwaggerDocs: async ({ res }) => htmlResponse(res, HTTP_OK, renderSwaggerPage()),
@@ -152,6 +176,8 @@ const CONTRACT_ROUTE_HANDLERS = {
   postRefresh: async ({ req, res, runtime, deps }) => handleRefresh(req, res, { runtime, ...deps }),
   postAtc: async ({ req, res, runtime, deps }) => handleAtc(req, res, { runtime, ...deps }),
   postVerify: async ({ req, res, runtime, deps }) => handleVerify(req, res, { runtime, ...deps }),
+  postKeepWarm: async ({ req, res, runtime, deps }) => handleKeepWarm(req, res, { runtime, ...deps }),
+  postDestroy: async ({ req, res, runtime, deps }) => handleDestroy(req, res, { runtime, ...deps }),
 }
 
 // Health is deliberately lock-free: the settings status row must answer while
@@ -192,6 +218,9 @@ function profileHealthStatus (profileId, status) {
   } = getRecgovSessionStatus(profileId)
   return {
     login_status: authStatus.state,
+    // Durable evidence that a session once existed, so a restart's `unchecked`
+    // is distinguishable from a profile that was never signed in.
+    has_stored_session: hasStoredSession(profileId),
     ...sessionStatus,
     ...authStatus,
   }
@@ -202,9 +231,10 @@ export const HANDLED_OPERATION_IDS = Object.freeze(Object.keys(CONTRACT_ROUTE_HA
 export const server = createCompanionServer()
 
 export function startServer () {
+  // No auth check at boot: profiles are launched on demand, per user. The
+  // legacy single profile this used to sign in belonged to nobody.
   server.listen(PORT, HOST, () => {
     log('listening', `http://${HOST}:${PORT}`, `headless=${IS_HEADLESS}`)
-    server.companionRuntime.setStartupAuthCheck(runStartupAuthCheck())
   })
   return server
 }
@@ -225,5 +255,7 @@ if (entrypointUrl && import.meta.url === entrypointUrl) {
   // bare console.* calls in cart.js/recgovSession.js — reaches Loki with a
   // `level` label. No-op on a TTY; see jsonConsole.js.
   installJsonConsole()
+  // After installJsonConsole, so captured lines still reach Loki with a level.
+  installLogCapture()
   installShutdownHandlers(startServer())
 }

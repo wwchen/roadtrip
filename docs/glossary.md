@@ -95,11 +95,25 @@ Source of truth: `backend/src/main/resources/poi-registry.yaml`, loaded by
   (`service/availability/TriggerKind.kt`): `slack_notify`, `email_notify`, or
   `atc`.
 - **ATC** — add-to-cart: the `atc` trigger asks the companion to place the
-  opening in a real recreation.gov shopping cart (a genuine hold). Rec.gov
-  only; other providers' watches can only notify.
+  opening in the **watch owner's** real recreation.gov shopping cart (a genuine
+  hold; never payment or checkout). Rec.gov only; other providers' watches can
+  only notify. Offered only to a signed-in user with rec.gov credentials saved
+  in Settings, since the hold lands in their account. **Two entry points:** the
+  `atc` watch trigger, which fires unattended when a site opens, and the
+  availability grid's *Add to cart*, which holds a site that is free right now
+  (`POST /api/booking/add-to-cart`). Same adapter and same gates; the direct one
+  answers in its HTTP response and notifies nobody. The outcome — held or
+  not — is emailed to the owner, and also posted to their Slack when they have
+  a personal token and channel.
+- **Armed profile** — a browser profile backing at least one active `atc`
+  watch. The backend's keepalive job pushes the armed set to the companion,
+  which keeps those profiles launched (exempt from the concurrency cap) and
+  refreshes their sessions, so a firing does not pay Chromium cold-start inside
+  a seconds-critical window.
 - **Companion** — the Node 22.9+ Playwright HTTP service in `companion/`. It
   drives real, persistently-logged-in Chromium profiles because Akamai blocks
   datacenter IPs and headless browsers; the backend never touches a browser —
   it polls public availability APIs and POSTs ATC payloads to the companion
   (`POST /atc`). One Chromium profile per user, keyed by a required
-  `profile_id`. See [companion.md](companion.md) for the full contract.
+  `profile_id`; the backend authenticates the user and only ever passes *their*
+  profile. See [companion.md](companion.md) for the full contract.

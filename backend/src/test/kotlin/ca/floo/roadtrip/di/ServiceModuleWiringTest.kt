@@ -2,13 +2,18 @@ package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.service.booking.BookingAdapter
+import ca.floo.roadtrip.service.booking.RecentAtcFires
 import ca.floo.roadtrip.service.settings.RecGovCredentialService
 import ca.floo.roadtrip.service.settings.UserSettingsService
 import org.jooq.DSLContext
 import org.junit.jupiter.api.Test
+import org.koin.core.qualifier.named
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertSame
 
 /**
  * Boot-time DI regression guard.
@@ -59,6 +64,55 @@ class ServiceModuleWiringTest : SharedDbTest() {
             assertNotNull(
                 app.koin.get<RecGovCredentialService>(),
                 "RecGovCredentialService must resolve with a null cipher and no companion",
+            )
+        } finally {
+            app.close()
+        }
+    }
+
+    @Test
+    fun `every companion caller shares one client`() {
+        // Three callers each built their own HttpClient — three selector threads
+        // and three pools to one service — with the enabled-check copy-pasted
+        // beside each. One single, resolved by all of them.
+        val config =
+            AppConfig.fromProperties(
+                mapOf(
+                    "roadtrip.availability.force-pull-cooldown" to "5m",
+                    "roadtrip.availability.provider-cooldown" to "5m",
+                    "roadtrip.booking.recgov-atc.companion-base-url" to "http://companion.invalid:8770",
+                ),
+            )
+
+        val app =
+            koinApplication(createEagerInstances = false) {
+                modules(
+                    repoModule,
+                    serviceModule,
+                    module {
+                        single { config }
+                        single<DSLContext> { ctx }
+                    },
+                )
+            }
+
+        try {
+            val channel = app.koin.get<CompanionChannel>()
+            assertNotNull(channel.session, "a configured companion must yield a session client")
+            assertNotNull(channel.atc, "the same client is the ATC transport — there is no second one")
+            assertSame(channel, app.koin.get<CompanionChannel>(), "the channel must be a single, not per-resolution")
+
+            // The booking adapters exist only with a companion configured, so
+            // this is the one place the ATC graph gets built end to end.
+            assertEquals(
+                1,
+                app.koin.get<List<BookingAdapter>>(named("bookingAdapters")).size,
+                "a configured companion must yield the rec.gov booking adapter",
+            )
+            assertSame(
+                app.koin.get<RecentAtcFires>(),
+                app.koin.get<RecentAtcFires>(),
+                "the adapter that records a fire and the sweep that reads it must share one view",
             )
         } finally {
             app.close()

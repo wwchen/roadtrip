@@ -1,11 +1,13 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 
 private const val UNSUPPORTED_TRIGGER_ERROR = "unsupported_trigger"
 private const val ATC_EMPTY_SCOPE_DETAIL = "atc requires at least one campsite in scope"
 private const val WATCH_TRIGGER_EMPTY_SCOPE_DETAIL = "watch trigger requires at least one campsite in scope"
+private const val ATC_NO_CREDENTIALS_DETAIL = "atc requires rec.gov credentials in Settings"
 
 internal fun interface WatchCapabilityValidator {
     fun validate(watch: AvailabilityWatchRepo.Watch)
@@ -35,6 +37,7 @@ internal class WatchTriggerCapabilityValidator(
                 AvailabilityTriggerKinds.ATC in watch.triggerKinds
         if (!requiresInternalPolling) return
 
+        val owner = UserId(watch.ownerUserId)
         val campsites = scopeResolver.resolve(watch)
         if (campsites.isEmpty()) {
             throw AvailabilityWatchValidationException(
@@ -60,7 +63,7 @@ internal class WatchTriggerCapabilityValidator(
 
         if (
             AvailabilityTriggerKinds.EMAIL_NOTIFY in watch.triggerKinds &&
-            AvailabilityTriggerKinds.EMAIL_NOTIFY !in watchCapabilityService.supportedTriggerKinds(campsites)
+            AvailabilityTriggerKinds.EMAIL_NOTIFY !in watchCapabilityService.supportedTriggerKinds(campsites, owner)
         ) {
             throw AvailabilityWatchValidationException(
                 error = UNSUPPORTED_TRIGGER_ERROR,
@@ -77,6 +80,15 @@ internal class WatchTriggerCapabilityValidator(
                 message =
                     "atc is not supported for ${bookingSupport.unsupportedCount} of " +
                         "${bookingSupport.scopedCount} scoped campsite(s)",
+            )
+        }
+
+        // Same gate the capability block applies, enforced at write time and
+        // uniformly: a hold has to land in *somebody's* rec.gov account.
+        if (!watchCapabilityService.canFulfilAddToCart(owner)) {
+            throw AvailabilityWatchValidationException(
+                error = UNSUPPORTED_TRIGGER_ERROR,
+                message = ATC_NO_CREDENTIALS_DETAIL,
             )
         }
     }

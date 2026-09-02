@@ -13,11 +13,15 @@
 // challenge, the failed-login backoff marker, and the last auth status.
 
 import path from 'node:path'
+import fs from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import {
   launchProfileContext,
+  recgovCookieSettingKey,
   resolveSessionDir,
 } from './browser.js'
+import { removeSetting } from './store.js'
+import { diagnosticDir, sweepProfileDiagnostics } from './tracing.js'
 import { log } from './server/logging.js'
 
 export const PROFILE_DIR_SEGMENT = 'profiles'
@@ -53,6 +57,27 @@ export function profilesRootDir (env = process.env) {
   return path.join(resolveSessionDir(env), PROFILE_DIR_SEGMENT)
 }
 
+/**
+ * The profile id a host-side CLI run is minting a session for, or null.
+ *
+ * The manual runbook points `COMPANION_BROWSER_PROFILE` at one pool directory
+ * — `<volume>/profiles/<profile_id>` — so the id is that directory's own name.
+ * `COMPANION_PROFILE_ID` says it outright and wins.
+ *
+ * Anything else answers null on purpose. A cookie jar IS a session, so an
+ * unkeyed or wrongly-keyed save hands one account's session to another; the
+ * legacy single-profile directory has no owner and must stay unkeyed.
+ */
+export function profileIdForSessionDir (env = process.env) {
+  const explicit = normalizeProfileId(env.COMPANION_PROFILE_ID)
+  if (explicit.ok) return explicit.profileId
+
+  const dir = resolveSessionDir(env)
+  if (path.basename(path.dirname(dir)) !== PROFILE_DIR_SEGMENT) return null
+  const derived = normalizeProfileId(path.basename(dir))
+  return derived.ok ? derived.profileId : null
+}
+
 export function createProfilePool ({
   rootDir = null,
   env = process.env,
@@ -64,6 +89,7 @@ export function createProfilePool ({
   failedLoginBackoffMs = null,
 } = {}) {
   const profilesDir = rootDir ? path.join(rootDir, PROFILE_DIR_SEGMENT) : profilesRootDir(env)
+  const diagnosticsDir = diagnosticDir(env)
   const browserCap = positiveNumber(maxConcurrentBrowsers, env.COMPANION_MAX_CONCURRENT_BROWSERS, DEFAULT_MAX_CONCURRENT_BROWSERS)
   const challengeTtlMs = positiveNumber(mfaChallengeTtlMs, env.COMPANION_MFA_CHALLENGE_TTL_MS, DEFAULT_MFA_CHALLENGE_TTL_MS)
   const backoffMs = positiveNumber(failedLoginBackoffMs, env.COMPANION_FAILED_LOGIN_BACKOFF_MS, DEFAULT_FAILED_LOGIN_BACKOFF_MS)
@@ -130,15 +156,33 @@ export function createProfilePool ({
     return [...profiles.values()].filter((state) => state.context)
   }
 
-  function onDemandResidents () {
-    return residentStates().filter((state) => !isKeepWarm(state.profileId))
+  /**
+   * On-demand profiles holding a browser slot: launched, or launching.
+   *
+   * An in-flight launch has to count. `state.context` is assigned only once
+   * Chromium is up, so counting residency alone let N concurrent cold callers
+   * for N *different* profiles all observe the same pre-launch count, all pass
+   * the cap check, and all launch — the cap held only while launches happened
+   * to be serial. [profileId] is the caller asking for a slot, excluded so it
+   * never counts itself once its own launch is in flight.
+   */
+  function onDemandOccupants (profileId) {
+    return [...profiles.values()].filter(
+      (state) =>
+        (state.context || state.launching) &&
+        !isKeepWarm(state.profileId) &&
+        state.profileId !== profileId,
+    )
   }
 
   async function evictForLaunch (profileId) {
     if (isKeepWarm(profileId)) return
-    while (onDemandResidents().length >= browserCap) {
-      const candidate = onDemandResidents()
-        .filter((state) => !state.lock && state.profileId !== profileId)
+    while (onDemandOccupants(profileId).length >= browserCap) {
+      // Only a launched profile can be evicted: closing an in-flight launch
+      // would not free anything, so a cap held entirely by launches is a
+      // refusal rather than a spin.
+      const candidate = onDemandOccupants(profileId)
+        .filter((state) => state.context && !state.lock)
         .toSorted((a, b) => a.lastUsedAt - b.lastUsedAt)[0]
       if (!candidate) {
         throw Object.assign(
@@ -196,10 +240,91 @@ export function createProfilePool ({
       return state.launching
     },
 
+    /**
+     * The already-launched context for a profile, or null.
+     *
+     * Deliberately not `context()`: that LAUNCHES one, and the callers of this
+     * (tracing around work on a profile someone else already opened, e.g. an
+     * MFA completion resuming a held page) must never start a browser as a
+     * side effect of wanting to observe one.
+     */
+    liveContext (profileId) {
+      return profiles.get(profileId)?.context ?? null
+    },
+
     async closeProfile (profileId) {
       const state = profiles.get(profileId)
       if (!state) return
       await closeState(state)
+    },
+
+    /**
+     * Erases every trace of one profile: browser, directory, stored jar,
+     * failure diagnostics.
+     *
+     * This is the ONLY operation that deletes profile state. `logout` clicks
+     * through rec.gov's sign-out flow in the browser and leaves the user-data
+     * directory and the saved cookie jar exactly where they were, so a
+     * "remove my credentials" built on logout alone left the user's rec.gov
+     * session material on disk — which is the bug this exists to fix.
+     *
+     * Idempotent: a profile that was never launched, or was already destroyed,
+     * is a success. The caller asked for it to be gone and it is gone.
+     *
+     * Acts on exactly the one id it is given — no prefix or wildcard match —
+     * and refuses any id whose directory would resolve outside the pool root.
+     * `normalizeProfileId` already rejects separators and leading dots at the
+     * HTTP boundary; this is the second lock on a function whose whole job is
+     * recursive deletion, and it is checked against the RESOLVED path so a
+     * future loosening of that pattern cannot turn into an escape.
+     */
+    async destroyProfile (profileId) {
+      const parsed = normalizeProfileId(profileId)
+      if (!parsed.ok) return { ok: false, error: parsed.error }
+
+      const root = path.resolve(profilesDir)
+      const target = path.resolve(profileDir(parsed.profileId))
+      if (target === root || !target.startsWith(root + path.sep)) {
+        logger('recgov profile destroy refused', `profile=${parsed.profileId}`, 'reason=outside_profiles_root')
+        return { ok: false, error: ERROR_PROFILE_ID_INVALID }
+      }
+
+      const state = profiles.get(parsed.profileId)
+      if (state) {
+        dropChallenge(state)
+        await closeState(state)
+      }
+      keepWarmIds.delete(parsed.profileId)
+      const jarRemoved = removeSetting(recgovCookieSettingKey(parsed.profileId))
+
+      const dirExisted = fs.existsSync(target)
+      fs.rmSync(target, { recursive: true, force: true })
+      // A kept /verify or /atc trace records the network log, so it holds the
+      // very session the jar above held; a login screenshot shows the user's
+      // page. Swept after the browser is closed, so nothing can write a new
+      // artifact behind the sweep — and NOT swallowed: an artifact that
+      // survives means the wipe did not happen, and the caller (which gates
+      // the credential delete on this result) has to hear about it.
+      const diagnosticsRemoved = await sweepProfileDiagnostics(parsed.profileId, diagnosticsDir)
+      // Last, so the busy lock the caller holds still guards everything above:
+      // the entry owns the lock, and a fresh one would let a second operation
+      // in mid-delete.
+      profiles.delete(parsed.profileId)
+
+      logger(
+        'recgov profile destroyed',
+        `profile=${parsed.profileId}`,
+        `dir_removed=${dirExisted}`,
+        `cookie_jar_removed=${jarRemoved}`,
+        `diagnostics_removed=${diagnosticsRemoved.length}`,
+      )
+      return {
+        ok: true,
+        profile_id: parsed.profileId,
+        directory_removed: dirExisted,
+        cookie_jar_removed: jarRemoved,
+        diagnostics_removed: diagnosticsRemoved.length,
+      }
     },
 
     setKeepWarmProfiles (ids = []) {

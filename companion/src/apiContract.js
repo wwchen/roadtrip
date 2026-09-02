@@ -19,6 +19,11 @@ export const COMPANION_API_ROUTES = [
     path: '/',
     operationId: 'getOperatorPage',
     summary: 'Operator login and session page',
+    description:
+      'The only route reachable without the shared-secret header from anywhere. It is static markup ' +
+      'carrying no profile data and no secrets; a browser cannot set a header on a navigation, so ' +
+      'gating it made the page unreachable in the one case it exists for. Every control on it sends ' +
+      'the token from its own field, and every route those controls call is still gated.',
     responses: {
       200: htmlResponse('HTML operator page with Rec.gov login, refresh, logout, health, and live session screenshot controls'),
     },
@@ -45,7 +50,10 @@ export const COMPANION_API_ROUTES = [
     description:
       'Phase one posts profile_id + username + password. When Rec.gov prompts for a code the ' +
       'response is 401 `mfa_required` with a challenge_id that holds the profile lock until it is ' +
-      'completed or expires; phase two posts profile_id + challenge_id + mfa_code.',
+      'completed or expires; phase two posts profile_id + challenge_id + mfa_code. ' +
+      'An `unattended: true` login skips the challenge entirely: it answers 401 `mfa_required` ' +
+      'with no challenge_id, closes the held page and releases the lock at once, because the ' +
+      'caller has nobody to read a code.',
     requestBody: {
       required: true,
       content: {
@@ -84,6 +92,20 @@ export const COMPANION_API_ROUTES = [
   },
   {
     method: 'POST',
+    path: '/destroy',
+    operationId: 'postDestroy',
+    summary: 'Erase one browser profile: close it, delete its directory and its stored cookie jar',
+    parameters: [profileIdQueryParameter()],
+    requestBody: profileRequestBody(),
+    responses: {
+      200: jsonResponse('Profile destroyed, or already absent', 'ProfileDestroyResponse'),
+      400: jsonResponse('Missing or malformed profile_id', 'ErrorResponse'),
+      409: jsonResponse('The profile is already running work', 'ErrorResponse'),
+      500: jsonResponse('Destroy failed unexpectedly', 'ErrorResponse'),
+    },
+  },
+  {
+    method: 'POST',
     path: '/refresh',
     operationId: 'postRefresh',
     summary: 'Force refresh one profile stored Rec.gov browser session',
@@ -96,6 +118,29 @@ export const COMPANION_API_ROUTES = [
       409: jsonResponse('The profile is already running work', 'ErrorResponse'),
       503: jsonResponse('The concurrent-browser cap is reached and no profile is evictable', 'ErrorResponse'),
       500: jsonResponse('Refresh failed unexpectedly', 'ErrorResponse'),
+    },
+  },
+  {
+    method: 'POST',
+    path: '/keep-warm',
+    operationId: 'postKeepWarm',
+    summary: 'Replace the armed (keep-warm) profile set',
+    description:
+      'The backend owns which profiles back an active `atc` watch and pushes the whole set on ' +
+      'each keepalive sweep; this replaces it wholesale rather than merging. Armed profiles are ' +
+      'exempt from the concurrent-browser cap, so an overflow is reported rather than evicting one. ' +
+      'Lock-free and profile-agnostic: it marks profiles, it does not drive browsers.',
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: { $ref: '#/components/schemas/KeepWarmRequest' },
+        },
+      },
+    },
+    responses: {
+      200: jsonResponse('The armed set as the companion now holds it', 'KeepWarmResponse'),
+      400: jsonResponse('The request body is not valid JSON or profile_ids is not an array', 'ErrorResponse'),
     },
   },
   {
@@ -175,6 +220,19 @@ export const COMPANION_API_ROUTES = [
   },
   {
     method: 'GET',
+    path: SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX,
+    operationId: 'listDiagnostics',
+    summary: 'List stored failure diagnostics (screenshots and Playwright traces)',
+    description:
+      'Newest first. Artifacts are kept only for operations that FAILED — a successful run writes ' +
+      'nothing — and the directory is pruned to COMPANION_MAX_DIAGNOSTIC_ARTIFACTS. Open a trace ' +
+      'with `npx playwright show-trace <file>`.',
+    responses: {
+      200: jsonResponse('The stored diagnostics', 'DiagnosticListResponse'),
+    },
+  },
+  {
+    method: 'GET',
     path: `${SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX}/{filename}`,
     operationId: 'getDiagnosticScreenshot',
     summary: 'Read a stored login diagnostic screenshot',
@@ -185,14 +243,14 @@ export const COMPANION_API_ROUTES = [
         required: true,
         schema: {
           type: 'string',
-          example: 'recgov-login-2026-07-17T00-00-00-000Z-login_success.png',
+          example: 'recgov-login-2026-07-17T00-00-00-000Z-profile_7-login_success.png',
         },
       },
     ],
     responses: {
-      200: pngResponse('Stored diagnostic PNG'),
+      200: pngResponse('Stored diagnostic PNG, or a Playwright trace archive'),
       400: jsonResponse('Diagnostic filename is invalid', 'ErrorResponse'),
-      404: jsonResponse('Diagnostic screenshot was not found', 'ErrorResponse'),
+      404: jsonResponse('Diagnostic artifact was not found', 'ErrorResponse'),
     },
   },
   {
@@ -322,6 +380,58 @@ export const COMPANION_API_SCHEMAS = {
         type: 'string',
         description: 'Challenge id returned by a phase-one login that hit an MFA prompt',
       },
+      unattended: {
+        type: 'boolean',
+        description:
+          'No human is waiting on this login (the backend fire-time re-login). An MFA prompt ' +
+          'answers mfa_required with no challenge_id and holds neither the page nor the lock.',
+      },
+    },
+  },
+  KeepWarmRequest: {
+    type: 'object',
+    required: ['profile_ids'],
+    properties: {
+      profile_ids: {
+        type: 'array',
+        items: PROFILE_ID_SCHEMA,
+        description: 'The complete armed set. An empty array disarms every profile.',
+      },
+    },
+  },
+  KeepWarmResponse: {
+    type: 'object',
+    required: ['ok', 'keep_warm', 'keep_warm_overflow'],
+    properties: {
+      ok: { type: 'boolean' },
+      keep_warm: { type: 'array', items: PROFILE_ID_SCHEMA },
+      keep_warm_overflow: {
+        type: 'integer',
+        description: 'Armed profiles beyond the cap. Reported, never resolved by eviction.',
+      },
+    },
+  },
+  ProfileDestroyResponse: {
+    type: 'object',
+    required: ['ok', 'profile_id', 'directory_removed', 'cookie_jar_removed', 'diagnostics_removed'],
+    properties: {
+      ok: { type: 'boolean' },
+      profile_id: PROFILE_ID_SCHEMA,
+      directory_removed: {
+        type: 'boolean',
+        description: 'False when the profile had no directory. Still a success — the caller asked for it to be gone.',
+      },
+      cookie_jar_removed: {
+        type: 'boolean',
+        description: 'Whether a stored per-profile rec.gov cookie jar was deleted.',
+      },
+      diagnostics_removed: {
+        type: 'integer',
+        description:
+          "How many of the profile's failure diagnostics were deleted. A kept /verify or /atc trace " +
+          'records the network log, so it holds that profile\'s live session cookies — the wipe deletes it too, ' +
+          'and fails rather than reporting success over an artifact it could not remove.',
+      },
     },
   },
   ProfileRequest: {
@@ -405,6 +515,35 @@ export const COMPANION_API_SCHEMAS = {
       screenshots: {
         type: 'array',
         items: { $ref: '#/components/schemas/PlaywrightScreenshot' },
+      },
+    },
+  },
+  DiagnosticListResponse: {
+    type: 'object',
+    required: ['ok', 'artifacts'],
+    properties: {
+      ok: { type: 'boolean' },
+      max_artifacts: { type: 'integer', description: 'The prune bound this companion keeps.' },
+      artifacts: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            file: { type: 'string', example: 'recgov-login-2026-09-01T00-00-00-000Z-profile_7-captcha_required.trace.zip' },
+            kind: { type: 'string', enum: ['screenshot', 'trace'] },
+            operation: { type: 'string', example: 'login' },
+            profile_id: {
+              type: 'string',
+              nullable: true,
+              description: 'Which profile the artifact belongs to, read back out of its name. Null for artifacts written before names carried one, and for the operator CLI\'s legacy profile — those no per-profile wipe can claim.',
+              example: '7',
+            },
+            reason: { type: 'string', example: 'captcha_required' },
+            url: { type: 'string' },
+            size_bytes: { type: 'integer' },
+            modified_at: { type: 'string', format: 'date-time' },
+          },
+        },
       },
     },
   },

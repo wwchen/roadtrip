@@ -114,7 +114,7 @@ beforeEach(() => {
   requests.length = 0;
   getSettings = () => json(settingsBody());
   getRecgovStatus = () =>
-    json({ configured: false, username: null, password_hint: null, session: 'not_configured' });
+    json({ configured: false, username: null, session: 'not_configured' });
   onPut = () => json(settingsBody());
   client = createTestQueryClient();
   stubApi();
@@ -329,7 +329,7 @@ describe('the Booking tab', () => {
     expect(await screen.findByText('Settings saved.')).toBeInTheDocument();
   });
 
-  test('after saving a password the masked hint comes from the server', async () => {
+  test('a saved password shows as placeholder dots, never as characters', async () => {
     renderSettingsModal();
     await screen.findByLabelText('Display name');
 
@@ -342,9 +342,11 @@ describe('the Booking tab', () => {
     getSettings = stored;
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    // A fixed-length mask, not the password's last characters and not its length.
-    expect(await screen.findByText('\u2022'.repeat(10))).toBeInTheDocument();
-    expect(screen.queryByLabelText('Recreation.gov password')).not.toBeInTheDocument();
+    // The field stays, emptied, with fixed-length dots as its PLACEHOLDER — so
+    // nothing real is in the DOM and the length is not the stored one either.
+    const password = await screen.findByLabelText('Recreation.gov password');
+    await waitFor(() => expect(password).toHaveValue(''));
+    expect(password).toHaveAttribute('placeholder', '\u2022'.repeat(10));
   });
 
   test('the session row never blocks the panel when the companion is down', async () => {
@@ -353,7 +355,7 @@ describe('the Booking tab', () => {
       json({
         configured: true,
         username: 'ada@example.test',
-        password_hint: '9f2c',
+       
         session: 'companion_unavailable',
         detail: 'connection refused',
       });
@@ -369,16 +371,115 @@ describe('the Booking tab', () => {
   });
 });
 
+describe('rec.gov MFA challenge', () => {
+  test('Cancel then Test login returns to the code step instead of locking the user out', async () => {
+    // The lockout this guards: the panel finds its way back to a live challenge
+    // through the status row's `mfa_pending`. When the login did not refetch
+    // that row, `mfa_pending` stayed false for the challenge's whole TTL, so the
+    // `profile_busy` answer — which IS this user's own challenge holding the
+    // profile lock — read as a generic failure, and the resume effect is
+    // edge-triggered and could not re-fire. Exercised through the real query
+    // rather than an injected `status` prop, which is what hid it.
+    getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
+    let challengeOpen = false;
+    getRecgovStatus = () =>
+      json({
+        configured: true,
+        username: 'ada@example.test',
+        session: 'expired',
+        mfa_pending: challengeOpen,
+      });
+    onPut = (url) => {
+      if (url === `${RECGOV_URL}/login`) {
+        if (challengeOpen) return json({ status: 'failed', error: 'profile_busy' });
+        challengeOpen = true;
+        return json({ status: 'mfa_required', challenge_id: 'challenge-1' });
+      }
+      return json(settingsBody({}, CONFIGURED_BOOKING));
+    };
+
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Test login' }));
+    expect(await screen.findByLabelText('Verification code')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() =>
+      expect(screen.queryByLabelText('Verification code')).not.toBeInTheDocument(),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Test login' }));
+
+    expect(await screen.findByLabelText('Verification code')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Another operation is using your rec.gov session/i),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe('remove rec.gov credentials', () => {
+  test('a refused removal tells the operator the booking service needs attention', async () => {
+    // This copy IS the admin signal: removal now blocks rather than half-applying,
+    // so a stuck companion must be legible from the UI, not only from the logs.
+    getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
+    expect(await screen.findByText('Danger zone')).toBeInTheDocument();
+
+    onPut = () => json({ error: 'recgov_profile_wipe_failed' }, 502);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm removal' }));
+
+    expect(await screen.findByText(/the booking service needs attention/i)).toBeInTheDocument();
+  });
+
+  test('does not claim a session wipe when there was no session to wipe', async () => {
+    // A failed wipe is refused server-side now, so `profile_destroyed: false`
+    // means no booking service is configured — nothing was left behind, and the
+    // copy must not imply a session is still sitting on a companion host.
+    getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
+    expect(await screen.findByText('Danger zone')).toBeInTheDocument();
+
+    onPut = () =>
+      json({
+        removed: true,
+        stranded_atc_watches: 0,
+        companion_signed_out: false,
+        profile_destroyed: false,
+      });
+    getSettings = () => json(settingsBody());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm removal' }));
+
+    expect(await screen.findByText(/no saved browser session to erase/i)).toBeInTheDocument();
+  });
+
   test('reports how many active add-to-cart watches it stranded', async () => {
     getSettings = () => json(settingsBody({}, CONFIGURED_BOOKING));
     renderSettingsModal();
     await screen.findByLabelText('Display name');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Account' }));
+    // Removal lives on Booking now, beside the credentials it removes.
+    await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
     expect(await screen.findByText('Danger zone')).toBeInTheDocument();
 
-    onPut = () => json({ removed: true, stranded_atc_watches: 2, companion_signed_out: false });
+    onPut = () =>
+      json({
+        removed: true,
+        stranded_atc_watches: 2,
+        companion_signed_out: true,
+        profile_destroyed: true,
+      });
     getSettings = () => json(settingsBody());
 
     await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
@@ -386,7 +487,8 @@ describe('remove rec.gov credentials', () => {
 
     expect(
       await screen.findByText(
-        'Recreation.gov credentials removed. 2 active add-to-cart watches will fail until you add them again.',
+        'Recreation.gov credentials and saved browser session removed. 2 active add-to-cart ' +
+          'watches will fail until you add them again.',
       ),
     ).toBeInTheDocument();
     await waitFor(() =>

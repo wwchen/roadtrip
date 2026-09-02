@@ -16,11 +16,15 @@ import {
 } from './browser.js'
 import { captureRecgovPageImage } from './recgovScreenshotCapture.js'
 import { SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX } from './recgovScreenshotRoutes.js'
+import { diagnosticArtifactName, diagnosticDir } from './tracing.js'
 
 export const RECGOV_HOME_URL = 'https://www.recreation.gov/'
 export const RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS = 20_000
 export const RECGOV_LOGIN_STATE_SETTLE_MS = 2_000
-export const RECGOV_DIAGNOSTIC_DIR = process.env.RECGOV_DIAGNOSTIC_DIR || '/tmp/campsite-companion/recgov-diagnostics'
+export const RECGOV_DIAGNOSTIC_DIR = diagnosticDir()
+
+/** The operation label login diagnostics are filed under. */
+const LOGIN_DIAGNOSTIC_OPERATION = 'login'
 
 const RECGOV_REFRESH_URL = 'https://www.recreation.gov/api/accounts/login/v2/refresh'
 const RECGOV_REFRESH_CONTENT_TYPE = 'text/plain;charset=UTF-8'
@@ -216,6 +220,18 @@ function updateSessionStatus (patch) {
 // Runs `fn` with every session-status write attributed to `profileId`.
 export function withRecgovProfileScope (profileId, fn) {
   return profileScope.run(sessionStatusKey(profileId), fn)
+}
+
+/**
+ * The pooled profile the current async scope belongs to, or null.
+ *
+ * Null covers the operator CLI's legacy profile, which is nobody's user: a
+ * diagnostic artifact written under it belongs to no pooled profile and no
+ * per-profile wipe may claim it.
+ */
+export function activeProfileId () {
+  const key = activeSessionStatusKey()
+  return key === LEGACY_PROFILE_KEY ? null : key
 }
 
 export async function resolveRecaccount (page, options = {}) {
@@ -839,7 +855,13 @@ async function waitForBrowserRecaccount (page, timeoutMs, { label = 'login' } = 
 
 async function captureLoginDiagnostic (page, reason, detail = null) {
   const capturedAt = new Date().toISOString()
-  const filename = `recgov-login-${capturedAt.replace(/[:.]/g, '-')}-${sanitizeDiagnosticReason(reason)}.png`
+  // Named with its profile so `POST /destroy` can erase it: a login screenshot
+  // is a picture of that user's signed-in (or half-signed-in) rec.gov page.
+  const filename = `${diagnosticArtifactName(
+    LOGIN_DIAGNOSTIC_OPERATION,
+    sanitizeDiagnosticReason(reason),
+    { profileId: activeProfileId(), capturedAt },
+  )}.png`
   const screenshotPath = path.join(RECGOV_DIAGNOSTIC_DIR, filename)
   const diagnostic = {
     reason,

@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { COMPANION_USER_AGENT, resolveSessionDir } from '../src/browser.js'
+import { DATES_ACCEPTED, DATES_REFUSED, enterDates as enterDatesForTest } from '../src/cart.js'
 import {
   bookingUrlForMatch,
   cartContainsMatch,
@@ -93,13 +94,13 @@ test('resolveSessionDir uses mounted companion profile env before legacy session
   assert.equal(resolveSessionDir({}, '/home/test'), '/home/test/.campsite-companion/browser-session')
 })
 
-test('recgovAuthenticationFailure reports the operator action for headless missing session', () => {
+test('recgovAuthenticationFailure names the profile, not a single operator session', () => {
   const failure = recgovAuthenticationFailure({
     headless: true,
   })
 
   assert.equal(failure.error, 'recgov_not_authenticated')
-  assert.match(failure.detail, /headless companion is not logged in/)
+  assert.match(failure.detail, /This profile has no Recreation\.gov session/)
   assert.match(failure.corrective_action, /companion root page/)
   assert.deepEqual(failure.auth, { headless: true })
 })
@@ -111,8 +112,23 @@ test('recgovAuthenticationFailure reports failed login attempts distinctly', () 
   })
 
   assert.equal(failure.error, 'recgov_login_failed')
-  assert.match(failure.detail, /MFA code/)
+  assert.match(failure.detail, /did not produce a browser session/)
   assert.match(failure.corrective_action, /companion root page/)
+})
+
+test('the login failure detail names the actual blocker, not always MFA', () => {
+  // One detail line used to end "submit a current MFA code" for every reason,
+  // so a captcha — which no code can clear — sent the operator to type one.
+  const captcha = recgovAuthenticationFailure({ headless: true, attemptedLogin: true, reason: 'captcha_required' })
+  assert.match(captcha.detail, /challenge the companion cannot solve/)
+  assert.doesNotMatch(captcha.detail, /verification code/)
+
+  const mfa = recgovAuthenticationFailure({ headless: true, attemptedLogin: true, reason: 'mfa_required' })
+  assert.match(mfa.detail, /verification code/)
+
+  // An unrecognised reason falls back to the bare line rather than guessing.
+  const unknown = recgovAuthenticationFailure({ headless: true, attemptedLogin: true, reason: 'something_new' })
+  assert.equal(unknown.detail, 'Recreation.gov credential login did not produce a browser session.')
 })
 
 test('cartHoldCompletionObserved ignores pre-confirmation cart and multi responses', () => {
@@ -508,4 +524,59 @@ function pickFailureFields (check) {
 
 function base64Url (value) {
   return Buffer.from(JSON.stringify(value)).toString('base64url')
+}
+
+test('the date picker reports refusal instead of pressing on', async () => {
+  // A real run: the arrival date was aria-disabled, the fiber fallback fired,
+  // and 30 seconds later the run died with "no Reserve button". aria-disabled
+  // is rec.gov saying the date is not bookable — the fallback must prove it
+  // was wrong, not assume it.
+  const page = fakeDatePickerPage({ ariaDisabled: true, fiberClicks: false })
+
+  assert.equal(await enterDatesForTest(page, '2026-09-05', '2026-09-06'), DATES_REFUSED)
+})
+
+test('a fiber click that does not visibly select the date is a refusal', async () => {
+  // Calling the handler directly cannot fail loudly, so "it did not throw" is
+  // not evidence the calendar took the date. Only the rendered selection is.
+  const page = fakeDatePickerPage({ ariaDisabled: true, fiberClicks: true, selectionSticks: false })
+
+  assert.equal(await enterDatesForTest(page, '2026-09-05', '2026-09-06'), DATES_REFUSED)
+})
+
+test('a fiber click that does select the date is accepted', async () => {
+  // The fallback is kept because rec.gov does mark some selectable dates
+  // disabled; when it genuinely works the run continues.
+  const page = fakeDatePickerPage({ ariaDisabled: true, fiberClicks: true, selectionSticks: true })
+
+  assert.equal(await enterDatesForTest(page, '2026-09-05', '2026-09-06'), DATES_ACCEPTED)
+})
+
+/**
+ * The slice of a Playwright page the date picker touches.
+ *
+ * `ariaDisabled` is rec.gov marking the arrival date unbookable;
+ * `selectionSticks` is whether the calendar actually renders it chosen
+ * afterwards, which is the only real proof the click landed.
+ */
+function fakeDatePickerPage ({ ariaDisabled = false, fiberClicks = false, selectionSticks = true } = {}) {
+  const selected = new Set()
+  return {
+    keyboard: { press: async () => {} },
+    waitForTimeout: async () => {},
+    waitForSelector: async () => {},
+    evaluate: async () => {
+      if (fiberClicks && selectionSticks) selected.add('arrival')
+      return fiberClicks
+    },
+    locator: (sel) => ({
+      first: () => ({
+        // The pre-selected check runs before anything is chosen; the
+        // post-fiber-click check runs after.
+        isVisible: async () => sel.includes('is-selected') && selected.has('arrival'),
+        click: async () => {},
+        getAttribute: async () => (ariaDisabled ? 'true' : null),
+      }),
+    }),
+  }
 }

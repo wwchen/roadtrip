@@ -7,7 +7,17 @@ import kotlinx.serialization.Serializable
 object RecgovSessionState {
     const val NOT_CONFIGURED = "not_configured"
     const val ACTIVE = "active"
+
+    /**
+     * Credentials are saved but this profile has never been signed in — the
+     * companion has no session to have lost. Distinct from [EXPIRED] because
+     * the user has not failed at anything yet; they simply have not started.
+     */
+    const val NOT_LOGGED_IN = "not_logged_in"
     const val EXPIRED = "expired"
+
+    /** The companion answered, but its own health check threw. Not the user's problem. */
+    const val CHECK_FAILED = "check_failed"
 
     /** The companion could not be asked. Never an error — the row just says so. */
     const val COMPANION_UNAVAILABLE = "companion_unavailable"
@@ -102,4 +112,14 @@ data class RecgovRemovedDto(
     @SerialName("stranded_atc_watches") val strandedAtcWatches: Int,
     /** False when the companion could not be reached; the local delete still happened. */
     @SerialName("companion_signed_out") val companionSignedOut: Boolean,
+    /**
+     * Whether the browser profile — its Chromium directory and its saved
+     * rec.gov cookie jar — was actually erased.
+     *
+     * Reported separately from [companionSignedOut] because the two can differ and
+     * the UI must not imply a full wipe that did not happen: when the companion
+     * is unreachable the credentials are gone from the database but the saved
+     * session material is still on the companion host.
+     */
+    @SerialName("profile_destroyed") val profileDestroyed: Boolean,
 )
