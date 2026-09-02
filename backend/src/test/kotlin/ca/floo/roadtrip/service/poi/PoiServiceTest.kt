@@ -195,6 +195,33 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals(emptyList(), features)
     }
 
+    // A recreation.gov campground's fees, stay limit and directions live in the
+    // RIDB record. The FE used to synthesise `upstream` from three Campflare keys,
+    // so those pins rendered an empty provenance table.
+    @Test
+    fun `campground detail serves the source record as upstream`() {
+        // No providerRefJson: seedCampground binds `providerRefJson ?: sourcePayloadJson`
+        // into source_payload, so passing one would displace the record under test.
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "232869",
+                name = "Cold Creek",
+                lon = -120.31,
+                lat = 39.54,
+                source = "recgov",
+                propertiesJson = """{"RECAREA":{"RecAreaName":"Lassen"},"StayLimit":"14 days"}""",
+            )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals(
+            "14 days",
+            detail.upstream!!
+                .jsonObject["StayLimit"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
     // The bug this pins: a gym's hours lived only in `payload.tags`, and every
     // reader goes through `to_jsonb(planet_fitness_locations)`, which carries
     // columns. Hours reached no caller, so the drawer's chip was dead on every

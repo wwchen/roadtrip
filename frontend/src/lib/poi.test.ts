@@ -122,6 +122,23 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
     },
   },
 
+  // A recreation.gov campground: `detail.upstream` is the RIDB facility record the
+  // backend captured, which is what `upstream-html.ts` reads its fields off.
+  campgroundUpstream: {
+    id: 'cg-ridb',
+    properties: {
+      category: 'campground',
+      detail: {
+        upstream: {
+          RECAREA: { RecAreaName: 'Lassen' },
+          FacilityDirections: 'Hwy 89 north entrance',
+          StayLimit: '14 days',
+        },
+        raw: {},
+      },
+    },
+  },
+
   nestedAddress: {
     id: 5,
     properties: {
@@ -173,16 +190,18 @@ describe('campground promotion', () => {
     expect(p.default_campsite_schedule).toBe('May-Oct');
   });
 
-  test('synthesises an upstream card from directions, status, and price', () => {
-    expect(flatten('campgroundNested').upstream).toEqual({
+  test('takes the upstream table from the backend, whatever the vendor shipped', () => {
+    // Was synthesised here from three Campflare keys, one renamed to a RIDB field
+    // name, so a recreation.gov record — which has none of them — rendered nothing.
+    expect(flatten('campgroundUpstream').upstream).toEqual({
+      RECAREA: { RecAreaName: 'Lassen' },
       FacilityDirections: 'Hwy 89 north entrance',
-      Status: 'Open seasonally',
-      Price: 'USD 26-USD 36',
+      StayLimit: '14 days',
     });
   });
 
-  test('collapses an equal min/max price to a single value', () => {
-    expect(flatten('campgroundJsonStrings').upstream).toMatchObject({ Price: 'USD 20' });
+  test('a campground whose source sent no upstream record has no table', () => {
+    expect(flatten('campgroundNested').upstream).toBeUndefined();
   });
 
   test('parses detail and raw when they arrive as JSON strings', () => {
