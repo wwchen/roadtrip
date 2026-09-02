@@ -49,6 +49,15 @@ const DATE_COLUMN_WIDTH_PX = 66;
 /** Placeholder rows in the skeleton — enough to fill the drawer, few enough to be fast. */
 const SKELETON_ROW_COUNT = 6;
 
+/**
+ * What tapping a watchable cell does.
+ *
+ * Three behaviours, not two: open the editor, offer sign-in, or stay inert. It was
+ * a boolean, and the boolean is what made a signed-out visitor's reserved cell look
+ * like a campground that does not do alerts at all.
+ */
+export type WatchGate = 'ready' | 'signed-out' | 'blocked';
+
 /** The cell currently armed for booking. */
 export interface ArmedBook {
   campsiteId: string;
@@ -70,7 +79,7 @@ export interface SiteMatrixProps {
     selectedSiteId: string | null;
     armedBook: ArmedBook | null;
     watchedDates: ReadonlySet<string>;
-    canWatch: boolean;
+    watchGate: WatchGate;
     /** True when this caller could actually hold a site — the same condition
      *  that enables the watch editor's ATC toggle. */
     canAddToCart: boolean;
@@ -203,7 +212,7 @@ export function SiteMatrix(props: SiteMatrixProps) {
                 cartAction={view.cartAction}
                 onAddToCart={events.cartRequested}
                 watchedDates={view.watchedDates}
-                canWatch={view.canWatch}
+                watchGate={view.watchGate}
                 onOpenWatch={events.watchOpened}
               />
             ))}
@@ -557,7 +566,7 @@ function MatrixRow({
   cartAction,
   onAddToCart,
   watchedDates,
-  canWatch,
+  watchGate,
   onOpenWatch,
 }: MatrixRowProps) {
   const id = rowId(row);
@@ -599,7 +608,7 @@ function MatrixRow({
             cartAction={cartAction}
             onAddToCart={onAddToCart}
             watchedDates={watchedDates}
-            canWatch={canWatch}
+            watchGate={watchGate}
             onOpenWatch={onOpenWatch}
           />
         ))}
@@ -637,7 +646,7 @@ interface MatrixCellProps {
   cartAction: CartAction | null;
   onAddToCart: (campsiteId: string, date: string) => void;
   watchedDates: ReadonlySet<string>;
-  canWatch: boolean;
+  watchGate: WatchGate;
   onOpenWatch: (anchor: HTMLElement, date: string) => void;
 }
 
@@ -654,7 +663,7 @@ function MatrixCell({
   cartAction,
   onAddToCart,
   watchedDates,
-  canWatch,
+  watchGate,
   onOpenWatch,
 }: MatrixCellProps) {
   const [cellAnchor, setCellAnchor] = useState<HTMLElement | null>(null);
@@ -666,8 +675,10 @@ function MatrixCell({
   if (state.value !== 'available') {
     const watched = watchedDates.has(day.date);
     // A watched cell stays interactive even for a user who can no longer create
-    // watches, so an existing one can always be managed.
-    if (isWatchableKind(state.kind) && (canWatch || watched)) {
+    // watches, so an existing one can always be managed. A signed-out visitor gets
+    // the same cell: it opens the sign-in gate rather than the editor.
+    if (isWatchableKind(state.kind) && (watchGate !== 'blocked' || watched)) {
+      const signedOut = watchGate === 'signed-out' && !watched;
       return (
         <td className={cellClass}>
           <button
@@ -676,7 +687,9 @@ function MatrixCell({
             aria-label={
               watched
                 ? `${aria}; availability watch set, tap to manage`
-                : `${aria}; tap to set an availability watch`
+                : signedOut
+                  ? `${aria}; tap to sign in and set an availability watch`
+                  : `${aria}; tap to set an availability watch`
             }
             onClick={(event) => onOpenWatch(event.currentTarget, day.date)}
           >

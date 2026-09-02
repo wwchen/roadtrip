@@ -120,6 +120,17 @@
 .rt-watch-editor-save:disabled,
 .rt-watch-editor-remove:disabled { opacity: 0.6; cursor: wait; }
 
+/* The sign-in gate: one sentence and one full-width action, in the editor's shell. */
+.rt-watch-editor-gate-text {
+  margin: 0;
+  color: var(--rt-muted);
+  line-height: 1.35;
+}
+.rt-watch-editor-actions--stretch .rt-watch-editor-save {
+  flex: 1 1 auto;
+  min-height: 36px;
+}
+
 /* Canonical mobile breakpoint — see the breakpoint note in tokens.css. */
 @media (max-width: 767px) {
   .rt-watch-editor {

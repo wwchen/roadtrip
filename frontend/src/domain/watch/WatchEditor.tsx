@@ -1,7 +1,6 @@
 // Unsupported triggers stay visible when an existing watch already uses them so
 // opening the editor can never silently strip its configuration.
 import { useState } from 'react';
-import { Icon } from '@ui';
 import { HttpError } from '@/api/http';
 import type { Watch } from '@/api/watches-api';
 import {
@@ -14,6 +13,7 @@ import {
   type TriggerState,
 } from '@/lib/watch-triggers';
 import { scopeSupportsAddToCart, type WatchCapabilities } from '@/lib/watch-windows';
+import { WatchPanelHead } from './WatchPanelHead';
 import { useMe } from '@/queries/auth';
 import './watch-editor.css';
 
@@ -85,22 +85,7 @@ export function WatchEditor({
 
   return (
     <div className="rt-watch-editor" role="group" aria-label="Availability watch editor">
-      <div className="rt-watch-editor-head">
-        <div>
-          {title ? <div className="rt-watch-editor-title">{title}</div> : null}
-          {subtitle ? <div className="rt-watch-editor-subtitle">{subtitle}</div> : null}
-        </div>
-        {onClose ? (
-          <button
-            type="button"
-            className="rt-watch-editor-icon"
-            aria-label="Close"
-            onClick={onClose}
-          >
-            <Icon name="close" aria-hidden="true" />
-          </button>
-        ) : null}
-      </div>
+      <WatchPanelHead title={title} subtitle={subtitle} onClose={onClose} />
 
       <div className="rt-watch-editor-body">
         {canSlack ? (

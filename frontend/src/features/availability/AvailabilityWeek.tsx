@@ -12,7 +12,7 @@ import { signIn } from '@/api/auth-api';
 import { DayDetail, type WatchUnavailableReason } from './DayDetail';
 import { CalendarPopover } from './CalendarPopover';
 import { SiteList } from './SiteList';
-import { SiteMatrix, SiteMatrixSkeleton } from './SiteMatrix';
+import { SiteMatrix, SiteMatrixSkeleton, type WatchGate } from './SiteMatrix';
 import { WatchPopover } from './WatchPopover';
 import { WeekNav } from './WeekNav';
 import { GENERIC_AVAILABILITY_ERROR, classifyAvailabilityErrorCode } from './availability-errors';
@@ -143,7 +143,8 @@ function AvailabilityWeekView({
         : watches.access === 'error'
           ? 'failed'
           : null;
-  const canWatch = watchUnavailable === null;
+  const watchGate: WatchGate =
+    watchUnavailable === null ? 'ready' : watchUnavailable === 'signed-out' ? 'signed-out' : 'blocked';
 
   const onSelectDate = useCallback(
     (date: string) => {
@@ -338,7 +339,7 @@ function AvailabilityWeekView({
               selectedSiteId,
               armedBook,
               watchedDates: watchedDatesOf(watches.byWindow),
-              canWatch,
+              watchGate,
               canAddToCart,
               cartAction,
             }}
@@ -405,6 +406,8 @@ function AvailabilityWeekView({
           watch={watchForDate(watches, watchTarget.date)}
           capabilities={capabilities}
           supportsAddToCart={supportsAddToCart(capabilities)}
+          gate={watchGate === 'signed-out' ? 'signed-out' : undefined}
+          onSignIn={() => signIn()}
           onSave={async (payload) => {
             try {
               await mutations.save(watchTarget.date, payload, watchForDate(watches, watchTarget.date));

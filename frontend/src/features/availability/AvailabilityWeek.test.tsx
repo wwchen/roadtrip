@@ -581,6 +581,31 @@ describe('watches', () => {
     expect(screen.getByText(/Sites by date/)).toBeInTheDocument();
   });
 
+  test('a signed-out visitor can open a watch from a reserved cell', async () => {
+    stubs.watches = () => json({ error: 'unauthorized' }, 401);
+    await mount();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /Site 1 2026-08-11:.*tap to sign in/i }),
+    );
+
+    expect(screen.getByRole('group', { name: 'Availability watch sign-in' })).toBeInTheDocument();
+    expect(screen.getByText('Sign in to get an alert when a site opens up that night.')).toBeInTheDocument();
+  });
+
+  test('a reserved cell stays inert when the provider cannot alert anyone', async () => {
+    stubs.availability = () =>
+      json(
+        availabilityBody(
+          [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
+          { trigger_kinds: [], booking_actions: [] },
+        ),
+      );
+    await mount();
+
+    expect(screen.queryByRole('button', { name: /Site 1 2026-08-11:/ })).toBeNull();
+  });
+
   test('says it is still checking while the watch list is in flight', async () => {
     stubs.watches = () => new Promise<Response>(() => {});
     await mount();

@@ -14,6 +14,7 @@ import type { Watch } from '@/api/watches-api';
 import { TRIGGER_KIND_ATC, TRIGGER_KIND_SLACK_NOTIFY, TRIGGER_KIND_EMAIL_NOTIFY } from '@/lib/watch-triggers';
 import type { TriggerPayload } from '@/lib/watch-triggers';
 import { WatchEditor } from '@/domain/watch/WatchEditor';
+import { WatchSignInGate } from '@/domain/watch/WatchSignInGate';
 import { useDismiss } from '@/lib/use-dismiss';
 import { longDayLabel } from './week-labels';
 import { normalizeWatchCapabilities, type WatchCapabilities } from '@/lib/watch-windows';
@@ -36,6 +37,10 @@ export interface WatchPopoverProps {
   capabilities: WatchCapabilities;
   /** Whether this provider can hold a site, gating the add-to-cart trigger. */
   supportsAddToCart: boolean;
+  /** Renders the sign-in gate in the editor's place. */
+  gate?: 'signed-out';
+  /** Starts the hosted sign-in flow, from the gate. */
+  onSignIn: () => void;
   onSave: (payload: TriggerPayload) => Promise<void>;
   onRemove: () => Promise<void>;
   onClose: () => void;
@@ -48,6 +53,8 @@ export function WatchPopover({
   watch,
   capabilities,
   supportsAddToCart,
+  gate,
+  onSignIn,
   onSave,
   onRemove,
   onClose,
@@ -106,25 +113,34 @@ export function WatchPopover({
         visibility: position ? 'visible' : 'hidden',
       }}
     >
-      <WatchEditor
-        title={`Watch ${poiName}`}
-        subtitle={longDayLabel(date)}
-        watch={watch ?? null}
-        capabilities={editorCapabilities}
-        onSave={async (payload) => {
-          await onSave(payload);
-          onClose();
-        }}
-        onRemove={
-          watch
-            ? async () => {
-                await onRemove();
-                onClose();
-              }
-            : null
-        }
-        onClose={onClose}
-      />
+      {gate === 'signed-out' ? (
+        <WatchSignInGate
+          title={`Watch ${poiName}`}
+          subtitle={longDayLabel(date)}
+          onSignIn={onSignIn}
+          onClose={onClose}
+        />
+      ) : (
+        <WatchEditor
+          title={`Watch ${poiName}`}
+          subtitle={longDayLabel(date)}
+          watch={watch ?? null}
+          capabilities={editorCapabilities}
+          onSave={async (payload) => {
+            await onSave(payload);
+            onClose();
+          }}
+          onRemove={
+            watch
+              ? async () => {
+                  await onRemove();
+                  onClose();
+                }
+              : null
+          }
+          onClose={onClose}
+        />
+      )}
     </div>,
     document.body,
   );
