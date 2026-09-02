@@ -40,4 +40,26 @@ data class PoiCategoryDetailSchema(
     // Key/values for the drawer's "Upstream data" table. Backend-shaped so the
     // FE never reaches into `raw` for a vendor's own nesting.
     val upstream: JsonElement? = null,
+    // Campground canonical columns, served as named fields so the FE reads
+    // them directly instead of digging a vendor-shaped payload out of `raw`.
+    val status: String? = null,
+    @SerialName("status_description") val statusDescription: String? = null,
+    val kind: String? = null,
+    val price: JsonElement? = null,
+    val schedule: JsonElement? = null,
+    val amenities: JsonElement? = null,
+    @SerialName("cell_coverage") val cellCoverage: JsonElement? = null,
+    @SerialName("max_rv_length") val maxRvLength: Double? = null,
+    @SerialName("max_trailer_length") val maxTrailerLength: Double? = null,
+    @SerialName("has_pull_through_sites") val hasPullThroughSites: Boolean? = null,
+    @SerialName("big_rig_friendly") val bigRigFriendly: Boolean? = null,
+    val links: JsonElement? = null,
+    val alerts: JsonElement? = null,
+    val connections: JsonElement? = null,
+    val metadata: JsonElement? = null,
+    val management: JsonElement? = null,
+    val contact: JsonElement? = null,
+    val email: String? = null,
+    val elevation: Double? = null,
+    @SerialName("last_verified") val lastVerified: String? = null,
 )

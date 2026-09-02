@@ -21,6 +21,9 @@ private const val PHONE_KEY = "phone"
 private const val URL_KEY = "url"
 private const val LATITUDE_KEY = "latitude"
 private const val LONGITUDE_KEY = "longitude"
+private const val EMAIL_KEY = "email"
+private const val ELEVATION_KEY = "elevation"
+private const val LAST_UPDATED_KEY = "last_updated"
 
 internal class CampgroundService(
     private val campgroundRepo: CampgroundRepo,
@@ -89,6 +92,26 @@ internal class CampgroundService(
                     // for its campground promotion until #709 removes that.
                     upstream = raw,
                     raw = raw,
+                    status = campground.status,
+                    statusDescription = campground.statusDescription,
+                    kind = campground.kind,
+                    price = campground.price,
+                    schedule = campground.defaultCampsiteSchedule,
+                    amenities = campground.amenities,
+                    cellCoverage = campground.cellService,
+                    maxRvLength = campground.maxRvLength,
+                    maxTrailerLength = campground.maxTrailerLength,
+                    hasPullThroughSites = campground.hasPullThroughSites,
+                    bigRigFriendly = campground.bigRigFriendly,
+                    links = campground.links,
+                    alerts = campground.alerts,
+                    connections = campground.connections,
+                    metadata = campground.metadata,
+                    management = campground.management,
+                    contact = campground.contact,
+                    email = campground.contact.stringProperty(EMAIL_KEY),
+                    elevation = campground.location.doubleProperty(ELEVATION_KEY),
+                    lastVerified = campground.metadata.stringProperty(LAST_UPDATED_KEY),
                 ),
         )
     }

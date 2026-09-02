@@ -283,7 +283,7 @@ class FeatureCollectionContractTest {
                         ),
                 ),
             )
-        val detail = gymDetail(out)
+        val detail = detailObject(out)
         assertEquals("Mo-Su 05:00-22:00", detail["opening_hours"]!!.jsonPrimitive.content)
         assertEquals("Planet Fitness", detail["brand"]!!.jsonPrimitive.content)
         assertEquals(
@@ -308,13 +308,45 @@ class FeatureCollectionContractTest {
                     detail = PoiCategoryDetailSchema(raw = json("""{}""")),
                 ),
             )
-        val detail = gymDetail(out)
+        val detail = detailObject(out)
         assertEquals(false, detail.containsKey("opening_hours"))
         assertEquals(false, detail.containsKey("brand"))
         assertEquals(false, detail.containsKey("upstream"))
     }
 
-    private fun gymDetail(encoded: String) =
+    @Test
+    fun `single feature detail — campground field keys are snake_case`() {
+        val out =
+            encodeApiJson(
+                detailFeature(
+                    id = 5,
+                    source = "recgov",
+                    sourceId = "232869",
+                    category = "campground",
+                    subcategory = null,
+                    name = "Cold Creek",
+                    region = "CA",
+                    geometry = """{"type":"Point","coordinates":[0,0]}""",
+                    detail =
+                        PoiCategoryDetailSchema(
+                            statusDescription = "Open seasonally",
+                            cellCoverage = json(""""weak""""),
+                            maxRvLength = 32.0,
+                            hasPullThroughSites = true,
+                            lastVerified = "2026-06-01",
+                            raw = json("""{}"""),
+                        ),
+                ),
+            )
+        val detail = detailObject(out)
+        assertEquals("Open seasonally", detail["status_description"]!!.jsonPrimitive.content)
+        assertEquals("weak", detail["cell_coverage"]!!.jsonPrimitive.content)
+        assertEquals(true, detail.containsKey("max_rv_length"))
+        assertEquals(true, detail.containsKey("has_pull_through_sites"))
+        assertEquals("2026-06-01", detail["last_verified"]!!.jsonPrimitive.content)
+    }
+
+    private fun detailObject(encoded: String) =
         Json
             .parseToJsonElement(encoded)
             .jsonObject["properties"]!!
