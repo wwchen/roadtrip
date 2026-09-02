@@ -14,6 +14,7 @@ import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeEach
@@ -247,6 +248,155 @@ class PoiServiceTest : SharedDbTest() {
 
         assertEquals("Camp among redwoods.", detail.description)
         assertEquals("https://example.test/large.jpg", detail.photoUrl)
+    }
+
+    // The three fields that are JSONB key lookups, not whole-column reads — a
+    // typo'd key (wrong column, or the wrong key inside the right column)
+    // compiles, passes every other gate, and serves null forever.
+    @Test
+    fun `campground detail extracts email, elevation and last_verified from nested JSONB`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "232869",
+                name = "Cold Creek",
+                lon = -120.31,
+                lat = 39.54,
+                source = "recgov",
+            )
+        ctx.execute(
+            """
+            UPDATE campgrounds
+            SET contact = ?::jsonb, location = ?::jsonb, metadata = ?::jsonb
+            WHERE id = ?
+            """.trimIndent(),
+            """{"email":"lavo_info@nps.gov"}""",
+            """{"elevation":1798}""",
+            """{"last_updated":"2026-06-01"}""",
+            fixture.catalogId,
+        )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals("lavo_info@nps.gov", detail.email)
+        assertEquals(1798.0, detail.elevation)
+        assertEquals("2026-06-01", detail.lastVerified)
+    }
+
+    // The remaining table rows are whole-column reads: a wrong RHS (e.g.
+    // `cellCoverage = campground.amenities`) still compiles and still passes a
+    // type-blind test, so this asserts each field against a distinct seeded value.
+    @Test
+    fun `campground detail serves its own columns as named schema fields`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "232869",
+                name = "Cold Creek",
+                lon = -120.31,
+                lat = 39.54,
+                source = "recgov",
+            )
+        ctx.execute(
+            """
+            UPDATE campgrounds
+            SET status = ?, status_description = ?, kind = ?,
+                price = ?::jsonb, default_campsite_schedule = ?::jsonb, amenities = ?::jsonb,
+                cell_service = ?::jsonb, max_rv_length = ?, max_trailer_length = ?,
+                has_pull_through_sites = ?, big_rig_friendly = ?,
+                links = ?::jsonb, alerts = ?::jsonb, connections = ?::jsonb,
+                metadata = ?::jsonb, management = ?::jsonb, contact = ?::jsonb
+            WHERE id = ?
+            """.trimIndent(),
+            "Open",
+            "Open seasonally",
+            "federal",
+            """{"minimum":26,"maximum":36}""",
+            """{"check_in_time":"14:00"}""",
+            """{"showers":true}""",
+            """{"level":"weak"}""",
+            32.0,
+            28.0,
+            true,
+            true,
+            """[{"url":"https://example.test"}]""",
+            """[{"message":"road closed"}]""",
+            """{"power":"30/50 amp"}""",
+            """{"last_updated":"2026-06-01"}""",
+            """{"agency_name":"NPS"}""",
+            """{"email":"a@b.test"}""",
+            fixture.catalogId,
+        )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals("Open", detail.status)
+        assertEquals("Open seasonally", detail.statusDescription)
+        assertEquals("federal", detail.kind)
+        assertEquals(
+            "26",
+            detail.price!!
+                .jsonObject["minimum"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "14:00",
+            detail.schedule!!
+                .jsonObject["check_in_time"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "true",
+            detail.amenities!!
+                .jsonObject["showers"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "weak",
+            detail.cellCoverage!!
+                .jsonObject["level"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(32.0, detail.maxRvLength)
+        assertEquals(28.0, detail.maxTrailerLength)
+        assertEquals(true, detail.hasPullThroughSites)
+        assertEquals(true, detail.bigRigFriendly)
+        assertEquals(
+            "https://example.test",
+            detail.links!!
+                .jsonArray[0]
+                .jsonObject["url"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "road closed",
+            detail.alerts!!
+                .jsonArray[0]
+                .jsonObject["message"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "30/50 amp",
+            detail.connections!!
+                .jsonObject["power"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "2026-06-01",
+            detail.metadata!!
+                .jsonObject["last_updated"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "NPS",
+            detail.management!!
+                .jsonObject["agency_name"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "a@b.test",
+            detail.contact!!
+                .jsonObject["email"]!!
+                .jsonPrimitive.content,
+        )
     }
 
     // The bug this pins: a gym's hours lived only in `payload.tags`, and every

@@ -193,16 +193,6 @@ describe('campground promotion', () => {
     expect(p.last_verified).toBe('2026-06-01');
   });
 
-  test('trims promoted text', () => {
-    expect(flatten('campgroundNested').description).toBe(
-      'Lakeside sites near the Loomis Museum.',
-    );
-  });
-
-  test('picks the first non-blank photo url in preference order', () => {
-    expect(flatten('campgroundNested').photo_url).toBe('https://example.test/m.jpg');
-  });
-
   test('carries the schedule through under its own name', () => {
     expect(flatten('campgroundNested').schedule).toBe('May-Oct');
   });
