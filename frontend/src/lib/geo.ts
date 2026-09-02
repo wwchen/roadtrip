@@ -20,16 +20,6 @@ const METRES_LABEL_BELOW_KM = 1;
 /** Below this the label keeps one decimal; above it rounds to whole km. */
 const ONE_DECIMAL_BELOW_KM = 10;
 
-// Degree span → zoom, coarse buckets. Tuned by eye for the park/campground
-// footprints this app flies to; not a projection calculation.
-const ZOOM_BY_SPAN: ReadonlyArray<readonly [spanDegrees: number, zoom: number]> = [
-  [3, 7],
-  [1, 8.5],
-  [0.3, 10],
-  [0.1, 11],
-];
-const ZOOM_FOR_SMALLEST_SPAN = 12;
-
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 
 /** Haversine distance in km. Used for distance-from-me and sort-by-nearest. */
@@ -128,13 +118,4 @@ export function geomCenter(geom: GeoJsonGeometry | null | undefined): GeomCenter
       [maxX, maxY],
     ],
   ];
-}
-
-export function zoomForBbox(bbox: Bbox): number {
-  const [[w, s], [e, n]] = bbox;
-  const span = Math.max(e - w, n - s);
-  for (const [threshold, zoom] of ZOOM_BY_SPAN) {
-    if (span > threshold) return zoom;
-  }
-  return ZOOM_FOR_SMALLEST_SPAN;
 }

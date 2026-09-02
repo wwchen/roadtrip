@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'vitest';
-import { token } from '@tokens';
 import { flattenHydratedPoi, type PoiFeature } from './poi';
 
 // One fixture per flattener branch, plus malformed and sparse inputs.
@@ -11,78 +10,79 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
     properties: {
       category: 'campground',
       name: 'Manzanita Lake',
-      raw: {
-        description: '  Lakeside sites near the Loomis Museum.  ',
-        management: { agency_name: 'National Park Service' },
-        contact: { primary_phone: '530.336.5521', email: 'lavo_info@nps.gov' },
-        location: { elevation: 1798, directions: 'Hwy 89 north entrance' },
-        metadata: { last_updated: '2026-06-01' },
-        photos: [{ medium_url: 'https://example.test/m.jpg', large_url: '' }],
-        price: { minimum: 26, maximum: 36, currency_code: 'USD' },
+      agency: 'National Park Service',
+      detail: {
+        description: 'Lakeside sites near the Loomis Museum.',
+        photo_url: 'https://example.test/m.jpg',
+        phone: '530.336.5521',
+        email: 'lavo_info@nps.gov',
+        elevation: 1798,
+        cell_coverage: 'weak',
+        reserve_url: 'https://example.test/reserve',
         status: 'Open',
         status_description: 'Open seasonally',
-        reservation_url: 'https://example.test/reserve',
-        default_campsite_schedule: 'May-Oct',
-        cell_service: 'weak',
+        price: { minimum: 26, maximum: 36, currency_code: 'USD' },
+        schedule: 'May-Oct',
+        last_verified: '2026-06-01',
+        // The vendor record verbatim. Inert for a campground — the facts above
+        // are what the drawer actually reads, named, from the backend now.
+        raw: {
+          description: '  Lakeside sites near the Loomis Museum.  ',
+          management: { agency_name: 'National Park Service' },
+          contact: { primary_phone: '530.336.5521', email: 'lavo_info@nps.gov' },
+          location: { elevation: 1798, directions: 'Hwy 89 north entrance' },
+          metadata: { last_updated: '2026-06-01' },
+          photos: [{ medium_url: 'https://example.test/m.jpg', large_url: '' }],
+          price: { minimum: 26, maximum: 36, currency_code: 'USD' },
+          status: 'Open',
+          status_description: 'Open seasonally',
+          reservation_url: 'https://example.test/reserve',
+          default_campsite_schedule: 'May-Oct',
+          cell_service: 'weak',
+        },
       },
       address: { city: 'Mineral', state_code: 'CA', postcode: '96063' },
     },
   },
 
-  // `detail` and `raw` arrive as encoded JSON strings from the JSONB columns.
+  // `detail` arrives as an encoded JSON string from the JSONB column.
   campgroundJsonStrings: {
     id: 'poi-7',
     properties: {
       category: 'campground',
       subcategory: 'rv-park',
+      agency: 'USFS',
       detail: JSON.stringify({
         address: { full: '1 Loop Rd', directions: 'Second left' },
+        email: 'usfs-rvpark@example.test',
         raw: { management: { agency: 'USFS' }, price: { minimum: 20, maximum: 20 } },
       }),
     },
   },
 
-  nationalPark: {
-    id: 900,
-    properties: {
-      category: 'national-park',
-      name: 'Lassen Volcanic',
-      region: 'CA',
-      raw: { acres: 106589, official_name: 'Lassen Volcanic National Park', designation: 'NPS' },
-    },
-  },
-
-  // PAD-US field names already present — they must win over the ETL keys.
-  statePark: {
-    id: 901,
-    properties: {
-      category: 'state-park',
-      raw: { Unit_Nm: 'Castle Crags', State_Nm: 'CA', Loc_Nm: 'Shasta', GIS_Acres: 4350, Mang_Name: 'STAT' },
-    },
-  },
-
+  // A charger as `/api/pois/{id}` sends it: its canonical columns are named
+  // fields on `detail`, same as a campground or a gym.
   supercharger: {
     id: 'sc-1',
     properties: {
       category: 'tesla_supercharger',
-      source_id: 'redding-ca',
-      raw: {
+      name: 'Redding, CA',
+      detail: {
         stall_count: 12,
-        max_power_kw: 250,
+        power_kilowatt: 250,
+        status: 'CONSTRUCTION',
         time_zone: 'America/Los_Angeles',
-        amenities: ['restrooms'],
+        amenities: ['AMENITIES_WIFI'],
         twenty_four_seven: true,
         open_to_non_teslas: false,
-        detail_payload: { availabilityProfile: { weekday: 'busy' }, accessHours: {} },
-        index_payload: { supercharger_function: { site_status: 'CONSTRUCTION' } },
+        pricebooks: [],
+        availability_profile: { availabilityProfile: { weekday: 'busy' } },
+        upstream: {
+          index: { supercharger_function: { site_status: 'CONSTRUCTION' } },
+          detail: { commonSiteName: 'Downtown Redding' },
+        },
       },
     },
-  },
-
-  // No raw at all: exercises the status/stall defaults and the token fallback.
-  superchargerBare: {
-    id: 'sc-2',
-    properties: { category: 'supercharger' },
   },
 
   // A gym as `/api/pois/{id}` sends it: hours, brand and the tag map are named
@@ -162,8 +162,8 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
 const flatten = (key: keyof typeof FIXTURES) =>
   flattenHydratedPoi(structuredClone(FIXTURES[key]!)).properties;
 
-describe('campground promotion', () => {
-  test('promotes management, contact, and location facts to flat names', () => {
+describe('a campground, whose facts all arrive named', () => {
+  test('carries management, contact, and location facts through from `detail`', () => {
     const p = flatten('campgroundNested');
     expect(p.agency).toBe('National Park Service');
     expect(p.phone).toBe('530.336.5521');
@@ -174,20 +174,8 @@ describe('campground promotion', () => {
     expect(p.last_verified).toBe('2026-06-01');
   });
 
-  test('trims promoted text', () => {
-    expect(flatten('campgroundNested').description).toBe(
-      'Lakeside sites near the Loomis Museum.',
-    );
-  });
-
-  test('picks the first non-blank photo url in preference order', () => {
-    expect(flatten('campgroundNested').photo_url).toBe('https://example.test/m.jpg');
-  });
-
-  test('mirrors schedule onto default_campsite_schedule', () => {
-    const p = flatten('campgroundNested');
-    expect(p.schedule).toBe('May-Oct');
-    expect(p.default_campsite_schedule).toBe('May-Oct');
+  test('carries the schedule through under its own name', () => {
+    expect(flatten('campgroundNested').schedule).toBe('May-Oct');
   });
 
   test('takes the upstream table from the backend, whatever the vendor shipped', () => {
@@ -205,7 +193,7 @@ describe('campground promotion', () => {
   });
 
   test('parses detail and raw when they arrive as JSON strings', () => {
-    expect(flatten('campgroundJsonStrings').agency).toBe('USFS');
+    expect(flatten('campgroundJsonStrings').email).toBe('usfs-rvpark@example.test');
   });
 
   test('a campground subcategory overrides the category', () => {
@@ -219,65 +207,21 @@ describe('campground promotion', () => {
   });
 });
 
-describe('park field mapping', () => {
-  test('maps ETL keys onto the PAD-US names the layers read', () => {
-    expect(flatten('nationalPark')).toMatchObject({
-      Unit_Nm: 'Lassen Volcanic',
-      State_Nm: 'CA',
-      Loc_Nm: 'Lassen Volcanic National Park',
-      GIS_Acres: 106589,
-      Mang_Name: 'NPS',
+describe('a charger, whose facts all arrive named', () => {
+  test('carries its canonical columns, and the upstream index/detail captures, straight through', () => {
+    const p = flatten('supercharger');
+    expect(p).toMatchObject({
+      stall_count: 12,
+      power_kilowatt: 250,
+      status: 'CONSTRUCTION',
+      time_zone: 'America/Los_Angeles',
+      amenities: ['AMENITIES_WIFI'],
+      twenty_four_seven: true,
+      open_to_non_teslas: false,
     });
-  });
-
-  test('existing PAD-US fields win over the ETL keys', () => {
-    expect(flatten('statePark')).toMatchObject({
-      Unit_Nm: 'Castle Crags',
-      Loc_Nm: 'Shasta',
-      GIS_Acres: 4350,
-      Mang_Name: 'STAT',
-    });
-  });
-});
-
-describe('supercharger promotion', () => {
-  test('promotes stall count, power, and the location id', () => {
-    expect(flatten('supercharger')).toMatchObject({
-      locationId: 'redding-ca',
-      stallCount: 12,
-      powerKilowatt: 250,
-      timeZone: 'America/Los_Angeles',
-    });
-  });
-
-  test('reads the site status out of the index payload', () => {
-    expect(flatten('supercharger').status).toBe('CONSTRUCTION');
-  });
-
-  test('folds access hours, amenities, and flags into upstream.detail', () => {
-    const upstream = flatten('supercharger').upstream as Record<string, unknown>;
-    expect(upstream.detail).toMatchObject({
-      accessHours: { twentyFourSeven: true },
-      amenities: ['restrooms'],
-      openToNonTeslas: false,
-      timeZone: 'America/Los_Angeles',
-      availabilityProfile: { weekday: 'busy' },
-    });
+    const upstream = p.upstream as Record<string, unknown>;
     expect(upstream.index).toEqual({ supercharger_function: { site_status: 'CONSTRUCTION' } });
-  });
-
-  test('omits flags that are absent upstream rather than inventing false', () => {
-    const detail = (flatten('supercharger').upstream as Record<string, unknown>)
-      .detail as Record<string, unknown>;
-    expect(detail).not.toHaveProperty('isTrailerFriendly');
-  });
-
-  test('falls back to the design token for colour and OPEN for status', () => {
-    const p = flatten('superchargerBare');
-    expect(p.color).toBe(token('--rt-layer-supercharger'));
-    expect(p.status).toBe('OPEN');
-    expect(p.stallCount).toBe(0);
-    expect(p.powerKilowatt).toBe(0);
+    expect(upstream.detail).toEqual({ commonSiteName: 'Downtown Redding' });
   });
 });
 
@@ -328,7 +272,7 @@ describe('malformed and empty input', () => {
     const p = flatten('malformedDetail');
     expect(p).not.toHaveProperty('detail');
     expect(p).not.toHaveProperty('raw');
-    expect(p.agency).toBe('');
+    expect(p.agency).toBeUndefined();
   });
 
   test('does not throw on a feature with no properties', () => {
@@ -355,34 +299,18 @@ describe('re-flattening', () => {
   test.each([
     ['campgroundNested'],
     ['campgroundJsonStrings'],
+    ['campgroundUpstream'],
     ['nestedAddress'],
     ['malformedDetail'],
     ['noProperties'],
+    ['empty'],
     // Was NOT a no-op while hours were dug out of `raw`, which the first pass eats.
     ['planetFitness'],
+    ['planetFitnessBare'],
+    ['supercharger'],
   ] as const)('is a no-op for %s', (key) => {
     const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));
     const twice = flattenHydratedPoi(structuredClone(once));
     expect(twice).toEqual(once);
-  });
-
-  test.each([
-    ['nationalPark', 'GIS_Acres', 106589, null],
-    ['nationalPark', 'Mang_Name', 'NPS', ''],
-    ['nationalPark', 'Loc_Nm', 'Lassen Volcanic National Park', ''],
-    ['supercharger', 'stallCount', 12, 0],
-    ['supercharger', 'powerKilowatt', 250, 0],
-  ] as const)('drops %s.%s on a second pass', (key, field, first, second) => {
-    const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));
-    const twice = flattenHydratedPoi(structuredClone(once));
-    expect(once.properties[field]).toEqual(first);
-    expect(twice.properties[field]).toEqual(second);
-  });
-
-  test('park fields that do have a flat fallback survive', () => {
-    const once = flattenHydratedPoi(structuredClone(FIXTURES.nationalPark!));
-    const twice = flattenHydratedPoi(structuredClone(once));
-    expect(twice.properties.Unit_Nm).toBe('Lassen Volcanic'); // falls back to p.name
-    expect(twice.properties.State_Nm).toBe('CA'); // falls back to p.region
   });
 });

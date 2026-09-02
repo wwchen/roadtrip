@@ -145,25 +145,6 @@ describe('a shared POI link', () => {
     expect(useMapStore.getState().hiddenAgencies).toEqual(['WA Parks']);
   });
 
-  test('frames a shared park instead of zooming to a point', async () => {
-    respond = () =>
-      json({
-        type: 'Feature',
-        id: 5,
-        geometry: {
-          type: 'Polygon',
-          coordinates: [[[-125, 46], [-121, 46], [-121, 50], [-125, 50], [-125, 46]]],
-        },
-        properties: { category: 'national-park', name: 'Olympic' },
-      });
-
-    await openOn('/?poi=5');
-
-    await waitFor(() => expect(instance.flyToCalls).toHaveLength(1));
-    // zoomForBbox: a 4° span frames at 7, well short of the 13 a point would get.
-    expect(instance.flyToCalls[0]).toMatchObject({ center: [-123, 48], zoom: 7 });
-  });
-
   test('a POI that fails to hydrate moves nothing', async () => {
     respond = () => json({ error: 'nope' }, 500);
 

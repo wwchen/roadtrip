@@ -104,48 +104,11 @@ export const Charger: Story = {
         city: 'Sutherlin',
         state: 'OR',
         postcode: '97479',
-        stallCount: 51,
-        powerKilowatt: 250,
-        v3: 51,
-        dateOpened: '2021-06-14',
-        detailPayload: {
-          accessHours: { twentyFourSeven: true },
-          openToNonTeslas: true,
-          amenities: ['restrooms', 'shopping'],
-        },
-      }}
-    />
-  ),
-};
-
-/** The parent of its campgrounds. The rollup that counts children instead of sites
- *  is the one thing this type is for, and no endpoint returns it yet. */
-export const Park: Story = {
-  render: () => (
-    <TypePage
-      properties={{
-        category: 'national-park',
-        Unit_Nm: 'Yosemite National Park',
-        State_Nm: 'California',
-        Mang_Name: 'National Park Service',
-        GIS_Acres: 761747,
-      }}
-    />
-  ),
-};
-
-export const StatePark: Story = {
-  render: () => (
-    <TypePage
-      properties={{
-        category: 'state-park',
-        Unit_Nm: 'Silver Falls State Park',
-        State_Nm: 'Oregon',
-        Mang_Name: 'Oregon Parks and Recreation Department',
-        GIS_Acres: 9200,
-        description:
-          'Ten waterfalls on one 7.2-mile loop, four of them with a trail behind the ' +
-          'falls. The day-use area fills by mid-morning on summer weekends.',
+        stall_count: 51,
+        power_kilowatt: 250,
+        twenty_four_seven: true,
+        open_to_non_teslas: true,
+        amenities: ['restrooms', 'shopping'],
       }}
     />
   ),

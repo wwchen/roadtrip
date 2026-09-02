@@ -14,6 +14,7 @@ import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeEach
@@ -220,6 +221,347 @@ class PoiServiceTest : SharedDbTest() {
                 .jsonObject["StayLimit"]!!
                 .jsonPrimitive.content,
         )
+        // The same blob used to go out as `raw` as well; nothing read it once the
+        // FE stopped promoting out of it.
+        assertNull(detail.raw)
+    }
+
+    @Test
+    fun `campground detail reads description and photo from canonical columns`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "232869",
+                name = "Cold Creek",
+                lon = -120.31,
+                lat = 39.54,
+                source = "recgov",
+            )
+        ctx.execute(
+            """
+            UPDATE campgrounds
+            SET medium_description = ?, photos = ?::jsonb
+            WHERE id = ?
+            """.trimIndent(),
+            "Camp among redwoods.",
+            """[{"url":"https://example.test/large.jpg"}]""",
+            fixture.catalogId,
+        )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals("Camp among redwoods.", detail.description)
+        assertEquals("https://example.test/large.jpg", detail.photoUrl)
+    }
+
+    // The three fields that are JSONB key lookups, not whole-column reads — a
+    // typo'd key (wrong column, or the wrong key inside the right column)
+    // compiles, passes every other gate, and serves null forever.
+    @Test
+    fun `campground detail extracts email, elevation and last_verified from nested JSONB`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "232869",
+                name = "Cold Creek",
+                lon = -120.31,
+                lat = 39.54,
+                source = "recgov",
+            )
+        ctx.execute(
+            """
+            UPDATE campgrounds
+            SET contact = ?::jsonb, location = ?::jsonb, metadata = ?::jsonb
+            WHERE id = ?
+            """.trimIndent(),
+            """{"email":"lavo_info@nps.gov"}""",
+            """{"elevation":1798}""",
+            """{"last_updated":"2026-06-01"}""",
+            fixture.catalogId,
+        )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals("lavo_info@nps.gov", detail.email)
+        assertEquals(1798.0, detail.elevation)
+        assertEquals("2026-06-01", detail.lastVerified)
+    }
+
+    // The remaining table rows are whole-column reads: a wrong RHS (e.g.
+    // `cellCoverage = campground.amenities`) still compiles and still passes a
+    // type-blind test, so this asserts each field against a distinct seeded value.
+    @Test
+    fun `campground detail serves its own columns as named schema fields`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "232869",
+                name = "Cold Creek",
+                lon = -120.31,
+                lat = 39.54,
+                source = "recgov",
+            )
+        ctx.execute(
+            """
+            UPDATE campgrounds
+            SET status = ?, status_description = ?, kind = ?,
+                price = ?::jsonb, default_campsite_schedule = ?::jsonb, amenities = ?::jsonb,
+                cell_service = ?::jsonb, max_rv_length = ?, max_trailer_length = ?,
+                has_pull_through_sites = ?, big_rig_friendly = ?,
+                links = ?::jsonb, alerts = ?::jsonb, connections = ?::jsonb,
+                metadata = ?::jsonb, management = ?::jsonb, contact = ?::jsonb
+            WHERE id = ?
+            """.trimIndent(),
+            "Open",
+            "Open seasonally",
+            "federal",
+            """{"minimum":26,"maximum":36}""",
+            """{"check_in_time":"14:00"}""",
+            """{"showers":true}""",
+            """{"level":"weak"}""",
+            32.0,
+            28.0,
+            true,
+            false,
+            """[{"url":"https://example.test"}]""",
+            """[{"message":"road closed"}]""",
+            """{"power":"30/50 amp"}""",
+            """{"last_updated":"2026-06-01"}""",
+            """{"agency_name":"NPS"}""",
+            """{"email":"a@b.test"}""",
+            fixture.catalogId,
+        )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals("Open", detail.status)
+        assertEquals("Open seasonally", detail.statusDescription)
+        assertEquals("federal", detail.kind)
+        assertEquals(
+            "26",
+            detail.price!!
+                .jsonObject["minimum"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "14:00",
+            detail.schedule!!
+                .jsonObject["check_in_time"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "true",
+            detail.amenities!!
+                .jsonObject["showers"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "weak",
+            detail.cellCoverage!!
+                .jsonObject["level"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(32.0, detail.maxRvLength)
+        assertEquals(28.0, detail.maxTrailerLength)
+        assertEquals(true, detail.hasPullThroughSites)
+        assertEquals(false, detail.bigRigFriendly)
+        assertEquals(
+            "https://example.test",
+            detail.links!!
+                .jsonArray[0]
+                .jsonObject["url"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "road closed",
+            detail.alerts!!
+                .jsonArray[0]
+                .jsonObject["message"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "30/50 amp",
+            detail.connections!!
+                .jsonObject["power"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "2026-06-01",
+            detail.metadata!!
+                .jsonObject["last_updated"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "NPS",
+            detail.management!!
+                .jsonObject["agency_name"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "a@b.test",
+            detail.contact!!
+                .jsonObject["email"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
+    // Campflare's shape, not recgov's: photos carry `original_url` (never
+    // `url`), and contact carries `primary_phone`/`primary_email` (never
+    // `phone`/`email`). A fixture seeded with recgov's keys can't catch a
+    // regression in the Campflare key-preference list.
+    @Test
+    fun `campground detail reads photo, phone and email from Campflare's keys`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "campflare-447",
+                name = "Upper Pines",
+                lon = -119.565,
+                lat = 37.739,
+                source = "campflare",
+            )
+        ctx.execute(
+            """
+            UPDATE campgrounds
+            SET photos = ?::jsonb, contact = ?::jsonb
+            WHERE id = ?
+            """.trimIndent(),
+            """[{"original_url":"https://cdn.example/p.jpg"}]""",
+            """{"primary_phone":"555-0100","primary_email":"info@example.test"}""",
+            fixture.catalogId,
+        )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals("https://cdn.example/p.jpg", detail.photoUrl)
+        assertEquals("555-0100", detail.phone)
+        assertEquals("info@example.test", detail.email)
+    }
+
+    // Mirrors the charger NULL-coercion pin below: the recgov ETL never writes
+    // these four columns (only Campflare's does), so a recgov row has them
+    // NULL and they must come back null, not the primitive-class zero value
+    // (0.0 / false).
+    @Test
+    fun `campground with no rig-size data serves null, not zero or false`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "no-rig-data",
+                name = "Somewhere",
+                lon = -119.565,
+                lat = 37.739,
+            )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertNull(detail.maxRvLength)
+        assertNull(detail.maxTrailerLength)
+        assertNull(detail.hasPullThroughSites)
+        assertNull(detail.bigRigFriendly)
+    }
+
+    // Charger fields are whole-column reads too: a wrong RHS (e.g.
+    // `trailerFriendly = supercharger.twentyFourSeven`) still compiles and still
+    // passes a type-blind test, so this asserts each field against a distinct
+    // seeded value. `hardware_counts` is deliberately absent — no ETL ever
+    // fills it, so it is not served.
+    @Test
+    fun `charger detail serves its own columns as named schema fields`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "redding-ca",
+                name = "Redding, CA",
+                lon = -122.3917,
+                lat = 40.5865,
+                poiType = "tesla_supercharger",
+            )
+        ctx.execute(
+            """
+            UPDATE tesla_superchargers
+            SET site_status = ?, time_zone = ?, amenities = ?::jsonb,
+                stall_count = ?, max_power_kw = ?, pricebooks = ?::jsonb,
+                availability_profile = ?::jsonb,
+                open_to_non_teslas = NULL, trailer_friendly = ?, twenty_four_seven = ?,
+                index_payload = ?::jsonb, detail_payload = ?::jsonb
+            WHERE id = ?
+            """.trimIndent(),
+            "CONSTRUCTION",
+            "America/Los_Angeles",
+            """["AMENITIES_WIFI"]""",
+            12,
+            250,
+            """[{"feeType":"CHARGING"}]""",
+            """{"availabilityProfile":{"weekday":"busy"}}""",
+            // A literal NULL above, then true, false — three booleans, three
+            // distinct states, so a swapped assignment between any pair fails.
+            true,
+            false,
+            """{"supercharger_function":{"site_status":"INDEX_ONLY_STATUS"}}""",
+            """{"commonSiteName":"Downtown Redding"}""",
+            fixture.catalogId,
+        )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals("CONSTRUCTION", detail.status)
+        assertEquals("America/Los_Angeles", detail.timeZone)
+        assertEquals(
+            "AMENITIES_WIFI",
+            detail.amenities!!
+                .jsonArray[0]
+                .jsonPrimitive.content,
+        )
+        assertEquals(12, detail.stallCount)
+        assertEquals(250, detail.powerKilowatt)
+        assertEquals(
+            "CHARGING",
+            detail.pricebooks!!
+                .jsonArray[0]
+                .jsonObject["feeType"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "busy",
+            detail.availabilityProfile!!
+                .jsonObject["availabilityProfile"]!!
+                .jsonObject["weekday"]!!
+                .jsonPrimitive.content,
+        )
+        assertNull(detail.openToNonTeslas)
+        assertEquals(true, detail.trailerFriendly)
+        assertEquals(false, detail.twentyFourSeven)
+        assertEquals(
+            "INDEX_ONLY_STATUS",
+            detail.upstream!!
+                .jsonObject["index"]!!
+                .jsonObject["supercharger_function"]!!
+                .jsonObject["site_status"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "Downtown Redding",
+            detail.upstream
+                .jsonObject["detail"]!!
+                .jsonObject["commonSiteName"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
+    // `stall_count`/`max_power_kw` read via `Int::class.java` (a JVM primitive)
+    // instead of `Int::class.javaObjectType`, so jOOQ silently turned a NULL
+    // hardware spec into 0 rather than surfacing "unknown". Neither column is
+    // written by `seedCatalogPoi`, so they are SQL NULL here without an UPDATE.
+    @Test
+    fun `charger with unknown hardware specs serves null, not zero`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "no-hardware-specs",
+                name = "Somewhere",
+                lon = -122.3917,
+                lat = 40.5865,
+                poiType = "tesla_supercharger",
+            )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertNull(detail.stallCount)
+        assertNull(detail.powerKilowatt)
     }
 
     // The bug this pins: a gym's hours lived only in `payload.tags`, and every

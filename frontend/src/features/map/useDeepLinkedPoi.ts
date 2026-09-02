@@ -12,7 +12,7 @@
 import { useEffect, useRef } from 'react';
 import { poiFromUrl } from '@/lib/poi-url';
 import { usePoiDetail } from '@/queries/poi-detail';
-import { geomCenter, hasCoordinates, zoomForBbox } from '@/lib/geo';
+import { geomCenter, hasCoordinates } from '@/lib/geo';
 import { featureAgency } from '@/map/agencies';
 import { overlayForCategory } from '@/map/overlays';
 import { useMapStore } from '@/stores/mapStore';
@@ -22,8 +22,6 @@ import { useMapContext } from './MapProvider';
 const SHARED_POINT_ZOOM = 13;
 /** Brisk enough not to feel like a tour. */
 const SHARED_FLY_SPEED = 1.6;
-/** Categories whose geometry is an area, so the camera frames it instead of zooming in. */
-const AREA_CATEGORIES = ['national-park', 'state-park'];
 
 /**
  * Restore the POI named in the URL, once per page load.
@@ -72,7 +70,7 @@ export function useDeepLinkedPoi(): void {
     // `hasCoordinates` and not just a finite check on the centroid: `geomCenter`
     // answers `[0, 0]` for a geometry it could not read, which is finite, so the
     // vanilla guard flew to null island for a POI whose geometry failed to load.
-    const [lng, lat, bbox] = geomCenter(geometry);
+    const [lng, lat] = geomCenter(geometry);
     if (!hasCoordinates(geometry) || !Number.isFinite(lng) || !Number.isFinite(lat)) return;
     restored.current = true;
 
@@ -82,10 +80,9 @@ export function useDeepLinkedPoi(): void {
     if (overlay) setOverlayHidden(overlay.key, false);
     if (properties.category === 'campground') setAgencyHidden(featureAgency(data), false);
 
-    const isArea = AREA_CATEGORIES.includes(String(properties.category));
     map.flyTo({
       center: [lng, lat],
-      zoom: isArea ? zoomForBbox(bbox) : SHARED_POINT_ZOOM,
+      zoom: SHARED_POINT_ZOOM,
       speed: SHARED_FLY_SPEED,
     });
   }, [data, map, styleEpoch, setOverlayHidden, setAgencyHidden]);

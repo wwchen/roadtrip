@@ -10,6 +10,7 @@ import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.service.poi.poiFeatureCollection
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
@@ -283,7 +284,7 @@ class FeatureCollectionContractTest {
                         ),
                 ),
             )
-        val detail = gymDetail(out)
+        val detail = detailObject(out)
         assertEquals("Mo-Su 05:00-22:00", detail["opening_hours"]!!.jsonPrimitive.content)
         assertEquals("Planet Fitness", detail["brand"]!!.jsonPrimitive.content)
         assertEquals(
@@ -308,13 +309,88 @@ class FeatureCollectionContractTest {
                     detail = PoiCategoryDetailSchema(raw = json("""{}""")),
                 ),
             )
-        val detail = gymDetail(out)
+        val detail = detailObject(out)
         assertEquals(false, detail.containsKey("opening_hours"))
         assertEquals(false, detail.containsKey("brand"))
         assertEquals(false, detail.containsKey("upstream"))
     }
 
-    private fun gymDetail(encoded: String) =
+    @Test
+    fun `single feature detail — campground field keys are snake_case`() {
+        val out =
+            encodeApiJson(
+                detailFeature(
+                    id = 5,
+                    source = "recgov",
+                    sourceId = "232869",
+                    category = "campground",
+                    subcategory = null,
+                    name = "Cold Creek",
+                    region = "CA",
+                    geometry = """{"type":"Point","coordinates":[0,0]}""",
+                    detail =
+                        PoiCategoryDetailSchema(
+                            statusDescription = "Open seasonally",
+                            cellCoverage = json(""""weak""""),
+                            maxRvLength = 32.0,
+                            hasPullThroughSites = true,
+                            lastVerified = "2026-06-01",
+                            raw = json("""{}"""),
+                        ),
+                ),
+            )
+        val detail = detailObject(out)
+        assertEquals("Open seasonally", detail["status_description"]!!.jsonPrimitive.content)
+        assertEquals("weak", detail["cell_coverage"]!!.jsonPrimitive.content)
+        assertEquals(true, detail.containsKey("max_rv_length"))
+        assertEquals(true, detail.containsKey("has_pull_through_sites"))
+        assertEquals("2026-06-01", detail["last_verified"]!!.jsonPrimitive.content)
+    }
+
+    // The FE reads these off `properties.detail` verbatim too — a camelCased
+    // `powerKilowatt` compiles, passes every typed test, and the Stalls row and
+    // busy-hours block just never render.
+    @Test
+    fun `single feature detail — charger field keys are snake_case`() {
+        val out =
+            encodeApiJson(
+                detailFeature(
+                    id = 11,
+                    source = "tesla_supercharger",
+                    sourceId = "redding-ca",
+                    category = "tesla_supercharger",
+                    subcategory = null,
+                    name = "Redding, CA",
+                    region = "CA",
+                    geometry = """{"type":"Point","coordinates":[0,0]}""",
+                    detail =
+                        PoiCategoryDetailSchema(
+                            stallCount = 12,
+                            powerKilowatt = 250,
+                            availabilityProfile = json("""{"availabilityProfile":{"weekday":"busy"}}"""),
+                            openToNonTeslas = true,
+                            trailerFriendly = false,
+                            twentyFourSeven = true,
+                            raw = json("""{}"""),
+                        ),
+                ),
+            )
+        val detail = detailObject(out)
+        assertEquals(12, detail["stall_count"]!!.jsonPrimitive.int)
+        assertEquals(250, detail["power_kilowatt"]!!.jsonPrimitive.int)
+        assertEquals(
+            "busy",
+            detail["availability_profile"]!!
+                .jsonObject["availabilityProfile"]!!
+                .jsonObject["weekday"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(true, detail["open_to_non_teslas"]!!.jsonPrimitive.boolean)
+        assertEquals(false, detail["trailer_friendly"]!!.jsonPrimitive.boolean)
+        assertEquals(true, detail["twenty_four_seven"]!!.jsonPrimitive.boolean)
+    }
+
+    private fun detailObject(encoded: String) =
         Json
             .parseToJsonElement(encoded)
             .jsonObject["properties"]!!

@@ -21,6 +21,23 @@ private const val PHONE_KEY = "phone"
 private const val URL_KEY = "url"
 private const val LATITUDE_KEY = "latitude"
 private const val LONGITUDE_KEY = "longitude"
+private const val EMAIL_KEY = "email"
+private const val ELEVATION_KEY = "elevation"
+private const val LAST_UPDATED_KEY = "last_updated"
+
+// Campflare's photo/contact shape differs from recgov's: recgov writes `url`
+// and `contact.phone`; Campflare writes `{original,small,medium,large}_url`
+// and `contact.primary_phone` / `contact.primary_email`. These preference
+// lists try every vendor's key so no source silently serves null.
+private const val LARGE_URL_KEY = "large_url"
+private const val MEDIUM_URL_KEY = "medium_url"
+private const val SMALL_URL_KEY = "small_url"
+private const val ORIGINAL_URL_KEY = "original_url"
+private const val PRIMARY_PHONE_KEY = "primary_phone"
+private const val PRIMARY_EMAIL_KEY = "primary_email"
+private val photoUrlKeys = listOf(URL_KEY, LARGE_URL_KEY, MEDIUM_URL_KEY, SMALL_URL_KEY, ORIGINAL_URL_KEY)
+private val phoneKeys = listOf(PHONE_KEY, PRIMARY_PHONE_KEY)
+private val emailKeys = listOf(EMAIL_KEY, PRIMARY_EMAIL_KEY)
 
 internal class CampgroundService(
     private val campgroundRepo: CampgroundRepo,
@@ -33,10 +50,12 @@ internal class CampgroundService(
         val detail = campgroundRepo.findPoiDetailByPoi(poi.id) ?: return null
         val campground = detail.campground
         val raw = Json.parseToJsonElement(detail.propertiesJson)
-        val rawObject = raw as? JsonObject ?: JsonObject(emptyMap())
         val infoUrl = campground.links.firstObjectStringProperty(URL_KEY)
-        val description = rawObject.stringProperty("description")
-        val photoUrl = rawObject.stringProperty("photo_url")
+        val description =
+            campground.mediumDescription
+                ?: campground.shortDescription
+                ?: campground.longDescription
+        val photoUrl = campground.photos.firstObjectStringProperty(photoUrlKeys)
         val dateContext =
             dateResolver.context(
                 lat = campground.location.doubleProperty(LATITUDE_KEY),
@@ -69,7 +88,7 @@ internal class CampgroundService(
                     unitName = null,
                     reserveUrl = campground.reservationUrl,
                     bookingSite = campground.reservationUrl?.let(UrlHosts::extract),
-                    phone = campground.contact.stringProperty(PHONE_KEY),
+                    phone = campground.contact.stringProperty(phoneKeys),
                     infoUrl = infoUrl,
                     address = campground.location,
                     description = description,
@@ -83,10 +102,28 @@ internal class CampgroundService(
                             reserveUrl = campground.reservationUrl,
                             infoUrl = infoUrl,
                         ),
-                    // Provenance table. Still also sent as `raw`, which the FE reads
-                    // for its campground promotion until #709 removes that.
+                    // The source record, sent once — no longer also as `raw`.
                     upstream = raw,
-                    raw = raw,
+                    status = campground.status,
+                    statusDescription = campground.statusDescription,
+                    kind = campground.kind,
+                    price = campground.price,
+                    schedule = campground.defaultCampsiteSchedule,
+                    amenities = campground.amenities,
+                    cellCoverage = campground.cellService,
+                    maxRvLength = campground.maxRvLength,
+                    maxTrailerLength = campground.maxTrailerLength,
+                    hasPullThroughSites = campground.hasPullThroughSites,
+                    bigRigFriendly = campground.bigRigFriendly,
+                    links = campground.links,
+                    alerts = campground.alerts,
+                    connections = campground.connections,
+                    metadata = campground.metadata,
+                    management = campground.management,
+                    contact = campground.contact,
+                    email = campground.contact.stringProperty(emailKeys),
+                    elevation = campground.location.doubleProperty(ELEVATION_KEY),
+                    lastVerified = campground.metadata.stringProperty(LAST_UPDATED_KEY),
                 ),
         )
     }
@@ -97,17 +134,9 @@ internal class CampgroundService(
     }
 }
 
-private fun JsonObject.stringProperty(key: String): String? =
-    (this[key] as? JsonPrimitive)
-        ?.contentOrNull
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
+private fun JsonElement.stringProperty(key: String): String? = stringProperty(listOf(key))
 
-private fun JsonElement.stringProperty(key: String): String? =
-    ((this as? JsonObject)?.get(key) as? JsonPrimitive)
-        ?.contentOrNull
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
+private fun JsonElement.stringProperty(keys: List<String>): String? = (this as? JsonObject)?.firstStringProperty(keys)
 
 private fun JsonElement.doubleProperty(key: String): Double? =
     ((this as? JsonObject)?.get(key) as? JsonPrimitive)
@@ -116,11 +145,16 @@ private fun JsonElement.doubleProperty(key: String): Double? =
         ?.takeIf { it.isNotEmpty() }
         ?.toDoubleOrNull()
 
-private fun JsonElement.firstObjectStringProperty(key: String): String? =
+private fun JsonElement.firstObjectStringProperty(key: String): String? = firstObjectStringProperty(listOf(key))
+
+private fun JsonElement.firstObjectStringProperty(keys: List<String>): String? =
     (this as? JsonArray)
-        ?.firstNotNullOfOrNull { element ->
-            (element as? JsonObject)
-                ?.let { (it[key] as? JsonPrimitive)?.contentOrNull }
-                ?.trim()
-                ?.takeIf { value -> value.isNotEmpty() }
-        }
+        ?.firstNotNullOfOrNull { element -> (element as? JsonObject)?.firstStringProperty(keys) }
+
+private fun JsonObject.firstStringProperty(keys: List<String>): String? =
+    keys.firstNotNullOfOrNull { key ->
+        (this[key] as? JsonPrimitive)
+            ?.contentOrNull
+            ?.trim()
+            ?.takeIf { value -> value.isNotEmpty() }
+    }
