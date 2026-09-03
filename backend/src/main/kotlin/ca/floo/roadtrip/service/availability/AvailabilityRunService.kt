@@ -11,6 +11,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZoneId
 
 private const val BACKOFF_BASE_MULTIPLIER = 2.0
 private const val BACKOFF_CEILING_SEC = 3_600L
@@ -19,6 +20,23 @@ private const val BACKOFF_CEILING_SEC = 3_600L
 // label and the column can't drift.
 private const val RUN_STATUS_COMPLETED = "completed"
 private const val RUN_STATUS_FAILED = "failed"
+
+/**
+ * The "already elapsed" cutoff per campground zone, as `local today -> campsite ids`.
+ *
+ * Grouped by the resolved date rather than by zone, so campgrounds that happen
+ * to agree on the day share one write instead of issuing identical statements.
+ * Campsite ids are deduplicated: a site reached through two groups must not be
+ * marked twice.
+ */
+internal fun elapsedCutoffs(
+    zonedCampsiteIds: List<Pair<ZoneId, List<Long>>>,
+    clock: Clock,
+): Map<LocalDate, List<Long>> =
+    zonedCampsiteIds
+        .filter { (_, ids) -> ids.isNotEmpty() }
+        .groupBy({ (zone, _) -> LocalDate.now(clock.withZone(zone)) }, { (_, ids) -> ids })
+        .mapValues { (_, idLists) -> idLists.flatten().distinct() }
 
 internal class AvailabilityRunService(
     private val runRepo: AvailabilityRunRepo,
@@ -55,9 +73,13 @@ internal class AvailabilityRunService(
     ): RunOutcome {
         val failure = results.firstOrNull { it.outcome != FetchOutcome.OK }
         val transitions = results.flatMap { writeObservations(it, handle.runId) }
-        val observedCampsiteIds =
-            results.flatMap { r -> r.campsites.map { it.id } }.distinct()
-        availabilityRepo.markElapsedAsPast(observedCampsiteIds, LocalDate.now(clock))
+        // Per campground zone, not one UTC day: a Pacific campground's rows
+        // would otherwise flip to `past` at 17:00 local, which the cube then
+        // serves and the next poll reads back as a past -> available opening.
+        elapsedCutoffs(results.map { it.dateContext.timeZone to it.campsites.map { c -> c.id } }, clock)
+            .forEach { (localToday, campsiteIds) ->
+                availabilityRepo.markElapsedAsPast(campsiteIds, localToday)
+            }
         recordFetchCalls(results, attemptsByGroup, handle.runId)
         val completedAt = OffsetDateTime.now(clock)
         val durationMs = durationMs(handle.startedAt, completedAt)
