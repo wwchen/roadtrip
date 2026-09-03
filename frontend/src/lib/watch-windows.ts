@@ -15,8 +15,6 @@ import type { WatchCapabilities as WireWatchCapabilities } from '@/api/availabil
 
 /** How often a watch polls, when the grid creates one. */
 export const DEFAULT_WATCH_CADENCE_SEC = 60;
-/** New watches stop after they fire: an alert you have acted on is noise. */
-export const DEFAULT_STOP_WHEN_FOUND = true;
 /** The booking action a provider must support before "add to cart" is offered. */
 const BOOKING_ACTION_ADD_TO_CART = 'add_to_cart';
 

@@ -1,7 +1,9 @@
 package ca.floo.roadtrip
 
+import ca.floo.roadtrip.route.api.settings.respondSettingsError
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.roadtripApiJson
+import ca.floo.roadtrip.service.settings.SettingsError
 import ca.floo.roadtrip.support.cacheOptionsFor
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -84,6 +86,9 @@ internal fun Application.installRoadtripPlugins() {
         exception<BadRequestException> { call, cause ->
             call.respondApiError(ERROR_INVALID_REQUEST, HttpStatusCode.BadRequest, cause.message)
         }
+        // Settings handlers let SettingsError propagate rather than each wrapping
+        // the same try/catch; the mapper is a pure function of the exception.
+        exception<SettingsError> { call, cause -> call.respondSettingsError(cause) }
     }
     install(roadtripAccessLogging)
     install(CallLogging) {

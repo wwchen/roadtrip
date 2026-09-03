@@ -51,31 +51,19 @@ internal fun Route.recgovSettingsRoutes(service: RecGovCredentialPort) {
                         return@put call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
-            try {
-                call.respondEncodedJson(service.save(principal.userId, req))
-            } catch (e: SettingsError) {
-                call.respondSettingsError(e)
-            }
+            call.respondEncodedJson(service.save(principal.userId, req))
         }.describeApi(TAG_SETTINGS, "Store rec.gov credentials")
             .access(RouteAccess.User)
 
         delete {
             val principal = call.requireUser() ?: return@delete
-            try {
-                call.respondEncodedJson(service.remove(principal.userId))
-            } catch (e: SettingsError) {
-                call.respondSettingsError(e)
-            }
+            call.respondEncodedJson(service.remove(principal.userId))
         }.describeApi(TAG_SETTINGS, "Remove rec.gov credentials")
             .access(RouteAccess.User)
 
         post(LOGIN_PATH) {
             val principal = call.requireUser() ?: return@post
-            try {
-                call.respondEncodedJson(service.login(principal.userId))
-            } catch (e: SettingsError) {
-                call.respondSettingsError(e)
-            }
+            call.respondEncodedJson(service.login(principal.userId))
         }.describeApi(TAG_SETTINGS, "Test rec.gov login with the stored credentials")
             .access(RouteAccess.User)
 
@@ -87,31 +75,19 @@ internal fun Route.recgovSettingsRoutes(service: RecGovCredentialPort) {
                         return@post call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
-            try {
-                call.respondEncodedJson(service.completeMfa(principal.userId, req.code))
-            } catch (e: SettingsError) {
-                call.respondSettingsError(e)
-            }
+            call.respondEncodedJson(service.completeMfa(principal.userId, req.code))
         }.describeApi(TAG_SETTINGS, "Complete a rec.gov MFA challenge")
             .access(RouteAccess.User)
 
         post(VERIFY_PATH) {
             val principal = call.requireUser() ?: return@post
-            try {
-                call.respondEncodedJson(service.verify(principal.userId))
-            } catch (e: SettingsError) {
-                call.respondSettingsError(e)
-            }
+            call.respondEncodedJson(service.verify(principal.userId))
         }.describeApi(TAG_SETTINGS, "Dry-run check of the rec.gov session")
             .access(RouteAccess.User)
 
         get(STATUS_PATH) {
             val principal: Principal.User = call.requireUser() ?: return@get
-            try {
-                call.respondEncodedJson(service.status(principal.userId))
-            } catch (e: SettingsError) {
-                call.respondSettingsError(e)
-            }
+            call.respondEncodedJson(service.status(principal.userId))
         }.describeApi(TAG_SETTINGS, "Stored rec.gov credentials and live session state")
             .access(RouteAccess.User)
     }

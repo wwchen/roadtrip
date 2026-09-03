@@ -19,7 +19,6 @@ import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.poi.canonicalPoiCategories
 import ca.floo.roadtrip.support.RoutingException
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
@@ -50,7 +49,7 @@ internal fun Route.poisOnRouteRoutes(
                                 .mapCatching { parseOnRouteRequest(it, routeConfig) }
                     ) {
                         is RouteBodyResult.Invalid -> {
-                            call.respondOnRouteJson(
+                            call.respondEncodedJson(
                                 ApiErrorSchema(error = "bad_request", detail = body.detail ?: "parse failed"),
                                 HttpStatusCode.BadRequest,
                             )
@@ -68,14 +67,14 @@ internal fun Route.poisOnRouteRoutes(
                         )
                     } catch (e: RoutingException) {
                         onRouteLog.warn("on-route lookup failed: {}", e.message)
-                        call.respondOnRouteJson(
+                        call.respondEncodedJson(
                             ApiErrorSchema(error = "routing_unavailable"),
                             HttpStatusCode.ServiceUnavailable,
                         )
                         return@post
                     }
 
-                call.respondOnRouteJson(onRouteFeatureCollection(rows))
+                call.respondEncodedJson(onRouteFeatureCollection(rows))
             }.describeApi(
                 tag = "poi",
                 summary = "Slim POIs inside a buffered route corridor (no viewport, no truncation)",
@@ -161,10 +160,3 @@ private fun onRouteFeature(row: PoiRow): PoisOnRouteFeatureSchema =
                 agency = row.agency,
             ),
     )
-
-private suspend inline fun <reified T> ApplicationCall.respondOnRouteJson(
-    value: T,
-    status: HttpStatusCode = HttpStatusCode.OK,
-) {
-    respondEncodedJson(value, status)
-}

@@ -2,6 +2,7 @@ package ca.floo.roadtrip.client.aspira
 
 import ca.floo.roadtrip.client.DateStringFormatter
 import ca.floo.roadtrip.client.VendorHttpDefaults
+import ca.floo.roadtrip.client.VendorHttpTransport
 import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.delay
@@ -204,11 +205,6 @@ class HttpAspiraAvailabilityClient(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
-        fun defaultClient(): HttpClient =
-            HttpClient
-                .newBuilder()
-                .connectTimeout(VendorHttpDefaults.connectTimeout)
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build()
+        fun defaultClient(): HttpClient = VendorHttpTransport.client()
     }
 }

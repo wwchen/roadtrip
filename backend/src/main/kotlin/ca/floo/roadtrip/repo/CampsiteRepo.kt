@@ -226,12 +226,6 @@ class CampsiteRepo(
                 id,
             )?.let(::campsiteFromRecord)
 
-    fun findAll(): List<Campsite> =
-        ctx
-            .fetch(
-                "$campsiteSelect WHERE c.deleted_at IS NULL ORDER BY c.id",
-            ).map(::campsiteFromRecord)
-
     fun findByCampground(campgroundId: Long): List<Campsite> =
         ctx
             .fetch(
@@ -261,21 +255,6 @@ class CampsiteRepo(
                 """.trimIndent(),
                 poiId,
             ).map(::campsiteFromRecord)
-
-    fun countSearch(filters: SearchFilters): Int {
-        val where = searchWhere(filters)
-        return ctx
-            .fetchOne(
-                """
-                SELECT COUNT(*) AS n
-                FROM campsites c
-                WHERE ${where.clauses.joinToString(" AND ")}
-                """.trimIndent(),
-                *where.params.toTypedArray(),
-            )!!
-            .get("n", Number::class.java)
-            .toInt()
-    }
 
     fun search(
         filters: SearchFilters,

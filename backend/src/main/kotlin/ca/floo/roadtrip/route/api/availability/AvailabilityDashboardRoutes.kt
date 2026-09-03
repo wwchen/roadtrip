@@ -19,7 +19,6 @@ import ca.floo.roadtrip.service.availability.AvailabilityDashboardController
 import ca.floo.roadtrip.service.availability.AvailabilityDashboardResult
 import ca.floo.roadtrip.service.availability.ForcePollerResult
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -33,13 +32,9 @@ private const val DEFAULT_LIST_OFFSET = 0
 private const val MIN_LIST_OFFSET = 0
 private const val SNAPSHOT_DEFAULT_LIMIT = 200
 private const val SNAPSHOT_MAX_LIMIT = 1000
-private const val SNAPSHOT_WINDOW_HOURS_MIN = 1
-private const val SNAPSHOT_WINDOW_HOURS_MAX = 24 * 30
-private const val SNAPSHOT_WINDOW_HOURS_DEFAULT = 24 * 7
 
 private val listLimitRange = MIN_LIST_LIMIT..MAX_LIST_LIMIT
 private val snapshotLimitRange = MIN_LIST_LIMIT..SNAPSHOT_MAX_LIMIT
-private val snapshotWindowHoursRange = SNAPSHOT_WINDOW_HOURS_MIN..SNAPSHOT_WINDOW_HOURS_MAX
 
 internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardController) {
     route("/api") {
@@ -50,7 +45,7 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                         when (val activeQuery = call.optionalBooleanQuery("active")) {
                             OptionalQuery.Missing -> null
                             is OptionalQuery.Invalid ->
-                                return@get call.respondError(
+                                return@get call.respondApiError(
                                     "invalid_active",
                                     HttpStatusCode.BadRequest,
                                     "active must be true or false",
@@ -59,14 +54,14 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                         }
                     val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
                     val offset = call.intQueryAtLeast("offset", DEFAULT_LIST_OFFSET, MIN_LIST_OFFSET)
-                    call.respondJson(
+                    call.respondEncodedJson(
                         dashboard.listPollers(active = active, limit = limit, offset = offset),
                     )
                 }.describeApi("availability", "List availability pollers (coalesced per-vendor-call-unit schedulable)")
                     .access(RouteAccess.Anonymous)
 
                 get("/summary") {
-                    call.respondJson(
+                    call.respondEncodedJson(
                         dashboard.pollersSummary(),
                     )
                 }.describeApi("availability", "Poller counters for the dashboard header")
@@ -76,22 +71,22 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                     get("/runs") {
                         val id =
                             call.longPath("id")
-                                ?: return@get call.respondError("invalid_id", HttpStatusCode.BadRequest)
+                                ?: return@get call.respondApiError("invalid_id", HttpStatusCode.BadRequest)
                         val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
-                        call.respondJson(dashboard.listRunsForPoller(id, limit = limit))
+                        call.respondEncodedJson(dashboard.listRunsForPoller(id, limit = limit))
                     }.describeApi("availability", "Runs for one poller, newest first")
                         .access(RouteAccess.Anonymous)
 
                     post("/force") {
                         val id =
                             call.longPath("id")
-                                ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
+                                ?: return@post call.respondApiError("invalid_id", HttpStatusCode.BadRequest)
                         when (val result = dashboard.forcePoller(id)) {
-                            is ForcePollerResult.Accepted -> call.respondJson(result.value)
+                            is ForcePollerResult.Accepted -> call.respondEncodedJson(result.value)
                             is ForcePollerResult.Cooldown ->
-                                call.respondJson(result.value, HttpStatusCode.TooManyRequests)
+                                call.respondEncodedJson(result.value, HttpStatusCode.TooManyRequests)
                             is ForcePollerResult.NotFound ->
-                                call.respondError(result.error, HttpStatusCode.NotFound, result.detail)
+                                call.respondApiError(result.error, HttpStatusCode.NotFound, result.detail)
                         }
                     }.describeApi("availability", "Force a poller due now ('check now'), rate-limited per poller")
                         .access(RouteAccess.Anonymous)
@@ -104,7 +99,7 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                     val pollerId = call.optionalLongQuery("poller_id")
                     val since = call.optionalOffsetDateTimeQuery("since")
                     val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
-                    call.respondJson(dashboard.listRuns(status = status, pollerId = pollerId, since = since, limit = limit))
+                    call.respondEncodedJson(dashboard.listRuns(status = status, pollerId = pollerId, since = since, limit = limit))
                 }.describeApi("availability", "Recent runs across all pollers")
                     .access(RouteAccess.Anonymous)
             }
@@ -125,11 +120,11 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                             )
                     ) {
                         is AvailabilityDashboardResult.Invalid ->
-                            call.respondError(result.error, HttpStatusCode.BadRequest, result.detail)
+                            call.respondApiError(result.error, HttpStatusCode.BadRequest, result.detail)
                         is AvailabilityDashboardResult.NotFound ->
-                            call.respondError(result.error, HttpStatusCode.NotFound, result.detail)
+                            call.respondApiError(result.error, HttpStatusCode.NotFound, result.detail)
                         is AvailabilityDashboardResult.Ok ->
-                            call.respondJson(result.value)
+                            call.respondEncodedJson(result.value)
                     }
                 }.describeApi("availability", "Availability change rows filtered by campsite_id or poi_id")
                     .access(RouteAccess.Anonymous)
@@ -145,11 +140,11 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                             )
                     ) {
                         is AvailabilityDashboardResult.Invalid ->
-                            call.respondError(result.error, HttpStatusCode.BadRequest, result.detail)
+                            call.respondApiError(result.error, HttpStatusCode.BadRequest, result.detail)
                         is AvailabilityDashboardResult.NotFound ->
-                            call.respondError(result.error, HttpStatusCode.NotFound, result.detail)
+                            call.respondApiError(result.error, HttpStatusCode.NotFound, result.detail)
                         is AvailabilityDashboardResult.Ok ->
-                            call.respondJson(result.value)
+                            call.respondEncodedJson(result.value)
                     }
                 }.describeApi("availability", "Per-date stats aggregated across a POI's campsites")
                     .access(RouteAccess.Anonymous)
@@ -157,14 +152,3 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
         }
     }
 }
-
-private suspend inline fun <reified T> ApplicationCall.respondJson(
-    body: T,
-    status: HttpStatusCode = HttpStatusCode.OK,
-) = respondEncodedJson(body, status)
-
-private suspend fun ApplicationCall.respondError(
-    error: String,
-    status: HttpStatusCode,
-    detail: String? = null,
-) = respondApiError(error = error, status = status, detail = detail)

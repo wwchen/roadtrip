@@ -2,9 +2,9 @@ package ca.floo.roadtrip.client.reserveamerica
 
 import ca.floo.roadtrip.client.DateStringFormatter
 import ca.floo.roadtrip.client.VendorHttpDefaults
+import ca.floo.roadtrip.client.VendorHttpTransport
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.support.ReserveAmericaException
-import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.slf4j.LoggerFactory
@@ -13,7 +13,6 @@ import java.net.CookiePolicy
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -115,20 +114,11 @@ class HttpReserveAmericaAvailabilityClient(
                 .header("Referer", "https://$host/")
                 .GET()
                 .build()
-        val resp =
-            try {
-                httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
-            } catch (e: Exception) {
-                throw ReserveAmericaException(
-                    "reserveamerica request failed: ${e.javaClass.name}: ${e.message}",
-                    httpStatus = null,
-                    cause = e,
-                )
+        val body =
+            VendorHttpTransport.send(httpClient, req, "reserveamerica", url) { message, status, cause ->
+                ReserveAmericaException(message, httpStatus = status, cause = cause)
             }
-        if (resp.statusCode() !in 200..299) {
-            throw ReserveAmericaException("reserveamerica HTTP ${resp.statusCode()} for $url", resp.statusCode())
-        }
-        return resp.body()
+        return body
     }
 
     private fun matrixUrl(
@@ -157,11 +147,8 @@ class HttpReserveAmericaAvailabilityClient(
                 "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
         fun defaultClient(): HttpClient =
-            HttpClient
-                .newBuilder()
-                .connectTimeout(VendorHttpDefaults.connectTimeout)
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .cookieHandler(CookieManager(null, CookiePolicy.ACCEPT_ALL))
-                .build()
+            VendorHttpTransport.client {
+                cookieHandler(CookieManager(null, CookiePolicy.ACCEPT_ALL))
+            }
     }
 }

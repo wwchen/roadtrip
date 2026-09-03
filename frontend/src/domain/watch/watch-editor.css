@@ -72,22 +72,6 @@
 .rt-watch-editor-switch input:checked + .rt-watch-editor-switch-track { background: var(--rt-brand); }
 .rt-watch-editor-switch input:checked + .rt-watch-editor-switch-track::after { transform: translateX(16px); }
 .rt-watch-editor-switch input:disabled + .rt-watch-editor-switch-track { opacity: 0.55; }
-.rt-watch-editor-field {
-  display: grid;
-  gap: 4px;
-  color: var(--rt-muted);
-  font-size: 11px;
-}
-.rt-watch-editor-field input {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid var(--rt-border-strong);
-  border-radius: var(--rt-r-sm);
-  padding: 7px 8px;
-  color: var(--rt-text);
-  background: var(--rt-bg-sunken);
-  font: inherit;
-}
 .rt-watch-editor-error {
   margin-top: 8px;
   color: var(--rt-error);
@@ -135,9 +119,5 @@
 @media (max-width: 767px) {
   .rt-watch-editor {
     width: min(var(--rt-watch-editor-width), calc(100vw - var(--rt-watch-editor-mobile-margin)));
-  }
-  .rt-watch-editor-field input {
-    min-height: 40px;
-    font-size: 16px;
   }
 }

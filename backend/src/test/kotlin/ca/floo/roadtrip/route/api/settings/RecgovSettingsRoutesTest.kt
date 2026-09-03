@@ -12,6 +12,7 @@ import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.route.auth.SESSION_COOKIE
 import ca.floo.roadtrip.route.auth.roadtripAuthorization
+import ca.floo.roadtrip.route.routeTestApplication
 import ca.floo.roadtrip.service.settings.RecGovCredentialPort
 import ca.floo.roadtrip.service.settings.RecGovSessionCodes
 import ca.floo.roadtrip.service.settings.SettingsError
@@ -27,7 +28,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.application.install
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
@@ -106,7 +106,7 @@ private fun resolve(token: String?): Principal =
 private fun ApplicationTestBuilder.mount(service: RecGovCredentialPort) {
     application {
         install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-        routing { recgovSettingsRoutes(service) }
+        routeTestApplication { recgovSettingsRoutes(service) }
     }
 }
 

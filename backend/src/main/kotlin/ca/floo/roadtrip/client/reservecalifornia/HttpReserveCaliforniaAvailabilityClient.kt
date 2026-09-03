@@ -2,9 +2,9 @@ package ca.floo.roadtrip.client.reservecalifornia
 
 import ca.floo.roadtrip.client.DateStringFormatter
 import ca.floo.roadtrip.client.VendorHttpDefaults
+import ca.floo.roadtrip.client.VendorHttpTransport
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.support.ReserveCaliforniaException
-import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -15,7 +15,6 @@ import org.slf4j.LoggerFactory
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.time.Instant
 import java.time.LocalDate
 
@@ -87,20 +86,11 @@ class HttpReserveCaliforniaAvailabilityClient(
                 .header("tenantId", TENANT_ID)
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build()
-        val resp =
-            try {
-                httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
-            } catch (e: Exception) {
-                throw ReserveCaliforniaException(
-                    "reservecalifornia request failed: ${e.javaClass.name}: ${e.message}",
-                    httpStatus = null,
-                    cause = e,
-                )
+        val body =
+            VendorHttpTransport.send(httpClient, req, "reservecalifornia", url) { message, status, cause ->
+                ReserveCaliforniaException(message, httpStatus = status, cause = cause)
             }
-        if (resp.statusCode() !in 200..299) {
-            throw ReserveCaliforniaException("reservecalifornia HTTP ${resp.statusCode()} for $url", resp.statusCode())
-        }
-        return Json.parseToJsonElement(resp.body()).jsonObject
+        return Json.parseToJsonElement(body).jsonObject
     }
 
     companion object {
@@ -109,11 +99,6 @@ class HttpReserveCaliforniaAvailabilityClient(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
-        fun defaultClient(): HttpClient =
-            HttpClient
-                .newBuilder()
-                .connectTimeout(VendorHttpDefaults.connectTimeout)
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build()
+        fun defaultClient(): HttpClient = VendorHttpTransport.client()
     }
 }

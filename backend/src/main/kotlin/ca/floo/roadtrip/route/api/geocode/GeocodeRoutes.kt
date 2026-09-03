@@ -14,7 +14,6 @@ import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.trimmedQuery
 import ca.floo.roadtrip.support.GeocodeException
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
@@ -44,7 +43,7 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
     route("/api") {
         get("/geocode") {
             if (!geocoder.configured) {
-                call.respondGeocodeError(
+                call.respondApiError(
                     "geocoding_unavailable",
                     HttpStatusCode.ServiceUnavailable,
                     detail = "roadtrip.mapbox.token not set",
@@ -54,7 +53,7 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
 
             val q = call.trimmedQuery("q")
             if (q.isBlank() || q.length > 200) {
-                call.respondGeocodeError("bad_query", HttpStatusCode.BadRequest)
+                call.respondApiError("bad_query", HttpStatusCode.BadRequest)
                 return@get
             }
 
@@ -66,11 +65,11 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
                 try {
                     geocoder.forward(q, autocomplete = autocomplete, proximity = proximity, limit = limit)
                 } catch (e: GeocodeException) {
-                    call.respondGeocodeError("geocoding_unavailable", HttpStatusCode.ServiceUnavailable)
+                    call.respondApiError("geocoding_unavailable", HttpStatusCode.ServiceUnavailable)
                     return@get
                 }
 
-            call.respondGeocodeJson(geocodeResponseDto(results))
+            call.respondEncodedJson(geocodeResponseDto(results))
         }.access(RouteAccess.Anonymous)
     }
 }
@@ -89,18 +88,3 @@ internal fun geocodeResponseDto(results: List<GeocodeResult>): GeocodeResponseDt
                 )
             },
     )
-
-private suspend fun ApplicationCall.respondGeocodeError(
-    error: String,
-    status: HttpStatusCode,
-    detail: String? = null,
-) {
-    respondApiError(error = error, status = status, detail = detail)
-}
-
-private suspend inline fun <reified T> ApplicationCall.respondGeocodeJson(
-    value: T,
-    status: HttpStatusCode = HttpStatusCode.OK,
-) {
-    respondEncodedJson(value, status)
-}

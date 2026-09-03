@@ -11,10 +11,8 @@ import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import ca.floo.roadtrip.service.etl.framework.campsiteTagKey
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -430,95 +428,6 @@ class AspiraCampsitesEtl(
                 )
             }
         }
-
-    private fun buildResourceTags(
-        inv: ResourceInventory,
-        dictionaries: AspiraDictionaries,
-    ): JsonObject =
-        buildJsonObject {
-            inv.resourceCategoryId
-                ?.let { dictionaries.resourceCategories[it] }
-                ?.let { put("resource_category", it) }
-
-            val capacity =
-                buildJsonObject {
-                    inv.minCapacity?.let { put("min", it) }
-                    inv.maxCapacity?.let { put("max", it) }
-                }
-            if (capacity.isNotEmpty()) {
-                put("capacity", capacity)
-            }
-
-            val equipment = equipmentLabels(inv.allowedEquipment, dictionaries)
-            if (equipment.isNotEmpty()) {
-                put(
-                    "equipment",
-                    buildJsonArray {
-                        equipment.forEach { add(JsonPrimitive(it)) }
-                    },
-                )
-            }
-
-            val attributes = attributeTags(inv.definedAttributes, dictionaries)
-            if (attributes.isNotEmpty()) {
-                put("attributes", attributes)
-            }
-        }
-
-    private fun equipmentLabels(
-        equipment: JsonArray?,
-        dictionaries: AspiraDictionaries,
-    ): List<String> {
-        if (equipment == null) return emptyList()
-        return equipment.mapNotNull { raw ->
-            val item = raw as? JsonObject ?: return@mapNotNull null
-            val categoryId = item["equipmentCategoryId"]?.jsonPrimitive?.intOrNull
-            val subCategoryId = item["subEquipmentCategoryId"]?.jsonPrimitive?.intOrNull
-            if (categoryId == null || subCategoryId == null) return@mapNotNull null
-            dictionaries.equipment[EquipmentKey(categoryId, subCategoryId)]?.subCategoryName
-        }
-    }
-
-    private fun attributeTags(
-        attrs: JsonArray?,
-        dictionaries: AspiraDictionaries,
-    ): JsonObject {
-        if (attrs == null) return JsonObject(emptyMap())
-        return buildJsonObject {
-            for (raw in attrs) {
-                val a = raw as? JsonObject ?: continue
-                val definitionId = a["attributeDefinitionId"]?.jsonPrimitive?.intOrNull ?: continue
-                val definition = dictionaries.attributes[definitionId] ?: continue
-                val name = definition.name ?: continue
-                val key = campsiteTagKey(name)
-                if (key.isEmpty()) continue
-                attributeTagValue(a, definition)?.let { put(key, it) }
-            }
-        }
-    }
-
-    private fun attributeTagValue(
-        attr: JsonObject,
-        definition: AttributeDefinition,
-    ): JsonElement? {
-        val labels = attributeValueLabels(attr, definition)
-        if (labels.size == 1) return JsonPrimitive(labels.single())
-        if (labels.size > 1) {
-            return buildJsonArray {
-                labels.forEach { add(JsonPrimitive(it)) }
-            }
-        }
-
-        val value = attr["value"]
-        if (value != null && value != JsonNull) return value
-
-        val values = attr["values"] as? JsonArray ?: return null
-        if (values.size == 1) return values.single()
-        if (values.size > 1) {
-            return buildJsonArray { values.forEach { add(it) } }
-        }
-        return null
-    }
 
     private fun attributeValueLabels(
         attr: JsonObject,

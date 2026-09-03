@@ -12,6 +12,7 @@ import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.route.auth.SESSION_COOKIE
 import ca.floo.roadtrip.route.auth.roadtripAuthorization
+import ca.floo.roadtrip.route.routeTestApplication
 import ca.floo.roadtrip.service.settings.SettingsError
 import ca.floo.roadtrip.service.settings.UserSettingsPort
 import io.ktor.client.request.delete
@@ -26,7 +27,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.application.install
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
@@ -115,7 +115,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing { settingsRoutes(StubSettingsService()) }
+                routeTestApplication { settingsRoutes(StubSettingsService()) }
             }
             val resp = client.get(SETTINGS_PATH)
             assertEquals(HttpStatusCode.Unauthorized, resp.status)
@@ -126,7 +126,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing { settingsRoutes(StubSettingsService()) }
+                routeTestApplication { settingsRoutes(StubSettingsService()) }
             }
             val resp =
                 client.put(PROFILE_PATH) {
@@ -141,7 +141,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing { settingsRoutes(StubSettingsService()) }
+                routeTestApplication { settingsRoutes(StubSettingsService()) }
             }
             val resp =
                 client.put(NOTIFICATIONS_PATH) {
@@ -156,7 +156,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing { settingsRoutes(StubSettingsService()) }
+                routeTestApplication { settingsRoutes(StubSettingsService()) }
             }
             val resp = client.delete(SLACK_DISCONNECT_PATH)
             assertEquals(HttpStatusCode.Unauthorized, resp.status)
@@ -167,7 +167,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing { settingsRoutes(StubSettingsService()) }
+                routeTestApplication { settingsRoutes(StubSettingsService()) }
             }
             val resp =
                 client.post(SLACK_TEST_PATH) {
@@ -184,7 +184,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing { settingsRoutes(StubSettingsService()) }
+                routeTestApplication { settingsRoutes(StubSettingsService()) }
             }
             val resp = client.get(SETTINGS_PATH) { userSession() }
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -201,7 +201,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing {
+                routeTestApplication {
                     settingsRoutes(
                         StubSettingsService(
                             onUpdateProfile = { _, req ->
@@ -234,7 +234,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing {
+                routeTestApplication {
                     settingsRoutes(
                         StubSettingsService(
                             onUpdateNotifications = { _, _ -> throw SettingsError.SlackRejected() },
@@ -258,7 +258,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing {
+                routeTestApplication {
                     settingsRoutes(
                         StubSettingsService(
                             onUpdateNotifications = { _, _ -> throw SettingsError.InvalidField("notification_email invalid") },
@@ -282,7 +282,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing {
+                routeTestApplication {
                     settingsRoutes(
                         StubSettingsService(
                             onUpdateNotifications = { _, _ -> throw SettingsError.EncryptionUnavailable() },
@@ -308,7 +308,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing {
+                routeTestApplication {
                     settingsRoutes(
                         StubSettingsService(
                             onSendSlackTest = { _, _ -> throw SettingsError.SlackNotConfigured() },
@@ -332,7 +332,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing {
+                routeTestApplication {
                     settingsRoutes(
                         StubSettingsService(
                             onSendSlackTest = { _, _ -> throw SettingsError.SlackSendFailed() },
@@ -356,7 +356,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing { settingsRoutes(StubSettingsService()) }
+                routeTestApplication { settingsRoutes(StubSettingsService()) }
             }
             val resp =
                 client.post(SLACK_TEST_PATH) {
@@ -377,7 +377,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing { settingsRoutes(StubSettingsService()) }
+                routeTestApplication { settingsRoutes(StubSettingsService()) }
             }
             val resp = client.post(EMAIL_TEST_PATH)
             assertEquals(HttpStatusCode.Unauthorized, resp.status)
@@ -388,7 +388,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing { settingsRoutes(StubSettingsService()) }
+                routeTestApplication { settingsRoutes(StubSettingsService()) }
             }
             val resp = client.post(EMAIL_TEST_PATH) { userSession() }
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -402,7 +402,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing {
+                routeTestApplication {
                     settingsRoutes(
                         StubSettingsService(
                             onSendEmailTest = { _ -> throw SettingsError.EmailSendFailed() },
@@ -423,7 +423,7 @@ class SettingsRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-                routing { settingsRoutes(StubSettingsService()) }
+                routeTestApplication { settingsRoutes(StubSettingsService()) }
             }
             val resp = client.delete(SLACK_DISCONNECT_PATH) { userSession() }
             assertEquals(HttpStatusCode.OK, resp.status)

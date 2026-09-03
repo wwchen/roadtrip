@@ -104,13 +104,6 @@
   color: var(--rt-muted);
 }
 
-/* Sentence-case, un-tracked aside inside an uppercase section label. */
-.rt-legend__hint {
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--rt-hint);
-}
-
 .rt-legend__count {
   color: var(--rt-faint);
   font-size: 11px;

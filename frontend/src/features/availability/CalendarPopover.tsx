@@ -15,8 +15,8 @@ import {
   startOfLocalMonth,
 } from '@/lib/local-date';
 import { useDismiss } from '@/lib/use-dismiss';
+import { DOW_LABELS } from './week-labels';
 
-const DOW_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 /** Six weeks, so the grid never changes height as you page months. */
 const GRID_CELLS = 42;
 
@@ -81,7 +81,7 @@ export function CalendarPopover({
           </button>
         </div>
         <div className="cg-cal-grid">
-          {DOW_HEADERS.map((label) => (
+          {DOW_LABELS.map((label) => (
             <div className="cg-cal-head" key={label}>
               {label}
             </div>

@@ -93,17 +93,4 @@ internal class PoiRepo(
             ctx.execute(sql, *params.toTypedArray())
         }
     }
-
-    fun softDeletePoiIfActive(poiId: Long) {
-        ctx.execute(
-            """
-            UPDATE pois
-            SET deleted_at = now(),
-                updated_at = now()
-            WHERE id = ?
-              AND deleted_at IS NULL
-            """.trimIndent(),
-            poiId,
-        )
-    }
 }
