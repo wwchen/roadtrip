@@ -6,7 +6,6 @@ import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.okRecords
 import ca.floo.roadtrip.service.etl.framework.records
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
@@ -32,18 +31,11 @@ class ReserveCaliforniaCampgroundsEtlTest {
         assertEquals("Lakefront camping.", campground.mediumDescription)
         assertEquals(
             "https://cdn.example/emerald.jpg",
-            campground.photos!!
-                .jsonArray
-                .first()
-                .jsonObject["url"]!!
-                .jsonPrimitive
-                .content,
+            campground.photos.single().url,
         )
-        val location = campground.location!!.jsonObject
-        assertEquals("CA", location["region"]!!.jsonPrimitive.content)
-        assertEquals("US", location["country"]!!.jsonPrimitive.content)
-        val management = campground.management!!.jsonObject
-        assertEquals("California State Parks", management["agency"]!!.jsonPrimitive.content)
+        assertEquals("CA", campground.location.region)
+        assertEquals("US", campground.location.country)
+        assertEquals("California State Parks", campground.management!!.agency)
         val amenities = campground.amenities!!.jsonObject
         assertEquals("true", amenities["Restrooms"]!!.jsonPrimitive.content)
     }

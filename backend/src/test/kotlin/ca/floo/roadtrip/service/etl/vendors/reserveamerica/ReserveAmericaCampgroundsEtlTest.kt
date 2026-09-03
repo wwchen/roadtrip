@@ -36,18 +36,16 @@ class ReserveAmericaCampgroundsEtlTest {
         assertEquals(DataProvider.RESERVEAMERICA, campground.dataProviderRef.provider)
         assertEquals("ra-695", campground.dataProviderRef.serialize())
         assertEquals("ALGER ISLAND", campground.name)
-        val location = campground.location!!.jsonObject
-        assertEquals("NY", location["region"]!!.jsonPrimitive.content)
-        assertEquals("US", location["country"]!!.jsonPrimitive.content)
+        assertEquals("NY", campground.location.region)
+        assertEquals("US", campground.location.country)
         assertEquals("state", campground.kind)
-        val management = campground.management!!.jsonObject
-        assertEquals("New York State Parks", management["agency"]!!.jsonPrimitive.content)
+        assertEquals("New York State Parks", campground.management!!.agency)
         assertEquals(
             "https://newyorkstateparks.reserveamerica.com/camping/alger-island/r/campgroundDetails.do?contractCode=NY&parkId=695",
             campground.reservationUrl,
         )
         assertEquals("Island campground on Fourth Lake.", campground.mediumDescription)
-        assertEquals("https://newyorkstateparks.reserveamerica.com/photo.jpg", campground.photos!!.jsonObjectArrayFirstUrl())
+        assertEquals("https://newyorkstateparks.reserveamerica.com/photo.jpg", campground.photos.single().url)
 
         val metadata = campground.metadata!!.jsonObject
         assertEquals("NY", metadata["contract"]!!.jsonPrimitive.content)
@@ -84,12 +82,10 @@ class ReserveAmericaCampgroundsEtlTest {
         assertEquals(DataProvider.RESERVEAMERICA, campground.dataProviderRef.provider)
         assertEquals("ra-123", campground.dataProviderRef.serialize())
         assertEquals("Writing-on-Stone Provincial Park", campground.name)
-        val location = campground.location!!.jsonObject
-        assertEquals("AB", location["region"]!!.jsonPrimitive.content)
-        assertEquals("CA", location["country"]!!.jsonPrimitive.content)
+        assertEquals("AB", campground.location.region)
+        assertEquals("CA", campground.location.country)
         assertEquals("provincial", campground.kind)
-        val management = campground.management!!.jsonObject
-        assertEquals("Alberta Parks", management["agency"]!!.jsonPrimitive.content)
+        assertEquals("Alberta Parks", campground.management!!.agency)
     }
 
     private fun kotlinx.serialization.json.JsonElement.jsonObjectArrayFirstUrl(): String =

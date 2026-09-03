@@ -1,5 +1,11 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.model.domain.Address
+import ca.floo.roadtrip.model.domain.CampgroundContact
+import ca.floo.roadtrip.model.domain.CampgroundLink
+import ca.floo.roadtrip.model.domain.CampgroundLocation
+import ca.floo.roadtrip.model.domain.CampgroundManagement
+import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
@@ -29,9 +35,9 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 kind = "established",
                 latitude = 37.739,
                 longitude = -119.565,
-                location = json("""{"latitude":37.739,"longitude":-119.565,"address":{"state_code":"CA","country_code":"US"}}"""),
+                location = CampgroundLocation(37.739, -119.565, address = Address(state = "CA", country = "US")),
                 amenities = json("""{"toilets":true,"water":true}"""),
-                management = json("""{"agency_name":"National Park Service"}"""),
+                management = CampgroundManagement("National Park Service"),
                 connections = json("""{"ridb_facility_id":"232447"}"""),
                 metadata = json("""{"last_updated":"2026-07-01T00:00:00Z"}"""),
                 sourceUrl = "https://campflare.com/campground/upper-pines-campground-447",
@@ -104,6 +110,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
+                    location = CampgroundLocation(37.739, -119.565),
                     sourcePayload = json("""{"FacilityID":"232447"}"""),
                 ),
             ),
@@ -117,6 +124,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     name = "Upper Pines Campflare",
                     latitude = 37.739,
                     longitude = -119.565,
+                    location = CampgroundLocation(37.739, -119.565),
                     sourcePayload = json("""{"id":"upper-pines-campground-447"}"""),
                 ),
             ),
@@ -163,6 +171,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 name = "Upper Pines",
                 latitude = 37.739,
                 longitude = -119.565,
+                location = CampgroundLocation(37.739, -119.565),
                 sourcePayload = json("""{"FacilityID":"232447"}"""),
             )
         val campflareRecord =
@@ -171,6 +180,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 name = "Upper Pines",
                 latitude = 37.739,
                 longitude = -119.565,
+                location = CampgroundLocation(37.739, -119.565),
                 sourcePayload = json("""{"id":"upper-pines-campground-447"}"""),
             )
 
@@ -235,7 +245,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
-                    location = json("""{"latitude":37.739,"longitude":-119.565}"""),
+                    location = CampgroundLocation(37.739, -119.565),
                     sourcePayload = json("""{"id":"upper-pines-campground-447"}"""),
                 ),
             ),
@@ -315,6 +325,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
+                    location = CampgroundLocation(37.739, -119.565),
                     sourcePayload = json("""{"id":"upper-pines-campground-447"}"""),
                 ),
             ),
@@ -327,6 +338,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
+                    location = CampgroundLocation(37.739, -119.565),
                     sourcePayload = json("""{"FacilityID":"232447"}"""),
                 ),
             ),
@@ -488,6 +500,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     name = "Bulk Campground $i",
                     latitude = 40.0 + i * 0.0001,
                     longitude = -120.0 - i * 0.0001,
+                    location = CampgroundLocation(40.0 + i * 0.0001, -120.0 - i * 0.0001),
                     sourcePayload = json("""{"id":"bulk-cg-$i"}"""),
                 )
             }
@@ -545,6 +558,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                         name = "Too Many Campground $i",
                         latitude = 40.0,
                         longitude = -120.0,
+                        location = CampgroundLocation(40.0, -120.0),
                     )
                 },
             )
@@ -585,6 +599,115 @@ class CatalogEntityRepoTest : SharedDbTest() {
             )
         }
     }
+
+    /**
+     * V55 rewrites stored rows into the canonical keys the typed columns
+     * encode. A row this repo just wrote is already canonical, so re-running
+     * the migration over it must change nothing — that equality is what makes
+     * the strict decoder on the read path safe.
+     */
+    @Test
+    fun `the normalization migration is a no-op on rows this repo wrote`() {
+        val repo = CampgroundRepo(ctx)
+        repo.upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "canonical-1"),
+                    name = "Canonical",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0, region = "CA", country = "US", elevation = 30.0, address = Address(city = "X")),
+                    links = listOf(CampgroundLink("https://a.test/", title = "A"), CampgroundLink("https://b.test/")),
+                    photos = listOf(CampgroundPhoto("https://p.test/1.jpg")),
+                    management = CampgroundManagement("NPS", website = "https://nps.test"),
+                    contact = CampgroundContact(phone = "1", email = "e@x.test"),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+
+        val before = campgroundColumnsAsText()
+        assertEquals(
+            listOf(
+                """{"region": "CA", "address": {"city": "X"}, "country": "US", "latitude": 1.0, "elevation": 30.0, "longitude": 2.0}""" +
+                    """|[{"url": "https://a.test/", "title": "A"}, {"url": "https://b.test/"}]""" +
+                    """|[{"url": "https://p.test/1.jpg"}]""" +
+                    """|{"agency": "NPS", "website": "https://nps.test"}""" +
+                    """|{"email": "e@x.test", "phone": "1"}""",
+            ),
+            before,
+        )
+
+        migrationStatements("V55__normalize_campground_jsonb.sql").forEach(ctx::execute)
+
+        assertEquals(before, campgroundColumnsAsText())
+    }
+
+    /**
+     * The migration's actual job: a row written before the columns were typed
+     * carries Campflare's upstream key names, and the read path decodes
+     * strictly now. Blank and untrimmed values become absent, which is what
+     * the old read path did on the way out.
+     */
+    @Test
+    fun `the normalization migration rewrites legacy Campflare keys`() {
+        val id =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO campgrounds (name, data_provider, data_provider_ref, location, links, photos, management, contact)
+                    VALUES ('Legacy', 'campflare', 'legacy-1', ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb)
+                    RETURNING id
+                    """.trimIndent(),
+                    """{"latitude":1,"longitude":2,"region":"  CA  ","directions":"Turn left at the pines.",""" +
+                        """"address":{"street1":"1 Rd","state_code":"CA","zipcode":"95389","country_code":"US","full":"1 Rd, CA 95389"}}""",
+                    """[{"href":"https://a.test/","label":"A"},{"caption":"no url"}]""",
+                    """[{"original_url":"https://p.test/1.jpg","large_url":"https://p.test/big.jpg"},{"caption":"no url"}]""",
+                    """{"agency_name":"NPS","agency_id":7,"agency_website":"https://nps.test"}""",
+                    """{"primary_phone":"555-0100","primary_email":"","fax":"x"}""",
+                )!!
+                .get("id", Long::class.java)
+
+        migrationStatements("V55__normalize_campground_jsonb.sql").forEach(ctx::execute)
+
+        val campground = checkNotNull(CampgroundRepo(ctx).findById(id))
+        assertEquals(
+            CampgroundLocation(
+                1.0,
+                2.0,
+                region = "CA",
+                directions = "Turn left at the pines.",
+                address = Address("1 Rd", state = "CA", postcode = "95389", country = "US", full = "1 Rd, CA 95389"),
+            ),
+            campground.location,
+        )
+        assertEquals(listOf(CampgroundLink("https://a.test/", title = "A")), campground.links)
+        assertEquals(listOf(CampgroundPhoto("https://p.test/big.jpg")), campground.photos)
+        assertEquals(CampgroundManagement("NPS", website = "https://nps.test"), campground.management)
+        assertEquals(CampgroundContact(phone = "555-0100"), campground.contact)
+    }
+
+    private fun campgroundColumnsAsText(): List<String> =
+        ctx
+            .fetch(
+                """
+                SELECT location::text AS location, links::text AS links, photos::text AS photos,
+                       management::text AS management, contact::text AS contact
+                FROM campgrounds ORDER BY id
+                """.trimIndent(),
+            ).map { row -> row.intoArray().joinToString("|") { it.toString() } }
+
+    /** jOOQ executes one statement per call, so the script is split on its statement terminators. */
+    private fun migrationStatements(name: String): List<String> =
+        checkNotNull(javaClass.classLoader.getResourceAsStream("db/migration/$name")) { "missing migration $name" }
+            .bufferedReader()
+            .use { it.readText() }
+            .lines()
+            .filterNot { it.trimStart().startsWith("--") }
+            .joinToString("\n")
+            .split(";")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
 
     private fun tableCount(table: String): Int =
         ctx

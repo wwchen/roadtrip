@@ -324,7 +324,7 @@ class PoiServiceTest : SharedDbTest() {
             """[{"message":"road closed"}]""",
             """{"power":"30/50 amp"}""",
             """{"last_updated":"2026-06-01"}""",
-            """{"agency_name":"NPS"}""",
+            """{"agency":"NPS"}""",
             """{"email":"a@b.test"}""",
             fixture.catalogId,
         )
@@ -391,7 +391,7 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals(
             "NPS",
             detail.management!!
-                .jsonObject["agency_name"]!!
+                .jsonObject["agency"]!!
                 .jsonPrimitive.content,
         )
         assertEquals(
@@ -402,12 +402,11 @@ class PoiServiceTest : SharedDbTest() {
         )
     }
 
-    // Campflare's shape, not recgov's: photos carry `original_url` (never
-    // `url`), and contact carries `primary_phone`/`primary_email` (never
-    // `phone`/`email`). A fixture seeded with recgov's keys can't catch a
-    // regression in the Campflare key-preference list.
+    // Campflare's upstream keys (original_url, primary_phone, primary_email)
+    // are mapped to the canonical ones by its ETL now, and V55 rewrote the
+    // rows that predate that. Every stored row therefore looks like this one.
     @Test
-    fun `campground detail reads photo, phone and email from Campflare's keys`() {
+    fun `campground detail reads photo, phone and email from the canonical columns`() {
         val fixture =
             ctx.seedCatalogPoi(
                 sourceId = "campflare-447",
@@ -422,8 +421,8 @@ class PoiServiceTest : SharedDbTest() {
             SET photos = ?::jsonb, contact = ?::jsonb
             WHERE id = ?
             """.trimIndent(),
-            """[{"original_url":"https://cdn.example/p.jpg"}]""",
-            """{"primary_phone":"555-0100","primary_email":"info@example.test"}""",
+            """[{"url":"https://cdn.example/p.jpg"}]""",
+            """{"phone":"555-0100","email":"info@example.test"}""",
             fixture.catalogId,
         )
 

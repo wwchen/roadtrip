@@ -1,5 +1,11 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
+import ca.floo.roadtrip.model.domain.Address
+import ca.floo.roadtrip.model.domain.CampgroundContact
+import ca.floo.roadtrip.model.domain.CampgroundLink
+import ca.floo.roadtrip.model.domain.CampgroundLocation
+import ca.floo.roadtrip.model.domain.CampgroundManagement
+import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CellSignal
 import ca.floo.roadtrip.model.domain.RatingSummary
@@ -10,7 +16,6 @@ import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.registry.AgencyConfig
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
-import ca.floo.roadtrip.service.etl.framework.CampgroundJsonb
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.fetchedAtOrNow
@@ -152,30 +157,30 @@ class RecGovCampgroundsEtl(
             longitude = lon,
             kind = bucket,
             mediumDescription = description(rawObj),
-            location = CampgroundJsonb.location(lat, lon, region = region, country = country, address = addressPayload(firstAddr)),
+            location = CampgroundLocation(lat, lon, region = region, country = country, address = address(firstAddr)),
             reservationUrl = infoUrl,
-            links = infoUrl?.let { CampgroundJsonb.links(it) },
-            photos = photoUrl?.let(CampgroundJsonb::photos),
+            links = listOfNotNull(infoUrl?.let(::CampgroundLink)),
+            photos = listOfNotNull(photoUrl?.let(::CampgroundPhoto)),
             cellService = cell?.let(::cellCoveragePayload),
-            management = agency?.let(CampgroundJsonb::management),
-            contact = row.FacilityPhone?.takeIf { it.isNotBlank() }?.let(CampgroundJsonb::contact),
+            management = agency?.let { CampgroundManagement(it) },
+            contact = row.FacilityPhone?.takeIf { it.isNotBlank() }?.let { CampgroundContact(phone = it) },
             metadata = metadataPayload(activities, rating),
             sourceUrl = infoUrl,
             sourcePayload = raw,
         )
     }
 
-    private fun addressPayload(address: FacilityAddress?): JsonObject? {
+    private fun address(address: FacilityAddress?): Address? {
         if (address == null) return null
-        val payload =
-            buildJsonObject {
-                address.FacilityStreetAddress1?.takeIf { it.isNotBlank() }?.let { put("street", it) }
-                address.City?.takeIf { it.isNotBlank() }?.let { put("city", it) }
-                address.AddressStateCode?.takeIf { it.isNotBlank() }?.let { put("state", it) }
-                address.PostalCode?.takeIf { it.isNotBlank() }?.let { put("postcode", it) }
-                normalizeCountry(address.AddressCountryCode)?.let { put("country", it) }
-            }
-        return payload.takeIf { it.isNotEmpty() }
+        val parsed =
+            Address(
+                street = address.FacilityStreetAddress1?.takeIf { it.isNotBlank() },
+                city = address.City?.takeIf { it.isNotBlank() },
+                state = address.AddressStateCode?.takeIf { it.isNotBlank() },
+                postcode = address.PostalCode?.takeIf { it.isNotBlank() },
+                country = normalizeCountry(address.AddressCountryCode),
+            )
+        return parsed.takeIf { it != Address() }
     }
 
     private fun metadataPayload(

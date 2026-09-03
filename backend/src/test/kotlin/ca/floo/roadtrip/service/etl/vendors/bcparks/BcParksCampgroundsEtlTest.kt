@@ -10,7 +10,6 @@ import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.terminalRecords
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeAll
@@ -18,7 +17,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.nio.file.Files
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BcParksCampgroundsEtlTest {
@@ -47,27 +45,9 @@ class BcParksCampgroundsEtlTest {
         assertEquals(49.3167, cg.latitude)
         assertEquals(-124.2833, cg.longitude)
         assertEquals("<p>A beautiful sandy beach campground.</p>", cg.mediumDescription)
-        assertNotNull(cg.photos)
-        val photoUrl =
-            cg.photos!!
-                .jsonArray
-                .first()
-                .jsonObject["url"]!!
-                .jsonPrimitive
-                .content
-        assertEquals("https://example.test/rathtrevor.jpg", photoUrl)
-        assertNotNull(cg.contact)
-        val phone =
-            cg.contact!!
-                .jsonObject["phone"]!!
-                .jsonPrimitive
-                .content
-        assertEquals("250-555-1234", phone)
-        val agency =
-            cg.management!!
-                .jsonObject["agency"]!!
-                .jsonPrimitive
-                .content
+        assertEquals("https://example.test/rathtrevor.jpg", cg.photos.single().url)
+        assertEquals("250-555-1234", cg.contact!!.phone)
+        val agency = cg.management!!.agency
         assertEquals("BC Parks", agency)
     }
 

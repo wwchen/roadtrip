@@ -1,5 +1,10 @@
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
+import ca.floo.roadtrip.model.domain.Address
+import ca.floo.roadtrip.model.domain.CampgroundContact
+import ca.floo.roadtrip.model.domain.CampgroundLink
+import ca.floo.roadtrip.model.domain.CampgroundManagement
+import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
@@ -11,7 +16,6 @@ import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.terminalOkRecords
 import ca.floo.roadtrip.service.etl.framework.terminalRecords
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
@@ -54,33 +58,35 @@ class CampflareCampgroundsEtlTest {
                 .jsonObject["name"]!!
                 .jsonPrimitive
                 .content
-        val campflareLink =
-            row.links!!
-                .jsonArray
-                .last()
-                .jsonObject
+        val campflareLink = row.links.last()
         assertEquals("232447", ridbFacilityId)
         assertEquals(true, hasToilets)
         assertEquals(" Upper Pines ", sourceName)
-        assertEquals("Campflare source", campflareLink["title"]!!.jsonPrimitive.content)
-        assertEquals(
-            "https://campflare.com/campground/upper-pines-campground-447",
-            campflareLink["url"]!!.jsonPrimitive.content,
-        )
+        assertEquals("Campflare source", campflareLink.title)
+        assertEquals("https://campflare.com/campground/upper-pines-campground-447", campflareLink.url)
         assertEquals(BookingProvider.RECGOV, row.bookingProvider)
         assertEquals("232447", row.bookingProviderRef)
     }
 
     @Test
-    fun `promotes management agency_name to the canonical agency key`() {
+    fun `maps management agency_name to the canonical agency`() {
         val etl = CampflareCampgroundsEtl()
         val rows = terminalRecords(etl, bundle("campflare-campgrounds", campgroundPayload()), transformCtx())
-        val management = rows.single().management!!.jsonObject
 
         // Serving query and every other vendor read management->>'agency'.
-        assertEquals("National Park Service", management["agency"]!!.jsonPrimitive.content)
-        // Upstream keys are preserved for detail rendering.
-        assertEquals("National Park Service", management["agency_name"]!!.jsonPrimitive.content)
+        // The upstream keys stay in source_payload, which the drawer renders.
+        assertEquals(CampgroundManagement("National Park Service"), rows.single().management)
+    }
+
+    @Test
+    fun `maps the Campflare photo, contact, elevation and address keys`() {
+        val etl = CampflareCampgroundsEtl()
+        val row = terminalRecords(etl, bundle("campflare-campgrounds", campgroundPayload()), transformCtx()).single()
+
+        assertEquals(listOf(CampgroundPhoto("https://cdn.example/p.jpg")), row.photos)
+        assertEquals(CampgroundContact(phone = "555-0100"), row.contact)
+        assertEquals(4000.0, row.location.elevation)
+        assertEquals(Address(state = "CA", country = "US"), row.location.address)
     }
 
     @Test
@@ -142,17 +148,9 @@ class CampflareCampgroundsEtlTest {
                 transformCtx(),
             )
 
-        val link =
-            rows
-                .single()
-                .links!!
-                .jsonArray
-                .single()
-                .jsonObject
-        assertEquals("Campflare source", link["title"]!!.jsonPrimitive.content)
         assertEquals(
-            "https://campflare.com/campground/no-links",
-            link["url"]!!.jsonPrimitive.content,
+            listOf(CampgroundLink("https://campflare.com/campground/no-links", title = "Campflare source")),
+            rows.single().links,
         )
     }
 
@@ -183,14 +181,7 @@ class CampflareCampgroundsEtlTest {
                 transformCtx(),
             )
 
-        assertEquals(
-            1,
-            rows
-                .single()
-                .links!!
-                .jsonArray
-                .size,
-        )
+        assertEquals(1, rows.single().links.size)
     }
 
     @Test

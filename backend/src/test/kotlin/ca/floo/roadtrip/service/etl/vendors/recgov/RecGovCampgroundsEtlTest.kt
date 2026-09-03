@@ -59,17 +59,11 @@ class RecGovCampgroundsEtlTest {
 
         val upperPines = campgrounds.getValue("232447")
 
-        val management = upperPines.management!!.jsonObject
-        assertEquals("National Park Service", management["agency"]!!.jsonPrimitive.content)
+        assertEquals("National Park Service", upperPines.management!!.agency)
         assertEquals("<p>Upper Pines is a Yosemite campground.</p>", upperPines.mediumDescription)
         assertEquals(
             "https://cdn.example/primary.webp",
-            upperPines.photos!!
-                .jsonArray
-                .first()
-                .jsonObject["url"]!!
-                .jsonPrimitive
-                .content,
+            upperPines.photos.single().url,
         )
         val metadata = upperPines.metadata!!.jsonObject
         assertEquals("Camping", metadata["activities"]!!.jsonArray[0].jsonPrimitive.content)

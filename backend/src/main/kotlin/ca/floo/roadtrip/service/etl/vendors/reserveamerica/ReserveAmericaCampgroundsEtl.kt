@@ -1,12 +1,15 @@
 package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
+import ca.floo.roadtrip.model.domain.CampgroundLink
+import ca.floo.roadtrip.model.domain.CampgroundLocation
+import ca.floo.roadtrip.model.domain.CampgroundManagement
+import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
-import ca.floo.roadtrip.service.etl.framework.CampgroundJsonb
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.fetchedAtOrNow
@@ -87,11 +90,11 @@ class ReserveAmericaCampgroundsEtl(
                             longitude = park.lon,
                             kind = bucket,
                             mediumDescription = park.description,
-                            location = CampgroundJsonb.location(park.lat, park.lon, region = settings.region, country = settings.country),
+                            location = CampgroundLocation(park.lat, park.lon, region = settings.region, country = settings.country),
                             reservationUrl = park.infoUrl,
-                            links = park.infoUrl?.let { CampgroundJsonb.links(it) },
-                            photos = park.photoUrl?.let(CampgroundJsonb::photos),
-                            management = CampgroundJsonb.management(settings.agency),
+                            links = listOfNotNull(park.infoUrl?.let(::CampgroundLink)),
+                            photos = listOfNotNull(park.photoUrl?.let(::CampgroundPhoto)),
+                            management = CampgroundManagement(settings.agency),
                             metadata = parkExtras,
                             sourceUrl = park.infoUrl,
                             sourcePayload = parkExtras,

@@ -1,5 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
+import ca.floo.roadtrip.model.domain.CampgroundLink
+import ca.floo.roadtrip.model.domain.CampgroundLocation
+import ca.floo.roadtrip.model.domain.CampgroundManagement
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
@@ -8,7 +11,6 @@ import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
-import ca.floo.roadtrip.service.etl.framework.CampgroundJsonb
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -189,10 +191,10 @@ class AspiraCampgroundsEtl(
             latitude = lat,
             longitude = lon,
             kind = subcategory,
-            location = CampgroundJsonb.location(latitude = lat, longitude = lon),
+            location = CampgroundLocation(latitude = lat, longitude = lon),
             reservationUrl = "https://$host/",
-            links = CampgroundJsonb.links("https://$host/"),
-            management = CampgroundJsonb.management(agency),
+            links = listOf(CampgroundLink("https://$host/")),
+            management = CampgroundManagement(agency),
             metadata =
                 leafExtras(
                     leaf = leaf,

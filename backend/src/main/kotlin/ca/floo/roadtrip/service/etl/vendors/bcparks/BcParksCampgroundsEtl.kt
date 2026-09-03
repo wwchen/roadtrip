@@ -1,5 +1,10 @@
 package ca.floo.roadtrip.service.etl.vendors.bcparks
 
+import ca.floo.roadtrip.model.domain.CampgroundContact
+import ca.floo.roadtrip.model.domain.CampgroundLink
+import ca.floo.roadtrip.model.domain.CampgroundLocation
+import ca.floo.roadtrip.model.domain.CampgroundManagement
+import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
@@ -8,7 +13,6 @@ import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
-import ca.floo.roadtrip.service.etl.framework.CampgroundJsonb
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraBookingCtaRef
@@ -143,12 +147,12 @@ class BcParksCampgroundsEtl(
             longitude = strapiRow.lon,
             kind = subcategory,
             mediumDescription = strapiRow.description,
-            location = CampgroundJsonb.location(strapiRow.lat, strapiRow.lon, region = REGION, country = COUNTRY),
+            location = CampgroundLocation(strapiRow.lat, strapiRow.lon, region = REGION, country = COUNTRY),
             reservationUrl = bookingUrl,
-            links = CampgroundJsonb.links(listOfNotNull(bookingUrl, strapiRow.url?.takeIf { it != bookingUrl })),
-            photos = strapiRow.photoUrl?.let(CampgroundJsonb::photos),
-            management = CampgroundJsonb.management(agency),
-            contact = strapiRow.phone?.let(CampgroundJsonb::contact),
+            links = listOfNotNull(bookingUrl, strapiRow.url?.takeIf { it != bookingUrl }).map { CampgroundLink(it) },
+            photos = listOfNotNull(strapiRow.photoUrl?.let(::CampgroundPhoto)),
+            management = CampgroundManagement(agency),
+            contact = strapiRow.phone?.let { CampgroundContact(phone = it) },
             metadata = metadataPayload(leaf, host, match.kind, bookingCtaRef, strapiRow),
             sourceUrl = bookingUrl,
             sourcePayload = sourcePayload(leaf, match.kind, bookingCtaRef, strapiRow),
