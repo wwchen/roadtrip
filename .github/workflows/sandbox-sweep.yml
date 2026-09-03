@@ -51,35 +51,15 @@ jobs:
           RECLAIM_FREE_TARGET_GB: ${{ vars.RECLAIM_FREE_TARGET_GB || 20 }}
         run: |
           set -euo pipefail
+          # Streamed rather than run from the release staging directory, so the
+          # sweep keeps working even when no release has landed yet.
           ssh -o BatchMode=yes "$SANDBOX_HOST" \
-            "bash -s -- '$RECLAIM_FREE_TARGET_GB'" <<'REMOTE'
-          set -euo pipefail
-          target_gb="$1"
-          free_gb() { df -Pk "$HOME" | awk 'NR==2 {print int($4 / 1024 / 1024)}'; }
-
-          before="$(free_gb)"
-          echo "==> free before: ${before}GB (target ${target_gb}GB)"
-
-          # Label-scoped because the host is shared. Images stay dangling-only
-          # so this cannot fight deploy.sh's tag retention. No build cache pass:
-          # builder.gc in daemon.json caps it without racing a deploy.
-          docker container prune --force \
-            --filter "label=ca.floo.roadtrip.managed=true" | tail -1
-          docker image prune --force \
-            --filter "label=ca.floo.roadtrip.managed=true" | tail -1
-          docker volume prune --force --all \
-            --filter "label=ca.floo.roadtrip.managed=true" | tail -1
-          # Without --all this reaches only anonymous volumes, so no named one
-          # is ever a candidate however long its stack has been down.
-          docker volume prune --force | tail -1
-
-          after="$(free_gb)"
-          echo "==> free after: ${after}GB (reclaimed $(( after - before ))GB)"
-          docker system df
-          if [ "$after" -lt "$target_gb" ]; then
-            echo "::warning::deploy host has ${after}GB free, under the ${target_gb}GB target; deploys will fail preflight until space is reclaimed"
-          fi
-          REMOTE
+            "RECLAIM_FREE_TARGET_GB='$RECLAIM_FREE_TARGET_GB' bash -s -- prune --scope host" \
+            < scripts/reclaim.sh
+          ssh -o BatchMode=yes "$SANDBOX_HOST" \
+            "RECLAIM_FREE_TARGET_GB='$RECLAIM_FREE_TARGET_GB' bash -s -- check-disk --label 'deploy host' --scope host" \
+            < scripts/reclaim.sh || \
+            echo "::warning::deploy host is under the ${RECLAIM_FREE_TARGET_GB}GB free-space target; deploys will fail preflight until space is reclaimed"
 
   plan:
     runs-on: ubuntu-latest

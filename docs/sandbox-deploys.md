@@ -242,11 +242,13 @@ rest. When a `pr<N>` sandbox is reaped its status comment is rewritten with the
 reason.
 
 A `reclaim` job runs alongside `plan` on the same schedule and frees derived
-Docker data on the deploy host: build cache, stopped containers, and dangling
-images. It is a separate job rather than a step on `stop` because the host can
-run out of disk with no sandbox due for reaping, and `stop` runs only when there
-are targets. It warns when the host is left under `RECLAIM_FREE_TARGET_GB`
-(repo variable, default **20**).
+Docker data on the deploy host: stopped containers, unused images, and
+volumes, through the same `reclaim.sh` that `deploy.sh` uses. It never touches
+build cache — that is `builder.gc`'s job (below), deliberately left alone here
+so a periodic sweep cannot race an in-flight deploy for it. The job is
+separate from `stop` because the host can run out of disk with no sandbox due
+for reaping, and `stop` runs only when there are targets. It warns when the
+host is left under `RECLAIM_FREE_TARGET_GB` (repo variable, default **20**).
 
 Every prune is scoped to the `ca.floo.roadtrip.managed=true` label, which the
 three Dockerfiles set and which `deploy.sh` puts on the volumes it creates. That
@@ -256,8 +258,16 @@ named volume. There is no list of things to spare, so nothing rots when another
 stack lands on the host.
 
 Prune never removes a resource still referenced by a container, so "unused" is
-Docker's judgement rather than ours. Images are pruned dangling-only in the
-sweep so the backstop cannot fight the tag retention `deploy.sh` applies.
+Docker's judgement rather than ours. Images are no longer pruned dangling-only
+in the sweep: since the sweep runs the same `reclaim.sh prune --scope host` as
+a prod deploy, it now also applies the host's keep-5-per-repository tag
+retention, deleting older tags by reference every 30 minutes rather than
+waiting for `deploy.sh` to run.
+
+That is the one accepted behavior change from unifying the two: a rollback
+deploy that pulls an image old enough (by creation time) to fall outside the
+keep-N window can find it untagged in the gap before `compose up` runs.
+Compose re-pulls, so it is recoverable, not a rollback failure.
 
 That reference check is not by itself enough for a **freshly created** volume.
 `_ensure_data_volume` labels `roadtrip-data-<sha>` the moment it creates it, but

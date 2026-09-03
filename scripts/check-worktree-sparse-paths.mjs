@@ -23,7 +23,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -90,6 +90,64 @@ walk('');
 
 const stale = [...EXCLUDED.keys()].filter((d) => !trackedDirs.has(d) || isFull(d));
 
+// The list above only proves the config is well-formed. It was well-formed for
+// weeks while no worktree ever had it applied, so every worktree carried the
+// 1.7 GB data/raw copy the list exists to exclude. Check the effect, not the
+// spelling — and check the real effect, not a proxy for it. `core.sparseCheckout`
+// only says cone mode is nominally on; it says nothing about which patterns are
+// in effect. A worktree toggled on after a full checkout, or created under an
+// older sparsePaths list from before a directory was excluded, reads `true` and
+// would pass a boolean-only check while still carrying the excluded directory in
+// full. So check for the directory's presence on disk, which is the outcome we
+// actually care about, alongside the boolean.
+const WORKTREE_ROOT = '.claude/worktrees';
+const unapplied = [];
+let worktreeDirs = [];
+try {
+  worktreeDirs = readdirSync(resolve(ROOT, WORKTREE_ROOT), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+} catch (error) {
+  // No worktrees on this checkout is normal; anything else (e.g. a permissions
+  // failure) is a real problem and must not silently read as "nothing to verify".
+  if (error.code !== 'ENOENT') throw error;
+}
+
+for (const name of worktreeDirs) {
+  const worktree = resolve(ROOT, WORKTREE_ROOT, name);
+  let enabled = '';
+  try {
+    enabled = execFileSync('git', ['-C', worktree, 'config', 'core.sparseCheckout'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    enabled = '';
+  }
+  const leaked = [...EXCLUDED.keys()].filter((dir) => existsSync(resolve(worktree, dir)));
+  if (enabled !== 'true' || leaked.length) {
+    unapplied.push({ name, enabled: enabled === 'true', leaked });
+  }
+}
+
+if (unapplied.length) {
+  console.error(
+    '\nWorktrees with worktree.sparsePaths not actually applied. core.sparseCheckout=true\n' +
+      'says cone mode is nominally on; it does not say the exclusion took effect, so each\n' +
+      'entry below names which is wrong:\n' +
+      unapplied
+        .map(({ name, enabled, leaked }) => {
+          const reasons = [];
+          if (!enabled) reasons.push('core.sparseCheckout is not enabled');
+          if (leaked.length) reasons.push(`still contains ${leaked.join(', ')}`);
+          return `  ${WORKTREE_ROOT}/${name}: ${reasons.join('; ')}`;
+        })
+        .join('\n') +
+      '\n\nRetrofit one with:\n' +
+      `  git -C <worktree> sparse-checkout set --cone -- <the directories in ${SETTINGS} worktree.sparsePaths>`,
+  );
+}
+
 if (malformed.length) {
   console.error(
     `${SETTINGS}: worktree.sparsePaths entries git sparse-checkout --cone will reject.\n` +
@@ -119,7 +177,8 @@ if (stale.length) {
       stale.map((d) => `  ${d}`).join('\n'),
   );
 }
-if (malformed.length || unknown.length || omitted.length || stale.length) process.exit(1);
+if (malformed.length || unknown.length || omitted.length || stale.length || unapplied.length)
+  process.exit(1);
 
 console.log(
   `worktree sparsePaths ok — ${sparsePaths.length} cone-mode entries cover every tracked ` +
