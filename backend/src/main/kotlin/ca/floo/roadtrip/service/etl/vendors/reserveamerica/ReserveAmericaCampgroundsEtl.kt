@@ -3,25 +3,20 @@ package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
+import ca.floo.roadtrip.service.etl.framework.CampgroundJsonb
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.fetchedAtOrNow
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
-import java.time.Instant
 
 // ReserveAmerica (Active Network) tenant park pages → canonical campgrounds.
 //
@@ -52,7 +47,7 @@ class ReserveAmericaCampgroundsEtl(
                 val html = env.payload.jsonPrimitive.content
                 parsePark(parkId, html)?.let { parks += it }
             }
-            val dto = ReserveAmericaDto(parks = parks, fetchedAt = parseFetchedAt(envelopes.first()))
+            val dto = ReserveAmericaDto(parks = parks, fetchedAt = envelopes.first().fetchedAtOrNow())
             if (dto.parks.isEmpty()) {
                 yield(ParseResult.Bad(null, listOf("$etlSlug: no park pages parsed")))
             } else {
@@ -92,11 +87,11 @@ class ReserveAmericaCampgroundsEtl(
                             longitude = park.lon,
                             kind = bucket,
                             mediumDescription = park.description,
-                            location = locationPayload(park, settings),
+                            location = CampgroundJsonb.location(park.lat, park.lon, region = settings.region, country = settings.country),
                             reservationUrl = park.infoUrl,
-                            links = park.infoUrl?.let(::linksPayload),
-                            photos = park.photoUrl?.let(::photoPayload),
-                            management = managementPayload(settings.agency),
+                            links = park.infoUrl?.let { CampgroundJsonb.links(it) },
+                            photos = park.photoUrl?.let(CampgroundJsonb::photos),
+                            management = CampgroundJsonb.management(settings.agency),
                             metadata = parkExtras,
                             sourceUrl = park.infoUrl,
                             sourcePayload = parkExtras,
@@ -189,13 +184,6 @@ class ReserveAmericaCampgroundsEtl(
         )
     }
 
-    private fun parseFetchedAt(envelope: Envelope): Instant =
-        try {
-            Instant.parse(envelope.fetchedAt)
-        } catch (e: Exception) {
-            Instant.now()
-        }
-
     private fun displayName(
         rawName: String,
         titleSuffix: String,
@@ -207,40 +195,6 @@ class ReserveAmericaCampgroundsEtl(
             trimmed
         }
     }
-
-    private fun locationPayload(
-        park: ParsedPark,
-        settings: ReserveAmericaSettings,
-    ): JsonObject =
-        buildJsonObject {
-            put("latitude", park.lat)
-            put("longitude", park.lon)
-            put("region", settings.region)
-            put("country", settings.country)
-        }
-
-    private fun linksPayload(url: String): JsonElement =
-        buildJsonArray {
-            add(
-                buildJsonObject {
-                    put("url", url)
-                },
-            )
-        }
-
-    private fun photoPayload(url: String): JsonElement =
-        buildJsonArray {
-            add(
-                buildJsonObject {
-                    put("url", url)
-                },
-            )
-        }
-
-    private fun managementPayload(agency: String): JsonObject =
-        buildJsonObject {
-            put("agency", agency)
-        }
 
     companion object {
         private val latitudeRegex = Regex("""place:location:latitude"\s+content='([^']+)'""")

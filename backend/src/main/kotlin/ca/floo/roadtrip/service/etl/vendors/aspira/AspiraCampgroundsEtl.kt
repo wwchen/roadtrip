@@ -8,6 +8,7 @@ import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
+import ca.floo.roadtrip.service.etl.framework.CampgroundJsonb
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -16,18 +17,12 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.time.Instant
-
-// How many unmatched leaf names the summary log names; enough to start a
-// diagnosis without turning one line into a dump.
-private const val LOGGED_MISS_SAMPLES = 5
 
 // Aspira leaves + heterogeneous geometry sources → canonical campgrounds.
 //
@@ -121,15 +116,10 @@ class AspiraCampgroundsEtl(
         val subcategory = ctx.subcategoryFor(etlSlug)
         val agency = ctx.requiredConstantAgency(etlSlug)
 
-        // Non-bookable filter, driven by the fetched data (no curated list). A
-        // leaf whose resourceLocationId's inventory holds only non-bookable
-        // categories — Aspira's own `showResourceCapacityOnline: false`, set on
-        // parking / guided hikes / shuttles / day-use buses — is a park
-        // activity mount, not a campground, so it is dropped even when its name
-        // matches geometry. Empty when a tenant declares no inventory +
-        // dictionary inputs, or when its dictionary marks everything bookable
-        // (WA/BC today) — then nothing is dropped, faithfully reflecting that
-        // that tenant's data marks nothing as non-bookable.
+        // Non-bookable filter, driven by the fetched data (no curated list):
+        // Aspira's own `showResourceCapacityOnline: false`. Empty when a tenant
+        // declares no inventory + dictionary inputs, or when its dictionary
+        // marks everything bookable (WA/BC today) — then nothing is dropped.
         val nonBookableResLocs =
             AspiraInventoryCategories.nonBookableResourceLocationIds(
                 inventory = dto.inventoryEnvelopes,
@@ -138,13 +128,36 @@ class AspiraCampgroundsEtl(
         val bookableMapIds =
             AspiraBookingCtaRefs.bookableMapIdsByResourceLocationId(dto.inventoryEnvelopes, dto.dictionaryPayload)
 
-        // Build one merged name index: normalized name → first (lat, lon).
-        // Geometry entries are walked in declared order, so the YAML's
-        // `inputs:` order doubles as a preference order — earlier sources
-        // (campground-level) win over later sources (park-polygon
-        // centroids) when both have the same normalized name.
+        val matcher = AspiraLeafMatcher(indexGeometry(dto.geomSources), nonBookableResLocs)
+        val (matches, tally) = matcher.matchBookable(dto.leaves)
+        val campgrounds = matches.map { campgroundCandidate(it, host, subcategory, agency, bookableMapIds) }
+
+        log.info(
+            "$etlSlug: {} leaves → {} pois " +
+                "(exact={} fuzzy={} parent={} miss={} skippedContainer={} skippedNonBookable={}; sample misses: {})",
+            dto.leaves.size,
+            campgrounds.size,
+            tally.exact,
+            tally.fuzzy,
+            tally.parent,
+            tally.miss,
+            tally.skippedContainer,
+            tally.skippedNonBookable,
+            tally.missSamples,
+        )
+        return campgrounds.asSequence().map { TransformResult.Ok(it) }
+    }
+
+    /**
+     * One merged name index: normalized name → first (lat, lon). Geometry
+     * entries are walked in declared order, so the YAML's `inputs:` order
+     * doubles as a preference order — earlier sources (campground-level)
+     * win over later sources (park-polygon centroids) when both carry the
+     * same normalized name.
+     */
+    private fun indexGeometry(geomSources: List<Pair<String, GeometrySource>>): Map<String, Pair<Double, Double>> {
         val byName = LinkedHashMap<String, Pair<Double, Double>>()
-        for ((slug, geomSource) in dto.geomSources) {
+        for ((slug, geomSource) in geomSources) {
             val before = byName.size
             geomSource.indexInto(byName)
             log.info(
@@ -154,123 +167,42 @@ class AspiraCampgroundsEtl(
                 byName.size,
             )
         }
+        return byName
+    }
 
-        // Token sets for the Jaccard fallback. Build once.
-        val tokenIndex: List<Pair<Set<String>, Pair<Double, Double>>> =
-            byName.entries.map { (k, v) -> k.split(' ').toSet() to v }
-
-        val campgrounds = mutableListOf<CampgroundUpsertCandidate>()
-        var exact = 0
-        var fuzzy = 0
-        var viaParent = 0
-        var miss = 0
-        var skippedContainer = 0
-        var skippedNonBookable = 0
-        val missSamples = mutableListOf<String>()
-
-        for (leaf in dto.leaves) {
-            // Campground-level model: a POI is one bookable campground node.
-            // Aspira's /api/maps also carries park-level container nodes
-            // (Banff, Jasper, …) and park-scoped activity mounts. Those have
-            // no resourceLocationId — they are not a bookable resource
-            // location, so they are not campgrounds. Emitting them layered a
-            // duplicate park POI on top of the park's already-correct
-            // campground POIs (each real campground is a mapLink carrying its
-            // own resourceLocationId). Skip container nodes here; their child
-            // campgrounds carry the coordinates and the parent-name fallback
-            // keeps every park represented on the map.
-            //
-            // Tenant-wide (WA/BC/PC share this ETL). Verified against all
-            // three /api/maps captures that the only null-resourceLocationId
-            // leaves are park containers (Camano Island WA, Wells Gray BC,
-            // 23 PC parks), and that resources carry parent refs through real
-            // campground leaves — so dropping containers orphans nothing.
-            if (leaf.resourceLocationId == null) {
-                skippedContainer++
-                continue
-            }
-            // Non-bookable activity node (parking, guided hike, shuttle, …):
-            // its resourceLocationId's inventory holds no overnight-stay
-            // resource. Drop it — a booking id + a name-match don't make a
-            // campground.
-            if (leaf.resourceLocationId in nonBookableResLocs) {
-                skippedNonBookable++
-                continue
-            }
-            val nk = normalize(leaf.name)
-            var coords: Pair<Double, Double>? = byName[nk]
-            var matchKind = "exact"
-
-            if (coords == null) {
-                val ntoks = nk.split(' ').toSet()
-                val best = tokenIndex.maxByOrNull { jaccard(it.first, ntoks) }
-                val score = best?.let { jaccard(it.first, ntoks) } ?: 0.0
-                if (best != null && score >= FUZZY_THRESHOLD) {
-                    coords = best.second
-                    matchKind = "fuzzy"
-                }
-            }
-
-            if (coords == null && leaf.parentName != null) {
-                val pk = normalize(leaf.parentName)
-                coords = byName[pk]
-                if (coords != null) matchKind = "parent"
-            }
-
-            if (coords == null) {
-                miss++
-                if (missSamples.size < 10) missSamples += leaf.name
-                continue
-            }
-
-            when (matchKind) {
-                "exact" -> exact++
-                "fuzzy" -> fuzzy++
-                "parent" -> viaParent++
-            }
-
-            val (lat, lon) = coords
-            val dataRef = DataProviderRef.Aspira(transactionLocationId = leaf.transactionLocationId, mapId = leaf.mapId)
-            val bookingCtaRef = AspiraBookingCtaRefs.forLeaf(leaf, bookableMapIds)
-            campgrounds +=
-                CampgroundUpsertCandidate(
-                    dataProviderRef = dataRef,
-                    bookingProvider = BookingProvider.ASPIRA,
-                    bookingProviderRef = bookingCtaRef?.let { campgroundBookingProviderRef(leaf, it) },
-                    name = leaf.name,
-                    latitude = lat,
-                    longitude = lon,
-                    kind = subcategory,
-                    location = locationPayload(latitude = lat, longitude = lon),
-                    reservationUrl = "https://$host/",
-                    links = linksPayload("https://$host/"),
-                    management = managementPayload(agency),
-                    metadata =
-                        leafExtras(
-                            leaf = leaf,
-                            host = host,
-                            matchKind = matchKind,
-                            bookingCtaRef = bookingCtaRef,
-                        ),
-                    sourceUrl = "https://$host/",
-                    sourcePayload = aspiraSourcePayload(leaf, matchKind, bookingCtaRef),
-                )
-        }
-
-        log.info(
-            "$etlSlug: {} leaves → {} pois " +
-                "(exact={} fuzzy={} parent={} miss={} skippedContainer={} skippedNonBookable={}; sample misses: {})",
-            dto.leaves.size,
-            campgrounds.size,
-            exact,
-            fuzzy,
-            viaParent,
-            miss,
-            skippedContainer,
-            skippedNonBookable,
-            missSamples.take(LOGGED_MISS_SAMPLES),
+    private fun campgroundCandidate(
+        match: AspiraLeafMatch<Pair<Double, Double>>,
+        host: String,
+        subcategory: String?,
+        agency: String,
+        bookableMapIds: Map<Long, Set<Long>>,
+    ): CampgroundUpsertCandidate {
+        val leaf = match.leaf
+        val (lat, lon) = match.value
+        val dataRef = DataProviderRef.Aspira(transactionLocationId = leaf.transactionLocationId, mapId = leaf.mapId)
+        val bookingCtaRef = AspiraBookingCtaRefs.forLeaf(leaf, bookableMapIds)
+        return CampgroundUpsertCandidate(
+            dataProviderRef = dataRef,
+            bookingProvider = BookingProvider.ASPIRA,
+            bookingProviderRef = bookingCtaRef?.let { campgroundBookingProviderRef(leaf, it) },
+            name = leaf.name,
+            latitude = lat,
+            longitude = lon,
+            kind = subcategory,
+            location = CampgroundJsonb.location(latitude = lat, longitude = lon),
+            reservationUrl = "https://$host/",
+            links = CampgroundJsonb.links("https://$host/"),
+            management = CampgroundJsonb.management(agency),
+            metadata =
+                leafExtras(
+                    leaf = leaf,
+                    host = host,
+                    matchKind = match.kind,
+                    bookingCtaRef = bookingCtaRef,
+                ),
+            sourceUrl = "https://$host/",
+            sourcePayload = aspiraSourcePayload(leaf, match.kind, bookingCtaRef),
         )
-        return campgrounds.asSequence().map { TransformResult.Ok(it) }
     }
 
     private fun campgroundBookingProviderRef(
@@ -287,7 +219,7 @@ class AspiraCampgroundsEtl(
 
     private fun aspiraSourcePayload(
         leaf: AspiraLeaf,
-        matchKind: String,
+        matchKind: AspiraLeafMatchKind,
         bookingCtaRef: AspiraBookingCtaRef?,
     ): JsonObject =
         buildJsonObject {
@@ -296,7 +228,7 @@ class AspiraCampgroundsEtl(
             put(ASPIRA_MAP_ID_KEY, leaf.mapId)
             leaf.resourceLocationId?.let { put(ASPIRA_RESOURCE_LOCATION_ID_KEY, it) }
             leaf.parentName?.let { put("parent_name", it) }
-            put("match_kind", matchKind)
+            put("match_kind", matchKind.label)
             bookingCtaRef?.let {
                 put(
                     "booking_cta_provider_ref",
@@ -309,33 +241,10 @@ class AspiraCampgroundsEtl(
             }
         }
 
-    private fun locationPayload(
-        latitude: Double,
-        longitude: Double,
-    ): JsonObject =
-        buildJsonObject {
-            put("latitude", latitude)
-            put("longitude", longitude)
-        }
-
-    private fun linksPayload(url: String): JsonElement =
-        buildJsonArray {
-            add(
-                buildJsonObject {
-                    put("url", url)
-                },
-            )
-        }
-
-    private fun managementPayload(agency: String): JsonObject =
-        buildJsonObject {
-            put("agency", agency)
-        }
-
     private fun leafExtras(
         leaf: AspiraLeaf,
         host: String,
-        matchKind: String,
+        matchKind: AspiraLeafMatchKind,
         bookingCtaRef: AspiraBookingCtaRef?,
     ): JsonElement =
         aspiraExtrasJson.encodeToJsonElement(
@@ -345,7 +254,7 @@ class AspiraCampgroundsEtl(
                 mapId = leaf.mapId,
                 resourceLocationId = leaf.resourceLocationId,
                 parentName = leaf.parentName,
-                matchKind = matchKind,
+                matchKind = matchKind.label,
                 bookingCtaProviderRef =
                     bookingCtaRef?.let {
                         AspiraBookingCtaProviderRefDto(
@@ -373,7 +282,6 @@ class AspiraCampgroundsEtl(
     }
 
     companion object {
-        private const val FUZZY_THRESHOLD = 0.5
         private const val ASPIRA_TRANSACTION_LOCATION_ID_KEY = "transactionLocationId"
         private const val ASPIRA_MAP_ID_KEY = "mapId"
         private const val ASPIRA_RESOURCE_LOCATION_ID_KEY = "resourceLocationId"

@@ -8,18 +8,20 @@ import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
+import ca.floo.roadtrip.service.etl.framework.CampgroundJsonb
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraBookingCtaRef
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraBookingCtaRefs
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraInventoryCategories
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeaf
+import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeafMatch
+import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeafMatchKind
+import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeafMatcher
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeavesWalk
-import ca.floo.roadtrip.service.etl.vendors.aspira.jaccard
 import ca.floo.roadtrip.service.etl.vendors.aspira.normalize
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -83,17 +85,6 @@ class BcParksCampgroundsEtl(
         val subcategory = ctx.subcategoryFor(etlSlug)
         val agency = ctx.requiredConstantAgency(etlSlug)
 
-        return transformCampgrounds(dto, host, subcategory, agency)
-            .asSequence()
-            .map { TransformResult.Ok(it) }
-    }
-
-    private fun transformCampgrounds(
-        dto: BcParksCampgroundsDto,
-        host: String,
-        subcategory: String?,
-        agency: String,
-    ): List<CampgroundUpsertCandidate> {
         val nonBookableResLocs =
             AspiraInventoryCategories.nonBookableResourceLocationIds(
                 inventory = dto.inventoryEnvelopes,
@@ -102,103 +93,66 @@ class BcParksCampgroundsEtl(
         val bookableMapIds =
             AspiraBookingCtaRefs.bookableMapIdsByResourceLocationId(dto.inventoryEnvelopes, dto.dictionaryPayload)
 
-        val byName = LinkedHashMap<String, StrapiMatch>()
-        for (row in dto.strapiRows) {
-            val key = normalize(row.name)
-            if (key.isNotEmpty()) byName.putIfAbsent(key, StrapiMatch(row.lat, row.lon, row))
-        }
-
-        val tokenIndex: List<Pair<Set<String>, StrapiMatch>> =
-            byName.entries.map { (k, v) -> k.split(' ').toSet() to v }
-
-        val campgrounds = mutableListOf<CampgroundUpsertCandidate>()
-        var exact = 0
-        var fuzzy = 0
-        var viaParent = 0
-        var miss = 0
-        var skippedContainer = 0
-        var skippedNonBookable = 0
-
-        for (leaf in dto.leaves) {
-            if (leaf.resourceLocationId == null) {
-                skippedContainer++
-                continue
-            }
-            if (leaf.resourceLocationId in nonBookableResLocs) {
-                skippedNonBookable++
-                continue
-            }
-
-            val nk = normalize(leaf.name)
-            var match: StrapiMatch? = byName[nk]
-            var matchKind = "exact"
-
-            if (match == null) {
-                val ntoks = nk.split(' ').toSet()
-                val best = tokenIndex.maxByOrNull { jaccard(it.first, ntoks) }
-                val score = best?.let { jaccard(it.first, ntoks) } ?: 0.0
-                if (best != null && score >= FUZZY_THRESHOLD) {
-                    match = best.second
-                    matchKind = "fuzzy"
-                }
-            }
-
-            if (match == null && leaf.parentName != null) {
-                val pk = normalize(leaf.parentName)
-                match = byName[pk]
-                if (match != null) matchKind = "parent"
-            }
-
-            if (match == null) {
-                miss++
-                continue
-            }
-
-            when (matchKind) {
-                "exact" -> exact++
-                "fuzzy" -> fuzzy++
-                "parent" -> viaParent++
-            }
-
-            val dataRef = DataProviderRef.BcParks(transactionLocationId = leaf.transactionLocationId, mapId = leaf.mapId)
-            val bookingCtaRef = AspiraBookingCtaRefs.forLeaf(leaf, bookableMapIds)
-            val strapiRow = match.strapiRow
-
-            campgrounds +=
-                CampgroundUpsertCandidate(
-                    dataProviderRef = dataRef,
-                    bookingProvider = BookingProvider.ASPIRA,
-                    bookingProviderRef = bookingCtaRef?.let { campgroundBookingRef(leaf, it) },
-                    name = leaf.name,
-                    latitude = match.lat,
-                    longitude = match.lon,
-                    kind = subcategory,
-                    mediumDescription = strapiRow.description,
-                    location = locationPayload(match.lat, match.lon),
-                    reservationUrl = "https://$host/",
-                    links = linksPayload("https://$host/", strapiRow.url),
-                    photos = strapiRow.photoUrl?.let(::photoPayload),
-                    management = managementPayload(agency),
-                    contact = strapiRow.phone?.let(::contactPayload),
-                    metadata = metadataPayload(leaf, host, matchKind, bookingCtaRef, strapiRow),
-                    sourceUrl = "https://$host/",
-                    sourcePayload = sourcePayload(leaf, matchKind, bookingCtaRef, strapiRow),
-                )
-        }
+        val matcher = AspiraLeafMatcher(indexStrapiRows(dto.strapiRows), nonBookableResLocs)
+        val (matches, tally) = matcher.matchBookable(dto.leaves)
+        val campgrounds = matches.map { campgroundCandidate(it, host, subcategory, agency, bookableMapIds) }
 
         log.info(
             "$etlSlug: {} leaves → {} campgrounds " +
                 "(exact={} fuzzy={} parent={} miss={} skippedContainer={} skippedNonBookable={})",
             dto.leaves.size,
             campgrounds.size,
-            exact,
-            fuzzy,
-            viaParent,
-            miss,
-            skippedContainer,
-            skippedNonBookable,
+            tally.exact,
+            tally.fuzzy,
+            tally.parent,
+            tally.miss,
+            tally.skippedContainer,
+            tally.skippedNonBookable,
         )
-        return campgrounds
+        return campgrounds.asSequence().map { TransformResult.Ok(it) }
+    }
+
+    /** Normalized Strapi park name → first row carrying it. */
+    private fun indexStrapiRows(rows: List<BcParksStrapiRow>): Map<String, BcParksStrapiRow> {
+        val byName = LinkedHashMap<String, BcParksStrapiRow>()
+        for (row in rows) {
+            val key = normalize(row.name)
+            if (key.isNotEmpty()) byName.putIfAbsent(key, row)
+        }
+        return byName
+    }
+
+    private fun campgroundCandidate(
+        match: AspiraLeafMatch<BcParksStrapiRow>,
+        host: String,
+        subcategory: String?,
+        agency: String,
+        bookableMapIds: Map<Long, Set<Long>>,
+    ): CampgroundUpsertCandidate {
+        val leaf = match.leaf
+        val strapiRow = match.value
+        val bookingUrl = "https://$host/"
+        val dataRef = DataProviderRef.BcParks(transactionLocationId = leaf.transactionLocationId, mapId = leaf.mapId)
+        val bookingCtaRef = AspiraBookingCtaRefs.forLeaf(leaf, bookableMapIds)
+        return CampgroundUpsertCandidate(
+            dataProviderRef = dataRef,
+            bookingProvider = BookingProvider.ASPIRA,
+            bookingProviderRef = bookingCtaRef?.let { campgroundBookingRef(leaf, it) },
+            name = leaf.name,
+            latitude = strapiRow.lat,
+            longitude = strapiRow.lon,
+            kind = subcategory,
+            mediumDescription = strapiRow.description,
+            location = CampgroundJsonb.location(strapiRow.lat, strapiRow.lon, region = REGION, country = COUNTRY),
+            reservationUrl = bookingUrl,
+            links = CampgroundJsonb.links(listOfNotNull(bookingUrl, strapiRow.url?.takeIf { it != bookingUrl })),
+            photos = strapiRow.photoUrl?.let(CampgroundJsonb::photos),
+            management = CampgroundJsonb.management(agency),
+            contact = strapiRow.phone?.let(CampgroundJsonb::contact),
+            metadata = metadataPayload(leaf, host, match.kind, bookingCtaRef, strapiRow),
+            sourceUrl = bookingUrl,
+            sourcePayload = sourcePayload(leaf, match.kind, bookingCtaRef, strapiRow),
+        )
     }
 
     // ---- Campground helpers ---------------------------------------------------
@@ -215,41 +169,10 @@ class BcParksCampgroundsEtl(
                 resourceLocationId = bookingCtaRef.resourceLocationId,
             ).serialize()
 
-    private fun locationPayload(
-        latitude: Double,
-        longitude: Double,
-    ): JsonObject =
-        buildJsonObject {
-            put("latitude", latitude)
-            put("longitude", longitude)
-            put("region", REGION)
-            put("country", COUNTRY)
-        }
-
-    private fun linksPayload(
-        bookingUrl: String,
-        infoUrl: String?,
-    ): JsonArray =
-        buildJsonArray {
-            add(buildJsonObject { put("url", bookingUrl) })
-            if (infoUrl != null && infoUrl != bookingUrl) {
-                add(buildJsonObject { put("url", infoUrl) })
-            }
-        }
-
-    private fun photoPayload(url: String): JsonArray =
-        buildJsonArray {
-            add(buildJsonObject { put("url", url) })
-        }
-
-    private fun managementPayload(agency: String): JsonObject = buildJsonObject { put("agency", agency) }
-
-    private fun contactPayload(phone: String): JsonObject = buildJsonObject { put("phone", phone) }
-
     private fun metadataPayload(
         leaf: AspiraLeaf,
         host: String,
-        matchKind: String,
+        matchKind: AspiraLeafMatchKind,
         bookingCtaRef: AspiraBookingCtaRef?,
         strapiRow: BcParksStrapiRow,
     ): JsonObject =
@@ -259,7 +182,7 @@ class BcParksCampgroundsEtl(
             put("map_id", leaf.mapId)
             leaf.resourceLocationId?.let { put("resource_location_id", it) }
             leaf.parentName?.let { put("parent_name", it) }
-            put("match_kind", matchKind)
+            put("match_kind", matchKind.label)
             strapiRow.orcs?.let { put("strapi_orcs", it) }
             bookingCtaRef?.let {
                 put(
@@ -275,7 +198,7 @@ class BcParksCampgroundsEtl(
 
     private fun sourcePayload(
         leaf: AspiraLeaf,
-        matchKind: String,
+        matchKind: AspiraLeafMatchKind,
         bookingCtaRef: AspiraBookingCtaRef?,
         strapiRow: BcParksStrapiRow,
     ): JsonObject =
@@ -285,7 +208,7 @@ class BcParksCampgroundsEtl(
             put("mapId", leaf.mapId)
             leaf.resourceLocationId?.let { put("resourceLocationId", it) }
             leaf.parentName?.let { put("parent_name", it) }
-            put("match_kind", matchKind)
+            put("match_kind", matchKind.label)
             strapiRow.orcs?.let { put("strapi_orcs", it) }
             strapiRow.url?.let { put("strapi_url", it) }
             bookingCtaRef?.let {
@@ -361,15 +284,8 @@ class BcParksCampgroundsEtl(
     }
 
     private companion object {
-        const val FUZZY_THRESHOLD = 0.5
         const val ASPIRA_TENANT = "bc"
         const val REGION = "BC"
         const val COUNTRY = "CA"
     }
-
-    private data class StrapiMatch(
-        val lat: Double,
-        val lon: Double,
-        val strapiRow: BcParksStrapiRow,
-    )
 }

@@ -7,8 +7,10 @@ import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
+import ca.floo.roadtrip.service.etl.framework.CampgroundJsonb
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.fetchedAtOrNow
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -20,7 +22,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
-import java.time.Instant
 
 class ReserveCaliforniaCampgroundsEtl(
     override val etlSlug: String = "reservecalifornia-campgrounds",
@@ -61,12 +62,12 @@ class ReserveCaliforniaCampgroundsEtl(
                             longitude = place.longitude,
                             kind = bucket,
                             mediumDescription = place.description,
-                            location = locationPayload(place.latitude, place.longitude),
+                            location = CampgroundJsonb.location(place.latitude, place.longitude, region = REGION, country = COUNTRY),
                             amenities = amenitiesPayload(place.amenities),
                             reservationUrl = parkUrl,
-                            links = linksPayload(parkUrl),
-                            photos = place.imageUrl?.let(::photoPayload),
-                            management = managementPayload(agency),
+                            links = CampgroundJsonb.links(parkUrl),
+                            photos = place.imageUrl?.let(CampgroundJsonb::photos),
+                            management = CampgroundJsonb.management(agency),
                             metadata = metadataPayload(place),
                             sourceUrl = parkUrl,
                             sourcePayload = place.raw,
@@ -76,40 +77,6 @@ class ReserveCaliforniaCampgroundsEtl(
             }
         }
 }
-
-internal fun locationPayload(
-    latitude: Double,
-    longitude: Double,
-): JsonObject =
-    buildJsonObject {
-        put("latitude", latitude)
-        put("longitude", longitude)
-        put("region", REGION)
-        put("country", COUNTRY)
-    }
-
-internal fun linksPayload(url: String): JsonElement =
-    buildJsonArray {
-        add(
-            buildJsonObject {
-                put("url", url)
-            },
-        )
-    }
-
-internal fun photoPayload(url: String): JsonElement =
-    buildJsonArray {
-        add(
-            buildJsonObject {
-                put("url", url)
-            },
-        )
-    }
-
-internal fun managementPayload(agency: String): JsonObject =
-    buildJsonObject {
-        put("agency", agency)
-    }
 
 internal fun amenitiesPayload(values: List<String>): JsonObject? {
     if (values.isEmpty()) return null
@@ -185,7 +152,7 @@ internal fun parseCatalog(
         places = places,
         facilities = facilities,
         grids = grids,
-        fetchedAt = parseFetchedAt(envelopes.first()),
+        fetchedAt = envelopes.first().fetchedAtOrNow(),
     )
 }
 
@@ -260,8 +227,6 @@ internal fun parseGrid(payload: JsonObject): ReserveCaliforniaGridCatalog? {
             },
     )
 }
-
-internal fun parseFetchedAt(envelope: Envelope): Instant = runCatching { Instant.parse(envelope.fetchedAt) }.getOrDefault(Instant.now())
 
 internal fun JsonObject.stringValue(key: String): String? =
     this[key]

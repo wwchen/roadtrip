@@ -8,6 +8,7 @@ import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.fetchedAtOrNow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -19,7 +20,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.time.Instant
 
 // How many colliding slugs the failure message names before it gets unreadable.
 private const val LOGGED_COLLISION_SAMPLES = 3
@@ -63,7 +63,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerUpsertCandidate>
                     if (slug.isNotBlank()) rawBySlug[slug] = obj
                 }
             }
-            val dto = TeslaIndexDto(rows = raw.data.data, rawBySlug = rawBySlug, fetchedAt = parseFetchedAt(envelope))
+            val dto = TeslaIndexDto(rows = raw.data.data, rawBySlug = rawBySlug, fetchedAt = envelope.fetchedAtOrNow())
             val errors = mutableListOf<String>()
             if (dto.rows.isEmpty()) errors += "no rows in payload"
             if (errors.isEmpty()) {
@@ -235,13 +235,6 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerUpsertCandidate>
     // location_url_slug values include slashes and uppercase ('AmsterdamNL')
     // that the source_id CHECK constraint (^[a-z0-9:_-]+$) rejects.
     private fun sanitizeSlug(s: String): String = s.lowercase().replace(Regex("[^a-z0-9_:-]+"), "-").trim('-')
-
-    private fun parseFetchedAt(envelope: Envelope): Instant =
-        try {
-            Instant.parse(envelope.fetchedAt)
-        } catch (e: Exception) {
-            Instant.now()
-        }
 
     companion object {
         private const val AMENITIES_KEY = "amenities"
