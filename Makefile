@@ -1,4 +1,4 @@
-.PHONY: help run test data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend
+.PHONY: help run test data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend reclaim reclaim-report
 
 PORT ?= 8765
 RUN_ENV ?= $(or $(env),dev)
@@ -42,6 +42,8 @@ help:
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make frontend         Build the React frontend into frontend/dist (tilt up does this too)"
 	@echo "  make grafana-export   Snapshot UI-edited dashboards and apply shared links"
+	@echo "  make reclaim          Reclaim local Docker disk (roadtrip-labelled resources only)"
+	@echo "  make reclaim-report   Show what make reclaim would remove, change nothing"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (host backend + Rec.gov companion)."
 
@@ -177,3 +179,11 @@ sandbox:
 
 sandbox-stop:
 	scripts/deploy.sh sandbox-down $(NAME)
+
+# Local scope keeps 2 tags per repo and never touches anonymous volumes, so
+# unrelated stacks sharing this machine are out of range.
+reclaim:
+	@scripts/reclaim.sh prune --scope local
+
+reclaim-report:
+	@scripts/reclaim.sh report --scope local
