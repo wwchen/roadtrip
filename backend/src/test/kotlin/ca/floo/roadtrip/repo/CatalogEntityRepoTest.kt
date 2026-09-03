@@ -1,5 +1,8 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.model.domain.Address
+import ca.floo.roadtrip.model.domain.CampgroundLocation
+import ca.floo.roadtrip.model.domain.CampgroundManagement
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
@@ -29,9 +32,9 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 kind = "established",
                 latitude = 37.739,
                 longitude = -119.565,
-                location = json("""{"latitude":37.739,"longitude":-119.565,"address":{"state_code":"CA","country_code":"US"}}"""),
+                location = CampgroundLocation(37.739, -119.565, address = Address(state = "CA", country = "US")),
                 amenities = json("""{"toilets":true,"water":true}"""),
-                management = json("""{"agency_name":"National Park Service"}"""),
+                management = CampgroundManagement("National Park Service"),
                 connections = json("""{"ridb_facility_id":"232447"}"""),
                 metadata = json("""{"last_updated":"2026-07-01T00:00:00Z"}"""),
                 sourceUrl = "https://campflare.com/campground/upper-pines-campground-447",
@@ -104,6 +107,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
+                    location = CampgroundLocation(37.739, -119.565),
                     sourcePayload = json("""{"FacilityID":"232447"}"""),
                 ),
             ),
@@ -117,6 +121,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     name = "Upper Pines Campflare",
                     latitude = 37.739,
                     longitude = -119.565,
+                    location = CampgroundLocation(37.739, -119.565),
                     sourcePayload = json("""{"id":"upper-pines-campground-447"}"""),
                 ),
             ),
@@ -163,6 +168,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 name = "Upper Pines",
                 latitude = 37.739,
                 longitude = -119.565,
+                location = CampgroundLocation(37.739, -119.565),
                 sourcePayload = json("""{"FacilityID":"232447"}"""),
             )
         val campflareRecord =
@@ -171,6 +177,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 name = "Upper Pines",
                 latitude = 37.739,
                 longitude = -119.565,
+                location = CampgroundLocation(37.739, -119.565),
                 sourcePayload = json("""{"id":"upper-pines-campground-447"}"""),
             )
 
@@ -235,7 +242,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
-                    location = json("""{"latitude":37.739,"longitude":-119.565}"""),
+                    location = CampgroundLocation(37.739, -119.565),
                     sourcePayload = json("""{"id":"upper-pines-campground-447"}"""),
                 ),
             ),
@@ -315,6 +322,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
+                    location = CampgroundLocation(37.739, -119.565),
                     sourcePayload = json("""{"id":"upper-pines-campground-447"}"""),
                 ),
             ),
@@ -327,6 +335,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
+                    location = CampgroundLocation(37.739, -119.565),
                     sourcePayload = json("""{"FacilityID":"232447"}"""),
                 ),
             ),
@@ -488,6 +497,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     name = "Bulk Campground $i",
                     latitude = 40.0 + i * 0.0001,
                     longitude = -120.0 - i * 0.0001,
+                    location = CampgroundLocation(40.0 + i * 0.0001, -120.0 - i * 0.0001),
                     sourcePayload = json("""{"id":"bulk-cg-$i"}"""),
                 )
             }
@@ -545,6 +555,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                         name = "Too Many Campground $i",
                         latitude = 40.0,
                         longitude = -120.0,
+                        location = CampgroundLocation(40.0, -120.0),
                     )
                 },
             )

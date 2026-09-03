@@ -6,14 +6,11 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 
 internal fun extractRecgovCampgroundRef(raw: JsonObject): String? =
     raw
@@ -77,26 +74,6 @@ internal fun JsonObject.objectField(name: String): JsonObject? = this[name] as? 
 internal fun JsonObject.arrayField(name: String): JsonElement? = this[name]?.takeIf { runCatching { it.jsonArray }.isSuccess }
 
 internal fun campflareCampgroundSourceUrl(campflareId: String): String = CampflareUrls.campground(campflareId)
-
-internal fun campgroundLinksWithCampflareSource(
-    raw: JsonObject,
-    sourceUrl: String,
-): JsonElement {
-    val links = raw.arrayField(LINKS_FIELD)?.jsonArray.orEmpty()
-    return buildJsonArray {
-        links.forEach { add(it) }
-        if (links.none { link -> (link as? JsonObject)?.sourceLinkUrl() == sourceUrl }) {
-            add(
-                buildJsonObject {
-                    put(TITLE_FIELD, CAMPFLARE_SOURCE_LINK_TITLE)
-                    put(URL_FIELD, sourceUrl)
-                },
-            )
-        }
-    }
-}
-
-private fun JsonObject.sourceLinkUrl(): String? = stringField(URL_FIELD) ?: stringField(HREF_FIELD)
 
 internal fun normalizedLatitude(value: Double?): Double? = normalizedCoordinate(value, LATITUDE_MIN, LATITUDE_MAX)
 

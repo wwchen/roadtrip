@@ -207,8 +207,7 @@ class AspiraCampgroundsEtlTest {
 
         assertEquals("1002:-2147483641", campground.dataProviderRef.serialize())
         assertEquals("federal", campground.kind)
-        val management = campground.management!!.jsonObject
-        assertEquals("Parks Canada", management["agency"]!!.jsonPrimitive.content)
+        assertEquals("Parks Canada", campground.management!!.agency)
     }
 
     @Test

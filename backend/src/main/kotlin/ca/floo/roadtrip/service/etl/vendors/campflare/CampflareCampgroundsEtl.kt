@@ -9,8 +9,6 @@ import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
     override val etlSlug = CAMPGROUNDS_ETL_SLUG
@@ -55,7 +53,7 @@ class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
                 longitude = longitude!!,
                 status = raw.stringField("status"),
                 kind = raw.stringField("kind"),
-                location = location,
+                location = campflareLocation(location!!, latitude = latitude!!, longitude = longitude!!),
                 defaultCampsiteSchedule = raw.objectField("default_campsite_schedule"),
                 amenities = raw.objectField("amenities"),
                 maxRvLength = raw.doubleField("max_rv_length"),
@@ -63,13 +61,13 @@ class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
                 hasPullThroughSites = raw.booleanField("has_pull_through_sites"),
                 bigRigFriendly = raw.booleanField("big_rig_friendly"),
                 reservationUrl = raw.stringField("reservation_url"),
-                links = campgroundLinksWithCampflareSource(raw, sourceUrl),
-                photos = raw.arrayField("photos"),
+                links = campflareLinks(raw.arrayField("links"), sourceUrl),
+                photos = campflarePhotos(raw.arrayField("photos")),
                 alerts = raw.arrayField("alerts"),
                 price = raw.objectField("price"),
                 cellService = raw.objectField("cell_service"),
-                management = normalizedManagement(raw.objectField("management")),
-                contact = raw.objectField("contact"),
+                management = campflareManagement(raw.objectField("management")),
+                contact = campflareContact(raw.objectField("contact")),
                 connections = raw.objectField("connections"),
                 metadata = raw.objectField("metadata"),
                 sourceUrl = sourceUrl,
@@ -77,19 +75,4 @@ class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
             ),
         )
     }
-
-    // Campflare ships management as {agency_name, agency_id, agency_website};
-    // the serving query and every other vendor read management->>'agency'.
-    // Promote agency_name to the canonical `agency` key while keeping the
-    // upstream keys for detail rendering. Null when upstream names no agency.
-    private fun normalizedManagement(management: JsonObject?): JsonObject? {
-        val agencyName = management?.stringField(AGENCY_NAME_KEY) ?: return null
-        return buildJsonObject {
-            management.forEach { (key, value) -> put(key, value) }
-            put(AGENCY_KEY, agencyName)
-        }
-    }
 }
-
-private const val AGENCY_KEY = "agency"
-private const val AGENCY_NAME_KEY = "agency_name"

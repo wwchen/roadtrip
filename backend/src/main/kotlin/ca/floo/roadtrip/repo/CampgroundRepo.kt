@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.CampgroundColumnJson
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
@@ -296,7 +297,7 @@ class CampgroundRepo(
                 params += record.shortDescription
                 params += record.mediumDescription
                 params += record.longDescription
-                params += jsonObject(record.location)
+                params += CampgroundColumnJson.encodeObject(record.location)
                 params += jsonObject(record.defaultCampsiteSchedule)
                 params += jsonObject(record.amenities)
                 params += record.maxRvLength
@@ -304,13 +305,13 @@ class CampgroundRepo(
                 params += record.hasPullThroughSites
                 params += record.bigRigFriendly
                 params += record.reservationUrl
-                params += jsonArray(record.links)
-                params += jsonArray(record.photos)
+                params += CampgroundColumnJson.encodeArray(record.links)
+                params += CampgroundColumnJson.encodeArray(record.photos)
                 params += jsonArray(record.alerts)
                 params += jsonObject(record.price)
                 params += jsonObject(record.cellService)
-                params += jsonObject(record.management)
-                params += jsonObject(record.contact)
+                params += CampgroundColumnJson.encodeObject(record.management)
+                params += CampgroundColumnJson.encodeObject(record.contact)
                 params += jsonObject(record.connections)
                 params += jsonObject(record.metadata)
                 params += jsonObject(record.sourcePayload)

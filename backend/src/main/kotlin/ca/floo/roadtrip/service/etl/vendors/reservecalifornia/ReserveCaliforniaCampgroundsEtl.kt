@@ -1,5 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
+import ca.floo.roadtrip.model.domain.CampgroundLink
+import ca.floo.roadtrip.model.domain.CampgroundLocation
+import ca.floo.roadtrip.model.domain.CampgroundManagement
+import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -7,7 +11,6 @@ import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
-import ca.floo.roadtrip.service.etl.framework.CampgroundJsonb
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.fetchedAtOrNow
@@ -62,12 +65,12 @@ class ReserveCaliforniaCampgroundsEtl(
                             longitude = place.longitude,
                             kind = bucket,
                             mediumDescription = place.description,
-                            location = CampgroundJsonb.location(place.latitude, place.longitude, region = REGION, country = COUNTRY),
+                            location = CampgroundLocation(place.latitude, place.longitude, region = REGION, country = COUNTRY),
                             amenities = amenitiesPayload(place.amenities),
                             reservationUrl = parkUrl,
-                            links = CampgroundJsonb.links(parkUrl),
-                            photos = place.imageUrl?.let(CampgroundJsonb::photos),
-                            management = CampgroundJsonb.management(agency),
+                            links = listOf(CampgroundLink(parkUrl)),
+                            photos = listOfNotNull(place.imageUrl?.let(::CampgroundPhoto)),
+                            management = CampgroundManagement(agency),
                             metadata = metadataPayload(place),
                             sourceUrl = parkUrl,
                             sourcePayload = place.raw,
