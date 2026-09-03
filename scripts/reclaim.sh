@@ -38,7 +38,13 @@ ghcr.io/wwchen/roadtrip/deploy
 # The deploy image is rebuilt per release and never rolled back to.
 NEVER_KEEP_REPOSITORY="ghcr.io/wwchen/roadtrip/deploy"
 
-SCOPE=host
+# Floor on container prune age. Roadtrip containers inherit the managed label
+# from their image, so a bare label filter can catch a container a concurrent
+# deploy (a different concurrency group) just created but has not started yet
+# -- the create-to-start gap in `docker compose up`.
+CONTAINER_PRUNE_MIN_AGE="10m"
+
+SCOPE=""
 DRY_RUN=0
 INCLUDE_ANONYMOUS=""
 MIN_GB=""
@@ -55,17 +61,18 @@ commands:
   report       print what prune would remove, change nothing
 
 options:
-  --scope local|host     default: host
+  --scope local|host     required, no default
   --dry-run
   --min-gb N
   --path PATH
   --label TEXT
   --include-anonymous
+  --no-include-anonymous
 USAGE
 }
 
 _need_value() {
-    (( $# >= 2 )) || { echo "error: $1 requires a value" >&2; _usage; exit 2; }
+    (( $# >= 2 )) && [[ "$2" != --* ]] || { echo "error: $1 requires a value" >&2; _usage; exit 2; }
 }
 
 _parse_args() {
@@ -80,12 +87,23 @@ _parse_args() {
             --path) _need_value "$@"; DISK_PATH="$2"; shift 2 ;;
             --label) _need_value "$@"; LABEL="$2"; shift 2 ;;
             --include-anonymous) INCLUDE_ANONYMOUS=1; shift ;;
+            --no-include-anonymous) INCLUDE_ANONYMOUS=0; shift ;;
             *) echo "error: unknown option $1" >&2; _usage; exit 2 ;;
         esac
     done
     case "${SCOPE}" in
         host|local) ;;
-        *) echo "error: --scope must be 'local' or 'host'" >&2; exit 2 ;;
+        "")
+            # check-disk does not depend on scope; prune and report do (image
+            # keep depth, anonymous-volume inclusion), and that is exactly the
+            # decision that must be explicit, not defaulted, on a shared host.
+            if [[ "${COMMAND}" == prune || "${COMMAND}" == report ]]; then
+                echo "error: --scope is required; pass --scope local or --scope host" >&2
+                _usage
+                exit 2
+            fi
+            ;;
+        *) echo "error: --scope must be 'local' or 'host'" >&2; _usage; exit 2 ;;
     esac
 }
 
@@ -170,7 +188,8 @@ _prune_volumes() {
 }
 
 _prune_containers() {
-    _docker container prune --force --filter "label=${MANAGED_LABEL}" | tail -1
+    _docker container prune --force --filter "label=${MANAGED_LABEL}" \
+        --filter "until=${CONTAINER_PRUNE_MIN_AGE}" | tail -1
 }
 
 cmd_prune() {

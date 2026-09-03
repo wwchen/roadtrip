@@ -42,7 +42,7 @@ help:
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make frontend         Build the React frontend into frontend/dist (tilt up does this too)"
 	@echo "  make grafana-export   Snapshot UI-edited dashboards and apply shared links"
-	@echo "  make reclaim          Reclaim local Docker disk (roadtrip-labelled resources only)"
+	@echo "  make reclaim          Remove stopped roadtrip containers, images, volumes (labelled only)"
 	@echo "  make reclaim-report   Show what make reclaim would remove, change nothing"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (host backend + Rec.gov companion)."

@@ -97,6 +97,15 @@ class CheckDiskTest(ReclaimTestCase):
         self.assertEqual(done.returncode, 2)
         self.assertIn("requires a value", done.stderr)
 
+    def test_option_value_that_looks_like_a_flag_is_a_usage_error(self) -> None:
+        # A missing value followed by another flag (a typo dropping the
+        # actual value) must not be swallowed as that flag's value -- it
+        # used to blow up later with "path: unbound variable" and exit 1,
+        # which deploy.sh's `|| exit 1` misreads as "disk under floor".
+        done = self.run_reclaim("check-disk", "--min-gb", "--path", str(self.tmp))
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("requires a value", done.stderr)
+
 
 FOUR_TAGS = "\n".join([
     "roadtrip/backend:tilt-aaaa",
@@ -107,6 +116,44 @@ FOUR_TAGS = "\n".join([
 
 
 class PruneTest(ReclaimTestCase):
+    def test_prune_without_scope_is_a_usage_error_and_runs_nothing(self) -> None:
+        # The critical bug this guards: SCOPE used to default to "host", so a
+        # bare `reclaim.sh prune` ran an unlabeled `docker volume prune
+        # --force` -- destroying anonymous volumes belonging to unrelated
+        # stacks on a shared machine. --scope must now be an explicit choice.
+        done = self.run_reclaim("prune")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("--scope", done.stderr)
+        self.assertIn("local", done.stderr)
+        self.assertIn("host", done.stderr)
+        self.assertEqual(self.docker_calls(), [])
+
+    def test_report_without_scope_is_also_a_usage_error(self) -> None:
+        done = self.run_reclaim("report")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("--scope", done.stderr)
+
+    def test_no_include_anonymous_overrides_host_default(self) -> None:
+        done = self.run_reclaim(
+            "prune", "--scope", "host", "--no-include-anonymous",
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        bare = [c for c in self.docker_calls()
+                if c.startswith("volume prune") and "label=" not in c]
+        self.assertEqual(bare, [], "host --no-include-anonymous must skip the bare volume prune")
+
+    def test_container_prune_carries_an_age_floor(self) -> None:
+        # A roadtrip container inherits the managed label from its image, so
+        # a bare label filter can reap a container a concurrent deploy just
+        # created but has not started yet (the create-to-start gap in
+        # `docker compose up`). An age floor keeps that container alive.
+        self.run_reclaim("prune", "--scope", "local")
+        container_prunes = [c for c in self.docker_calls()
+                             if c.startswith("container prune")]
+        self.assertTrue(container_prunes)
+        for call in container_prunes:
+            self.assertIn("until=", call, call)
+
     def test_local_scope_keeps_two_tags_per_repository(self) -> None:
         self.image_ls.write_text(FOUR_TAGS)
         done = self.run_reclaim("prune", "--scope", "local")
@@ -207,6 +254,15 @@ class DeployIntegrationTest(unittest.TestCase):
         # missed. All three must delegate or two of them would call deleted
         # functions.
         self.assertEqual(self.source.count('"${RECLAIM}" prune --scope host'), 3)
+        # Pre-branch, only the 30-minute sweep pruned anonymous volumes;
+        # deploy.sh's own prune was label-scoped only. All three deploy.sh
+        # call sites run far more often than the sweep (every prod deploy,
+        # sandbox up, and sandbox down), so they must opt back out of
+        # anonymous-volume pruning rather than inherit --scope host's default.
+        self.assertEqual(
+            self.source.count('"${RECLAIM}" prune --scope host --no-include-anonymous'),
+            3,
+        )
 
     def test_volume_hold_survives(self) -> None:
         self.assertIn("_hold_data_volume() {", self.source)

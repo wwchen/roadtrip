@@ -362,7 +362,7 @@ _deploy_prod() {
     fi
     _release_data_volume
     _record_last_good_release "${app_sha}" "${data_sha}" "${companion_sha}" "${branch}"
-    "${RECLAIM}" prune --scope host
+    "${RECLAIM}" prune --scope host --no-include-anonymous
     echo "==> production deployed: ${app_sha}"
 }
 
@@ -732,7 +732,7 @@ _sandbox_down() {
         || echo "==> warning: Cloudflare teardown failed for ${sandbox_owner}"
     rm -f "${marker}"
     _sandbox_lock_release
-    "${RECLAIM}" prune --scope host
+    "${RECLAIM}" prune --scope host --no-include-anonymous
     echo "==> sandbox ${sandbox_owner} is down"
 }
 
@@ -1033,6 +1033,6 @@ _write_sandbox_marker "live"
 # The sandbox backend now mounts the data volume, so Docker's own refcount is
 # protection enough and the guard can go before we prune.
 _release_data_volume
-"${RECLAIM}" prune --scope host
+"${RECLAIM}" prune --scope host --no-include-anonymous
 echo ""
 echo "Sandbox is live: ${SANDBOX_URL}"
