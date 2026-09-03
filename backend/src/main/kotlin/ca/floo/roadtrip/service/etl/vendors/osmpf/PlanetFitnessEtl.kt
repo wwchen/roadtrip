@@ -2,12 +2,12 @@ package ca.floo.roadtrip.service.etl.vendors.osmpf
 
 import ca.floo.roadtrip.model.domain.Address
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
-import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.fetchedAtOrNow
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -15,7 +15,6 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
-import java.time.Instant
 
 // OSM Overpass → canonical planet_fitness_locations.
 //
@@ -42,7 +41,7 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationUps
                     PlanetFitnessRawDto.serializer(),
                     envelope.payload,
                 )
-            val dto = payload.copy(fetchedAt = parseFetchedAt(envelope))
+            val dto = payload.copy(fetchedAt = envelope.fetchedAtOrNow())
             // The DTO can hold a 200-elements payload; we validate per-element
             // at transform time and drop invalid elements there. This stage
             // only checks the outer shape.
@@ -131,13 +130,6 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationUps
             address.country?.let { put("country", it) }
         }
     }
-
-    private fun parseFetchedAt(envelope: Envelope): Instant =
-        try {
-            Instant.parse(envelope.fetchedAt)
-        } catch (e: Exception) {
-            Instant.now()
-        }
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }

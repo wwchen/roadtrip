@@ -10,8 +10,10 @@ import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.registry.AgencyConfig
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
+import ca.floo.roadtrip.service.etl.framework.CampgroundJsonb
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.fetchedAtOrNow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -26,7 +28,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import java.time.Instant
 import kotlin.math.round
 
 // RIDB facilities feed → canonical campgrounds.
@@ -81,7 +82,7 @@ class RecGovCampgroundsEtl(
                     rows = typed,
                     rawById = rawById,
                     enrichmentById = enrichmentById,
-                    fetchedAt = parseFetchedAt(envelopes.first()),
+                    fetchedAt = envelopes.first().fetchedAtOrNow(),
                 )
             if (dto.rows.isEmpty()) {
                 yield(ParseResult.Bad(null, listOf("$etlSlug: no rows in payload")))
@@ -151,33 +152,18 @@ class RecGovCampgroundsEtl(
             longitude = lon,
             kind = bucket,
             mediumDescription = description(rawObj),
-            location = locationPayload(lat, lon, region, country, firstAddr),
+            location = CampgroundJsonb.location(lat, lon, region = region, country = country, address = addressPayload(firstAddr)),
             reservationUrl = infoUrl,
-            links = infoUrl?.let(::linksPayload),
-            photos = photoUrl?.let(::photoPayload),
+            links = infoUrl?.let { CampgroundJsonb.links(it) },
+            photos = photoUrl?.let(CampgroundJsonb::photos),
             cellService = cell?.let(::cellCoveragePayload),
-            management = agency?.let(::managementPayload),
-            contact = row.FacilityPhone?.takeIf { it.isNotBlank() }?.let(::contactPayload),
+            management = agency?.let(CampgroundJsonb::management),
+            contact = row.FacilityPhone?.takeIf { it.isNotBlank() }?.let(CampgroundJsonb::contact),
             metadata = metadataPayload(activities, rating),
             sourceUrl = infoUrl,
             sourcePayload = raw,
         )
     }
-
-    private fun locationPayload(
-        latitude: Double,
-        longitude: Double,
-        region: String?,
-        country: String,
-        address: FacilityAddress?,
-    ): JsonObject =
-        buildJsonObject {
-            put("latitude", latitude)
-            put("longitude", longitude)
-            region?.let { put("region", it) }
-            put("country", country)
-            addressPayload(address)?.let { put("address", it) }
-        }
 
     private fun addressPayload(address: FacilityAddress?): JsonObject? {
         if (address == null) return null
@@ -191,34 +177,6 @@ class RecGovCampgroundsEtl(
             }
         return payload.takeIf { it.isNotEmpty() }
     }
-
-    private fun linksPayload(url: String): JsonArray =
-        buildJsonArray {
-            add(
-                buildJsonObject {
-                    put("url", url)
-                },
-            )
-        }
-
-    private fun photoPayload(url: String): JsonArray =
-        buildJsonArray {
-            add(
-                buildJsonObject {
-                    put("url", url)
-                },
-            )
-        }
-
-    private fun managementPayload(agency: String): JsonObject =
-        buildJsonObject {
-            put("agency", agency)
-        }
-
-    private fun contactPayload(phone: String): JsonObject =
-        buildJsonObject {
-            put("phone", phone)
-        }
 
     private fun metadataPayload(
         activities: List<String>,
@@ -428,13 +386,6 @@ class RecGovCampgroundsEtl(
             else -> if (v.length == 2) v else null
         }
     }
-
-    private fun parseFetchedAt(envelope: Envelope): Instant =
-        try {
-            Instant.parse(envelope.fetchedAt)
-        } catch (e: Exception) {
-            Instant.now()
-        }
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
