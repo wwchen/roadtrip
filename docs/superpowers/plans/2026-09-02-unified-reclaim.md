@@ -532,7 +532,7 @@ class DeployIntegrationTest(unittest.TestCase):
         self.assertIn('"${RECLAIM}" check-disk --label "prod deploy"', self.source)
         self.assertIn('"${RECLAIM}" check-disk --label "sandbox deploy"', self.source)
         self.assertIn("MIN_FREE_DISK_GB", self.source)
-        self.assertEqual(self.source.count('"${RECLAIM}" prune --scope host'), 2)
+        self.assertEqual(self.source.count('"${RECLAIM}" prune --scope host'), 3)
 
     def test_volume_hold_survives(self) -> None:
         self.assertIn("_hold_data_volume() {", self.source)
@@ -583,7 +583,7 @@ unused while `reclaim.sh` applies its own default.
 "${RECLAIM}" prune --scope host
 ```
 
-There are two such pairs, around lines 444-445 and 815-816.
+There are THREE such pairs, around lines 444-445, 815-816, and 1117-1118. The third is in the sandbox-up success path at top level, not inside a function; missing it would call two deleted functions on every successful sandbox-up.
 
 Leave `_hold_data_volume`, `_release_data_volume`, and `_ensure_data_volume` untouched.
 
