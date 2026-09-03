@@ -21,7 +21,7 @@ UPDATE campgrounds SET location = jsonb_strip_nulls(jsonb_build_object(
       'postcode', COALESCE(location->'address'->>'postcode', location->'address'->>'postal_code', location->'address'->>'zipcode'),
       'country',  COALESCE(location->'address'->>'country', location->'address'->>'country_code'))), '{}'::jsonb)
   END))
-WHERE jsonb_typeof(location) = 'object' AND location->'latitude' IS NOT NULL;
+WHERE jsonb_typeof(location) = 'object';
 
 UPDATE campgrounds SET photos = COALESCE((
   SELECT jsonb_agg(jsonb_build_object('url', s.url) ORDER BY s.ord)
