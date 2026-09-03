@@ -2,6 +2,7 @@ import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppProviders } from './AppProviders';
 import { initSandboxChrome } from './sandbox/sandbox-chrome';
+import { installIconSprite } from '@ui/icon-sprite';
 import { useThemeStore } from '@/stores/themeStore';
 import './shell.css';
 
@@ -44,9 +45,14 @@ function logUnhandledRejections(): void {
  * the providers live here: it has to be on every page, and the failure mode of a
  * page forgetting it is invisible (see `sandbox/sandbox-chrome.ts`). It renders
  * outside `#root` and never blocks, so it does not wait on the mount point.
+ *
+ * The icon sprite installs here for that same reason, and before the mount point
+ * is looked up: it belongs to the document rather than to any page, and a glyph
+ * that renders before it lands keeps the href it was given.
  */
 export function mountPage(node: ReactNode): void {
   logUnhandledRejections();
+  installIconSprite();
   initSandboxChrome();
   useThemeStore.getState().initTheme();
 
