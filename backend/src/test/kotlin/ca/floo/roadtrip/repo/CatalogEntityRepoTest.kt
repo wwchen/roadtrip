@@ -1,8 +1,11 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.Address
+import ca.floo.roadtrip.model.domain.CampgroundContact
+import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
+import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
@@ -596,6 +599,71 @@ class CatalogEntityRepoTest : SharedDbTest() {
             )
         }
     }
+
+    /**
+     * V55 rewrites stored rows into the canonical keys the typed columns
+     * encode. A row this repo just wrote is already canonical, so re-running
+     * the migration over it must change nothing — that equality is what makes
+     * the strict decoder on the read path safe.
+     */
+    @Test
+    fun `the normalization migration is a no-op on rows this repo wrote`() {
+        val repo = CampgroundRepo(ctx)
+        repo.upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "canonical-1"),
+                    name = "Canonical",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0, region = "CA", country = "US", elevation = 30.0, address = Address(city = "X")),
+                    links = listOf(CampgroundLink("https://a.test/", title = "A"), CampgroundLink("https://b.test/")),
+                    photos = listOf(CampgroundPhoto("https://p.test/1.jpg")),
+                    management = CampgroundManagement("NPS", website = "https://nps.test"),
+                    contact = CampgroundContact(phone = "1", email = "e@x.test"),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+
+        val before = campgroundColumnsAsText()
+        assertEquals(
+            listOf(
+                """{"region": "CA", "address": {"city": "X"}, "country": "US", "latitude": 1.0, "elevation": 30.0, "longitude": 2.0}""" +
+                    """|[{"url": "https://a.test/", "title": "A"}, {"url": "https://b.test/"}]""" +
+                    """|[{"url": "https://p.test/1.jpg"}]""" +
+                    """|{"agency": "NPS", "website": "https://nps.test"}""" +
+                    """|{"email": "e@x.test", "phone": "1"}""",
+            ),
+            before,
+        )
+
+        migrationStatements("V55__normalize_campground_jsonb.sql").forEach(ctx::execute)
+
+        assertEquals(before, campgroundColumnsAsText())
+    }
+
+    private fun campgroundColumnsAsText(): List<String> =
+        ctx
+            .fetch(
+                """
+                SELECT location::text AS location, links::text AS links, photos::text AS photos,
+                       management::text AS management, contact::text AS contact
+                FROM campgrounds ORDER BY id
+                """.trimIndent(),
+            ).map { row -> row.intoArray().joinToString("|") { it.toString() } }
+
+    /** jOOQ executes one statement per call, so the script is split on its statement terminators. */
+    private fun migrationStatements(name: String): List<String> =
+        checkNotNull(javaClass.classLoader.getResourceAsStream("db/migration/$name")) { "missing migration $name" }
+            .bufferedReader()
+            .use { it.readText() }
+            .lines()
+            .filterNot { it.trimStart().startsWith("--") }
+            .joinToString("\n")
+            .split(";")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
 
     private fun tableCount(table: String): Int =
         ctx
