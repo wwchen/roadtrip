@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.productionTerminalEtlDefinitions
 import ca.floo.roadtrip.service.etl.framework.records
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -139,11 +140,10 @@ class AspiraCampgroundsEtlTest {
             fetchedAt = Instant.parse("2026-07-05T00:00:00Z"),
         )
 
-    private fun campgrounds(dto: AspiraJoinDto): List<CampgroundUpsertCandidate> =
-        records(
-            AspiraCampgroundsEtl(slug, DataProvider.ASPIRA, "pc")
-                .transform(dto, ctx),
-        )
+    // The whole class models the Parks Canada tenant, and PC declares
+    // `parent_name_fallback: true` in the registry — so the default harness
+    // opts in, the same as production. Tests that want it off pass explicitly.
+    private fun campgrounds(dto: AspiraJoinDto): List<CampgroundUpsertCandidate> = campgrounds(dto, parentNameFallback = true)
 
     /** DTO variant carrying an inventory envelope + category dictionary for the non-bookable filter. */
     private fun dtoWith(
@@ -385,5 +385,69 @@ class AspiraCampgroundsEtlTest {
                 fetchedAt = Instant.parse("2026-07-05T00:00:00Z"),
             )
         assertEquals(1, campgrounds(dto).size, "no dictionary → no filtering")
+    }
+
+    // --- parent-name fallback -------------------------------------------
+    //
+    // A leaf whose own name matches no geometry, but whose parent does.
+    // "Backcountry Reservations" shares no tokens with either seeded name, so
+    // it cannot match exactly or fuzzily — the only route to coordinates is
+    // its parent, which normalizes to the same key as the Banff feature.
+    private fun parentOnlyLeaf() =
+        AspiraLeaf(
+            name = "Backcountry Reservations",
+            transactionLocationId = 1003L,
+            mapId = 1103L,
+            resourceLocationId = 556L,
+            parentName = "Banff National Park of Canada",
+        )
+
+    private fun campgrounds(
+        dto: AspiraJoinDto,
+        parentNameFallback: Boolean,
+    ): List<CampgroundUpsertCandidate> =
+        records(
+            AspiraCampgroundsEtl(
+                etlSlug = slug,
+                dataProviderValue = DataProvider.ASPIRA,
+                aspiraTenant = "pc",
+                parentNameFallback = parentNameFallback,
+            ).transform(dto, ctx),
+        )
+
+    // The enabled case is already covered by `campground leaf that misses its
+    // own name falls back to the parent park centroid`, which runs on the PC
+    // default above.
+    @Test
+    fun `a leaf matching only via its parent is dropped when the fallback is off`() {
+        // Parks Canada gets 37 of its 106 bookable leaves this way, which is why
+        // it opts in; the tenants that do not declare the flag match none.
+        val emitted = campgrounds(dtoOf(parentOnlyLeaf()), parentNameFallback = false)
+        assertEquals(0, emitted.size, "without the fallback the leaf has no coordinates")
+    }
+
+    @Test
+    fun `the fallback does not rescue a leaf whose parent is also unknown`() {
+        val orphan = parentOnlyLeaf().copy(parentName = "Nowhere In The Index")
+        assertEquals(0, campgrounds(dtoOf(orphan), parentNameFallback = true).size)
+    }
+
+    /**
+     * The half that actually broke: `parent_name_fallback: true` sat in the
+     * registry and nothing read it. Every other test here constructs the ETL
+     * directly, so they pass whether or not the registry wires the arg — this
+     * one drives the real YAML through the real registry, which is what catches
+     * a silently unread arg.
+     */
+    @Test
+    fun `the PC terminal reads parent_name_fallback from the registry`() {
+        val definition =
+            productionTerminalEtlDefinitions[slug]
+                ?: error("$slug is not a registered terminal")
+        val etl = definition.etl as AspiraCampgroundsEtl
+
+        val emitted = records(etl.transform(dtoOf(parentOnlyLeaf()), ctx))
+
+        assertEquals(1, emitted.size, "PC declares the fallback, so the registry must pass it")
     }
 }
