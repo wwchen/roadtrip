@@ -80,6 +80,12 @@ Model names must tell callers what kind of shape they are holding:
 - **ETL upsert candidates** are not table rows. Vendor ETLs emit candidate
   values such as `CampgroundUpsertCandidate` / `CampsiteUpsertCandidate`.
   Repos convert those candidates into persisted rows.
+- **Typed JSONB columns.** When a JSONB column has more than one writer or
+  more than one reader, its shape is a `@Serializable` domain type
+  (`CampgroundLocation`, `CampgroundLink`, ...). Candidates and rows carry the
+  type; the entity repo is the only place that encodes or decodes it. Vendor
+  ETLs map upstream keys into the type, so the read path never carries
+  per-vendor key fallbacks.
 
 A model named after a table must not silently include provider-specific helper
 fields, selected vendor refs, API response convenience fields, or partially
