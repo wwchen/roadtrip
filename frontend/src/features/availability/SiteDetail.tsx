@@ -10,7 +10,7 @@ import {
   descriptionText,
   detailFacts,
   featureLabels,
-  findImageUrl,
+  photoUrl,
   rawPayload,
 } from './site-detail-facts';
 import {
@@ -35,10 +35,8 @@ export function SiteDetail({
 }: SiteDetailProps) {
   const raw = rawPayload(site);
   const name = siteName(site);
-  const imageUrl = findImageUrl(site);
-  const description = descriptionText(
-    site.description ?? raw.description ?? raw.campsite_description,
-  );
+  const imageUrl = photoUrl(site);
+  const description = descriptionText(raw.description);
   const facts = detailFacts(site, raw);
   const features = featureLabels(site, raw);
   const url = reservationUrlFromTemplate(site, {

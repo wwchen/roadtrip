@@ -50,6 +50,7 @@ class CampflareCampsitesEtlTest {
                 .content
         assertEquals("Tent", equipmentName)
         assertEquals(6, row.maxPeople)
+        assertEquals("""[{"url":"https://cdn.example/site.jpg"}]""", row.photos.toString())
         assertEquals("Site 001", sourceName)
         assertEquals(BookingProvider.RECGOV, row.bookingProvider)
         assertEquals("001", row.bookingProviderRef)

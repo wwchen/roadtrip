@@ -9,7 +9,9 @@ import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.photosPayload
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
 
 class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
     override val etlSlug = CAMPSITES_ETL_SLUG
@@ -70,9 +72,19 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
                 drivewayLength = raw.intField("driveway_length"),
                 maxRvLength = raw.intField("max_rv_length"),
                 maxTrailerLength = raw.doubleField("max_trailer_length"),
-                photos = raw.arrayField("photos"),
+                photos = photosPayload(photoUrls(raw)),
                 sourcePayload = raw,
             ),
         )
     }
+
+    private fun photoUrls(raw: JsonObject): List<String> =
+        raw
+            .arrayField(PHOTOS_FIELD)
+            ?.jsonArray
+            .orEmpty()
+            .mapNotNull { (it as? JsonObject)?.stringField(PHOTO_ORIGINAL_URL_FIELD) }
 }
+
+private const val PHOTOS_FIELD = "photos"
+private const val PHOTO_ORIGINAL_URL_FIELD = "original_url"

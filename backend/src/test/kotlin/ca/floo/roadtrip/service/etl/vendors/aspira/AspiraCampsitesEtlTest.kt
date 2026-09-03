@@ -121,6 +121,63 @@ class AspiraCampsitesEtlTest {
         assertEquals("-2147483630:-2147483388", campsite.parentDataProviderRef!!.serialize())
     }
 
+    @Test
+    fun `promotes photos and resolves attribute names and value labels from the dictionary`() {
+        val etl =
+            AspiraCampsitesEtl(
+                etlSlug = "aspira-wa-campsites",
+                mapsInputSlug = "aspira-maps-wa",
+                inventoryInputSlug = "aspira-inventory-wa",
+                aspiraTenant = "wa",
+            )
+        val inventory =
+            """
+            {
+              "-2147481558": {
+                "resourceId": -2147481558,
+                "resourceLocationId": -2147483624,
+                "localizedValues": [{ "cultureName": "en-US", "name": "31" }],
+                "mapIds": [-2147483615],
+                "photos": [
+                  { "photoUrlResult": { "url": "https://cdn.example/a.jpg", "avifUrl": "https://cdn.example/a.avif" } },
+                  { "photoUrlResult": null }
+                ],
+                "definedAttributes": [
+                  { "attributeDefinitionId": -32716, "value": 90.0, "values": [] },
+                  { "attributeDefinitionId": -32759, "value": null, "values": [1, 2] },
+                  { "attributeDefinitionId": -1, "value": 3, "values": [] }
+                ]
+              }
+            }
+            """.trimIndent()
+        val dictionaries =
+            AspiraCampsitesEtl.AspiraDictionaries(
+                equipment = emptyMap(),
+                resourceCategories = emptyMap(),
+                attributes =
+                    mapOf(
+                        -32716 to AspiraCampsitesEtl.AttributeDefinition(name = "Site Length", valueLabels = emptyMap()),
+                        -32759 to AspiraCampsitesEtl.AttributeDefinition(name = "Pets", valueLabels = mapOf(1 to "Yes", 2 to "Leashed")),
+                    ),
+            )
+        val dto =
+            AspiraCampsitesEtl.Parsed(
+                inventory = listOf(envelopeOf(inventory)),
+                maps = Json.parseToJsonElement(mapsPayload).jsonObject["payload"] as kotlinx.serialization.json.JsonArray,
+                dictionaries = dictionaries,
+            )
+
+        val campsite = records(etl.transform(dto, ctx)).single()
+
+        assertEquals("""[{"url":"https://cdn.example/a.jpg"}]""", campsite.photos.toString())
+        assertEquals(
+            """[{"definition_id":-32716,"name":"Site Length","value":90.0},""" +
+                """{"definition_id":-32759,"name":"Pets","value":["Yes","Leashed"]},""" +
+                """{"definition_id":-1,"value":3}]""",
+            campsite.sourcePayload!!.jsonObject["defined_attributes"].toString(),
+        )
+    }
+
     private fun envelopeOf(payloadJson: String): Envelope =
         Json.decodeFromString(
             Envelope.serializer(),
