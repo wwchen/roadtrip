@@ -59,11 +59,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
                         return@put call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
-            try {
-                call.respondEncodedJson(service.updateProfile(principal.userId, req))
-            } catch (e: SettingsError) {
-                call.respondSettingsError(e)
-            }
+            call.respondEncodedJson(service.updateProfile(principal.userId, req))
         }.describeApi(TAG_SETTINGS, "Update profile settings")
             .access(RouteAccess.User)
 
@@ -80,11 +76,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
                         return@put call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
-            try {
-                call.respondEncodedJson(service.updateNotifications(principal, req))
-            } catch (e: SettingsError) {
-                call.respondSettingsError(e)
-            }
+            call.respondEncodedJson(service.updateNotifications(principal, req))
         }.describeApi(TAG_SETTINGS, "Update notification settings")
             .access(RouteAccess.User)
 
@@ -106,21 +98,13 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
                         return@post call.respondInvalidBody()
                     is RouteBodyResult.Valid -> body.value
                 }
-            try {
-                call.respondEncodedJson(service.sendSlackTest(principal.userId, req.channel))
-            } catch (e: SettingsError) {
-                call.respondSettingsError(e)
-            }
+            call.respondEncodedJson(service.sendSlackTest(principal.userId, req.channel))
         }.describeApi(TAG_SETTINGS, "Send a Slack test message")
             .access(RouteAccess.User)
 
         post(EMAIL_TEST_PATH) {
             val principal = call.requireUser() ?: return@post
-            try {
-                call.respondEncodedJson(service.sendEmailTest(principal.userId))
-            } catch (e: SettingsError) {
-                call.respondSettingsError(e)
-            }
+            call.respondEncodedJson(service.sendEmailTest(principal.userId))
         }.describeApi(TAG_SETTINGS, "Send a test email")
             .access(RouteAccess.User)
     }
