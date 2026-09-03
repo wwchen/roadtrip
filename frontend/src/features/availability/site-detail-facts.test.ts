@@ -6,9 +6,7 @@ import {
   descriptionText,
   detailFacts,
   featureLabels,
-  findImageUrl,
-  firstString,
-  formatValue,
+  photoUrl,
 } from './site-detail-facts';
 
 const site = (extra: Partial<Campsite> = {}): Partial<Campsite> => ({ id: 1, ...extra });
@@ -16,32 +14,18 @@ const facts = (s: Partial<Campsite>) => Object.fromEntries(detailFacts(s).map((f
 
 describe('capacity', () => {
   test('reads a range, a ceiling and a floor as different claims', () => {
-    expect(capacityLabel(site(), { min_capacity: 2, max_capacity: 6 })).toBe('2-6 people');
-    expect(capacityLabel(site(), { max_capacity: 6 })).toBe('Up to 6 people');
+    expect(capacityLabel(site({ max_people: 6 }), { min_num_people: 2 })).toBe('2-6 people');
+    expect(capacityLabel(site({ max_people: 6 }), {})).toBe('Up to 6 people');
     expect(capacityLabel(site(), { min_capacity: 2 })).toBe('2+ people');
   });
 
   test('collapses a range whose ends agree', () => {
-    expect(capacityLabel(site(), { min_capacity: 6, max_capacity: 6 })).toBe('Up to 6 people');
-  });
-
-  test('accepts every spelling', () => {
-    expect(capacityLabel(site(), { minCapacity: 2, maxCapacity: 6 })).toBe('2-6 people');
-    expect(capacityLabel(site(), { min_num_people: 2, max_num_people: 6 })).toBe('2-6 people');
-    expect(capacityLabel(site(), { minNumPeople: 2, maxNumPeople: 6 })).toBe('2-6 people');
-  });
-
-  test('prefers the promoted column over the payload', () => {
-    expect(capacityLabel(site({ max_people: 4 }), { max_capacity: 99 })).toBe('Up to 4 people');
-  });
-
-  test('reads numbers written as strings', () => {
-    expect(capacityLabel(site(), { max_capacity: '6' })).toBe('Up to 6 people');
+    expect(capacityLabel(site({ max_people: 6 }), { min_capacity: 6 })).toBe('Up to 6 people');
   });
 
   test('says nothing when it knows nothing', () => {
     expect(capacityLabel(site(), {})).toBe('');
-    expect(capacityLabel(site(), { max_capacity: 'lots' })).toBe('');
+    expect(capacityLabel(site({ max_people: null }), { min_capacity: 'lots' })).toBe('');
   });
 });
 
@@ -73,17 +57,14 @@ describe('the fact list', () => {
     expect(Object.keys(facts(site()))).toEqual([]);
   });
 
-  test('falls back through the payload for the loop and type', () => {
-    expect(facts(site({ source_payload: { loop: 'B', site_type: 'RV' } }))).toMatchObject({
-      Loop: 'B',
-      Type: 'RV',
-    });
+  test('falls back to the kind when nothing more specific was listed', () => {
+    expect(facts(site({ kind: 'site' }))).toEqual({ Type: 'site' });
   });
 
   test('lists at most four equipment types', () => {
-    expect(
-      facts(site({ source_payload: { allowed_equipment: ['Tent', 'RV', 'Van', 'Trailer', 'Boat'] } })),
-    ).toMatchObject({ Equipment: 'Tent, RV, Van, Trailer' });
+    const equipment = ['Tent', 'RV', 'Van', 'Trailer', 'Boat'].map((name) => ({ name }));
+
+    expect(facts(site({ equipment }))).toMatchObject({ Equipment: 'Tent, RV, Van, Trailer' });
   });
 });
 
@@ -96,54 +77,33 @@ describe('feature chips', () => {
   });
 
   test('format the measurements with units', () => {
-    expect(featureLabels(site({ max_rv_length: 32, max_cars: 2 }))).toEqual(
-      expect.arrayContaining(['Max RV length: 32 ft', 'Max cars: 2']),
-    );
-  });
-
-  test('deduplicate the same fact arriving twice', () => {
-    const labels = featureLabels(
-      site({ firepit: true, source_payload: { attributes: [{ name: 'firepit' }] } }),
-    );
-
-    expect(labels.filter((label) => label.toLowerCase() === 'firepit')).toHaveLength(1);
+    expect(featureLabels(site({ max_rv_length: 32, max_cars: 2 }))).toEqual([
+      'Max cars: 2',
+      'Max RV length: 32 ft',
+    ]);
   });
 
   test('are capped so a dense row stays readable', () => {
     const many = Array.from({ length: 40 }, (_, index) => ({ name: `Feature ${index}` }));
 
-    expect(featureLabels(site({ source_payload: { attributes: many } }))).toHaveLength(12);
+    expect(featureLabels(site({ source_payload: { defined_attributes: many } }))).toHaveLength(12);
   });
 });
 
-describe('flattening provider attribute bags', () => {
-  test('reads a name/value pair', () => {
+describe('flattening the attribute list', () => {
+  test('reads a name/value pair, joining a list of values', () => {
     expect(attributeLabels([{ name: 'Shade', value: 'Full' }])).toEqual(['Shade: Full']);
+    expect(attributeLabels([{ name: 'Adjacent to', value: ['Lake', 'Trail'] }])).toEqual([
+      'Adjacent to: Lake, Trail',
+    ]);
   });
 
-  test('drops a redundant boolean value', () => {
-    expect(attributeLabels([{ name: 'Pets allowed', value: true }])).toEqual(['Pets allowed']);
+  test('keeps a name that has no value', () => {
+    expect(attributeLabels([{ name: 'Pets allowed', value: null }])).toEqual(['Pets allowed']);
   });
 
-  test('recurses through nested arrays', () => {
-    expect(attributeLabels([[{ name: 'A' }], [{ name: 'B' }]])).toEqual(['A', 'B']);
-  });
-
-  test('accepts bare strings', () => {
-    expect(attributeLabels(['Shade', ''])).toEqual(['Shade']);
-  });
-
-  test('skips an unresolved definition reference', () => {
-    expect(attributeLabels([{ definition_id: 41, value: 'x' }])).toEqual([]);
-    expect(attributeLabels([{ attributeDefinitionId: 41 }])).toEqual([]);
-  });
-
-  test('humanises an anonymous object"s keys, minus its id', () => {
-    expect(attributeLabels([{ id: 9, max_shade: 'Full' }])).toEqual(['Max Shade: Full']);
-  });
-
-  test('strips markup out of provider text', () => {
-    expect(attributeLabels(['<b>Shade</b>  full'])).toEqual(['Shade full']);
+  test('skips a definition the dictionary did not name', () => {
+    expect(attributeLabels([{ definition_id: 41, value: 'x' }, 'stray'])).toEqual([]);
   });
 });
 
@@ -152,6 +112,7 @@ describe('the description', () => {
     expect(descriptionText('<p>Waterfront   site.</p>')).toBe('Waterfront site.');
     expect(descriptionText('x'.repeat(400))).toHaveLength(260);
     expect(descriptionText('x'.repeat(400)).endsWith('...')).toBe(true);
+    expect(descriptionText('x'.repeat(400), 120)).toHaveLength(120);
   });
 
   test('is empty for nothing useful', () => {
@@ -160,55 +121,15 @@ describe('the description', () => {
   });
 });
 
-describe('finding an image', () => {
-  test('takes a URL whose key says image', () => {
-    expect(findImageUrl(site({ source_payload: { image_url: 'https://cdn.example/a' } }))).toBe(
-      'https://cdn.example/a',
+describe('the photo', () => {
+  test('is the first one', () => {
+    expect(photoUrl(site({ photos: [{ url: 'https://cdn.example/a.jpg' }, { url: 'x' }] }))).toBe(
+      'https://cdn.example/a.jpg',
     );
   });
 
-  test('takes a URL whose extension says image', () => {
-    expect(findImageUrl(site({ source_payload: { hero: 'https://cdn.example/a.jpg?v=2' } }))).toBe(
-      'https://cdn.example/a.jpg?v=2',
-    );
-  });
-
-  test('skips anything keyed as a map', () => {
-    expect(findImageUrl(site({ source_payload: { map_url: 'https://cdn.example/m.png' } }))).toBe('');
-  });
-
-  test('ignores a plain link', () => {
-    expect(findImageUrl(site({ source_payload: { url: 'https://recreation.gov/x' } }))).toBe('');
-  });
-
-  test('searches nested structures', () => {
-    expect(
-      findImageUrl(site({ source_payload: { media: [{ thumbnail: 'https://cdn.example/t.webp' }] } })),
-    ).toBe('https://cdn.example/t.webp');
-  });
-
-  test('survives a cyclic payload', () => {
-    const payload: Record<string, unknown> = { name: 'x' };
-    payload.self = payload;
-
-    expect(() => findImageUrl(site({ source_payload: payload }))).not.toThrow();
-  });
-});
-
-describe('the small coercions', () => {
-  test('formatValue treats absence and false as nothing', () => {
-    expect(formatValue(null)).toBe('');
-    expect(formatValue(false)).toBe('');
-    expect(formatValue(true)).toBe('true');
-    expect(formatValue(0)).toBe('0');
-    expect(formatValue(NaN)).toBe('');
-    expect(formatValue(['a', '', 'b'])).toBe('a, b');
-    expect(formatValue({ label: 'Named' })).toBe('Named');
-  });
-
-  test('firstString takes the first non-blank, numbers included', () => {
-    expect(firstString('', '   ', 'third')).toBe('third');
-    expect(firstString(null, 42)).toBe('42');
-    expect(firstString(null, undefined)).toBe('');
+  test('is nothing when the row has none', () => {
+    expect(photoUrl(site({ photos: [] }))).toBe('');
+    expect(photoUrl(site())).toBe('');
   });
 });

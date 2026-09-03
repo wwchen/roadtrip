@@ -11,8 +11,10 @@ import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.photosPayload
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -200,6 +202,7 @@ class AspiraCampsitesEtl(
                                 kindListed = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] },
                                 equipment = inv.allowedEquipment?.let { enrichAllowedEquipment(it, dto.dictionaries) },
                                 maxPeople = inv.maxCapacity,
+                                photos = photosPayload(inv.photos),
                                 sourcePayload =
                                     buildResourceRaw(
                                         inv = inv,
@@ -287,6 +290,10 @@ class AspiraCampsitesEtl(
             (obj["mapIds"] as? JsonArray)
                 ?.mapNotNull { it.jsonPrimitive.long.takeIf { _ -> it.jsonPrimitive.contentOrNull != null } }
                 ?: emptyList()
+        val photos =
+            (obj["photos"] as? JsonArray).orEmpty().mapNotNull { photo ->
+                ((photo as? JsonObject)?.get("photoUrlResult") as? JsonObject)?.get("url")?.jsonPrimitive?.contentOrNull
+            }
         return ResourceInventory(
             resourceId = resourceId,
             name = name,
@@ -299,6 +306,7 @@ class AspiraCampsitesEtl(
             allowedEquipment = allowedEquipment,
             definedAttributes = definedAttributes,
             mapIds = mapIds,
+            photos = photos,
         )
     }
 
@@ -365,10 +373,8 @@ class AspiraCampsitesEtl(
                 put("allowed_equipment", enrichAllowedEquipment(inv.allowedEquipment, dictionaries))
             }
             if (inv.definedAttributes != null) {
-                // Strip Aspira's outer wrapping (`attributeVisibility`,
-                // duplicate `attributeId`/`attributeDefinitionId`) and
-                // keep just (id, value, values) so downstream consumers
-                // don't have to know Aspira-shaped JSON.
+                // Strip Aspira's outer wrapping and resolve the dictionary here, so
+                // the row carries `{name, value}` rather than definition ids and enums.
                 put("defined_attributes", flattenAttributes(inv.definedAttributes, dictionaries))
             }
         }
@@ -407,27 +413,40 @@ class AspiraCampsitesEtl(
             for (raw in attrs) {
                 val a = raw as? JsonObject ?: continue
                 val definitionId = a["attributeDefinitionId"]?.jsonPrimitive?.intOrNull
+                val definition = definitionId?.let { dictionaries.attributes[it] }
                 add(
                     buildJsonObject {
-                        definitionId?.let {
-                            put("definition_id", it)
-                            dictionaries.attributes[it]?.name?.let { name -> put("name", name) }
-                        }
-                        a["value"]?.let { put("value", it) }
-                        a["values"]?.let { put("values", it) }
-                        val labels = attributeValueLabels(a, definitionId?.let { dictionaries.attributes[it] })
-                        if (labels.isNotEmpty()) {
-                            put(
-                                "value_labels",
-                                buildJsonArray {
-                                    labels.forEach { add(JsonPrimitive(it)) }
-                                },
-                            )
-                        }
+                        definitionId?.let { put("definition_id", it) }
+                        definition?.name?.let { put("name", it) }
+                        attributeValue(a, definition)?.let { put("value", it) }
                     },
                 )
             }
         }
+
+    /** The dictionary's labels for an enum value, else the value itself. */
+    private fun attributeValue(
+        attr: JsonObject,
+        definition: AttributeDefinition?,
+    ): JsonElement? {
+        val labels = attributeValueLabels(attr, definition)
+        if (labels.size == 1) return JsonPrimitive(labels.single())
+        if (labels.size > 1) {
+            return buildJsonArray {
+                labels.forEach { add(JsonPrimitive(it)) }
+            }
+        }
+
+        val value = attr["value"]
+        if (value != null && value != JsonNull) return value
+
+        val values = attr["values"] as? JsonArray ?: return null
+        if (values.size == 1) return values.single()
+        if (values.size > 1) {
+            return buildJsonArray { values.forEach { add(it) } }
+        }
+        return null
+    }
 
     private fun attributeValueLabels(
         attr: JsonObject,
@@ -616,6 +635,7 @@ class AspiraCampsitesEtl(
         val allowedEquipment: JsonArray?,
         val definedAttributes: JsonArray?,
         val mapIds: List<Long>,
+        val photos: List<String>,
     ) {
         val firstMapId: Long? get() = mapIds.firstOrNull()
     }

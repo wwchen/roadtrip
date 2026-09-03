@@ -1,12 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { Campsite } from '@/api/campsite-api';
-import {
-  campsitesForIds,
-  compareListRows,
-  descriptionSummary,
-  rowDetails,
-  siteListLabel,
-} from './site-list-rows';
+import { campsitesForIds, compareListRows, rowDetails, siteListLabel } from './site-list-rows';
 
 const site = (id: number, extra: Partial<Campsite> = {}) =>
   ({ id, name: `Site ${id}`, ...extra }) as Campsite;
@@ -38,42 +32,19 @@ describe('the row summary', () => {
   test('combines capacity and description', () => {
     expect(
       rowDetails(site(1, { max_people: 6, source_payload: { description: 'By the water.' } })),
-    ).toEqual(['Sleeps up to 6', 'By the water.']);
+    ).toEqual(['Up to 6 people', 'By the water.']);
   });
 
-  test('phrases capacity by what is known', () => {
-    expect(rowDetails(site(1, { source_payload: { min_capacity: 2, max_capacity: 6 } }))).toEqual([
-      'Sleeps 2-6',
-    ]);
-    expect(rowDetails(site(1, { source_payload: { min_capacity: 2 } }))).toEqual(['Sleeps 2+']);
+  test('clamps the description to two lines" worth', () => {
+    const [summary] = rowDetails(site(1, { source_payload: { description: 'x'.repeat(200) } }));
+
+    expect(summary).toHaveLength(120);
+    expect(summary!.endsWith('...')).toBe(true);
   });
 
   test('is empty when the row says nothing', () => {
     expect(rowDetails(site(1))).toEqual([]);
-  });
-
-  test('ignores a non-object payload', () => {
     expect(rowDetails(site(1, { source_payload: 'nope' }))).toEqual([]);
-  });
-});
-
-describe('the description summary', () => {
-  test('flattens markup and whitespace', () => {
-    expect(descriptionSummary('<p>Walk-in   site.</p>\n<p>Shaded.</p>')).toBe(
-      'Walk-in site. Shaded.',
-    );
-  });
-
-  test('clamps to two lines" worth', () => {
-    const summary = descriptionSummary('x'.repeat(200));
-
-    expect(summary).toHaveLength(120);
-    expect(summary.endsWith('...')).toBe(true);
-  });
-
-  test('is empty for nothing', () => {
-    expect(descriptionSummary(null)).toBe('');
-    expect(descriptionSummary('<p>  </p>')).toBe('');
   });
 });
 
