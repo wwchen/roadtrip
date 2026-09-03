@@ -48,17 +48,21 @@ options:
 USAGE
 }
 
+_need_value() {
+    (( $# >= 2 )) || { echo "error: $1 requires a value" >&2; _usage; exit 2; }
+}
+
 _parse_args() {
     COMMAND="${1:-}"
     [[ -n "${COMMAND}" ]] || { _usage; exit 2; }
     shift
     while (( $# )); do
         case "$1" in
-            --scope) SCOPE="$2"; shift 2 ;;
+            --scope) _need_value "$@"; SCOPE="$2"; shift 2 ;;
             --dry-run) DRY_RUN=1; shift ;;
-            --min-gb) MIN_GB="$2"; shift 2 ;;
-            --path) DISK_PATH="$2"; shift 2 ;;
-            --label) LABEL="$2"; shift 2 ;;
+            --min-gb) _need_value "$@"; MIN_GB="$2"; shift 2 ;;
+            --path) _need_value "$@"; DISK_PATH="$2"; shift 2 ;;
+            --label) _need_value "$@"; LABEL="$2"; shift 2 ;;
             --include-anonymous) INCLUDE_ANONYMOUS=1; shift ;;
             *) echo "error: unknown option $1" >&2; _usage; exit 2 ;;
         esac
@@ -86,7 +90,7 @@ _apply_scope_defaults() {
 # for 14h once.
 cmd_check_disk() {
     local free_kb free_gb
-    free_kb="$(df -Pk "${DISK_PATH}" | awk 'NR==2 {print $4}')"
+    free_kb="$(df -Pk "${DISK_PATH}" 2>/dev/null | awk 'NR==2 {print $4}' || true)"
     if [[ -z "${free_kb}" ]]; then
         echo "warning: could not read free space on ${DISK_PATH}; skipping ${LABEL} disk check" >&2
         return 0

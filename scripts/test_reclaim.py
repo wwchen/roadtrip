@@ -84,6 +84,19 @@ class CheckDiskTest(ReclaimTestCase):
         done = self.run_reclaim("nonsense")
         self.assertEqual(done.returncode, 2)
 
+    def test_unreadable_path_warns_and_succeeds(self) -> None:
+        done = self.run_reclaim(
+            "check-disk", "--label", "unit test", "--min-gb", "1",
+            "--path", "/nonexistent/path/xyz",
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("could not read free space", done.stderr)
+
+    def test_option_without_a_value_is_a_usage_error(self) -> None:
+        done = self.run_reclaim("check-disk", "--min-gb")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("requires a value", done.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
