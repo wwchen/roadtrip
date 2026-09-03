@@ -10,6 +10,7 @@
 // container that clips anything wider than one 66px column.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Icon } from '@ui';
 import { bookingCopy, gateCopy } from '@/lib/strings';
 import { useDismiss } from '@/lib/use-dismiss';
 
@@ -118,7 +119,7 @@ export function CellBookPopover({ anchor, onOpenBooking, cart, onClose }: CellBo
           onClose();
         }}
       >
-        <ExternalLinkIcon />
+        <Icon name="external" className="cg-cell-book-pop-icon" aria-hidden="true" />
         <span>{bookingCopy.openProvider}</span>
       </button>
       <button
@@ -133,7 +134,7 @@ export function CellBookPopover({ anchor, onOpenBooking, cart, onClose }: CellBo
           else cart.onOpenSettings();
         }}
       >
-        <CartIcon />
+        <Icon name="cart-add" className="cg-cell-book-pop-icon" aria-hidden="true" />
         <span className="cg-cell-book-pop-text">
           <span>{bookingCopy.addToCart}</span>
           {cart.state === 'signed-out' ? (
@@ -173,43 +174,4 @@ function positionFor(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(value, Math.max(min, max)));
-}
-
-/** Inline stroke SVGs: two one-off marks, not worth an entry in the icon set. */
-function ExternalLinkIcon() {
-  return (
-    <svg
-      className="cg-cell-book-pop-icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-      <path d="M15 3h6v6" />
-      <path d="M10 14 21 3" />
-    </svg>
-  );
-}
-
-function CartIcon() {
-  return (
-    <svg
-      className="cg-cell-book-pop-icon"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="9" cy="20" r="1.25" />
-      <circle cx="18" cy="20" r="1.25" />
-      <path d="M2 3h2.5l2.4 12.2a1.5 1.5 0 0 0 1.5 1.2h8.8a1.5 1.5 0 0 0 1.5-1.2L21 7H6" />
-    </svg>
-  );
 }
