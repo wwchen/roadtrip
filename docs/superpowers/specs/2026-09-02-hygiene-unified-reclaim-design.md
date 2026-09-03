@@ -31,18 +31,25 @@ list is still never applied. Each worktree therefore carries a full 1.7 GB
 The guardrail passed the whole time because it validates the config's shape
 and never checks that the config changed anything.
 
-### Locally built images carry no ownership label
+### The reclaim path is never invoked locally
 
-`scripts/deploy.sh` prunes with `--filter label=ca.floo.roadtrip.managed=true`,
-and `sandbox-sweep.yml` filters on the same label. That label is applied to
-containers and volumes at run time; it is not baked into any image. Nothing
-in the local build path applies it either — `docker_build()`'s `labels=`
-argument in the `Tiltfile` is Tilt UI metadata, not Docker image labels.
+`scripts/deploy.sh:_prune_roadtrip_images` already names `roadtrip/backend`
+and `roadtrip/recgov-companion` in its repository list, and all three
+Dockerfiles already apply `LABEL ca.floo.roadtrip.managed="true"`, which the
+local images really carry. Both mechanisms that would reap local images are
+therefore in place and correct.
 
-Result: 12.4 GB of local images, including four tags each of
-`roadtrip/recgov-companion` (~3.8 GB per tag) and `roadtrip/backend`
-(~690 MB per tag), unreachable by the label-scoped prune that keeps the
-deploy host clean.
+The gap is that nothing ever runs them on a developer machine: the prune is a
+private function inside a script whose only entry points are `prod`,
+`sandbox-up`, and `sandbox-down`. Result: 12.4 GB of local images, four tags
+each of `roadtrip/recgov-companion` (~3.8 GB per tag) and `roadtrip/backend`
+(~690 MB per tag), 3.98 GB of it reclaimable.
+
+Retention also needs a local default of its own. With four tags per repository
+and `ROADTRIP_IMAGE_KEEP:-5`, running the existing prune locally would free
+nothing from named tags — the keep window is wider than the tag history. Host
+rollback depth and laptop disk pressure are different problems and want
+different numbers.
 
 ### The same logic exists three times
 
@@ -56,8 +63,8 @@ Three implementations of one idea, and the third context was simply forgotten.
 
 ## Scope
 
-**In scope.** One reclaim implementation shared by all three contexts; image
-ownership labels; a local entry point; a guardrail that checks `sparsePaths`
+**In scope.** One reclaim implementation shared by all three contexts;
+scope-specific retention defaults; a local entry point; a guardrail that checks `sparsePaths`
 is in effect rather than merely well-formed.
 
 **Out of scope.** Sandbox TTL stays in `sandbox-sweep.yml`'s `plan` job. TTL
@@ -71,8 +78,9 @@ created by Claude Code and are not covered by the worktree guardrail.
 
 Defaults live in `scripts/reclaim.sh` as `: "${NAME:=value}"`, overridable by
 environment — code default, config override, per `AGENTS.md`. Existing names
-`ROADTRIP_IMAGE_RETENTION` (336h) and `ROADTRIP_IMAGE_KEEP` (5) are preserved
-so current overrides keep working. `RECLAIM_FREE_TARGET_GB` becomes the one
+`ROADTRIP_IMAGE_RETENTION` (336h) and `ROADTRIP_IMAGE_KEEP` are preserved so
+current overrides keep working; `ROADTRIP_IMAGE_KEEP` keeps its current value
+of 5 as the host default and gains a local default of 2 (see §3). `RECLAIM_FREE_TARGET_GB` becomes the one
 name for the disk floor; `sandbox-sweep.yml` continues to supply it from
 `vars.RECLAIM_FREE_TARGET_GB`.
 
@@ -121,13 +129,14 @@ window where the volume exists but no container refers to it. Moving the
 prune must not move it out from under that hold. This is the subtlest part of
 the change and needs a test of its own.
 
-### 3. Image ownership labels
+### 3. Scope-specific retention defaults
 
-Add `LABEL ca.floo.roadtrip.managed=true` to the backend, companion, and data
-Dockerfiles. Labelling at the image definition means every builder — Tilt,
-`deploy.sh`, CI — produces reclaimable images without each build path having
-to remember. This is what makes `--scope=local` able to reach the stale Tilt
-tags at all.
+Image labels and the repository list already cover local images, so no
+Dockerfile or Tiltfile change is needed. What differs by scope is how many
+tags to keep: `ROADTRIP_IMAGE_KEEP` defaults to 5 under `--scope=host`, where
+it sets rollback depth, and to 2 under `--scope=local`, where the only
+consumer is disk. `--include-anonymous` follows the same pattern, on for host
+and off for local.
 
 ### 4. Worktree hygiene
 
@@ -154,7 +163,8 @@ hold unmerged work. Removal stays an explicit, separate action.
 - `scripts/test_reclaim.py`, following the existing pytest pattern in
   `scripts/test_deploy_stale_cleanup.py` and `scripts/test_docker_compose.py`.
   Cases: label filter present on every destructive call; `--include-anonymous`
-  off under `--scope=local`; keep-N-tags-per-repo; `check-disk` exit codes;
+  and `ROADTRIP_IMAGE_KEEP` taking their scope-specific defaults;
+  keep-N-tags-per-repo; `check-disk` exit codes;
   `--dry-run` changes nothing.
 - A regression test for the volume-hold window described in §2.
 - New cases in the sparse-path checker covering an applied worktree, an
