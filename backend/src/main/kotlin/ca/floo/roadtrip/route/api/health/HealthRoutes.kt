@@ -8,7 +8,6 @@ import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.service.health.ReadinessService
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -31,13 +30,13 @@ import java.time.Instant
 internal fun Route.healthRoutes(readiness: ReadinessService) {
     route("/api") {
         get("/health") {
-            call.respondHealthJson(healthResponseDto(Instant.now().epochSecond))
+            call.respondEncodedJson(healthResponseDto(Instant.now().epochSecond))
         }.describeApi("health", "Application liveness probe")
             .access(RouteAccess.Anonymous)
 
         get("/health/ready") {
             val report = readiness.report()
-            call.respondHealthJson(
+            call.respondEncodedJson(
                 readinessResponseDto(report, Instant.now().epochSecond),
                 if (report.isReady) HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable,
             )
@@ -62,10 +61,3 @@ internal fun readinessResponseDto(
                 ReadinessResponseDto.Dependency.DOWN
             },
     )
-
-private suspend inline fun <reified T> ApplicationCall.respondHealthJson(
-    value: T,
-    status: HttpStatusCode = HttpStatusCode.OK,
-) {
-    respondEncodedJson(value, status)
-}

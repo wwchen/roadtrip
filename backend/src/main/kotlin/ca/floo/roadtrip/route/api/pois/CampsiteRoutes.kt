@@ -42,16 +42,16 @@ internal fun Route.campsiteRoutes(
                     get {
                         val poiId =
                             call.longPath("id")
-                                ?: return@get call.respondCampsiteError("bad_id", HttpStatusCode.BadRequest)
+                                ?: return@get call.respondApiError("bad_id", HttpStatusCode.BadRequest)
                         try {
-                            call.respondCampsiteJson(
+                            call.respondEncodedJson(
                                 controller.campsitesForPoi(
                                     poiId = poiId,
                                     siteTypes = call.queryValues("site_type", "siteType"),
                                 ),
                             )
                         } catch (e: AvailabilityServiceError.NotFound) {
-                            call.respondCampsiteError(e.error, HttpStatusCode.NotFound)
+                            call.respondApiError(e.error, HttpStatusCode.NotFound)
                         }
                     }.describeApi(
                         tag = "campsite",
@@ -87,7 +87,7 @@ internal fun Route.campsiteRoutes(
                             }
 
                         try {
-                            call.respondAvailabilityJson(
+                            call.respondEncodedJson(
                                 controller.availabilityForPoi(
                                     poiId = poiId,
                                     siteTypes = call.queryValues("site_type", "siteType"),
@@ -108,7 +108,7 @@ internal fun Route.campsiteRoutes(
                                 causeChain(e),
                                 e,
                             )
-                            call.respondAvailabilityJson(error, status)
+                            call.respondEncodedJson(error, status)
                         }
                     }.describeApi(
                         tag = "availability",
@@ -165,26 +165,11 @@ internal fun upstreamHttpStatus(e: AvailabilityProviderError): Int? {
 /** Depth cap so a self-referential cause chain can't spin or flood a log line. */
 private const val MAX_CAUSE_DEPTH = 8
 
-private suspend fun ApplicationCall.respondCampsiteError(
-    error: String,
-    status: HttpStatusCode,
-    detail: String? = null,
-) {
-    respondApiError(error = error, status = status, detail = detail)
-}
-
-private suspend inline fun <reified T> ApplicationCall.respondCampsiteJson(
-    value: T,
-    status: HttpStatusCode = HttpStatusCode.OK,
-) {
-    respondEncodedJson(value, status)
-}
-
 private suspend fun ApplicationCall.respondAvailabilityError(
     error: String,
     status: HttpStatusCode,
 ) {
-    respondAvailabilityJson(availabilityErrorDto(error), status)
+    respondEncodedJson(availabilityErrorDto(error), status)
 }
 
 private suspend fun ApplicationCall.respondServiceAvailabilityError(e: AvailabilityServiceError) {
@@ -199,14 +184,7 @@ private suspend fun ApplicationCall.respondServiceAvailabilityError(e: Availabil
             is AvailabilityServiceError.BadDateWindow -> availabilityErrorDto(e)
             else -> availabilityErrorDto(e.error)
         }
-    respondAvailabilityJson(body, status)
-}
-
-private suspend inline fun <reified T> ApplicationCall.respondAvailabilityJson(
-    value: T,
-    status: HttpStatusCode = HttpStatusCode.OK,
-) {
-    respondEncodedJson(value, status)
+    respondEncodedJson(body, status)
 }
 
 private fun availabilityErrorDto(e: AvailabilityServiceError.BadDateWindow): AvailabilityErrorDto =

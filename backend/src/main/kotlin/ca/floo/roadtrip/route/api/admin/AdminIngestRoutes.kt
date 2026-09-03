@@ -29,7 +29,6 @@ import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.support.TargetBusyException
 import ca.floo.roadtrip.support.TargetNotFoundException
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -73,28 +72,28 @@ fun Route.adminIngestRoutes(controller: IngestController) {
                 route("/runs") {
                     get {
                         val target = call.queryParam("target")
-                        call.respondAdminJson(listRecent(controller, target, limit = RECENT_RUNS_LIMIT))
+                        call.respondEncodedJson(listRecent(controller, target, limit = RECENT_RUNS_LIMIT))
                     }.describeApi("admin", "Last $RECENT_RUNS_LIMIT parent ingest runs (filter by ?target=)")
                         .access(RouteAccess.Anonymous)
 
                     get("/{id}") {
                         val id = call.longPath("id")
                         if (id == null) {
-                            call.respondAdminJson(ErrorNotFoundSchema(error = "bad id"), HttpStatusCode.BadRequest)
+                            call.respondEncodedJson(ErrorNotFoundSchema(error = "bad id"), HttpStatusCode.BadRequest)
                             return@get
                         }
                         val body = runDetail(controller, id)
                         if (body == null) {
-                            call.respondAdminJson(ErrorNotFoundSchema(error = "not found", id = id), HttpStatusCode.NotFound)
+                            call.respondEncodedJson(ErrorNotFoundSchema(error = "not found", id = id), HttpStatusCode.NotFound)
                         } else {
-                            call.respondAdminJson(body)
+                            call.respondEncodedJson(body)
                         }
                     }.describeApi("admin", "One ingest run with its ordered phase rows")
                         .access(RouteAccess.Anonymous)
                 }
 
                 get("/status") {
-                    call.respondAdminJson(statusByTarget(controller))
+                    call.respondEncodedJson(statusByTarget(controller))
                 }.describeApi("admin", "Per-target ingest run status + age in seconds")
                     .access(RouteAccess.Anonymous)
             }
@@ -117,15 +116,15 @@ private suspend fun io.ktor.server.routing.RoutingContext.runOne(
                 "completed", "noop" -> HttpStatusCode.OK
                 else -> HttpStatusCode.InternalServerError
             }
-        call.respondAdminJson(outcome.toSchema(), status)
+        call.respondEncodedJson(outcome.toSchema(), status)
     } catch (_: TargetNotFoundException) {
         val known = controller.knownTargets().sorted()
-        call.respondAdminJson(
+        call.respondEncodedJson(
             ErrorUnknownTargetSchema(error = "unknown target", target = target, known = known),
             HttpStatusCode.NotFound,
         )
     } catch (e: TargetBusyException) {
-        call.respondAdminJson(
+        call.respondEncodedJson(
             ErrorTargetBusySchema(error = "target busy", target = e.target, runningRunId = e.runningRunId),
             HttpStatusCode.Conflict,
         )
@@ -188,7 +187,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
             Pair(outcomes, anyFailed)
         }
     val status = if (anyFailed) HttpStatusCode.InternalServerError else HttpStatusCode.OK
-    call.respondAdminJson(
+    call.respondEncodedJson(
         FanOutResponseSchema(
             kind = kind.rowValue,
             outcomes = outcomes.map { it.toSchema() },
@@ -215,13 +214,6 @@ private fun statusByTarget(controller: IngestController): StatusResponseSchema =
     StatusResponseSchema(
         targets = controller.statusByKnownTarget().map { it.toSchema() },
     )
-
-private suspend inline fun <reified T> ApplicationCall.respondAdminJson(
-    value: T,
-    status: HttpStatusCode = HttpStatusCode.OK,
-) {
-    respondEncodedJson(value, status)
-}
 
 private fun RunOutcome.toSchema(): RunOutcomeSchema =
     RunOutcomeSchema(

@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.route.api.settings
 
-import ca.floo.roadtrip.model.api.SettingsResponseDto
 import ca.floo.roadtrip.model.api.UpdateNotificationsRequest
 import ca.floo.roadtrip.model.api.UpdateProfileRequest
 import ca.floo.roadtrip.model.domain.auth.Principal
@@ -14,7 +13,6 @@ import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.service.settings.SettingsError
 import ca.floo.roadtrip.service.settings.UserSettingsPort
-import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
@@ -49,7 +47,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
         get {
             val principal = call.requireUser() ?: return@get
             val dto = service.read(principal)
-            call.respondSettings(dto)
+            call.respondEncodedJson(dto)
         }.describeApi(TAG_SETTINGS, "Get current account settings")
             .access(RouteAccess.User)
 
@@ -62,7 +60,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
                     is RouteBodyResult.Valid -> body.value
                 }
             try {
-                call.respondSettings(service.updateProfile(principal.userId, req))
+                call.respondEncodedJson(service.updateProfile(principal.userId, req))
             } catch (e: SettingsError) {
                 call.respondSettingsError(e)
             }
@@ -83,7 +81,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
                     is RouteBodyResult.Valid -> body.value
                 }
             try {
-                call.respondSettings(service.updateNotifications(principal, req))
+                call.respondEncodedJson(service.updateNotifications(principal, req))
             } catch (e: SettingsError) {
                 call.respondSettingsError(e)
             }
@@ -93,7 +91,7 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
         delete(SLACK_PATH) {
             val principal = call.requireUser() ?: return@delete
             val dto = service.disconnectSlack(principal.userId)
-            call.respondSettings(dto)
+            call.respondEncodedJson(dto)
         }.describeApi(TAG_SETTINGS, "Disconnect Slack integration")
             .access(RouteAccess.User)
 
@@ -127,5 +125,3 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
             .access(RouteAccess.User)
     }
 }
-
-private suspend fun ApplicationCall.respondSettings(dto: SettingsResponseDto) = respondEncodedJson(dto)

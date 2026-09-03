@@ -173,7 +173,7 @@ internal fun Route.routeRoutes(
                     }
                 }
 
-            call.respondRouteJson(
+            call.respondEncodedJson(
                 routeResponseFeatureCollection(
                     response = response,
                     waypoints = coords,
@@ -232,12 +232,5 @@ private suspend fun ApplicationCall.respondRouteError(
     detail: String,
     status: HttpStatusCode,
 ) {
-    respondRouteJson(RouteErrorDto(error = error, detail = detail), status)
-}
-
-private suspend inline fun <reified T> ApplicationCall.respondRouteJson(
-    value: T,
-    status: HttpStatusCode = HttpStatusCode.OK,
-) {
-    respondEncodedJson(value, status)
+    respondEncodedJson(RouteErrorDto(error = error, detail = detail), status)
 }

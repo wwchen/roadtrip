@@ -1,7 +1,5 @@
 package ca.floo.roadtrip.route.api.pois
 
-import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
-import ca.floo.roadtrip.model.api.poi.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.model.api.poi.PoisRequestSchema
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.domain.poi.Bbox
@@ -20,7 +18,6 @@ import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.POI_LIMIT
 import ca.floo.roadtrip.service.poi.PoiReader
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -58,7 +55,7 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
                                 .mapCatching(::parseRequest)
                     ) {
                         is RouteBodyResult.Invalid -> {
-                            call.respondPoiError(
+                            call.respondApiError(
                                 "bad_request",
                                 HttpStatusCode.BadRequest,
                                 body.detail ?: "parse failed",
@@ -68,7 +65,7 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
                         is RouteBodyResult.Valid -> body.value
                     }
 
-                call.respondPoiFeatureJson(
+                call.respondEncodedJson(
                     poiService.pois(
                         bbox = req.bbox,
                         zoom = req.zoom,
@@ -93,7 +90,7 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
                 val q = call.trimmedQuery("q")
                 val limit = call.boundedIntQuery("limit", DEFAULT_SEARCH_LIMIT, searchLimitRange)
                 val categories = call.splitQueryValues("categories")
-                call.respondPoiJson(
+                call.respondEncodedJson(
                     poiService.search(
                         query = q,
                         categories = categories,
@@ -118,15 +115,15 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
             get("/{id}") {
                 val id =
                     call.longPath("id")
-                        ?: return@get call.respondPoiError("bad_id", HttpStatusCode.BadRequest)
+                        ?: return@get call.respondApiError("bad_id", HttpStatusCode.BadRequest)
                 val feature =
                     poiService.poiDetail(id)
-                        ?: return@get call.respondPoiError("not_found", HttpStatusCode.NotFound)
+                        ?: return@get call.respondApiError("not_found", HttpStatusCode.NotFound)
                 call.response.headers.append(
                     "Cache-Control",
                     "public, max-age=300, stale-while-revalidate=3600",
                 )
-                call.respondPoiFeatureJson(feature)
+                call.respondEncodedJson(feature)
             }.describeApi(
                 tag = "poi",
                 summary = "Full per-row POI detail (the slim bbox endpoint omits these fields)",
@@ -159,27 +156,4 @@ private fun parseRequest(dto: PoisRequestSchema): PoiRequest {
             ?.takeIf { it.isNotEmpty() }
 
     return PoiRequest(bbox, dto.zoom, categories)
-}
-
-private suspend fun ApplicationCall.respondPoiFeatureJson(value: PoiFeatureCollectionSchema) {
-    respondEncodedJson(value)
-}
-
-private suspend fun ApplicationCall.respondPoiFeatureJson(value: PoiDetailFeatureSchema) {
-    respondEncodedJson(value)
-}
-
-private suspend fun ApplicationCall.respondPoiError(
-    error: String,
-    status: HttpStatusCode,
-    detail: String? = null,
-) {
-    respondApiError(error = error, status = status, detail = detail)
-}
-
-private suspend inline fun <reified T> ApplicationCall.respondPoiJson(
-    value: T,
-    status: HttpStatusCode = HttpStatusCode.OK,
-) {
-    respondEncodedJson(value, status)
 }
