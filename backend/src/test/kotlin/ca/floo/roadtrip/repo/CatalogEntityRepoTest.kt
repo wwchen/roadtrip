@@ -643,6 +643,43 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals(before, campgroundColumnsAsText())
     }
 
+    /**
+     * The migration's actual job: a row written before the columns were typed
+     * carries Campflare's upstream key names, and the read path decodes
+     * strictly now. Blank and untrimmed values become absent, which is what
+     * the old read path did on the way out.
+     */
+    @Test
+    fun `the normalization migration rewrites legacy Campflare keys`() {
+        val id =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO campgrounds (name, data_provider, data_provider_ref, location, links, photos, management, contact)
+                    VALUES ('Legacy', 'campflare', 'legacy-1', ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb)
+                    RETURNING id
+                    """.trimIndent(),
+                    """{"latitude":1,"longitude":2,"region":"  CA  ","address":{"street1":"1 Rd","state_code":"CA","zipcode":"95389","country_code":"US"}}""",
+                    """[{"href":"https://a.test/","label":"A"},{"caption":"no url"}]""",
+                    """[{"original_url":"https://p.test/1.jpg","large_url":"https://p.test/big.jpg"},{"caption":"no url"}]""",
+                    """{"agency_name":"NPS","agency_id":7,"agency_website":"https://nps.test"}""",
+                    """{"primary_phone":"555-0100","primary_email":"","fax":"x"}""",
+                )!!
+                .get("id", Long::class.java)
+
+        migrationStatements("V55__normalize_campground_jsonb.sql").forEach(ctx::execute)
+
+        val campground = checkNotNull(CampgroundRepo(ctx).findById(id))
+        assertEquals(
+            CampgroundLocation(1.0, 2.0, region = "CA", address = Address("1 Rd", state = "CA", postcode = "95389", country = "US")),
+            campground.location,
+        )
+        assertEquals(listOf(CampgroundLink("https://a.test/", title = "A")), campground.links)
+        assertEquals(listOf(CampgroundPhoto("https://p.test/big.jpg")), campground.photos)
+        assertEquals(CampgroundManagement("NPS", website = "https://nps.test"), campground.management)
+        assertEquals(CampgroundContact(phone = "555-0100"), campground.contact)
+    }
+
     private fun campgroundColumnsAsText(): List<String> =
         ctx
             .fetch(

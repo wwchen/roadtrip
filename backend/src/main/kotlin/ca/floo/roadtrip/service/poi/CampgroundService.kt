@@ -111,14 +111,8 @@ internal class CampgroundService(
     }
 }
 
-private fun JsonElement.stringProperty(key: String): String? = stringProperty(listOf(key))
-
-private fun JsonElement.stringProperty(keys: List<String>): String? = (this as? JsonObject)?.firstStringProperty(keys)
-
-private fun JsonObject.firstStringProperty(keys: List<String>): String? =
-    keys.firstNotNullOfOrNull { key ->
-        (this[key] as? JsonPrimitive)
-            ?.contentOrNull
-            ?.trim()
-            ?.takeIf { value -> value.isNotEmpty() }
-    }
+private fun JsonElement.stringProperty(key: String): String? =
+    ((this as? JsonObject)?.get(key) as? JsonPrimitive)
+        ?.contentOrNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
