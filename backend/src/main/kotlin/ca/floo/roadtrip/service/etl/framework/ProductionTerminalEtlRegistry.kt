@@ -54,6 +54,7 @@ private fun createPoiTerminal(entry: EtlEntry): TerminalEtlDefinition<*, *> =
                     etlSlug = entry.slug,
                     dataProviderValue = DataProvider.ASPIRA,
                     aspiraTenant = entry.args.require("tenant"),
+                    stateFilter = entry.args["state_filter"],
                 ),
             )
         "BcParksCampgroundsEtl" -> campgroundSink(BcParksCampgroundsEtl(etlSlug = entry.slug))
