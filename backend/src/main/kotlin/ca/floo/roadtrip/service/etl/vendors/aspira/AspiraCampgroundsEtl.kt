@@ -66,6 +66,22 @@ class AspiraCampgroundsEtl(
      * row. Null for the non-US tenants, which want the whole file.
      */
     private val stateFilter: String? = null,
+    /**
+     * Whether a leaf that matches no geometry by its own name may fall back to
+     * its parent's, from the registry's `parent_name_fallback`.
+     *
+     * Parks Canada is built as park containers holding campgrounds, so the
+     * parent centroid is the only geometry many of its leaves can reach — 37 of
+     * its 106 bookable leaves resolve this way, a third of the pins it emits.
+     * The state tenants match none, which is why this is opt-in rather than
+     * universal: a coarser park-centroid pin is right for PC and would be an
+     * unwanted guess elsewhere.
+     *
+     * Note [BcParksCampgroundsEtl] forks this ladder and still runs the
+     * fallback unconditionally (4 pins, all under Wells Gray), so the opt-in
+     * model is not yet honoured repo-wide.
+     */
+    private val parentNameFallback: Boolean = false,
 ) : CampgroundEtl<AspiraJoinDto> {
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
@@ -211,7 +227,7 @@ class AspiraCampgroundsEtl(
                 }
             }
 
-            if (coords == null && leaf.parentName != null) {
+            if (coords == null && parentNameFallback && leaf.parentName != null) {
                 val pk = normalize(leaf.parentName)
                 coords = byName[pk]
                 if (coords != null) matchKind = "parent"
