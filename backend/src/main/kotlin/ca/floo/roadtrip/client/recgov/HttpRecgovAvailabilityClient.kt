@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.client.recgov
 
 import ca.floo.roadtrip.client.DateStringFormatter
+import ca.floo.roadtrip.client.VendorHttpDefaults
 import ca.floo.roadtrip.support.RecGovException
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -72,7 +73,9 @@ class HttpRecgovAvailabilityClient(
         /** Error bodies go in an exception message — enough to identify the
          *  failure, not enough to dump a page of HTML into the logs. */
         private const val ERROR_BODY_EXCERPT_CHARS = 200
-        private const val REQUEST_TIMEOUT_MS = 15_000L
+
+        /** Ktor's CIO engine wants millis; the ceiling itself is the shared one. */
+        private val requestTimeoutMs = VendorHttpDefaults.requestTimeout.toMillis()
         private const val MAX_TRANSPORT_RETRIES = 2
         private val userAgent =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
@@ -80,7 +83,7 @@ class HttpRecgovAvailabilityClient(
 
         fun defaultClient(): HttpClient =
             HttpClient(CIO) {
-                engine { requestTimeout = REQUEST_TIMEOUT_MS }
+                engine { requestTimeout = requestTimeoutMs }
                 defaultRequest {
                     header("User-Agent", userAgent)
                     header("Accept", "application/json")

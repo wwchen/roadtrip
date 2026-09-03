@@ -2,9 +2,9 @@ package ca.floo.roadtrip.client.campflare
 
 import ca.floo.roadtrip.client.DateStringFormatter
 import ca.floo.roadtrip.client.VendorHttpDefaults
+import ca.floo.roadtrip.client.VendorHttpTransport
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.support.CampflareException
-import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -16,7 +16,6 @@ import org.slf4j.LoggerFactory
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.time.Instant
 import java.time.LocalDate
 
@@ -83,20 +82,11 @@ class HttpCampflareAvailabilityClient(
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build()
-        val resp =
-            try {
-                httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
-            } catch (e: Exception) {
-                throw CampflareException(
-                    "campflare request failed: ${e.javaClass.name}: ${e.message}",
-                    httpStatus = null,
-                    cause = e,
-                )
+        val body =
+            VendorHttpTransport.send(httpClient, req, "campflare", url) { message, status, cause ->
+                CampflareException(message, httpStatus = status, cause = cause)
             }
-        if (resp.statusCode() !in 200..299) {
-            throw CampflareException("campflare HTTP ${resp.statusCode()} for $url", resp.statusCode())
-        }
-        return Json.parseToJsonElement(resp.body()).jsonObject
+        return Json.parseToJsonElement(body).jsonObject
     }
 
     companion object {
@@ -104,11 +94,6 @@ class HttpCampflareAvailabilityClient(
         private const val DEFAULT_API_BASE_URL = "https://api.campflare.com/v2"
         private const val USER_AGENT = "roadtrip-campflare-availability/1.0"
 
-        fun defaultClient(): HttpClient =
-            HttpClient
-                .newBuilder()
-                .connectTimeout(VendorHttpDefaults.connectTimeout)
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build()
+        fun defaultClient(): HttpClient = VendorHttpTransport.client()
     }
 }
