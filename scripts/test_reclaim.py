@@ -157,6 +157,14 @@ class PruneTest(ReclaimTestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         for call in self.docker_calls():
             self.assertFalse(call.startswith("image rm"), call)
+            self.assertNotIn(" prune", call)
+
+    def test_report_names_the_images_it_would_remove(self) -> None:
+        self.image_ls.write_text(FOUR_TAGS)
+        done = self.run_reclaim("report", "--scope", "local")
+        self.assertIn("roadtrip/backend:latest", done.stdout)
+        self.assertIn("roadtrip/backend:tilt-cccc", done.stdout)
+        self.assertNotIn("roadtrip/backend:tilt-aaaa", done.stdout)
 
     def test_image_keep_env_override_wins_over_scope_default(self) -> None:
         self.image_ls.write_text(FOUR_TAGS)

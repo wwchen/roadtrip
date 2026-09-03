@@ -22,9 +22,11 @@ MANAGED_LABEL="ca.floo.roadtrip.managed=true"
 HOST_IMAGE_KEEP=5
 LOCAL_IMAGE_KEEP=2
 
-# Repository list rather than a label filter, because the keep-N window is a
-# per-repository idea and `docker image ls` cannot express "labelled". The
-# label filter still guards the dangling prune below.
+# Repository list rather than a label filter. The keep-N window is a
+# per-repository idea, and the explicit allowlist is itself the safety
+# boundary for these `image rm` calls — they take a bare reference, so
+# unlike every other destructive call here they are scoped by name, not
+# by label. Keep the list tight. The dangling prune below is label-scoped.
 ROADTRIP_REPOSITORIES="
 ghcr.io/wwchen/roadtrip/backend
 ghcr.io/wwchen/roadtrip/recgov-companion
@@ -112,6 +114,16 @@ _docker() {
     docker "$@"
 }
 
+# Silences the real call's output but still announces itself under
+# --dry-run, which is the whole point of `report`.
+_docker_quiet() {
+    if (( DRY_RUN )); then
+        echo "dry-run: docker $*"
+        return 0
+    fi
+    docker "$@" >/dev/null 2>&1
+}
+
 _prune_images() {
     local repository reference image_id index repository_keep
     local references
@@ -134,14 +146,14 @@ _prune_images() {
             image_id="$(docker image inspect --format '{{.Id}}' "${reference}" 2>/dev/null || true)"
             [[ -n "${image_id}" ]] || continue
             if [[ -z "$(docker ps -aq --filter "ancestor=${image_id}")" ]]; then
-                _docker image rm "${reference}" >/dev/null 2>&1 || true
+                _docker_quiet image rm "${reference}" || true
             fi
         done
     done
 
-    _docker image prune -f \
+    _docker_quiet image prune -f \
         --filter "label=${MANAGED_LABEL}" \
-        --filter "until=${ROADTRIP_IMAGE_RETENTION}" >/dev/null
+        --filter "until=${ROADTRIP_IMAGE_RETENTION}"
 }
 
 # One roadtrip-data-<sha> volume per data tree SHA, which the image prune never
