@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import {
   MAX_SEARCH_RESULTS,
+  REGION_FIT_PADDING_PX,
+  boundsOf,
+  cameraForResult,
+  geocodeKind,
   geocodeSearchResults,
   isSearchable,
   kindForCategory,
@@ -166,5 +170,97 @@ describe('zoomForResult', () => {
     expect(zoomForResult({ source: 'poi', kind: 'CG' } as SearchResult)).toBe(13);
     expect(zoomForResult({ source: 'geocode', kind: 'ADDR' } as SearchResult)).toBe(14);
     expect(zoomForResult({ source: 'geocode', kind: 'PLACE' } as SearchResult)).toBe(10);
+  });
+});
+
+describe('geocodeKind', () => {
+  test('separates addresses, regions and everything else', () => {
+    expect(geocodeKind('address')).toBe('ADDR');
+    expect(geocodeKind('region')).toBe('REGION');
+    expect(geocodeKind('country')).toBe('REGION');
+    expect(geocodeKind('district')).toBe('REGION');
+    // A town is a point at a fixed zoom, not an area to frame.
+    expect(geocodeKind('place')).toBe('PLACE');
+    expect(geocodeKind(undefined)).toBe('PLACE');
+  });
+});
+
+describe('boundsOf', () => {
+  test('nests the wire"s flat quad', () => {
+    expect(boundsOf([-114.05, 37, -109.04, 42])).toEqual([
+      [-114.05, 37],
+      [-109.04, 42],
+    ]);
+  });
+
+  test('refuses anything it cannot trust whole', () => {
+    expect(boundsOf(undefined)).toBeNull();
+    expect(boundsOf([-114.05, 37, -109.04])).toBeNull();
+    expect(boundsOf([-114.05, 37, -109.04, 42, 0])).toBeNull();
+    expect(boundsOf([Number.NaN, 37, -109.04, 42])).toBeNull();
+    // Inverted: east west of west, which would frame the wrong half of the world.
+    expect(boundsOf([-109.04, 37, -114.05, 42])).toBeNull();
+  });
+});
+
+describe('a region result', () => {
+  test('carries its extent forward', () => {
+    const [result] = geocodeSearchResults([
+      geocodeRow({
+        place_name: 'Utah, United States',
+        place_type: 'region',
+        bbox: [-114.05, 37, -109.04, 42],
+      }),
+    ] as never);
+
+    expect(result?.kind).toBe('REGION');
+    expect(result?.bounds).toEqual([
+      [-114.05, 37],
+      [-109.04, 42],
+    ]);
+  });
+
+  test('a town keeps no bounds even though the upstream sends one', () => {
+    const [result] = geocodeSearchResults([
+      geocodeRow({ place_name: 'Moab, Utah', place_type: 'place', bbox: [-109.6, 38.5, -109.4, 38.7] }),
+    ] as never);
+
+    expect(result?.kind).toBe('PLACE');
+    expect(result?.bounds).toBeUndefined();
+  });
+});
+
+describe('cameraForResult', () => {
+  test('frames a result that knows its own extent', () => {
+    const camera = cameraForResult({
+      source: 'geocode',
+      kind: 'REGION',
+      lng: -111,
+      lat: 39,
+      bounds: [
+        [-114.05, 37],
+        [-109.04, 42],
+      ],
+    } as SearchResult);
+
+    expect(camera).toEqual({
+      type: 'fit',
+      bounds: [
+        [-114.05, 37],
+        [-109.04, 42],
+      ],
+      padding: REGION_FIT_PADDING_PX,
+    });
+  });
+
+  test('flies to a point result at its own zoom', () => {
+    const camera = cameraForResult({
+      source: 'poi',
+      kind: 'CG',
+      lng: -119.56,
+      lat: 37.73,
+    } as SearchResult);
+
+    expect(camera).toEqual({ type: 'fly', center: [-119.56, 37.73], zoom: 13 });
   });
 });

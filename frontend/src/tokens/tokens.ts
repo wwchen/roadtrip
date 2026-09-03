@@ -106,8 +106,13 @@ export function resetTokenCache(): void {
 }
 
 /** Search-result kind → pin color token name. */
-export const KIND_TOKEN: Readonly<Record<'PLACE' | 'ADDR' | 'CG' | 'SC' | 'PF', string>> = {
+export const KIND_TOKEN: Readonly<
+  Record<'PLACE' | 'ADDR' | 'CG' | 'SC' | 'PF' | 'REGION', string>
+> = {
   PLACE: '--rt-kind-place',
+  // The colour the region's own boundary draws in, so the chip in the dropdown
+  // and the outline on the map are visibly the same thing.
+  REGION: '--rt-map-route-alt',
   ADDR: '--rt-kind-address',
   CG: '--rt-layer-cg',
   SC: '--rt-layer-supercharger',

@@ -10,7 +10,7 @@ import { useMapStore } from '@/stores/mapStore';
 import { useTripStore, type TripStop } from '@/stores/tripStore';
 import { clampCorridorMiles } from '@/lib/trip-corridor';
 import { fillStopWithCurrentLocation } from '@/domain/trip/current-location';
-import { zoomForResult, type SearchResult } from './search-results';
+import { cameraForResult, type SearchResult } from './search-results';
 import { shouldAutoFocus } from '@/domain/trip/viewport';
 import {
   addEmptyStop,
@@ -25,6 +25,8 @@ import {
 
 /** Matches the vanilla's flyTo calls, which all used the same easing. */
 const FLY_SPEED = 1.6;
+/** A region fit is a bigger move than a flyTo, so it gets the route fit's timing. */
+const REGION_FIT_DURATION_MS = 700;
 
 export interface TripPlanner {
   stops: StopSlot[];
@@ -99,15 +101,33 @@ export function useTripPlanner(): TripPlanner {
       // Browse mode is a look-at-this surface, so a pick moves the camera. In
       // directions mode the row is an itinerary entry and the route fit owns the
       // camera — flying per pick would fight the fit.
-      if (mode === 'directions') return;
-      map?.flyTo({
-        center: [result.lng, result.lat],
-        zoom: zoomForResult(result),
-        speed: FLY_SPEED,
-      });
+      // A region is an area, so it gets framed; a point gets flown to. The two
+      // are different camera calls, which is why `cameraForResult` returns which
+      // one rather than a zoom this would then have to guess a bbox for.
+      const camera = cameraForResult(result);
+      if (mode !== 'directions') {
+        if (camera.type === 'fit') {
+          map?.fitBounds(camera.bounds, {
+            padding: camera.padding,
+            duration: REGION_FIT_DURATION_MS,
+          });
+        } else {
+          map?.flyTo({ center: camera.center, zoom: camera.zoom, speed: FLY_SPEED });
+        }
+      }
+      // The region selection is NOT conditional on browse mode: an itinerary row
+      // holding a region should still say which region, and the boundary is what
+      // says it. Picking anything else clears it, so the outline never outlives
+      // the search that produced it.
+      const mapState = useMapStore.getState();
+      if (result.kind === 'REGION') {
+        mapState.selectRegion({ placeName: result.name });
+      } else {
+        mapState.clearSelectedRegion();
+      }
       // A POI pick opens its drawer too, which is the whole reason a POI ranks above
       // a geocoded place: the drawer hydrates from the id.
-      if (result.poiId != null) useMapStore.getState().selectPoi(result.poiId);
+      if (result.poiId != null) mapState.selectPoi(result.poiId);
     },
     [clearFocus, map, mode, setStops, stops],
   );
@@ -152,6 +172,10 @@ export function useTripPlanner(): TripPlanner {
     clearAll: useCallback(() => {
       // `reset()` clears the focus request too, since it is store state now.
       reset();
+      // The boundary belongs to the search that produced it, and clearing the
+      // trip clears that search — leaving an outline up for a region no row
+      // names any more is the map disagreeing with the topbar.
+      useMapStore.getState().clearSelectedRegion();
       setLocationError(null);
     }, [reset]),
     addExternal,

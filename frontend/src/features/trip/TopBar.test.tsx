@@ -50,6 +50,7 @@ beforeEach(() => {
     userLocation: null,
     viewport: null,
     selectedPoiId: null,
+    selectedRegion: null,
     hiddenAgencies: [],
     hiddenOverlays: [],
   });
@@ -135,6 +136,54 @@ describe('browse mode', () => {
     // A POI pick opens its drawer, which is why POIs rank above places.
     expect(useMapStore.getState().selectedPoiId).toBe(7);
     expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  test('picking a region frames the region instead of a point inside it', async () => {
+    // The Turn 5 case: a region is an area, so the camera fits its extent and the
+    // boundary layer is told which region to draw. A guessed zoom over a centroid
+    // is what this replaces.
+    geocodeResults = [
+      {
+        id: 'r1',
+        place_name: 'Utah, United States',
+        place_type: 'region',
+        lng: -111.0937,
+        lat: 39.321,
+        bbox: [-114.052, 36.997, -109.041, 42.001],
+      },
+    ];
+    poiResults = [];
+    mount();
+    await type(searchBox(), 'utah');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(1));
+
+    await act(async () => {
+      screen.getAllByRole('option')[0]!.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true }),
+      );
+    });
+
+    expect(fakeMap.flyToCalls).toHaveLength(0);
+    expect(fakeMap.fitBoundsCalls.at(-1)?.bounds).toEqual([
+      [-114.052, 36.997],
+      [-109.041, 42.001],
+    ]);
+    expect(useMapStore.getState().selectedRegion).toEqual({ placeName: 'Utah, United States' });
+  });
+
+  test('picking a point result clears a region left over from a previous search', async () => {
+    useMapStore.setState({ selectedRegion: { placeName: 'Utah, United States' } });
+    mount();
+    await type(searchBox(), 'bowman');
+    await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(2));
+
+    await act(async () => {
+      screen.getAllByRole('option')[0]!.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true }),
+      );
+    });
+
+    expect(useMapStore.getState().selectedRegion).toBeNull();
   });
 
   test('offers Directions once the search row is filled', async () => {

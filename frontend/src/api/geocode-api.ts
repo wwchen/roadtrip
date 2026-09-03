@@ -11,6 +11,14 @@ export interface GeocodeResult {
   place_type: string;
   lng: number;
   lat: number;
+  /**
+   * `[west, south, east, north]`, present only for a feature the upstream
+   * reports an extent for — a country, a region, a district, a place.
+   *
+   * A flat quad rather than the nested `Bbox` the map uses, because this
+   * mirrors the wire shape; `search-results.ts` is where it becomes a camera.
+   */
+  bbox?: [number, number, number, number];
 }
 
 /** Mirrors GeocodeResponseDto. */

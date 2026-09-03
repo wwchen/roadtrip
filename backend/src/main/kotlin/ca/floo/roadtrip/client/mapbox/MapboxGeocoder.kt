@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.client.mapbox
 
+import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.model.routing.GeocodeResult
 import ca.floo.roadtrip.support.GeocodeException
 import io.ktor.client.HttpClient
@@ -11,12 +12,17 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.encodeURLPathPart
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
+
+/** `[west, south, east, north]` — the only bbox arity this API speaks. */
+private const val BBOX_COORDINATE_COUNT = 4
 
 /**
  * Mapbox Geocoding API v5 forward-geocoding httpClient. Backs /api/geocode for
@@ -101,8 +107,36 @@ class MapboxGeocoder(
                     ?.jsonPrimitive
                     ?.contentOrNull ?: "place"
             val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: ""
-            GeocodeResult(id = id, placeName = name, lng = lng, lat = lat, placeType = placeType)
+            GeocodeResult(
+                id = id,
+                placeName = name,
+                lng = lng,
+                lat = lat,
+                placeType = placeType,
+                bbox = parseBbox(obj["bbox"]),
+            )
         }
+    }
+
+    /**
+     * Mapbox's `bbox`, which it reports for features that HAVE an extent —
+     * countries, regions, districts, places, and the parks that come back as
+     * `place_type: poi` with a footprint. Address-level features carry none.
+     *
+     * Anything that is not exactly four finite numbers is treated as absent
+     * rather than partially trusted: a half-read extent would frame the map on a
+     * box that is not the region, which is worse than falling back to the centre.
+     */
+    private fun parseBbox(element: JsonElement?): Bbox? {
+        val values =
+            element
+                ?.let { runCatching { it.jsonArray }.getOrNull() }
+                ?.mapNotNull { (it as? JsonPrimitive)?.doubleOrNull }
+                ?: return null
+        if (values.size != BBOX_COORDINATE_COUNT) return null
+        val (west, south, east, north) = values
+        if (west > east || south > north) return null
+        return Bbox(west = west, south = south, east = east, north = north)
     }
 
     companion object {
