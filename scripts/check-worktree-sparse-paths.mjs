@@ -23,7 +23,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -90,6 +90,45 @@ walk('');
 
 const stale = [...EXCLUDED.keys()].filter((d) => !trackedDirs.has(d) || isFull(d));
 
+// The list above only proves the config is well-formed. It was well-formed for
+// weeks while no worktree ever had it applied, so every worktree carried the
+// 1.7 GB data/raw copy the list exists to exclude. Check the effect, not the
+// spelling.
+const WORKTREE_ROOT = '.claude/worktrees';
+const unapplied = [];
+let worktreeDirs = [];
+try {
+  worktreeDirs = readdirSync(resolve(ROOT, WORKTREE_ROOT), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+} catch {
+  // No worktrees on this checkout; nothing to verify.
+}
+
+for (const name of worktreeDirs) {
+  const worktree = resolve(ROOT, WORKTREE_ROOT, name);
+  let enabled = '';
+  try {
+    enabled = execFileSync('git', ['-C', worktree, 'config', 'core.sparseCheckout'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    enabled = '';
+  }
+  if (enabled !== 'true') unapplied.push(name);
+}
+
+if (unapplied.length) {
+  console.error(
+    `\nWorktrees with worktree.sparsePaths never applied — each carries a full copy of\n` +
+      `${[...EXCLUDED.keys()].join(', ')} that sparsePaths exists to exclude. Claude Code\n` +
+      'owns applying this setting at worktree creation; a passing config check does not\n' +
+      'mean it took effect:\n' +
+      unapplied.map((d) => `  ${WORKTREE_ROOT}/${d}`).join('\n'),
+  );
+}
+
 if (malformed.length) {
   console.error(
     `${SETTINGS}: worktree.sparsePaths entries git sparse-checkout --cone will reject.\n` +
@@ -119,7 +158,8 @@ if (stale.length) {
       stale.map((d) => `  ${d}`).join('\n'),
   );
 }
-if (malformed.length || unknown.length || omitted.length || stale.length) process.exit(1);
+if (malformed.length || unknown.length || omitted.length || stale.length || unapplied.length)
+  process.exit(1);
 
 console.log(
   `worktree sparsePaths ok — ${sparsePaths.length} cone-mode entries cover every tracked ` +
