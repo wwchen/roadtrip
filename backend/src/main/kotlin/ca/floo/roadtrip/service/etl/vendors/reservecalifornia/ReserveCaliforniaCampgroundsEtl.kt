@@ -286,7 +286,6 @@ internal fun isActivityHighlight(label: String): Boolean {
 
 internal fun reserveCaliforniaParkUrl(placeId: Long): String = "https://reservecalifornia.com/park/$placeId"
 
-internal const val CAMPGROUND_REF_PREFIX = "rc-"
 internal const val REGION = "CA"
 internal const val COUNTRY = "US"
 internal const val PARENT_PLACE_ID_KEY = "_parent_place_id"

@@ -33,13 +33,9 @@ private const val DEFAULT_LIST_OFFSET = 0
 private const val MIN_LIST_OFFSET = 0
 private const val SNAPSHOT_DEFAULT_LIMIT = 200
 private const val SNAPSHOT_MAX_LIMIT = 1000
-private const val SNAPSHOT_WINDOW_HOURS_MIN = 1
-private const val SNAPSHOT_WINDOW_HOURS_MAX = 24 * 30
-private const val SNAPSHOT_WINDOW_HOURS_DEFAULT = 24 * 7
 
 private val listLimitRange = MIN_LIST_LIMIT..MAX_LIST_LIMIT
 private val snapshotLimitRange = MIN_LIST_LIMIT..SNAPSHOT_MAX_LIMIT
-private val snapshotWindowHoursRange = SNAPSHOT_WINDOW_HOURS_MIN..SNAPSHOT_WINDOW_HOURS_MAX
 
 internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardController) {
     route("/api") {
