@@ -98,5 +98,73 @@ class CheckDiskTest(ReclaimTestCase):
         self.assertIn("requires a value", done.stderr)
 
 
+FOUR_TAGS = "\n".join([
+    "roadtrip/backend:tilt-aaaa",
+    "roadtrip/backend:tilt-bbbb",
+    "roadtrip/backend:latest",
+    "roadtrip/backend:tilt-cccc",
+]) + "\n"
+
+
+class PruneTest(ReclaimTestCase):
+    def test_local_scope_keeps_two_tags_per_repository(self) -> None:
+        self.image_ls.write_text(FOUR_TAGS)
+        done = self.run_reclaim("prune", "--scope", "local")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        removed = [c for c in self.docker_calls() if c.startswith("image rm ")]
+        self.assertIn("image rm roadtrip/backend:latest", removed)
+        self.assertIn("image rm roadtrip/backend:tilt-cccc", removed)
+        self.assertNotIn("image rm roadtrip/backend:tilt-aaaa", removed)
+        self.assertNotIn("image rm roadtrip/backend:tilt-bbbb", removed)
+
+    def test_host_scope_keeps_five_so_four_tags_survive(self) -> None:
+        self.image_ls.write_text(FOUR_TAGS)
+        done = self.run_reclaim("prune", "--scope", "host")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        removed = [c for c in self.docker_calls()
+                   if c.startswith("image rm roadtrip/backend")]
+        self.assertEqual(removed, [])
+
+    def test_every_prune_call_is_label_scoped(self) -> None:
+        self.run_reclaim("prune", "--scope", "local")
+        prunes = [c for c in self.docker_calls() if " prune" in c]
+        self.assertTrue(prunes)
+        for call in prunes:
+            self.assertIn("label=ca.floo.roadtrip.managed=true", call, call)
+
+    def test_local_scope_never_prunes_anonymous_volumes(self) -> None:
+        self.run_reclaim("prune", "--scope", "local")
+        for call in self.docker_calls():
+            if call.startswith("volume prune"):
+                self.assertIn("label=", call, call)
+
+    def test_host_scope_does_prune_anonymous_volumes(self) -> None:
+        self.run_reclaim("prune", "--scope", "host")
+        bare = [c for c in self.docker_calls()
+                if c.startswith("volume prune") and "label=" not in c]
+        self.assertTrue(bare, "host scope must reach anonymous volumes")
+
+    def test_dry_run_makes_no_destructive_call(self) -> None:
+        self.image_ls.write_text(FOUR_TAGS)
+        self.run_reclaim("prune", "--scope", "local", "--dry-run")
+        for call in self.docker_calls():
+            self.assertFalse(call.startswith("image rm"), call)
+            self.assertNotIn(" prune", call)
+
+    def test_report_changes_nothing(self) -> None:
+        self.image_ls.write_text(FOUR_TAGS)
+        done = self.run_reclaim("report", "--scope", "local")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        for call in self.docker_calls():
+            self.assertFalse(call.startswith("image rm"), call)
+
+    def test_image_keep_env_override_wins_over_scope_default(self) -> None:
+        self.image_ls.write_text(FOUR_TAGS)
+        self.run_reclaim("prune", "--scope", "local", ROADTRIP_IMAGE_KEEP="4")
+        removed = [c for c in self.docker_calls()
+                   if c.startswith("image rm roadtrip/backend")]
+        self.assertEqual(removed, [])
+
+
 if __name__ == "__main__":
     unittest.main()

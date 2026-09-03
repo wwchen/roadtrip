@@ -22,6 +22,20 @@ MANAGED_LABEL="ca.floo.roadtrip.managed=true"
 HOST_IMAGE_KEEP=5
 LOCAL_IMAGE_KEEP=2
 
+# Repository list rather than a label filter, because the keep-N window is a
+# per-repository idea and `docker image ls` cannot express "labelled". The
+# label filter still guards the dangling prune below.
+ROADTRIP_REPOSITORIES="
+ghcr.io/wwchen/roadtrip/backend
+ghcr.io/wwchen/roadtrip/recgov-companion
+ghcr.io/wwchen/roadtrip/data
+roadtrip/backend
+roadtrip/recgov-companion
+ghcr.io/wwchen/roadtrip/deploy
+"
+# The deploy image is rebuilt per release and never rolled back to.
+NEVER_KEEP_REPOSITORY="ghcr.io/wwchen/roadtrip/deploy"
+
 SCOPE=host
 DRY_RUN=0
 INCLUDE_ANONYMOUS=""
@@ -88,6 +102,77 @@ _apply_scope_defaults() {
 # wedges on its own ENOSPC and every later `docker` invocation blocks forever
 # on a socket that accepts connections but never answers. That took prod down
 # for 14h once.
+# Reads go straight to docker; only destructive calls route through here, so
+# --dry-run still sees a real image list and reports real decisions.
+_docker() {
+    if (( DRY_RUN )); then
+        echo "dry-run: docker $*"
+        return 0
+    fi
+    docker "$@"
+}
+
+_prune_images() {
+    local repository reference image_id index repository_keep
+    local references
+
+    echo "==> pruning unused Roadtrip images (keep ${ROADTRIP_IMAGE_KEEP} tags per active repository)"
+    for repository in ${ROADTRIP_REPOSITORIES}; do
+        repository_keep="${ROADTRIP_IMAGE_KEEP}"
+        [[ "${repository}" == "${NEVER_KEEP_REPOSITORY}" ]] && repository_keep=0
+        references=()
+        while IFS= read -r reference; do
+            [[ -n "${reference}" ]] && references+=("${reference}")
+        done < <(
+            docker image ls "${repository}" --format '{{.Repository}}:{{.Tag}}' \
+                | awk '$0 !~ /:<none>$/ && !seen[$0]++'
+        )
+        (( ${#references[@]} )) || continue
+        for index in "${!references[@]}"; do
+            (( index < repository_keep )) && continue
+            reference="${references[$index]}"
+            image_id="$(docker image inspect --format '{{.Id}}' "${reference}" 2>/dev/null || true)"
+            [[ -n "${image_id}" ]] || continue
+            if [[ -z "$(docker ps -aq --filter "ancestor=${image_id}")" ]]; then
+                _docker image rm "${reference}" >/dev/null 2>&1 || true
+            fi
+        done
+    done
+
+    _docker image prune -f \
+        --filter "label=${MANAGED_LABEL}" \
+        --filter "until=${ROADTRIP_IMAGE_RETENTION}" >/dev/null
+}
+
+# One roadtrip-data-<sha> volume per data tree SHA, which the image prune never
+# touches. --all because these are named. Rollback depth is the image
+# retention's job: deploy.sh repopulates a missing volume, so these are a
+# cache, not the record.
+_prune_volumes() {
+    echo "==> pruning unused Roadtrip data volumes"
+    _docker volume prune --force --all --filter "label=${MANAGED_LABEL}" | tail -1
+    if (( INCLUDE_ANONYMOUS )); then
+        echo "==> pruning anonymous volumes"
+        _docker volume prune --force | tail -1
+    fi
+}
+
+_prune_containers() {
+    _docker container prune --force --filter "label=${MANAGED_LABEL}" | tail -1
+}
+
+cmd_prune() {
+    _prune_containers
+    _prune_images
+    _prune_volumes
+}
+
+cmd_report() {
+    DRY_RUN=1
+    cmd_prune
+    docker system df
+}
+
 cmd_check_disk() {
     local free_kb free_gb
     free_kb="$(df -Pk "${DISK_PATH}" 2>/dev/null | awk 'NR==2 {print $4}' || true)"
@@ -110,6 +195,8 @@ main() {
     _apply_scope_defaults
     case "${COMMAND}" in
         check-disk) cmd_check_disk ;;
+        prune) cmd_prune ;;
+        report) cmd_report ;;
         *) echo "error: unknown command ${COMMAND}" >&2; _usage; exit 2 ;;
     esac
 }
