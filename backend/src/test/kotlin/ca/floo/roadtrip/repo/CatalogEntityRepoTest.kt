@@ -659,7 +659,8 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     VALUES ('Legacy', 'campflare', 'legacy-1', ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb)
                     RETURNING id
                     """.trimIndent(),
-                    """{"latitude":1,"longitude":2,"region":"  CA  ","address":{"street1":"1 Rd","state_code":"CA","zipcode":"95389","country_code":"US"}}""",
+                    """{"latitude":1,"longitude":2,"region":"  CA  ","directions":"Turn left at the pines.",""" +
+                        """"address":{"street1":"1 Rd","state_code":"CA","zipcode":"95389","country_code":"US","full":"1 Rd, CA 95389"}}""",
                     """[{"href":"https://a.test/","label":"A"},{"caption":"no url"}]""",
                     """[{"original_url":"https://p.test/1.jpg","large_url":"https://p.test/big.jpg"},{"caption":"no url"}]""",
                     """{"agency_name":"NPS","agency_id":7,"agency_website":"https://nps.test"}""",
@@ -671,7 +672,13 @@ class CatalogEntityRepoTest : SharedDbTest() {
 
         val campground = checkNotNull(CampgroundRepo(ctx).findById(id))
         assertEquals(
-            CampgroundLocation(1.0, 2.0, region = "CA", address = Address("1 Rd", state = "CA", postcode = "95389", country = "US")),
+            CampgroundLocation(
+                1.0,
+                2.0,
+                region = "CA",
+                directions = "Turn left at the pines.",
+                address = Address("1 Rd", state = "CA", postcode = "95389", country = "US", full = "1 Rd, CA 95389"),
+            ),
             campground.location,
         )
         assertEquals(listOf(CampgroundLink("https://a.test/", title = "A")), campground.links)

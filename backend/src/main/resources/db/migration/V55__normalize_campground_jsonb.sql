@@ -16,13 +16,15 @@ UPDATE campgrounds SET location = jsonb_strip_nulls(jsonb_build_object(
   'region',    NULLIF(btrim(location->>'region'), ''),
   'country',   NULLIF(btrim(location->>'country'), ''),
   'elevation', location->'elevation',
+  'directions', NULLIF(btrim(location->>'directions'), ''),
   'address',   CASE WHEN jsonb_typeof(location->'address') = 'object' THEN
     NULLIF(jsonb_strip_nulls(jsonb_build_object(
       'street',   NULLIF(btrim(COALESCE(location->'address'->>'street', location->'address'->>'street1', location->'address'->>'address_line')), ''),
       'city',     NULLIF(btrim(location->'address'->>'city'), ''),
       'state',    NULLIF(btrim(COALESCE(location->'address'->>'state', location->'address'->>'state_code')), ''),
       'postcode', NULLIF(btrim(COALESCE(location->'address'->>'postcode', location->'address'->>'postal_code', location->'address'->>'zipcode')), ''),
-      'country',  NULLIF(btrim(COALESCE(location->'address'->>'country', location->'address'->>'country_code')), ''))), '{}'::jsonb)
+      'country',  NULLIF(btrim(COALESCE(location->'address'->>'country', location->'address'->>'country_code')), ''),
+      'full',     NULLIF(btrim(location->'address'->>'full'), ''))), '{}'::jsonb)
   END))
 WHERE jsonb_typeof(location) = 'object';
 

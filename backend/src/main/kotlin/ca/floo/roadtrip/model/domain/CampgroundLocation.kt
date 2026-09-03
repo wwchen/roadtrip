@@ -16,5 +16,6 @@ data class CampgroundLocation(
     val region: String? = null,
     val country: String? = null,
     val elevation: Double? = null,
+    val directions: String? = null,
     val address: Address? = null,
 )

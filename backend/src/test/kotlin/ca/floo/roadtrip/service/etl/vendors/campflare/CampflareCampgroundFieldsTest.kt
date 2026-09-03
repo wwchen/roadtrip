@@ -19,15 +19,17 @@ class CampflareCampgroundFieldsTest {
     fun `location keeps elevation and normalizes the nested address keys`() {
         val raw =
             obj(
-                """{"latitude":37.7,"longitude":-119.5,"elevation":4000,
-                   "address":{"street1":"1 Park Rd","state_code":"CA","zipcode":"95389","country_code":"US"}}""",
+                """{"latitude":37.7,"longitude":-119.5,"elevation":4000,"directions":"Past the gate.",
+                   "address":{"street1":"1 Park Rd","state_code":"CA","zipcode":"95389","country_code":"US",
+                              "full":"1 Park Rd, CA 95389"}}""",
             )
         assertEquals(
             CampgroundLocation(
                 37.7,
                 -119.5,
                 elevation = 4000.0,
-                address = Address(street = "1 Park Rd", state = "CA", postcode = "95389", country = "US"),
+                directions = "Past the gate.",
+                address = Address(street = "1 Park Rd", state = "CA", postcode = "95389", country = "US", full = "1 Park Rd, CA 95389"),
             ),
             campflareLocation(raw, latitude = 37.7, longitude = -119.5),
         )

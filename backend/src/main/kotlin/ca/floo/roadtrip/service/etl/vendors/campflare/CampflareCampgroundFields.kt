@@ -35,6 +35,7 @@ internal fun campflareLocation(
         region = location.stringField("region"),
         country = location.stringField("country"),
         elevation = location.doubleField("elevation"),
+        directions = location.stringField("directions"),
         address = location.objectField("address")?.let(::campflareAddress),
     )
 
@@ -46,6 +47,7 @@ private fun campflareAddress(address: JsonObject): Address? {
             state = address.first(stateKeys),
             postcode = address.first(postcodeKeys),
             country = address.first(countryKeys),
+            full = address.stringField("full"),
         )
     return parsed.takeIf { it != Address() }
 }
