@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+RECLAIM="${SCRIPT_DIR}/reclaim.sh"
 
 # Host-health guardrails. Defined here rather than in the tunables block below
 # because the `prod` subcommand dispatches before that block is reached.
@@ -47,32 +48,6 @@ _require_sandbox_name() {
         echo "error: sandbox name must be 1-63 lowercase letters, digits, or hyphens" >&2
         exit 2
     fi
-}
-
-# A full disk does not fail a Docker call, it deadlocks the daemon: Docker
-# Desktop wedges on its own ENOSPC and every later `docker` invocation blocks
-# forever on a socket that accepts connections but never answers. That took
-# prod down for 14h once. Refuse to start a deploy without room for the pulls.
-_require_free_disk() {
-    local label="$1"
-    local min_gb="${ROADTRIP_MIN_FREE_DISK_GB:-${MIN_FREE_DISK_GB}}"
-    local target="${HOME}"
-    local free_kb
-    local free_gb
-
-    free_kb="$(df -Pk "${target}" | awk 'NR==2 {print $4}')"
-    if [[ -z "${free_kb}" ]]; then
-        echo "warning: could not read free space on ${target}; skipping ${label} disk check" >&2
-        return 0
-    fi
-    free_gb=$(( free_kb / 1024 / 1024 ))
-    if (( free_gb < min_gb )); then
-        echo "error: ${label} needs ${min_gb}GB free on ${target}, found ${free_gb}GB" >&2
-        echo "       a full disk deadlocks the Docker daemon; reclaim space before deploying" >&2
-        echo "       (run the sandbox-sweep reclaim job, or 'docker image prune -f' on the host)" >&2
-        exit 1
-    fi
-    echo "==> disk check: ${free_gb}GB free on ${target} (minimum ${min_gb}GB)"
 }
 
 # Deploys that ran while the daemon was wedged never return, so they pile up
@@ -211,60 +186,6 @@ _ensure_data_volume() {
     fi
 }
 
-_prune_roadtrip_images() {
-    local retention="${ROADTRIP_IMAGE_RETENTION:-336h}"
-    local keep="${ROADTRIP_IMAGE_KEEP:-5}"
-    local repository
-    local reference
-    local image_id
-    local index
-    local repository_keep
-    local -a references
-
-    echo "==> pruning unused Roadtrip images (keep ${keep} tags per active repository)"
-    for repository in \
-        ghcr.io/wwchen/roadtrip/backend \
-        ghcr.io/wwchen/roadtrip/recgov-companion \
-        ghcr.io/wwchen/roadtrip/data \
-        roadtrip/backend \
-        roadtrip/recgov-companion \
-        ghcr.io/wwchen/roadtrip/deploy; do
-        repository_keep="${keep}"
-        [[ "${repository}" == "ghcr.io/wwchen/roadtrip/deploy" ]] && repository_keep=0
-        references=()
-        while IFS= read -r reference; do
-            references+=("${reference}")
-        done < <(
-            docker image ls "${repository}" --format '{{.Repository}}:{{.Tag}}' \
-                | awk '$0 !~ /:<none>$/ && !seen[$0]++'
-        )
-        for index in "${!references[@]}"; do
-            (( index < repository_keep )) && continue
-            reference="${references[$index]}"
-            image_id="$(docker image inspect --format '{{.Id}}' "${reference}" 2>/dev/null || true)"
-            [[ -n "${image_id}" ]] || continue
-            if [[ -z "$(docker ps -aq --filter "ancestor=${image_id}")" ]]; then
-                docker image rm "${reference}" >/dev/null 2>&1 || true
-            fi
-        done
-    done
-
-    docker image prune -f \
-        --filter "label=ca.floo.roadtrip.managed=true" \
-        --filter "until=${retention}" >/dev/null
-}
-
-# One roadtrip-data-<sha> volume per data tree SHA, which the image prune never
-# touched. Label-scoped because the host is shared, --all because these are
-# named. Rollback depth is the image retention's job: _ensure_data_volume
-# repopulates a missing volume, so these are a cache, not the record.
-_prune_data_volumes() {
-    echo "==> pruning unused Roadtrip data volumes"
-    docker volume prune --force --all \
-        --filter "label=ca.floo.roadtrip.managed=true" \
-        | tail -1
-}
-
 # ── Rollback ─────────────────────────────────────────────────────────────────
 # Set for the duration of a rollback deploy so a rollback that is itself
 # unhealthy stops instead of recursing into another one.
@@ -381,7 +302,7 @@ _deploy_prod() {
     _require_sha "companion tree SHA" "${companion_sha}"
 
     _clear_stale_deploys
-    _require_free_disk "prod deploy"
+    "${RECLAIM}" check-disk --label "prod deploy" --scope host --min-gb "${ROADTRIP_MIN_FREE_DISK_GB:-${MIN_FREE_DISK_GB}}" || exit 1
 
     export ROADTRIP_BACKEND_IMAGE="ghcr.io/wwchen/roadtrip/backend:${app_sha}"
     export ROADTRIP_COMPANION_IMAGE="ghcr.io/wwchen/roadtrip/recgov-companion:${companion_sha}"
@@ -441,8 +362,7 @@ _deploy_prod() {
     fi
     _release_data_volume
     _record_last_good_release "${app_sha}" "${data_sha}" "${companion_sha}" "${branch}"
-    _prune_roadtrip_images
-    _prune_data_volumes
+    "${RECLAIM}" prune --scope host
     echo "==> production deployed: ${app_sha}"
 }
 
@@ -812,8 +732,7 @@ _sandbox_down() {
         || echo "==> warning: Cloudflare teardown failed for ${sandbox_owner}"
     rm -f "${marker}"
     _sandbox_lock_release
-    _prune_roadtrip_images
-    _prune_data_volumes
+    "${RECLAIM}" prune --scope host
     echo "==> sandbox ${sandbox_owner} is down"
 }
 
@@ -843,7 +762,7 @@ esac
 # Sandboxes share the deploy host with prod, so a sandbox that fills the disk
 # deadlocks the daemon for prod too. Teardown is exempt: it frees space.
 _clear_stale_deploys
-_require_free_disk "sandbox deploy"
+"${RECLAIM}" check-disk --label "sandbox deploy" --scope host --min-gb "${ROADTRIP_MIN_FREE_DISK_GB:-${MIN_FREE_DISK_GB}}" || exit 1
 
 # ── Derive logical sandbox owner ──────────────────────────────────────────────
 if [[ -n "${NAME_OVERRIDE}" ]]; then
@@ -1114,7 +1033,6 @@ _write_sandbox_marker "live"
 # The sandbox backend now mounts the data volume, so Docker's own refcount is
 # protection enough and the guard can go before we prune.
 _release_data_volume
-_prune_roadtrip_images
-_prune_data_volumes
+"${RECLAIM}" prune --scope host
 echo ""
 echo "Sandbox is live: ${SANDBOX_URL}"

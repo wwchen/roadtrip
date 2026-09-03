@@ -174,5 +174,53 @@ class PruneTest(ReclaimTestCase):
         self.assertEqual(removed, [])
 
 
+class DeployIntegrationTest(unittest.TestCase):
+    """deploy.sh must delegate reclaim, and must NOT lose the volume hold.
+
+    The hold at _hold_data_volume exists because prod, sandbox, and the sweep
+    sit in three different concurrency groups, so a prune can land in the
+    window where a data volume exists but nothing mounts it yet. Moving the
+    prune out of deploy.sh is exactly the change most likely to drop it.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.source = (ROOT / "scripts" / "deploy.sh").read_text()
+
+    def test_private_reclaim_helpers_are_gone(self) -> None:
+        for name in ("_require_free_disk", "_prune_roadtrip_images",
+                     "_prune_data_volumes"):
+            self.assertNotIn(f"{name}() {{", self.source,
+                             f"{name} should have moved to reclaim.sh")
+
+    def test_deploy_delegates_to_reclaim(self) -> None:
+        # Asserting on the exact call, not the bare word "prune", which still
+        # appears in the volume-hold comments and would pass either way.
+        self.assertIn('RECLAIM="${SCRIPT_DIR}/reclaim.sh"', self.source)
+        self.assertIn('"${RECLAIM}" check-disk --label "prod deploy"', self.source)
+        self.assertIn('"${RECLAIM}" check-disk --label "sandbox deploy"', self.source)
+        self.assertIn("MIN_FREE_DISK_GB", self.source)
+        # Three call sites, not two: prod deploy, sandbox teardown, and the
+        # sandbox-up success path (top-level, after the health check passes).
+        # The original brief for this task said two; grepping the actual file
+        # showed a third at the end of the sandbox-up flow that the brief
+        # missed. All three must delegate or two of them would call deleted
+        # functions.
+        self.assertEqual(self.source.count('"${RECLAIM}" prune --scope host'), 3)
+
+    def test_volume_hold_survives(self) -> None:
+        self.assertIn("_hold_data_volume() {", self.source)
+        self.assertIn("_release_data_volume() {", self.source)
+        self.assertIn("DATA_VOLUME_GUARD_SECONDS", self.source)
+
+    def test_no_bare_docker_prune_left_in_deploy(self) -> None:
+        for line in self.source.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            if "docker image prune" in stripped or "docker volume prune" in stripped:
+                self.fail(f"deploy.sh still prunes directly: {stripped}")
+
+
 if __name__ == "__main__":
     unittest.main()
