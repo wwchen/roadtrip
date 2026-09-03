@@ -75,7 +75,7 @@ printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$1" in
   image)
     case "$2" in
-      ls) cat "$FAKE_IMAGE_LS" 2>/dev/null || true ;;
+      ls) [ "$3" = "roadtrip/backend" ] && cat "$FAKE_IMAGE_LS" 2>/dev/null; true ;;
       inspect) echo "sha256:deadbeef" ;;
     esac
     ;;
@@ -531,6 +531,7 @@ class DeployIntegrationTest(unittest.TestCase):
         self.assertIn('RECLAIM="${SCRIPT_DIR}/reclaim.sh"', self.source)
         self.assertIn('"${RECLAIM}" check-disk --label "prod deploy"', self.source)
         self.assertIn('"${RECLAIM}" check-disk --label "sandbox deploy"', self.source)
+        self.assertIn("MIN_FREE_DISK_GB", self.source)
         self.assertEqual(self.source.count('"${RECLAIM}" prune --scope host'), 2)
 
     def test_volume_hold_survives(self) -> None:
@@ -567,10 +568,14 @@ RECLAIM="${SCRIPT_DIR}/reclaim.sh"
 3. Replace each `_require_free_disk "<label>"` call site with:
 
 ```bash
-"${RECLAIM}" check-disk --label "<label>" --scope host || exit 1
+"${RECLAIM}" check-disk --label "<label>" --scope host --min-gb "${ROADTRIP_MIN_FREE_DISK_GB:-${MIN_FREE_DISK_GB}}" || exit 1
 ```
 
 There are two: `_require_free_disk "prod deploy"` (around line 384) and `_require_free_disk "sandbox deploy"` (around line 846).
+
+Passing `--min-gb` explicitly keeps `deploy.sh`'s existing `MIN_FREE_DISK_GB`
+constant live and authoritative for the host, rather than silently leaving it
+unused while `reclaim.sh` applies its own default.
 
 4. Replace each adjacent pair of `_prune_roadtrip_images` / `_prune_data_volumes` calls with a single:
 
@@ -742,7 +747,7 @@ if (unapplied.length) {
 }
 ```
 
-Extend the import on line 2 and the final exit condition:
+Extend the `node:fs` import and the final exit condition:
 
 ```javascript
 import { readFileSync, readdirSync } from 'node:fs';
@@ -760,7 +765,7 @@ Expected: FAIL, listing all five worktrees under `.claude/worktrees` as unapplie
 
 - [ ] **Step 3: Verify it passes when there are no worktrees**
 
-Run: `git -C /tmp init -q reclaim-probe && cd /tmp/reclaim-probe` is **not** needed — instead confirm the `catch` path by temporarily renaming:
+Confirm the `catch` path — a checkout with no worktrees must still pass — by temporarily renaming the directory:
 
 ```bash
 mv .claude/worktrees .claude/worktrees.bak
