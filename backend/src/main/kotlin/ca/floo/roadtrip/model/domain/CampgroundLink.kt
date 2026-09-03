@@ -6,4 +6,5 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class CampgroundLink(
     val url: String,
+    val title: String? = null,
 )

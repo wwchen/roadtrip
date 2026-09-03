@@ -6,4 +6,5 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class CampgroundManagement(
     val agency: String,
+    val website: String? = null,
 )

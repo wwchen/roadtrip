@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.framework
 
+import ca.floo.roadtrip.model.domain.Address
 import ca.floo.roadtrip.model.domain.CampgroundContact
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
@@ -26,8 +27,8 @@ object CampgroundJsonb {
         longitude: Double,
         region: String? = null,
         country: String? = null,
-        address: JsonObject? = null,
-    ): JsonObject = encode(CampgroundLocation(latitude, longitude, region, country, address))
+        address: Address? = null,
+    ): JsonObject = encode(CampgroundLocation(latitude, longitude, region, country, address = address))
 
     fun links(urls: List<String>): JsonArray = JsonArray(urls.map { encode(CampgroundLink(it)) })
 

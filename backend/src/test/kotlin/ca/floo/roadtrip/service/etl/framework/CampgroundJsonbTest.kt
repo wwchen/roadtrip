@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.framework
 
+import ca.floo.roadtrip.model.domain.Address
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -20,14 +21,14 @@ class CampgroundJsonbTest {
 
     @Test
     fun `location carries region, country and address in column order`() {
-        val address = buildJsonObject { put("city", "Banff") }
+        val address = Address(city = "Banff")
         val expected =
             buildJsonObject {
                 put("latitude", 51.18)
                 put("longitude", -115.57)
                 put("region", "AB")
                 put("country", "CA")
-                put("address", address)
+                put("address", buildJsonObject { put("city", "Banff") })
             }
         assertEquals(
             expected,
