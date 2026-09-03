@@ -59,9 +59,30 @@ class AspiraCampgroundsEtl(
     override val etlSlug: String,
     private val dataProviderValue: DataProvider,
     private val aspiraTenant: String,
+    /**
+     * Two-letter state a US tenant books, from the registry's `state_filter`.
+     * The uscampgrounds.info geometry file is nationwide and campground names
+     * repeat across states, so without this a leaf can match another state's
+     * row. Null for the non-US tenants, which want the whole file.
+     */
+    private val stateFilter: String? = null,
 ) : CampgroundEtl<AspiraJoinDto> {
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
+
+    /**
+     * The geometry inputs, paired with the source that reads each one — every
+     * declared input that is not maps, inventory or dictionaries.
+     */
+    internal fun geometrySourcesFor(inputs: InputBundle): List<Pair<String, GeometrySource>> {
+        val slugs = inputs.dataSourceSlugs()
+        val mapsSlug = slugs.first { it.contains("maps") }
+        val inventorySlug = slugs.firstOrNull { it.contains("inventory") }
+        val dictionarySlug = slugs.firstOrNull { it.contains("dictionaries") }
+        return slugs
+            .filter { it != mapsSlug && it != inventorySlug && it != dictionarySlug }
+            .map { slug -> slug to detectGeometrySource(slug, inputs.envelopes(slug)) }
+    }
 
     override fun parse(inputs: InputBundle): Sequence<ParseResult<AspiraJoinDto>> =
         sequence {
@@ -72,11 +93,7 @@ class AspiraCampgroundsEtl(
             val mapsArray = inputs.envelope(mapsSlug).payload.jsonArray
             val leaves = AspiraLeavesWalk.walk(mapsArray)
 
-            val geomEntries =
-                inputs
-                    .dataSourceSlugs()
-                    .filter { it != mapsSlug && it != inventorySlug && it != dictionarySlug }
-                    .map { slug -> slug to detectGeometrySource(slug, inputs.envelopes(slug)) }
+            val geomEntries = geometrySourcesFor(inputs)
 
             val dto =
                 AspiraJoinDto(
@@ -347,7 +364,7 @@ class AspiraCampgroundsEtl(
         // We have a few characteristic shapes; sniff by slug first (cheap)
         // and fall back to payload inspection if the slug is unknown.
         return when {
-            slug.contains("uscampgrounds") -> UsCampgroundsCsvSource(envelopes)
+            slug.contains("uscampgrounds") -> UsCampgroundsCsvSource(envelopes, stateFilter)
             slug.contains("bcparks") -> BcParksStrapiSource(envelopes)
             slug.contains("places") -> ApcaPlacesCentroidSource(envelopes)
             slug.contains("accommodation") -> ApcaAccommodationSource(envelopes)
