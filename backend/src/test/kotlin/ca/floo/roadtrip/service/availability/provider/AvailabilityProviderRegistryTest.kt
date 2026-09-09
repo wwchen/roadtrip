@@ -47,6 +47,7 @@ class AvailabilityProviderRegistryTest {
         CampflareAvailabilityProvider(
             availabilityClient = stubCampflareClient(),
             enabled = true,
+            configured = true,
         )
 
     private val reserveCaliforniaProvider =
@@ -123,6 +124,7 @@ class AvailabilityProviderRegistryTest {
             CampflareAvailabilityProvider(
                 availabilityClient = stubCampflareClient(),
                 enabled = false,
+                configured = true,
             )
         val list = listOf(disabledCampflare, recgovProvider)
         val campground =

@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.config
 
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+
 class ReadPathProviderConfig(
     val enabledDataProviders: Set<String>,
     val enabledAvailabilityProviders: Set<String>,
@@ -11,14 +13,7 @@ class ReadPathProviderConfig(
     companion object {
         private const val ENABLED_DATA_PROVIDERS_KEY = "enabled-data-providers"
         private const val ENABLED_AVAILABILITY_PROVIDERS_KEY = "enabled-availability-providers"
-        private val availabilityProviderIds =
-            setOf(
-                "aspira",
-                "campflare",
-                "recgov",
-                "reserveamerica",
-                "reservecalifornia",
-            )
+        private val availabilityProviderIds: Set<String> = BookingProvider.entries.map { it.id }.toSet()
 
         fun fromConfig(config: ConfigSection): ReadPathProviderConfig =
             ReadPathProviderConfig(

@@ -169,6 +169,7 @@ val serviceModule =
                 CampflareAvailabilityProvider(
                     availabilityClient = get(),
                     enabled = config.isProviderEnabled(BookingProvider.CAMPFLARE),
+                    configured = !config.campflare.apiKey.isNullOrBlank(),
                 ),
                 ReserveCaliforniaAvailabilityProvider(
                     availabilityClient = get(),
@@ -438,9 +439,7 @@ fun slackInteractivityModule(signingSecret: String) =
         }
     }
 
-private fun AppConfig.isProviderEnabled(id: ca.floo.roadtrip.model.domain.provider.BookingProvider): Boolean =
-    readPathProviders.isAvailabilityProviderEnabled(id.id) &&
-        (id != ca.floo.roadtrip.model.domain.provider.BookingProvider.CAMPFLARE || !campflare.apiKey.isNullOrBlank())
+private fun AppConfig.isProviderEnabled(id: BookingProvider): Boolean = readPathProviders.isAvailabilityProviderEnabled(id.id)
 
 internal fun notificationTriggerKinds(emailConfigured: Boolean): List<String> =
     buildList {

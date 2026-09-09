@@ -13,6 +13,8 @@ import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class CampflareAvailabilityProviderTest {
     @Test
@@ -51,7 +53,7 @@ class CampflareAvailabilityProviderTest {
                         observedAt = Instant.EPOCH,
                     )
                 }
-            val provider = CampflareAvailabilityProvider(client, enabled = true)
+            val provider = CampflareAvailabilityProvider(client, enabled = true, configured = true)
 
             val batch =
                 provider.catalogAvailability(
@@ -108,7 +110,7 @@ class CampflareAvailabilityProviderTest {
                         observedAt = Instant.EPOCH,
                     )
                 }
-            val provider = CampflareAvailabilityProvider(client, enabled = true)
+            val provider = CampflareAvailabilityProvider(client, enabled = true, configured = true)
 
             val batch =
                 provider.catalogAvailability(
@@ -128,6 +130,15 @@ class CampflareAvailabilityProviderTest {
 
             assertEquals(listOf(AvailabilityStatus.UNKNOWN, AvailabilityStatus.UNKNOWN), batch.observations.map { it.status })
         }
+
+    @Test
+    fun `provider is enabled only when allowed by config and an api key is configured`() {
+        val client = CampflareAvailabilityClient { _, _, _ -> error("availability client should not be called") }
+
+        assertTrue(CampflareAvailabilityProvider(client, enabled = true, configured = true).isEnabled())
+        assertFalse(CampflareAvailabilityProvider(client, enabled = true, configured = false).isEnabled())
+        assertFalse(CampflareAvailabilityProvider(client, enabled = false, configured = true).isEnabled())
+    }
 
     private data class CampflareCall(
         val campgroundIds: List<String>,

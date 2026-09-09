@@ -146,7 +146,7 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 poiRepo = PoiRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
-                availabilityProviders = listOf(CampflareAvailabilityProvider(unusedCampflareClient(), enabled = true)),
+                availabilityProviders = listOf(CampflareAvailabilityProvider(unusedCampflareClient(), enabled = true, configured = true)),
                 dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )

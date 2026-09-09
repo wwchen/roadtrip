@@ -20,6 +20,7 @@ import java.time.temporal.ChronoUnit
 class CampflareAvailabilityProvider(
     private val availabilityClient: CampflareAvailabilityClient,
     private val enabled: Boolean,
+    private val configured: Boolean,
 ) : AvailabilityProvider {
     override val id: BookingProvider = BookingProvider.CAMPFLARE
 
@@ -30,7 +31,7 @@ class CampflareAvailabilityProvider(
             maxPollWindowDays = CAMPFLARE_MAX_POLL_WINDOW_DAYS,
         )
 
-    override fun isEnabled(): Boolean = enabled
+    override fun isEnabled(): Boolean = enabled && configured
 
     override fun supportsCampground(campground: Campground): Boolean =
         isEnabled() && campground.dataProviderRef is DataProviderRef.Campflare
