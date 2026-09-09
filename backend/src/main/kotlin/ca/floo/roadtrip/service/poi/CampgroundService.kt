@@ -71,7 +71,7 @@ internal class CampgroundService(
                     description = description,
                     photoUrl = photoUrl,
                     bookingRef = detail.bookingRef?.let(BookingRefDto::from),
-                    availabilitySupported = (availabilityProvider != null).takeIf { it },
+                    availabilitySupported = (detail.bookingRef != null).takeIf { it },
                     cta = ctas,
                     bookingSystem =
                         cta.bookingSystem(

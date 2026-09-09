@@ -65,6 +65,26 @@ class PoiServiceTest : SharedDbTest() {
     }
 
     @Test
+    fun `a booking provider without a ref does not advertise availability support`() {
+        val poiId =
+            ctx
+                .seedCatalogPoi(
+                    sourceId = "-2147483647:-2147483027",
+                    name = "Refless Campground",
+                    lon = -116.19,
+                    lat = 51.43,
+                    source = SOURCE,
+                    bookingProvider = SOURCE,
+                    bookingProviderRef = null,
+                ).poiId
+
+        val detail = poiService().poiDetail(poiId)!!.campgroundDetail()
+
+        assertNull(detail.bookingRef)
+        assertNull(detail.availabilitySupported)
+    }
+
+    @Test
     fun `detail row projects first campground link as info URL`() {
         val link = "https://www.fs.usda.gov/recarea/tahoe/recarea/?recid=80728"
         val fixture =
