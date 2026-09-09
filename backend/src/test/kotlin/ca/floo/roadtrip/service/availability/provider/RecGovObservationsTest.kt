@@ -200,6 +200,36 @@ class RecGovObservationsTest {
     }
 
     @Test
+    fun `a window of only reserved and not-available days rolls up to zero_available`() {
+        val map =
+            mapOf(
+                "100" to campsiteWith((0..1L).associate { futureKey(it) to "Reserved" }),
+                "200" to campsiteWith((0..1L).associate { futureKey(it) to "Not Available" }),
+            )
+        val body = classify(clientReturning(map), days = 2, catalogSiteIds = listOf("100", "200"))
+
+        assertEquals("zero_available", body["state"]!!.jsonPrimitive.content)
+        assertEquals(
+            listOf("reserved", "reserved"),
+            body["availability"]!!.jsonArray.map { it.jsonObject["status"]!!.jsonPrimitive.content },
+        )
+    }
+
+    @Test
+    fun `one unmapped status beside a reserved site rolls the day to unknown`() {
+        val map =
+            mapOf(
+                "100" to campsiteWith(mapOf(futureKey(0) to "Reserved")),
+                "200" to campsiteWith(mapOf(futureKey(0) to "Walk-Up Only")),
+            )
+        val body = classify(clientReturning(map), days = 1, catalogSiteIds = listOf("100", "200"))
+        val day = body["availability"]!!.jsonArray.single().jsonObject
+
+        assertEquals("success", body["state"]!!.jsonPrimitive.content)
+        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `not available maps to reserved`() {
         val map = mapOf("100" to campsiteWith(mapOf(futureKey(0) to "Not Available")))
         val body = classify(clientReturning(map), days = 1)
