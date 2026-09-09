@@ -57,7 +57,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
 
     private fun poiService(): PoiService =
         PoiService(
-            poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf("recgov")),
+            poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf("recgov", "campflare")),
             detailServices =
                 listOf(
                     CampgroundService(
@@ -157,7 +157,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `corridor uniques campground rows by provider campground id`() =
+    fun `corridor uniques campground rows across data providers on one booking ref`() =
         testApplication {
             seed(
                 listOf(
@@ -167,15 +167,17 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                         lat = 48.4,
                         category = "campground",
                         source = "recgov",
-                        providerRefJson = """{"recgov_id":"12345"}""",
+                        bookingProvider = "recgov",
+                        bookingProviderRef = "12345",
                     ),
                     row(
-                        sourceId = "recgov-duplicate",
+                        sourceId = "campflare-duplicate",
                         lon = -122.4,
                         lat = 47.7,
                         category = "campground",
-                        source = "recgov",
-                        providerRefJson = """{"recgov_id":"12345"}""",
+                        source = "campflare",
+                        bookingProvider = "recgov",
+                        bookingProviderRef = "12345",
                     ),
                     row(
                         sourceId = "recgov-other",
@@ -183,7 +185,8 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                         lat = 49.2,
                         category = "campground",
                         source = "recgov",
-                        providerRefJson = """{"recgov_id":"67890"}""",
+                        bookingProvider = "recgov",
+                        bookingProviderRef = "67890",
                     ),
                 ),
             )
@@ -366,7 +369,8 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
         val name: String,
         val geomGeoJson: String,
         val source: String,
-        val providerRefJson: String?,
+        val bookingProvider: String?,
+        val bookingProviderRef: String?,
         val agency: String?,
     )
 
@@ -376,7 +380,8 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
         lat: Double,
         category: String,
         source: String = "recgov",
-        providerRefJson: String? = null,
+        bookingProvider: String? = null,
+        bookingProviderRef: String? = null,
         agency: String? = null,
     ): TestRow =
         TestRow(
@@ -385,7 +390,8 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
             name = sourceId,
             geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
             source = source,
-            providerRefJson = providerRefJson,
+            bookingProvider = bookingProvider,
+            bookingProviderRef = bookingProviderRef,
             agency = agency,
         )
 
@@ -398,7 +404,8 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                 lat = 0.0,
                 poiType = r.category,
                 source = r.source,
-                providerRefJson = r.providerRefJson,
+                bookingProvider = r.bookingProvider,
+                bookingProviderRef = r.bookingProviderRef,
                 agency = r.agency,
                 geomGeoJson = r.geomGeoJson,
             )

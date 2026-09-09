@@ -34,9 +34,10 @@ instance (see `backend/src/main/resources/poi-registry.yaml`).
 
 ## ID model
 
-- **POI** `provider_ref` = `{contract_code, park_id}` (both strings), e.g.
-  `{"contract_code": "ABPP", "park_id": "330101"}`. `park_id`/`facilityID` is
-  unique only *within* a `contractCode`.
+- **Campground** booking identity is the typed pair `booking_provider =
+  'reserveamerica'` plus `booking_provider_ref = '{contract_code}:{park_id}'`,
+  e.g. `ABPP:330101`, parsed into `BookingProviderRef.ReserveAmerica`.
+  `park_id`/`facilityID` is unique only *within* a `contractCode`.
 - **Campsite** identity is the canonical catalog row id. `vendor_id` is the
   numeric `siteId` in the calendar's `campsiteDetails.do` href.
   `vendor` is **per-tenant** (`reserveamerica_abpp`, `reserveamerica_ny`), not a

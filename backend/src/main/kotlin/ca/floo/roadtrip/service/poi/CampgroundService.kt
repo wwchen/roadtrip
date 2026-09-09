@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.poi
 
+import ca.floo.roadtrip.model.api.BookingRefDto
 import ca.floo.roadtrip.model.api.poi.PoiCategoryDetailSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailPropertiesSchema
 import ca.floo.roadtrip.model.domain.CampgroundColumnJson
@@ -41,8 +42,7 @@ internal class CampgroundService(
         val availabilityProvider = campground.bookingProvider
         val computedCtas =
             cta.computeCtas(
-                providerRefJson = detail.providerRefJson,
-                ctaProviderRefJson = detail.ctaProviderRefJson,
+                bookingRef = detail.bookingRef,
                 reserveUrl = campground.reservationUrl,
                 infoUrl = infoUrl,
             )
@@ -70,12 +70,12 @@ internal class CampgroundService(
                     address = CampgroundColumnJson.element(campground.location),
                     description = description,
                     photoUrl = photoUrl,
-                    providerRef = detail.providerRefJson?.let { Json.parseToJsonElement(it) },
-                    availabilitySupported = (availabilityProvider != null).takeIf { it },
+                    bookingRef = detail.bookingRef?.let(BookingRefDto::from),
+                    availabilitySupported = (detail.bookingRef != null).takeIf { it },
                     cta = ctas,
                     bookingSystem =
                         cta.bookingSystem(
-                            providerRefJson = detail.providerRefJson,
+                            bookingRef = detail.bookingRef,
                             reserveUrl = campground.reservationUrl,
                             infoUrl = infoUrl,
                         ),

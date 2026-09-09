@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.availability.hasFullCoverage
 import ca.floo.roadtrip.service.availability.isFreshAsOf
@@ -28,9 +29,7 @@ class AvailabilityLoader(
 
     data class Metadata(
         val provider: String,
-        val campgroundId: String? = null,
-        val host: String? = null,
-        val mapId: String? = null,
+        val scope: BookingProviderRef? = null,
         val campsiteId: Long? = null,
     )
 
@@ -152,9 +151,7 @@ class AvailabilityLoader(
                     ttlSeconds = effectiveTtlSeconds(request),
                 ),
             seasonBlock = seasonBlock,
-            campgroundId = request.metadata.campgroundId,
-            host = request.metadata.host,
-            mapId = request.metadata.mapId,
+            scope = request.metadata.scope,
             campsiteId = request.metadata.campsiteId,
         )
     }
@@ -165,9 +162,7 @@ class AvailabilityLoader(
     ): Metadata =
         fallback.copy(
             provider = batch.provider,
-            campgroundId = batch.campgroundId ?: fallback.campgroundId,
-            host = batch.host ?: fallback.host,
-            mapId = batch.mapId ?: fallback.mapId,
+            scope = batch.scope ?: fallback.scope,
             campsiteId = batch.campsiteId ?: fallback.campsiteId,
         )
 

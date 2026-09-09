@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.metadata.registry
 
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.YamlMap
 import com.charleskorn.kaml.YamlNode
@@ -223,41 +224,6 @@ class PoiRegistry(
         return out
     }
 
-    fun hostBySource(): Map<String, String> {
-        val out = mutableMapOf<String, String>()
-        for (row in poiData) {
-            val terminal = row.etls.lastOrNull() ?: continue
-            val host = terminal.args["host"] ?: continue
-            out[terminal.slug] = host
-        }
-        return out
-    }
-
-    /**
-     * Sources whose terminal ETL produces rec.gov-keyed campgrounds. Used
-     * by the availability-provider registry to map the terminal etl slug → `RECGOV`.
-     */
-    fun recgovSources(): Set<String> =
-        poiData
-            .mapNotNull { row -> row.etls.lastOrNull() }
-            .filter { it.adapter == "RecGovCampgroundsEtl" }
-            .map { it.slug }
-            .toSet()
-
-    fun campflareSources(): Set<String> =
-        poiData
-            .mapNotNull { row -> row.etls.lastOrNull() }
-            .filter { it.adapter == "CampflareCampgroundsEtl" }
-            .map { it.slug }
-            .toSet()
-
-    fun bcParksSources(): Set<String> =
-        poiData
-            .mapNotNull { row -> row.etls.lastOrNull() }
-            .filter { it.adapter == "BcParksCampgroundsEtl" }
-            .map { it.slug }
-            .toSet()
-
     /**
      * ReserveAmerica terminal ETL sources with their Active Network tenant
      * config. Unlike Aspira, these tenants are fully config-driven because the
@@ -268,8 +234,10 @@ class PoiRegistry(
         poiData
             .mapNotNull { row -> row.etls.lastOrNull() }
             .filter { it.adapter == "ReserveAmericaCampgroundsEtl" }
-            .filter { (it.args["provider"] ?: "reserveamerica").lowercase() == "reserveamerica" }
-            .map { terminal ->
+            .filter { row ->
+                val provider = row.args["provider"]?.trim()?.lowercase() ?: BookingProvider.RESERVEAMERICA.id
+                BookingProvider.fromIdOrNull(provider) == BookingProvider.RESERVEAMERICA
+            }.map { terminal ->
                 val contract =
                     terminal.args["contract"]
                         ?: error("ReserveAmerica source '${terminal.slug}' is missing args.contract")
@@ -290,13 +258,6 @@ class PoiRegistry(
                     bookingHorizonDays = horizon,
                 )
             }
-
-    fun reserveCaliforniaSources(): Set<String> =
-        poiData
-            .mapNotNull { row -> row.etls.lastOrNull() }
-            .filter { it.adapter == "ReserveCaliforniaCampgroundsEtl" }
-            .map { it.slug }
-            .toSet()
 
     companion object {
         private val yaml =

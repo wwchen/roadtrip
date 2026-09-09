@@ -77,9 +77,7 @@ fun availabilityResponseFromObservations(batch: AvailabilityObservationBatch): A
         state = state,
         seasonBlock = batch.seasonBlock.takeIf { state == "closed_for_season" },
         cacheBlock = batch.cacheBlock,
-        campgroundId = batch.campgroundId,
-        host = batch.host,
-        mapId = batch.mapId,
+        scopeRef = batch.scope?.serialize(),
         campsiteId = batch.campsiteId,
     )
 }
@@ -149,12 +147,9 @@ fun classifyWindowState(days: List<DayClassification>): String {
 }
 
 /**
- * Build the JSON the FE drawer reads. Stable across providers:
- *   - `provider`: "recgov" | "aspira" so the FE can pick provider-specific
- *     CTAs without having to keep its own classifier.
- *   - `season`: optional reopen-date hint; only rec.gov surfaces this today.
- *   - Provider-specific fields (recgov: campground_id; aspira: host, map_id)
- *     are additive — the FE ignores unknown fields.
+ * `provider` is the vendor id. `season` is an optional reopen-date hint only
+ * rec.gov surfaces today. `scope_ref` is the serialized `BookingProviderRef`
+ * the observations were fetched under, and is opaque to clients.
  */
 fun availabilityResponseDto(
     provider: String,
@@ -164,16 +159,12 @@ fun availabilityResponseDto(
     state: String,
     seasonBlock: AvailabilitySeasonBlock?,
     cacheBlock: AvailabilityCacheBlock,
-    campgroundId: String? = null,
-    host: String? = null,
-    mapId: String? = null,
+    scopeRef: String? = null,
     campsiteId: Long? = null,
 ): AvailabilityResponseDto =
     AvailabilityResponseDto(
         provider = provider,
-        campgroundId = campgroundId,
-        host = host,
-        mapId = mapId,
+        scopeRef = scopeRef,
         campsiteId = campsiteId,
         checkedAt = Instant.now().toString(),
         startDate = startDate.toString(),

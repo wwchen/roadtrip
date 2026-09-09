@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.ingest.Phase
 import ca.floo.roadtrip.model.metadata.ingest.RunKind
+import ca.floo.roadtrip.model.metadata.ingest.RunStatus
 import ca.floo.roadtrip.model.metadata.ingest.Target
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
@@ -55,7 +56,7 @@ class IngestControllerTest : SharedDbTest() {
             val controller = controllerWith(targetMap("curated"))
 
             val outcome = controller.startRun("curated", RunKind.IMPORT, "test")
-            assertEquals("noop", outcome.status)
+            assertEquals(RunStatus.NOOP, outcome.status)
             assertEquals(RunKind.IMPORT, outcome.kind)
 
             val parent = ctx.selectFrom(INGEST_RUNS).where(INGEST_RUNS.ID.eq(outcome.parentRunId)).fetchOne()!!
@@ -75,7 +76,7 @@ class IngestControllerTest : SharedDbTest() {
             )
 
         val outcome = runBlocking { controller.startRun("t", RunKind.IMPORT, "test") }
-        assertEquals("failed", outcome.status)
+        assertEquals(RunStatus.FAILED, outcome.status)
         assertEquals("import:does-not-exist", outcome.failedPhase)
 
         val parent = ctx.selectFrom(INGEST_RUNS).where(INGEST_RUNS.ID.eq(outcome.parentRunId)).fetchOne()!!
@@ -108,7 +109,7 @@ class IngestControllerTest : SharedDbTest() {
 
             val outcome = controller.startRun("t", RunKind.IMPORT, "test")
 
-            assertEquals("failed", outcome.status)
+            assertEquals(RunStatus.FAILED, outcome.status)
             assertEquals("p1", outcome.failedPhase)
 
             val phases =
@@ -157,7 +158,7 @@ class IngestControllerTest : SharedDbTest() {
 
                 release.countDown()
                 val outcome = first.await()
-                assertEquals("completed", outcome.status)
+                assertEquals(RunStatus.COMPLETED, outcome.status)
             }
         }
 
@@ -190,8 +191,8 @@ class IngestControllerTest : SharedDbTest() {
                 val second = async(Dispatchers.IO) { controller.startRun("Blocking B", RunKind.IMPORT, "test") }
                 assertTrue(gate.await(5, TimeUnit.SECONDS), "both imports did not start concurrently")
                 release.countDown()
-                assertEquals("completed", first.await().status)
-                assertEquals("completed", second.await().status)
+                assertEquals(RunStatus.COMPLETED, first.await().status)
+                assertEquals(RunStatus.COMPLETED, second.await().status)
             }
         }
 

@@ -65,12 +65,13 @@ Three layers of identity:
   and the key our `AspiraAvailabilityClient` looks up at request time
   in `/api/availability/map`'s `resourceAvailabilities` block.
 
-`pois.provider_ref` is the POI identity/join ref, not necessarily the best
-booking-grid deep link. Some Parks Canada campground POIs use a container
-`mapId`, while their sites live under child grid maps. `AspiraBookingCtaRefs`
-therefore resolves `properties.upstream.booking_cta_provider_ref` from the
-inventory's `mapIds[]`; the POI drawer uses that for the primary booking CTA
-and keeps `provider_ref` stable for joins and provider dispatch.
+A campground's `data_provider_ref` is its identity/join ref, not necessarily
+the best booking-grid deep link. Some Parks Canada campground POIs use a
+container `mapId`, while their sites live under child grid maps.
+`AspiraBookingCtaRefs.forLeaf` therefore picks the bookable map id out of the
+inventory's `mapIds[]`, and `campgroundBookingProviderRef` encodes it into the
+`booking_provider_ref` column; the POI drawer uses that column for the primary
+booking CTA, leaving the data ref stable for joins and provider dispatch.
 
 **Only a lone child map substitutes for the container.** A park's sites often
 span several sibling grid maps under one `resourceLocationId` — Sasquatch's 179

@@ -153,9 +153,9 @@ class BcParksCampgroundsEtl(
             photos = listOfNotNull(strapiRow.photoUrl?.let(::CampgroundPhoto)),
             management = CampgroundManagement(agency),
             contact = strapiRow.phone?.let { CampgroundContact(phone = it) },
-            metadata = metadataPayload(leaf, host, match.kind, bookingCtaRef, strapiRow),
+            metadata = metadataPayload(leaf, host, match.kind, strapiRow),
             sourceUrl = bookingUrl,
-            sourcePayload = sourcePayload(leaf, match.kind, bookingCtaRef, strapiRow),
+            sourcePayload = sourcePayload(leaf, match.kind, strapiRow),
         )
     }
 
@@ -177,7 +177,6 @@ class BcParksCampgroundsEtl(
         leaf: AspiraLeaf,
         host: String,
         matchKind: AspiraLeafMatchKind,
-        bookingCtaRef: AspiraBookingCtaRef?,
         strapiRow: BcParksStrapiRow,
     ): JsonObject =
         buildJsonObject {
@@ -188,22 +187,11 @@ class BcParksCampgroundsEtl(
             leaf.parentName?.let { put("parent_name", it) }
             put("match_kind", matchKind.label)
             strapiRow.orcs?.let { put("strapi_orcs", it) }
-            bookingCtaRef?.let {
-                put(
-                    "booking_cta_provider_ref",
-                    buildJsonObject {
-                        put("transactionLocationId", leaf.transactionLocationId)
-                        put("mapId", it.mapId)
-                        put("resourceLocationId", it.resourceLocationId)
-                    },
-                )
-            }
         }
 
     private fun sourcePayload(
         leaf: AspiraLeaf,
         matchKind: AspiraLeafMatchKind,
-        bookingCtaRef: AspiraBookingCtaRef?,
         strapiRow: BcParksStrapiRow,
     ): JsonObject =
         buildJsonObject {
@@ -215,16 +203,6 @@ class BcParksCampgroundsEtl(
             put("match_kind", matchKind.label)
             strapiRow.orcs?.let { put("strapi_orcs", it) }
             strapiRow.url?.let { put("strapi_url", it) }
-            bookingCtaRef?.let {
-                put(
-                    "booking_cta_provider_ref",
-                    buildJsonObject {
-                        put("transactionLocationId", leaf.transactionLocationId)
-                        put("mapId", it.mapId)
-                        put("resourceLocationId", it.resourceLocationId)
-                    },
-                )
-            }
         }
 
     // ---- Strapi parsing -------------------------------------------------------

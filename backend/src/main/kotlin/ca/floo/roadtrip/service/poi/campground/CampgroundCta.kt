@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.poi.campground
 
 import ca.floo.roadtrip.model.api.poi.PoiCtaSchema
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRefLegacyJson
 import ca.floo.roadtrip.service.availability.provider.AspiraBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.AspiraBookingUrl
 import ca.floo.roadtrip.service.availability.provider.RecGovBookingDisplay
@@ -36,26 +35,22 @@ internal class CampgroundCta(
     // flow through. Same per-vendor knowledge as computeCtas, surfaced as
     // a string for the drawer footer.
     fun bookingSystem(
-        providerRefJson: String?,
+        bookingRef: BookingProviderRef?,
         reserveUrl: String?,
         infoUrl: String?,
     ): String? {
-        val providerRef = providerRefJson?.let(BookingProviderRefLegacyJson::fromLegacyJson)
         val upstreamUrl = providerUrl(reserveUrl = reserveUrl, infoUrl = infoUrl)
-        return providers.firstNotNullOfOrNull { it.bookingSystem(providerRef, upstreamUrl) }
+        return providers.firstNotNullOfOrNull { it.bookingSystem(bookingRef, upstreamUrl) }
     }
 
     fun computeCtas(
-        providerRefJson: String?,
-        ctaProviderRefJson: String?,
+        bookingRef: BookingProviderRef?,
         reserveUrl: String?,
         infoUrl: String?,
     ): List<PoiCtaSchema> {
-        val primaryProviderRef = (ctaProviderRefJson ?: providerRefJson)?.let(BookingProviderRefLegacyJson::fromLegacyJson)
-        val sourceProviderRef = providerRefJson?.let(BookingProviderRefLegacyJson::fromLegacyJson)
         val primaryCta =
             primaryReserveCta(
-                providerRef = primaryProviderRef,
+                providerRef = bookingRef,
                 reserveUrl = reserveUrl,
                 infoUrl = infoUrl,
             ) ?: infoUrl?.takeIf { it.isNotBlank() }?.let {
@@ -67,7 +62,7 @@ internal class CampgroundCta(
             }
         return listOfNotNull(
             primaryCta,
-            campflareCta(sourceProviderRef),
+            campflareCta(bookingRef),
         ).distinctBy { it.url }
     }
 

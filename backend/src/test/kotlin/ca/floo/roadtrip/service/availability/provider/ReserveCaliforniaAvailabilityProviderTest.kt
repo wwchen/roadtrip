@@ -6,6 +6,7 @@ import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
@@ -84,8 +85,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
             assertEquals(false, provider.capabilities.supportsInternalPolling)
             assertEquals(183, provider.capabilities.bookingHorizonDays)
             assertEquals("reservecalifornia", batch.provider)
-            assertEquals("690", batch.campgroundId)
-            assertEquals("611,612", batch.mapId)
+            assertEquals(BookingProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611L, 612L)), batch.scope)
             assertEquals(3, batch.observations.size)
             assertEquals(setOf(43793L), batch.observations.map { it.campsiteId }.toSet())
             assertEquals(

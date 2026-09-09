@@ -409,7 +409,7 @@ export const isNoCta = (result: CtaResult): result is NoCta => !Array.isArray(re
 /**
  * The buttons a campground gets.
  *
- * The backend computes an ordered CTA list per pin (`provider_ref` + `info_url` →
+ * The backend computes an ordered CTA list per pin (`booking_ref` + `info_url` →
  * vendor URLs and labels, including dated Aspira deeplinks), and the client renders it
  * verbatim — per-vendor URL precedence is a server concern. Everything below the first
  * branch is fallback for pins the backend could not resolve.

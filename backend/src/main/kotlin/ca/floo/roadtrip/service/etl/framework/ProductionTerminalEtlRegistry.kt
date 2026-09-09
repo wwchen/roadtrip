@@ -43,34 +43,40 @@ internal val productionTerminalEtlDefinitions: Map<String, TerminalEtlDefinition
     out
 }
 
-@Suppress("UNCHECKED_CAST")
-private fun createPoiTerminal(entry: EtlEntry): TerminalEtlDefinition<*, *> =
-    when (entry.adapter) {
-        "CampflareCampgroundsEtl" -> campgroundSink(CampflareCampgroundsEtl())
-        "RecGovCampgroundsEtl" -> campgroundSink(RecGovCampgroundsEtl(entry.slug))
-        "AspiraCampgroundsEtl" ->
-            campgroundSink(
-                AspiraCampgroundsEtl(
-                    etlSlug = entry.slug,
-                    dataProviderValue = DataProvider.ASPIRA,
-                    aspiraTenant = entry.args.require("tenant"),
-                    stateFilter = entry.args["state_filter"],
-                ),
-            )
-        "BcParksCampgroundsEtl" -> campgroundSink(BcParksCampgroundsEtl(etlSlug = entry.slug))
-        "ReserveAmericaCampgroundsEtl" -> campgroundSink(ReserveAmericaCampgroundsEtl(entry.slug))
-        "ReserveCaliforniaCampgroundsEtl" -> campgroundSink(ReserveCaliforniaCampgroundsEtl(entry.slug))
-        "PlanetFitnessEtl" -> planetFitnessSink(PlanetFitnessEtl())
-        "TeslaIndexEtl" -> teslaSuperchargerSink(TeslaIndexEtl())
-        else -> error("Unknown poi_data adapter: ${entry.adapter} (slug=${entry.slug})")
-    }
+internal data class PoiAdapterSpec(
+    val dataProvider: DataProvider,
+    val create: (EtlEntry) -> TerminalEtlDefinition<*, *>,
+)
 
-@Suppress("UNCHECKED_CAST")
-private fun createCampsiteTerminal(entry: EtlEntry): TerminalEtlDefinition<*, *> =
-    when (entry.adapter) {
-        "CampflareCampsitesEtl" -> campsiteSink(CampflareCampsitesEtl())
-        "RecGovCampsitesEtl" -> campsiteSink(RecGovCampsitesEtl(entry.slug))
-        "AspiraCampsitesEtl" ->
+internal val poiAdapters: Map<String, PoiAdapterSpec> =
+    mapOf(
+        "CampflareCampgroundsEtl" to PoiAdapterSpec(DataProvider.CAMPFLARE) { campgroundSink(CampflareCampgroundsEtl()) },
+        "RecGovCampgroundsEtl" to PoiAdapterSpec(DataProvider.RECGOV) { campgroundSink(RecGovCampgroundsEtl(it.slug)) },
+        "AspiraCampgroundsEtl" to
+            PoiAdapterSpec(DataProvider.ASPIRA) { entry ->
+                campgroundSink(
+                    AspiraCampgroundsEtl(
+                        etlSlug = entry.slug,
+                        dataProviderValue = DataProvider.ASPIRA,
+                        aspiraTenant = entry.args.require("tenant"),
+                        stateFilter = entry.args["state_filter"],
+                    ),
+                )
+            },
+        "BcParksCampgroundsEtl" to PoiAdapterSpec(DataProvider.STRAPI) { campgroundSink(BcParksCampgroundsEtl(etlSlug = it.slug)) },
+        "ReserveAmericaCampgroundsEtl" to
+            PoiAdapterSpec(DataProvider.RESERVEAMERICA) { campgroundSink(ReserveAmericaCampgroundsEtl(it.slug)) },
+        "ReserveCaliforniaCampgroundsEtl" to
+            PoiAdapterSpec(DataProvider.RESERVECALIFORNIA) { campgroundSink(ReserveCaliforniaCampgroundsEtl(it.slug)) },
+        "PlanetFitnessEtl" to PoiAdapterSpec(DataProvider.PLANET_FITNESS_LOCATION) { planetFitnessSink(PlanetFitnessEtl()) },
+        "TeslaIndexEtl" to PoiAdapterSpec(DataProvider.TESLA_SUPERCHARGER) { teslaSuperchargerSink(TeslaIndexEtl()) },
+    )
+
+internal val campsiteAdapters: Map<String, (EtlEntry) -> TerminalEtlDefinition<*, *>> =
+    mapOf(
+        "CampflareCampsitesEtl" to { _ -> campsiteSink(CampflareCampsitesEtl()) },
+        "RecGovCampsitesEtl" to { entry -> campsiteSink(RecGovCampsitesEtl(entry.slug)) },
+        "AspiraCampsitesEtl" to { entry ->
             campsiteSink(
                 AspiraCampsitesEtl(
                     etlSlug = entry.slug,
@@ -83,16 +89,27 @@ private fun createCampsiteTerminal(entry: EtlEntry): TerminalEtlDefinition<*, *>
                             ?.let { DataProvider.fromId(it) } ?: DataProvider.ASPIRA,
                 ),
             )
-        "ReserveAmericaSitesEtl" ->
+        },
+        "ReserveAmericaSitesEtl" to { entry ->
             campsiteSink(
                 ReserveAmericaSitesEtl(
                     etlSlug = entry.slug,
                     contractCode = entry.args.require("contract"),
                 ),
             )
-        "ReserveCaliforniaSitesEtl" -> campsiteSink(ReserveCaliforniaSitesEtl(entry.slug))
-        else -> error("Unknown campsite_data adapter: ${entry.adapter} (slug=${entry.slug})")
-    }
+        },
+        "ReserveCaliforniaSitesEtl" to { entry -> campsiteSink(ReserveCaliforniaSitesEtl(entry.slug)) },
+    )
+
+internal fun dataProviderForAdapter(adapter: String): DataProvider? = poiAdapters[adapter]?.dataProvider
+
+private fun createPoiTerminal(entry: EtlEntry): TerminalEtlDefinition<*, *> =
+    poiAdapters[entry.adapter]?.create?.invoke(entry)
+        ?: error("Unknown poi_data adapter: ${entry.adapter} (slug=${entry.slug})")
+
+private fun createCampsiteTerminal(entry: EtlEntry): TerminalEtlDefinition<*, *> =
+    campsiteAdapters[entry.adapter]?.invoke(entry)
+        ?: error("Unknown campsite_data adapter: ${entry.adapter} (slug=${entry.slug})")
 
 private fun Map<String, String>.require(key: String): String = this[key] ?: error("Missing required ETL arg '$key'")
 

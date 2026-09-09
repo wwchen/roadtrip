@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityErrorDto
@@ -100,7 +101,7 @@ class RecGovAvailabilityProvider(
                 observations = observationsFromCampsites(merged, dates, observedAtByDate),
                 seasonBlock = inferReopenDate(merged, startDate),
                 cacheBlock = directFetchCacheBlock(),
-                campgroundId = recgovId,
+                scope = BookingProviderRef.RecGov(facilityId = recgovId),
             )
         }
 
@@ -130,16 +131,13 @@ class RecGovAvailabilityProvider(
                 observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, campsiteIdByVendorId),
                 seasonBlock = inferReopenDate(catalogSites, startDate),
                 cacheBlock = directFetchCacheBlock(),
-                campgroundId = recgovId,
+                scope = BookingProviderRef.RecGov(facilityId = recgovId),
             )
         }
 
-    private fun recgovIdOrThrow(campground: Campground): String {
-        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull)
-        val ref = provider?.let { campground.bookingProviderRef?.let { r -> BookingProviderRef.parse(it, r) } }
-        return (ref as? BookingProviderRef.RecGov)?.facilityId
+    private fun recgovIdOrThrow(campground: Campground): String =
+        (campground.bookingRef() as? BookingProviderRef.RecGov)?.facilityId
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
-    }
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
         mapUpstreamErrors(
@@ -240,8 +238,8 @@ private fun classifyRecgovStatus(raw: String?): AvailabilityStatus {
         status.equals("Available", true) || status.equals("Open", true) -> AvailabilityStatus.AVAILABLE
         status.equals("Not Reservable", true) -> AvailabilityStatus.FIRST_COME
         status.equals("Closed", true) -> AvailabilityStatus.CLOSED
-        status.equals("Reserved", true) -> AvailabilityStatus.RESERVED
-        else -> AvailabilityStatus.RESERVED
+        status.equals("Reserved", true) || status.equals("Not Available", true) -> AvailabilityStatus.RESERVED
+        else -> AvailabilityStatus.UNKNOWN
     }
 }
 

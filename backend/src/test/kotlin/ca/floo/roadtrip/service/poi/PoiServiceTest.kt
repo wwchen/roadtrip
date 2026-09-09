@@ -1,10 +1,12 @@
 package ca.floo.roadtrip.service.poi
 
+import ca.floo.roadtrip.model.api.BookingRefDto
 import ca.floo.roadtrip.model.api.poi.PoiCategoryDetailSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiRepo
@@ -31,41 +33,55 @@ class PoiServiceTest : SharedDbTest() {
 
     @Test
     fun `detail row surfaces primary campground vendor ref`() {
-        val poiId =
-            seedPoi(
-                providerRefJson = """{"transactionLocationId":-2147483647,"mapId":-2147483026,"resourceLocationId":-2147483640}""",
-                propertiesJson = """{"upstream":{"booking_cta_provider_ref":null}}""",
-            )
+        val poiId = seedPoi()
 
         val feature = poiService().poiDetail(poiId)
         val row = campgroundDetailRow(poiId)
 
         assertNotNull(feature)
-        val publicRef = feature.campgroundDetail().providerRef!!.jsonObject
-        assertEquals("-2147483026", publicRef["mapId"]!!.jsonPrimitive.content)
-        assertEquals("-2147483647", publicRef["transactionLocationId"]!!.jsonPrimitive.content)
-        assertEquals("-2147483640", publicRef["resourceLocationId"]!!.jsonPrimitive.content)
-        assertNull(row.ctaProviderRefJson)
+        val ref = feature.campgroundDetail().bookingRef!!
+        assertEquals("aspira", ref.provider)
+        assertEquals("pc:-2147483647:-2147483026:-2147483640", ref.ref)
+        assertEquals(aspiraBookingRef, row.bookingRef)
     }
 
     @Test
-    fun `detail row ignores old materialized Aspira CTA ref from source payload`() {
+    fun `detail row ignores a stale CTA ref left in the source payload`() {
         val poiId =
             seedPoi(
-                providerRefJson = """{"transactionLocationId":-2147483647,"mapId":-2147483026,"resourceLocationId":-2147483640}""",
-                propertiesJson =
+                sourcePayloadJson =
                     """
-                    {"upstream":{"booking_cta_provider_ref":{
+                    {"booking_cta_provider_ref":{
                       "transactionLocationId":-2147483647,
                       "mapId":-2147483645,
                       "resourceLocationId":-2147483640
-                    }}}
+                    }}
                     """.trimIndent(),
             )
 
         val row = campgroundDetailRow(poiId)
 
-        assertNull(row.ctaProviderRefJson)
+        assertEquals(aspiraBookingRef, row.bookingRef)
+    }
+
+    @Test
+    fun `a booking provider without a ref does not advertise availability support`() {
+        val poiId =
+            ctx
+                .seedCatalogPoi(
+                    sourceId = "-2147483647:-2147483027",
+                    name = "Refless Campground",
+                    lon = -116.19,
+                    lat = 51.43,
+                    source = SOURCE,
+                    bookingProvider = SOURCE,
+                    bookingProviderRef = null,
+                ).poiId
+
+        val detail = poiService().poiDetail(poiId)!!.campgroundDetail()
+
+        assertNull(detail.bookingRef)
+        assertNull(detail.availabilitySupported)
     }
 
     @Test
@@ -128,8 +144,7 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals("232869", feature.properties.sourceId)
         val detail = feature.campgroundDetail()
         assertEquals("https://www.recreation.gov/camping/campgrounds/232869", detail.reserveUrl)
-        val publicRef = detail.providerRef!!.jsonObject
-        assertEquals("232869", publicRef["recgov_id"]!!.jsonPrimitive.content)
+        assertEquals(BookingRefDto("recgov", "232869"), detail.bookingRef)
         assertEquals(listOf("recgov"), detail.sources)
     }
 
@@ -148,11 +163,7 @@ class PoiServiceTest : SharedDbTest() {
             )
 
         val row = campgroundDetailRow(fixture.poiId)
-        val publicRef =
-            Json
-                .parseToJsonElement(row.providerRefJson!!)
-                .jsonObject
-        assertEquals("upper-pines-campground-447", publicRef["campflare_id"]!!.jsonPrimitive.content)
+        assertEquals(BookingProviderRef.Campflare(campgroundId = "upper-pines-campground-447"), row.bookingRef)
     }
 
     @Test
@@ -625,10 +636,7 @@ class PoiServiceTest : SharedDbTest() {
             .get("poi_id", Long::class.java)
     }
 
-    private fun seedPoi(
-        providerRefJson: String,
-        propertiesJson: String = "{}",
-    ): Long =
+    private fun seedPoi(sourcePayloadJson: String = "{}"): Long =
         ctx
             .seedCatalogPoi(
                 sourceId = "-2147483647:-2147483026",
@@ -640,8 +648,7 @@ class PoiServiceTest : SharedDbTest() {
                 agency = "Parks Canada",
                 region = "AB",
                 country = "CA",
-                providerRefJson = providerRefJson,
-                propertiesJson = propertiesJson,
+                propertiesJson = sourcePayloadJson,
                 bookingProvider = SOURCE,
                 bookingProviderRef = "pc:-2147483647:-2147483026:-2147483640",
             ).poiId
@@ -670,5 +677,12 @@ class PoiServiceTest : SharedDbTest() {
         const val SOURCE = "aspira"
         const val GYM_LOCATION_ID = "node-448794721"
         val vancouverBbox = Bbox(west = -125.0, south = 47.0, east = -120.0, north = 51.0)
+        val aspiraBookingRef =
+            BookingProviderRef.Aspira(
+                tenant = "pc",
+                transactionLocationId = -2147483647,
+                mapId = -2147483026,
+                resourceLocationId = -2147483640,
+            )
     }
 }

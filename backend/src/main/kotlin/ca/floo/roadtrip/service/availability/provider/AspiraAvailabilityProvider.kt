@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -52,8 +53,7 @@ class AspiraAvailabilityProvider(
     override fun isEnabled(): Boolean = enabled
 
     override fun supportsCampground(campground: Campground): Boolean {
-        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return false
-        val ref = campground.bookingProviderRef?.let { BookingProviderRef.parse(provider, it) } ?: return false
+        val ref = campground.bookingRef() ?: return false
         return isEnabled() && ref is BookingProviderRef.Aspira && ref.tenant in tenants
     }
 
@@ -64,11 +64,10 @@ class AspiraAvailabilityProvider(
     ): AvailabilityObservationBatch {
         val aspiraRef = aspiraRefOrThrow(campground)
         val tenant = tenantForRef(aspiraRef)
-        val mapId = mapIdOrThrow(aspiraRef.mapId)
         return runWithErrorMapping {
             fetchAvailability(
+                scope = aspiraRef,
                 host = tenant.host,
-                mapId = mapId,
                 startDate = startDate,
                 endDate = endDate,
                 campsiteVendor = tenant.vendorCode,
@@ -123,8 +122,8 @@ class AspiraAvailabilityProvider(
         return runWithErrorMapping {
             if (occupancyEnabled && resourceLocationId != null) {
                 fetchCatalogOccupancy(
+                    scope = aspiraRef,
                     host = tenant.host,
-                    parentMapId = parentMapId,
                     resourceLocationId = resourceLocationId,
                     campsites = targets,
                     today = startDate,
@@ -132,8 +131,8 @@ class AspiraAvailabilityProvider(
                 )
             } else {
                 fetchCatalog(
+                    scope = aspiraRef,
                     host = tenant.host,
-                    parentMapId = parentMapId,
                     campsites = targets,
                     startDate = startDate,
                     endDate = endDate,
@@ -162,29 +161,28 @@ class AspiraAvailabilityProvider(
     }
 
     private suspend fun fetchAvailability(
+        scope: BookingProviderRef.Aspira,
         host: String,
-        mapId: Int,
         startDate: LocalDate,
         endDate: LocalDate,
         campsiteVendor: String? = null,
     ): AvailabilityObservationBatch {
         val days = daysBetween(startDate, endDate)
         val observedAt = Instant.now()
-        val data = availabilityClient.fetch(host, mapId, startDate, endDate.minusDays(1))
+        val data = availabilityClient.fetch(host, mapIdOrThrow(scope.mapId), startDate, endDate.minusDays(1))
         return AvailabilityObservationBatch(
             provider = "aspira",
             startDate = startDate,
             endDate = endDate,
             observations = observationsFromAvailability(data, startDate, days, observedAt, campsiteVendor),
             cacheBlock = directFetchCacheBlock(),
-            host = host,
-            mapId = mapId.toString(),
+            scope = scope,
         )
     }
 
     private suspend fun fetchCatalog(
+        scope: BookingProviderRef.Aspira,
         host: String,
-        parentMapId: Int,
         campsites: List<AspiraCatalogCampsite>,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -195,8 +193,8 @@ class AspiraAvailabilityProvider(
                 .distinctBy { it.campsiteId }
         if (targets.isEmpty()) {
             return fetchAvailability(
+                scope = scope,
                 host = host,
-                mapId = parentMapId,
                 startDate = startDate,
                 endDate = endDate,
             )
@@ -222,14 +220,13 @@ class AspiraAvailabilityProvider(
             endDate = endDate,
             observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days),
             cacheBlock = directFetchCacheBlock(),
-            host = host,
-            mapId = parentMapId.toString(),
+            scope = scope,
         )
     }
 
     private suspend fun fetchCatalogOccupancy(
+        scope: BookingProviderRef.Aspira,
         host: String,
-        parentMapId: Int,
         resourceLocationId: Int,
         campsites: List<AspiraCatalogCampsite>,
         today: LocalDate,
@@ -245,8 +242,7 @@ class AspiraAvailabilityProvider(
                 endDate = today.plusDays(days.toLong()),
                 observations = emptyList(),
                 cacheBlock = directFetchCacheBlock(),
-                host = host,
-                mapId = parentMapId.toString(),
+                scope = scope,
             )
         }
 
@@ -263,8 +259,7 @@ class AspiraAvailabilityProvider(
             endDate = today.plusDays(days.toLong()),
             observations = observations,
             cacheBlock = directFetchCacheBlock(),
-            host = host,
-            mapId = parentMapId.toString(),
+            scope = scope,
         )
     }
 
@@ -278,12 +273,9 @@ class AspiraAvailabilityProvider(
 
     private fun mapIdOrThrow(mapId: Long): Int = intOrThrow("mapId", mapId)
 
-    private fun aspiraRefOrThrow(campground: Campground): BookingProviderRef.Aspira {
-        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull)
-        val ref = provider?.let { campground.bookingProviderRef?.let { r -> BookingProviderRef.parse(it, r) } }
-        return (ref as? BookingProviderRef.Aspira)
+    private fun aspiraRefOrThrow(campground: Campground): BookingProviderRef.Aspira =
+        (campground.bookingRef() as? BookingProviderRef.Aspira)
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
-    }
 
     private fun intOrThrow(
         label: String,

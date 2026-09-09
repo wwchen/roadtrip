@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.config.ApiCacheConfig
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
@@ -11,6 +12,7 @@ import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
@@ -35,6 +37,10 @@ import kotlin.test.assertSame
 private val earliestBookable: LocalDate = LocalDate.of(2026, 8, 1)
 private const val DEFAULT_WINDOW_DAYS = 7L
 private const val WIDE_WINDOW_DAYS = 60L
+private val aspiraTtlOverride: Duration = Duration.ofMinutes(15)
+
+// Wide enough that any row this suite writes counts as fresh, forcing the cache path.
+private val alwaysFreshTtl: Duration = Duration.ofDays(3650)
 
 class CampsiteAvailabilityServiceTest : SharedDbTest() {
     private lateinit var campground: Campground
@@ -65,14 +71,45 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
         fetcher: FailoverAvailabilityFetcher = CapturingFetcher(),
         clock: Clock = Clock.systemUTC(),
         snapshotFreshnessTtl: (AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
+        availabilityRepo: AvailabilityRepo? = null,
     ) = CampsiteAvailabilityService(
         availabilityProviders = providers,
         dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
         failoverFetcher = fetcher,
-        availabilityRepo = null,
+        availabilityRepo = availabilityRepo,
         clock = clock,
         snapshotFreshnessTtl = snapshotFreshnessTtl,
     )
+
+    @Test
+    fun `a cache hit still carries the provider's parent ref as scope`() {
+        val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
+        val svc =
+            service(
+                providers = listOf(recgov),
+                snapshotFreshnessTtl = { alwaysFreshTtl },
+                availabilityRepo = AvailabilityRepo(ctx),
+            )
+        val fetch =
+            suspend {
+                svc.fetchAvailability(
+                    campground = campground,
+                    campsites = campsites,
+                    startDate = null,
+                    endDate = null,
+                    dateContext = dateContext(),
+                )
+            }
+
+        val result =
+            runBlocking {
+                fetch()
+                fetch()
+            }
+
+        assertEquals(true, result.batch.cacheBlock.hit)
+        assertEquals(recgov.parentRefFor(campground), result.batch.scope)
+    }
 
     @Test
     fun `dispatches to the first provider that supports the campground`() {
@@ -206,17 +243,28 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
     }
 
     @Test
-    fun `default snapshot freshness TTL maps each provider to its cache entity TTL`() {
-        assertEquals(ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl, defaultSnapshotFreshnessTtl(BookingProvider.RECGOV))
-        assertEquals(ApiCacheEntity.CAMPFLARE_AVAILABILITY.defaultTtl, defaultSnapshotFreshnessTtl(BookingProvider.CAMPFLARE))
-        assertEquals(ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl, defaultSnapshotFreshnessTtl(BookingProvider.ASPIRA))
+    fun `default snapshot freshness TTL is the provider's cache entity default`() {
+        for (provider in BookingProvider.entries) {
+            assertEquals(
+                ApiCacheEntity.availability(provider).defaultTtl,
+                defaultSnapshotFreshnessTtl(provider),
+                provider.id,
+            )
+        }
+    }
+
+    @Test
+    fun `configured snapshot freshness TTL reads the per-provider cache override`() {
+        val cache =
+            ApiCacheConfig(
+                ttlByEntity = mapOf(ApiCacheEntity.availability(BookingProvider.ASPIRA) to aspiraTtlOverride),
+            )
+        val snapshotFreshnessTtl = configuredSnapshotFreshnessTtl(cache)
+
+        assertEquals(aspiraTtlOverride, snapshotFreshnessTtl(FakeAvailabilityProvider(BookingProvider.ASPIRA)))
         assertEquals(
-            ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl,
-            defaultSnapshotFreshnessTtl(BookingProvider.RESERVEAMERICA),
-        )
-        assertEquals(
-            ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl,
-            defaultSnapshotFreshnessTtl(BookingProvider.RESERVECALIFORNIA),
+            ApiCacheEntity.availability(BookingProvider.RECGOV).defaultTtl,
+            snapshotFreshnessTtl(FakeAvailabilityProvider(BookingProvider.RECGOV)),
         )
     }
 

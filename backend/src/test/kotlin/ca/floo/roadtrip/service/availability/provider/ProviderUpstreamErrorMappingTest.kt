@@ -125,6 +125,7 @@ class ProviderUpstreamErrorMappingTest {
             CampflareAvailabilityProvider(
                 CampflareAvailabilityClient { _, _, _ -> throw CampflareException(message, httpStatus = httpStatus) },
                 enabled = true,
+                configured = true,
             )
         assertThrown(expected) {
             adapter.availability(

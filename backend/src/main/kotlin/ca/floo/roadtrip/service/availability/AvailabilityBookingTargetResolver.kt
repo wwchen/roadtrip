@@ -2,10 +2,9 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 
 /**
@@ -77,16 +76,10 @@ internal class AvailabilityBookingTargetResolver(
         action: BookingAction,
         resolved: ResolvedAvailabilityTarget,
     ): BookingTarget? {
-        val ref = resolved.campground.declaredBookingRef() ?: return null
+        val ref = resolved.campground.bookingRef() ?: return null
         val vendorSiteId = resolved.campsite.bookingRefFor(ref.provider) ?: return null
         return bookings.targetFor(action, ref, resolved.campsite.id, vendorSiteId)
     }
-}
-
-/** The typed booking ref a campground row declares, if any. */
-internal fun Campground.declaredBookingRef(): BookingProviderRef? {
-    val provider = bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
-    return bookingProviderRef?.let { BookingProviderRef.parse(provider, it) }
 }
 
 /** This campsite's id *on [provider]*, when it declares one. */

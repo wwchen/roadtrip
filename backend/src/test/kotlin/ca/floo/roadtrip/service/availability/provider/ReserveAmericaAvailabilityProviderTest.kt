@@ -5,6 +5,7 @@ import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
@@ -69,7 +70,7 @@ class ReserveAmericaAvailabilityProviderTest {
             assertEquals(BookingProvider.RESERVEAMERICA, adapter.id)
             assertEquals(false, adapter.capabilities.supportsInternalPolling)
             assertEquals("reserveamerica", batch.provider)
-            assertEquals("489", batch.campgroundId)
+            assertEquals(BookingProviderRef.ReserveAmerica(contractCode = "NY", parkId = "489"), batch.scope)
             assertEquals(2, batch.observations.size)
             assertEquals(
                 listOf(AvailabilityStatus.RESERVED, AvailabilityStatus.AVAILABLE),

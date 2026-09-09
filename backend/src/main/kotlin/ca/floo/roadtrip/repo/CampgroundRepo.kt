@@ -4,11 +4,9 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.CampgroundColumnJson
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
+import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
 import ca.floo.roadtrip.model.domain.poi.PoiGeometryUpdate
-import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRefLegacyJson
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import org.jooq.DSLContext
@@ -82,8 +80,6 @@ class CampgroundRepo(
                   $baseSelectColumns,
                   cg.data_provider AS detail_source,
                   cg.data_provider_ref AS detail_source_id,
-                  NULLIF(cg.source_payload->'booking_cta_provider_ref', 'null'::jsonb)::text
-                    AS cta_provider_ref_text,
                   COALESCE(cg.source_payload::text, '{}') AS properties_text,
                   ARRAY[cg.data_provider]::TEXT[] AS member_sources
                 FROM poi_campgrounds pc
@@ -102,8 +98,7 @@ class CampgroundRepo(
             campground = campground,
             source = record.get("detail_source", String::class.java),
             sourceId = record.get("detail_source_id", String::class.java),
-            providerRefJson = bookingProviderRefJson(campground),
-            ctaProviderRefJson = record.get("cta_provider_ref_text", String::class.java),
+            bookingRef = campground.bookingRef(),
             propertiesJson = record.get("properties_text", String::class.java),
             memberSources = memberSourcesOf(record.get("member_sources")),
         )
@@ -182,12 +177,6 @@ class CampgroundRepo(
             bookingProvider = record.get("booking_provider", String::class.java),
             bookingProviderRef = record.get("booking_provider_ref", String::class.java),
         )
-    }
-
-    private fun bookingProviderRefJson(campground: Campground): String? {
-        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
-        val ref = BookingProviderRef.parse(provider, campground.bookingProviderRef ?: return null) ?: return null
-        return BookingProviderRefLegacyJson.toLegacyJson(ref)
     }
 
     private fun addInClause(

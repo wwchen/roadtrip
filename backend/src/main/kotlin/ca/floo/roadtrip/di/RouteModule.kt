@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.client.oidc.OidcClient
+import ca.floo.roadtrip.config.ApiCacheConfig
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -57,6 +58,7 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.configuredSnapshotFreshnessTtl
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingActionService
 import ca.floo.roadtrip.service.etl.framework.IngestController
@@ -130,6 +132,7 @@ internal fun Application.registerKoinRoutes() {
                 dateResolver = dateResolver,
                 failoverFetcher = failoverFetcher,
                 watchCapabilities = watchCapabilities,
+                cacheConfig = config.cache,
             )
         campsiteRoutes(campsiteController)
         bulkAvailabilityRoutes(
@@ -190,6 +193,7 @@ private fun campsiteAvailabilityController(
     dateResolver: AvailabilityDateResolver,
     failoverFetcher: FailoverAvailabilityFetcher,
     watchCapabilities: WatchCapabilityService,
+    cacheConfig: ApiCacheConfig,
 ): CampsiteAvailabilityController {
     val campsitesRepo = CampsiteRepo(ctx)
     val campgroundRepo = CampgroundRepo(ctx)
@@ -212,6 +216,7 @@ private fun campsiteAvailabilityController(
                 dateResolver = dateResolver,
                 failoverFetcher = failoverFetcher,
                 availabilityRepo = AvailabilityRepo(ctx),
+                snapshotFreshnessTtl = configuredSnapshotFreshnessTtl(cacheConfig),
             ),
         dateResolver = dateResolver,
         watchCapabilityService = watchCapabilities,

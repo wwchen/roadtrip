@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.config.ApiCacheConfig
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
@@ -67,7 +68,11 @@ internal class CampsiteAvailabilityService(
         val batch =
             availabilityLoader.loadOrFetch(
                 AvailabilityLoader.Request(
-                    metadata = AvailabilityLoader.Metadata(provider = provider.id.id),
+                    metadata =
+                        AvailabilityLoader.Metadata(
+                            provider = provider.id.id,
+                            scope = provider.parentRefFor(campground),
+                        ),
                     targets = campsites.map { AvailabilityLoader.CampsiteTarget(dbId = it.id) },
                     startDate = windows.target.startDate,
                     endDate = windows.target.endDate,
@@ -96,11 +101,7 @@ internal class CampsiteAvailabilityService(
             ?: throw AvailabilityServiceError.UnknownCampground
 }
 
-internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration =
-    when (providerId) {
-        BookingProvider.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
-        BookingProvider.CAMPFLARE -> ApiCacheEntity.CAMPFLARE_AVAILABILITY.defaultTtl
-        BookingProvider.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
-        BookingProvider.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
-        BookingProvider.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
-    }
+internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration = ApiCacheEntity.availability(providerId).defaultTtl
+
+internal fun configuredSnapshotFreshnessTtl(cache: ApiCacheConfig): (AvailabilityProvider) -> Duration =
+    { provider -> cache.availabilityTtl(provider.id) }

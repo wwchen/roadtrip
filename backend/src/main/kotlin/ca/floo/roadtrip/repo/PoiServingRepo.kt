@@ -69,21 +69,8 @@ internal class PoiServingRepo(
                 agency,
                 ST_X(ST_Centroid(geom)) AS lng,
                 ST_Y(ST_Centroid(geom)) AS lat,
-                CASE
-                  WHEN category = 'campground' AND NULLIF(provider_ref ->> 'recgov_id', '') IS NOT NULL
-                    THEN 'recgov:' || (provider_ref ->> 'recgov_id')
-                  WHEN category = 'campground'
-                    AND NULLIF(provider_ref ->> 'transactionLocationId', '') IS NOT NULL
-                    AND NULLIF(provider_ref ->> 'mapId', '') IS NOT NULL
-                    THEN 'aspira:' || source || ':' ||
-                      (provider_ref ->> 'transactionLocationId') || ':' ||
-                      (provider_ref ->> 'mapId')
-                  WHEN category = 'campground' AND NULLIF(provider_ref ->> 'park_id', '') IS NOT NULL
-                    THEN 'reserveamerica:' || source || ':' || (provider_ref ->> 'park_id')
-                  WHEN category = 'campground' AND NULLIF(provider_ref ->> 'facility_id', '') IS NOT NULL
-                    THEN 'reserveamerica:' || source || ':' || (provider_ref ->> 'facility_id')
-                  ELSE source || ':' || source_id
-                END AS poi_key
+                source,
+                COALESCE(booking_provider || ':' || booking_provider_ref, source || ':' || source_id) AS poi_key
               FROM (
                 SELECT
                   p.id,
@@ -93,7 +80,8 @@ internal class PoiServingRepo(
                   cg.management->>'agency' AS agency,
                   COALESCE(cg.data_provider, p.poi_type) AS source,
                   COALESCE(cg.data_provider_ref, ts.location_slug, pf.location_id, p.id::text) AS source_id,
-                  COALESCE(cg.source_payload, '{}'::jsonb) AS provider_ref
+                  cg.booking_provider,
+                  cg.booking_provider_ref
                 FROM pois p
                 LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
                 LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL
@@ -109,12 +97,13 @@ internal class PoiServingRepo(
             ),
             ranked AS (
               SELECT *,
-                     ROW_NUMBER() OVER (PARTITION BY poi_key ORDER BY id ASC) AS rn
+                     ROW_NUMBER() OVER (PARTITION BY poi_key ORDER BY id ASC) AS rn,
+                     FIRST_VALUE(source) OVER (PARTITION BY poi_key ORDER BY id ASC) AS first_source
               FROM candidates
             )
             SELECT id, category, subcategory, agency, lng, lat
             FROM ranked
-            WHERE rn = 1
+            WHERE rn = 1 OR source = first_source
             ORDER BY id ASC
             """.trimIndent()
         val args = mutableListOf<Any>()

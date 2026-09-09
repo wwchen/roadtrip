@@ -32,23 +32,27 @@ import kotlin.test.assertNull
 
 private const val TEST_POI_ID = 1L
 
+/** Offsets from the resolver's own earliest bookable date, so the window never goes stale. */
+private const val WINDOW_START_OFFSET_DAYS = 1L
+private const val WINDOW_LENGTH_DAYS = 7L
+
 class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
     @Test
     fun `slice carries the resolved window and the filtered campsites`() {
-        val controller = sliceTestController(siteTypes = listOf("tent", "rv"))
+        val fixture = sliceTestController(siteTypes = listOf("tent", "rv"))
 
         val slice =
             runBlocking {
-                controller.poiAvailabilitySlice(
+                fixture.controller.poiAvailabilitySlice(
                     poiId = TEST_POI_ID,
                     siteTypes = listOf("tent"),
-                    startDate = LocalDate.of(2026, 9, 4),
-                    endDate = LocalDate.of(2026, 9, 11),
+                    startDate = fixture.startDate,
+                    endDate = fixture.endDate,
                 )
             }
 
-        assertEquals(LocalDate.of(2026, 9, 4), slice.startDate)
-        assertEquals(LocalDate.of(2026, 9, 11), slice.endDate)
+        assertEquals(fixture.startDate, slice.startDate)
+        assertEquals(fixture.endDate, slice.endDate)
         assertEquals(2, slice.allCampsites.size)
         assertEquals(1, slice.campsites.size)
         assertNotNull(slice.batch)
@@ -56,15 +60,15 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
 
     @Test
     fun `slice has a null batch when no campsite matches the site type filter`() {
-        val controller = sliceTestController(siteTypes = listOf("tent"))
+        val fixture = sliceTestController(siteTypes = listOf("tent"))
 
         val slice =
             runBlocking {
-                controller.poiAvailabilitySlice(
+                fixture.controller.poiAvailabilitySlice(
                     poiId = TEST_POI_ID,
                     siteTypes = listOf("cabin"),
-                    startDate = LocalDate.of(2026, 9, 4),
-                    endDate = LocalDate.of(2026, 9, 11),
+                    startDate = fixture.startDate,
+                    endDate = fixture.endDate,
                 )
             }
 
@@ -82,7 +86,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
      * with real implementations since `poiAvailabilitySlice` never exercises
      * them but the controller's constructor still requires them.
      */
-    private fun sliceTestController(siteTypes: List<String>): CampsiteAvailabilityController {
+    private fun sliceTestController(siteTypes: List<String>): SliceFixture {
         ctx.cleanCanonicalCatalogFixtures()
         val fixture =
             ctx.seedCatalogPoi(
@@ -112,26 +116,35 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
 
-        return CampsiteAvailabilityController(
-            campgroundRepo = campgroundRepo,
-            campsitesRepo = campsitesRepo,
-            catalogService = CampsiteCatalogService(DbRefResolver(RefLinkRepo(ctx)), campsitesRepo, targets),
-            availabilityService =
-                CampsiteAvailabilityService(
-                    availabilityProviders = providers,
-                    dateResolver = dateResolver,
-                    failoverFetcher = CannedBatchFetcher(),
-                    availabilityRepo = null,
-                ),
-            dateResolver = dateResolver,
-            watchCapabilityService =
-                WatchCapabilityService(
-                    availabilityTargets = targets,
-                    bookingTargets = AvailabilityBookingTargetResolver(BookingAdapterRegistry(emptyList())),
-                ),
-        )
+        val controller =
+            CampsiteAvailabilityController(
+                campgroundRepo = campgroundRepo,
+                campsitesRepo = campsitesRepo,
+                catalogService = CampsiteCatalogService(DbRefResolver(RefLinkRepo(ctx)), campsitesRepo, targets),
+                availabilityService =
+                    CampsiteAvailabilityService(
+                        availabilityProviders = providers,
+                        dateResolver = dateResolver,
+                        failoverFetcher = CannedBatchFetcher(),
+                        availabilityRepo = null,
+                    ),
+                dateResolver = dateResolver,
+                watchCapabilityService =
+                    WatchCapabilityService(
+                        availabilityTargets = targets,
+                        bookingTargets = AvailabilityBookingTargetResolver(BookingAdapterRegistry(emptyList())),
+                    ),
+            )
+        val start = dateResolver.contextForPoi(TEST_POI_ID).earliestDate.plusDays(WINDOW_START_OFFSET_DAYS)
+        return SliceFixture(controller = controller, startDate = start, endDate = start.plusDays(WINDOW_LENGTH_DAYS))
     }
 }
+
+private data class SliceFixture(
+    val controller: CampsiteAvailabilityController,
+    val startDate: LocalDate,
+    val endDate: LocalDate,
+)
 
 /**
  * Failover fetcher stub: skips the real upstream call and answers every

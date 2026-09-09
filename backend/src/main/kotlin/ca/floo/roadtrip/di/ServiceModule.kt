@@ -6,7 +6,6 @@ import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.config.ReadPathProviderConfig
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
@@ -58,6 +57,7 @@ import ca.floo.roadtrip.service.booking.BookingActionService
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
 import ca.floo.roadtrip.service.booking.RecentAtcFires
+import ca.floo.roadtrip.service.etl.framework.dataProviderForAdapter
 import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.health.ReadinessServiceImpl
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
@@ -169,6 +169,7 @@ val serviceModule =
                 CampflareAvailabilityProvider(
                     availabilityClient = get(),
                     enabled = config.isProviderEnabled(BookingProvider.CAMPFLARE),
+                    configured = !config.campflare.apiKey.isNullOrBlank(),
                 ),
                 ReserveCaliforniaAvailabilityProvider(
                     availabilityClient = get(),
@@ -438,9 +439,7 @@ fun slackInteractivityModule(signingSecret: String) =
         }
     }
 
-private fun AppConfig.isProviderEnabled(id: ca.floo.roadtrip.model.domain.provider.BookingProvider): Boolean =
-    readPathProviders.isAvailabilityProviderEnabled(id.id) &&
-        (id != ca.floo.roadtrip.model.domain.provider.BookingProvider.CAMPFLARE || !campflare.apiKey.isNullOrBlank())
+private fun AppConfig.isProviderEnabled(id: BookingProvider): Boolean = readPathProviders.isAvailabilityProviderEnabled(id.id)
 
 internal fun notificationTriggerKinds(emailConfigured: Boolean): List<String> =
     buildList {
@@ -466,15 +465,12 @@ private fun supportedReadPathDataProviders(registry: PoiRegistry): Set<String> =
     registry.poiData
         .mapNotNull { row -> row.etls.lastOrNull()?.slug }
         .toSet() +
-        canonicalCampgroundSourceKeys(registry) +
+        catalogDataProviderKeys(registry) +
         defaultPoiTypes.filter { it != CampgroundService.POI_TYPE }
 
-private fun canonicalCampgroundSourceKeys(registry: PoiRegistry): Set<String> =
-    buildSet {
-        if (registry.campflareSources().isNotEmpty()) add(DataProvider.CAMPFLARE.id)
-        if (registry.recgovSources().isNotEmpty()) add(DataProvider.RECGOV.id)
-        if (registry.hostBySource().any { (_, host) -> AspiraTenants.byHost(host) != null }) add(DataProvider.ASPIRA.id)
-        if (registry.bcParksSources().isNotEmpty()) add(DataProvider.STRAPI.id)
-        if (registry.reserveAmericaSources().isNotEmpty()) add(DataProvider.RESERVEAMERICA.id)
-        if (registry.reserveCaliforniaSources().isNotEmpty()) add(DataProvider.RESERVECALIFORNIA.id)
-    }
+private fun catalogDataProviderKeys(registry: PoiRegistry): Set<String> =
+    registry.poiData
+        .mapNotNull { row -> row.etls.lastOrNull()?.adapter }
+        .mapNotNull(::dataProviderForAdapter)
+        .map { it.id }
+        .toSet()

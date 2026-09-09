@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route
 
+import ca.floo.roadtrip.model.api.BookingRefDto
 import ca.floo.roadtrip.model.api.poi.PoiCategoryDetailSchema
 import ca.floo.roadtrip.model.api.poi.PoiCtaSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
@@ -222,7 +223,7 @@ class FeatureCollectionContractTest {
                         PoiCategoryDetailSchema(
                             infoUrl =
                                 "https://newyorkstateparks.reserveamerica.com/camping/x/r/campgroundDetails.do?contractCode=NY&parkId=117",
-                            providerRef = json("""{"contract_code":"NY","park_id":"117"}"""),
+                            bookingRef = BookingRefDto(provider = "reserveamerica", ref = "NY:117"),
                             availabilitySupported = true,
                             raw = json("""{}"""),
                         ),

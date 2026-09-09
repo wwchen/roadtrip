@@ -575,7 +575,7 @@ class SmokeTest {
                                   "kind": "reserve"
                                 }
                               ],
-                              "provider_ref": { "place_id": 629, "facility_ids": [889] },
+                              "booking_ref": { "provider": "reservecalifornia", "ref": "629:889" },
                               "raw": {
                                 "amenities": ["Restrooms", "Showers"],
                                 "activities": ["Fishing", "Hiking"],

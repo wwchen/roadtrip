@@ -130,7 +130,7 @@ class AspiraObservationsTest {
                     ),
                 )
 
-            assertEquals((-999).toString(), dto.mapId)
+            assertEquals("wa:-999:-999:null", dto.scopeRef)
             assertEquals(listOf(1L, 3L), dto.availability[0].availableCampsiteIds)
             assertEquals(4, dto.availability[0].campsiteStatuses!!.size)
             assertEquals(4, dto.availability[1].campsiteStatuses!!.size)

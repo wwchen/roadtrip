@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.availability
 
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import java.time.LocalDate
 
 data class AvailabilityObservationBatch(
@@ -9,8 +10,6 @@ data class AvailabilityObservationBatch(
     val observations: List<CampsiteDayObservation>,
     val cacheBlock: AvailabilityCacheBlock,
     val seasonBlock: AvailabilitySeasonBlock? = null,
-    val campgroundId: String? = null,
-    val host: String? = null,
-    val mapId: String? = null,
+    val scope: BookingProviderRef? = null,
     val campsiteId: Long? = null,
 )

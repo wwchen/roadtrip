@@ -176,7 +176,7 @@ For terminal ETLs that need reservation-provider context (Aspira, RecGov,
 etc.), construct the right `ProviderRef.<Vendor>(...)` payload directly from
 the upstream row and YAML args. Use `ctx.argFor(etlSlug, "host")` or similar
 for per-tenant values. Reservation provider identity is not a table FK; runtime
-dispatch uses `pois.source` plus the `provider_ref` JSON payload.
+dispatch uses the typed `booking_provider` + `booking_provider_ref` columns.
 
 For terminal ETLs that need the FE bucket, use `ctx.subcategoryFor(etlSlug)` to read the value the YAML declared on the owning `poi_data:` row.
 

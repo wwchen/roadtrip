@@ -18,6 +18,7 @@ import ca.floo.roadtrip.model.domain.ingest.IngestRunPhaseRow
 import ca.floo.roadtrip.model.domain.ingest.TargetIngestStatusRow
 import ca.floo.roadtrip.model.metadata.ingest.RunKind
 import ca.floo.roadtrip.model.metadata.ingest.RunOutcome
+import ca.floo.roadtrip.model.metadata.ingest.RunStatus
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
@@ -111,11 +112,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.runOne(
             withContext(NonCancellable) {
                 controller.startRun(target, kind, "admin-api")
             }
-        val status =
-            when (outcome.status) {
-                "completed", "noop" -> HttpStatusCode.OK
-                else -> HttpStatusCode.InternalServerError
-            }
+        val status = if (outcome.status == RunStatus.FAILED) HttpStatusCode.InternalServerError else HttpStatusCode.OK
         call.respondEncodedJson(outcome.toSchema(), status)
     } catch (_: TargetNotFoundException) {
         val known = controller.knownTargets().sorted()
@@ -151,7 +148,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
                 log.info("fan-out [{}/{}] target={} starting", idx + 1, all.size, target)
                 try {
                     val outcome = controller.startRun(target, kind, "admin-api")
-                    if (outcome.status == "failed") anyFailed = true
+                    if (outcome.status == RunStatus.FAILED) anyFailed = true
                     outcomes.add(outcome)
                     val elapsed = (System.currentTimeMillis() - targetStarted) / 1000.0
                     log.info(
@@ -159,7 +156,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
                         idx + 1,
                         all.size,
                         target,
-                        outcome.status,
+                        outcome.status.wire,
                         "%.1f".format(elapsed),
                     )
                 } catch (e: TargetBusyException) {
@@ -170,7 +167,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
                             parentRunId = e.runningRunId,
                             target = e.target,
                             kind = kind,
-                            status = "busy",
+                            status = RunStatus.BUSY,
                             failedPhase = null,
                         ),
                     )
@@ -220,7 +217,7 @@ private fun RunOutcome.toSchema(): RunOutcomeSchema =
         runId = parentRunId,
         target = target,
         kind = kind.rowValue,
-        status = status,
+        status = status.wire,
         failedPhase = failedPhase,
     )
 

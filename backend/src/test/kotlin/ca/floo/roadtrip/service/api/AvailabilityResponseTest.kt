@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.DayClassification
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.route.common.encodeApiJson
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
@@ -46,14 +47,14 @@ class AvailabilityResponseTest {
                     state = "success",
                     seasonBlock = null,
                     cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
-                    campgroundId = "232447",
+                    scopeRef = BookingProviderRef.RecGov(facilityId = "232447").serialize(),
                 ),
             )
         val json = Json.parseToJsonElement(body).jsonObject
         val availabilityDay = json["availability"]!!.jsonArray[0].jsonObject
 
         assertEquals("recgov", json["provider"]!!.jsonPrimitive.content)
-        assertEquals("232447", json["campground_id"]!!.jsonPrimitive.content)
+        assertEquals("232447", json["scope_ref"]!!.jsonPrimitive.content)
         assertEquals(JsonNull, json["season"])
         assertEquals("2026-06-10", json["start_date"]!!.jsonPrimitive.content)
         assertEquals("2026-06-11", json["end_date"]!!.jsonPrimitive.content)
@@ -70,6 +71,34 @@ class AvailabilityResponseTest {
                 .jsonPrimitive.content,
         )
         assertEquals(false, json["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test
+    fun `a batch without a scope serializes with no scope_ref key`() {
+        val body =
+            encodeApiJson(
+                availabilityResponseFromObservations(
+                    AvailabilityObservationBatch(
+                        provider = "recgov",
+                        startDate = LocalDate.parse("2026-06-10"),
+                        endDate = LocalDate.parse("2026-06-11"),
+                        observations =
+                            listOf(
+                                CampsiteDayObservation(
+                                    campsiteId = 100,
+                                    date = LocalDate.parse("2026-06-10"),
+                                    observedAt = Instant.parse("2026-06-01T00:00:00Z"),
+                                    status = AvailabilityStatus.AVAILABLE,
+                                ),
+                            ),
+                        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 60),
+                        scope = null,
+                    ),
+                ),
+            )
+        val json = Json.parseToJsonElement(body).jsonObject
+
+        assertNull(json["scope_ref"])
     }
 
     @Test
@@ -116,12 +145,12 @@ class AvailabilityResponseTest {
                             ),
                         ),
                     cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 3, ttlSeconds = 60),
-                    campgroundId = "232447",
+                    scope = BookingProviderRef.RecGov(facilityId = "232447"),
                 ),
             )
 
         assertEquals("recgov", dto.provider)
-        assertEquals("232447", dto.campgroundId)
+        assertEquals("232447", dto.scopeRef)
         assertEquals("2026-06-10", dto.startDate)
         assertEquals("2026-06-12", dto.endDate)
         assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
@@ -148,11 +177,17 @@ class AvailabilityResponseTest {
                             ),
                         ),
                     cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
-                    host = "reservation.pc.gc.ca",
-                    mapId = "-2147483388",
+                    scope =
+                        BookingProviderRef.Aspira(
+                            tenant = "pc",
+                            transactionLocationId = 4189,
+                            mapId = -2147483388,
+                            resourceLocationId = null,
+                        ),
                 ),
             )
 
+        assertEquals("pc:4189:-2147483388:null", dto.scopeRef)
         assertEquals(2, dto.availability.size)
         assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
         assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[1].status)
