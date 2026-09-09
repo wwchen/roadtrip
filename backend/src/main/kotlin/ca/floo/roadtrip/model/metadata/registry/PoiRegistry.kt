@@ -224,16 +224,6 @@ class PoiRegistry(
         return out
     }
 
-    fun hostBySource(): Map<String, String> {
-        val out = mutableMapOf<String, String>()
-        for (row in poiData) {
-            val terminal = row.etls.lastOrNull() ?: continue
-            val host = terminal.args["host"] ?: continue
-            out[terminal.slug] = host
-        }
-        return out
-    }
-
     /**
      * ReserveAmerica terminal ETL sources with their Active Network tenant
      * config. Unlike Aspira, these tenants are fully config-driven because the
