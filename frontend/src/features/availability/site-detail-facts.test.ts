@@ -105,6 +105,18 @@ describe('feature chips', () => {
     );
   });
 
+  test('a blank attribute name is not a chip even when it has a value', () => {
+    expect(
+      featureLabels({
+        attributes: [
+          { name: '', value: 'Yes' },
+          { name: '  ', value: 'No' },
+          { name: 'Shade', value: 'Partial' },
+        ],
+      }),
+    ).toEqual(['Shade: Partial']);
+  });
+
   test('truncate a chip whose attribute value runs on', () => {
     const [chip] = featureLabels({ attributes: [{ name: 'Notes', value: 'x'.repeat(200) }] });
 

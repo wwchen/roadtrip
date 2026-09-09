@@ -91,8 +91,10 @@ export function featureLabels(site: Partial<Campsite>): string[] {
   measure('Max RV length', lengthLabel(site.max_rv_length));
   measure('Max trailer length', lengthLabel(site.max_trailer_length));
   for (const attribute of site.attributes ?? []) {
+    const name = compactText(attribute.name);
+    if (!name) continue;
     const value = compactText(attribute.value);
-    labels.push(value ? `${attribute.name}: ${value}` : attribute.name);
+    labels.push(value ? `${name}: ${value}` : name);
   }
   return unique(
     labels.map((label) => truncateText(label, MAX_FEATURE_CHARS)).filter(isNotBlank),
