@@ -21,7 +21,8 @@ UPDATE campsites SET equipment = COALESCE((
                              WHEN jsonb_typeof(e.v) = 'object' THEN COALESCE(e.v->>'name', e.v->>'label', e.v->>'equipment_name') END), '') AS label
     FROM jsonb_array_elements(equipment) WITH ORDINALITY AS e(v, ord)
   ) s WHERE s.label IS NOT NULL), '[]'::jsonb)
-WHERE jsonb_typeof(equipment) = 'array';
+WHERE jsonb_typeof(equipment) = 'array'
+  AND EXISTS (SELECT 1 FROM jsonb_array_elements(equipment) e WHERE jsonb_typeof(e) <> 'string');
 
 UPDATE campsites SET equipment = '[]'::jsonb WHERE equipment IS NULL OR jsonb_typeof(equipment) <> 'array';
 ALTER TABLE campsites ALTER COLUMN equipment SET DEFAULT '[]'::jsonb;
@@ -38,7 +39,13 @@ UPDATE campsites SET photos = COALESCE((
     FROM jsonb_array_elements(photos) WITH ORDINALITY AS p(v, ord)
     WHERE jsonb_typeof(p.v) = 'object'
   ) s WHERE s.url IS NOT NULL), '[]'::jsonb)
-WHERE jsonb_typeof(photos) = 'array';
+WHERE jsonb_typeof(photos) = 'array'
+  AND EXISTS (
+    SELECT 1 FROM jsonb_array_elements(photos) p
+    WHERE NOT jsonb_exists(p, 'url')
+       OR jsonb_exists(p, 'large_url') OR jsonb_exists(p, 'medium_url')
+       OR jsonb_exists(p, 'small_url') OR jsonb_exists(p, 'original_url')
+  );
 
 UPDATE campsites SET min_people = COALESCE(
     CASE WHEN source_payload->>'min_capacity' ~ '^[0-9]+$'
