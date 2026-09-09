@@ -1,6 +1,8 @@
--- Typed campsite columns. equipment becomes an array of strings, photos an
--- array of {url}, and three facts the drawer used to dig out of source_payload
--- get columns. Idempotent; canonical rows map to themselves.
+-- Typed campsite columns, plus canonicalized equipment and photos so legacy
+-- rows decode strictly in the window between migrate and `make data-import`.
+-- No backfill: the import right after deploy rewrites every live row.
+-- equipment stays nullable; NOT NULL waits for a later migration, once a
+-- rollback can no longer put the old jar back.
 
 ALTER TABLE campsites
   ADD COLUMN IF NOT EXISTS attributes JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -26,59 +28,24 @@ WHERE jsonb_typeof(equipment) = 'array'
 
 UPDATE campsites SET equipment = '[]'::jsonb WHERE equipment IS NULL OR jsonb_typeof(equipment) <> 'array';
 ALTER TABLE campsites ALTER COLUMN equipment SET DEFAULT '[]'::jsonb;
-ALTER TABLE campsites ALTER COLUMN equipment SET NOT NULL;
 
--- V38's check allowed NULL; the column is NOT NULL now, so it is array-only.
 ALTER TABLE campsites DROP CONSTRAINT IF EXISTS campsites_equipment_check;
-ALTER TABLE campsites ADD CONSTRAINT campsites_equipment_check CHECK (jsonb_typeof(equipment) = 'array');
+ALTER TABLE campsites ADD CONSTRAINT campsites_equipment_check CHECK (equipment IS NULL OR jsonb_typeof(equipment) = 'array');
 
 UPDATE campsites SET photos = COALESCE((
   SELECT jsonb_agg(jsonb_build_object('url', s.url) ORDER BY s.ord)
   FROM (
-    SELECT p.ord, NULLIF(btrim(COALESCE(p.v->>'url', p.v->>'large_url', p.v->>'medium_url', p.v->>'small_url', p.v->>'original_url')), '') AS url
+    SELECT p.ord,
+           NULLIF(btrim(COALESCE(CASE WHEN jsonb_typeof(p.v->'url') = 'string' THEN p.v->>'url' END,
+                                 p.v->>'large_url', p.v->>'medium_url', p.v->>'small_url', p.v->>'original_url')), '') AS url
     FROM jsonb_array_elements(photos) WITH ORDINALITY AS p(v, ord)
     WHERE jsonb_typeof(p.v) = 'object'
   ) s WHERE s.url IS NOT NULL), '[]'::jsonb)
 WHERE jsonb_typeof(photos) = 'array'
   AND EXISTS (
     SELECT 1 FROM jsonb_array_elements(photos) p
-    WHERE NOT jsonb_exists(p, 'url')
+    WHERE jsonb_typeof(p) <> 'object'
+       OR jsonb_typeof(p->'url') <> 'string'
        OR jsonb_exists(p, 'large_url') OR jsonb_exists(p, 'medium_url')
        OR jsonb_exists(p, 'small_url') OR jsonb_exists(p, 'original_url')
   );
-
-UPDATE campsites SET min_people = COALESCE(
-    CASE WHEN source_payload->>'min_capacity' ~ '^[0-9]+$'
-         THEN (source_payload->>'min_capacity')::int END,
-    CASE WHEN source_payload->'_roadtrip_tags'->'capacity'->>'min' ~ '^[0-9]+$'
-         THEN (source_payload->'_roadtrip_tags'->'capacity'->>'min')::int END)
-WHERE min_people IS NULL
-  AND (source_payload->>'min_capacity' ~ '^[0-9]+$' OR source_payload->'_roadtrip_tags'->'capacity'->>'min' ~ '^[0-9]+$');
-
-UPDATE campsites SET description = NULLIF(btrim(regexp_replace(regexp_replace(source_payload->>'description', '<[^>]*>', ' ', 'g'), '\s+', ' ', 'g')), '')
-WHERE description IS NULL AND jsonb_exists(source_payload, 'description');
-
-UPDATE campsites SET attributes = COALESCE((
-  SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object('name', s.name, 'value', s.value)) ORDER BY s.ord)
-  FROM (
-    SELECT a.ord, NULLIF(btrim(a.v->>'name'), '') AS name,
-           NULLIF(btrim(COALESCE(a.v->'value_labels'->>0, a.v->>'value')), '') AS value
-    FROM jsonb_array_elements(source_payload->'defined_attributes') WITH ORDINALITY AS a(v, ord)
-    WHERE jsonb_typeof(a.v) = 'object'
-  ) s WHERE s.name IS NOT NULL), '[]'::jsonb)
-WHERE attributes = '[]'::jsonb AND jsonb_typeof(source_payload->'defined_attributes') = 'array';
-
--- The old rec.gov ETL stored reserve_type and use beside the attribute bag; the
--- new one appends them as named attributes, so the backfill does too.
-UPDATE campsites SET attributes = COALESCE((
-  SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object('name', s.name, 'value', s.value)) ORDER BY s.ord, s.sort_key)
-  FROM (
-    SELECT 0 AS ord, t.key AS sort_key, initcap(replace(t.key, '_', ' ')) AS name, NULLIF(btrim(t.value), '') AS value
-    FROM jsonb_each_text(source_payload->'_roadtrip_tags'->'attributes') AS t(key, value)
-    UNION ALL
-    SELECT 1, '', 'Reserve type', NULLIF(btrim(source_payload->'_roadtrip_tags'->>'reserve_type'), '')
-    UNION ALL
-    SELECT 2, '', 'Type of use', NULLIF(btrim(source_payload->'_roadtrip_tags'->>'use'), '')
-  ) s
-  WHERE s.ord = 0 OR s.value IS NOT NULL), '[]'::jsonb)
-WHERE attributes = '[]'::jsonb AND jsonb_typeof(source_payload->'_roadtrip_tags'->'attributes') = 'object';
