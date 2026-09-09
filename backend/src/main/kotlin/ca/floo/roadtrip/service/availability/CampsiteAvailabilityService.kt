@@ -68,7 +68,11 @@ internal class CampsiteAvailabilityService(
         val batch =
             availabilityLoader.loadOrFetch(
                 AvailabilityLoader.Request(
-                    metadata = AvailabilityLoader.Metadata(provider = provider.id.id),
+                    metadata =
+                        AvailabilityLoader.Metadata(
+                            provider = provider.id.id,
+                            scope = provider.parentRefFor(campground),
+                        ),
                     targets = campsites.map { AvailabilityLoader.CampsiteTarget(dbId = it.id) },
                     startDate = windows.target.startDate,
                     endDate = windows.target.endDate,
