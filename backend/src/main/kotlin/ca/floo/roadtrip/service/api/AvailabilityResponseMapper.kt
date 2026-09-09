@@ -146,7 +146,11 @@ fun classifyWindowState(days: List<DayClassification>): String {
     }
 }
 
-/** `scope_ref` is the serialized `BookingProviderRef` the observations were fetched under; it is opaque to clients. */
+/**
+ * `provider` is the vendor id. `season` is an optional reopen-date hint only
+ * rec.gov surfaces today. `scope_ref` is the serialized `BookingProviderRef`
+ * the observations were fetched under, and is opaque to clients.
+ */
 fun availabilityResponseDto(
     provider: String,
     startDate: LocalDate,

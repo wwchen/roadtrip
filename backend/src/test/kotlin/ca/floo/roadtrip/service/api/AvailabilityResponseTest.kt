@@ -74,6 +74,34 @@ class AvailabilityResponseTest {
     }
 
     @Test
+    fun `a batch without a scope serializes with no scope_ref key`() {
+        val body =
+            encodeApiJson(
+                availabilityResponseFromObservations(
+                    AvailabilityObservationBatch(
+                        provider = "recgov",
+                        startDate = LocalDate.parse("2026-06-10"),
+                        endDate = LocalDate.parse("2026-06-11"),
+                        observations =
+                            listOf(
+                                CampsiteDayObservation(
+                                    campsiteId = 100,
+                                    date = LocalDate.parse("2026-06-10"),
+                                    observedAt = Instant.parse("2026-06-01T00:00:00Z"),
+                                    status = AvailabilityStatus.AVAILABLE,
+                                ),
+                            ),
+                        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 60),
+                        scope = null,
+                    ),
+                ),
+            )
+        val json = Json.parseToJsonElement(body).jsonObject
+
+        assertNull(json["scope_ref"])
+    }
+
+    @Test
     fun `atomic campsite day observations roll up to stable dto shape`() {
         val olderObservedAt = Instant.parse("2026-06-01T00:00:00Z")
         val observedAt = Instant.parse("2026-06-01T00:05:00Z")

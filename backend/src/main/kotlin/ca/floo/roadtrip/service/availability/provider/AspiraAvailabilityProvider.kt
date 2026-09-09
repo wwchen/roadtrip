@@ -64,12 +64,10 @@ class AspiraAvailabilityProvider(
     ): AvailabilityObservationBatch {
         val aspiraRef = aspiraRefOrThrow(campground)
         val tenant = tenantForRef(aspiraRef)
-        val mapId = mapIdOrThrow(aspiraRef.mapId)
         return runWithErrorMapping {
             fetchAvailability(
-                scope = aspiraRef.copy(mapId = mapId.toLong()),
+                scope = aspiraRef,
                 host = tenant.host,
-                mapId = mapId,
                 startDate = startDate,
                 endDate = endDate,
                 campsiteVendor = tenant.vendorCode,
@@ -135,7 +133,6 @@ class AspiraAvailabilityProvider(
                 fetchCatalog(
                     scope = aspiraRef,
                     host = tenant.host,
-                    parentMapId = parentMapId,
                     campsites = targets,
                     startDate = startDate,
                     endDate = endDate,
@@ -166,14 +163,13 @@ class AspiraAvailabilityProvider(
     private suspend fun fetchAvailability(
         scope: BookingProviderRef.Aspira,
         host: String,
-        mapId: Int,
         startDate: LocalDate,
         endDate: LocalDate,
         campsiteVendor: String? = null,
     ): AvailabilityObservationBatch {
         val days = daysBetween(startDate, endDate)
         val observedAt = Instant.now()
-        val data = availabilityClient.fetch(host, mapId, startDate, endDate.minusDays(1))
+        val data = availabilityClient.fetch(host, mapIdOrThrow(scope.mapId), startDate, endDate.minusDays(1))
         return AvailabilityObservationBatch(
             provider = "aspira",
             startDate = startDate,
@@ -187,7 +183,6 @@ class AspiraAvailabilityProvider(
     private suspend fun fetchCatalog(
         scope: BookingProviderRef.Aspira,
         host: String,
-        parentMapId: Int,
         campsites: List<AspiraCatalogCampsite>,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -200,7 +195,6 @@ class AspiraAvailabilityProvider(
             return fetchAvailability(
                 scope = scope,
                 host = host,
-                mapId = parentMapId,
                 startDate = startDate,
                 endDate = endDate,
             )
