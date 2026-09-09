@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.model.api.CampsiteDto
 import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -25,7 +26,7 @@ internal class CampsiteCatalogService(
         return PoiCampsitesResponseSchema(
             poiId = poiId,
             type = CAMPSITE_RESPONSE_TYPE,
-            campsites = campsites,
+            campsites = campsites.map(CampsiteDto::from),
             reservationUrlTemplates =
                 campsites
                     .mapNotNull { campsite ->

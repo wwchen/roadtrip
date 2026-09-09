@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.api.AvailabilityWatchListResponse
 import ca.floo.roadtrip.model.api.AvailabilityWatchResponse
 import ca.floo.roadtrip.model.api.AvailabilityWatchSchema
 import ca.floo.roadtrip.model.api.AvailabilityWatchTargetSchema
+import ca.floo.roadtrip.model.api.CampsiteDto
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -57,7 +58,7 @@ internal class AvailabilityWatchApiMapper(
                 },
             poiId = firstTarget?.poiId,
             campsiteId = firstTarget?.campsiteId,
-            campsite = singleCampsite,
+            campsite = singleCampsite?.let(CampsiteDto::from),
             campsiteFilters = watch.campsiteFilters,
             startDate = watch.startDate.toString(),
             endDate = watch.endDate.toString(),
