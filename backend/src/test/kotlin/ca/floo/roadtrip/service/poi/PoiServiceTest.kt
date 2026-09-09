@@ -51,7 +51,7 @@ class PoiServiceTest : SharedDbTest() {
             seedPoi(
                 sourcePayloadJson =
                     """
-                    {"stale_cta_ref":{
+                    {"booking_cta_provider_ref":{
                       "transactionLocationId":-2147483647,
                       "mapId":-2147483645,
                       "resourceLocationId":-2147483640
