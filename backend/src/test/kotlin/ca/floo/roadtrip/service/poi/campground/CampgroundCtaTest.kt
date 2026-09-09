@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.poi.campground
 
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -16,22 +17,28 @@ class CampgroundCtaTest {
     private val cta = CampgroundCta(clock = fixedClock)
 
     @Test
-    fun `recgov reservable provider_ref labels stored booking URL`() {
+    fun `recgov reservable ref labels stored booking URL`() {
         val out =
-            cta.computeCta(
-                row(
-                    providerRefJson = """{"recgov_id":"232450"}""",
+            cta
+                .computeCtas(
+                    bookingRef = BookingProviderRef.RecGov(facilityId = "232450"),
                     reserveUrl = "https://www.recreation.gov/camping/campgrounds/232450",
-                ),
-            )
+                    infoUrl = null,
+                ).singleOrNull()
         assertEquals("https://www.recreation.gov/camping/campgrounds/232450", out?.url)
         assertEquals("Reserve on recreation.gov", out?.label)
         assertEquals("reserve", out?.kind)
     }
 
     @Test
-    fun `reservecalifornia provider_ref produces park deeplink`() {
-        val out = cta.computeCta(row(providerRefJson = """{"place_id":660,"facility_ids":[901]}"""))
+    fun `reservecalifornia ref produces park deeplink`() {
+        val out =
+            cta
+                .computeCtas(
+                    bookingRef = BookingProviderRef.ReserveCalifornia(placeId = 660, facilityIds = listOf(901)),
+                    reserveUrl = null,
+                    infoUrl = null,
+                ).singleOrNull()
         assertEquals("https://reservecalifornia.com/park/660", out?.url)
         assertEquals("Reserve on ReserveCalifornia", out?.label)
         assertEquals("reserve", out?.kind)
@@ -40,12 +47,12 @@ class CampgroundCtaTest {
     @Test
     fun `aspira parks canada produces dated NextGen deeplink with tenant label`() {
         val out =
-            cta.computeCta(
-                row(
-                    providerRefJson = """{"transactionLocationId":4189,"mapId":-2147483361,"resourceLocationId":-2147483408}""",
+            cta
+                .computeCtas(
+                    bookingRef = parksCanadaRef,
+                    reserveUrl = null,
                     infoUrl = "https://reservation.pc.gc.ca/",
-                ),
-            )
+                ).singleOrNull()
         val url = out?.url
         assertNotNull(url)
         assertTrue(url.startsWith("https://reservation.pc.gc.ca/create-booking/results?"), "host + path: $url")
@@ -61,12 +68,12 @@ class CampgroundCtaTest {
     @Test
     fun `aspira parks canada can derive CTA host from canonical reserve_url`() {
         val out =
-            cta.computeCta(
-                row(
-                    providerRefJson = """{"transactionLocationId":4189,"mapId":-2147483361,"resourceLocationId":-2147483408}""",
+            cta
+                .computeCtas(
+                    bookingRef = parksCanadaRef,
                     reserveUrl = "https://reservation.pc.gc.ca/",
-                ),
-            )
+                    infoUrl = null,
+                ).singleOrNull()
         val url = out?.url
         assertNotNull(url)
         assertTrue(url.startsWith("https://reservation.pc.gc.ca/create-booking/results?"), "host + path: $url")
@@ -76,30 +83,32 @@ class CampgroundCtaTest {
     }
 
     @Test
-    fun `aspira CTA uses linked reservable map when POI map is only a container`() {
+    fun `aspira deeplink uses the map id carried by the booking ref`() {
         val out =
-            cta.computeCta(
-                row(
-                    providerRefJson = """{"transactionLocationId":4189,"mapId":-2147483026,"resourceLocationId":-2147483640}""",
-                    ctaProviderRefJson = """{"transactionLocationId":4189,"mapId":-2147483645,"resourceLocationId":-2147483640}""",
-                    infoUrl = "https://reservation.pc.gc.ca/",
-                ),
-            )
-        val url = out?.url
-        assertNotNull(url)
-        assertTrue(url.contains("mapId=-2147483645"), url)
-        assertTrue(!url.contains("mapId=-2147483026"), url)
+            cta
+                .computeCtas(
+                    bookingRef =
+                        BookingProviderRef.Aspira(
+                            tenant = "pc",
+                            transactionLocationId = 4189,
+                            mapId = -2147483645,
+                            resourceLocationId = 9002,
+                        ),
+                    reserveUrl = "https://reservation.pc.gc.ca/",
+                    infoUrl = null,
+                ).singleOrNull()
+        assertTrue(out!!.url.contains("mapId=-2147483645"), out.url)
     }
 
     @Test
     fun `aspira BC parks gets BC Parks label`() {
         val out =
-            cta.computeCta(
-                row(
-                    providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}""",
+            cta
+                .computeCtas(
+                    bookingRef = bcParksRef,
+                    reserveUrl = null,
                     infoUrl = "https://camping.bcparks.ca/",
-                ),
-            )
+                ).singleOrNull()
         assertEquals("Book on BC Parks", out?.label)
         assertTrue(out!!.url.startsWith("https://camping.bcparks.ca/create-booking/results?"))
     }
@@ -107,12 +116,18 @@ class CampgroundCtaTest {
     @Test
     fun `aspira WA state parks gets WA label`() {
         val out =
-            cta.computeCta(
-                row(
-                    providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}""",
+            cta
+                .computeCtas(
+                    bookingRef =
+                        BookingProviderRef.Aspira(
+                            tenant = "washington",
+                            transactionLocationId = 1,
+                            mapId = 2,
+                            resourceLocationId = null,
+                        ),
+                    reserveUrl = null,
                     infoUrl = "https://washington.goingtocamp.com/",
-                ),
-            )
+                ).singleOrNull()
         assertEquals("Book WA State Park", out?.label)
     }
 
@@ -121,31 +136,31 @@ class CampgroundCtaTest {
         // The string "NULL" or omitting when the tenant requires it bounces
         // WA's results page back to the homepage. We omit cleanly when null.
         val out =
-            cta.computeCta(
-                row(
-                    providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}""",
+            cta
+                .computeCtas(
+                    bookingRef = bcParksRef,
+                    reserveUrl = null,
                     infoUrl = "https://camping.bcparks.ca/",
-                ),
-            )
+                ).singleOrNull()
         assertTrue(!out!!.url.contains("resourceLocationId"))
     }
 
     @Test
     fun `aspira without info_url returns null because we cannot derive a host`() {
-        val out =
-            cta.computeCta(
-                row(providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}"""),
-            )
+        val out = cta.computeCtas(bookingRef = bcParksRef, reserveUrl = null, infoUrl = null).singleOrNull()
         assertNull(out)
     }
 
     @Test
     fun `non-reservable Forest Service campground uses RIDB official URL`() {
-        // POI 441 (Butte Meadows) shape: no provider_ref, info_url points at fs.usda.gov
+        // POI 441 (Butte Meadows) shape: no booking ref, info_url points at fs.usda.gov
         val out =
-            cta.computeCta(
-                row(infoUrl = "https://www.fs.usda.gov/recarea/lassen/recarea/?recid=11276"),
-            )
+            cta
+                .computeCtas(
+                    bookingRef = null,
+                    reserveUrl = null,
+                    infoUrl = "https://www.fs.usda.gov/recarea/lassen/recarea/?recid=11276",
+                ).singleOrNull()
         assertEquals("https://www.fs.usda.gov/recarea/lassen/recarea/?recid=11276", out?.url)
         assertEquals("Park info on fs.usda.gov", out?.label)
         assertEquals("info", out?.kind)
@@ -153,68 +168,75 @@ class CampgroundCtaTest {
 
     @Test
     fun `info_url with unrecognized host falls back to bare host label`() {
-        val out = cta.computeCta(row(infoUrl = "https://example.org/some/page"))
+        val out =
+            cta.computeCtas(bookingRef = null, reserveUrl = null, infoUrl = "https://example.org/some/page").singleOrNull()
         assertEquals("Visit example.org", out?.label)
     }
 
     @Test
     fun `www prefix in host is stripped before label lookup`() {
-        val out = cta.computeCta(row(infoUrl = "https://www.nps.gov/yose/index.htm"))
+        val out =
+            cta.computeCtas(bookingRef = null, reserveUrl = null, infoUrl = "https://www.nps.gov/yose/index.htm").singleOrNull()
         assertEquals("Park info on nps.gov", out?.label)
     }
 
     @Test
-    fun `no provider_ref and no info_url returns null`() {
-        assertNull(cta.computeCta(row()))
+    fun `no booking ref and no info_url returns null`() {
+        assertNull(cta.computeCtas(bookingRef = null, reserveUrl = null, infoUrl = null).singleOrNull())
     }
 
     @Test
     fun `blank info_url returns null`() {
-        assertNull(cta.computeCta(row(infoUrl = "  ")))
+        assertNull(cta.computeCtas(bookingRef = null, reserveUrl = null, infoUrl = "  ").singleOrNull())
     }
 
     @Test
     fun `blank reserve_url falls back to info_url`() {
-        val out = cta.computeCta(row(reserveUrl = "  ", infoUrl = "https://www.nps.gov/yose/index.htm"))
+        val out =
+            cta
+                .computeCtas(
+                    bookingRef = null,
+                    reserveUrl = "  ",
+                    infoUrl = "https://www.nps.gov/yose/index.htm",
+                ).singleOrNull()
         assertEquals("Park info on nps.gov", out?.label)
     }
 
     @Test
     fun `non-provider reserve_url does not override info_url fallback`() {
         val out =
-            cta.computeCta(
-                row(
+            cta
+                .computeCtas(
+                    bookingRef = null,
                     reserveUrl = "https://reservation.pc.gc.ca/",
                     infoUrl = "https://parks.canada.ca/banff",
-                ),
-            )
+                ).singleOrNull()
         assertEquals("https://parks.canada.ca/banff", out?.url)
         assertEquals("Park info on parks.canada.ca", out?.label)
     }
 
     @Test
-    fun `provider_ref recgov wins over info_url`() {
+    fun `recgov ref wins over info_url`() {
         // A reservable rec.gov campground also has its rec.gov page as info_url.
         // We want the canonical "Reserve on recreation.gov" CTA, not the page link.
         val out =
-            cta.computeCta(
-                row(
-                    providerRefJson = """{"recgov_id":"232450"}""",
+            cta
+                .computeCtas(
+                    bookingRef = BookingProviderRef.RecGov(facilityId = "232450"),
+                    reserveUrl = null,
                     infoUrl = "https://www.recreation.gov/camping/campgrounds/232450",
-                ),
-            )
+                ).singleOrNull()
         assertEquals("Reserve on recreation.gov", out?.label)
         assertEquals("reserve", out?.kind)
     }
 
     @Test
-    fun `campflare provider_ref appends public Campflare CTA after primary CTA`() {
+    fun `campflare ref appends public Campflare CTA after primary CTA`() {
         val out =
             cta.computeCtas(
-                row(
-                    providerRefJson = """{"campflare_id":"cranberry-lake-wsp"}""",
-                    infoUrl = "https://parks.wa.gov/find-parks/state-parks/deception-pass-state-park",
-                ),
+                bookingRef = BookingProviderRef.Campflare(campgroundId = "cranberry-lake-wsp"),
+                reserveUrl = null,
+                infoUrl = "https://parks.wa.gov/find-parks/state-parks/deception-pass-state-park",
             )
 
         assertEquals(2, out.size)
@@ -227,14 +249,12 @@ class CampgroundCtaTest {
     }
 
     @Test
-    fun `campflare provider_ref with stored reserve_url does not infer recgov CTA`() {
+    fun `campflare ref with stored reserve_url does not infer recgov CTA`() {
         val out =
             cta.computeCtas(
-                row(
-                    providerRefJson = """{"campflare_id":"white-wolf-campground-567"}""",
-                    reserveUrl = "https://www.recreation.gov/camping/campgrounds/10083567",
-                    infoUrl = "https://www.nps.gov/yose/planyourvisit/wwcamp.htm",
-                ),
+                bookingRef = BookingProviderRef.Campflare(campgroundId = "white-wolf-campground-567"),
+                reserveUrl = "https://www.recreation.gov/camping/campgrounds/10083567",
+                infoUrl = "https://www.nps.gov/yose/planyourvisit/wwcamp.htm",
             )
 
         assertEquals(2, out.size)
@@ -246,8 +266,13 @@ class CampgroundCtaTest {
     }
 
     @Test
-    fun `campflare provider_ref without primary link returns public Campflare CTA`() {
-        val out = cta.computeCtas(row(providerRefJson = """{"campflare_id":"cranberry-lake-wsp"}"""))
+    fun `campflare ref without primary link returns public Campflare CTA`() {
+        val out =
+            cta.computeCtas(
+                bookingRef = BookingProviderRef.Campflare(campgroundId = "cranberry-lake-wsp"),
+                reserveUrl = null,
+                infoUrl = null,
+            )
 
         assertEquals(1, out.size)
         assertEquals("https://campflare.com/campground/cranberry-lake-wsp", out.single().url)
@@ -259,86 +284,46 @@ class CampgroundCtaTest {
         assertEquals(
             "Recreation.gov",
             cta.bookingSystem(
-                row(
-                    providerRefJson = """{"recgov_id":"232450"}""",
-                    reserveUrl = "https://www.recreation.gov/camping/campgrounds/232450",
-                ),
+                bookingRef = BookingProviderRef.RecGov(facilityId = "232450"),
+                reserveUrl = "https://www.recreation.gov/camping/campgrounds/232450",
+                infoUrl = null,
             ),
         )
         assertEquals(
             "Aspira NextGen (Parks Canada)",
-            cta.bookingSystem(
-                row(
-                    providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}""",
-                    infoUrl = "https://reservation.pc.gc.ca/",
-                ),
-            ),
+            cta.bookingSystem(bookingRef = bcParksRef, reserveUrl = null, infoUrl = "https://reservation.pc.gc.ca/"),
         )
         assertEquals(
             "Aspira NextGen (BC Parks)",
-            cta.bookingSystem(
-                row(
-                    providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}""",
-                    infoUrl = "https://camping.bcparks.ca/",
-                ),
-            ),
+            cta.bookingSystem(bookingRef = bcParksRef, reserveUrl = null, infoUrl = "https://camping.bcparks.ca/"),
         )
         assertEquals(
             "Aspira NextGen (WA State Parks)",
-            cta.bookingSystem(
-                row(
-                    providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}""",
-                    infoUrl = "https://washington.goingtocamp.com/",
-                ),
-            ),
+            cta.bookingSystem(bookingRef = bcParksRef, reserveUrl = null, infoUrl = "https://washington.goingtocamp.com/"),
         )
         assertEquals(
             "Aspira NextGen (Parks Canada)",
-            cta.bookingSystem(
-                row(
-                    providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}""",
-                    reserveUrl = "https://reservation.pc.gc.ca/",
-                ),
-            ),
+            cta.bookingSystem(bookingRef = bcParksRef, reserveUrl = "https://reservation.pc.gc.ca/", infoUrl = null),
         )
-        assertNull(cta.bookingSystem(row(infoUrl = "https://www.fs.usda.gov/recarea/")))
-        assertNull(cta.bookingSystem(row()))
+        assertNull(cta.bookingSystem(bookingRef = null, reserveUrl = null, infoUrl = "https://www.fs.usda.gov/recarea/"))
+        assertNull(cta.bookingSystem(bookingRef = null, reserveUrl = null, infoUrl = null))
     }
 
-    private fun row(
-        providerRefJson: String? = null,
-        ctaProviderRefJson: String? = null,
-        reserveUrl: String? = null,
-        infoUrl: String? = null,
-    ): CtaInput =
-        CtaInput(
-            providerRefJson = providerRefJson,
-            ctaProviderRefJson = ctaProviderRefJson,
-            reserveUrl = reserveUrl,
-            infoUrl = infoUrl,
-        )
+    private companion object {
+        val parksCanadaRef =
+            BookingProviderRef.Aspira(
+                tenant = "pc",
+                transactionLocationId = 4189,
+                mapId = -2147483361,
+                resourceLocationId = -2147483408,
+            )
 
-    private fun CampgroundCta.computeCta(input: CtaInput) = computeCtas(input).singleOrNull()
-
-    private fun CampgroundCta.computeCtas(input: CtaInput) =
-        computeCtas(
-            providerRefJson = input.providerRefJson,
-            ctaProviderRefJson = input.ctaProviderRefJson,
-            reserveUrl = input.reserveUrl,
-            infoUrl = input.infoUrl,
-        )
-
-    private fun CampgroundCta.bookingSystem(input: CtaInput) =
-        bookingSystem(
-            providerRefJson = input.providerRefJson,
-            reserveUrl = input.reserveUrl,
-            infoUrl = input.infoUrl,
-        )
-
-    private data class CtaInput(
-        val providerRefJson: String?,
-        val ctaProviderRefJson: String?,
-        val reserveUrl: String?,
-        val infoUrl: String?,
-    )
+        val bcParksRef =
+            BookingProviderRef.Aspira(
+                tenant = "bcparks",
+                transactionLocationId = 1,
+                mapId = 2,
+                resourceLocationId = null,
+            )
+    }
 }

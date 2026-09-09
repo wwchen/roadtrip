@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.model.domain
 
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.serialization.json.JsonElement
 import java.time.Instant
@@ -41,3 +43,8 @@ data class Campground(
     val bookingProvider: String?,
     val bookingProviderRef: String?,
 )
+
+fun Campground.bookingRef(): BookingProviderRef? {
+    val provider = bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
+    return bookingProviderRef?.let { BookingProviderRef.parse(provider, it) }
+}
