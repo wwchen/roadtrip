@@ -33,6 +33,16 @@ class PoiServingRepoTest : SharedDbTest() {
         assertEquals(setOf(a, b), rows.map { it.id }.toSet())
     }
 
+    @Test
+    fun `campgrounds with a booking provider but no ref fall back to data provider identity`() {
+        val a = seed(source = "recgov", sourceId = "1", bookingProvider = "aspira", bookingProviderRef = null)
+        val b = seed(source = "recgov", sourceId = "2", bookingProvider = "aspira", bookingProviderRef = null)
+
+        val rows = repo().fetchPoisWithinPolygon(WORLD, listOf("campground"))
+
+        assertEquals(setOf(a, b), rows.map { it.id }.toSet())
+    }
+
     private fun repo() = PoiServingRepo(ctx, enabledDataProviders = setOf("recgov", "campflare"))
 
     private fun seed(
