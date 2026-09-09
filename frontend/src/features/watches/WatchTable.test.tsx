@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { Campsite } from '@/api/campsite-api';
 import type { Watch } from '@/api/watches-api';
 import { formatWatchDate, relativeTime, watchFallbackName, WatchTable } from './WatchTable';
 
@@ -17,6 +18,18 @@ const watch = (fields: Partial<Watch> = {}): Watch => ({
   status: 'active',
   created_at: '2026-06-01T00:00:00Z',
   updated_at: '2026-06-01T00:00:00Z',
+  ...fields,
+});
+
+const campsite = (fields: Partial<Campsite> = {}): Campsite => ({
+  id: 5,
+  campground_id: 7,
+  name: 'Site 12',
+  kind: 'STANDARD',
+  equipment: [],
+  attributes: [],
+  data_provider: 'recgov',
+  data_provider_ref: '5',
   ...fields,
 });
 
@@ -74,16 +87,12 @@ describe('relativeTime', () => {
 
 describe('watchFallbackName', () => {
   test('uses the campsite name when there is no POI', () => {
-    expect(watchFallbackName(watch({ poi_id: null, campsite: { id: 5, name: 'Site 12' } }))).toBe(
-      'Site 12',
-    );
+    expect(watchFallbackName(watch({ poi_id: null, campsite: campsite() }))).toBe('Site 12');
   });
 
   test('prefixes the loop when the campsite has one', () => {
     expect(
-      watchFallbackName(
-        watch({ poi_id: null, campsite: { id: 5, name: 'Site 12', loop_name: 'Loop A' } }),
-      ),
+      watchFallbackName(watch({ poi_id: null, campsite: campsite({ loop_name: 'Loop A' }) })),
     ).toBe('Loop A / Site 12');
   });
 

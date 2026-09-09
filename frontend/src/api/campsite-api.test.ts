@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { requestPoiCampsitesAvailability } from './availability-api';
-import { fetchPoiCampsites, poiCampsitesUrl } from './campsite-api';
+import { fetchPoiCampsites, poiCampsitesUrl, type Campsite } from './campsite-api';
 import { jsonResponse, stubFetch } from '@/test/fetch-stub';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -51,11 +51,29 @@ describe('requestPoiCampsitesAvailability', () => {
 
 describe('fetchPoiCampsites', () => {
   test('returns canonical campsite catalog rows', async () => {
+    const row: Campsite = {
+      id: 1,
+      campground_id: 7,
+      name: 'Site 12',
+      kind: 'STANDARD NONELECTRIC',
+      kind_listed: 'Standard Nonelectric',
+      loop_name: 'Loop A',
+      description: 'Walk-in tent site by the water.',
+      min_people: 2,
+      max_people: 6,
+      equipment: ['Tent'],
+      attributes: [{ name: 'Shade', value: 'Partial' }],
+      photo_url: 'https://cdn.example/1.jpg',
+      firepit: true,
+      data_provider: 'recgov',
+      data_provider_ref: '100',
+      booking_provider: 'recgov',
+    };
     const fetchStub = stubFetch(
       jsonResponse({
         poi_id: 42,
         type: 'campground',
-        campsites: [{ id: 1, data_provider: 'recgov', data_provider_ref: '100' }],
+        campsites: [row],
         reservation_url_templates: { 1: 'https://example.test/{start_date}' },
       }),
     );
@@ -63,7 +81,7 @@ describe('fetchPoiCampsites', () => {
     const json = await fetchPoiCampsites(42);
 
     expect(fetchStub.last.url).toBe('/api/pois/42/campsites');
-    expect(json.campsites).toEqual([{ id: 1, data_provider: 'recgov', data_provider_ref: '100' }]);
+    expect(json.campsites).toEqual([row]);
     expect(json.reservation_url_templates).toEqual({ 1: 'https://example.test/{start_date}' });
   });
 

@@ -40,10 +40,6 @@ export function formatWatchDate(iso: string | null | undefined): string | null {
 /** The label a watch shows when it has no POI target. Ported from the original. */
 export function watchFallbackName(watch: Watch): string {
   const site = watch.campsite;
-  const name = typeof site?.name === 'string' ? site.name : '';
-  if (name) {
-    const loop = typeof site?.loop_name === 'string' ? site.loop_name : '';
-    return loop ? `${loop} / ${name}` : name;
-  }
+  if (site?.name) return site.loop_name ? `${site.loop_name} / ${site.name}` : site.name;
   return `Watch #${watch.id}`;
 }

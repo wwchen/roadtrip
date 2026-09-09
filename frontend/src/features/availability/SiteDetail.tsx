@@ -1,18 +1,11 @@
 // The expanded row under a selected site in the matrix.
 //
-// No `dangerouslySetInnerHTML` anywhere, unlike the campground drawer's About section:
-// a campsite description is one clamped paragraph in a dense row, so its markup has
-// nothing to contribute and `site-detail-facts` strips it. That also means this
-// component has no sanitiser to get wrong.
+// No `dangerouslySetInnerHTML` anywhere, unlike the campground drawer's About
+// section: every field here is text off the typed catalog row, so this component
+// has no sanitiser to get wrong.
 import type { Campsite } from '@/api/campsite-api';
 import { siteName } from './matrix-rows';
-import {
-  descriptionText,
-  detailFacts,
-  featureLabels,
-  findImageUrl,
-  rawPayload,
-} from './site-detail-facts';
+import { descriptionText, detailFacts, featureLabels } from './site-detail-facts';
 import {
   bookingLabel,
   reservationUrlFromTemplate,
@@ -33,14 +26,11 @@ export function SiteDetail({
   selectedEndDate = null,
   reservationUrlTemplates,
 }: SiteDetailProps) {
-  const raw = rawPayload(site);
   const name = siteName(site);
-  const imageUrl = findImageUrl(site);
-  const description = descriptionText(
-    site.description ?? raw.description ?? raw.campsite_description,
-  );
-  const facts = detailFacts(site, raw);
-  const features = featureLabels(site, raw);
+  const imageUrl = site.photo_url ?? '';
+  const description = descriptionText(site.description);
+  const facts = detailFacts(site);
+  const features = featureLabels(site);
   const url = reservationUrlFromTemplate(site, {
     startDate: selectedDate,
     endDate: selectedEndDate,
