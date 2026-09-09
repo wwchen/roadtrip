@@ -57,6 +57,14 @@ service/availability/provider/
     e.g. AspiraBookingUrl.kt, RecGovBookingDisplay.kt)
 ```
 
+## One ref encoding
+
+`booking_provider` + `booking_provider_ref` (the colon-delimited
+`BookingProviderRef.serialize()` form) is the only booking identity. The POI
+detail API emits it as `booking_ref: {provider, ref}` and the availability
+API as `scope_ref`. Nothing on the serving path reads `source_payload`; a key
+an ETL writes there is provenance, not behaviour.
+
 `models/availability/AvailabilityProviderCapabilities.kt` and
 `models/availability/AvailabilityProviderError.kt` are shared provider-contract
 types, not adapter implementation, because schedulers, API services, routes,

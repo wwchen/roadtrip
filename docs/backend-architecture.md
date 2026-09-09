@@ -201,6 +201,7 @@ routes
 Route code never parses provider references and never calls vendor adapters
 directly. Provider-specific richness stays inside the adapter or in explicit
 extension points owned by the availability-provider layer.
+`AvailabilityObservationBatch.scope` is the typed `BookingProviderRef` the adapter fetched under; adapters never put vendor ids in generic fields.
 
 ## ETL Flow
 
