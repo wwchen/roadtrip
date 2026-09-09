@@ -200,10 +200,9 @@ class AspiraCampgroundsEtl(
                     leaf = leaf,
                     host = host,
                     matchKind = match.kind,
-                    bookingCtaRef = bookingCtaRef,
                 ),
             sourceUrl = "https://$host/",
-            sourcePayload = aspiraSourcePayload(leaf, match.kind, bookingCtaRef),
+            sourcePayload = aspiraSourcePayload(leaf, match.kind),
         )
     }
 
@@ -222,7 +221,6 @@ class AspiraCampgroundsEtl(
     private fun aspiraSourcePayload(
         leaf: AspiraLeaf,
         matchKind: AspiraLeafMatchKind,
-        bookingCtaRef: AspiraBookingCtaRef?,
     ): JsonObject =
         buildJsonObject {
             put("name", leaf.name)
@@ -231,23 +229,12 @@ class AspiraCampgroundsEtl(
             leaf.resourceLocationId?.let { put(ASPIRA_RESOURCE_LOCATION_ID_KEY, it) }
             leaf.parentName?.let { put("parent_name", it) }
             put("match_kind", matchKind.label)
-            bookingCtaRef?.let {
-                put(
-                    "booking_cta_provider_ref",
-                    buildJsonObject {
-                        put(ASPIRA_TRANSACTION_LOCATION_ID_KEY, leaf.transactionLocationId)
-                        put(ASPIRA_MAP_ID_KEY, it.mapId)
-                        put(ASPIRA_RESOURCE_LOCATION_ID_KEY, it.resourceLocationId)
-                    },
-                )
-            }
         }
 
     private fun leafExtras(
         leaf: AspiraLeaf,
         host: String,
         matchKind: AspiraLeafMatchKind,
-        bookingCtaRef: AspiraBookingCtaRef?,
     ): JsonElement =
         aspiraExtrasJson.encodeToJsonElement(
             AspiraLeafExtrasDto(
@@ -257,14 +244,6 @@ class AspiraCampgroundsEtl(
                 resourceLocationId = leaf.resourceLocationId,
                 parentName = leaf.parentName,
                 matchKind = matchKind.label,
-                bookingCtaProviderRef =
-                    bookingCtaRef?.let {
-                        AspiraBookingCtaProviderRefDto(
-                            transactionLocationId = leaf.transactionLocationId,
-                            mapId = it.mapId,
-                            resourceLocationId = it.resourceLocationId,
-                        )
-                    },
             ),
         )
 
@@ -305,14 +284,6 @@ private data class AspiraLeafExtrasDto(
     @SerialName("resource_location_id") val resourceLocationId: Long?,
     @SerialName("parent_name") val parentName: String?,
     @SerialName("match_kind") val matchKind: String,
-    @SerialName("booking_cta_provider_ref") val bookingCtaProviderRef: AspiraBookingCtaProviderRefDto?,
-)
-
-@Serializable
-private data class AspiraBookingCtaProviderRefDto(
-    val transactionLocationId: Long,
-    val mapId: Long,
-    val resourceLocationId: Long,
 )
 
 // ---- Helpers ---------------------------------------------------------------

@@ -226,7 +226,7 @@ class AspiraCampgroundsEtlTest {
     }
 
     @Test
-    fun `extras materialize canonical booking CTA ref from the one inventory child map`() {
+    fun `booking ref adopts the one inventory child map`() {
         val leaf =
             AspiraLeaf(
                 name = "Two Jack Lakeside",
@@ -245,10 +245,7 @@ class AspiraCampgroundsEtlTest {
 
         val campground = campgrounds(dtoWith(leaf, inventory, categoryDict)).single()
 
-        val bookingRef = campground.metadata!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
-        assertEquals("1005", bookingRef["transactionLocationId"]!!.jsonPrimitive.content)
-        assertEquals("-2147483645", bookingRef["mapId"]!!.jsonPrimitive.content)
-        assertEquals("9002", bookingRef["resourceLocationId"]!!.jsonPrimitive.content)
+        assertEquals("pc:1005:-2147483645:9002", campground.bookingProviderRef)
     }
 
     @Test
@@ -271,12 +268,7 @@ class AspiraCampgroundsEtlTest {
 
         val campground = campgrounds(dtoWith(leaf, inventory, categoryDict)).single()
 
-        val bookingRef = campground.metadata!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
-        assertEquals("-2147483026", bookingRef["mapId"]!!.jsonPrimitive.content)
-        assertEquals(
-            "pc:1005:-2147483026:9002",
-            campground.bookingProviderRef,
-        )
+        assertEquals("pc:1005:-2147483026:9002", campground.bookingProviderRef)
     }
 
     @Test
@@ -299,8 +291,7 @@ class AspiraCampgroundsEtlTest {
 
         val campground = campgrounds(dtoWith(leaf, inventory, categoryDict)).single()
 
-        val bookingRef = campground.metadata!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
-        assertEquals("-2147483645", bookingRef["mapId"]!!.jsonPrimitive.content)
+        assertEquals("pc:1005:-2147483645:9002", campground.bookingProviderRef)
     }
 
     @Test

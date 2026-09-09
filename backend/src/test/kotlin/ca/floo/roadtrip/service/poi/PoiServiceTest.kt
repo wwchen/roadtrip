@@ -46,12 +46,12 @@ class PoiServiceTest : SharedDbTest() {
     }
 
     @Test
-    fun `detail row ignores old materialized Aspira CTA ref from source payload`() {
+    fun `detail row ignores a stale CTA ref left in the source payload`() {
         val poiId =
             seedPoi(
                 sourcePayloadJson =
                     """
-                    {"booking_cta_provider_ref":{
+                    {"stale_cta_ref":{
                       "transactionLocationId":-2147483647,
                       "mapId":-2147483645,
                       "resourceLocationId":-2147483640

@@ -68,7 +68,7 @@ Three layers of identity:
 `pois.provider_ref` is the POI identity/join ref, not necessarily the best
 booking-grid deep link. Some Parks Canada campground POIs use a container
 `mapId`, while their sites live under child grid maps. `AspiraBookingCtaRefs`
-therefore resolves `properties.upstream.booking_cta_provider_ref` from the
+therefore resolves the campground's `booking_provider_ref` column from the
 inventory's `mapIds[]`; the POI drawer uses that for the primary booking CTA
 and keeps `provider_ref` stable for joins and provider dispatch.
 

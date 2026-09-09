@@ -10,8 +10,6 @@ import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.terminalRecords
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -64,8 +62,6 @@ class BcParksCampgroundsEtlTest {
 
         // -2147483548 is the leaf's own map; neither loop map covers the whole POI.
         assertEquals("bc:4189:-2147483548:9001", cg.bookingProviderRef)
-        val ctaRef = cg.metadata!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
-        assertEquals("-2147483548", ctaRef["mapId"]!!.jsonPrimitive.content)
     }
 
     private fun bundleAcrossLoops(): InputBundle =
