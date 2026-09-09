@@ -4,8 +4,8 @@ import ca.floo.roadtrip.model.domain.CampgroundContact
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
-import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -150,7 +150,7 @@ class BcParksCampgroundsEtl(
             location = CampgroundLocation(strapiRow.lat, strapiRow.lon, region = REGION, country = COUNTRY),
             reservationUrl = bookingUrl,
             links = listOfNotNull(bookingUrl, strapiRow.url?.takeIf { it != bookingUrl }).map { CampgroundLink(it) },
-            photos = listOfNotNull(strapiRow.photoUrl?.let(::CampgroundPhoto)),
+            photos = listOfNotNull(strapiRow.photoUrl?.let(::CatalogPhoto)),
             management = CampgroundManagement(agency),
             contact = strapiRow.phone?.let { CampgroundContact(phone = it) },
             metadata = metadataPayload(leaf, host, match.kind, strapiRow),

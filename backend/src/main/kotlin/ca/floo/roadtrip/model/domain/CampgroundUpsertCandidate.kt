@@ -26,7 +26,7 @@ data class CampgroundUpsertCandidate(
     val bigRigFriendly: Boolean? = null,
     val reservationUrl: String? = null,
     val links: List<CampgroundLink> = emptyList(),
-    val photos: List<CampgroundPhoto> = emptyList(),
+    val photos: List<CatalogPhoto> = emptyList(),
     val alerts: JsonElement? = null,
     val price: JsonElement? = null,
     val cellService: JsonElement? = null,

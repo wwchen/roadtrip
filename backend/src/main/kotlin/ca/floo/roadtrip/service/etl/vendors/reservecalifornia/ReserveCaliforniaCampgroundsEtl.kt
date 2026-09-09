@@ -3,8 +3,8 @@ package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
-import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.Envelope
@@ -69,7 +69,7 @@ class ReserveCaliforniaCampgroundsEtl(
                             amenities = amenitiesPayload(place.amenities),
                             reservationUrl = parkUrl,
                             links = listOf(CampgroundLink(parkUrl)),
-                            photos = listOfNotNull(place.imageUrl?.let(::CampgroundPhoto)),
+                            photos = listOfNotNull(place.imageUrl?.let(::CatalogPhoto)),
                             management = CampgroundManagement(agency),
                             metadata = metadataPayload(place),
                             sourceUrl = parkUrl,

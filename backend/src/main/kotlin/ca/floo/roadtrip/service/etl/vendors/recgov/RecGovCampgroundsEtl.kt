@@ -5,8 +5,8 @@ import ca.floo.roadtrip.model.domain.CampgroundContact
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
-import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.CellSignal
 import ca.floo.roadtrip.model.domain.RatingSummary
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -160,7 +160,7 @@ class RecGovCampgroundsEtl(
             location = CampgroundLocation(lat, lon, region = region, country = country, address = address(firstAddr)),
             reservationUrl = infoUrl,
             links = listOfNotNull(infoUrl?.let(::CampgroundLink)),
-            photos = listOfNotNull(photoUrl?.let(::CampgroundPhoto)),
+            photos = listOfNotNull(photoUrl?.let(::CatalogPhoto)),
             cellService = cell?.let(::cellCoveragePayload),
             management = agency?.let { CampgroundManagement(it) },
             contact = row.FacilityPhone?.takeIf { it.isNotBlank() }?.let { CampgroundContact(phone = it) },

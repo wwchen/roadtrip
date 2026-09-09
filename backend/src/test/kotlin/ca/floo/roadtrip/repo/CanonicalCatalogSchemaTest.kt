@@ -93,6 +93,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
         assertEquals(
             listOf(
                 "ada_accessible",
+                "attributes",
                 "booking_provider",
                 "booking_provider_ref",
                 "campground_id",
@@ -100,6 +101,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "data_provider",
                 "data_provider_ref",
                 "deleted_at",
+                "description",
                 "driveway_length",
                 "electric_hookups",
                 "equipment",
@@ -114,6 +116,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "max_people",
                 "max_rv_length",
                 "max_trailer_length",
+                "min_people",
                 "name",
                 "photos",
                 "picnic_table",

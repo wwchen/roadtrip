@@ -27,7 +27,7 @@ data class Campground(
     val bigRigFriendly: Boolean?,
     val reservationUrl: String?,
     val links: List<CampgroundLink>,
-    val photos: List<CampgroundPhoto>,
+    val photos: List<CatalogPhoto>,
     val alerts: JsonElement,
     val price: JsonElement,
     val cellService: JsonElement,

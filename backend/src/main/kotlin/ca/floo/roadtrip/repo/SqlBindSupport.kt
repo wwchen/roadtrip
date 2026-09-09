@@ -26,5 +26,3 @@ internal fun requireCatalogBatchWithinLimit(
 internal fun jsonObject(value: JsonElement?): String = value?.toString() ?: EMPTY_JSON_OBJECT
 
 internal fun jsonArray(value: JsonElement?): String = value?.toString() ?: EMPTY_JSON_ARRAY
-
-internal fun jsonArrayOrNull(value: JsonElement?): String? = value?.toString()

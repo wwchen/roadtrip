@@ -2,9 +2,8 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.model.domain.CatalogColumnJson
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL
@@ -20,7 +19,6 @@ class CampsiteRepo(
         val names: List<String> = emptyList(),
         val loops: List<String> = emptyList(),
         val siteTypes: List<String> = emptyList(),
-        val rawContainsJson: List<String> = emptyList(),
     )
 
     fun upsertCampsites(
@@ -135,6 +133,7 @@ class CampsiteRepo(
                         "?, ?, ?, " +
                         "?, ?, ?, ?, " +
                         "?, ?, ?::jsonb, ?::jsonb, " +
+                        "?::jsonb, ?, ?, " +
                         "now(), NULL)"
                 }
             val sql =
@@ -147,6 +146,7 @@ class CampsiteRepo(
                   water_hookups, electric_hookups, sewer_hookups,
                   max_people, max_cars, pull_through, driveway_length,
                   max_rv_length, max_trailer_length, photos, source_payload,
+                  attributes, description, min_people,
                   updated_at, deleted_at
                 )
                 VALUES $placeholders
@@ -179,6 +179,9 @@ class CampsiteRepo(
                   max_trailer_length = EXCLUDED.max_trailer_length,
                   photos = EXCLUDED.photos,
                   source_payload = EXCLUDED.source_payload,
+                  attributes = EXCLUDED.attributes,
+                  description = EXCLUDED.description,
+                  min_people = EXCLUDED.min_people,
                   updated_at = now(),
                   deleted_at = NULL
                 """.trimIndent()
@@ -196,7 +199,7 @@ class CampsiteRepo(
                 params += record.latitude
                 params += record.longitude
                 params += record.reservationUrl
-                params += jsonArrayOrNull(record.equipment)
+                params += CatalogColumnJson.encodeArray(record.equipment)
                 params += record.kindListed
                 params += jsonObject(record.schedule)
                 params += jsonObject(record.price)
@@ -212,8 +215,11 @@ class CampsiteRepo(
                 params += record.drivewayLength
                 params += record.maxRvLength
                 params += record.maxTrailerLength
-                params += jsonArray(record.photos)
+                params += CatalogColumnJson.encodeArray(record.photos)
                 params += jsonObject(record.sourcePayload)
+                params += CatalogColumnJson.encodeArray(record.attributes)
+                params += record.description
+                params += record.minPeople
             }
             ctx.execute(sql, *params.toTypedArray())
         }
@@ -294,10 +300,6 @@ class CampsiteRepo(
                 }
             params.addAll(filters.names.map { "%${escapeLikePattern(it)}%" })
         }
-        for (rawJson in filters.rawContainsJson) {
-            clauses += "c.source_payload @> ?::jsonb"
-            params += rawJson
-        }
         return SearchWhere(clauses, params)
     }
 
@@ -358,7 +360,7 @@ class CampsiteRepo(
             latitude = record.get("latitude", Double::class.javaObjectType),
             longitude = record.get("longitude", Double::class.javaObjectType),
             reservationUrl = record.get("reservation_url", String::class.java),
-            equipment = parseNullableJsonElement(record.get("equipment_text", String::class.java)),
+            equipment = CatalogColumnJson.decodeArray(record.get("equipment_text", String::class.java)),
             kindListed = record.get("kind_listed", String::class.java),
             schedule = parseJsonElement(record.get("schedule_text", String::class.java)),
             price = parseJsonElement(record.get("price_text", String::class.java)),
@@ -374,7 +376,10 @@ class CampsiteRepo(
             drivewayLength = record.get("driveway_length", Int::class.javaObjectType),
             maxRvLength = record.get("max_rv_length", Int::class.javaObjectType),
             maxTrailerLength = record.get("max_trailer_length", Double::class.javaObjectType),
-            photos = parseJsonElement(record.get("photos_text", String::class.java)),
+            photos = CatalogColumnJson.decodeArray(record.get("photos_text", String::class.java)),
+            attributes = CatalogColumnJson.decodeArray(record.get("attributes_text", String::class.java)),
+            description = record.get("description", String::class.java),
+            minPeople = record.get("min_people", Int::class.javaObjectType),
             sourcePayload = parseJsonElement(record.get("source_payload_text", String::class.java)),
             createdAt = record.instant("created_at"),
             updatedAt = record.instant("updated_at"),
@@ -385,11 +390,6 @@ class CampsiteRepo(
             bookingProviderRef = record.get("booking_provider_ref", String::class.java),
         )
     }
-
-    private fun parseNullableJsonElement(raw: String?): JsonElement? =
-        raw
-            ?.takeIf { it != "null" }
-            ?.let { Json.parseToJsonElement(it) }
 
     private data class ParentKey(
         val dataProvider: String,
@@ -449,6 +449,9 @@ class CampsiteRepo(
               c.max_rv_length,
               c.max_trailer_length,
               c.photos::text AS photos_text,
+              c.attributes::text AS attributes_text,
+              c.description,
+              c.min_people,
               c.source_payload::text AS source_payload_text,
               c.created_at,
               c.updated_at,

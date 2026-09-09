@@ -31,7 +31,7 @@ data class Campsite(
     val longitude: Double?,
     @SerialName("reservation_url")
     val reservationUrl: String?,
-    val equipment: JsonElement?,
+    val equipment: List<String>,
     @SerialName("kind_listed")
     val kindListed: String?,
     val schedule: JsonElement,
@@ -59,7 +59,11 @@ data class Campsite(
     val maxRvLength: Int?,
     @SerialName("max_trailer_length")
     val maxTrailerLength: Double?,
-    val photos: JsonElement,
+    val photos: List<CatalogPhoto>,
+    val attributes: List<CampsiteAttribute>,
+    val description: String?,
+    @SerialName("min_people")
+    val minPeople: Int?,
     @SerialName("source_payload")
     val sourcePayload: JsonElement,
     @Serializable(with = InstantIsoStringSerializer::class)

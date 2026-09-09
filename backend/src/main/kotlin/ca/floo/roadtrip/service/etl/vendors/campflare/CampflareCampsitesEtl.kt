@@ -9,7 +9,11 @@ import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 
 class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
     override val etlSlug = CAMPSITES_ETL_SLUG
@@ -54,7 +58,7 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
                 latitude = normalizedLatitude(raw.doubleField("latitude")),
                 longitude = normalizedLongitude(raw.doubleField("longitude")),
                 reservationUrl = reservationUrl,
-                equipment = raw.arrayField("equipment"),
+                equipment = campflareEquipment(raw.arrayField("equipment")),
                 kindListed = raw.stringField("kind_listed"),
                 schedule = raw.objectField("schedule"),
                 price = raw.objectField("price"),
@@ -70,9 +74,19 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
                 drivewayLength = raw.intField("driveway_length"),
                 maxRvLength = raw.intField("max_rv_length"),
                 maxTrailerLength = raw.doubleField("max_trailer_length"),
-                photos = raw.arrayField("photos"),
+                photos = campflarePhotos(raw.arrayField("photos")),
                 sourcePayload = raw,
             ),
         )
     }
+
+    /** Upstream lists equipment either as bare names or as objects keyed `name`. */
+    private fun campflareEquipment(equipment: JsonElement?): List<String> =
+        equipment?.jsonArray.orEmpty().mapNotNull { entry ->
+            when (entry) {
+                is JsonPrimitive -> entry.contentOrNull
+                is JsonObject -> entry.stringField("name")
+                else -> null
+            }?.trim()?.takeIf(String::isNotEmpty)
+        }
 }

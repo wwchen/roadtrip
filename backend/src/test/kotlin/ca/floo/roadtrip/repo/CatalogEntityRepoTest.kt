@@ -5,9 +5,10 @@ import ca.floo.roadtrip.model.domain.CampgroundContact
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
-import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.CampsiteAttribute
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -264,7 +265,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                         latitude = 37.738,
                         longitude = -119.566,
                         reservationUrl = "https://example.test/site/001",
-                        equipment = json("""[{"name":"Tent"}]"""),
+                        equipment = listOf("Tent"),
                         maxPeople = 6,
                         sourcePayload = json("""{"id":"upper-pines-site-001","campground_id":"upper-pines-campground-447"}"""),
                     ),
@@ -312,6 +313,55 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals("campflare", availabilityTarget.dataProviderRef.provider.id)
         assertEquals("upper-pines-site-001", availabilityTarget.dataProviderRef.serialize())
         assertEquals("Site 001", availabilityTarget.name)
+    }
+
+    @Test
+    fun `campsite typed columns round-trip through the repo`() {
+        CampgroundRepo(ctx).upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = "cg-typed-1"),
+                    name = "Typed Parent",
+                    latitude = 37.739,
+                    longitude = -119.565,
+                    location = CampgroundLocation(37.739, -119.565),
+                ),
+            ),
+            source = "recgov-campgrounds",
+        )
+
+        val campsites = CampsiteRepo(ctx)
+        campsites.upsertCampsiteBatch(
+            listOf(
+                CampsiteUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = "cs-typed-1"),
+                    parentDataProviderRef = DataProviderRef.RecGov(id = "cg-typed-1"),
+                    name = "Site 1",
+                    equipment = listOf("Tent", "RV"),
+                    photos = listOf(CatalogPhoto(url = "https://example.test/site1.jpg")),
+                    attributes =
+                        listOf(
+                            CampsiteAttribute(name = "Shade", value = "Partial"),
+                            CampsiteAttribute(name = "Pets allowed"),
+                        ),
+                    description = "Walk-in tent site by the water.",
+                    minPeople = 2,
+                    maxPeople = 6,
+                ),
+            ),
+        )
+
+        val campgroundId = assertNotNull(CampgroundRepo(ctx).findByPoi(poiIdForCampground("cg-typed-1"))).id
+        val row = campsites.findByCampground(campgroundId).single()
+
+        assertEquals(listOf("Tent", "RV"), row.equipment)
+        assertEquals(listOf(CatalogPhoto("https://example.test/site1.jpg")), row.photos)
+        assertEquals(
+            listOf(CampsiteAttribute("Shade", "Partial"), CampsiteAttribute("Pets allowed")),
+            row.attributes,
+        )
+        assertEquals("Walk-in tent site by the water.", row.description)
+        assertEquals(2, row.minPeople)
     }
 
     @Test
@@ -618,7 +668,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     longitude = 2.0,
                     location = CampgroundLocation(1.0, 2.0, region = "CA", country = "US", elevation = 30.0, address = Address(city = "X")),
                     links = listOf(CampgroundLink("https://a.test/", title = "A"), CampgroundLink("https://b.test/")),
-                    photos = listOf(CampgroundPhoto("https://p.test/1.jpg")),
+                    photos = listOf(CatalogPhoto("https://p.test/1.jpg")),
                     management = CampgroundManagement("NPS", website = "https://nps.test"),
                     contact = CampgroundContact(phone = "1", email = "e@x.test"),
                 ),
@@ -682,10 +732,71 @@ class CatalogEntityRepoTest : SharedDbTest() {
             campground.location,
         )
         assertEquals(listOf(CampgroundLink("https://a.test/", title = "A")), campground.links)
-        assertEquals(listOf(CampgroundPhoto("https://p.test/big.jpg")), campground.photos)
+        assertEquals(listOf(CatalogPhoto("https://p.test/big.jpg")), campground.photos)
         assertEquals(CampgroundManagement("NPS", website = "https://nps.test"), campground.management)
         assertEquals(CampgroundContact(phone = "555-0100"), campground.contact)
     }
+
+    /**
+     * The campsite counterpart of the V55 no-op: a row the typed repo just
+     * wrote is already canonical, so re-running V56 over it must change
+     * nothing.
+     */
+    @Test
+    fun `the campsite migration is a no-op on rows this repo wrote`() {
+        CampgroundRepo(ctx).upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = "cg-canonical-1"),
+                    name = "Canonical Parent",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                ),
+            ),
+            source = "recgov-campgrounds",
+        )
+        CampsiteRepo(ctx).upsertCampsiteBatch(
+            listOf(
+                CampsiteUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = "cs-canonical-1"),
+                    parentDataProviderRef = DataProviderRef.RecGov(id = "cg-canonical-1"),
+                    name = "Canonical Site",
+                    equipment = listOf("Tent", "RV"),
+                    photos = listOf(CatalogPhoto("https://p.test/site.jpg")),
+                    attributes = listOf(CampsiteAttribute("Shade", "Partial"), CampsiteAttribute("Pets allowed")),
+                    description = "Walk-in tent site by the water.",
+                    minPeople = 2,
+                ),
+            ),
+        )
+
+        val before = campsiteColumnsAsText()
+        assertEquals(
+            listOf(
+                """["Tent", "RV"]""" +
+                    """|[{"url": "https://p.test/site.jpg"}]""" +
+                    """|[{"name": "Shade", "value": "Partial"}, {"name": "Pets allowed"}]""" +
+                    """|Walk-in tent site by the water.""" +
+                    """|2""",
+            ),
+            before,
+        )
+
+        migrationStatements("V56__typed_campsite_columns.sql").forEach(ctx::execute)
+
+        assertEquals(before, campsiteColumnsAsText())
+    }
+
+    private fun campsiteColumnsAsText(): List<String> =
+        ctx
+            .fetch(
+                """
+                SELECT equipment::text AS equipment, photos::text AS photos, attributes::text AS attributes,
+                       description, min_people
+                FROM campsites ORDER BY id
+                """.trimIndent(),
+            ).map { row -> row.intoArray().joinToString("|") { it.toString() } }
 
     private fun campgroundColumnsAsText(): List<String> =
         ctx

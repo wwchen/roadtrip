@@ -5,7 +5,7 @@ import ca.floo.roadtrip.model.domain.CampgroundContact
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
-import ca.floo.roadtrip.model.domain.CampgroundPhoto
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -52,9 +52,9 @@ private fun campflareAddress(address: JsonObject): Address? {
     return parsed.takeIf { it != Address() }
 }
 
-internal fun campflarePhotos(photos: JsonElement?): List<CampgroundPhoto> =
+internal fun campflarePhotos(photos: JsonElement?): List<CatalogPhoto> =
     photos?.jsonArray.orEmpty().mapNotNull { entry ->
-        (entry as? JsonObject)?.first(photoUrlKeys)?.let(::CampgroundPhoto)
+        (entry as? JsonObject)?.first(photoUrlKeys)?.let(::CatalogPhoto)
     }
 
 /**

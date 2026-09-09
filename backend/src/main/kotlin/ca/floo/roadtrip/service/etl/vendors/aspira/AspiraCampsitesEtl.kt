@@ -198,7 +198,7 @@ class AspiraCampsitesEtl(
                                 loopName = leaf?.name ?: parentLeaf?.name,
                                 kind = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] } ?: "site",
                                 kindListed = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] },
-                                equipment = inv.allowedEquipment?.let { enrichAllowedEquipment(it, dto.dictionaries) },
+                                equipment = allowedEquipmentNames(inv.allowedEquipment, dto.dictionaries),
                                 maxPeople = inv.maxCapacity,
                                 sourcePayload =
                                     buildResourceRaw(
@@ -371,6 +371,18 @@ class AspiraCampsitesEtl(
                 // don't have to know Aspira-shaped JSON.
                 put("defined_attributes", flattenAttributes(inv.definedAttributes, dictionaries))
             }
+        }
+
+    /** The sub-category labels only; the enriched JSON stays in `sourcePayload`. */
+    private fun allowedEquipmentNames(
+        equipment: JsonArray?,
+        dictionaries: AspiraDictionaries,
+    ): List<String> =
+        equipment.orEmpty().mapNotNull { raw ->
+            val item = raw as? JsonObject ?: return@mapNotNull null
+            val categoryId = item["equipmentCategoryId"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+            val subCategoryId = item["subEquipmentCategoryId"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+            dictionaries.equipment[EquipmentKey(categoryId, subCategoryId)]?.subCategoryName
         }
 
     private fun enrichAllowedEquipment(

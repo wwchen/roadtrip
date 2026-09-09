@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.Campground
-import ca.floo.roadtrip.model.domain.CampgroundColumnJson
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.CatalogColumnJson
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
 import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
@@ -152,7 +152,7 @@ class CampgroundRepo(
             shortDescription = record.get("short_description", String::class.java),
             mediumDescription = record.get("medium_description", String::class.java),
             longDescription = record.get("long_description", String::class.java),
-            location = CampgroundColumnJson.decodeObject(record.get("location_text", String::class.java)),
+            location = CatalogColumnJson.decodeObject(record.get("location_text", String::class.java)),
             defaultCampsiteSchedule = parseJsonElement(record.get("default_campsite_schedule_text", String::class.java)),
             amenities = parseJsonElement(record.get("amenities_text", String::class.java)),
             maxRvLength = record.get("max_rv_length", Double::class.javaObjectType),
@@ -160,13 +160,13 @@ class CampgroundRepo(
             hasPullThroughSites = record.get("has_pull_through_sites", Boolean::class.javaObjectType),
             bigRigFriendly = record.get("big_rig_friendly", Boolean::class.javaObjectType),
             reservationUrl = record.get("reservation_url", String::class.java),
-            links = CampgroundColumnJson.decodeArray(record.get("links_text", String::class.java)),
-            photos = CampgroundColumnJson.decodeArray(record.get("photos_text", String::class.java)),
+            links = CatalogColumnJson.decodeArray(record.get("links_text", String::class.java)),
+            photos = CatalogColumnJson.decodeArray(record.get("photos_text", String::class.java)),
             alerts = parseJsonElement(record.get("alerts_text", String::class.java)),
             price = parseJsonElement(record.get("price_text", String::class.java)),
             cellService = parseJsonElement(record.get("cell_service_text", String::class.java)),
-            management = CampgroundColumnJson.decodeObject(record.get("management_text", String::class.java)),
-            contact = CampgroundColumnJson.decodeObject(record.get("contact_text", String::class.java)),
+            management = CatalogColumnJson.decodeObject(record.get("management_text", String::class.java)),
+            contact = CatalogColumnJson.decodeObject(record.get("contact_text", String::class.java)),
             connections = parseJsonElement(record.get("connections_text", String::class.java)),
             metadata = parseJsonElement(record.get("metadata_text", String::class.java)),
             sourcePayload = parseJsonElement(record.get("source_payload_text", String::class.java)),
@@ -286,7 +286,7 @@ class CampgroundRepo(
                 params += record.shortDescription
                 params += record.mediumDescription
                 params += record.longDescription
-                params += CampgroundColumnJson.encodeObject(record.location)
+                params += CatalogColumnJson.encodeObject(record.location)
                 params += jsonObject(record.defaultCampsiteSchedule)
                 params += jsonObject(record.amenities)
                 params += record.maxRvLength
@@ -294,13 +294,13 @@ class CampgroundRepo(
                 params += record.hasPullThroughSites
                 params += record.bigRigFriendly
                 params += record.reservationUrl
-                params += CampgroundColumnJson.encodeArray(record.links)
-                params += CampgroundColumnJson.encodeArray(record.photos)
+                params += CatalogColumnJson.encodeArray(record.links)
+                params += CatalogColumnJson.encodeArray(record.photos)
                 params += jsonArray(record.alerts)
                 params += jsonObject(record.price)
                 params += jsonObject(record.cellService)
-                params += CampgroundColumnJson.encodeObject(record.management)
-                params += CampgroundColumnJson.encodeObject(record.contact)
+                params += CatalogColumnJson.encodeObject(record.management)
+                params += CatalogColumnJson.encodeObject(record.contact)
                 params += jsonObject(record.connections)
                 params += jsonObject(record.metadata)
                 params += jsonObject(record.sourcePayload)

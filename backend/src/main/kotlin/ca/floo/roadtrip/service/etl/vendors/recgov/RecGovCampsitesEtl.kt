@@ -95,7 +95,7 @@ class RecGovCampsitesEtl(
                                 loopName = raw.stringField("loop"),
                                 kind = campsiteType ?: DEFAULT_CAMPSITE_KIND,
                                 kindListed = campsiteType,
-                                equipment = raw["equipment_types"] as? JsonArray,
+                                equipment = equipmentNames(raw),
                                 maxPeople = raw["max_num_people"]?.jsonPrimitive?.intOrNull,
                                 sourcePayload =
                                     withSynthetic(
@@ -111,6 +111,11 @@ class RecGovCampsitesEtl(
                 }
             }
         }
+
+    private fun equipmentNames(raw: JsonObject): List<String> =
+        (raw["equipment_types"] as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf(String::isNotEmpty) }
+            ?: emptyList()
 
     private fun JsonObject.stringField(key: String): String? =
         (this[key] as? JsonPrimitive)
