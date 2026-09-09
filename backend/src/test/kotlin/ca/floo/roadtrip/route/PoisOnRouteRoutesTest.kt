@@ -57,7 +57,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
 
     private fun poiService(): PoiService =
         PoiService(
-            poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf("recgov")),
+            poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf("recgov", "campflare")),
             detailServices =
                 listOf(
                     CampgroundService(
@@ -157,7 +157,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `corridor uniques campground rows by provider campground id`() =
+    fun `corridor uniques campground rows across data providers on one booking ref`() =
         testApplication {
             seed(
                 listOf(
@@ -171,11 +171,11 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                         bookingProviderRef = "12345",
                     ),
                     row(
-                        sourceId = "recgov-duplicate",
+                        sourceId = "campflare-duplicate",
                         lon = -122.4,
                         lat = 47.7,
                         category = "campground",
-                        source = "recgov",
+                        source = "campflare",
                         bookingProvider = "recgov",
                         bookingProviderRef = "12345",
                     ),
