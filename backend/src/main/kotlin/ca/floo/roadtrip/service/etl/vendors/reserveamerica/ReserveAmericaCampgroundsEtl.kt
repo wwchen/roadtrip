@@ -69,22 +69,16 @@ class ReserveAmericaCampgroundsEtl(
                 val name = displayName(park.name, settings.titleSuffix)
                 val vendorRefId = "${settings.sourceIdPrefix}-${park.parkId}"
                 val parkExtras = parkExtras(park, name, settings.contract)
+                val bookingProvider =
+                    BookingProvider
+                        .fromIdOrNull(settings.provider.trim().lowercase())
+                        ?.takeIf { it == BookingProvider.RESERVEAMERICA }
                 yield(
                     TransformResult.Ok(
                         CampgroundUpsertCandidate(
                             dataProviderRef = DataProviderRef.ReserveAmerica(id = vendorRefId),
-                            bookingProvider =
-                                if (settings.provider.lowercase() == "reserveamerica") {
-                                    BookingProvider.RESERVEAMERICA
-                                } else {
-                                    null
-                                },
-                            bookingProviderRef =
-                                if (settings.provider.lowercase() == "reserveamerica") {
-                                    "${settings.contract}:${park.parkId}"
-                                } else {
-                                    null
-                                },
+                            bookingProvider = bookingProvider,
+                            bookingProviderRef = bookingProvider?.let { "${settings.contract}:${park.parkId}" },
                             name = name,
                             latitude = park.lat,
                             longitude = park.lon,
@@ -230,7 +224,7 @@ private data class ReserveAmericaSettings(
                 region = region,
                 country = ctx.argFor(etlSlug, "country") ?: "CA",
                 agency = ctx.requiredConstantAgency(etlSlug),
-                provider = ctx.argFor(etlSlug, "provider") ?: "reserveamerica",
+                provider = ctx.argFor(etlSlug, "provider") ?: BookingProvider.RESERVEAMERICA.id,
                 titleSuffix = ctx.argFor(etlSlug, "title_suffix") ?: ", $region",
                 sourceIdPrefix = ctx.argFor(etlSlug, "source_id_prefix") ?: "ra",
             )

@@ -241,7 +241,7 @@ private fun classifyRecgovStatus(raw: String?): AvailabilityStatus {
         status.equals("Not Reservable", true) -> AvailabilityStatus.FIRST_COME
         status.equals("Closed", true) -> AvailabilityStatus.CLOSED
         status.equals("Reserved", true) -> AvailabilityStatus.RESERVED
-        else -> AvailabilityStatus.RESERVED
+        else -> AvailabilityStatus.UNKNOWN
     }
 }
 

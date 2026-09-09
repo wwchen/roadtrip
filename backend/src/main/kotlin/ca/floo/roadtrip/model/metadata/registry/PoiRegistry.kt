@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.metadata.registry
 
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.YamlMap
 import com.charleskorn.kaml.YamlNode
@@ -243,8 +244,10 @@ class PoiRegistry(
         poiData
             .mapNotNull { row -> row.etls.lastOrNull() }
             .filter { it.adapter == "ReserveAmericaCampgroundsEtl" }
-            .filter { (it.args["provider"] ?: "reserveamerica").lowercase() == "reserveamerica" }
-            .map { terminal ->
+            .filter { row ->
+                val provider = row.args["provider"]?.trim()?.lowercase() ?: BookingProvider.RESERVEAMERICA.id
+                BookingProvider.fromIdOrNull(provider) == BookingProvider.RESERVEAMERICA
+            }.map { terminal ->
                 val contract =
                     terminal.args["contract"]
                         ?: error("ReserveAmerica source '${terminal.slug}' is missing args.contract")
