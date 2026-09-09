@@ -240,7 +240,7 @@ private fun classifyRecgovStatus(raw: String?): AvailabilityStatus {
         status.equals("Available", true) || status.equals("Open", true) -> AvailabilityStatus.AVAILABLE
         status.equals("Not Reservable", true) -> AvailabilityStatus.FIRST_COME
         status.equals("Closed", true) -> AvailabilityStatus.CLOSED
-        status.equals("Reserved", true) -> AvailabilityStatus.RESERVED
+        status.equals("Reserved", true) || status.equals("Not Available", true) -> AvailabilityStatus.RESERVED
         else -> AvailabilityStatus.UNKNOWN
     }
 }

@@ -62,10 +62,11 @@ Status mapping (`classifyRecgovStatus`):
 |---|---|
 | `Available`, `Open` | `AVAILABLE` |
 | `Reserved` | `RESERVED` |
+| `Not Available` | `RESERVED` |
 | `Closed` | `CLOSED` |
 | `Not Reservable` | `FIRST_COME` |
 | `null`, empty | `UNKNOWN` |
-| anything else | `RESERVED` |
+| anything else | `UNKNOWN` |
 
 The earliest bookable day at or after the window start is reported as
 `AvailabilitySeasonBlock.reopensOn`, which is how a closed-for-the-season

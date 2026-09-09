@@ -200,6 +200,20 @@ class RecGovObservationsTest {
     }
 
     @Test
+    fun `not available maps to reserved`() {
+        val map = mapOf("100" to campsiteWith(mapOf(futureKey(0) to "Not Available")))
+        val body = classify(clientReturning(map), days = 1)
+        val day = body["availability"]!!.jsonArray.single().jsonObject
+
+        assertEquals(
+            "reserved",
+            day["campsite_statuses"]!!
+                .jsonObject["100"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
     fun `missing date row maps to unknown rather than closed`() {
         val map = mapOf("100" to campsiteWith(emptyMap()))
         val body = classify(clientReturning(map), days = 1)
