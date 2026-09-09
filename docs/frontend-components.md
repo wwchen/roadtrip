@@ -57,6 +57,8 @@ features, features and pages may import domains, and domains never import featur
 compose multiple features to exercise a page, but production composition belongs in
 `pages/`.
 
+The `Campsite` type in `api/campsite-api.ts` is the closed mirror of `CampsiteDto`: every field is explicitly typed, with no index signature. When the drawer needs a new fact, the vendor ETL promotes it to a typed column and the DTO gains a field; nothing in the frontend reads a `source_payload` or reconciles vendor spellings. `features/availability/site-detail-facts.ts` is the one place campsite facts are turned into copy.
+
 ## Where copy lives
 
 User-facing copy for the availability, watch and booking surfaces is in
