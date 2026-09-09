@@ -61,7 +61,17 @@ UPDATE campsites SET attributes = COALESCE((
   ) s WHERE s.name IS NOT NULL), '[]'::jsonb)
 WHERE attributes = '[]'::jsonb AND jsonb_typeof(source_payload->'defined_attributes') = 'array';
 
+-- The old rec.gov ETL stored reserve_type and use beside the attribute bag; the
+-- new one appends them as named attributes, so the backfill does too.
 UPDATE campsites SET attributes = COALESCE((
-  SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object('name', initcap(replace(t.key, '_', ' ')), 'value', NULLIF(btrim(t.value), ''))) ORDER BY t.key)
-  FROM jsonb_each_text(source_payload->'_roadtrip_tags'->'attributes') AS t(key, value)), '[]'::jsonb)
+  SELECT jsonb_agg(jsonb_strip_nulls(jsonb_build_object('name', s.name, 'value', s.value)) ORDER BY s.ord, s.sort_key)
+  FROM (
+    SELECT 0 AS ord, t.key AS sort_key, initcap(replace(t.key, '_', ' ')) AS name, NULLIF(btrim(t.value), '') AS value
+    FROM jsonb_each_text(source_payload->'_roadtrip_tags'->'attributes') AS t(key, value)
+    UNION ALL
+    SELECT 1, '', 'Reserve type', NULLIF(btrim(source_payload->'_roadtrip_tags'->>'reserve_type'), '')
+    UNION ALL
+    SELECT 2, '', 'Type of use', NULLIF(btrim(source_payload->'_roadtrip_tags'->>'use'), '')
+  ) s
+  WHERE s.ord = 0 OR s.value IS NOT NULL), '[]'::jsonb)
 WHERE attributes = '[]'::jsonb AND jsonb_typeof(source_payload->'_roadtrip_tags'->'attributes') = 'object';
