@@ -29,7 +29,10 @@ export function detailFacts(site: Partial<Campsite>): SiteFact[] {
   add('Loop', site.loop_name);
   add('Type', site.kind_listed ?? site.kind);
   add('Capacity', capacityLabel(site));
-  add('Equipment', (site.equipment ?? []).slice(0, MAX_EQUIPMENT_ITEMS).join(', '));
+  add(
+    'Equipment',
+    (site.equipment ?? []).filter(isNotBlank).slice(0, MAX_EQUIPMENT_ITEMS).join(', '),
+  );
   add('Provider', site.data_provider);
   add('Provider ID', site.data_provider_ref);
   return facts;
@@ -91,7 +94,9 @@ export function featureLabels(site: Partial<Campsite>): string[] {
     const value = compactText(attribute.value);
     labels.push(value ? `${attribute.name}: ${value}` : attribute.name);
   }
-  return unique(labels.map((label) => truncateText(label, MAX_FEATURE_CHARS))).slice(0, MAX_FEATURES);
+  return unique(
+    labels.map((label) => truncateText(label, MAX_FEATURE_CHARS)).filter(isNotBlank),
+  ).slice(0, MAX_FEATURES);
 }
 
 export function descriptionText(value: string | null | undefined): string {
@@ -109,6 +114,11 @@ function lengthLabel(feet: number | null | undefined): string {
 
 function compactText(value: string | null | undefined): string {
   return value ? value.replace(/\s+/g, ' ').trim() : '';
+}
+
+/** A vendor's empty string is not a chip and not an equipment name. */
+function isNotBlank(value: string): boolean {
+  return compactText(value) !== '';
 }
 
 function unique(values: readonly string[]): string[] {

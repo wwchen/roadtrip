@@ -47,6 +47,12 @@ describe('the fact list', () => {
     expect(detailFacts({ id: 1 })).toEqual([]);
   });
 
+  test('blank equipment entries do not use up the four slots', () => {
+    expect(detailFacts({ equipment: ['', '  ', 'Tent', 'RV', 'Van', 'Boat', 'Trailer'] })).toEqual([
+      { label: 'Equipment', value: 'Tent, RV, Van, Boat' },
+    ]);
+  });
+
   test('falls back to the raw kind when the provider listed no label', () => {
     expect(detailFacts({ kind: 'RV NONELECTRIC' })).toEqual([
       { label: 'Type', value: 'RV NONELECTRIC' },
@@ -91,6 +97,12 @@ describe('feature chips', () => {
 
   test('deduplicate a fact that arrives as a column and an attribute', () => {
     expect(featureLabels({ firepit: true, attributes: [{ name: 'firepit' }] })).toEqual(['Firepit']);
+  });
+
+  test('a blank attribute name is not a chip', () => {
+    expect(featureLabels({ attributes: [{ name: '' }, { name: '  ' }, { name: 'Shade' }] })).toEqual(
+      ['Shade'],
+    );
   });
 
   test('truncate a chip whose attribute value runs on', () => {
