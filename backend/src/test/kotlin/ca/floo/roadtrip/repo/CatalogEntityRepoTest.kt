@@ -788,30 +788,57 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals(before, campsiteColumnsAsText())
     }
 
+    /**
+     * The campsite migration's actual job: rows written before the columns were
+     * typed carry vendor-shaped equipment, photos and attribute bags, and the
+     * read path decodes strictly now.
+     */
+    @Test
+    fun `the campsite migration rewrites legacy vendor shapes`() {
+        seedCampsites("cg-legacy-shape", "cs-legacy-recgov", "cs-legacy-aspira")
+        ctx.execute(
+            """
+            UPDATE campsites
+            SET equipment = ?::jsonb, photos = ?::jsonb, source_payload = ?::jsonb,
+                attributes = '[]'::jsonb, min_people = NULL, description = NULL
+            WHERE data_provider_ref = 'cs-legacy-recgov'
+            """.trimIndent(),
+            """[{"name":"Tent"},"RV"]""",
+            """[{"large_url":"https://x/a.jpg"},{"url":"https://x/b.jpg"}]""",
+            """{"_roadtrip_tags":{"capacity":{"min":"2"},"reserve_type":"Site-Specific","use":"Overnight",""" +
+                """"attributes":{"fire_pit":"Yes","shade":"Partial"}},"description":"<p>By the <b>lake</b></p>"}""",
+        )
+        ctx.execute(
+            "UPDATE campsites SET source_payload = ?::jsonb, attributes = '[]'::jsonb WHERE data_provider_ref = 'cs-legacy-aspira'",
+            """{"defined_attributes":[{"name":"Max Vehicle Length","value_labels":["32 ft"]},{"value":3}]}""",
+        )
+
+        migrationStatements("V56__typed_campsite_columns.sql").forEach(ctx::execute)
+
+        val repo = CampsiteRepo(ctx)
+        val recgov = checkNotNull(repo.findById(campsiteId("cs-legacy-recgov")))
+        assertEquals(listOf("Tent", "RV"), recgov.equipment)
+        assertEquals(listOf(CatalogPhoto("https://x/a.jpg"), CatalogPhoto("https://x/b.jpg")), recgov.photos)
+        assertEquals(2, recgov.minPeople)
+        assertEquals("By the lake", recgov.description)
+        assertEquals(
+            listOf(
+                CampsiteAttribute("Fire Pit", "Yes"),
+                CampsiteAttribute("Shade", "Partial"),
+                CampsiteAttribute("Reserve type", "Site-Specific"),
+                CampsiteAttribute("Type of use", "Overnight"),
+            ),
+            recgov.attributes,
+        )
+
+        val aspira = checkNotNull(repo.findById(campsiteId("cs-legacy-aspira")))
+        assertEquals(listOf(CampsiteAttribute("Max Vehicle Length", "32 ft")), aspira.attributes)
+    }
+
     /** Legacy payloads mix a non-numeric `min_capacity` with a numeric tags value; the backfill must survive both. */
     @Test
     fun `the campsite migration backfills min people past a non-numeric min capacity`() {
-        CampgroundRepo(ctx).upsertCampgrounds(
-            listOf(
-                CampgroundUpsertCandidate(
-                    dataProviderRef = DataProviderRef.RecGov(id = "cg-legacy-1"),
-                    name = "Legacy Parent",
-                    latitude = 1.0,
-                    longitude = 2.0,
-                    location = CampgroundLocation(1.0, 2.0),
-                ),
-            ),
-            source = "recgov-campgrounds",
-        )
-        CampsiteRepo(ctx).upsertCampsiteBatch(
-            listOf(
-                CampsiteUpsertCandidate(
-                    dataProviderRef = DataProviderRef.RecGov(id = "cs-legacy-1"),
-                    parentDataProviderRef = DataProviderRef.RecGov(id = "cg-legacy-1"),
-                    name = "Legacy Site",
-                ),
-            ),
-        )
+        seedCampsites("cg-legacy-1", "cs-legacy-1")
         ctx.execute(
             "UPDATE campsites SET min_people = NULL, source_payload = ?::jsonb",
             """{"min_capacity": "n/a", "_roadtrip_tags": {"capacity": {"min": 3}}}""",
@@ -827,6 +854,39 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 .toInt(),
         )
     }
+
+    /** A parent campground plus one bare campsite per ref, for migration replays to rewrite. */
+    private fun seedCampsites(
+        campgroundRef: String,
+        vararg campsiteRefs: String,
+    ) {
+        CampgroundRepo(ctx).upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = campgroundRef),
+                    name = "Legacy Parent",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                ),
+            ),
+            source = "recgov-campgrounds",
+        )
+        CampsiteRepo(ctx).upsertCampsiteBatch(
+            campsiteRefs.map { ref ->
+                CampsiteUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = ref),
+                    parentDataProviderRef = DataProviderRef.RecGov(id = campgroundRef),
+                    name = ref,
+                )
+            },
+        )
+    }
+
+    private fun campsiteId(dataProviderRef: String): Long =
+        ctx
+            .fetchOne("SELECT id FROM campsites WHERE data_provider_ref = ?", dataProviderRef)!!
+            .get("id", Long::class.java)
 
     private fun campsiteColumnsAsText(): List<String> =
         ctx
