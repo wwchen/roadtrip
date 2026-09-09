@@ -2,12 +2,23 @@ package ca.floo.roadtrip.config
 
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import java.time.Duration
+import java.util.Objects
 
-data class ApiCacheEntity(
+// defaultTtl is deliberately outside equality: ttlByEntity keys on identity, so a
+// per-provider default must not make a lookup miss.
+class ApiCacheEntity(
     val namespace: String,
     val configKey: String,
     val defaultTtl: Duration,
 ) {
+    override fun equals(other: Any?): Boolean =
+        this === other ||
+            (other is ApiCacheEntity && namespace == other.namespace && configKey == other.configKey)
+
+    override fun hashCode(): Int = Objects.hash(namespace, configKey)
+
+    override fun toString(): String = "ApiCacheEntity(namespace=$namespace, configKey=$configKey)"
+
     @Suppress("ObjectPropertyNaming")
     companion object {
         private val DEFAULT_ROUTE_TTL: Duration = Duration.ofMinutes(10)

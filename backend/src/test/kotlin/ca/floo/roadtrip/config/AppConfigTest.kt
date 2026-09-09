@@ -18,6 +18,14 @@ class AppConfigTest {
         AppConfig.fromProperties(requiredAvailabilityProperties + properties)
 
     @Test
+    fun `cache entity identity ignores the default TTL`() {
+        assertEquals(
+            ApiCacheEntity("x", "x.ttl", Duration.ofMinutes(1)),
+            ApiCacheEntity("x", "x.ttl", Duration.ofMinutes(2)),
+        )
+    }
+
+    @Test
     fun `availability config parses cooldown durations`() {
         val config =
             appConfig(
