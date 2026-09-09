@@ -58,6 +58,7 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.configuredSnapshotFreshnessTtl
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingActionService
 import ca.floo.roadtrip.service.etl.framework.IngestController
@@ -215,7 +216,7 @@ private fun campsiteAvailabilityController(
                 dateResolver = dateResolver,
                 failoverFetcher = failoverFetcher,
                 availabilityRepo = AvailabilityRepo(ctx),
-                snapshotFreshnessTtl = { provider -> cacheConfig.availabilityTtl(provider.id) },
+                snapshotFreshnessTtl = configuredSnapshotFreshnessTtl(cacheConfig),
             ),
         dateResolver = dateResolver,
         watchCapabilityService = watchCapabilities,

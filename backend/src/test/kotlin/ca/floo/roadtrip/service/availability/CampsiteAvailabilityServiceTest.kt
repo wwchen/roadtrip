@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.config.ApiCacheConfig
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
@@ -35,6 +36,7 @@ import kotlin.test.assertSame
 private val earliestBookable: LocalDate = LocalDate.of(2026, 8, 1)
 private const val DEFAULT_WINDOW_DAYS = 7L
 private const val WIDE_WINDOW_DAYS = 60L
+private val aspiraTtlOverride: Duration = Duration.ofMinutes(15)
 
 class CampsiteAvailabilityServiceTest : SharedDbTest() {
     private lateinit var campground: Campground
@@ -214,6 +216,21 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
                 provider.id,
             )
         }
+    }
+
+    @Test
+    fun `configured snapshot freshness TTL reads the per-provider cache override`() {
+        val cache =
+            ApiCacheConfig(
+                ttlByEntity = mapOf(ApiCacheEntity.availability(BookingProvider.ASPIRA) to aspiraTtlOverride),
+            )
+        val snapshotFreshnessTtl = configuredSnapshotFreshnessTtl(cache)
+
+        assertEquals(aspiraTtlOverride, snapshotFreshnessTtl(FakeAvailabilityProvider(BookingProvider.ASPIRA)))
+        assertEquals(
+            ApiCacheEntity.availability(BookingProvider.RECGOV).defaultTtl,
+            snapshotFreshnessTtl(FakeAvailabilityProvider(BookingProvider.RECGOV)),
+        )
     }
 
     /**
