@@ -831,7 +831,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/model/metadata/ingest/RunStatus.kt`
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/model/metadata/ingest/RunOutcome.kt`
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/framework/IngestController.kt:139,151,155`
-- Modify: `backend/src/main/kotlin/ca/floo/roadtrip/route/api/admin/AdminIngestRoutes.kt:115-119,226-233`
+- Modify: `backend/src/main/kotlin/ca/floo/roadtrip/route/api/admin/AdminIngestRoutes.kt:115-119,154,162,226-233`
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/provider/RecGovAvailabilityProvider.kt:235-247`
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/vendors/reserveamerica/ReserveAmericaCampgroundsEtl.kt:77-90`
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/model/metadata/registry/PoiRegistry.kt:271`
@@ -885,7 +885,7 @@ enum class RunStatus(val wire: String) {
 val status = if (outcome.status == RunStatus.FAILED) HttpStatusCode.InternalServerError else HttpStatusCode.OK
 ```
 
-and `toSchema()` sets `status = status.wire`.
+and `toSchema()` sets `status = status.wire`. The batch runner in the same file compares and forwards the status too: line 154 becomes `if (outcome.status == RunStatus.FAILED) anyFailed = true` and line 162 passes `outcome.status.wire`.
 
 `ReserveAmericaCampgroundsEtl.kt:77-90`:
 
