@@ -72,16 +72,20 @@ A shared `service/etl/framework/HtmlText.stripTags(s)` does the one
 tag-stripping the frontend did (`<[^>]*>` → space, collapse whitespace, trim);
 the ReserveCalifornia highlight splitter uses it too.
 
-**Migration `V56__typed_campsite_columns.sql`.** Adds the three columns;
-rewrites `equipment` (string or `{name}` object → string) and `photos`
-(`url`/`large_url`/`medium_url`/`small_url`/`original_url` → `{url}`) in
-place; backfills `min_people` from `source_payload->'min_capacity'` (Aspira)
-and `source_payload->'_roadtrip_tags'->'capacity'->>'min'` (rec.gov),
-`description` from `source_payload->>'description'` with tags stripped by
-`regexp_replace`, and `attributes` from Aspira's `defined_attributes[]` and
-rec.gov's `_roadtrip_tags->'attributes'` (slug keys humanized: `_` → space,
-initcap). Idempotent. Rows the ETLs write after this change already carry the
-canonical shape.
+**Migration `V56__typed_campsite_columns.sql`.** Adds the three columns and
+canonicalizes the two list columns, so a row written before the columns were
+typed still decodes strictly: `equipment` (string or `{name}` object → string)
+and `photos` (`url`/`large_url`/`medium_url`/`small_url`/`original_url` →
+`{url}`, elements with no usable URL dropped) are rewritten in place.
+`equipment` stays nullable and keeps its NULL-tolerant check — a rollback puts
+the previous jar back, and that jar binds SQL NULL for vendors that never set
+it, so `SET NOT NULL` waits for a later migration. The migration backfills
+nothing: the deploy runs `make data-import` immediately after it, and the
+import rewrites every live campsite row through the new ETLs, filling
+`attributes`, `description`, and `min_people` from the vendor's own field
+names. Between migrate and import, rec.gov campsites render no attribute chips
+and no minimum capacity — the drawer's other facts are unaffected. Idempotent.
+Rows the ETLs write after this change already carry the canonical shape.
 
 **Closed DTO** (`model/api/CampsiteDto.kt`), the only campsite wire shape,
 used by `PoiCampsitesResponseSchema.campsites` and
@@ -131,7 +135,7 @@ migration; the DTO keeps `kind` and `kind_listed` as strings for now.
 
 ## Risks
 
-- **Strict decode on read.** A campsite row whose `equipment` is a legacy shape the migration did not anticipate throws on read. The migration is written against every shape the five ETLs and the fixtures produce, and the plan includes a dry-run count query for production.
-- **Attributes from rec.gov re-import.** The V56 backfill humanizes slug keys (`fire_pit` → `Fire Pit`); the next import overwrites them with the vendor's own names. Values are unchanged. After re-import the promoted names (Fire Pit, Picnic Table, Accessible, Max Num of Vehicles, Driveway Length, Max Vehicle Length) leave `attributes` and appear as the typed columns instead, and the slug round-trip is lossy for small words and punctuation (`Max Num Of Vehicles`) until then.
+- **Strict decode on read.** A campsite row whose `equipment` is a legacy shape the migration did not anticipate throws on read. The migration is written against every shape the five ETLs and the fixtures produce, and the read path treats a SQL NULL list column as an empty list rather than throwing.
+- **The migrate-to-import window.** `attributes`, `description`, and `min_people` are empty until `make data-import` finishes, so rec.gov campsites show no attribute chips and no minimum capacity for the length of that import. Nothing else in the drawer depends on them, and a failed import leaves the columns empty rather than wrong — the next scheduled import fills them. After the import the promoted facts (Fire Pit, Picnic Table, Accessible, Max Num of Vehicles, Driveway Length, Max Vehicle Length) are typed columns rather than attributes, so they never appear twice.
 - **Wire break.** `campsites[]` loses every field the drawer did not read, and the watch `campsite` embed shrinks the same way. The only consumers are `frontend/src` (updated in the same change) and the `campsite-stats` Grafana dashboard, which reads columns via SQL, not the API.
 - **Frontend fixture debt.** Nine test files seed `source_payload`; they are rewritten to the DTO shape rather than tolerated.
