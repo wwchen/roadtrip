@@ -132,6 +132,6 @@ migration; the DTO keeps `kind` and `kind_listed` as strings for now.
 ## Risks
 
 - **Strict decode on read.** A campsite row whose `equipment` is a legacy shape the migration did not anticipate throws on read. The migration is written against every shape the five ETLs and the fixtures produce, and the plan includes a dry-run count query for production.
-- **Attributes from rec.gov re-import.** The V56 backfill humanizes slug keys (`fire_pit` → `Fire Pit`); the next import overwrites them with the vendor's own names. Values are unchanged.
+- **Attributes from rec.gov re-import.** The V56 backfill humanizes slug keys (`fire_pit` → `Fire Pit`); the next import overwrites them with the vendor's own names. Values are unchanged. After re-import the promoted names (Fire Pit, Picnic Table, Accessible, Max Num of Vehicles, Driveway Length, Max Vehicle Length) leave `attributes` and appear as the typed columns instead, and the slug round-trip is lossy for small words and punctuation (`Max Num Of Vehicles`) until then.
 - **Wire break.** `campsites[]` loses every field the drawer did not read, and the watch `campsite` embed shrinks the same way. The only consumers are `frontend/src` (updated in the same change) and the `campsite-stats` Grafana dashboard, which reads columns via SQL, not the API.
 - **Frontend fixture debt.** Nine test files seed `source_payload`; they are rewritten to the DTO shape rather than tolerated.

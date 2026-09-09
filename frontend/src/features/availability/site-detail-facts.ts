@@ -3,6 +3,7 @@ import type { Campsite } from '@/api/campsite-api';
 
 /** Feature chips past this are noise in a row that is already dense. */
 const MAX_FEATURES = 12;
+const MAX_FEATURE_CHARS = 84;
 const MAX_DESCRIPTION_CHARS = 260;
 const MAX_EQUIPMENT_ITEMS = 4;
 
@@ -90,15 +91,16 @@ export function featureLabels(site: Partial<Campsite>): string[] {
     const value = compactText(attribute.value);
     labels.push(value ? `${attribute.name}: ${value}` : attribute.name);
   }
-  return unique(labels).slice(0, MAX_FEATURES);
+  return unique(labels.map((label) => truncateText(label, MAX_FEATURE_CHARS))).slice(0, MAX_FEATURES);
 }
 
 export function descriptionText(value: string | null | undefined): string {
-  const text = compactText(value);
-  if (!text) return '';
-  return text.length > MAX_DESCRIPTION_CHARS
-    ? `${text.slice(0, MAX_DESCRIPTION_CHARS - 3).trim()}...`
-    : text;
+  return truncateText(compactText(value), MAX_DESCRIPTION_CHARS);
+}
+
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 3).trim()}...`;
 }
 
 function lengthLabel(feet: number | null | undefined): string {

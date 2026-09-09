@@ -76,7 +76,7 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
                 maxRvLength = raw.intField("max_rv_length"),
                 maxTrailerLength = raw.doubleField("max_trailer_length"),
                 photos = campflarePhotos(raw.arrayField("photos")),
-                description = raw.stringField("description")?.let(HtmlText::stripTags),
+                description = raw.stringField("description")?.let(HtmlText::stripTags)?.takeIf { it.isNotBlank() },
                 sourcePayload = raw,
             ),
         )

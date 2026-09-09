@@ -93,6 +93,13 @@ describe('feature chips', () => {
     expect(featureLabels({ firepit: true, attributes: [{ name: 'firepit' }] })).toEqual(['Firepit']);
   });
 
+  test('truncate a chip whose attribute value runs on', () => {
+    const [chip] = featureLabels({ attributes: [{ name: 'Notes', value: 'x'.repeat(200) }] });
+
+    expect(chip).toHaveLength(84);
+    expect(chip.endsWith('...')).toBe(true);
+  });
+
   test('are capped so a dense row stays readable', () => {
     const many = Array.from({ length: 40 }, (_, index) => ({ name: `Feature ${index}` }));
 
