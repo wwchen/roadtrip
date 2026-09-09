@@ -24,6 +24,28 @@ class PoiServingRepoTest : SharedDbTest() {
     }
 
     @Test
+    fun `campgrounds from one data provider sharing a booking ref are both pins`() {
+        val a =
+            seed(
+                source = "aspira",
+                sourceId = "bc-1",
+                bookingProvider = "aspira",
+                bookingProviderRef = SHARED_ASPIRA_REF,
+            )
+        val b =
+            seed(
+                source = "aspira",
+                sourceId = "bc-2",
+                bookingProvider = "aspira",
+                bookingProviderRef = SHARED_ASPIRA_REF,
+            )
+
+        val rows = repo(enabledDataProviders = setOf("aspira")).fetchPoisWithinPolygon(WORLD, listOf("campground"))
+
+        assertEquals(setOf(a, b), rows.map { it.id }.toSet())
+    }
+
+    @Test
     fun `campgrounds without a booking ref dedupe on data provider identity`() {
         val a = seed(source = "recgov", sourceId = "1", bookingProvider = null, bookingProviderRef = null)
         val b = seed(source = "recgov", sourceId = "2", bookingProvider = null, bookingProviderRef = null)
@@ -43,7 +65,8 @@ class PoiServingRepoTest : SharedDbTest() {
         assertEquals(setOf(a, b), rows.map { it.id }.toSet())
     }
 
-    private fun repo() = PoiServingRepo(ctx, enabledDataProviders = setOf("recgov", "campflare"))
+    private fun repo(enabledDataProviders: Set<String> = setOf("recgov", "campflare")) =
+        PoiServingRepo(ctx, enabledDataProviders = enabledDataProviders)
 
     private fun seed(
         source: String,
@@ -72,5 +95,6 @@ class PoiServingRepoTest : SharedDbTest() {
         const val WORLD = """{"type":"Polygon","coordinates":[[[-180,-89],[180,-89],[180,89],[-180,89],[-180,-89]]]}"""
         const val CAMP_LON = -120.0
         const val CAMP_LAT = 45.0
+        const val SHARED_ASPIRA_REF = "pc:1005:-2147483645:9002"
     }
 }

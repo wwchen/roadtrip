@@ -69,6 +69,7 @@ internal class PoiServingRepo(
                 agency,
                 ST_X(ST_Centroid(geom)) AS lng,
                 ST_Y(ST_Centroid(geom)) AS lat,
+                source,
                 COALESCE(booking_provider || ':' || booking_provider_ref, source || ':' || source_id) AS poi_key
               FROM (
                 SELECT
@@ -96,12 +97,13 @@ internal class PoiServingRepo(
             ),
             ranked AS (
               SELECT *,
-                     ROW_NUMBER() OVER (PARTITION BY poi_key ORDER BY id ASC) AS rn
+                     ROW_NUMBER() OVER (PARTITION BY poi_key ORDER BY id ASC) AS rn,
+                     FIRST_VALUE(source) OVER (PARTITION BY poi_key ORDER BY id ASC) AS first_source
               FROM candidates
             )
             SELECT id, category, subcategory, agency, lng, lat
             FROM ranked
-            WHERE rn = 1
+            WHERE rn = 1 OR source = first_source
             ORDER BY id ASC
             """.trimIndent()
         val args = mutableListOf<Any>()
