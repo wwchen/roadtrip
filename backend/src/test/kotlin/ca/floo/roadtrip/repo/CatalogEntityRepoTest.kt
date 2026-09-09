@@ -364,6 +364,21 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals(2, row.minPeople)
     }
 
+    /**
+     * `equipment` stays nullable until the old jar is out of rotation, and that
+     * jar binds SQL NULL for vendors that never set it. The read path treats an
+     * absent column as an absent list rather than throwing.
+     */
+    @Test
+    fun `a NULL equipment column reads as an empty list`() {
+        seedCampsites("cg-null-equipment", "cs-null-equipment")
+        ctx.execute("UPDATE campsites SET equipment = NULL WHERE data_provider_ref = ?", "cs-null-equipment")
+
+        val row = checkNotNull(CampsiteRepo(ctx).findById(campsiteId("cs-null-equipment")))
+
+        assertEquals(emptyList(), row.equipment)
+    }
+
     @Test
     fun `per-vendor campsite identity maintains separate rows for each provider`() {
         val campgrounds = CampgroundRepo(ctx)

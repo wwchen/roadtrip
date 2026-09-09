@@ -360,7 +360,7 @@ class CampsiteRepo(
             latitude = record.get("latitude", Double::class.javaObjectType),
             longitude = record.get("longitude", Double::class.javaObjectType),
             reservationUrl = record.get("reservation_url", String::class.java),
-            equipment = CatalogColumnJson.decodeArray(record.get("equipment_text", String::class.java)),
+            equipment = decodeListColumn(record.get("equipment_text", String::class.java)),
             kindListed = record.get("kind_listed", String::class.java),
             schedule = parseJsonElement(record.get("schedule_text", String::class.java)),
             price = parseJsonElement(record.get("price_text", String::class.java)),
@@ -376,8 +376,8 @@ class CampsiteRepo(
             drivewayLength = record.get("driveway_length", Int::class.javaObjectType),
             maxRvLength = record.get("max_rv_length", Int::class.javaObjectType),
             maxTrailerLength = record.get("max_trailer_length", Double::class.javaObjectType),
-            photos = CatalogColumnJson.decodeArray(record.get("photos_text", String::class.java)),
-            attributes = CatalogColumnJson.decodeArray(record.get("attributes_text", String::class.java)),
+            photos = decodeListColumn(record.get("photos_text", String::class.java)),
+            attributes = decodeListColumn(record.get("attributes_text", String::class.java)),
             description = record.get("description", String::class.java),
             minPeople = record.get("min_people", Int::class.javaObjectType),
             sourcePayload = parseJsonElement(record.get("source_payload_text", String::class.java)),
@@ -466,3 +466,11 @@ class CampsiteRepo(
 }
 
 private fun escapeLikePattern(value: String): String = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+/**
+ * A SQL NULL list column is an absent list. The columns are nullable until the
+ * migration that follows the old jar out of rotation, and the strict decoder
+ * takes a non-null string.
+ */
+private inline fun <reified T : Any> decodeListColumn(raw: String?): List<T> =
+    if (raw == null) emptyList() else CatalogColumnJson.decodeArray(raw)
