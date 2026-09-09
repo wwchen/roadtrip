@@ -391,14 +391,9 @@ when the daily slice looks free.
 
 ## Adapter design notes
 
-Recommended `provider_ref` shape:
-
-```json
-{
-  "place_id": 690,
-  "facility_ids": [611, 612, 767]
-}
-```
+Booking identity is the typed pair `booking_provider = 'reservecalifornia'`
+plus `booking_provider_ref = '{place_id}:{facility_ids}'`, e.g.
+`690:611,612,767`, parsed into `BookingProviderRef.ReserveCalifornia`.
 
 Open questions before implementation:
 
@@ -427,5 +422,5 @@ Minimal v1 path:
 5. `supportsInternalPolling = false` until rate limits and snapshot behavior are
    validated.
 
-No Flyway migration should be required if the adapter uses the existing
-`provider_ref` JSONB column.
+No Flyway migration should be required: the adapter uses the existing typed
+`booking_provider` / `booking_provider_ref` columns.
