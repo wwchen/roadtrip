@@ -77,6 +77,20 @@ class RecGovCampsitesEtlTest {
         }
         """.trimIndent()
 
+    private val unparseablePromotedPayload =
+        """
+        {
+          "campsites": {
+            "C1": {
+              "site": "C1",
+              "attributes": [
+                { "attribute_name": "Fire Pit", "attribute_value": "Seasonal" }
+              ]
+            }
+          }
+        }
+        """.trimIndent()
+
     @Test
     fun `transform falls back to campsite id when recgov site fields are blank`() {
         val etl = RecGovCampsitesEtl("recgov-campsites")
@@ -132,6 +146,15 @@ class RecGovCampsitesEtlTest {
         val second = campsites.getValue("B2")
         assertEquals(false, second.adaAccessible)
         assertEquals(3, second.maxCars)
+    }
+
+    @Test
+    fun `keeps a promoted attribute the column cannot hold`() {
+        val etl = RecGovCampsitesEtl("recgov-campsites")
+        val campsite = terminalRecords(etl, bundle(unparseablePromotedPayload), transformCtx()).single()
+
+        assertNull(campsite.firepit)
+        assertEquals(listOf(CampsiteAttribute("Fire Pit", "Seasonal")), campsite.attributes)
     }
 
     private fun bundle(payloadJson: String = blankFieldsPayload): InputBundle =

@@ -160,15 +160,19 @@ class RecGovCampsitesEtl(
             val attribute = element as? JsonObject ?: continue
             val name = attribute.stringField("attribute_name") ?: continue
             val value = attribute.stringField("attribute_value")
-            when (name.lowercase()) {
-                FIRE_PIT_ATTRIBUTE -> firepit = booleanValue(value)
-                PICNIC_TABLE_ATTRIBUTE -> picnicTable = booleanValue(value)
-                in adaAccessibleAttributes -> adaAccessible = booleanValue(value)
-                in maxCarsAttributes -> maxCars = leadingInt(value)
-                DRIVEWAY_LENGTH_ATTRIBUTE -> drivewayLength = leadingInt(value)
-                MAX_VEHICLE_LENGTH_ATTRIBUTE -> maxRvLength = leadingInt(value)
-                else -> rest += CampsiteAttribute(name, value)
-            }
+            // A promoted name whose value the column can't hold ("Fire Pit: Seasonal")
+            // stays an attribute rather than becoming nothing at all.
+            val promoted =
+                when (name.lowercase()) {
+                    FIRE_PIT_ATTRIBUTE -> booleanValue(value)?.also { firepit = it }
+                    PICNIC_TABLE_ATTRIBUTE -> booleanValue(value)?.also { picnicTable = it }
+                    in adaAccessibleAttributes -> booleanValue(value)?.also { adaAccessible = it }
+                    in maxCarsAttributes -> leadingInt(value)?.also { maxCars = it }
+                    DRIVEWAY_LENGTH_ATTRIBUTE -> leadingInt(value)?.also { drivewayLength = it }
+                    MAX_VEHICLE_LENGTH_ATTRIBUTE -> leadingInt(value)?.also { maxRvLength = it }
+                    else -> null
+                }
+            if (promoted == null) rest += CampsiteAttribute(name, value)
         }
         raw.stringField("campsite_reserve_type")?.let { rest += CampsiteAttribute(RESERVE_TYPE_LABEL, it) }
         raw.stringField("type_of_use")?.let { rest += CampsiteAttribute(TYPE_OF_USE_LABEL, it) }
