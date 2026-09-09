@@ -6,10 +6,7 @@ import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.route.common.roadtripApiJson
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.encodeToJsonElement
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
@@ -30,28 +27,34 @@ private const val MIN_PEOPLE = 2
 
 class CampsiteDtoTest {
     private val row =
-        campsiteFixture().copy(
+        campsiteFixture(bookingProvider = null).copy(
+            equipment = listOf("Tent", "RV"),
             photos = listOf(CatalogPhoto(PHOTO_URL)),
-            attributes = listOf(CampsiteAttribute("Shade", "Partial")),
+            attributes = listOf(CampsiteAttribute("Shade", "Partial"), CampsiteAttribute("Pets allowed")),
             minPeople = MIN_PEOPLE,
         )
 
     @Test
-    fun `carries the first photo, the attributes and min_people`() {
-        val json = encoded()
-
-        assertEquals(PHOTO_URL, json.getValue("photo_url").jsonPrimitive.content)
+    fun `carries the facts the drawer renders and their values`() {
         assertEquals(
-            "Shade",
-            json
-                .getValue("attributes")
-                .jsonArray
-                .single()
-                .jsonObject
-                .getValue("name")
-                .jsonPrimitive.content,
+            roadtripApiJson.parseToJsonElement(
+                """
+                {
+                  "id": 1,
+                  "campground_id": 1,
+                  "name": "Site 1",
+                  "kind": "site",
+                  "min_people": 2,
+                  "equipment": ["Tent", "RV"],
+                  "attributes": [{"name": "Shade", "value": "Partial"}, {"name": "Pets allowed"}],
+                  "photo_url": "$PHOTO_URL",
+                  "data_provider": "recgov",
+                  "data_provider_ref": "1"
+                }
+                """.trimIndent(),
+            ),
+            encoded(),
         )
-        assertEquals(MIN_PEOPLE, json.getValue("min_people").jsonPrimitive.int)
     }
 
     @Test

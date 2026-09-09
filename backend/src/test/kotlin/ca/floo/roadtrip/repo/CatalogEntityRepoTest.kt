@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class CatalogEntityRepoTest : SharedDbTest() {
     @BeforeEach
@@ -804,70 +805,35 @@ class CatalogEntityRepoTest : SharedDbTest() {
     }
 
     /**
-     * The campsite migration's actual job: rows written before the columns were
-     * typed carry vendor-shaped equipment, photos and attribute bags, and the
-     * read path decodes strictly now.
+     * The campsite migration's whole job: rows written before the columns were
+     * typed carry vendor-shaped equipment and photos, and the read path decodes
+     * strictly now. It does not backfill — the `make data-import` the deploy
+     * runs next rewrites every row, so the three new columns stay empty here
+     * even though the payload holds what fills them.
      */
     @Test
-    fun `the campsite migration rewrites legacy vendor shapes`() {
-        seedCampsites("cg-legacy-shape", "cs-legacy-recgov", "cs-legacy-aspira")
+    fun `the campsite migration rewrites legacy vendor shapes and backfills nothing`() {
+        seedCampsites("cg-legacy-shape", "cs-legacy-recgov")
         ctx.execute(
             """
             UPDATE campsites
-            SET equipment = ?::jsonb, photos = ?::jsonb, source_payload = ?::jsonb,
-                attributes = '[]'::jsonb, min_people = NULL, description = NULL
+            SET equipment = ?::jsonb, photos = ?::jsonb, source_payload = ?::jsonb
             WHERE data_provider_ref = 'cs-legacy-recgov'
             """.trimIndent(),
             """[{"name":"Tent"},"RV"]""",
-            """[{"large_url":"https://x/a.jpg"},{"url":"https://x/b.jpg"}]""",
-            """{"_roadtrip_tags":{"capacity":{"min":"2"},"reserve_type":"Site-Specific","use":"Overnight",""" +
-                """"attributes":{"fire_pit":"Yes","shade":"Partial"}},"description":"<p>By the <b>lake</b></p>"}""",
-        )
-        ctx.execute(
-            "UPDATE campsites SET source_payload = ?::jsonb, attributes = '[]'::jsonb WHERE data_provider_ref = 'cs-legacy-aspira'",
-            """{"defined_attributes":[{"name":"Max Vehicle Length","value_labels":["32 ft"]},{"value":3}]}""",
+            """[{"large_url":"https://x/a.jpg"},{"url":"https://x/b.jpg"},{"url":null},"junk"]""",
+            """{"attributes":[{"attribute_name":"Fire Pit","attribute_value":"Yes"}],"min_num_people":2,""" +
+                """"description":"<p>By the <b>lake</b></p>"}""",
         )
 
         migrationStatements("V56__typed_campsite_columns.sql").forEach(ctx::execute)
 
-        val repo = CampsiteRepo(ctx)
-        val recgov = checkNotNull(repo.findById(campsiteId("cs-legacy-recgov")))
-        assertEquals(listOf("Tent", "RV"), recgov.equipment)
-        assertEquals(listOf(CatalogPhoto("https://x/a.jpg"), CatalogPhoto("https://x/b.jpg")), recgov.photos)
-        assertEquals(2, recgov.minPeople)
-        assertEquals("By the lake", recgov.description)
-        assertEquals(
-            listOf(
-                CampsiteAttribute("Fire Pit", "Yes"),
-                CampsiteAttribute("Shade", "Partial"),
-                CampsiteAttribute("Reserve type", "Site-Specific"),
-                CampsiteAttribute("Type of use", "Overnight"),
-            ),
-            recgov.attributes,
-        )
-
-        val aspira = checkNotNull(repo.findById(campsiteId("cs-legacy-aspira")))
-        assertEquals(listOf(CampsiteAttribute("Max Vehicle Length", "32 ft")), aspira.attributes)
-    }
-
-    /** Legacy payloads mix a non-numeric `min_capacity` with a numeric tags value; the backfill must survive both. */
-    @Test
-    fun `the campsite migration backfills min people past a non-numeric min capacity`() {
-        seedCampsites("cg-legacy-1", "cs-legacy-1")
-        ctx.execute(
-            "UPDATE campsites SET min_people = NULL, source_payload = ?::jsonb",
-            """{"min_capacity": "n/a", "_roadtrip_tags": {"capacity": {"min": 3}}}""",
-        )
-
-        migrationStatements("V56__typed_campsite_columns.sql").forEach(ctx::execute)
-
-        assertEquals(
-            3,
-            ctx
-                .fetchOne("SELECT min_people AS n FROM campsites")!!
-                .get("n", Number::class.java)
-                .toInt(),
-        )
+        val row = checkNotNull(CampsiteRepo(ctx).findById(campsiteId("cs-legacy-recgov")))
+        assertEquals(listOf("Tent", "RV"), row.equipment)
+        assertEquals(listOf(CatalogPhoto("https://x/a.jpg"), CatalogPhoto("https://x/b.jpg")), row.photos)
+        assertEquals(emptyList(), row.attributes)
+        assertNull(row.description)
+        assertNull(row.minPeople)
     }
 
     /** A parent campground plus one bare campsite per ref, for migration replays to rewrite. */
