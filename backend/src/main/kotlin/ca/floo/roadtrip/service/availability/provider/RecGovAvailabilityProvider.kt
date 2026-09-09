@@ -100,7 +100,7 @@ class RecGovAvailabilityProvider(
                 observations = observationsFromCampsites(merged, dates, observedAtByDate),
                 seasonBlock = inferReopenDate(merged, startDate),
                 cacheBlock = directFetchCacheBlock(),
-                campgroundId = recgovId,
+                scope = BookingProviderRef.RecGov(facilityId = recgovId),
             )
         }
 
@@ -130,7 +130,7 @@ class RecGovAvailabilityProvider(
                 observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, campsiteIdByVendorId),
                 seasonBlock = inferReopenDate(catalogSites, startDate),
                 cacheBlock = directFetchCacheBlock(),
-                campgroundId = recgovId,
+                scope = BookingProviderRef.RecGov(facilityId = recgovId),
             )
         }
 

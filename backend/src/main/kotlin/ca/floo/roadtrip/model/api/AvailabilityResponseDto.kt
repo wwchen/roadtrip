@@ -8,9 +8,7 @@ import kotlinx.serialization.json.JsonElement
 @Serializable
 data class AvailabilityResponseDto(
     val provider: String,
-    @SerialName("campground_id") val campgroundId: String? = null,
-    val host: String? = null,
-    @SerialName("map_id") val mapId: String? = null,
+    @SerialName("scope_ref") val scopeRef: String? = null,
     @SerialName("campsite_id") val campsiteId: Long? = null,
     @SerialName("longest_run_nights") val longestRunNights: Int? = null,
     @SerialName("checked_at") val checkedAt: String,

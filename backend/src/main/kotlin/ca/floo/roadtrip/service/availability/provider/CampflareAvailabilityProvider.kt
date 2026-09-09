@@ -149,7 +149,7 @@ class CampflareAvailabilityProvider(
             endDate = endDate,
             observations = observations,
             cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L),
-            campgroundId = campgroundId,
+            scope = BookingProviderRef.Campflare(campgroundId = campgroundId),
         )
 
     private fun campflareIdOrThrow(campground: Campground): String =

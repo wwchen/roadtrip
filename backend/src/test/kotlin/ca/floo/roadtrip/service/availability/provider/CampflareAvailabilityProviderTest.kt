@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampgroundAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampsiteAvailability
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
@@ -84,7 +85,7 @@ class CampflareAvailabilityProviderTest {
                 observedCall,
             )
             assertEquals("campflare", batch.provider)
-            assertEquals("upper-pines-campground-447", batch.campgroundId)
+            assertEquals(BookingProviderRef.Campflare(campgroundId = "upper-pines-campground-447"), batch.scope)
             assertEquals(2, batch.observations.size)
             assertEquals(setOf(100L), batch.observations.map { it.campsiteId }.toSet())
             assertEquals(

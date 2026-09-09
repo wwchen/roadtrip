@@ -134,9 +134,7 @@ class ReserveCaliforniaAvailabilityProvider(
             endDate = endDate,
             observations = observations,
             cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L),
-            campgroundId = ref.placeId.toString(),
-            host = "reservecalifornia.com",
-            mapId = ref.facilityIds.joinToString(","),
+            scope = ref,
         )
 
     private fun reserveCaliforniaRefOrThrow(campground: Campground): BookingProviderRef.ReserveCalifornia {

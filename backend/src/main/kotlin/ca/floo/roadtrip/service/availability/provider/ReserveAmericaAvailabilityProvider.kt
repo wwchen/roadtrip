@@ -62,9 +62,11 @@ class ReserveAmericaAvailabilityProvider(
                 }
             }
         return batch(
-            host = tenant.host,
-            contractCode = tenant.contractCode,
-            parkId = reserveAmericaRef.parkId,
+            scope =
+                BookingProviderRef.ReserveAmerica(
+                    contractCode = tenant.contractCode,
+                    parkId = reserveAmericaRef.parkId,
+                ),
             startDate = startDate,
             endDate = endDate,
             observations = observations,
@@ -90,9 +92,11 @@ class ReserveAmericaAvailabilityProvider(
                 )
             }
         return batch(
-            host = tenant.host,
-            contractCode = tenant.contractCode,
-            parkId = reserveAmericaRef.parkId,
+            scope =
+                BookingProviderRef.ReserveAmerica(
+                    contractCode = tenant.contractCode,
+                    parkId = reserveAmericaRef.parkId,
+                ),
             startDate = startDate,
             endDate = endDate,
             observations = observations,
@@ -139,9 +143,7 @@ class ReserveAmericaAvailabilityProvider(
         }
 
     private fun batch(
-        host: String,
-        contractCode: String,
-        parkId: String,
+        scope: BookingProviderRef.ReserveAmerica,
         startDate: LocalDate,
         endDate: LocalDate,
         observations: List<CampsiteDayObservation>,
@@ -153,9 +155,7 @@ class ReserveAmericaAvailabilityProvider(
             endDate = endDate,
             observations = observations,
             cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L),
-            campgroundId = parkId,
-            host = host,
-            mapId = contractCode,
+            scope = scope,
             campsiteId = campsiteId,
         )
 

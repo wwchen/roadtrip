@@ -136,7 +136,7 @@ class RecGovObservationsTest {
         val body = classify(clientReturning(map), days = 7)
         assertEquals("success", body["state"]!!.jsonPrimitive.content)
         assertEquals("recgov", body["provider"]!!.jsonPrimitive.content)
-        assertEquals("232447", body["campground_id"]!!.jsonPrimitive.content)
+        assertEquals("232447", body["scope_ref"]!!.jsonPrimitive.content)
         assertEquals(today.toString(), body["start_date"]!!.jsonPrimitive.content)
         assertEquals(today.plusDays(7).toString(), body["end_date"]!!.jsonPrimitive.content)
         assertEquals(7, body["availability"]!!.jsonArray.size)

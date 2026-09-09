@@ -27,9 +27,8 @@ export interface AvailabilityCache {
 /** Mirrors AvailabilityResponseDto — one campsite's window. */
 export interface CampsiteAvailability {
   provider: string;
-  campground_id?: string | null;
-  host?: string | null;
-  map_id?: string | null;
+  /** Serialized BookingProviderRef the window was fetched under; opaque. */
+  scope_ref?: string | null;
   campsite_id?: number | null;
   checked_at: string;
   start_date: string;

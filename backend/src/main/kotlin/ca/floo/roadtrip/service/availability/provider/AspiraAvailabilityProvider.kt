@@ -67,6 +67,7 @@ class AspiraAvailabilityProvider(
         val mapId = mapIdOrThrow(aspiraRef.mapId)
         return runWithErrorMapping {
             fetchAvailability(
+                scope = aspiraRef.copy(mapId = mapId.toLong()),
                 host = tenant.host,
                 mapId = mapId,
                 startDate = startDate,
@@ -123,8 +124,8 @@ class AspiraAvailabilityProvider(
         return runWithErrorMapping {
             if (occupancyEnabled && resourceLocationId != null) {
                 fetchCatalogOccupancy(
+                    scope = aspiraRef,
                     host = tenant.host,
-                    parentMapId = parentMapId,
                     resourceLocationId = resourceLocationId,
                     campsites = targets,
                     today = startDate,
@@ -132,6 +133,7 @@ class AspiraAvailabilityProvider(
                 )
             } else {
                 fetchCatalog(
+                    scope = aspiraRef,
                     host = tenant.host,
                     parentMapId = parentMapId,
                     campsites = targets,
@@ -162,6 +164,7 @@ class AspiraAvailabilityProvider(
     }
 
     private suspend fun fetchAvailability(
+        scope: BookingProviderRef.Aspira,
         host: String,
         mapId: Int,
         startDate: LocalDate,
@@ -177,12 +180,12 @@ class AspiraAvailabilityProvider(
             endDate = endDate,
             observations = observationsFromAvailability(data, startDate, days, observedAt, campsiteVendor),
             cacheBlock = directFetchCacheBlock(),
-            host = host,
-            mapId = mapId.toString(),
+            scope = scope,
         )
     }
 
     private suspend fun fetchCatalog(
+        scope: BookingProviderRef.Aspira,
         host: String,
         parentMapId: Int,
         campsites: List<AspiraCatalogCampsite>,
@@ -195,6 +198,7 @@ class AspiraAvailabilityProvider(
                 .distinctBy { it.campsiteId }
         if (targets.isEmpty()) {
             return fetchAvailability(
+                scope = scope,
                 host = host,
                 mapId = parentMapId,
                 startDate = startDate,
@@ -222,14 +226,13 @@ class AspiraAvailabilityProvider(
             endDate = endDate,
             observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days),
             cacheBlock = directFetchCacheBlock(),
-            host = host,
-            mapId = parentMapId.toString(),
+            scope = scope,
         )
     }
 
     private suspend fun fetchCatalogOccupancy(
+        scope: BookingProviderRef.Aspira,
         host: String,
-        parentMapId: Int,
         resourceLocationId: Int,
         campsites: List<AspiraCatalogCampsite>,
         today: LocalDate,
@@ -245,8 +248,7 @@ class AspiraAvailabilityProvider(
                 endDate = today.plusDays(days.toLong()),
                 observations = emptyList(),
                 cacheBlock = directFetchCacheBlock(),
-                host = host,
-                mapId = parentMapId.toString(),
+                scope = scope,
             )
         }
 
@@ -263,8 +265,7 @@ class AspiraAvailabilityProvider(
             endDate = today.plusDays(days.toLong()),
             observations = observations,
             cacheBlock = directFetchCacheBlock(),
-            host = host,
-            mapId = parentMapId.toString(),
+            scope = scope,
         )
     }
 
