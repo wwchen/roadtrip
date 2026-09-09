@@ -41,8 +41,10 @@ UPDATE campsites SET photos = COALESCE((
 WHERE jsonb_typeof(photos) = 'array';
 
 UPDATE campsites SET min_people = COALESCE(
-    (source_payload->>'min_capacity')::int,
-    (source_payload->'_roadtrip_tags'->'capacity'->>'min')::int)
+    CASE WHEN source_payload->>'min_capacity' ~ '^[0-9]+$'
+         THEN (source_payload->>'min_capacity')::int END,
+    CASE WHEN source_payload->'_roadtrip_tags'->'capacity'->>'min' ~ '^[0-9]+$'
+         THEN (source_payload->'_roadtrip_tags'->'capacity'->>'min')::int END)
 WHERE min_people IS NULL
   AND (source_payload->>'min_capacity' ~ '^[0-9]+$' OR source_payload->'_roadtrip_tags'->'capacity'->>'min' ~ '^[0-9]+$');
 

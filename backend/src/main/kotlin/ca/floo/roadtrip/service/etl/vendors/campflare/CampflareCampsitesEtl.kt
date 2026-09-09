@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
+import ca.floo.roadtrip.service.etl.framework.HtmlText
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.JsonElement
@@ -75,6 +76,7 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
                 maxRvLength = raw.intField("max_rv_length"),
                 maxTrailerLength = raw.doubleField("max_trailer_length"),
                 photos = campflarePhotos(raw.arrayField("photos")),
+                description = raw.stringField("description")?.let(HtmlText::stripTags),
                 sourcePayload = raw,
             ),
         )

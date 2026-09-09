@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
+import ca.floo.roadtrip.service.etl.framework.HtmlText
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.fetchedAtOrNow
@@ -241,8 +242,7 @@ internal fun JsonObject.stringValue(key: String): String? =
 internal fun parseHighlights(raw: String?): List<String> =
     raw
         ?.split(Regex("""(?i)<br\s*/?>"""))
-        ?.map { it.replace(Regex("""<[^>]+>"""), " ") }
-        ?.map { it.replace(Regex("""\s+"""), " ").trim() }
+        ?.map(HtmlText::stripTags)
         ?.filter { it.isNotEmpty() }
         ?.distinct()
         .orEmpty()

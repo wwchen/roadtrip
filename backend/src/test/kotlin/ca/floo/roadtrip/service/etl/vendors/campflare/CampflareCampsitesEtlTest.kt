@@ -44,6 +44,7 @@ class CampflareCampsitesEtlTest {
         assertEquals(listOf("Tent"), row.equipment)
         assertEquals(listOf(CatalogPhoto("https://cdn.example/site.jpg")), row.photos)
         assertEquals(6, row.maxPeople)
+        assertEquals("Quiet site", row.description)
         assertEquals("Site 001", sourceName)
         assertEquals(BookingProvider.RECGOV, row.bookingProvider)
         assertEquals("001", row.bookingProviderRef)
@@ -143,6 +144,7 @@ class CampflareCampsitesEtlTest {
             "reservation_url": "https://www.recreation.gov/camping/campsites/001",
             "equipment": [{"name": "Tent"}],
             "kind_listed": "Tent Site",
+            "description": "<b>Quiet</b> site",
             "schedule": {"check_in_time": "14:00", "uniform": true},
             "price": {"per_night": 36, "currency_code": "USD"},
             "firepit": true,

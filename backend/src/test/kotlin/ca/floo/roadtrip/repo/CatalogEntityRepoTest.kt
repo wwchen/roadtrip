@@ -788,6 +788,46 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals(before, campsiteColumnsAsText())
     }
 
+    /** Legacy payloads mix a non-numeric `min_capacity` with a numeric tags value; the backfill must survive both. */
+    @Test
+    fun `the campsite migration backfills min people past a non-numeric min capacity`() {
+        CampgroundRepo(ctx).upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = "cg-legacy-1"),
+                    name = "Legacy Parent",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                ),
+            ),
+            source = "recgov-campgrounds",
+        )
+        CampsiteRepo(ctx).upsertCampsiteBatch(
+            listOf(
+                CampsiteUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = "cs-legacy-1"),
+                    parentDataProviderRef = DataProviderRef.RecGov(id = "cg-legacy-1"),
+                    name = "Legacy Site",
+                ),
+            ),
+        )
+        ctx.execute(
+            "UPDATE campsites SET min_people = NULL, source_payload = ?::jsonb",
+            """{"min_capacity": "n/a", "_roadtrip_tags": {"capacity": {"min": 3}}}""",
+        )
+
+        migrationStatements("V56__typed_campsite_columns.sql").forEach(ctx::execute)
+
+        assertEquals(
+            3,
+            ctx
+                .fetchOne("SELECT min_people AS n FROM campsites")!!
+                .get("n", Number::class.java)
+                .toInt(),
+        )
+    }
+
     private fun campsiteColumnsAsText(): List<String> =
         ctx
             .fetch(
