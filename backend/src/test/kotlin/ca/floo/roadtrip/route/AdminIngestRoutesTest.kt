@@ -132,18 +132,20 @@ class AdminIngestRoutesTest : SharedDbTest() {
                 val running = async(Dispatchers.IO) { controller.startRun(BUSY_TARGET, RunKind.IMPORT, "test") }
                 assertTrue(gate.await(GATE_TIMEOUT_SEC, TimeUnit.SECONDS), "first import did not start")
 
-                val resp = client.post("/api/admin/data/import")
+                try {
+                    val resp = client.post("/api/admin/data/import")
 
-                assertEquals(HttpStatusCode.InternalServerError, resp.status)
-                val outcomes =
-                    Json
-                        .parseToJsonElement(resp.bodyAsText())
-                        .jsonObject["outcomes"]!!
-                        .jsonArray
-                val busy = outcomes.single { it.jsonObject["target"]!!.jsonPrimitive.content == BUSY_TARGET }
-                assertEquals("busy", busy.jsonObject["status"]!!.jsonPrimitive.content)
-
-                release.countDown()
+                    assertEquals(HttpStatusCode.InternalServerError, resp.status)
+                    val outcomes =
+                        Json
+                            .parseToJsonElement(resp.bodyAsText())
+                            .jsonObject["outcomes"]!!
+                            .jsonArray
+                    val busy = outcomes.single { it.jsonObject["target"]!!.jsonPrimitive.content == BUSY_TARGET }
+                    assertEquals("busy", busy.jsonObject["status"]!!.jsonPrimitive.content)
+                } finally {
+                    release.countDown()
+                }
                 running.await()
             }
         }
