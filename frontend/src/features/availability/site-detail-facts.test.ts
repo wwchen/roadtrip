@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import type { Campsite } from '@/api/campsite-api';
-import { capacityLabel, descriptionText, detailFacts, featureLabels } from './site-detail-facts';
+import {
+  capacityLabel,
+  capacityRange,
+  descriptionText,
+  detailFacts,
+  featureLabels,
+} from './site-detail-facts';
 
 const site: Partial<Campsite> = {
   id: 1,
@@ -55,6 +61,12 @@ describe('capacity', () => {
     expect(capacityLabel({ min_people: 2 })).toBe('2+ people');
     expect(capacityLabel({ min_people: 4, max_people: 4 })).toBe('Up to 4 people');
     expect(capacityLabel({})).toBe('');
+  });
+
+  test('the range is the shared decision, not the prose', () => {
+    expect(capacityRange({ min_people: 2, max_people: 6 })).toEqual({ min: 2, max: 6 });
+    expect(capacityRange({ max_people: 6 })).toEqual({ min: null, max: 6 });
+    expect(capacityRange({})).toBeNull();
   });
 });
 

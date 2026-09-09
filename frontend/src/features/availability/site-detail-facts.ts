@@ -34,10 +34,23 @@ export function detailFacts(site: Partial<Campsite>): SiteFact[] {
   return facts;
 }
 
-/** "4-6 people" / "Up to 6 people" / "2+ people" — three different claims. */
-export function capacityLabel(site: Partial<Campsite>): string {
+export interface CapacityRange {
+  min: number | null;
+  max: number | null;
+}
+
+/** The two capacity columns as one decision; null when neither is known. */
+export function capacityRange(site: Partial<Campsite>): CapacityRange | null {
   const min = site.min_people ?? null;
   const max = site.max_people ?? null;
+  return min == null && max == null ? null : { min, max };
+}
+
+/** "4-6 people" / "Up to 6 people" / "2+ people" — three different claims. */
+export function capacityLabel(site: Partial<Campsite>): string {
+  const range = capacityRange(site);
+  if (!range) return '';
+  const { min, max } = range;
   if (min != null && max != null && min !== max) return `${min}-${max} people`;
   if (max != null) return `Up to ${max} people`;
   if (min != null) return `${min}+ people`;

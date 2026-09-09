@@ -2,13 +2,10 @@
 //
 import type { Campsite } from '@/api/campsite-api';
 import { siteName } from './matrix-rows';
-import { capacityLabel } from './site-detail-facts';
+import { capacityRange } from './site-detail-facts';
 
 /** Two lines of summary is the row's height budget; past that it is truncated. */
 const MAX_DESCRIPTION_CHARS = 120;
-
-/** The drawer says "2-6 people"; a dense row says "Sleeps 2-6". */
-const PEOPLE_SUFFIX = ' people';
 
 /**
  * The catalog rows for a day's available ids, in the id list's order.
@@ -37,14 +34,17 @@ export function rowDetails(row: Partial<Campsite>): string[] {
 /**
  * Sleeping capacity, in the list's wording.
  *
- * The drawer's three phrasings are distinct claims — a known range, a known
- * ceiling, and a known floor — so this re-words that one decision rather than
- * branching over the same two columns a second time.
+ * Shares the drawer's capacity decision as data and phrases it for a dense row:
+ * a known range, a known ceiling, and a known floor are distinct claims.
  */
 function sleepsLabel(row: Partial<Campsite>): string {
-  const capacity = capacityLabel(row).replace(PEOPLE_SUFFIX, '');
-  if (!capacity) return '';
-  return `Sleeps ${capacity.charAt(0).toLowerCase()}${capacity.slice(1)}`;
+  const range = capacityRange(row);
+  if (!range) return '';
+  const { min, max } = range;
+  if (min != null && max != null && min !== max) return `Sleeps ${min}-${max}`;
+  if (max != null) return `Sleeps up to ${max}`;
+  if (min != null) return `Sleeps ${min}+`;
+  return '';
 }
 
 /** A provider description as one clamped line, for a dense list row. */
