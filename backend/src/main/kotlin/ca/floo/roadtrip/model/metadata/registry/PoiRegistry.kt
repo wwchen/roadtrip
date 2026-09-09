@@ -234,31 +234,6 @@ class PoiRegistry(
     }
 
     /**
-     * Sources whose terminal ETL produces rec.gov-keyed campgrounds. Used
-     * by the availability-provider registry to map the terminal etl slug → `RECGOV`.
-     */
-    fun recgovSources(): Set<String> =
-        poiData
-            .mapNotNull { row -> row.etls.lastOrNull() }
-            .filter { it.adapter == "RecGovCampgroundsEtl" }
-            .map { it.slug }
-            .toSet()
-
-    fun campflareSources(): Set<String> =
-        poiData
-            .mapNotNull { row -> row.etls.lastOrNull() }
-            .filter { it.adapter == "CampflareCampgroundsEtl" }
-            .map { it.slug }
-            .toSet()
-
-    fun bcParksSources(): Set<String> =
-        poiData
-            .mapNotNull { row -> row.etls.lastOrNull() }
-            .filter { it.adapter == "BcParksCampgroundsEtl" }
-            .map { it.slug }
-            .toSet()
-
-    /**
      * ReserveAmerica terminal ETL sources with their Active Network tenant
      * config. Unlike Aspira, these tenants are fully config-driven because the
      * contract code, host, and booking horizon are all declared on the
@@ -290,13 +265,6 @@ class PoiRegistry(
                     bookingHorizonDays = horizon,
                 )
             }
-
-    fun reserveCaliforniaSources(): Set<String> =
-        poiData
-            .mapNotNull { row -> row.etls.lastOrNull() }
-            .filter { it.adapter == "ReserveCaliforniaCampgroundsEtl" }
-            .map { it.slug }
-            .toSet()
 
     companion object {
         private val yaml =
