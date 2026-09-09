@@ -1,40 +1,32 @@
 package ca.floo.roadtrip.config
 
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import java.time.Duration
 
-enum class ApiCacheEntity(
+data class ApiCacheEntity(
     val namespace: String,
     val configKey: String,
     val defaultTtl: Duration,
 ) {
-    ROUTE(
-        namespace = "route",
-        configKey = "route.ttl",
-        defaultTtl = Duration.ofMinutes(10),
-    ),
-    RECGOV_AVAILABILITY(
-        namespace = "recgov_availability",
-        configKey = "recgov-availability.ttl",
-        defaultTtl = Duration.ofHours(2),
-    ),
-    CAMPFLARE_AVAILABILITY(
-        namespace = "campflare_availability",
-        configKey = "campflare-availability.ttl",
-        defaultTtl = Duration.ofHours(2),
-    ),
-    ASPIRA_AVAILABILITY(
-        namespace = "aspira_availability",
-        configKey = "aspira-availability.ttl",
-        defaultTtl = Duration.ofHours(2),
-    ),
-    RESERVEAMERICA_AVAILABILITY(
-        namespace = "reserveamerica_availability",
-        configKey = "reserveamerica-availability.ttl",
-        defaultTtl = Duration.ofHours(2),
-    ),
-    RESERVECALIFORNIA_AVAILABILITY(
-        namespace = "reservecalifornia_availability",
-        configKey = "reservecalifornia-availability.ttl",
-        defaultTtl = Duration.ofHours(2),
-    ),
+    @Suppress("ObjectPropertyNaming")
+    companion object {
+        private val DEFAULT_ROUTE_TTL: Duration = Duration.ofMinutes(10)
+        private val DEFAULT_AVAILABILITY_TTL: Duration = Duration.ofHours(2)
+
+        val ROUTE: ApiCacheEntity =
+            ApiCacheEntity(
+                namespace = "route",
+                configKey = "route.ttl",
+                defaultTtl = DEFAULT_ROUTE_TTL,
+            )
+
+        val entries: List<ApiCacheEntity> = listOf(ROUTE) + BookingProvider.entries.map(::availability)
+
+        fun availability(provider: BookingProvider): ApiCacheEntity =
+            ApiCacheEntity(
+                namespace = "${provider.id}_availability",
+                configKey = "${provider.id}-availability.ttl",
+                defaultTtl = DEFAULT_AVAILABILITY_TTL,
+            )
+    }
 }

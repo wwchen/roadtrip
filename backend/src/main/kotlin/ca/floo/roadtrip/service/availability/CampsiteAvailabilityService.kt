@@ -96,11 +96,4 @@ internal class CampsiteAvailabilityService(
             ?: throw AvailabilityServiceError.UnknownCampground
 }
 
-internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration =
-    when (providerId) {
-        BookingProvider.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
-        BookingProvider.CAMPFLARE -> ApiCacheEntity.CAMPFLARE_AVAILABILITY.defaultTtl
-        BookingProvider.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
-        BookingProvider.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
-        BookingProvider.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
-    }
+internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration = ApiCacheEntity.availability(providerId).defaultTtl

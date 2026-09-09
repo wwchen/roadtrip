@@ -206,18 +206,14 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
     }
 
     @Test
-    fun `default snapshot freshness TTL maps each provider to its cache entity TTL`() {
-        assertEquals(ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl, defaultSnapshotFreshnessTtl(BookingProvider.RECGOV))
-        assertEquals(ApiCacheEntity.CAMPFLARE_AVAILABILITY.defaultTtl, defaultSnapshotFreshnessTtl(BookingProvider.CAMPFLARE))
-        assertEquals(ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl, defaultSnapshotFreshnessTtl(BookingProvider.ASPIRA))
-        assertEquals(
-            ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl,
-            defaultSnapshotFreshnessTtl(BookingProvider.RESERVEAMERICA),
-        )
-        assertEquals(
-            ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl,
-            defaultSnapshotFreshnessTtl(BookingProvider.RESERVECALIFORNIA),
-        )
+    fun `default snapshot freshness TTL is the provider's cache entity default`() {
+        for (provider in BookingProvider.entries) {
+            assertEquals(
+                ApiCacheEntity.availability(provider).defaultTtl,
+                defaultSnapshotFreshnessTtl(provider),
+                provider.id,
+            )
+        }
     }
 
     /**

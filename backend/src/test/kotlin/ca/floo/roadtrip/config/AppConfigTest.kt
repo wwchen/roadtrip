@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.config
 
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import org.junit.jupiter.api.Test
 import java.time.Duration
 import kotlin.test.assertEquals
@@ -170,11 +171,9 @@ class AppConfigTest {
         val config = appConfig()
 
         assertEquals(Duration.ofMinutes(10), config.cache.ttlFor(ApiCacheEntity.ROUTE))
-        assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY))
-        assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.CAMPFLARE_AVAILABILITY))
-        assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY))
-        assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.RESERVEAMERICA_AVAILABILITY))
-        assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY))
+        for (provider in BookingProvider.entries) {
+            assertEquals(Duration.ofHours(2), config.cache.availabilityTtl(provider), provider.id)
+        }
     }
 
     @Test
@@ -192,11 +191,11 @@ class AppConfigTest {
             )
 
         assertEquals(Duration.ofMinutes(30), config.cache.ttlFor(ApiCacheEntity.ROUTE))
-        assertEquals(Duration.ofHours(4), config.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY))
-        assertEquals(Duration.ofMinutes(20), config.cache.ttlFor(ApiCacheEntity.CAMPFLARE_AVAILABILITY))
-        assertEquals(Duration.ofMinutes(15), config.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY))
-        assertEquals(Duration.ofMinutes(30), config.cache.ttlFor(ApiCacheEntity.RESERVEAMERICA_AVAILABILITY))
-        assertEquals(Duration.ofMinutes(45), config.cache.ttlFor(ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY))
+        assertEquals(Duration.ofHours(4), config.cache.availabilityTtl(BookingProvider.RECGOV))
+        assertEquals(Duration.ofMinutes(20), config.cache.availabilityTtl(BookingProvider.CAMPFLARE))
+        assertEquals(Duration.ofMinutes(15), config.cache.availabilityTtl(BookingProvider.ASPIRA))
+        assertEquals(Duration.ofMinutes(30), config.cache.availabilityTtl(BookingProvider.RESERVEAMERICA))
+        assertEquals(Duration.ofMinutes(45), config.cache.availabilityTtl(BookingProvider.RESERVECALIFORNIA))
     }
 
     @Test
