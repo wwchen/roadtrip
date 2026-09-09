@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityErrorDto
@@ -134,12 +135,9 @@ class RecGovAvailabilityProvider(
             )
         }
 
-    private fun recgovIdOrThrow(campground: Campground): String {
-        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull)
-        val ref = provider?.let { campground.bookingProviderRef?.let { r -> BookingProviderRef.parse(it, r) } }
-        return (ref as? BookingProviderRef.RecGov)?.facilityId
+    private fun recgovIdOrThrow(campground: Campground): String =
+        (campground.bookingRef() as? BookingProviderRef.RecGov)?.facilityId
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
-    }
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
         mapUpstreamErrors(

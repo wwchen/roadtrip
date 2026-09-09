@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import java.time.LocalDate
@@ -38,8 +39,7 @@ interface AvailabilityProvider {
     fun isEnabled(): Boolean
 
     fun supportsCampground(campground: Campground): Boolean {
-        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return false
-        val ref = campground.bookingProviderRef?.let { BookingProviderRef.parse(provider, it) } ?: return false
+        val ref = campground.bookingRef() ?: return false
         return isEnabled() && id == ref.provider
     }
 
@@ -49,10 +49,7 @@ interface AvailabilityProvider {
      * Returns null when this provider cannot derive a ref (should not happen
      * if [supportsCampground] returned true).
      */
-    fun parentRefFor(campground: Campground): BookingProviderRef? {
-        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
-        return campground.bookingProviderRef?.let { BookingProviderRef.parse(provider, it) }
-    }
+    fun parentRefFor(campground: Campground): BookingProviderRef? = campground.bookingRef()
 
     /**
      * Per-day availability for the half-open window `[startDate, endDate)`.

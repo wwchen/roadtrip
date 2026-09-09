@@ -10,6 +10,7 @@ import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.ReserveCaliforniaException
@@ -137,12 +138,9 @@ class ReserveCaliforniaAvailabilityProvider(
             scope = ref,
         )
 
-    private fun reserveCaliforniaRefOrThrow(campground: Campground): BookingProviderRef.ReserveCalifornia {
-        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull)
-        val ref = provider?.let { campground.bookingProviderRef?.let { r -> BookingProviderRef.parse(it, r) } }
-        return (ref as? BookingProviderRef.ReserveCalifornia)
+    private fun reserveCaliforniaRefOrThrow(campground: Campground): BookingProviderRef.ReserveCalifornia =
+        (campground.bookingRef() as? BookingProviderRef.ReserveCalifornia)
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
-    }
 
     private fun observedAt(grids: List<ReserveCaliforniaGridAvailability>): Instant =
         grids

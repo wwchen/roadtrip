@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -52,8 +53,7 @@ class AspiraAvailabilityProvider(
     override fun isEnabled(): Boolean = enabled
 
     override fun supportsCampground(campground: Campground): Boolean {
-        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return false
-        val ref = campground.bookingProviderRef?.let { BookingProviderRef.parse(provider, it) } ?: return false
+        val ref = campground.bookingRef() ?: return false
         return isEnabled() && ref is BookingProviderRef.Aspira && ref.tenant in tenants
     }
 
@@ -279,12 +279,9 @@ class AspiraAvailabilityProvider(
 
     private fun mapIdOrThrow(mapId: Long): Int = intOrThrow("mapId", mapId)
 
-    private fun aspiraRefOrThrow(campground: Campground): BookingProviderRef.Aspira {
-        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull)
-        val ref = provider?.let { campground.bookingProviderRef?.let { r -> BookingProviderRef.parse(it, r) } }
-        return (ref as? BookingProviderRef.Aspira)
+    private fun aspiraRefOrThrow(campground: Campground): BookingProviderRef.Aspira =
+        (campground.bookingRef() as? BookingProviderRef.Aspira)
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
-    }
 
     private fun intOrThrow(
         label: String,
