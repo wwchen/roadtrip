@@ -26,7 +26,3 @@ export function availableCampsiteIds(day: Day): string[] {
 export function availableCount(day: Day): number {
   return availableCampsiteIds(day).length;
 }
-
-export function campsiteCount(day: Day): number {
-  return Object.keys(cells(day)).length;
-}

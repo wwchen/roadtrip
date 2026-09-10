@@ -55,7 +55,6 @@ const respondFor = (url: string): Response => {
       days: [],
       watch_capabilities: {
         trigger_kinds: [],
-        booking_actions: [],
         add_to_cart: { state: 'unsupported' },
       },
     });

@@ -10,7 +10,6 @@ import { normalizeWatchCapabilities } from '@/lib/watch-windows';
 const caps = (triggerKinds: string[], addToCart: AddToCartState = 'unsupported') =>
   normalizeWatchCapabilities({
     trigger_kinds: triggerKinds,
-    booking_actions: addToCart === 'unsupported' ? [] : ['add_to_cart'],
     add_to_cart: { state: addToCart },
   });
 

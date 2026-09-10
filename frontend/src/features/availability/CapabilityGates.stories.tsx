@@ -136,7 +136,6 @@ export const EditorWithoutCredentials: Story = {
           watch={null}
           capabilities={normalizeWatchCapabilities({
             trigger_kinds: ['slack_notify', 'email_notify'],
-            booking_actions: ['add_to_cart'],
             add_to_cart: { state: 'no_credentials' },
           })}
           onSave={async () => {}}

@@ -42,6 +42,9 @@ import {
 import { TRIGGER_KIND_SLACK_NOTIFY, buildTriggerPayload, triggerStateOf } from '@/lib/watch-triggers';
 import './availability.css';
 
+/** How far back from the booking horizon the last selectable week starts. */
+const LAST_WEEK_START_OFFSET = WEEK_DAYS - 1;
+
 export interface AvailabilityWeekProps {
   /** The hydrated campground feature: supplies the POI id, name and earliest date. */
   feature: PoiFeature;
@@ -129,15 +132,17 @@ function AvailabilityWeekView({
   // memoised callbacks that read it churn for no reason.
   const capabilities = week.data?.watchCapabilities ?? NO_WATCH_CAPABILITIES;
 
-  // The provider's real booking horizon, so the picker cannot offer a date the
-  // backend answers with `beyond_booking_horizon`. The week's own `latest_date` is
-  // the authority; the POI detail carries the same number for the first paint, and
-  // with neither the picker simply has no ceiling.
+  // The provider's real booking horizon, so the picker cannot offer a week the
+  // backend answers with `beyond_booking_horizon`. What is picked is a week *start*,
+  // so the ceiling is a whole week short of the horizon — a week starting on it
+  // would ask for six days past it. The week's own `latest_date` is the authority;
+  // the POI detail carries the same number for the first paint, and with neither the
+  // picker simply has no ceiling.
   const maxDate = useMemo(() => {
     const raw = week.data?.latest_date ?? featureLatest;
     if (!raw) return null;
     const parsed = parseLocalYmd(raw);
-    return Number.isFinite(parsed.getTime()) ? parsed : null;
+    return Number.isFinite(parsed.getTime()) ? addLocalDays(parsed, -LAST_WEEK_START_OFFSET) : null;
   }, [featureLatest, week.data?.latest_date]);
 
   // Provider first, user second: "this campground cannot do alerts" and "sign in to
@@ -452,8 +457,8 @@ function AvailabilityWeekView({
  * The grid, or the banner that replaces it.
  *
  * `empty` and `closed_for_season` are separate branches with separate copy, and the
- * response's `state` is what picks one: an empty `days` is not the signal, since a
- * closed season still ships its (all-closed) days. One is permanent, one is a date.
+ * response's `state` is what picks one: both ship an empty `days`, so the grid alone
+ * cannot tell them apart. One is permanent, one is a date.
  */
 function WeekSurface({
   week,

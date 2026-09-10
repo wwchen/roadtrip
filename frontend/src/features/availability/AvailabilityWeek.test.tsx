@@ -132,14 +132,12 @@ const json = (body: unknown, status = 200): Response =>
 
 const SLACK_CAPABILITIES = {
   trigger_kinds: ['slack_notify'],
-  booking_actions: [],
   add_to_cart: { state: 'unsupported' },
 };
 
 /** A provider the poller cannot reach: no trigger the backend would accept. */
 const NO_CAPABILITIES = {
   trigger_kinds: [],
-  booking_actions: [],
   add_to_cart: { state: 'unsupported' },
 };
 
@@ -571,9 +569,11 @@ describe('the calendar popover', () => {
   });
 
   // The ceiling is the provider's real horizon — 180 days on rec.gov, 183 on
-  // ReserveCalifornia — not a flat year. A picker that offers a date past it sends
-  // the user to a request the backend refuses with `beyond_booking_horizon`.
-  test('stops at the horizon the response reported', async () => {
+  // ReserveCalifornia — not a flat year, and the picker picks a *week start*: the
+  // last one that fits is seven days back from the horizon. Offering the horizon
+  // itself sends the user to a request the backend refuses with
+  // `beyond_booking_horizon`.
+  test('stops a week short of the horizon the response reported', async () => {
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available'])], undefined, { latest_date: '2026-08-20' }));
     await mount();
@@ -582,8 +582,9 @@ describe('the calendar popover', () => {
       screen.getByRole('button', { name: 'Pick a date' }).click();
     });
 
-    expect(screen.getByRole('button', { name: '20' })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: '21' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '14' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '15' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '20' })).toBeDisabled();
   });
 
   test('uses the POI detail’s horizon until the week lands, and none without either', async () => {
@@ -596,7 +597,8 @@ describe('the calendar popover', () => {
     await act(async () => {
       screen.getByRole('button', { name: 'Pick a date' }).click();
     });
-    expect(screen.getByRole('button', { name: '21' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '14' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '15' })).toBeDisabled();
     unmount();
 
     render(
@@ -773,7 +775,7 @@ describe('watches', () => {
       json(
         availabilityBody(
           [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
-          { trigger_kinds: [], booking_actions: [], add_to_cart: { state: 'unsupported' } },
+          { trigger_kinds: [], add_to_cart: { state: 'unsupported' } },
         ),
       );
     await mount();
@@ -818,7 +820,6 @@ describe('watches', () => {
       json(
         availabilityBody([stream(1, ['available', 'reserved'])], {
           trigger_kinds: ['email_notify'],
-          booking_actions: [],
           add_to_cart: { state: 'unsupported' },
         }),
       );
@@ -863,7 +864,6 @@ describe('watches', () => {
       json(
         availabilityBody([stream(1, ['available', 'reserved'])], {
           trigger_kinds: [],
-          booking_actions: [],
           add_to_cart: { state: 'unsupported' },
         }),
       );
@@ -1056,7 +1056,6 @@ describe('the catalog', () => {
 /** The capability block a user who can actually hold a site gets back. */
 const ATC_CAPABILITIES = {
   trigger_kinds: ['slack_notify', 'atc'],
-  booking_actions: ['add_to_cart'],
   add_to_cart: { state: 'ready' },
 };
 

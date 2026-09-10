@@ -128,7 +128,12 @@ export function useRemoveRecgov() {
   const queryClient = useQueryClient();
   return useMutation<RecgovRemovedResponse, unknown, void>({
     mutationFn: () => removeRecgov(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.settings() }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+      // Removing the login closes the grid's cart gate, the same way saving one
+      // opens it: `add_to_cart.state` is decided from these credentials.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.availability.all() });
+    },
   });
 }
 

@@ -15,7 +15,6 @@
 //   - "no online openings to watch", when the day itself has nothing to wait for.
 import { Button, LinkButton } from '@ui';
 import { availabilityStatusMeta } from '@/lib/availability-status';
-import { availableCount, campsiteCount } from '@/lib/day-fields';
 import { dayCopy, gateCopy } from '@/lib/strings';
 import type { AvailabilityDay } from '@/api/availability-api';
 import { longDayLabel } from './week-labels';
@@ -91,13 +90,7 @@ export function DayDetail({
 
 function StatusLine({ day }: { day: AvailabilityDay }) {
   const meta = availabilityStatusMeta(day.status);
-  if (meta.value !== 'available') return <span className={meta.detailClass}>{meta.text}</span>;
-  return (
-    <>
-      <span className={meta.detailClass}>{meta.text}</span> · {availableCount(day)} of{' '}
-      {campsiteCount(day)} sites
-    </>
-  );
+  return <span className={meta.detailClass}>{meta.text}</span>;
 }
 
 function DayAction({

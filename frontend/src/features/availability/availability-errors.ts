@@ -10,6 +10,7 @@ const AVAILABILITY_ERROR_LABELS = new Map<string, string>([
   ['unsupported', 'Provider not supported'],
   ['provider_misconfigured', 'Provider misconfigured — we are on it'],
   ['ip_throttled', 'Too many requests — slow down'],
+  ['beyond_booking_horizon', 'That date is past what this provider lets you book'],
 ]);
 
 /** What the week grid shows when the request could not be fulfilled. */

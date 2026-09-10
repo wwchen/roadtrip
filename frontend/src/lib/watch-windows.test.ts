@@ -14,7 +14,6 @@ import {
 /** The wire block, as the availability response and the watch envelope send it. */
 const wire = (triggerKinds: string[], addToCart: AddToCartState = 'unsupported') => ({
   trigger_kinds: triggerKinds,
-  booking_actions: addToCart === 'unsupported' ? [] : ['add_to_cart'],
   add_to_cart: { state: addToCart },
 });
 
@@ -66,7 +65,7 @@ describe('capabilities', () => {
   });
 
   test('the cart state is the backend"s, never re-derived from the two arrays', () => {
-    // Same `booking_actions`, four different answers — which is the point of the
+    // One trigger list, four different answers — which is the point of the
     // field: the gap between "this scope has a cart" and "you can drive it" is
     // named upstream rather than inferred from a missing `atc` trigger.
     for (const state of ['ready', 'no_credentials', 'signed_out', 'unsupported'] as const) {
@@ -83,7 +82,6 @@ describe('capabilities', () => {
     expect(
       normalizeWatchCapabilities({
         trigger_kinds: ['slack_notify'],
-        booking_actions: [],
       } as never).addToCart,
     ).toBe('unsupported');
   });

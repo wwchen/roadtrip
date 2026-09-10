@@ -146,6 +146,10 @@ function useWatchWriteHandlers(): WatchWriteHandlers {
       if (!isUnauthorized(error)) return;
       void queryClient.invalidateQueries({ queryKey: queryKeys.watches.all() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.me() });
+      // The availability week is per-principal — `watch_capabilities` and every
+      // cell's cart gate answer for whoever asked — so a changed identity has to
+      // re-ask for it too.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.availability.all() });
     },
   };
 }

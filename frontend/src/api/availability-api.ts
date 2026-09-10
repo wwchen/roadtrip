@@ -60,7 +60,6 @@ export interface SeasonBlock {
 /** Mirrors AvailabilityWatchCapabilitiesDto. */
 export interface WatchCapabilities {
   trigger_kinds: string[];
-  booking_actions: string[];
   add_to_cart: { state: AddToCartState };
 }
 
