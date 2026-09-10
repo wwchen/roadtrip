@@ -59,6 +59,8 @@ compose multiple features to exercise a page, but production composition belongs
 
 The `Campsite` type in `api/campsite-api.ts` is the closed mirror of `CampsiteDto`: every field is explicitly typed, with no index signature. When the drawer needs a new fact, the vendor ETL promotes it to a typed column and the DTO gains a field; nothing in the frontend reads a `source_payload` or reconciles vendor spellings. `features/availability/site-detail-facts.ts` is the one place campsite facts are turned into copy.
 
+Amenity, carrier, and campsite-kind labels are the same rule applied to display text: the backend owns the vocabulary (`AmenityKey`, `Carrier`, `CampsiteKind`) and ships the label on the wire — `label`/`negativeLabel` on POI amenity and carrier entries, `kind_label` on `CampsiteDto` — so the frontend keeps no amenity map, carrier map, or kind-label map of its own; it renders the string it is given. `features/availability/matrix-rows.ts` builds the Type dropdown's options from each row's `kind`/`kind_label` pair and filters on the wire `kind`, never the label, so a rename of display text can never change which sites a filter matches.
+
 ## Where copy lives
 
 User-facing copy for the availability, watch and booking surfaces is in

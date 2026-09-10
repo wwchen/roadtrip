@@ -131,6 +131,27 @@ metadata such as name, loop, kind, and reservation URL. When code needs table
 fields, use `CampsiteRepo.findById` / query methods; when code needs to call
 a provider, use `DbAvailabilityTargetResolver`.
 
+## Campsite kind vocabulary and `site_type` filters
+
+`campsites.kind` stores one wire value from `CampsiteKind`
+(`model/domain/CampsiteKind.kt`): `standard`, `tent`, `rv`, `cabin`, `group`,
+`walk_in`, `boat_in`, `equestrian`, `backcountry`, `day_use`, `other`. The
+vendor's own type string is kept separately as `kind_listed`.
+`service/etl/framework/CampsiteKinds.kt` is the one per-vendor mapping table —
+rec.gov, Campflare, Aspira, and ReserveCalifornia each map their upstream
+type string into the enum; ReserveAmerica has no upstream type and maps
+everything to `other`. `CampsiteDto.kind` carries the wire value and
+`kind_label` carries the enum's display label, so the drawer's Type dropdown
+can list labels while filtering on the wire value underneath.
+
+The `site_type` query parameter on the campsites, availability, and
+bulk-availability routes accepts only these wire values. An unknown value is
+a `bad_request` naming the value and listing the accepted set (built off
+`CampsiteKind.entries` so the error text cannot drift from the parser). A
+watch's stored `campsite_filters.site_type` (string or array) is resolved
+through the same enum, but an unknown stored value simply matches nothing
+rather than erroring — it predates the vocabulary or a validating client.
+
 ## Provider-ref resolution
 
 Each ETL writes its own per-vendor campground row. Availability lookups use
