@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.model.domain.CatalogColumnJson
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProvider
@@ -10,6 +12,10 @@ import org.jooq.Record
 /**
  * The link queries behind ref resolution: POI ↔ campground ↔ campsite ids, and
  * the typed provider refs attached to those rows.
+ *
+ * A row's booking identity is its primary `booking_provider`/`booking_provider_ref`
+ * plus every entry of its `booking_aliases` bag, so a lookup by ref matches
+ * either and a lookup for refs returns both, primary first.
  *
  * A cross-entity read repo (like `PoiServingRepo`), named for its use case: no
  * single entity owns "what is reachable from this ref", and the resolver that
@@ -48,29 +54,27 @@ class RefLinkRepo(
         ctx
             .fetch(
                 """
-                SELECT cg.booking_provider, cg.booking_provider_ref
+                SELECT $CAMPGROUND_BOOKING_COLUMNS
                 FROM campgrounds cg
                 JOIN poi_campgrounds pc ON pc.campground_id = cg.id
                 WHERE pc.poi_id = ?
                   AND cg.deleted_at IS NULL
-                  AND cg.booking_provider IS NOT NULL
                 """.trimIndent(),
                 poiId,
-            ).mapNotNull(::bookingRef)
+            ).flatMap(::bookingRefs)
 
     fun campsiteBookingRefsForPoi(poiId: Long): List<BookingProviderRef> =
         ctx
             .fetch(
                 """
-                SELECT c.booking_provider, c.booking_provider_ref
+                SELECT $CAMPSITE_BOOKING_COLUMNS
                 FROM campsites c
                 JOIN poi_campgrounds pc ON pc.campground_id = c.campground_id
                 WHERE pc.poi_id = ?
                   AND c.deleted_at IS NULL
-                  AND c.booking_provider IS NOT NULL
                 """.trimIndent(),
                 poiId,
-            ).mapNotNull(::bookingRef)
+            ).flatMap(::bookingRefs)
 
     fun poiIdsForCampground(campgroundId: Long): List<Long> =
         ctx
@@ -98,12 +102,12 @@ class RefLinkRepo(
         ctx
             .fetch(
                 """
-                SELECT cg.booking_provider, cg.booking_provider_ref
+                SELECT $CAMPGROUND_BOOKING_COLUMNS
                 FROM campgrounds cg
-                WHERE cg.id = ? AND cg.deleted_at IS NULL AND cg.booking_provider IS NOT NULL
+                WHERE cg.id = ? AND cg.deleted_at IS NULL
                 """.trimIndent(),
                 campgroundId,
-            ).mapNotNull(::bookingRef)
+            ).flatMap(::bookingRefs)
 
     fun dataRefsForCampground(campgroundId: Long): List<DataProviderRef> =
         ctx
@@ -143,24 +147,24 @@ class RefLinkRepo(
         ctx
             .fetch(
                 """
-                SELECT c.booking_provider, c.booking_provider_ref
+                SELECT $CAMPSITE_BOOKING_COLUMNS
                 FROM campsites c
-                WHERE c.id = ? AND c.deleted_at IS NULL AND c.booking_provider IS NOT NULL
+                WHERE c.id = ? AND c.deleted_at IS NULL
                 """.trimIndent(),
                 campsiteId,
-            ).mapNotNull(::bookingRef)
+            ).flatMap(::bookingRefs)
 
     fun parentCampgroundBookingRefsForCampsite(campsiteId: Long): List<BookingProviderRef> =
         ctx
             .fetch(
                 """
-                SELECT cg.booking_provider, cg.booking_provider_ref
+                SELECT $CAMPGROUND_BOOKING_COLUMNS
                 FROM campsites c
                 JOIN campgrounds cg ON cg.id = c.campground_id
-                WHERE c.id = ? AND c.deleted_at IS NULL AND cg.deleted_at IS NULL AND cg.booking_provider IS NOT NULL
+                WHERE c.id = ? AND c.deleted_at IS NULL AND cg.deleted_at IS NULL
                 """.trimIndent(),
                 campsiteId,
-            ).mapNotNull(::bookingRef)
+            ).flatMap(::bookingRefs)
 
     fun dataRefsForCampsite(campsiteId: Long): List<DataProviderRef> =
         ctx
@@ -200,10 +204,9 @@ class RefLinkRepo(
             .fetch(
                 """
                 SELECT cg.id FROM campgrounds cg
-                WHERE cg.booking_provider = ? AND cg.booking_provider_ref = ? AND cg.deleted_at IS NULL
+                WHERE ${bookingRefPredicate("cg")} AND cg.deleted_at IS NULL
                 """.trimIndent(),
-                ref.provider.id,
-                ref.serialize(),
+                *bookingRefParams(ref),
             ).map { it.get("id", Long::class.java) }
 
     fun campsiteIdsByCampgroundBookingRef(ref: BookingProviderRef): List<Long> =
@@ -212,10 +215,9 @@ class RefLinkRepo(
                 """
                 SELECT c.id FROM campsites c
                 JOIN campgrounds cg ON cg.id = c.campground_id
-                WHERE cg.booking_provider = ? AND cg.booking_provider_ref = ? AND c.deleted_at IS NULL AND cg.deleted_at IS NULL
+                WHERE ${bookingRefPredicate("cg")} AND c.deleted_at IS NULL AND cg.deleted_at IS NULL
                 """.trimIndent(),
-                ref.provider.id,
-                ref.serialize(),
+                *bookingRefParams(ref),
             ).map { it.get("id", Long::class.java) }
 
     fun campsiteIdsByBookingRef(ref: BookingProviderRef): List<Long> =
@@ -223,23 +225,48 @@ class RefLinkRepo(
             .fetch(
                 """
                 SELECT c.id FROM campsites c
-                WHERE c.booking_provider = ? AND c.booking_provider_ref = ? AND c.deleted_at IS NULL
+                WHERE ${bookingRefPredicate("c")} AND c.deleted_at IS NULL
                 """.trimIndent(),
-                ref.provider.id,
-                ref.serialize(),
+                *bookingRefParams(ref),
             ).map { it.get("id", Long::class.java) }
 
     /** Unparseable stored refs read as "no ref": a bad row must not fail the
      *  whole resolution, and there is nothing the caller could do with it. */
-    private fun bookingRef(record: Record): BookingProviderRef? {
-        val provider = BookingProvider.fromIdOrNull(record.get("booking_provider", String::class.java)) ?: return null
-        val ref = record.get("booking_provider_ref", String::class.java) ?: return null
-        return BookingProviderRef.parse(provider, ref)
+    private fun bookingRefs(record: Record): List<BookingProviderRef> {
+        val primary =
+            BookingProvider
+                .fromIdOrNull(record.get("booking_provider", String::class.java).orEmpty())
+                ?.let { provider ->
+                    record.get("booking_provider_ref", String::class.java)?.let { BookingProviderRef.parse(provider, it) }
+                }
+        val aliases =
+            decodeListColumn<BookingAlias>(record.get("booking_aliases_text", String::class.java))
+                .mapNotNull { BookingProviderRef.parse(it.provider, it.ref) }
+        return listOfNotNull(primary) + aliases
     }
 
     private fun dataRef(record: Record): DataProviderRef? {
         val provider = DataProvider.fromIdOrNull(record.get("data_provider", String::class.java)) ?: return null
         val ref = record.get("data_provider_ref", String::class.java) ?: return null
         return DataProviderRef.parse(provider, ref)
+    }
+
+    private companion object {
+        private const val CAMPGROUND_BOOKING_COLUMNS =
+            "cg.booking_provider, cg.booking_provider_ref, cg.booking_aliases::text AS booking_aliases_text"
+
+        private const val CAMPSITE_BOOKING_COLUMNS =
+            "c.booking_provider, c.booking_provider_ref, c.booking_aliases::text AS booking_aliases_text"
+
+        /** Primary or alias, in that order; the alias arm is a GIN-indexed containment test. */
+        private fun bookingRefPredicate(alias: String): String =
+            "($alias.booking_provider = ? AND $alias.booking_provider_ref = ? OR $alias.booking_aliases @> ?::jsonb)"
+
+        private fun bookingRefParams(ref: BookingProviderRef): Array<Any?> =
+            arrayOf(
+                ref.provider.id,
+                ref.serialize(),
+                CatalogColumnJson.encodeArray(listOf(BookingAlias(provider = ref.provider, ref = ref.serialize()))),
+            )
     }
 }

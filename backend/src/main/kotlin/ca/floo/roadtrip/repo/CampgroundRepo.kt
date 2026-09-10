@@ -15,6 +15,7 @@ import ca.floo.roadtrip.model.domain.CatalogUpsertResult
 import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
 import ca.floo.roadtrip.model.domain.poi.PoiGeometryUpdate
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import org.jooq.DSLContext
@@ -147,6 +148,7 @@ class CampgroundRepo(
             dataProviderRef = dataProviderRef,
             bookingProvider = record.get("booking_provider", String::class.java),
             bookingProviderRef = record.get("booking_provider_ref", String::class.java),
+            bookingAliases = decodeListColumn<BookingAlias>(record.get("booking_aliases_text", String::class.java)),
         )
     }
 
@@ -178,7 +180,7 @@ class CampgroundRepo(
         for (chunk in deduped.chunked(BULK_CHUNK_SIZE)) {
             val placeholders =
                 chunk.joinToString(", ") {
-                    "(?, ?, ?, ?, " +
+                    "(?, ?, ?, ?, ?::jsonb, " +
                         "?, ?, ?, ?, ?, " +
                         "?, ?, ?, " +
                         "?::jsonb, ?::jsonb, ?::jsonb, " +
@@ -190,7 +192,7 @@ class CampgroundRepo(
             val sql =
                 """
                 INSERT INTO campgrounds (
-                  data_provider, data_provider_ref, booking_provider, booking_provider_ref,
+                  data_provider, data_provider_ref, booking_provider, booking_provider_ref, booking_aliases,
                   name, parent_name, status, status_description, kind,
                   short_description, medium_description, long_description,
                   location, default_campsite_schedule, amenities,
@@ -204,6 +206,7 @@ class CampgroundRepo(
                 DO UPDATE SET
                   booking_provider = EXCLUDED.booking_provider,
                   booking_provider_ref = EXCLUDED.booking_provider_ref,
+                  booking_aliases = EXCLUDED.booking_aliases,
                   name = EXCLUDED.name,
                   parent_name = EXCLUDED.parent_name,
                   status = EXCLUDED.status,
@@ -240,6 +243,7 @@ class CampgroundRepo(
                 params += record.dataProviderRef.serialize()
                 params += record.bookingProvider?.id
                 params += record.bookingProviderRef
+                params += CatalogColumnJson.encodeArray(record.bookingAliases)
                 params += record.name
                 params += record.parentName
                 params += record.status
@@ -377,7 +381,8 @@ class CampgroundRepo(
             cg.data_provider,
             cg.data_provider_ref,
             cg.booking_provider,
-            cg.booking_provider_ref
+            cg.booking_provider_ref,
+            cg.booking_aliases::text AS booking_aliases_text
             """.trimIndent()
 
         private val baseSelect =

@@ -60,10 +60,18 @@ service/availability/provider/
 ## One ref encoding
 
 `booking_provider` + `booking_provider_ref` (the colon-delimited
-`BookingProviderRef.serialize()` form) is the only booking identity. The POI
-detail API emits it as `booking_ref: {provider, ref}` and the availability
-API as `scope_ref`. Nothing on the serving path reads `source_payload`; a key
-an ETL writes there is provenance, not behaviour.
+`BookingProviderRef.serialize()` form) is the row's *primary* booking identity.
+The POI detail API emits it as `booking_ref: {provider, ref}` and the
+availability API as `scope_ref`. Nothing on the serving path reads
+`source_payload`; a key an ETL writes there is provenance, not behaviour.
+
+The same inventory can be sold by more than one vendor, so `campgrounds` and
+`campsites` also carry `booking_aliases`: a JSONB array of
+`BookingAlias(provider, ref)` holding the other vendors' identities for the
+same row (V59). A Campflare campground that rec.gov also lists is
+Campflare-primary with one rec.gov alias; no ETL writes another vendor's
+identity as its primary. `RefLinkRepo`'s ref lookups match the primary or any
+alias, and return the primary first.
 
 `models/availability/AvailabilityProviderCapabilities.kt` and
 `models/availability/AvailabilityProviderError.kt` are shared provider-contract
@@ -79,10 +87,14 @@ Every vendor adapter class implements `AvailabilityProvider`: the shared
 normalized availability contract plus identity, capabilities, ref handling, and
 booking-link metadata. There is no separate registry class — dispatch is
 `providers.firstOrNull { it.supportsCampground(campground) }`, which asks each
-adapter about the concrete catalog row (enabled, and the row's typed booking
-ref is one this adapter serves) rather than about a bare provider id. Aspira
-overrides it to also require a tenant it is configured for, which a
-`BookingProvider`-keyed lookup could not express.
+adapter about the concrete catalog row rather than about a bare provider id.
+One rule for every adapter: enabled, and `claimedRef(campground)` is non-null —
+the primary ref when it is this provider's, else the matching alias parsed as
+this provider's `BookingProviderRef`. `parentRefFor` and `vendorSiteIdFor`
+resolve the same way, so an aliased row keeps the `parent_ref` key its live
+poller already stores. Aspira overrides `supportsCampground` to also require a
+tenant it is configured for, which a `BookingProvider`-keyed lookup could not
+express.
 Boot wiring assembles that list as one Koin singleton
 (`single<List<AvailabilityProvider>>(named("availabilityProviders"))` in
 `ServiceModule.kt`), injecting each vendor's HTTP client individually. Raw

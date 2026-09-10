@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.domain
 
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.serialization.json.JsonElement
@@ -46,6 +47,7 @@ data class Campsite(
     val dataProviderRefValue: String,
     val bookingProvider: String?,
     val bookingProviderRef: String?,
+    val bookingAliases: List<BookingAlias> = emptyList(),
 ) {
     val dataProviderRef: DataProviderRef = parseDataProviderRef(dataProvider, dataProviderRefValue)
 }

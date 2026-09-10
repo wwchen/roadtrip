@@ -2,6 +2,7 @@ package ca.floo.roadtrip.fixtures
 
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteKind
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -17,6 +18,7 @@ fun campsiteFixture(
     dataProviderRef: DataProviderRef = dataProviderRef(vendor, vendorId),
     bookingProvider: String? = BookingProvider.fromIdOrNull(vendor)?.id,
     bookingProviderRef: String? = vendorId,
+    bookingAliases: List<BookingAlias> = emptyList(),
     name: String = "Site $id",
     kind: CampsiteKind? = CampsiteKind.OTHER,
     loopName: String? = null,
@@ -60,6 +62,7 @@ fun campsiteFixture(
         dataProviderRefValue = dataProviderRef.serialize(),
         bookingProvider = bookingProvider,
         bookingProviderRef = bookingProviderRef,
+        bookingAliases = bookingAliases,
     )
 
 private fun dataProviderRef(

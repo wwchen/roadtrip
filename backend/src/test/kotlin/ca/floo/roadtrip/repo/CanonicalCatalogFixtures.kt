@@ -7,6 +7,8 @@ import org.jooq.DSLContext
 
 private val defaultTestDataProvider = DataProvider.RECGOV.id
 
+const val EMPTY_BOOKING_ALIASES = "[]"
+
 @Suppress("UnusedReceiverParameter")
 fun DSLContext.refreshCanonicalCatalogViews() {
     // No-op: materialized views removed in V44.
@@ -53,6 +55,7 @@ fun DSLContext.seedCatalogPoi(
     geomGeoJson: String = """{"type":"Point","coordinates":[$lon,$lat]}""",
     bookingProvider: String? = null,
     bookingProviderRef: String? = null,
+    bookingAliasesJson: String = EMPTY_BOOKING_ALIASES,
     refresh: Boolean = true,
 ): CatalogPoiFixture {
     val canonicalType = canonicalPoiType(poiType)
@@ -88,6 +91,7 @@ fun DSLContext.seedCatalogPoi(
                         sourcePayloadJson = propertiesJson,
                         bookingProvider = bookingProvider,
                         bookingProviderRef = bookingProviderRef,
+                        bookingAliasesJson = bookingAliasesJson,
                         refresh = false,
                     )
                 execute("INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)", poiId, campgroundId)
@@ -166,15 +170,16 @@ fun DSLContext.seedCampground(
     sourcePayloadJson: String = "{}",
     bookingProvider: String? = null,
     bookingProviderRef: String? = null,
+    bookingAliasesJson: String = EMPTY_BOOKING_ALIASES,
     refresh: Boolean = true,
 ): Long =
     fetchOne(
         """
         INSERT INTO campgrounds (
-          name, kind, data_provider, data_provider_ref, booking_provider, booking_provider_ref,
+          name, kind, data_provider, data_provider_ref, booking_provider, booking_provider_ref, booking_aliases,
           location, management, source_payload
         ) VALUES (
-          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?::jsonb,
           jsonb_strip_nulls(jsonb_build_object('region', ?::text, 'country', ?::text)),
           jsonb_strip_nulls(jsonb_build_object('agency', ?::text)),
           ?::jsonb
@@ -187,6 +192,7 @@ fun DSLContext.seedCampground(
         sourceId,
         bookingProvider,
         bookingProviderRef,
+        bookingAliasesJson,
         region,
         country,
         agency,
@@ -206,15 +212,16 @@ fun DSLContext.seedCampsite(
     sourcePayloadJson: String = "{}",
     bookingProvider: String? = null,
     bookingProviderRef: String? = null,
+    bookingAliasesJson: String = EMPTY_BOOKING_ALIASES,
     refresh: Boolean = true,
 ): Long =
     fetchOne(
         """
         INSERT INTO campsites (
           campground_id, name, kind, data_provider, data_provider_ref,
-          booking_provider, booking_provider_ref, loop_name, reservation_url, source_payload
+          booking_provider, booking_provider_ref, booking_aliases, loop_name, reservation_url, source_payload
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb
+          ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?::jsonb
         )
         RETURNING id
         """.trimIndent(),
@@ -225,6 +232,7 @@ fun DSLContext.seedCampsite(
         vendorId,
         bookingProvider,
         bookingProviderRef,
+        bookingAliasesJson,
         loopName,
         reservationUrl,
         providerRefJson ?: sourcePayloadJson,

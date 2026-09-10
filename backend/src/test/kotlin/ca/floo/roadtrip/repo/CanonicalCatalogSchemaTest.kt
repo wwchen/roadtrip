@@ -51,6 +51,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "alerts",
                 "amenities",
                 "big_rig_friendly",
+                "booking_aliases",
                 "booking_provider",
                 "booking_provider_ref",
                 "cell_service",
@@ -95,6 +96,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
             listOf(
                 "ada_accessible",
                 "attributes",
+                "booking_aliases",
                 "booking_provider",
                 "booking_provider_ref",
                 "campground_id",
@@ -268,6 +270,45 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "campsites.campsites_provider_uidx",
             ),
             indexes,
+        )
+    }
+
+    @Test
+    fun `booking alias bags are array-checked and GIN indexed on both catalog tables`() {
+        val indexes =
+            ctx
+                .fetch(
+                    """
+                    SELECT tablename || '.' || indexname AS ref
+                    FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND indexname IN ('campgrounds_booking_aliases_gin', 'campsites_booking_aliases_gin')
+                    ORDER BY ref
+                    """.trimIndent(),
+                ).map { it.get("ref", String::class.java) }
+
+        val checks =
+            ctx
+                .fetch(
+                    """
+                    SELECT conname
+                    FROM pg_constraint
+                    WHERE conname IN ('campgrounds_booking_aliases_check', 'campsites_booking_aliases_check')
+                      AND convalidated
+                    ORDER BY conname
+                    """.trimIndent(),
+                ).map { it.get("conname", String::class.java) }
+
+        assertEquals(
+            listOf(
+                "campgrounds.campgrounds_booking_aliases_gin",
+                "campsites.campsites_booking_aliases_gin",
+            ),
+            indexes,
+        )
+        assertEquals(
+            listOf("campgrounds_booking_aliases_check", "campsites_booking_aliases_check"),
+            checks,
         )
     }
 

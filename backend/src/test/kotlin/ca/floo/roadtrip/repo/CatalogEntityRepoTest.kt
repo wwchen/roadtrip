@@ -21,6 +21,8 @@ import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.BeforeEach
@@ -1347,6 +1349,172 @@ class CatalogEntityRepoTest : SharedDbTest() {
         )
         assertEquals(emptyList(), checkNotNull(repo.findById(campgroundId("legacy-alert-body-not-string"))).alerts)
     }
+
+    @Test
+    fun `booking aliases round-trip through both catalog repos`() {
+        val alias = BookingAlias(provider = BookingProvider.RECGOV, ref = "232447")
+        CampgroundRepo(ctx).upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cg-alias-1"),
+                    bookingProvider = BookingProvider.CAMPFLARE,
+                    bookingProviderRef = "cg-alias-1",
+                    bookingAliases = listOf(alias),
+                    name = "Aliased",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                ),
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cg-alias-none"),
+                    bookingProvider = BookingProvider.CAMPFLARE,
+                    bookingProviderRef = "cg-alias-none",
+                    name = "Unaliased",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+        CampsiteRepo(ctx).upsertCampsiteBatch(
+            listOf(
+                CampsiteUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cs-alias-1"),
+                    parentDataProviderRef = DataProviderRef.Campflare(id = "cg-alias-1"),
+                    bookingProvider = BookingProvider.CAMPFLARE,
+                    bookingProviderRef = "cs-alias-1",
+                    bookingAliases = listOf(BookingAlias(provider = BookingProvider.RECGOV, ref = "330257")),
+                    name = "Aliased Site",
+                ),
+                CampsiteUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cs-alias-none"),
+                    parentDataProviderRef = DataProviderRef.Campflare(id = "cg-alias-1"),
+                    name = "Unaliased Site",
+                ),
+            ),
+        )
+
+        val campground = checkNotNull(CampgroundRepo(ctx).findById(campgroundId("cg-alias-1")))
+        val campsite = checkNotNull(CampsiteRepo(ctx).findById(campsiteId("cs-alias-1")))
+
+        assertEquals(listOf(alias), campground.bookingAliases)
+        assertEquals(listOf(BookingAlias(provider = BookingProvider.RECGOV, ref = "330257")), campsite.bookingAliases)
+        assertEquals(
+            """[{"ref": "232447", "provider": "recgov"}]""",
+            ctx
+                .fetchOne("SELECT booking_aliases::text AS aliases FROM campgrounds WHERE data_provider_ref = ?", "cg-alias-1")!!
+                .get("aliases", String::class.java),
+        )
+        assertEquals(emptyList(), checkNotNull(CampgroundRepo(ctx).findById(campgroundId("cg-alias-none"))).bookingAliases)
+        assertEquals(emptyList(), checkNotNull(CampsiteRepo(ctx).findById(campsiteId("cs-alias-none"))).bookingAliases)
+    }
+
+    /** A NULL bag predates the column's default, and both it and `[]` read as "no aliases". */
+    @Test
+    fun `a NULL booking alias column reads as an empty list`() {
+        CampgroundRepo(ctx).upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cg-alias-null"),
+                    name = "Null Bag",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+        ctx.execute("ALTER TABLE campgrounds ALTER COLUMN booking_aliases DROP NOT NULL")
+        ctx.execute("UPDATE campgrounds SET booking_aliases = NULL WHERE data_provider_ref = ?", "cg-alias-null")
+
+        assertEquals(emptyList(), checkNotNull(CampgroundRepo(ctx).findById(campgroundId("cg-alias-null"))).bookingAliases)
+
+        ctx.execute("UPDATE campgrounds SET booking_aliases = '[]'::jsonb WHERE booking_aliases IS NULL")
+        ctx.execute("ALTER TABLE campgrounds ALTER COLUMN booking_aliases SET NOT NULL")
+    }
+
+    /**
+     * V59's whole job: a Campflare row stamped with rec.gov as its *primary*
+     * becomes Campflare primary carrying rec.gov as an alias. Rows that already
+     * name their own vendor are left alone, and a rerun changes nothing.
+     */
+    @Test
+    fun `the booking alias migration canonicalizes campflare rows stamped with recgov`() {
+        seedBookingRow("campflare", "upper-pines-campground-447", "recgov", "232447")
+        seedBookingRow("campflare", "lone-campflare-448", "campflare", "lone-campflare-448")
+        seedBookingRow("recgov", "232999", "recgov", "232999")
+
+        // Twice: a rerun over the rows the first pass canonicalized must change nothing.
+        repeat(2) { migrationStatements("V59__booking_aliases.sql").forEach(ctx::execute) }
+
+        assertEquals(
+            listOf(
+                """campflare|upper-pines-campground-447|[{"ref": "232447", "provider": "recgov"}]""",
+                "campflare|lone-campflare-448|[]",
+                "recgov|232999|[]",
+            ),
+            campgroundBookingColumnsAsText(),
+        )
+    }
+
+    @Test
+    fun `the booking alias migration canonicalizes campflare campsites stamped with recgov`() {
+        val campgroundId = ctx.seedCampground(source = "campflare", sourceId = "upper-pines-campground-447")
+        ctx.seedCampsite(
+            campgroundId = campgroundId,
+            vendor = "campflare",
+            vendorId = "upper-pines-site-100",
+            bookingProvider = "recgov",
+            bookingProviderRef = "330257",
+        )
+        ctx.seedCampsite(
+            campgroundId = campgroundId,
+            vendor = "campflare",
+            vendorId = "lone-campflare-site",
+            bookingProvider = "campflare",
+            bookingProviderRef = "lone-campflare-site",
+        )
+
+        repeat(2) { migrationStatements("V59__booking_aliases.sql").forEach(ctx::execute) }
+
+        val aliased = checkNotNull(CampsiteRepo(ctx).findById(campsiteId("upper-pines-site-100")))
+        val untouched = checkNotNull(CampsiteRepo(ctx).findById(campsiteId("lone-campflare-site")))
+
+        assertEquals("campflare", aliased.bookingProvider)
+        assertEquals("upper-pines-site-100", aliased.bookingProviderRef)
+        assertEquals(listOf(BookingAlias(provider = BookingProvider.RECGOV, ref = "330257")), aliased.bookingAliases)
+        assertEquals("campflare", untouched.bookingProvider)
+        assertEquals("lone-campflare-site", untouched.bookingProviderRef)
+        assertEquals(emptyList(), untouched.bookingAliases)
+    }
+
+    /** One bare campground carrying only its identity columns, for the alias migration to rewrite. */
+    private fun seedBookingRow(
+        dataProvider: String,
+        dataProviderRef: String,
+        bookingProvider: String,
+        bookingProviderRef: String,
+    ) = ctx.execute(
+        """
+        INSERT INTO campgrounds (name, data_provider, data_provider_ref, booking_provider, booking_provider_ref)
+        VALUES (?, ?, ?, ?, ?)
+        """.trimIndent(),
+        "Legacy",
+        dataProvider,
+        dataProviderRef,
+        bookingProvider,
+        bookingProviderRef,
+    )
+
+    private fun campgroundBookingColumnsAsText(): List<String> =
+        ctx
+            .fetch(
+                """
+                SELECT booking_provider, booking_provider_ref, booking_aliases::text AS aliases
+                FROM campgrounds ORDER BY id
+                """.trimIndent(),
+            ).map { row -> row.intoArray().joinToString("|") { it.toString() } }
 
     /** One bare campground row per vendor, written in the shapes that predate the typed columns. */
     private fun seedLegacyCampground(

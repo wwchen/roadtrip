@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -42,13 +43,14 @@ class CampgroundAvailabilitySupportTest {
     }
 
     @Test
-    fun `supportsCampground campflare matches even when bookingProvider is recgov`() {
+    fun `supportsCampground campflare matches a campflare primary carrying a recgov alias`() {
         val provider = NoopCampflareProvider(enabled = true)
         val campground =
             campground(
                 dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-447"),
-                bookingProvider = "recgov",
-                bookingProviderRef = "232447",
+                bookingProvider = "campflare",
+                bookingProviderRef = "upper-pines-447",
+                bookingAliases = listOf(BookingAlias(provider = BookingProvider.RECGOV, ref = "232447")),
             )
 
         assertTrue(provider.supportsCampground(campground))
@@ -90,8 +92,9 @@ class CampgroundAvailabilitySupportTest {
         val campground =
             campground(
                 dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-447"),
-                bookingProvider = "recgov",
-                bookingProviderRef = "232447",
+                bookingProvider = "campflare",
+                bookingProviderRef = "upper-pines-447",
+                bookingAliases = listOf(BookingAlias(provider = BookingProvider.RECGOV, ref = "232447")),
             )
 
         val match = providers.firstOrNull { it.supportsCampground(campground) }
@@ -102,6 +105,7 @@ class CampgroundAvailabilitySupportTest {
         dataProviderRef: DataProviderRef,
         bookingProvider: String?,
         bookingProviderRef: String?,
+        bookingAliases: List<BookingAlias> = emptyList(),
     ): Campground =
         Campground(
             id = 1L,
@@ -130,6 +134,7 @@ class CampgroundAvailabilitySupportTest {
             dataProviderRef = dataProviderRef,
             bookingProvider = bookingProvider,
             bookingProviderRef = bookingProviderRef,
+            bookingAliases = bookingAliases,
         )
 
     private class NoopRecgovProvider : AvailabilityProvider {
@@ -162,9 +167,6 @@ class CampgroundAvailabilitySupportTest {
             )
 
         override fun isEnabled(): Boolean = enabled
-
-        override fun supportsCampground(campground: Campground): Boolean =
-            isEnabled() && campground.dataProviderRef is DataProviderRef.Campflare
 
         override suspend fun availability(
             campground: Campground,

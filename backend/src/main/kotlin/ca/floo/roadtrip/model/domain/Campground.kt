@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.domain
 
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -43,6 +44,7 @@ data class Campground(
     val dataProviderRef: DataProviderRef,
     val bookingProvider: String?,
     val bookingProviderRef: String?,
+    val bookingAliases: List<BookingAlias> = emptyList(),
 )
 
 fun Campground.bookingRef(): BookingProviderRef? {

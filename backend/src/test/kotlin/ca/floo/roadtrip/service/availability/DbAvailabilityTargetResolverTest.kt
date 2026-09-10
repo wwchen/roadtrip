@@ -5,7 +5,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -32,6 +31,8 @@ private const val BC_PARKS_TEST_CAMPGROUND_DATA_REF = "-2147483534:-2147483460"
 private const val BC_PARKS_TEST_PARENT_BOOKING_REF = "bc:-2147483534:-2147483460:-2147483560"
 private const val BC_PARKS_TEST_CAMPSITE_DATA_REF = "bc:-2147477118"
 private const val BC_PARKS_TEST_RESOURCE_ID = "-2147477118"
+private const val RECGOV_CAMPGROUND_ALIAS = """[{"provider":"recgov","ref":"232447"}]"""
+private const val RECGOV_CAMPSITE_ALIAS = """[{"provider":"recgov","ref":"330257"}]"""
 
 class DbAvailabilityTargetResolverTest : SharedDbTest() {
     @BeforeEach
@@ -100,14 +101,6 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             )
 
         override fun isEnabled(): Boolean = enabled
-
-        override fun supportsCampground(campground: Campground): Boolean =
-            enabled && campground.dataProviderRef is DataProviderRef.Campflare
-
-        override fun parentRefFor(campground: Campground): BookingProviderRef? {
-            val ref = campground.dataProviderRef as? DataProviderRef.Campflare ?: return null
-            return BookingProviderRef.Campflare(ref.id)
-        }
 
         override suspend fun availability(
             campground: Campground,
@@ -211,6 +204,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(BookingProvider.CAMPFLARE, target.provider.id)
             assertEquals("upper-pines-campground-447", target.parentRef!!.parentRefKey)
             assertEquals("upper-pines-site-100", target.provider.vendorSiteIdFor(target.campsite))
+            // No rec.gov alias on the row, so rec.gov never claims it.
+            assertEquals(listOf(BookingProvider.CAMPFLARE), target.candidates.map { it.id })
         }
 
     @Test
@@ -224,8 +219,9 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                     vendor = "campflare",
                     vendorId = "upper-pines-site-100",
                     name = "Campflare Site 100",
-                    bookingProvider = "recgov",
-                    bookingProviderRef = "330257",
+                    bookingProvider = "campflare",
+                    bookingProviderRef = "upper-pines-site-100",
+                    bookingAliasesJson = RECGOV_CAMPSITE_ALIAS,
                 )
 
             val campsitesRepo = CampsiteRepo(ctx)
@@ -288,7 +284,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         val resolver = DbRefResolver(RefLinkRepo(ctx))
         val candidates = resolver.resolve<RefValue.CampgroundBookingRef>(RefValue.PoiId(poiId))
         assertEquals(
-            listOf("recgov"),
+            listOf("campflare", "recgov"),
             candidates.map { it.ref.provider.id },
         )
     }
@@ -455,6 +451,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(null, target)
         }
 
+    /** The V59 shape: Campflare primary, rec.gov carried as an alias. */
     private fun seedCampflarePoiWithRecgovBooking(): Long =
         ctx
             .seedCatalogPoi(
@@ -464,7 +461,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 lat = 37.74,
                 source = "campflare",
                 providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
-                bookingProvider = "recgov",
-                bookingProviderRef = "232447",
+                bookingProvider = "campflare",
+                bookingProviderRef = "upper-pines-campground-447",
+                bookingAliasesJson = RECGOV_CAMPGROUND_ALIAS,
             ).poiId
 }

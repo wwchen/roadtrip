@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.serialization.json.JsonNull
 import java.time.Instant
@@ -9,6 +10,7 @@ internal fun testCampground(
     bookingProvider: String?,
     bookingProviderRef: String?,
     dataProviderRef: DataProviderRef = DataProviderRef.RecGov(id = "test"),
+    bookingAliases: List<BookingAlias> = emptyList(),
 ): Campground =
     Campground(
         id = 1L,
@@ -37,4 +39,5 @@ internal fun testCampground(
         dataProviderRef = dataProviderRef,
         bookingProvider = bookingProvider,
         bookingProviderRef = bookingProviderRef,
+        bookingAliases = bookingAliases,
     )
