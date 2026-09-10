@@ -32,7 +32,7 @@ enum class AmenityKey(
     SHOWERS("showers", "Showers", "No showers"),
 
     @SerialName("toilets")
-    TOILETS("toilets", "Toilets"),
+    TOILETS("toilets", "Toilets", "No toilets"),
 
     @SerialName("trash")
     TRASH("trash", "Trash"),
@@ -47,7 +47,7 @@ enum class AmenityKey(
     WIFI("wifi", "Wi-Fi"),
 
     @SerialName("other")
-    OTHER("other", ""),
+    OTHER("other", "Other"),
     ;
 
     companion object {

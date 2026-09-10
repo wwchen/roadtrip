@@ -491,9 +491,8 @@ class PoiServiceTest : SharedDbTest() {
 
         assertEquals("CONSTRUCTION", detail.status)
         assertEquals("America/Los_Angeles", detail.timeZone)
-        // `amenities` speaks the campground vocabulary now, which a charger's
-        // vendor strings ("AMENITIES_WIFI") do not — they await a field of their own.
         assertEquals(emptyList(), detail.amenities)
+        assertEquals(listOf("AMENITIES_WIFI"), detail.chargerAmenities)
         assertEquals(12, detail.stallCount)
         assertEquals(250, detail.powerKilowatt)
         assertEquals(

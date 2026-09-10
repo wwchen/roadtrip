@@ -69,6 +69,7 @@ data class PoiCategoryDetailSchema(
     // the campground block above. `status` and `time_zone` are shared with
     // campgrounds and reused rather than duplicated; `amenities` is not —
     // it now carries the campground vocabulary only.
+    @SerialName("charger_amenities") val chargerAmenities: List<String> = emptyList(),
     @SerialName("stall_count") val stallCount: Int? = null,
     @SerialName("power_kilowatt") val powerKilowatt: Int? = null,
     val pricebooks: JsonElement? = null,

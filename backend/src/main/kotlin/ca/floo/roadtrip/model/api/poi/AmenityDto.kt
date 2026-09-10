@@ -19,24 +19,27 @@ data class AmenityDto(
     companion object {
         private const val TOILETS_LABEL_FORMAT = "%s toilets"
 
-        fun from(amenity: CampgroundAmenity): AmenityDto =
-            AmenityDto(
-                key = amenity.key.wire,
-                label = label(amenity),
-                present = amenity.present,
-                detail = amenity.detail,
-            )
-
-        private fun label(amenity: CampgroundAmenity): String {
-            val key = amenity.key
+        fun from(amenity: CampgroundAmenity): AmenityDto {
             val detail = amenity.detail?.trim()?.takeIf { it.isNotEmpty() }
-            return when {
+            return AmenityDto(
+                key = amenity.key.wire,
+                label = label(amenity.key, amenity.present, detail),
+                present = amenity.present,
+                detail = detail,
+            )
+        }
+
+        private fun label(
+            key: AmenityKey,
+            present: Boolean,
+            detail: String?,
+        ): String =
+            when {
                 key == AmenityKey.OTHER -> detail ?: key.label
+                !present && key.negativeLabel != null -> key.negativeLabel
                 key == AmenityKey.TOILETS && detail != null -> TOILETS_LABEL_FORMAT.format(detail.capitalizeFirst())
-                !amenity.present -> key.negativeLabel ?: key.label
                 else -> key.label
             }
-        }
 
         private fun String.capitalizeFirst(): String = replaceFirstChar { it.uppercaseChar() }
     }

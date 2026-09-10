@@ -6,6 +6,8 @@ import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 internal class TeslaSuperchargerService(
@@ -31,8 +33,7 @@ internal class TeslaSuperchargerService(
                     raw = raw,
                     status = supercharger.siteStatus,
                     timeZone = supercharger.timeZone,
-                    // `amenities` now carries the typed campground vocabulary, which a
-                    // charger's vendor strings do not speak. They need a field of their own.
+                    chargerAmenities = supercharger.amenities.jsonArray.map { it.jsonPrimitive.content },
                     stallCount = supercharger.stallCount,
                     powerKilowatt = supercharger.maxPowerKw,
                     pricebooks = supercharger.pricebooks,

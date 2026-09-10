@@ -66,7 +66,7 @@ class PoiDetailDtoTest {
                 """"alerts":[{"title":"Road closed",""" +
                 """"body":"Highway 89 is closed north of the entrance.",""" +
                 """"ends_on":"2026-10-01","source_url":"https://example.test/alert"}],""" +
-                """"last_verified":"2026-06-01"}"""
+                """"last_verified":"2026-06-01","charger_amenities":[]}"""
         )
         assertEquals(expected, encodeApiJson(detail))
     }
@@ -74,7 +74,7 @@ class PoiDetailDtoTest {
     @Test
     fun `a campground with nothing in its bags encodes empty lists and omits the objects`() {
         assertEquals(
-            """{"sources":[],"amenities":[],"cell_coverage":[],"activities":[],"alerts":[]}""",
+            """{"sources":[],"amenities":[],"cell_coverage":[],"activities":[],"alerts":[],"charger_amenities":[]}""",
             encodeApiJson(PoiCategoryDetailSchema()),
         )
     }
@@ -107,13 +107,26 @@ class PoiDetailDtoTest {
     }
 
     @Test
+    fun `an absent toilets amenity favours the negative label over the kind`() {
+        assertEquals("No toilets", labelOf(AmenityKey.TOILETS, present = false, detail = "vault"))
+    }
+
+    @Test
+    fun `a blank detail is dropped rather than sent blank`() {
+        assertEquals(
+            """{"key":"toilets","label":"Toilets","present":true}""",
+            encodeApiJson(AmenityDto.from(CampgroundAmenity(key = AmenityKey.TOILETS, present = true, detail = "  "))),
+        )
+    }
+
+    @Test
     fun `an other amenity is labelled by the vendor's own words`() {
         assertEquals("Horse corral", labelOf(AmenityKey.OTHER, detail = "Horse corral"))
     }
 
     @Test
     fun `an other amenity with no words falls back to the key's label`() {
-        assertEquals(AmenityKey.OTHER.label, labelOf(AmenityKey.OTHER))
+        assertEquals("Other", labelOf(AmenityKey.OTHER))
     }
 
     @Test

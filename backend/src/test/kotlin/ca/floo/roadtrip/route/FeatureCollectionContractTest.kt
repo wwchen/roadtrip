@@ -217,7 +217,8 @@ class FeatureCollectionContractTest {
                 """"activities":["hiking"],"rating":{"average":4.3,"count":87},""" +
                 """"price":{"minimum":26.0,"maximum":36.0,"currency":"CAD"},""" +
                 """"schedule":{"check_in":"14:00","check_out":"11:00"},""" +
-                """"alerts":[{"body":"Bear activity in the loop."}]}}}"""
+                """"alerts":[{"body":"Bear activity in the loop."}],""" +
+                """"charger_amenities":[]}}}"""
         )
         assertEquals(expected, encodeApiJson(feature))
     }
@@ -251,7 +252,12 @@ class FeatureCollectionContractTest {
         assert(!out.contains("\"booking_system\""))
         // The typed bags are always present, empty, rather than absent — the FE
         // maps over them without a null guard.
-        assert(out.contains(""""detail":{"sources":[],"raw":{},"amenities":[],"cell_coverage":[],"activities":[],"alerts":[]}"""))
+        assert(
+            out.contains(
+                """"detail":{"sources":[],"raw":{},"amenities":[],"cell_coverage":[],"activities":[],""" +
+                    """"alerts":[],"charger_amenities":[]}""",
+            ),
+        )
     }
 
     @Test
