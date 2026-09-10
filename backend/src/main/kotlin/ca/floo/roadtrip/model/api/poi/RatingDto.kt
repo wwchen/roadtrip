@@ -10,6 +10,11 @@ data class RatingDto(
     val count: Int,
 ) {
     companion object {
-        fun from(rating: CampgroundRating): RatingDto = RatingDto(average = rating.average, count = rating.count)
+        private const val MIN_SERVED_COUNT = 1
+
+        /** An average over no reviews is a vendor placeholder, not a rating, so it is not served. */
+        fun from(rating: CampgroundRating): RatingDto? =
+            RatingDto(average = rating.average, count = rating.count)
+                .takeIf { it.count >= MIN_SERVED_COUNT }
     }
 }

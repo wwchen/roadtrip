@@ -246,6 +246,7 @@
   background: var(--rt-fill-active);
   font-size: 12px;
   color: var(--rt-hint);
+  overflow-wrap: anywhere;
 }
 
 /* An absence is the only thing in this row that takes a hue: "no showers" changes

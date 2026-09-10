@@ -18,6 +18,7 @@ data class AmenityDto(
 ) {
     companion object {
         private const val TOILETS_LABEL_FORMAT = "%s toilets"
+        private const val DETAILED_LABEL_FORMAT = "%s: %s"
 
         /**
          * The served list. An absent amenity whose key has no negative label
@@ -48,6 +49,7 @@ data class AmenityDto(
                 key == AmenityKey.OTHER -> detail ?: key.label
                 !present && key.negativeLabel != null -> key.negativeLabel
                 key == AmenityKey.TOILETS && detail != null -> TOILETS_LABEL_FORMAT.format(detail.capitalizeFirst())
+                detail != null -> DETAILED_LABEL_FORMAT.format(key.label, detail)
                 else -> key.label
             }
 

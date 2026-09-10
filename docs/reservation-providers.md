@@ -148,9 +148,11 @@ The `site_type` query parameter on the campsites, availability, and
 bulk-availability routes accepts only these wire values. An unknown value is
 a `bad_request` naming the value and listing the accepted set (built off
 `CampsiteKind.entries` so the error text cannot drift from the parser). A
-watch's stored `campsite_filters.site_type` (string or array) is resolved
-through the same enum, but an unknown stored value simply matches nothing
-rather than erroring — it predates the vocabulary or a validating client.
+Watch create and modify validate `campsite_filters.site_type` against the same
+wire vocabulary, with the same `bad_request`; a `site_type` that is neither a
+string nor an array of strings is refused too. A stored value that predates
+that validation is resolved through the same enum when the watch runs, but an
+unknown one simply matches nothing rather than erroring.
 
 ## Provider-ref resolution
 

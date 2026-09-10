@@ -147,6 +147,28 @@ class PoiDetailDtoTest {
     }
 
     @Test
+    fun `an amenity with a detail names it after the label`() {
+        assertEquals("Wi-Fi: guest network", labelOf(AmenityKey.WIFI, detail = "guest network"))
+    }
+
+    // A key with no AmenityKey has no negative label to render, so upstream's
+    // "no camp kitchen" is a fact with no wording and stays off the wire.
+    @Test
+    fun `an absent unknown amenity stays off the wire`() {
+        assertEquals(
+            "[]",
+            encodeApiJson(AmenityDto.fromAll(listOf(CampgroundAmenity(key = AmenityKey.OTHER, present = false, detail = "Camp kitchen")))),
+        )
+    }
+
+    @Test
+    fun `a rating nobody left a review on is not served`() {
+        assertEquals(null, RatingDto.from(CampgroundRating(average = 4.5, count = 0)))
+        assertEquals(null, RatingDto.from(CampgroundRating(average = 4.5, count = -1)))
+        assertEquals(RatingDto(average = 4.5, count = 1), RatingDto.from(CampgroundRating(average = 4.5, count = 1)))
+    }
+
+    @Test
     fun `a carrier reading without a sample count omits it`() {
         assertEquals(
             """{"carrier":"tmobile","label":"T-Mobile","average":2.0}""",

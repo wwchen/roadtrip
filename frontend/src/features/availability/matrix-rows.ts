@@ -187,19 +187,18 @@ export function loopOptions(rows: readonly Partial<Campsite>[]): string[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
-/** The backend labels every kind; this is only for a row that arrived without one. */
-const OTHER_TYPE_LABEL = 'Other';
-
 /**
  * The distinct site types present, for the type dropdown: the filter runs on the
- * wire value, the option reads as the backend's label.
+ * wire value, the option reads as the backend's label. Every catalog row carries
+ * both; a row synthesised from the days carries neither.
  */
 export function typeOptions(rows: readonly Partial<Campsite>[]): FilterOption[] {
   const byValue = new Map<string, FilterOption>();
   for (const row of rows) {
     const value = row.kind?.trim();
-    if (!value || byValue.has(value)) continue;
-    byValue.set(value, { value, label: row.kind_label?.trim() || OTHER_TYPE_LABEL });
+    const label = row.kind_label?.trim();
+    if (!value || !label || byValue.has(value)) continue;
+    byValue.set(value, { value, label });
   }
   return [...byValue.values()].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
 }

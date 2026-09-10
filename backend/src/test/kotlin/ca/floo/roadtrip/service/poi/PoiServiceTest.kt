@@ -393,6 +393,36 @@ class PoiServiceTest : SharedDbTest() {
         )
     }
 
+    // Several vendors set the parent to the campground itself, which renders as
+    // "Cold Creek, in Cold Creek". A parent is only a parent when it differs.
+    @Test
+    fun `campground detail drops a parent name that is the campground's own`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "232870",
+                name = "Cold Creek",
+                lon = -120.31,
+                lat = 39.54,
+                source = "recgov",
+            )
+        ctx.execute("UPDATE campgrounds SET parent_name = ? WHERE id = ?", "  cold creek ", fixture.catalogId)
+
+        assertNull(
+            poiService()
+                .poiDetail(fixture.poiId)!!
+                .properties.detail.parentName,
+        )
+
+        ctx.execute("UPDATE campgrounds SET parent_name = ? WHERE id = ?", "Cold Creek Recreation Area", fixture.catalogId)
+
+        assertEquals(
+            "Cold Creek Recreation Area",
+            poiService()
+                .poiDetail(fixture.poiId)!!
+                .properties.detail.parentName,
+        )
+    }
+
     // Campflare's upstream keys (original_url, primary_phone, primary_email)
     // are mapped to the canonical ones by its ETL now, and V55 rewrote the
     // rows that predate that. Every stored row therefore looks like this one.
