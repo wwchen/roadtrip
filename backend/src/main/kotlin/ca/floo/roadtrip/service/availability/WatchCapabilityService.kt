@@ -110,7 +110,11 @@ internal class WatchCapabilityService(
         campsites: List<Campsite>,
     ): Boolean = canFulfilAddToCart(requester, resolve(campsites))
 
-    private fun canFulfilAddToCart(
+    /** Resolved-scope overload so a caller answering more than one capability
+     *  question about the same scope (write-time validation, `capabilitiesFor`)
+     *  resolves it once and shares the result rather than each question
+     *  re-walking the campsite list. */
+    internal fun canFulfilAddToCart(
         requester: UserId?,
         scope: ResolvedWatchScope,
     ): Boolean {
@@ -122,11 +126,24 @@ internal class WatchCapabilityService(
         return adapters.isNotEmpty() && adapters.all { it.canFulfil(user) }
     }
 
-    /** Whose cart this scope's holds would land in, as a person reads it. */
-    fun addToCartProviderName(campsites: List<Campsite>): String? =
-        addToCartAdapters(resolve(campsites))
-            .firstOrNull()
-            ?.displayName
+    /** Whose cart this scope's holds would land in, as a person reads it: the
+     *  first adapter [owner] would actually need to add credentials for, not
+     *  simply the first adapter in scope — naming an adapter [owner] can
+     *  already fulfil would send them to Settings for a provider that was
+     *  never the problem. */
+    fun addToCartProviderName(
+        owner: UserId,
+        campsites: List<Campsite>,
+    ): String? = addToCartProviderName(owner, resolve(campsites))
+
+    /** Resolved-scope overload; see [canFulfilAddToCart]'s. */
+    internal fun addToCartProviderName(
+        owner: UserId,
+        scope: ResolvedWatchScope,
+    ): String? {
+        val adapters = addToCartAdapters(scope)
+        return (adapters.firstOrNull { !it.canFulfil(owner) } ?: adapters.firstOrNull())?.displayName
+    }
 
     /** The adapters that would hold this scope's sites, each named once. */
     private fun addToCartAdapters(scope: ResolvedWatchScope): List<BookingAdapter> =
@@ -172,5 +189,7 @@ internal class WatchCapabilityService(
         )
     }
 
-    private fun resolve(campsites: List<Campsite>): ResolvedWatchScope = ResolvedWatchScope(campsites.map(availabilityTargets::resolve))
+    /** Internal, not private: write-time validation resolves a scope once and
+     *  shares it across the capability questions it needs answered. */
+    internal fun resolve(campsites: List<Campsite>): ResolvedWatchScope = ResolvedWatchScope(campsites.map(availabilityTargets::resolve))
 }

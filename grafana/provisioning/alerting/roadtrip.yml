@@ -359,7 +359,7 @@ groups:
             model:
               refId: A
               editorMode: code
-              expr: sum(increase(roadtrip_booking_atc_total{provider="recgov",outcome=~"no_target|unsupported|exception"}[1h])) or vector(0)
+              expr: sum(increase(roadtrip_booking_atc_total{provider=~"recgov|none",outcome=~"no_target|unsupported|exception"}[1h])) or vector(0)
               instant: true
               range: false
               legendFormat: __auto

@@ -301,7 +301,7 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(roadtrip_booking_atc_total{provider=\"recgov\",outcome=~\"no_target|unsupported|exception\"}[$__range])) or on() vector(0)",
+          "expr": "sum(increase(roadtrip_booking_atc_total{provider=~\"recgov|none\",outcome=~\"no_target|unsupported|exception\"}[$__range])) or on() vector(0)",
           "legendFormat": "Blocked before the vendor",
           "range": true,
           "refId": "A"

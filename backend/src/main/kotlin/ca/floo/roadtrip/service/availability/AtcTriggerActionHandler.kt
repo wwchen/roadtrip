@@ -56,21 +56,21 @@ internal class AtcTriggerActionHandler(
             }
         if (pending.isEmpty()) {
             log.warn("ATC trigger unsupported for watch_id={} openings={}", watch.id, openings.size)
-            // No booking adapter answered, so the availability provider the
-            // opening was seen under is the closest thing to a provider there is.
-            val seenUnder = openings.firstOrNull()?.resolvedTarget
+            val opening = openings.firstOrNull()
+            // No booking provider was reached, so the vendor the owner saw the
+            // opening under is the only honest thing to name in the delivered
+            // report — but the metric names no booking provider, matching
+            // every other exit where the fire never reached one.
             reportResult(
                 watch = watch,
-                // No booking provider was reached, so the vendor the owner saw
-                // the opening under is the only honest thing to name.
-                vendor = openings.firstOrNull()?.watchOpening?.vendor ?: VENDOR_UNKNOWN,
+                vendor = opening?.watchOpening?.vendor ?: VENDOR_UNKNOWN,
                 status = ATC_RESULT_FAILED,
                 request = noCompanionRequest,
                 response = null,
                 error = BookingActionCodes.UNSUPPORTED_TARGET,
                 detail = NO_TARGET_DETAIL,
             )
-            metrics.atcFired(seenUnder?.provider?.id, AtcOutcome.NO_TARGET)
+            metrics.atcFired(null, AtcOutcome.NO_TARGET)
             return false
         }
         if (pending.size > 1) {

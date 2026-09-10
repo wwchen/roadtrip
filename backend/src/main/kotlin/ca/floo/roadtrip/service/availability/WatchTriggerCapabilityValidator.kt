@@ -90,12 +90,15 @@ internal class WatchTriggerCapabilityValidator(
         // Same gate the capability block applies, enforced at write time and
         // uniformly: a hold has to land in *somebody's* account with the
         // provider that would make it, so the refusal names that provider.
-        if (!watchCapabilityService.canFulfilAddToCart(owner, campsites)) {
+        // Resolved once and shared with the name lookup below, rather than
+        // each re-resolving every campsite in scope.
+        val scope = watchCapabilityService.resolve(campsites)
+        if (!watchCapabilityService.canFulfilAddToCart(owner, scope)) {
             throw AvailabilityWatchValidationException(
                 error = UNSUPPORTED_TRIGGER_ERROR,
                 message =
                     atcNoCredentialsDetail(
-                        watchCapabilityService.addToCartProviderName(campsites) ?: UNNAMED_BOOKING_PROVIDER,
+                        watchCapabilityService.addToCartProviderName(owner, scope) ?: UNNAMED_BOOKING_PROVIDER,
                     ),
             )
         }

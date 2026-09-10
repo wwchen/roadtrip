@@ -750,10 +750,11 @@ class TriggerActionHandlerTest {
             )
 
             assertEquals(listOf(AtcOutcome.NO_TARGET), metrics.fires.map { it.outcome })
-            // No booking adapter answered, so the series carries the provider the
-            // opening was seen under — the Campflare row nobody can hold — rather
-            // than a blank label for the one exit nobody is told about.
-            assertEquals(listOf(BookingProvider.CAMPFLARE), metrics.fires.map { it.provider })
+            // No booking provider was reached, so the metric names none — even
+            // though the opening was seen under Campflare, that availability
+            // provider never answered as a booking provider and dashboards
+            // filtering on a real provider must not see this fire silently.
+            assertEquals(listOf(null), metrics.fires.map { it.provider })
         }
 
     @Test
