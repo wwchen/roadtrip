@@ -282,7 +282,10 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                     SELECT tablename || '.' || indexname AS ref
                     FROM pg_indexes
                     WHERE schemaname = 'public'
-                      AND indexname IN ('campgrounds_booking_aliases_gin', 'campsites_booking_aliases_gin')
+                      AND indexname IN (
+                        'campgrounds_booking_aliases_gin', 'campsites_booking_aliases_gin',
+                        'campgrounds_booking_provider_ref_idx', 'campsites_booking_provider_ref_idx'
+                      )
                     ORDER BY ref
                     """.trimIndent(),
                 ).map { it.get("ref", String::class.java) }
@@ -302,7 +305,9 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
         assertEquals(
             listOf(
                 "campgrounds.campgrounds_booking_aliases_gin",
+                "campgrounds.campgrounds_booking_provider_ref_idx",
                 "campsites.campsites_booking_aliases_gin",
+                "campsites.campsites_booking_provider_ref_idx",
             ),
             indexes,
         )

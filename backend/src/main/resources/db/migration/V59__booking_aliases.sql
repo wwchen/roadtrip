@@ -20,6 +20,10 @@ ALTER TABLE campsites VALIDATE CONSTRAINT campsites_booking_aliases_check;
 CREATE INDEX IF NOT EXISTS campgrounds_booking_aliases_gin ON campgrounds USING GIN (booking_aliases);
 CREATE INDEX IF NOT EXISTS campsites_booking_aliases_gin ON campsites USING GIN (booking_aliases);
 
+-- Lets the primary-or-alias OR in RefLinkRepo plan as a BitmapOr over both indexes.
+CREATE INDEX IF NOT EXISTS campgrounds_booking_provider_ref_idx ON campgrounds (booking_provider, booking_provider_ref);
+CREATE INDEX IF NOT EXISTS campsites_booking_provider_ref_idx ON campsites (booking_provider, booking_provider_ref);
+
 -- Campflare rows carrying rec.gov as their primary become Campflare primary with rec.gov as an alias;
 -- the WHERE already excludes a rewritten row, so a rerun changes nothing.
 UPDATE campgrounds

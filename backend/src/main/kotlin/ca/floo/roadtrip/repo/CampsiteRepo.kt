@@ -5,7 +5,6 @@ import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogColumnJson
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
-import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL
@@ -343,7 +342,7 @@ class CampsiteRepo(
             dataProviderRefValue = dataProviderRefStr,
             bookingProvider = record.get("booking_provider", String::class.java),
             bookingProviderRef = record.get("booking_provider_ref", String::class.java),
-            bookingAliases = decodeListColumn<BookingAlias>(record.get("booking_aliases_text", String::class.java)),
+            bookingAliases = decodeBookingAliases(record.get("booking_aliases_text", String::class.java)),
         )
     }
 

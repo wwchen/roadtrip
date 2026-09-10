@@ -1435,6 +1435,39 @@ class CatalogEntityRepoTest : SharedDbTest() {
     }
 
     /**
+     * A row stamped by a newer process (or a future vendor onboarded after
+     * this build) can carry a `provider` id this build's [BookingProvider]
+     * enum does not know. The decode must drop that one entry rather than
+     * fail the whole row.
+     */
+    @Test
+    fun `a booking alias entry naming an unknown provider is skipped, not fatal`() {
+        CampgroundRepo(ctx).upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cg-alias-unknown"),
+                    name = "Mixed Aliases",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+        ctx.execute(
+            """UPDATE campgrounds SET booking_aliases =
+                '[{"provider":"recgov","ref":"1"},{"provider":"future_vendor","ref":"2"}]'::jsonb
+                WHERE data_provider_ref = ?""",
+            "cg-alias-unknown",
+        )
+
+        assertEquals(
+            listOf(BookingAlias(provider = BookingProvider.RECGOV, ref = "1")),
+            checkNotNull(CampgroundRepo(ctx).findById(campgroundId("cg-alias-unknown"))).bookingAliases,
+        )
+    }
+
+    /**
      * V59's whole job: a Campflare row stamped with rec.gov as its *primary*
      * becomes Campflare primary carrying rec.gov as an alias. Rows that already
      * name their own vendor are left alone, and a rerun changes nothing.

@@ -53,7 +53,7 @@ class AspiraAvailabilityProvider(
     override fun isEnabled(): Boolean = enabled
 
     override fun supportsCampground(campground: Campground): Boolean {
-        val ref = campground.bookingRef() ?: return false
+        val ref = claimedRef(campground) ?: return false
         return isEnabled() && ref is BookingProviderRef.Aspira && ref.tenant in tenants
     }
 

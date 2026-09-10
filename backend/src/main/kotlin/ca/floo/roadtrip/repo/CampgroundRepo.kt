@@ -15,7 +15,6 @@ import ca.floo.roadtrip.model.domain.CatalogUpsertResult
 import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
 import ca.floo.roadtrip.model.domain.poi.PoiGeometryUpdate
-import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import org.jooq.DSLContext
@@ -148,7 +147,7 @@ class CampgroundRepo(
             dataProviderRef = dataProviderRef,
             bookingProvider = record.get("booking_provider", String::class.java),
             bookingProviderRef = record.get("booking_provider_ref", String::class.java),
-            bookingAliases = decodeListColumn<BookingAlias>(record.get("booking_aliases_text", String::class.java)),
+            bookingAliases = decodeBookingAliases(record.get("booking_aliases_text", String::class.java)),
         )
     }
 

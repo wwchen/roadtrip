@@ -240,7 +240,7 @@ class RefLinkRepo(
                     record.get("booking_provider_ref", String::class.java)?.let { BookingProviderRef.parse(provider, it) }
                 }
         val aliases =
-            decodeListColumn<BookingAlias>(record.get("booking_aliases_text", String::class.java))
+            decodeBookingAliases(record.get("booking_aliases_text", String::class.java))
                 .mapNotNull { BookingProviderRef.parse(it.provider, it.ref) }
         return listOfNotNull(primary) + aliases
     }

@@ -7,6 +7,8 @@ import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.support.AspiraException
@@ -15,6 +17,7 @@ import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class AspiraAvailabilityProviderTest {
@@ -426,6 +429,42 @@ class AspiraAvailabilityProviderTest {
             )!!
 
         assertTrue(url.contains("mapId=-2147483420"), url)
+    }
+
+    @Test
+    fun `aspira claims a campground through its alias when the primary belongs to another provider`() {
+        val adapter =
+            AspiraAvailabilityProvider(
+                tenants = mapOf("pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365)),
+                availabilityClient = fakeAspiraClient(),
+                enabled = true,
+            )
+        val aliased =
+            testCampground(
+                bookingProvider = "campflare",
+                bookingProviderRef = "some-campflare-id",
+                bookingAliases = listOf(BookingAlias(provider = BookingProvider.ASPIRA, ref = "pc:1:2:3")),
+            )
+
+        assertTrue(adapter.supportsCampground(aliased))
+    }
+
+    @Test
+    fun `an alias for an unconfigured tenant is not supported`() {
+        val adapter =
+            AspiraAvailabilityProvider(
+                tenants = emptyMap(),
+                availabilityClient = fakeAspiraClient(),
+                enabled = true,
+            )
+        val aliased =
+            testCampground(
+                bookingProvider = "campflare",
+                bookingProviderRef = "some-campflare-id",
+                bookingAliases = listOf(BookingAlias(provider = BookingProvider.ASPIRA, ref = "pc:1:2:3")),
+            )
+
+        assertFalse(adapter.supportsCampground(aliased))
     }
 }
 
