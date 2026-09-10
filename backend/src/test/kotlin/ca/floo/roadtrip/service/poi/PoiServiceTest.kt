@@ -1,8 +1,12 @@
 package ca.floo.roadtrip.service.poi
 
 import ca.floo.roadtrip.model.api.BookingRefDto
+import ca.floo.roadtrip.model.api.poi.CarrierSignalDto
 import ca.floo.roadtrip.model.api.poi.PoiCategoryDetailSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
+import ca.floo.roadtrip.model.api.poi.PriceDto
+import ca.floo.roadtrip.model.api.poi.RatingDto
+import ca.floo.roadtrip.model.api.poi.ScheduleDto
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
@@ -312,7 +316,7 @@ class PoiServiceTest : SharedDbTest() {
         ctx.execute(
             """
             UPDATE campgrounds
-            SET status = ?, status_description = ?, kind = ?,
+            SET status = ?, status_description = ?, kind = ?, parent_name = ?,
                 price = ?::jsonb, default_campsite_schedule = ?::jsonb, amenities = ?::jsonb,
                 cell_service = ?::jsonb, max_rv_length = ?, max_trailer_length = ?,
                 has_pull_through_sites = ?, big_rig_friendly = ?,
@@ -323,10 +327,11 @@ class PoiServiceTest : SharedDbTest() {
             "Open",
             "Open seasonally",
             "federal",
-            """{"minimum":26,"maximum":36}""",
-            """{"check_in":"14:00"}""",
-            """[{"key":"showers","present":true}]""",
-            """[{"carrier":"verizon","average":1.5}]""",
+            "Lassen Volcanic National Park",
+            """{"minimum":26,"maximum":36,"currency":"USD"}""",
+            """{"check_in":"14:00","check_out":"11:00"}""",
+            """[{"key":"showers","present":true},{"key":"water","present":false}]""",
+            """[{"carrier":"verizon","average":1.5,"count":9}]""",
             32.0,
             28.0,
             true,
@@ -334,7 +339,7 @@ class PoiServiceTest : SharedDbTest() {
             """[{"url":"https://example.test"}]""",
             """[{"body":"road closed"}]""",
             """{"power":"30/50 amp"}""",
-            """{"last_updated":"2026-06-01"}""",
+            """{"last_updated":"2026-06-01","activities":["Hiking"],"rating":{"average":4.3,"count":87}}""",
             """{"agency":"NPS"}""",
             """{"email":"a@b.test"}""",
             fixture.catalogId,
@@ -345,32 +350,17 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals("Open", detail.status)
         assertEquals("Open seasonally", detail.statusDescription)
         assertEquals("federal", detail.kind)
+        assertEquals("Lassen Volcanic National Park", detail.parentName)
+        assertEquals(PriceDto(minimum = 26.0, maximum = 36.0, currency = "USD"), detail.price)
+        assertEquals(ScheduleDto(checkIn = "14:00", checkOut = "11:00"), detail.schedule)
+        // The negative label is applied backend-side, so `water` reads "No water".
+        assertEquals(listOf("showers" to "Showers", "water" to "No water"), detail.amenities.map { it.key to it.label })
         assertEquals(
-            "26.0",
-            detail.price!!
-                .jsonObject["minimum"]!!
-                .jsonPrimitive.content,
+            CarrierSignalDto(carrier = "verizon", label = "Verizon", average = 1.5, count = 9),
+            detail.cellCoverage.single(),
         )
-        assertEquals(
-            "14:00",
-            detail.schedule!!
-                .jsonObject["check_in"]!!
-                .jsonPrimitive.content,
-        )
-        assertEquals(
-            "showers",
-            detail.amenities!!
-                .jsonArray[0]
-                .jsonObject["key"]!!
-                .jsonPrimitive.content,
-        )
-        assertEquals(
-            "verizon",
-            detail.cellCoverage!!
-                .jsonArray[0]
-                .jsonObject["carrier"]!!
-                .jsonPrimitive.content,
-        )
+        assertEquals(listOf("Hiking"), detail.activities)
+        assertEquals(RatingDto(average = 4.3, count = 87), detail.rating)
         assertEquals(32.0, detail.maxRvLength)
         assertEquals(28.0, detail.maxTrailerLength)
         assertEquals(true, detail.hasPullThroughSites)
@@ -382,23 +372,11 @@ class PoiServiceTest : SharedDbTest() {
                 .jsonObject["url"]!!
                 .jsonPrimitive.content,
         )
-        assertEquals(
-            "road closed",
-            detail.alerts!!
-                .jsonArray[0]
-                .jsonObject["body"]!!
-                .jsonPrimitive.content,
-        )
+        assertEquals("road closed", detail.alerts.single().body)
         assertEquals(
             "30/50 amp",
             detail.connections!!
                 .jsonObject["power"]!!
-                .jsonPrimitive.content,
-        )
-        assertEquals(
-            "2026-06-01",
-            detail.metadata!!
-                .jsonObject["last_updated"]!!
                 .jsonPrimitive.content,
         )
         assertEquals(
@@ -513,12 +491,9 @@ class PoiServiceTest : SharedDbTest() {
 
         assertEquals("CONSTRUCTION", detail.status)
         assertEquals("America/Los_Angeles", detail.timeZone)
-        assertEquals(
-            "AMENITIES_WIFI",
-            detail.amenities!!
-                .jsonArray[0]
-                .jsonPrimitive.content,
-        )
+        // `amenities` speaks the campground vocabulary now, which a charger's
+        // vendor strings ("AMENITIES_WIFI") do not — they await a field of their own.
+        assertEquals(emptyList(), detail.amenities)
         assertEquals(12, detail.stallCount)
         assertEquals(250, detail.powerKilowatt)
         assertEquals(

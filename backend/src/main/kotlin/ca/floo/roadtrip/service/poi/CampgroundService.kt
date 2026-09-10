@@ -1,8 +1,14 @@
 package ca.floo.roadtrip.service.poi
 
 import ca.floo.roadtrip.model.api.BookingRefDto
+import ca.floo.roadtrip.model.api.poi.AlertDto
+import ca.floo.roadtrip.model.api.poi.AmenityDto
+import ca.floo.roadtrip.model.api.poi.CarrierSignalDto
 import ca.floo.roadtrip.model.api.poi.PoiCategoryDetailSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailPropertiesSchema
+import ca.floo.roadtrip.model.api.poi.PriceDto
+import ca.floo.roadtrip.model.api.poi.RatingDto
+import ca.floo.roadtrip.model.api.poi.ScheduleDto
 import ca.floo.roadtrip.model.domain.CatalogColumnJson
 import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -78,18 +84,20 @@ internal class CampgroundService(
                     status = campground.status,
                     statusDescription = campground.statusDescription,
                     kind = campground.kind,
-                    price = CatalogColumnJson.element(campground.price),
-                    schedule = CatalogColumnJson.element(campground.defaultCampsiteSchedule),
-                    amenities = CatalogColumnJson.elements(campground.amenities),
-                    cellCoverage = CatalogColumnJson.elements(campground.cellService),
+                    parentName = campground.parentName,
+                    amenities = campground.amenities.map(AmenityDto::from),
+                    cellCoverage = campground.cellService.map(CarrierSignalDto::from),
+                    activities = campground.metadata?.activities.orEmpty(),
+                    rating = campground.metadata?.rating?.let(RatingDto::from),
+                    price = campground.price?.let(PriceDto::from),
+                    schedule = campground.defaultCampsiteSchedule?.let(ScheduleDto::from),
                     maxRvLength = campground.maxRvLength,
                     maxTrailerLength = campground.maxTrailerLength,
                     hasPullThroughSites = campground.hasPullThroughSites,
                     bigRigFriendly = campground.bigRigFriendly,
                     links = CatalogColumnJson.elements(campground.links),
-                    alerts = CatalogColumnJson.elements(campground.alerts),
+                    alerts = campground.alerts.map(AlertDto::from),
                     connections = campground.connections,
-                    metadata = CatalogColumnJson.element(campground.metadata),
                     management = CatalogColumnJson.element(campground.management),
                     contact = CatalogColumnJson.element(campground.contact),
                     email = campground.contact?.email,

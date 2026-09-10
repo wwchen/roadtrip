@@ -1,10 +1,24 @@
 package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.model.api.BookingRefDto
+import ca.floo.roadtrip.model.api.poi.AlertDto
+import ca.floo.roadtrip.model.api.poi.AmenityDto
+import ca.floo.roadtrip.model.api.poi.CarrierSignalDto
 import ca.floo.roadtrip.model.api.poi.PoiCategoryDetailSchema
 import ca.floo.roadtrip.model.api.poi.PoiCtaSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailPropertiesSchema
+import ca.floo.roadtrip.model.api.poi.PriceDto
+import ca.floo.roadtrip.model.api.poi.RatingDto
+import ca.floo.roadtrip.model.api.poi.ScheduleDto
+import ca.floo.roadtrip.model.domain.AmenityKey
+import ca.floo.roadtrip.model.domain.CampgroundAlert
+import ca.floo.roadtrip.model.domain.CampgroundAmenity
+import ca.floo.roadtrip.model.domain.CampgroundPrice
+import ca.floo.roadtrip.model.domain.CampgroundRating
+import ca.floo.roadtrip.model.domain.CampgroundSchedule
+import ca.floo.roadtrip.model.domain.Carrier
+import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.poi.PoiRow
 import ca.floo.roadtrip.route.api.pois.onRouteFeatureCollection
 import ca.floo.roadtrip.route.common.encodeApiJson
@@ -12,6 +26,7 @@ import ca.floo.roadtrip.service.poi.poiFeatureCollection
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
@@ -147,6 +162,31 @@ class FeatureCollectionContractTest {
                                     """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
                                     """"season":"May-Oct","near":"Banff"}""",
                             ),
+                        parentName = "Banff National Park",
+                        amenities =
+                            listOf(
+                                AmenityDto.from(CampgroundAmenity(key = AmenityKey.SHOWERS, present = true)),
+                            ),
+                        cellCoverage =
+                            listOf(
+                                CarrierSignalDto.from(
+                                    CarrierSignal(carrier = Carrier.VERIZON, average = 3.5, count = 12),
+                                ),
+                            ),
+                        activities = listOf("hiking"),
+                        rating = RatingDto.from(CampgroundRating(average = 4.3, count = 87)),
+                        price =
+                            PriceDto.from(
+                                CampgroundPrice(minimum = 26.0, maximum = 36.0, currency = "CAD"),
+                            ),
+                        schedule =
+                            ScheduleDto.from(
+                                CampgroundSchedule(checkIn = "14:00", checkOut = "11:00"),
+                            ),
+                        alerts =
+                            listOf(
+                                AlertDto.from(CampgroundAlert(body = "Bear activity in the loop.")),
+                            ),
                     ),
             )
         val expected = (
@@ -170,7 +210,14 @@ class FeatureCollectionContractTest {
                 """"label":"Park info on parks.canada.ca","kind":"info"}],""" +
                 """"raw":{"category":"federal","amenities":["showers"],"activities":["hiking"],""" +
                 """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
-                """"season":"May-Oct","near":"Banff"}}}}"""
+                """"season":"May-Oct","near":"Banff"},""" +
+                """"parent_name":"Banff National Park",""" +
+                """"amenities":[{"key":"showers","label":"Showers","present":true}],""" +
+                """"cell_coverage":[{"carrier":"verizon","label":"Verizon","average":3.5,"count":12}],""" +
+                """"activities":["hiking"],"rating":{"average":4.3,"count":87},""" +
+                """"price":{"minimum":26.0,"maximum":36.0,"currency":"CAD"},""" +
+                """"schedule":{"check_in":"14:00","check_out":"11:00"},""" +
+                """"alerts":[{"body":"Bear activity in the loop."}]}}}"""
         )
         assertEquals(expected, encodeApiJson(feature))
     }
@@ -202,7 +249,9 @@ class FeatureCollectionContractTest {
         assert(!out.contains("\"availability_supported\""))
         assert(!out.contains("\"cta\""))
         assert(!out.contains("\"booking_system\""))
-        assert(out.contains(""""detail":{"sources":[],"raw":{}}"""))
+        // The typed bags are always present, empty, rather than absent — the FE
+        // maps over them without a null guard.
+        assert(out.contains(""""detail":{"sources":[],"raw":{},"amenities":[],"cell_coverage":[],"activities":[],"alerts":[]}"""))
     }
 
     @Test
@@ -332,7 +381,13 @@ class FeatureCollectionContractTest {
                     detail =
                         PoiCategoryDetailSchema(
                             statusDescription = "Open seasonally",
-                            cellCoverage = json(""""weak""""),
+                            parentName = "Lassen Volcanic National Park",
+                            cellCoverage =
+                                listOf(
+                                    CarrierSignalDto.from(
+                                        CarrierSignal(carrier = Carrier.ATT, average = 1.5),
+                                    ),
+                                ),
                             maxRvLength = 32.0,
                             hasPullThroughSites = true,
                             lastVerified = "2026-06-01",
@@ -342,7 +397,14 @@ class FeatureCollectionContractTest {
             )
         val detail = detailObject(out)
         assertEquals("Open seasonally", detail["status_description"]!!.jsonPrimitive.content)
-        assertEquals("weak", detail["cell_coverage"]!!.jsonPrimitive.content)
+        assertEquals("Lassen Volcanic National Park", detail["parent_name"]!!.jsonPrimitive.content)
+        assertEquals(
+            "AT&T",
+            detail["cell_coverage"]!!
+                .jsonArray[0]
+                .jsonObject["label"]!!
+                .jsonPrimitive.content,
+        )
         assertEquals(true, detail.containsKey("max_rv_length"))
         assertEquals(true, detail.containsKey("has_pull_through_sites"))
         assertEquals("2026-06-01", detail["last_verified"]!!.jsonPrimitive.content)

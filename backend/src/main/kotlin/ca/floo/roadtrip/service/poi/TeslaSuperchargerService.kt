@@ -31,7 +31,8 @@ internal class TeslaSuperchargerService(
                     raw = raw,
                     status = supercharger.siteStatus,
                     timeZone = supercharger.timeZone,
-                    amenities = supercharger.amenities,
+                    // `amenities` now carries the typed campground vocabulary, which a
+                    // charger's vendor strings do not speak. They need a field of their own.
                     stallCount = supercharger.stallCount,
                     powerKilowatt = supercharger.maxPowerKw,
                     pricebooks = supercharger.pricebooks,
