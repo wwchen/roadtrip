@@ -4,6 +4,7 @@ import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.model.api.BulkAvailabilityResponseDto
 import ca.floo.roadtrip.model.api.BulkPoiAvailabilityDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.support.causeChain
 import kotlinx.coroutines.CancellationException
@@ -49,6 +50,8 @@ internal fun interface PoiAvailabilitySliceLookup {
  */
 internal class BulkAvailabilityController(
     private val sliceLookup: PoiAvailabilitySliceLookup,
+    /** Same lookup the fused detail endpoint uses, so `watchable` cannot diverge. */
+    private val pollingSupported: (Campsite) -> Boolean,
     private val config: BulkAvailabilityConfig,
     private val clock: Clock = Clock.systemUTC(),
 ) {
@@ -56,7 +59,12 @@ internal class BulkAvailabilityController(
         campsiteController: CampsiteAvailabilityController,
         config: BulkAvailabilityConfig,
         clock: Clock = Clock.systemUTC(),
-    ) : this(PoiAvailabilitySliceLookup(campsiteController::poiAvailabilitySlice), config, clock)
+    ) : this(
+        PoiAvailabilitySliceLookup(campsiteController::poiAvailabilitySlice),
+        campsiteController::pollingSupported,
+        config,
+        clock,
+    )
 
     suspend fun availabilityForPois(request: BulkAvailabilityRequest): BulkAvailabilityResponseDto {
         val freshAtOrAfter = Instant.now(clock).minus(config.tolerance)
@@ -108,7 +116,7 @@ internal class BulkAvailabilityController(
     ): BulkPoiAvailabilityDto {
         val campsites =
             slice
-                .perCampsiteEnvelopes()
+                .perCampsiteEnvelopes(pollingSupported)
                 .map { it.response.copy(longestRunNights = longestRunNights(it.observations)) }
                 .filter { (it.longestRunNights ?: 0) >= minNights }
                 .sortedByDescending { it.longestRunNights ?: 0 }

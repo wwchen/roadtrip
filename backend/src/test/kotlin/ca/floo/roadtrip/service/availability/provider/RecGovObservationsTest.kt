@@ -5,6 +5,8 @@ import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.fixtures.availableCellIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.cellStatuses
+import ca.floo.roadtrip.model.api.AvailabilityResponseDto
+import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -63,7 +65,7 @@ class RecGovObservationsTest {
             }
         val body =
             encodeApiJson(
-                availabilityResponseFromObservations(
+                responseOf(
                     runBlocking {
                         p.catalogAvailability(testCampground(), campsites, today, today.plusDays(days.toLong()))
                     },
@@ -79,7 +81,7 @@ class RecGovObservationsTest {
         val p = RecGovAvailabilityProvider(client, enabled = true)
         val body =
             encodeApiJson(
-                availabilityResponseFromObservations(
+                responseOf(
                     runBlocking { p.availability(testCampground(), today, today.plusDays(days.toLong())) },
                 ),
             )
@@ -271,7 +273,7 @@ class RecGovObservationsTest {
         val p = RecGovAvailabilityProvider(clientReturning(emptyMap()), enabled = true)
         val body =
             encodeApiJson(
-                availabilityResponseFromObservations(
+                responseOf(
                     runBlocking {
                         p.catalogAvailability(testCampground(), campsites, today, today.plusDays(1))
                     },
@@ -450,3 +452,10 @@ class RecGovObservationsTest {
         assertEquals("available", day["status"]!!.jsonPrimitive.content)
     }
 }
+
+/**
+ * These tests read parsed statuses, not watchability, so every window is quoted
+ * from its own start date by a provider the poller can reach.
+ */
+private fun responseOf(batch: AvailabilityObservationBatch): AvailabilityResponseDto =
+    availabilityResponseFromObservations(batch, pollingSupported = true, earliestDate = batch.startDate)

@@ -33,6 +33,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
 import ca.floo.roadtrip.service.ref.DbRefResolver
+import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -271,6 +272,52 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
+    fun `a reserved cell is watchable when the provider can be polled`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            assertEquals(true, reservedCellWatchable(client))
+        }
+
+    @Test
+    fun `a reserved cell is not watchable when the provider cannot be polled`() =
+        testApplication {
+            application {
+                routeTestApplication { bulkAvailabilityRoutesUnderTest(pollingSupported = false) }
+            }
+
+            // The same cell the detail endpoint would call unwatchable: `watchable`
+            // is one predicate, and polling support is part of it on both endpoints.
+            assertEquals(false, reservedCellWatchable(client))
+        }
+
+    /** The bulk cell for the window's second (reserved) night on the one campsite. */
+    private suspend fun reservedCellWatchable(client: HttpClient): Boolean {
+        val resp =
+            client.post("/api/pois/availability/bulk") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
+            }
+        assertEquals(HttpStatusCode.OK, resp.status)
+        val campsiteId = 1L * FAKE_SLICE_CAMPSITE_ID_MULTIPLIER
+        val day =
+            Json
+                .parseToJsonElement(resp.bodyAsText())
+                .jsonObject["pois"]!!
+                .jsonArray[0]
+                .jsonObject["campsites"]!!
+                .jsonArray[0]
+                .jsonObject["availability"]!!
+                .jsonArray[1]
+                .jsonObject
+        assertEquals("reserved", day["status"]!!.jsonPrimitive.content)
+        return day["cells"]!!
+            .jsonObject[campsiteId.toString()]!!
+            .jsonObject["watchable"]!!
+            .jsonPrimitive.boolean
+    }
+
+    @Test
     fun `throttles by ip`() =
         testApplication {
             application {
@@ -297,7 +344,10 @@ class BulkAvailabilityRoutesTest {
             assertEquals("ip_throttled", body["error"]!!.jsonPrimitive.content)
         }
 
-    private fun Route.bulkAvailabilityRoutesUnderTest(rateLimit: IpRateLimiter? = null) {
+    private fun Route.bulkAvailabilityRoutesUnderTest(
+        rateLimit: IpRateLimiter? = null,
+        pollingSupported: Boolean = true,
+    ) {
         val config =
             BulkAvailabilityConfig(
                 maxPois = TEST_MAX_POIS,
@@ -305,7 +355,12 @@ class BulkAvailabilityRoutesTest {
                 tolerance = Duration.ZERO,
                 ipRateLimitPerMinute = TEST_IP_RATE_LIMIT_PER_MINUTE,
             )
-        val controller = BulkAvailabilityController(sliceLookup = FakePoiAvailabilitySliceLookup(), config = config)
+        val controller =
+            BulkAvailabilityController(
+                sliceLookup = FakePoiAvailabilitySliceLookup(),
+                pollingSupported = { pollingSupported },
+                config = config,
+            )
         if (rateLimit != null) {
             bulkAvailabilityRoutes(controller, config, rateLimit)
         } else {
@@ -328,7 +383,11 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
                 routeTestApplication {
                     campsiteRoutes(campsiteAvailabilityController())
                     bulkAvailabilityRoutes(
-                        BulkAvailabilityController(FakePoiAvailabilitySliceLookup(), BulkAvailabilityConfig.default),
+                        BulkAvailabilityController(
+                            sliceLookup = FakePoiAvailabilitySliceLookup(),
+                            pollingSupported = { true },
+                            config = BulkAvailabilityConfig.default,
+                        ),
                         BulkAvailabilityConfig.default,
                     )
                 }
@@ -382,8 +441,9 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
 
 /**
  * Stands in for [CampsiteAvailabilityController.poiAvailabilitySlice] without
- * a database. Every POI resolves to one campsite with a single bookable
- * night, except [RATE_LIMITED_POI_ID], which reports an upstream failure.
+ * a database. Every POI resolves to one campsite with a single bookable night
+ * followed by a reserved one, except [RATE_LIMITED_POI_ID], which reports an
+ * upstream failure.
  */
 private class FakePoiAvailabilitySliceLookup : PoiAvailabilitySliceLookup {
     override suspend fun poiAvailabilitySlice(
@@ -396,7 +456,15 @@ private class FakePoiAvailabilitySliceLookup : PoiAvailabilitySliceLookup {
         if (poiId == RATE_LIMITED_POI_ID) throw AvailabilityProviderError.RateLimited()
         val campsite = campsiteFixture(id = poiId * FAKE_SLICE_CAMPSITE_ID_MULTIPLIER, campgroundId = poiId)
         val observations =
-            listOf(CampsiteDayObservation(campsite.id, windowStart, observedAt, AvailabilityStatus.AVAILABLE))
+            listOf(
+                CampsiteDayObservation(campsite.id, windowStart, observedAt, AvailabilityStatus.AVAILABLE),
+                CampsiteDayObservation(
+                    campsite.id,
+                    windowStart.plusDays(1),
+                    observedAt,
+                    AvailabilityStatus.RESERVED,
+                ),
+            )
         return PoiAvailabilitySlice(
             poiId = poiId,
             startDate = windowStart,

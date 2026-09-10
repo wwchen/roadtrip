@@ -38,20 +38,26 @@ internal data class PoiAvailabilitySlice(
  * One envelope per campsite, each narrowed to that campsite's observations.
  * Both read endpoints shape their response from this, so a change to the
  * envelope lands in one place. Empty when no campsite matched the filter.
+ *
+ * [pollingSupported] rides along because a cell's `watchable` is not a property
+ * of its status alone, and the fused week and this envelope must agree on it.
  */
-internal fun PoiAvailabilitySlice.perCampsiteEnvelopes(): List<CampsiteEnvelope> {
+internal fun PoiAvailabilitySlice.perCampsiteEnvelopes(pollingSupported: (Campsite) -> Boolean): List<CampsiteEnvelope> {
     val batch = batch ?: return emptyList()
     return campsites.map { campsite ->
         val forCampsite = batch.observations.filter { it.campsiteId == campsite.id }
         CampsiteEnvelope(
             response =
                 availabilityResponseFromObservations(
-                    batch.copy(
-                        observations = forCampsite,
-                        campsiteId = campsite.id,
-                        startDate = startDate,
-                        endDate = endDate,
-                    ),
+                    batch =
+                        batch.copy(
+                            observations = forCampsite,
+                            campsiteId = campsite.id,
+                            startDate = startDate,
+                            endDate = endDate,
+                        ),
+                    pollingSupported = pollingSupported(campsite),
+                    earliestDate = earliestDate,
                 ),
             observations = forCampsite,
         )

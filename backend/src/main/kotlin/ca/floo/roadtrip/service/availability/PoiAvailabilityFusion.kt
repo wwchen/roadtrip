@@ -5,10 +5,11 @@ import ca.floo.roadtrip.model.api.AvailabilityDayDto
 import ca.floo.roadtrip.model.api.AvailabilityWindowState
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
-import ca.floo.roadtrip.model.availability.DayClassification
+import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.Campsite
-import ca.floo.roadtrip.service.api.classifyWindowState
-import ca.floo.roadtrip.service.api.dayClassificationsFromObservations
+import ca.floo.roadtrip.service.api.StreamWindowState
+import ca.floo.roadtrip.service.api.campsiteWindowStatuses
+import ca.floo.roadtrip.service.api.classifyStreamWindowState
 import ca.floo.roadtrip.service.api.rollupStatus
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -29,7 +30,7 @@ internal data class FusedWindow(
 internal class CampsiteStream(
     val campsiteId: Long,
     val polls: Boolean,
-    val days: List<DayClassification>,
+    val statuses: List<AvailabilityStatus>,
     val closedForSeason: Boolean,
     val cache: AvailabilityCacheBlock,
 )
@@ -40,7 +41,7 @@ internal class CampsiteStream(
  * watchability of both. Pure — [pollingSupported] is the only lookup and the
  * caller owns it, so this stays testable without a database.
  */
-internal fun fuse(
+internal fun fusePoiWindow(
     slice: PoiAvailabilitySlice,
     pollingSupported: (Campsite) -> Boolean,
     earliestDate: LocalDate,
@@ -53,8 +54,8 @@ internal fun fuse(
     val observationsByCampsite = batch.observations.groupBy { it.campsiteId }
     val streams =
         slice.campsites.sortedBy { it.id }.map { campsite ->
-            val days =
-                dayClassificationsFromObservations(
+            val statuses =
+                campsiteWindowStatuses(
                     startDate = slice.startDate,
                     endDate = slice.endDate,
                     observations = observationsByCampsite[campsite.id].orEmpty(),
@@ -62,8 +63,8 @@ internal fun fuse(
             CampsiteStream(
                 campsiteId = campsite.id,
                 polls = pollingSupported(campsite),
-                days = days,
-                closedForSeason = classifyWindowState(days) == AvailabilityWindowState.CLOSED_FOR_SEASON.wireValue,
+                statuses = statuses,
+                closedForSeason = classifyStreamWindowState(statuses) == StreamWindowState.CLOSED_FOR_SEASON,
                 cache = batch.cacheBlock,
             )
         }
@@ -76,10 +77,15 @@ internal fun fuse(
         // One batch backs every campsite in a slice today, so its block is also
         // the stalest; the max keeps the rule right should the streams diverge.
         cache = streams.map { it.cache }.maxByOrNull { it.ageSeconds },
+        // A closed week has no grid to draw — clients gate on `state` — so the
+        // days are the wire's own dead weight.
         days =
-            (0 until dayCount).map { offset ->
-                val date = slice.startDate.plusDays(offset.toLong())
-                fusedDay(streams, offset, date, bookable = !date.isBefore(earliestDate))
+            if (closedForSeason) {
+                emptyList()
+            } else {
+                (0 until dayCount).map { offset ->
+                    fusedDay(streams, offset, slice.startDate.plusDays(offset.toLong()), earliestDate)
+                }
             },
     )
 }
@@ -89,16 +95,12 @@ private fun fusedDay(
     streams: List<CampsiteStream>,
     offset: Int,
     date: LocalDate,
-    bookable: Boolean,
+    earliestDate: LocalDate,
 ): AvailabilityDayDto {
     val cells =
         streams.associate { stream ->
-            val status = stream.days[offset].status
             stream.campsiteId to
-                AvailabilityCellDto(
-                    status = status,
-                    watchable = status.watchable && stream.polls && bookable,
-                )
+                AvailabilityCellDto.of(stream.statuses[offset], stream.polls, date, earliestDate)
         }
     return AvailabilityDayDto(
         date = date.toString(),

@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -31,6 +32,12 @@ internal class CampsiteAvailabilityController(
     private val dateResolver: AvailabilityDateResolver,
     private val watchCapabilityService: WatchCapabilityService,
 ) {
+    /**
+     * Whether a watch on this campsite could ever be polled — the lookup both
+     * read paths fold into a cell's `watchable`.
+     */
+    fun pollingSupported(campsite: Campsite): Boolean = watchCapabilityService.pollingSupported(campsite)
+
     /** @throws AvailabilityServiceError.NotFound when the POI has no campground. */
     fun campsitesForPoi(
         poiId: Long,
@@ -121,7 +128,7 @@ internal class CampsiteAvailabilityController(
     ): PoiCampsitesAvailabilityResponseDto {
         val slice = poiAvailabilitySlice(poiId, siteTypes, startDate, endDate)
         val watchCaps = watchCapabilityService.capabilitiesFor(slice.allCampsites, requester)
-        val fused = fuse(slice, watchCapabilityService::pollingSupported, slice.earliestDate)
+        val fused = fusePoiWindow(slice, ::pollingSupported, slice.earliestDate)
 
         return PoiCampsitesAvailabilityResponseDto(
             poiId = poiId,

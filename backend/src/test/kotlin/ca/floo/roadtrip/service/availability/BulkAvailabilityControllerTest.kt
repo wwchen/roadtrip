@@ -127,6 +127,7 @@ private fun bulkController(
 ): BulkAvailabilityController =
     BulkAvailabilityController(
         sliceLookup = FakePoiAvailabilitySliceLookup(recorder, meter),
+        pollingSupported = { true },
         config =
             BulkAvailabilityConfig(
                 maxPois = TEST_MAX_POIS,

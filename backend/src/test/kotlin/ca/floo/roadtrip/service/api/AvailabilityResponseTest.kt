@@ -45,9 +45,11 @@ class AvailabilityResponseTest {
                                     ),
                             ),
                         ),
-                    state = "success",
+                    state = StreamWindowState.SUCCESS,
                     seasonBlock = null,
                     cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
+                    pollingSupported = true,
+                    earliestDate = LocalDate.parse("2026-06-10"),
                     scopeRef = BookingProviderRef.RecGov(facilityId = "232447").serialize(),
                 ),
             )
@@ -97,6 +99,8 @@ class AvailabilityResponseTest {
                         cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 60),
                         scope = null,
                     ),
+                    pollingSupported = true,
+                    earliestDate = LocalDate.parse("2026-06-10"),
                 ),
             )
         val json = Json.parseToJsonElement(body).jsonObject
@@ -150,6 +154,8 @@ class AvailabilityResponseTest {
                     cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 3, ttlSeconds = 60),
                     scope = BookingProviderRef.RecGov(facilityId = "232447"),
                 ),
+                pollingSupported = true,
+                earliestDate = LocalDate.parse("2026-06-10"),
             )
 
         assertEquals("recgov", dto.provider)
@@ -188,6 +194,8 @@ class AvailabilityResponseTest {
                             resourceLocationId = null,
                         ),
                 ),
+                pollingSupported = true,
+                earliestDate = LocalDate.parse("2026-06-10"),
             )
 
         assertEquals("pc:4189:-2147483388:null", dto.scopeRef)
@@ -207,7 +215,7 @@ class AvailabilityResponseTest {
             )
 
         assertEquals(AvailabilityStatus.UNKNOWN, day.status)
-        assertEquals("success", classifyWindowState(listOf(day)))
+        assertEquals(StreamWindowState.SUCCESS, classifyWindowState(listOf(day)))
     }
 
     @Test
@@ -223,7 +231,7 @@ class AvailabilityResponseTest {
             )
 
         assertEquals(AvailabilityStatus.UNKNOWN, day.status)
-        assertEquals("success", classifyWindowState(listOf(day)))
+        assertEquals(StreamWindowState.SUCCESS, classifyWindowState(listOf(day)))
     }
 
     @Test
@@ -240,7 +248,7 @@ class AvailabilityResponseTest {
                 ),
             )
 
-        assertEquals("success", classifyWindowState(days))
+        assertEquals(StreamWindowState.SUCCESS, classifyWindowState(days))
     }
 
     @Test

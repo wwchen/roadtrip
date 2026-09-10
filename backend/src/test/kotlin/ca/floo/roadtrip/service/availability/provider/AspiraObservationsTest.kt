@@ -7,6 +7,8 @@ import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.fixtures.availableIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.statuses
+import ca.floo.roadtrip.model.api.AvailabilityResponseDto
+import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -82,7 +84,7 @@ class AspiraObservationsTest {
 
             val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
             val dto =
-                availabilityResponseFromObservations(
+                responseOf(
                     provider.availability(
                         campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
                         startDate = LocalDate.parse("2026-07-01"),
@@ -123,7 +125,7 @@ class AspiraObservationsTest {
                     aspiraCampsite(4, "4"),
                 )
             val dto =
-                availabilityResponseFromObservations(
+                responseOf(
                     provider.catalogAvailability(
                         campground = aspiraCampground("wa", -999),
                         campsites = campsites,
@@ -166,7 +168,7 @@ class AspiraObservationsTest {
                     aspiraCampsite(3, "3"),
                 )
             val dto =
-                availabilityResponseFromObservations(
+                responseOf(
                     provider.catalogAvailability(
                         campground = aspiraCampground("pc", -999),
                         campsites = campsites,
@@ -222,7 +224,7 @@ class AspiraObservationsTest {
                     ),
                 )
             val dto =
-                availabilityResponseFromObservations(
+                responseOf(
                     provider.catalogAvailability(
                         campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
                         campsites = campsites,
@@ -278,7 +280,7 @@ class AspiraObservationsTest {
                     ),
                 )
             val dto =
-                availabilityResponseFromObservations(
+                responseOf(
                     provider.catalogAvailability(
                         campground = aspiraCampground("bc", ALICE_LAKE_PARENT_MAP_ID),
                         campsites = campsites,
@@ -318,7 +320,7 @@ class AspiraObservationsTest {
             val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
             val campsites = listOf(aspiraCampsite(100, "100"))
             val dto =
-                availabilityResponseFromObservations(
+                responseOf(
                     provider.catalogAvailability(
                         campground = aspiraCampground("pc", -999),
                         campsites = campsites,
@@ -370,7 +372,7 @@ class AspiraObservationsTest {
                     aspiraCampsite(300, "300", DataProviderRef.AspiraCampsite(tenant = "pc", resourceLocationId = 300)),
                 )
             val dto =
-                availabilityResponseFromObservations(
+                responseOf(
                     provider.catalogAvailability(
                         campground = aspiraCampground("pc", -999, resourceLocationId = -123),
                         campsites = campsites,
@@ -461,3 +463,10 @@ private fun fakeAspiraClient(
             onFetchOccupancy?.invoke(host, resourceLocationId, startDate, endDate)
                 ?: error("fakeAspiraClient.fetchOccupancy not stubbed")
     }
+
+/**
+ * These tests read parsed statuses, not watchability, so every window is quoted
+ * from its own start date by a provider the poller can reach.
+ */
+private fun responseOf(batch: AvailabilityObservationBatch): AvailabilityResponseDto =
+    availabilityResponseFromObservations(batch, pollingSupported = true, earliestDate = batch.startDate)

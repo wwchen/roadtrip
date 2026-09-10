@@ -5,15 +5,13 @@ import kotlinx.serialization.Serializable
 
 /** The window-level outcome of a fused campground availability read. */
 @Serializable
-enum class AvailabilityWindowState(
-    val wireValue: String,
-) {
+enum class AvailabilityWindowState {
     @SerialName("success")
-    SUCCESS("success"),
+    SUCCESS,
 
     @SerialName("empty")
-    EMPTY("empty"),
+    EMPTY,
 
     @SerialName("closed_for_season")
-    CLOSED_FOR_SEASON("closed_for_season"),
+    CLOSED_FOR_SEASON,
 }

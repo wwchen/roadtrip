@@ -1186,6 +1186,20 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     }
 
     @Test
+    fun `a new watch with no cadence preference cannot loosen an existing tighter one`() {
+        // The pair a poller sees when a second watch lands on it: the NULL watch
+        // falls through to the global default, and the min keeps the existing 60.
+        assertEquals(
+            EXISTING_WATCH_CADENCE_SEC,
+            resolveCadenceSec(
+                listOf(watchWithCadence(EXISTING_WATCH_CADENCE_SEC), watchWithCadence(null)),
+                poiCadenceOverrideSec = null,
+                globalDefaultSec = globalDefaultCadenceSec,
+            ),
+        )
+    }
+
+    @Test
     fun `poi cadence override is read from the poller's representative poi and plumbs into next_run_at`() =
         runBlocking {
             val provider = CountingRecgovProvider()
@@ -1596,5 +1610,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 }
 
 private val globalDefaultCadenceSec = AvailabilityPollerConfig.default.defaultCadenceSec
+
+/** A watch already on the poller, tighter than the global default. */
+private const val EXISTING_WATCH_CADENCE_SEC = 60
 private const val GRAFANA_ROOT_URL = "http://grafana.test/dash"
 private const val APP_ROOT_URL = "http://app.test"
