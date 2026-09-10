@@ -8,6 +8,7 @@ import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
 class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
@@ -54,6 +55,8 @@ class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
                 status = raw.stringField("status"),
                 kind = raw.stringField("kind"),
                 location = campflareLocation(location!!, latitude = latitude!!, longitude = longitude!!),
+                defaultCampsiteSchedule = CampflareCampgroundBags.schedule(raw.objectField(SCHEDULE_FIELD)),
+                amenities = raw.objectField(AMENITIES_FIELD)?.let(CampflareCampgroundBags::amenities).orEmpty(),
                 maxRvLength = raw.doubleField("max_rv_length"),
                 maxTrailerLength = raw.doubleField("max_trailer_length"),
                 hasPullThroughSites = raw.booleanField("has_pull_through_sites"),
@@ -61,9 +64,13 @@ class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
                 reservationUrl = raw.stringField("reservation_url"),
                 links = campflareLinks(raw.arrayField("links"), sourceUrl),
                 photos = campflarePhotos(raw.arrayField("photos")),
+                alerts = CampflareCampgroundBags.alerts(raw[ALERTS_FIELD] as? JsonArray),
+                price = CampflareCampgroundBags.price(raw.objectField(PRICE_FIELD)),
+                cellService = raw.objectField(CELL_SERVICE_FIELD)?.let(CampflareCampgroundBags::carriers).orEmpty(),
                 management = campflareManagement(raw.objectField("management")),
                 contact = campflareContact(raw.objectField("contact")),
                 connections = raw.objectField("connections"),
+                metadata = CampflareCampgroundBags.metadata(raw.objectField(METADATA_FIELD)),
                 sourceUrl = sourceUrl,
                 sourcePayload = raw,
             ),

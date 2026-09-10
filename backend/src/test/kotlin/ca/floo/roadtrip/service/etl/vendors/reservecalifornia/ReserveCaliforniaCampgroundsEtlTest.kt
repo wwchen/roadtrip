@@ -1,5 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
+import ca.floo.roadtrip.model.domain.AmenityKey
+import ca.floo.roadtrip.model.domain.CampgroundAmenity
+import ca.floo.roadtrip.model.domain.CampgroundMetadata
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -13,6 +16,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class ReserveCaliforniaCampgroundsEtlTest {
     @Test
@@ -36,8 +40,28 @@ class ReserveCaliforniaCampgroundsEtlTest {
         assertEquals("CA", campground.location.region)
         assertEquals("US", campground.location.country)
         assertEquals("California State Parks", campground.management!!.agency)
-        // The typed amenity bag stays empty until the ReserveCalifornia mapping lands.
-        assertEquals(emptyList(), campground.amenities)
+    }
+
+    @Test
+    fun `highlight labels map onto the amenity vocabulary and activities land in metadata`() {
+        val campground =
+            records(
+                ReserveCaliforniaCampgroundsEtl("reservecalifornia-campgrounds")
+                    .transform(catalog(), transformCtx()),
+            ).single()
+
+        assertEquals(
+            listOf(
+                CampgroundAmenity(AmenityKey.TOILETS),
+                CampgroundAmenity(AmenityKey.SHOWERS),
+                CampgroundAmenity(AmenityKey.CAMP_STORE),
+                CampgroundAmenity(AmenityKey.FIRES_ALLOWED),
+                CampgroundAmenity(AmenityKey.OTHER, detail = "Museum"),
+            ),
+            campground.amenities,
+        )
+        assertEquals(CampgroundMetadata(activities = listOf("Hiking")), campground.metadata)
+        assertNull(campground.parentName)
     }
 
     @Test
@@ -77,7 +101,14 @@ class ReserveCaliforniaCampgroundsEtlTest {
                             unitTypeByFacilityId = mapOf(611L to "Tent Site", 612L to "Day Use"),
                             imageUrl = "https://cdn.example/emerald.jpg",
                             description = "Lakefront camping.",
-                            amenities = listOf("Restrooms"),
+                            amenities =
+                                listOf(
+                                    " restrooms ",
+                                    "Rinse Showers",
+                                    "Store - Convenience",
+                                    "Fire Rings",
+                                    "Museum",
+                                ),
                             activities = listOf("Hiking"),
                             raw = jsonObject("""{"PlaceId":690,"Name":"Emerald Bay SP"}"""),
                         ),

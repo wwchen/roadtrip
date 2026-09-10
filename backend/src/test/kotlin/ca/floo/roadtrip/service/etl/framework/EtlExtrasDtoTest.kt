@@ -364,6 +364,7 @@ class EtlExtrasDtoTest {
                     ),
             ).single()
 
+        assertNull(campground.parentName)
         val extras = campground.sourcePayload!!.jsonObject
         assertEquals("Lakeside Campground", extras["name"]!!.jsonPrimitive.content)
         assertEquals(11, extras["transactionLocationId"]!!.jsonPrimitive.int)

@@ -48,8 +48,11 @@ class ReserveAmericaCampgroundsEtlTest {
         assertEquals("Island campground on Fourth Lake.", campground.mediumDescription)
         assertEquals("https://newyorkstateparks.reserveamerica.com/photo.jpg", campground.photos.single().url)
 
-        // Provenance rides on source_payload now; the typed metadata stays empty.
+        // Provenance rides on source_payload now; the typed bags stay empty.
         assertNull(campground.metadata)
+        assertNull(campground.parentName)
+        assertEquals(emptyList(), campground.amenities)
+        assertEquals(emptyList(), campground.cellService)
         val extras = campground.sourcePayload!!.jsonObject
         assertEquals("NY", extras["contract"]!!.jsonPrimitive.content)
         assertEquals("ALGER ISLAND", extras["name"]!!.jsonPrimitive.content)

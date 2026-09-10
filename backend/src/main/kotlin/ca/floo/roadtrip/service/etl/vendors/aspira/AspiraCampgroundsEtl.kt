@@ -13,14 +13,8 @@ import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
@@ -188,6 +182,7 @@ class AspiraCampgroundsEtl(
             bookingProvider = BookingProvider.ASPIRA,
             bookingProviderRef = bookingCtaRef?.let { campgroundBookingProviderRef(leaf, it) },
             name = leaf.name,
+            parentName = leaf.parentName,
             latitude = lat,
             longitude = lon,
             kind = subcategory,
@@ -225,22 +220,6 @@ class AspiraCampgroundsEtl(
             put("match_kind", matchKind.label)
         }
 
-    private fun leafExtras(
-        leaf: AspiraLeaf,
-        host: String,
-        matchKind: AspiraLeafMatchKind,
-    ): JsonElement =
-        aspiraExtrasJson.encodeToJsonElement(
-            AspiraLeafExtrasDto(
-                host = host,
-                transactionLocationId = leaf.transactionLocationId,
-                mapId = leaf.mapId,
-                resourceLocationId = leaf.resourceLocationId,
-                parentName = leaf.parentName,
-                matchKind = matchKind.label,
-            ),
-        )
-
     private fun detectGeometrySource(
         slug: String,
         envelopes: List<ca.floo.roadtrip.model.metadata.Envelope>,
@@ -262,23 +241,6 @@ class AspiraCampgroundsEtl(
         private const val ASPIRA_RESOURCE_LOCATION_ID_KEY = "resourceLocationId"
     }
 }
-
-@OptIn(ExperimentalSerializationApi::class)
-private val aspiraExtrasJson =
-    Json {
-        encodeDefaults = true
-        explicitNulls = true
-    }
-
-@Serializable
-private data class AspiraLeafExtrasDto(
-    val host: String,
-    @SerialName("transaction_location_id") val transactionLocationId: Long,
-    @SerialName("map_id") val mapId: Long,
-    @SerialName("resource_location_id") val resourceLocationId: Long?,
-    @SerialName("parent_name") val parentName: String?,
-    @SerialName("match_kind") val matchKind: String,
-)
 
 // ---- Helpers ---------------------------------------------------------------
 

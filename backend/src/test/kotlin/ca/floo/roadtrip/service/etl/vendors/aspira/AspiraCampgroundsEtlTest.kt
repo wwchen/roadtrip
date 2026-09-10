@@ -218,6 +218,12 @@ class AspiraCampgroundsEtlTest {
     }
 
     @Test
+    fun `the leaf parent map title becomes the campground parent name`() {
+        assertEquals("Banff", campgrounds(dtoOf(campground)).single().parentName)
+        assertEquals("Banff National Park of Canada", campgrounds(dtoOf(campgroundMissingOwnName)).single().parentName)
+    }
+
+    @Test
     fun `source payload records match provenance`() {
         val campground = campgrounds(dtoOf(campground)).single()
         val extras = campground.sourcePayload!!.jsonObject

@@ -1,9 +1,17 @@
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
 import ca.floo.roadtrip.model.domain.Address
+import ca.floo.roadtrip.model.domain.AmenityKey
+import ca.floo.roadtrip.model.domain.CampgroundAlert
+import ca.floo.roadtrip.model.domain.CampgroundAmenity
 import ca.floo.roadtrip.model.domain.CampgroundContact
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundManagement
+import ca.floo.roadtrip.model.domain.CampgroundMetadata
+import ca.floo.roadtrip.model.domain.CampgroundPrice
+import ca.floo.roadtrip.model.domain.CampgroundSchedule
+import ca.floo.roadtrip.model.domain.Carrier
+import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
@@ -54,13 +62,34 @@ class CampflareCampgroundsEtlTest {
                 .content
         val campflareLink = row.links.last()
         assertEquals("232447", ridbFacilityId)
-        // The typed bags stay empty until the Campflare mapping lands.
-        assertEquals(emptyList(), row.amenities)
         assertEquals(" Upper Pines ", sourceName)
         assertEquals("Campflare source", campflareLink.title)
         assertEquals("https://campflare.com/campground/upper-pines-campground-447", campflareLink.url)
         assertEquals(BookingProvider.RECGOV, row.bookingProvider)
         assertEquals("232447", row.bookingProviderRef)
+    }
+
+    @Test
+    fun `maps the Campflare bags onto the typed campground vocabularies`() {
+        val etl = CampflareCampgroundsEtl()
+        val row = terminalRecords(etl, bundle("campflare-campgrounds", campgroundPayload()), transformCtx()).single()
+
+        assertEquals(
+            listOf(
+                CampgroundAmenity(AmenityKey.TOILETS, present = true, detail = "vault"),
+                CampgroundAmenity(AmenityKey.WATER, present = true),
+            ),
+            row.amenities,
+        )
+        assertEquals(listOf(CarrierSignal(Carrier.VERIZON, average = 0.6)), row.cellService)
+        assertEquals(CampgroundPrice(minimum = 36.0, currency = "USD"), row.price)
+        assertEquals(CampgroundSchedule(checkIn = "14:00"), row.defaultCampsiteSchedule)
+        assertEquals(
+            listOf(CampgroundAlert(title = "Fire ban", body = "No open flames.", endsOn = "2026-09-01")),
+            row.alerts,
+        )
+        assertEquals(CampgroundMetadata(lastUpdated = "2026-07-01T00:00:00Z"), row.metadata)
+        assertNull(row.parentName)
     }
 
     @Test
@@ -243,7 +272,11 @@ class CampflareCampgroundsEtlTest {
               "address": {"state_code": "CA", "country_code": "US"}
             },
             "default_campsite_schedule": {"check_in_time": "14:00", "uniform": true},
-            "amenities": {"toilets": true, "water": true},
+            "amenities": {"toilets": true, "water": true, "wifi": null, "toilet_kind": "vault"},
+            "alerts": [
+              {"title": "Fire ban", "content": "No open flames.", "end_date": "2026-09-01"},
+              {"title": "Nothing to say"}
+            ],
             "max_rv_length": 35,
             "reservation_url": "https://www.recreation.gov/camping/campgrounds/232447",
             "links": [{"url": "https://www.nps.gov/yose", "title": "NPS"}],

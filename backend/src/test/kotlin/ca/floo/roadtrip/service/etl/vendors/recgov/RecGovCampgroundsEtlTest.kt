@@ -1,5 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
+import ca.floo.roadtrip.model.domain.CampgroundMetadata
+import ca.floo.roadtrip.model.domain.CampgroundRating
+import ca.floo.roadtrip.model.domain.Carrier
+import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
@@ -61,9 +65,34 @@ class RecGovCampgroundsEtlTest {
             "https://cdn.example/primary.webp",
             upperPines.photos.single().url,
         )
-        // The typed metadata and carrier bags stay empty until the rec.gov mapping lands.
-        assertNull(upperPines.metadata)
-        assertEquals(emptyList(), upperPines.cellService)
+        assertEquals(
+            CampgroundMetadata(
+                activities = listOf("Camping", "Hiking"),
+                rating = CampgroundRating(average = 4.25, count = 8),
+            ),
+            upperPines.metadata,
+        )
+        // T-Mobile rated nobody and Boost is not in the vocabulary; both drop.
+        assertEquals(
+            listOf(
+                CarrierSignal(Carrier.VERIZON, average = 3.5, count = 4),
+                CarrierSignal(Carrier.ATT, average = 1.25, count = 2),
+                CarrierSignal(Carrier.US_CELLULAR, average = 2.0, count = 3),
+            ),
+            upperPines.cellService,
+        )
+        assertEquals("Yosemite National Park", upperPines.parentName)
+        assertNull(campgrounds.getValue("10083567").parentName)
+    }
+
+    @Test
+    fun `transform leaves activities-only metadata without a rating`() {
+        val etl = RecGovCampgroundsEtl("recgov-campgrounds")
+        val campgrounds = terminalRecords(etl, bundle(), transformCtx).associateBy { it.dataProviderRef.serialize() }
+
+        assertEquals(CampgroundMetadata(activities = listOf("Camping", "Hiking")), campgrounds.getValue("232447").metadata)
+        assertNull(campgrounds.getValue("248965").metadata)
+        assertEquals(emptyList(), campgrounds.getValue("232447").cellService)
     }
 
     @Test
@@ -153,6 +182,10 @@ class RecGovCampgroundsEtlTest {
                             }
                           ],
                           "ORGANIZATION": [{"OrgAbbrevName": "NPS", "OrgName": "National Park Service"}],
+                          "RECAREA": [
+                            {"RecAreaID": 2782, "RecAreaName": "Yosemite National Park"},
+                            {"RecAreaID": 1234, "RecAreaName": "Ignored Second Parent"}
+                          ],
                           "FACILITYADDRESS": [
                             {
                               "AddressStateCode": "CA",
@@ -238,6 +271,16 @@ class RecGovCampgroundsEtlTest {
                             "carrier": "T-Mobile",
                             "average_rating": null,
                             "number_of_ratings": 0
+                          },
+                          {
+                            "carrier": "US Cellular",
+                            "average_rating": 2.0,
+                            "number_of_ratings": 3
+                          },
+                          {
+                            "carrier": "Boost Mobile",
+                            "average_rating": 5.0,
+                            "number_of_ratings": 1
                           }
                         ]
                       }
