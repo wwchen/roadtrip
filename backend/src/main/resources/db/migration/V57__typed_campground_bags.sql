@@ -34,7 +34,7 @@ UPDATE campgrounds SET amenities = COALESCE((
     SELECT 0,
            jsonb_build_object('key', 'toilets', 'present', true, 'detail', to_jsonb(amenities->>'toilet_kind'))
     WHERE jsonb_typeof(amenities->'toilet_kind') = 'string'
-      AND NOT jsonb_exists(amenities, 'toilets')
+      AND COALESCE(jsonb_typeof(amenities->'toilets'), 'null') = 'null'
   ) s), '[]'::jsonb)
 WHERE jsonb_typeof(amenities) = 'object';
 
@@ -53,8 +53,8 @@ UPDATE campgrounds SET cell_service = COALESCE((
   ) s), '[]'::jsonb)
 WHERE jsonb_typeof(cell_service) = 'object';
 
-UPDATE campgrounds SET amenities = '[]'::jsonb WHERE amenities IS NULL OR jsonb_typeof(amenities) <> 'array';
-UPDATE campgrounds SET cell_service = '[]'::jsonb WHERE cell_service IS NULL OR jsonb_typeof(cell_service) <> 'array';
+UPDATE campgrounds SET amenities = '[]'::jsonb WHERE jsonb_typeof(amenities) <> 'array';
+UPDATE campgrounds SET cell_service = '[]'::jsonb WHERE jsonb_typeof(cell_service) <> 'array';
 
 ALTER TABLE campgrounds ALTER COLUMN amenities SET DEFAULT '[]'::jsonb;
 ALTER TABLE campgrounds ALTER COLUMN cell_service SET DEFAULT '[]'::jsonb;
@@ -85,8 +85,8 @@ WHERE jsonb_typeof(metadata) = 'object'
 UPDATE campgrounds SET price = jsonb_strip_nulls(jsonb_build_object(
   'minimum', CASE WHEN jsonb_typeof(price->'minimum') = 'number' THEN price->'minimum' END,
   'maximum', CASE WHEN jsonb_typeof(price->'maximum') = 'number' THEN price->'maximum' END,
-  'currency', CASE WHEN jsonb_typeof(price->'currency') = 'string' THEN price->'currency'
-                   WHEN jsonb_typeof(price->'currency_code') = 'string' THEN price->'currency_code' END))
+  'currency', CASE WHEN jsonb_typeof(price->'currency_code') = 'string' THEN price->'currency_code'
+                   WHEN jsonb_typeof(price->'currency') = 'string' THEN price->'currency' END))
 WHERE jsonb_typeof(price) = 'object'
   AND EXISTS (
     SELECT 1 FROM jsonb_object_keys(price) k

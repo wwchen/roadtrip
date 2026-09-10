@@ -94,7 +94,11 @@ internal class CampgroundService(
                     contact = CatalogColumnJson.element(campground.contact),
                     email = campground.contact?.email,
                     elevation = campground.location?.elevation,
-                    lastVerified = campground.metadata?.lastUpdated,
+                    lastVerified =
+                        campground.metadata
+                            ?.lastUpdated
+                            ?.trim()
+                            ?.takeIf { it.isNotEmpty() },
                 ),
         )
     }

@@ -992,11 +992,16 @@ class CatalogEntityRepoTest : SharedDbTest() {
             "legacy-campflare",
             "amenities" to """{"toilets":true,"showers":false,"wifi":null,"toilet_kind":"vault"}""",
             "cell_service" to """{"verizon":3.5,"uscell":2,"fakecell":1}""",
-            "price" to """{"currency":"USD","currency_code":"usd","minimum":36,"maximum":50}""",
+            "price" to """{"currency":"$","currency_code":"USD","minimum":36,"maximum":50}""",
             "default_campsite_schedule" to """{"check_in_time":"14:00","check_out_time":"11:00","uniform":true}""",
             "alerts" to
                 """[{"title":"Fire ban","content":"No fires.","end_date":"2026-09-30","source_url":"https://a.test/"},{"title":"No body"}]""",
             "metadata" to """{"last_updated":"2026-07-01T00:00:00Z","has_availability_alerts":true}""",
+        )
+        seedLegacyCampground(
+            "campflare",
+            "legacy-campflare-null-toilets",
+            "amenities" to """{"toilets":null,"toilet_kind":"vault"}""",
         )
         seedLegacyCampground(
             "reservecalifornia",
@@ -1039,6 +1044,12 @@ class CatalogEntityRepoTest : SharedDbTest() {
         )
         assertEquals(CampgroundMetadata(lastUpdated = "2026-07-01T00:00:00Z"), campflare.metadata)
         assertNull(campflare.parentName)
+
+        val nullToilets = checkNotNull(repo.findById(campgroundId("legacy-campflare-null-toilets")))
+        assertEquals(
+            listOf(CampgroundAmenity(AmenityKey.TOILETS, present = true, detail = "vault")),
+            nullToilets.amenities,
+        )
 
         val reserveCalifornia = checkNotNull(repo.findById(campgroundId("legacy-rc")))
         assertEquals(
