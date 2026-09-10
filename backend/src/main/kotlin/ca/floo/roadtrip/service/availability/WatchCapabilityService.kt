@@ -73,9 +73,14 @@ internal class WatchCapabilityService(
     fun supportedTriggerKinds(
         campsites: List<Campsite>,
         requester: UserId?,
+    ): List<String> = supportedTriggerKinds(campsites, supportedBookingActions(campsites), requester)
+
+    private fun supportedTriggerKinds(
+        campsites: List<Campsite>,
+        bookingActions: Set<BookingAction>,
+        requester: UserId?,
     ): List<String> {
         if (!internalPollingSupportFor(campsites).supported) return emptyList()
-        val bookingActions = supportedBookingActions(campsites)
         return buildList {
             addAll(notificationTriggerKinds)
             if (BookingAction.ADD_TO_CART in bookingActions && canFulfilAddToCart(requester)) {
@@ -97,9 +102,17 @@ internal class WatchCapabilityService(
     fun addToCartState(
         campsites: List<Campsite>,
         requester: UserId?,
+    ): AddToCartState = addToCartState(campsites, supportedBookingActions(campsites), requester)
+
+    private fun addToCartState(
+        campsites: List<Campsite>,
+        bookingActions: Set<BookingAction>,
+        requester: UserId?,
     ): AddToCartState =
         when {
-            BookingAction.ADD_TO_CART !in supportedBookingActions(campsites) -> AddToCartState.UNSUPPORTED
+            // A scope that can't be polled can never fire a hold either.
+            !internalPollingSupportFor(campsites).supported -> AddToCartState.UNSUPPORTED
+            BookingAction.ADD_TO_CART !in bookingActions -> AddToCartState.UNSUPPORTED
             requester == null -> AddToCartState.SIGNED_OUT
             !canFulfilAddToCart(requester) -> AddToCartState.NO_CREDENTIALS
             else -> AddToCartState.READY
@@ -111,9 +124,9 @@ internal class WatchCapabilityService(
     ): AvailabilityWatchCapabilitiesDto {
         val bookingActions = supportedBookingActions(campsites)
         return AvailabilityWatchCapabilitiesDto(
-            triggerKinds = supportedTriggerKinds(campsites, requester),
+            triggerKinds = supportedTriggerKinds(campsites, bookingActions, requester),
             bookingActions = BookingAction.entries.filter { it in bookingActions }.map { it.wireValue },
-            addToCart = AddToCartCapabilityDto(addToCartState(campsites, requester)),
+            addToCart = AddToCartCapabilityDto(addToCartState(campsites, bookingActions, requester)),
         )
     }
 }

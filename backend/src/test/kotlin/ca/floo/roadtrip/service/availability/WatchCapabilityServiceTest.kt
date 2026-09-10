@@ -97,6 +97,15 @@ class WatchCapabilityServiceTest {
     }
 
     @Test
+    fun `add to cart state is unsupported when the scope cannot be polled, even with a resolvable target`() {
+        val campsite = campsite(1L, "site-1")
+        val service = service(campsites = listOf(campsite), supportsInternalPolling = false)
+
+        assertEquals(AddToCartState.UNSUPPORTED, service.addToCartState(listOf(campsite), credentialedUser))
+        assertEquals(emptyList(), service.supportedTriggerKinds(listOf(campsite), credentialedUser))
+    }
+
+    @Test
     fun `atc is absent for an anonymous reader, and is not an error`() {
         // Magic-link and signed-out readers of the availability API get the
         // notification kinds and nothing that needs an account behind it.

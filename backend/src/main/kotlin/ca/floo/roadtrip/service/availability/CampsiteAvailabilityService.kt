@@ -31,12 +31,12 @@ internal class CampsiteAvailabilityService(
     private val availabilityProviders: List<AvailabilityProvider>,
     private val dateResolver: AvailabilityDateResolver,
     private val failoverFetcher: FailoverAvailabilityFetcher,
+    private val bookingHorizons: BookingHorizonResolver,
     availabilityRepo: AvailabilityRepo? = null,
     private val clock: Clock = Clock.systemUTC(),
     private val snapshotFreshnessTtl: (provider: AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
 ) {
     private val availabilityLoader = AvailabilityLoader(availabilityRepo, clock)
-    private val bookingHorizons = BookingHorizonResolver(availabilityProviders, dateResolver)
 
     suspend fun fetchAvailability(
         campground: Campground,
@@ -95,7 +95,8 @@ internal class CampsiteAvailabilityService(
         return CampsiteAvailabilityResult(
             startDate = windows.target.startDate,
             endDate = windows.target.endDate,
-            latestDate = dateResolver.latestDate(dateContext, caps.bookingHorizonDays),
+            // providerFor above already found a provider for this campground, so the same pick here can't miss.
+            latestDate = bookingHorizons.latestDate(campground, dateContext)!!,
             batch = batch,
         )
     }

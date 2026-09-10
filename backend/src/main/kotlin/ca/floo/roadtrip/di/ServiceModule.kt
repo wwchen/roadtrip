@@ -193,6 +193,12 @@ val serviceModule =
             CoordinateTimeZones.warmUp()
             AvailabilityDateResolver(poiRepo = get<PoiRepo>())
         }
+        single {
+            BookingHorizonResolver(
+                availabilityProviders = get(named("availabilityProviders")),
+                dateResolver = get<AvailabilityDateResolver>(),
+            )
+        }
         single { WatchScopeResolver(get<CampsiteRepo>()) }
         single {
             DbAvailabilityTargetResolver(
@@ -392,11 +398,7 @@ val serviceModule =
                 CampgroundService(
                     campgroundRepo = get<CampgroundRepo>(),
                     dateResolver = get<AvailabilityDateResolver>(),
-                    bookingHorizons =
-                        BookingHorizonResolver(
-                            availabilityProviders = get(named("availabilityProviders")),
-                            dateResolver = get<AvailabilityDateResolver>(),
-                        ),
+                    bookingHorizons = get<BookingHorizonResolver>(),
                 ),
                 TeslaSuperchargerService(get<TeslaSuperchargerRepo>()),
                 PlanetFitnessLocationService(get<PlanetFitnessLocationRepo>()),

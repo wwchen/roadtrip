@@ -50,6 +50,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
+import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
@@ -89,6 +90,7 @@ internal fun Application.registerKoinRoutes() {
     val watchCapabilities: WatchCapabilityService by inject()
     val availabilityProviders: List<AvailabilityProvider> by inject(named("availabilityProviders"))
     val dateResolver: AvailabilityDateResolver by inject()
+    val bookingHorizons: BookingHorizonResolver by inject()
     val failoverFetcher: FailoverAvailabilityFetcher by inject()
     val poiService: PoiReader by inject()
     val poisOnRouteService: PoisOnRouteService by inject()
@@ -130,6 +132,7 @@ internal fun Application.registerKoinRoutes() {
                 ctx = ctx,
                 availabilityProviders = availabilityProviders,
                 dateResolver = dateResolver,
+                bookingHorizons = bookingHorizons,
                 failoverFetcher = failoverFetcher,
                 watchCapabilities = watchCapabilities,
                 cacheConfig = config.cache,
@@ -191,6 +194,7 @@ private fun campsiteAvailabilityController(
     ctx: DSLContext,
     availabilityProviders: List<AvailabilityProvider>,
     dateResolver: AvailabilityDateResolver,
+    bookingHorizons: BookingHorizonResolver,
     failoverFetcher: FailoverAvailabilityFetcher,
     watchCapabilities: WatchCapabilityService,
     cacheConfig: ApiCacheConfig,
@@ -215,6 +219,7 @@ private fun campsiteAvailabilityController(
                 availabilityProviders = availabilityProviders,
                 dateResolver = dateResolver,
                 failoverFetcher = failoverFetcher,
+                bookingHorizons = bookingHorizons,
                 availabilityRepo = AvailabilityRepo(ctx),
                 snapshotFreshnessTtl = configuredSnapshotFreshnessTtl(cacheConfig),
             ),
