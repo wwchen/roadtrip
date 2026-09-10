@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.poi
 import ca.floo.roadtrip.model.api.BookingRefDto
 import ca.floo.roadtrip.model.api.poi.PoiCategoryDetailSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailPropertiesSchema
-import ca.floo.roadtrip.model.domain.CampgroundColumnJson
+import ca.floo.roadtrip.model.domain.CatalogColumnJson
 import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -67,7 +67,7 @@ internal class CampgroundService(
                     bookingSite = campground.reservationUrl?.let(UrlHosts::extract),
                     phone = campground.contact?.phone,
                     infoUrl = infoUrl,
-                    address = CampgroundColumnJson.element(campground.location),
+                    address = CatalogColumnJson.element(campground.location),
                     description = description,
                     photoUrl = photoUrl,
                     bookingRef = detail.bookingRef?.let(BookingRefDto::from),
@@ -92,12 +92,12 @@ internal class CampgroundService(
                     maxTrailerLength = campground.maxTrailerLength,
                     hasPullThroughSites = campground.hasPullThroughSites,
                     bigRigFriendly = campground.bigRigFriendly,
-                    links = CampgroundColumnJson.elements(campground.links),
+                    links = CatalogColumnJson.elements(campground.links),
                     alerts = campground.alerts,
                     connections = campground.connections,
                     metadata = campground.metadata,
-                    management = CampgroundColumnJson.element(campground.management),
-                    contact = CampgroundColumnJson.element(campground.contact),
+                    management = CatalogColumnJson.element(campground.management),
+                    contact = CatalogColumnJson.element(campground.contact),
                     email = campground.contact?.email,
                     elevation = campground.location?.elevation,
                     lastVerified = campground.metadata.stringProperty(LAST_UPDATED_KEY),

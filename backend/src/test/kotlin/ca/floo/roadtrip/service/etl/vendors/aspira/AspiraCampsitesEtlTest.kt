@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
+import ca.floo.roadtrip.model.domain.CampsiteAttribute
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
@@ -51,14 +52,47 @@ class AspiraCampsitesEtlTest {
             "resourceLocationId": -2147483624,
             "resourceCategoryId": -2147483648,
             "localizedValues": [
-              { "cultureName": "en-US", "name": "31" }
+              { "cultureName": "en-US", "name": "31", "description": "<p>Lakeside &amp; shaded</p>" }
             ],
+            "minCapacity": 2,
             "mapIds": [-2147483615],
             "allowedEquipment": [],
-            "definedAttributes": []
+            "definedAttributes": [
+              { "attributeDefinitionId": -32715, "attributeVisibility": 0, "value": 3, "values": [] },
+              { "attributeDefinitionId": -40001, "attributeVisibility": 0, "value": 7, "values": [] }
+            ]
           }
         }
         """.trimIndent()
+
+    private val dictionaries =
+        AspiraCampsitesEtl.AspiraDictionaries(
+            equipment = emptyMap(),
+            resourceCategories = emptyMap(),
+            attributes =
+                mapOf(
+                    -32715 to
+                        AspiraCampsitesEtl.AttributeDefinition(
+                            name = "Max Vehicle Length",
+                            valueLabels = mapOf(3 to "32 ft"),
+                        ),
+                ),
+        )
+
+    /** Same definition, but the tenant dictionary has no label for value 3. */
+    private val unlabelledDictionaries =
+        AspiraCampsitesEtl.AspiraDictionaries(
+            equipment = emptyMap(),
+            resourceCategories = emptyMap(),
+            attributes =
+                mapOf(
+                    -32715 to
+                        AspiraCampsitesEtl.AttributeDefinition(
+                            name = "Max Vehicle Length",
+                            valueLabels = emptyMap(),
+                        ),
+                ),
+        )
 
     @BeforeAll
     fun setUp() {
@@ -119,6 +153,52 @@ class AspiraCampsitesEtlTest {
         assertEquals("bc:-2147481558", campsite.dataProviderRef.serialize())
         assertEquals(DataProvider.STRAPI, campsite.parentDataProviderRef!!.provider)
         assertEquals("-2147483630:-2147483388", campsite.parentDataProviderRef!!.serialize())
+    }
+
+    @Test
+    fun `promotes inventory capacity description and named attributes onto typed columns`() {
+        val etl =
+            AspiraCampsitesEtl(
+                etlSlug = "aspira-wa-campsites",
+                mapsInputSlug = "aspira-maps-wa",
+                inventoryInputSlug = "aspira-inventory-wa",
+                aspiraTenant = "wa",
+            )
+
+        val dto =
+            AspiraCampsitesEtl.Parsed(
+                inventory = listOf(envelopeOf(inventoryPayload)),
+                maps = Json.parseToJsonElement(mapsPayload).jsonObject["payload"] as kotlinx.serialization.json.JsonArray,
+                dictionaries = dictionaries,
+            )
+
+        val campsite = records(etl.transform(dto, ctx)).single()
+
+        assertEquals(2, campsite.minPeople)
+        assertEquals("Lakeside &amp; shaded", campsite.description)
+        assertEquals(listOf(CampsiteAttribute("Max Vehicle Length", "32 ft")), campsite.attributes)
+    }
+
+    @Test
+    fun `falls back to the raw scalar when no value label matches and drops nameless attributes`() {
+        val etl =
+            AspiraCampsitesEtl(
+                etlSlug = "aspira-wa-campsites",
+                mapsInputSlug = "aspira-maps-wa",
+                inventoryInputSlug = "aspira-inventory-wa",
+                aspiraTenant = "wa",
+            )
+
+        val dto =
+            AspiraCampsitesEtl.Parsed(
+                inventory = listOf(envelopeOf(inventoryPayload)),
+                maps = Json.parseToJsonElement(mapsPayload).jsonObject["payload"] as kotlinx.serialization.json.JsonArray,
+                dictionaries = unlabelledDictionaries,
+            )
+
+        val campsite = records(etl.transform(dto, ctx)).single()
+
+        assertEquals(listOf(CampsiteAttribute("Max Vehicle Length", "3")), campsite.attributes)
     }
 
     private fun envelopeOf(payloadJson: String): Envelope =

@@ -3,14 +3,15 @@ package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
-import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
+import ca.floo.roadtrip.service.etl.framework.HtmlText
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.fetchedAtOrNow
@@ -69,7 +70,7 @@ class ReserveCaliforniaCampgroundsEtl(
                             amenities = amenitiesPayload(place.amenities),
                             reservationUrl = parkUrl,
                             links = listOf(CampgroundLink(parkUrl)),
-                            photos = listOfNotNull(place.imageUrl?.let(::CampgroundPhoto)),
+                            photos = listOfNotNull(place.imageUrl?.let(::CatalogPhoto)),
                             management = CampgroundManagement(agency),
                             metadata = metadataPayload(place),
                             sourceUrl = parkUrl,
@@ -241,8 +242,7 @@ internal fun JsonObject.stringValue(key: String): String? =
 internal fun parseHighlights(raw: String?): List<String> =
     raw
         ?.split(Regex("""(?i)<br\s*/?>"""))
-        ?.map { it.replace(Regex("""<[^>]+>"""), " ") }
-        ?.map { it.replace(Regex("""\s+"""), " ").trim() }
+        ?.map(HtmlText::stripTags)
         ?.filter { it.isNotEmpty() }
         ?.distinct()
         .orEmpty()

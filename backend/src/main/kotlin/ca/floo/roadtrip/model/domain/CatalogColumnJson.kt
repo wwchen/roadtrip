@@ -10,11 +10,12 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 
 /**
- * The one codec for the typed campground JSONB columns. Absent values are the
- * empty object / array on the wire and in the table; unknown stored keys are
- * ignored on read, so a column written before a field existed still decodes.
+ * The one codec for the typed catalog JSONB columns (campgrounds and
+ * campsites). Absent values are the empty object / array on the wire and in the
+ * table; unknown stored keys are ignored on read, so a column written before a
+ * field existed still decodes.
  */
-object CampgroundColumnJson {
+object CatalogColumnJson {
     const val EMPTY_OBJECT = "{}"
 
     @OptIn(ExperimentalSerializationApi::class)

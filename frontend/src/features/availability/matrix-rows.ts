@@ -52,7 +52,7 @@ export function isWatchableKind(kind: string): boolean {
 
 /** A campsite's display name, however little the provider gave us. */
 export function siteName(row: Partial<Campsite>): string {
-  if (row.name) return String(row.name);
+  if (row.name) return row.name;
   // Aspira's availability map ships resource ids and no names, so a numbered
   // fallback beats "(unnamed)" — the number is what is printed on the post.
   if (row.data_provider_ref) return `Site #${row.data_provider_ref}`;
@@ -65,7 +65,7 @@ export function rowId(row: Partial<Campsite>): string {
 
 /** "Loop A / Site 12", or just the site when the provider has no loops. */
 export function siteTitleText(row: Partial<Campsite>, label = siteName(row)): string {
-  const loop = typeof row.loop_name === 'string' ? row.loop_name.trim() : '';
+  const loop = row.loop_name?.trim();
   return loop ? `${loop} / ${label}` : label;
 }
 
@@ -180,15 +180,13 @@ export function availableDateCount(row: Partial<Campsite>, context: SortContext)
   return count;
 }
 
-/** The distinct values of a column, for a filter dropdown. */
-export function filterOptions(rows: readonly Partial<Campsite>[], key: keyof Campsite): string[] {
-  return [
-    ...new Set(
-      rows
-        .map((row) => row[key])
-        .filter((value): value is string => typeof value === 'string' && value.trim() !== ''),
-    ),
-  ].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+/** The distinct values of a filterable column, for a filter dropdown. */
+export function filterOptions(
+  rows: readonly Partial<Campsite>[],
+  key: 'loop_name' | 'kind',
+): string[] {
+  const values = rows.map((row) => row[key]).filter((value): value is string => !!value?.trim());
+  return [...new Set(values)].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
 /**
@@ -239,7 +237,7 @@ export function availabilityIndex(days: readonly FusedDay[]): Map<string, Set<st
 function compareCampsite(a: Partial<Campsite>, b: Partial<Campsite>): number {
   const loopA = a.loop_name || NO_LOOP_SORT_KEY;
   const loopB = b.loop_name || NO_LOOP_SORT_KEY;
-  if (loopA !== loopB) return String(loopA).localeCompare(String(loopB));
+  if (loopA !== loopB) return loopA.localeCompare(loopB);
   return compareBySite(a, b);
 }
 
@@ -247,14 +245,14 @@ function compareBySite(a: Partial<Campsite>, b: Partial<Campsite>): number {
   const nameA = a.name || a.data_provider_ref || '';
   const nameB = b.name || b.data_provider_ref || '';
   // Numeric collation, so "Site 9" precedes "Site 10".
-  return String(nameA).localeCompare(String(nameB), undefined, { numeric: true });
+  return nameA.localeCompare(nameB, undefined, { numeric: true });
 }
 
 function compareByType(a: Partial<Campsite>, b: Partial<Campsite>): number {
   const typeA = a.kind || NO_LOOP_SORT_KEY;
   const typeB = b.kind || NO_LOOP_SORT_KEY;
   if (typeA !== typeB) {
-    return String(typeA).localeCompare(String(typeB), undefined, { numeric: true });
+    return typeA.localeCompare(typeB, undefined, { numeric: true });
   }
   return compareCampsite(a, b);
 }

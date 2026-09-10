@@ -5,7 +5,7 @@ import ca.floo.roadtrip.model.domain.CampgroundContact
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
-import ca.floo.roadtrip.model.domain.CampgroundPhoto
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
@@ -46,7 +46,7 @@ class CampflareCampgroundFieldsTest {
     @Test
     fun `photos prefer url then large medium small original and drop entries without one`() {
         val raw = obj("""{"photos":[{"original_url":"o","large_url":"l"},{"small_url":"s"},{"caption":"none"}]}""")
-        assertEquals(listOf(CampgroundPhoto("l"), CampgroundPhoto("s")), campflarePhotos(raw["photos"]))
+        assertEquals(listOf(CatalogPhoto("l"), CatalogPhoto("s")), campflarePhotos(raw["photos"]))
         assertEquals(emptyList(), campflarePhotos(null))
     }
 

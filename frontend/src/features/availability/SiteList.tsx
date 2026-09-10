@@ -172,14 +172,14 @@ function Row({
     <>
       <div className="cg-sites-row-main">
         <div className="cg-sites-row-name">{name}</div>
-        {row.loop_name ? <div className="cg-sites-row-loop">{String(row.loop_name)}</div> : null}
+        {row.loop_name ? <div className="cg-sites-row-loop">{row.loop_name}</div> : null}
         {details.length > 0 ? (
           <div className="cg-sites-row-details">{details.join(' · ')}</div>
         ) : null}
       </div>
       {row.kind || bookable ? (
         <div className="cg-sites-row-side">
-          {row.kind ? <span className="cg-sites-row-type">{String(row.kind)}</span> : null}
+          {row.kind ? <span className="cg-sites-row-type">{row.kind}</span> : null}
           {bookable ? <span className="cg-sites-row-book">Book</span> : null}
         </div>
       ) : null}

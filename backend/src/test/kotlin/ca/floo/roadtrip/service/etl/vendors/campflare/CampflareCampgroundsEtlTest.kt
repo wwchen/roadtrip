@@ -4,7 +4,7 @@ import ca.floo.roadtrip.model.domain.Address
 import ca.floo.roadtrip.model.domain.CampgroundContact
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundManagement
-import ca.floo.roadtrip.model.domain.CampgroundPhoto
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
@@ -83,7 +83,7 @@ class CampflareCampgroundsEtlTest {
         val etl = CampflareCampgroundsEtl()
         val row = terminalRecords(etl, bundle("campflare-campgrounds", campgroundPayload()), transformCtx()).single()
 
-        assertEquals(listOf(CampgroundPhoto("https://cdn.example/p.jpg")), row.photos)
+        assertEquals(listOf(CatalogPhoto("https://cdn.example/p.jpg")), row.photos)
         assertEquals(CampgroundContact(phone = "555-0100"), row.contact)
         assertEquals(4000.0, row.location.elevation)
         assertEquals(Address(state = "CA", country = "US"), row.location.address)

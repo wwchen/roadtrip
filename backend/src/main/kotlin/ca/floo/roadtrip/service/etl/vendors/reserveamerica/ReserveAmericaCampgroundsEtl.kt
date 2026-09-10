@@ -3,8 +3,8 @@ package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
-import ca.floo.roadtrip.model.domain.CampgroundPhoto
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.ParseResult
@@ -87,7 +87,7 @@ class ReserveAmericaCampgroundsEtl(
                             location = CampgroundLocation(park.lat, park.lon, region = settings.region, country = settings.country),
                             reservationUrl = park.infoUrl,
                             links = listOfNotNull(park.infoUrl?.let(::CampgroundLink)),
-                            photos = listOfNotNull(park.photoUrl?.let(::CampgroundPhoto)),
+                            photos = listOfNotNull(park.photoUrl?.let(::CatalogPhoto)),
                             management = CampgroundManagement(settings.agency),
                             metadata = parkExtras,
                             sourceUrl = park.infoUrl,

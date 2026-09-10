@@ -73,19 +73,8 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
         val response = service.campsitesForPoi(poiId, siteTypes = emptyList())
 
         assertEquals(campsiteId, response.campsites.single().id)
-        assertEquals(
-            "recgov",
-            response.campsites
-                .single()
-                .dataProviderRef.provider.id,
-        )
-        assertEquals(
-            "site-100",
-            response.campsites
-                .single()
-                .dataProviderRef
-                .serialize(),
-        )
+        assertEquals("recgov", response.campsites.single().dataProvider)
+        assertEquals("site-100", response.campsites.single().dataProviderRef)
         assertEquals("site", response.campsites.single().kind)
         assertEquals(
             "provider-template://232447/recgov/site-100",
@@ -101,7 +90,7 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
         assertEquals("recgov", campsiteJson.getValue("data_provider").jsonPrimitive.content)
         assertEquals("site-100", campsiteJson.getValue("data_provider_ref").jsonPrimitive.content)
         assertEquals("site", campsiteJson.getValue("kind").jsonPrimitive.content)
-        assertFalse(campsiteJson.containsKey("dataProviderRef"))
+        assertFalse(campsiteJson.containsKey("source_payload"))
         assertEquals(
             "provider-template://232447/recgov/site-100",
             json

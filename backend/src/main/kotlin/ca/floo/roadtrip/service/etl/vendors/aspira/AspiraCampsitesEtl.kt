@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
+import ca.floo.roadtrip.model.domain.CampsiteAttribute
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
@@ -9,6 +10,7 @@ import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
+import ca.floo.roadtrip.service.etl.framework.HtmlText
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.JsonArray
@@ -198,8 +200,11 @@ class AspiraCampsitesEtl(
                                 loopName = leaf?.name ?: parentLeaf?.name,
                                 kind = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] } ?: "site",
                                 kindListed = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] },
-                                equipment = inv.allowedEquipment?.let { enrichAllowedEquipment(it, dto.dictionaries) },
+                                equipment = allowedEquipmentNames(inv.allowedEquipment, dto.dictionaries),
                                 maxPeople = inv.maxCapacity,
+                                attributes = campsiteAttributes(inv.definedAttributes, dto.dictionaries),
+                                description = inv.description?.let(HtmlText::stripTags)?.takeIf { it.isNotBlank() },
+                                minPeople = inv.minCapacity,
                                 sourcePayload =
                                     buildResourceRaw(
                                         inv = inv,
@@ -371,6 +376,37 @@ class AspiraCampsitesEtl(
                 // don't have to know Aspira-shaped JSON.
                 put("defined_attributes", flattenAttributes(inv.definedAttributes, dictionaries))
             }
+        }
+
+    /** The sub-category labels only; the enriched JSON stays in `sourcePayload`. */
+    private fun allowedEquipmentNames(
+        equipment: JsonArray?,
+        dictionaries: AspiraDictionaries,
+    ): List<String> =
+        equipment.orEmpty().mapNotNull { raw ->
+            val item = raw as? JsonObject ?: return@mapNotNull null
+            val categoryId = item["equipmentCategoryId"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+            val subCategoryId = item["subEquipmentCategoryId"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+            dictionaries.equipment[EquipmentKey(categoryId, subCategoryId)]?.subCategoryName
+        }
+
+    /** The named attributes only; the Aspira-shaped JSON stays in `sourcePayload`. */
+    private fun campsiteAttributes(
+        attrs: JsonArray?,
+        dictionaries: AspiraDictionaries,
+    ): List<CampsiteAttribute> =
+        attrs.orEmpty().mapNotNull { raw ->
+            val attribute = raw as? JsonObject ?: return@mapNotNull null
+            val definition =
+                attribute["attributeDefinitionId"]
+                    ?.jsonPrimitive
+                    ?.intOrNull
+                    ?.let { dictionaries.attributes[it] }
+            val name = definition?.name ?: return@mapNotNull null
+            val value =
+                attributeValueLabels(attribute, definition).firstOrNull()
+                    ?: attribute["value"]?.jsonPrimitive?.contentOrNull
+            CampsiteAttribute(name, value)
         }
 
     private fun enrichAllowedEquipment(

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
@@ -11,7 +12,6 @@ import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.terminalOkRecords
 import ca.floo.roadtrip.service.etl.framework.terminalRecords
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
@@ -36,20 +36,15 @@ class CampflareCampsitesEtlTest {
         assertEquals("A", row.loopName)
         assertEquals(37.738, row.latitude)
         assertEquals(-119.566, row.longitude)
-        val equipmentName =
-            row.equipment!!
-                .jsonArray
-                .single()
-                .jsonObject["name"]!!
-                .jsonPrimitive
-                .content
         val sourceName =
             row.sourcePayload!!
                 .jsonObject["name"]!!
                 .jsonPrimitive
                 .content
-        assertEquals("Tent", equipmentName)
+        assertEquals(listOf("Tent"), row.equipment)
+        assertEquals(listOf(CatalogPhoto("https://cdn.example/site.jpg")), row.photos)
         assertEquals(6, row.maxPeople)
+        assertEquals("Quiet site", row.description)
         assertEquals("Site 001", sourceName)
         assertEquals(BookingProvider.RECGOV, row.bookingProvider)
         assertEquals("001", row.bookingProviderRef)
@@ -149,6 +144,7 @@ class CampflareCampsitesEtlTest {
             "reservation_url": "https://www.recreation.gov/camping/campsites/001",
             "equipment": [{"name": "Tent"}],
             "kind_listed": "Tent Site",
+            "description": "<b>Quiet</b> site",
             "schedule": {"check_in_time": "14:00", "uniform": true},
             "price": {"per_night": 36, "currency_code": "USD"},
             "firepit": true,

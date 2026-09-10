@@ -57,11 +57,11 @@ private const val UNKNOWN_POI_ID = 999_999L
 private const val DEFAULT_WINDOW_DAYS = 7
 
 // Every nullable campsite column the recgov ETL leaves unwritten, in the wire
-// names `Campsite` serializes them under.
+// names `CampsiteDto` serves them under.
 private val unwrittenCampsiteFields =
     listOf(
-        "latitude",
-        "longitude",
+        "description",
+        "min_people",
         "firepit",
         "picnic_table",
         "ada_accessible",
@@ -74,6 +74,21 @@ private val unwrittenCampsiteFields =
         "driveway_length",
         "max_rv_length",
         "max_trailer_length",
+    )
+
+// Columns of the `campsites` row that no client renders: the raw source
+// payload, the bookkeeping timestamps, the vendor blobs and the coordinates.
+private val neverOnTheWire =
+    listOf(
+        "source_payload",
+        "schedule",
+        "price",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "booking_provider_ref",
+        "latitude",
+        "longitude",
     )
 
 class CampsiteRoutesTest : SharedDbTest() {
@@ -188,6 +203,24 @@ class CampsiteRoutesTest : SharedDbTest() {
                     value != null && value != JsonNull
                 }
             assertEquals(emptyList(), fabricated, "facts the recgov source never asserted")
+        }
+
+    @Test
+    fun `GET campsites keeps the row-only columns off the wire`() =
+        testApplication {
+            application { routeTestApplication { campsiteRoutesUnderTest() } }
+            val (poiId, _) = seedRecgovPoiWithCampsite()
+
+            val resp = client.get("/api/pois/$poiId/campsites")
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val leaked =
+                Json
+                    .parseToJsonElement(resp.bodyAsText())
+                    .jsonObject["campsites"]!!
+                    .jsonArray
+                    .flatMap { campsite -> neverOnTheWire.filter(campsite.jsonObject::containsKey) }
+            assertEquals(emptyList(), leaked, "columns the API must not serve")
         }
 
     @Test

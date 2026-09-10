@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
+import ca.floo.roadtrip.model.domain.CampsiteAttribute
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -10,7 +11,6 @@ import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import ca.floo.roadtrip.service.etl.framework.campsiteTagKey
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -19,6 +19,20 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+
+private const val FIRE_PIT_ATTRIBUTE = "fire pit"
+private const val PICNIC_TABLE_ATTRIBUTE = "picnic table"
+private val adaAccessibleAttributes = setOf("accessible", "ada accessible")
+private val maxCarsAttributes = setOf("max num of vehicles", "max vehicles")
+private const val DRIVEWAY_LENGTH_ATTRIBUTE = "driveway length"
+private const val MAX_VEHICLE_LENGTH_ATTRIBUTE = "max vehicle length"
+
+private val yesValues = setOf("yes", "y", "true")
+private val noValues = setOf("no", "n", "false")
+private val leadingIntRegex = Regex("^\\d+")
+
+private const val RESERVE_TYPE_LABEL = "Reserve type"
+private const val TYPE_OF_USE_LABEL = "Type of use"
 
 /**
  * Terminal ETL for the `campsite_data` section. Reads per-facility
@@ -81,7 +95,7 @@ class RecGovCampsitesEtl(
                         yield(TransformResult.Bad(campsiteId, listOf("expected campsite JSON object")))
                         continue
                     }
-                    val tags = buildCampsiteTags(raw)
+                    val promoted = promoteAttributes(raw)
                     val siteName = raw.stringField("site") ?: campsiteId
                     val campsiteType = raw.stringField("campsite_type")
                     yield(
@@ -95,15 +109,20 @@ class RecGovCampsitesEtl(
                                 loopName = raw.stringField("loop"),
                                 kind = campsiteType ?: DEFAULT_CAMPSITE_KIND,
                                 kindListed = campsiteType,
-                                equipment = raw["equipment_types"] as? JsonArray,
+                                equipment = equipmentNames(raw),
+                                firepit = promoted.firepit,
+                                picnicTable = promoted.picnicTable,
+                                adaAccessible = promoted.adaAccessible,
                                 maxPeople = raw["max_num_people"]?.jsonPrimitive?.intOrNull,
+                                maxCars = promoted.maxCars,
+                                drivewayLength = promoted.drivewayLength,
+                                maxRvLength = promoted.maxRvLength,
+                                attributes = promoted.attributes,
+                                minPeople = raw["min_num_people"]?.jsonPrimitive?.intOrNull,
                                 sourcePayload =
                                     withSynthetic(
                                         raw,
-                                        mapOf(
-                                            "_parent_facility_id" to JsonPrimitive(facilityId),
-                                            "_roadtrip_tags" to tags,
-                                        ),
+                                        mapOf("_parent_facility_id" to JsonPrimitive(facilityId)),
                                     ),
                             ),
                         ),
@@ -112,51 +131,71 @@ class RecGovCampsitesEtl(
             }
         }
 
+    private fun equipmentNames(raw: JsonObject): List<String> =
+        (raw["equipment_types"] as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf(String::isNotEmpty) }
+            ?: emptyList()
+
     private fun JsonObject.stringField(key: String): String? =
         (this[key] as? JsonPrimitive)
             ?.contentOrNull
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
 
-    private fun buildCampsiteTags(raw: JsonObject): JsonObject =
-        buildJsonObject {
-            val capacity =
-                buildJsonObject {
-                    raw["min_num_people"]?.jsonPrimitive?.intOrNull?.let { put("min", it) }
-                    raw["max_num_people"]?.jsonPrimitive?.intOrNull?.let { put("max", it) }
+    /**
+     * Rec.gov ships every campsite fact as a free-form (name, value) pair. The
+     * handful the drawer renders as typed columns are promoted here; the rest
+     * stay as named attributes.
+     */
+    private fun promoteAttributes(raw: JsonObject): PromotedAttributes {
+        var firepit: Boolean? = null
+        var picnicTable: Boolean? = null
+        var adaAccessible: Boolean? = null
+        var maxCars: Int? = null
+        var drivewayLength: Int? = null
+        var maxRvLength: Int? = null
+        val rest = mutableListOf<CampsiteAttribute>()
+
+        for (element in (raw["attributes"] as? JsonArray).orEmpty()) {
+            val attribute = element as? JsonObject ?: continue
+            val name = attribute.stringField("attribute_name") ?: continue
+            val value = attribute.stringField("attribute_value")
+            // A promoted name whose value the column can't hold ("Fire Pit: Seasonal")
+            // stays an attribute rather than becoming nothing at all.
+            val promoted =
+                when (name.lowercase()) {
+                    FIRE_PIT_ATTRIBUTE -> booleanValue(value)?.also { firepit = it }
+                    PICNIC_TABLE_ATTRIBUTE -> booleanValue(value)?.also { picnicTable = it }
+                    in adaAccessibleAttributes -> booleanValue(value)?.also { adaAccessible = it }
+                    in maxCarsAttributes -> leadingInt(value)?.also { maxCars = it }
+                    DRIVEWAY_LENGTH_ATTRIBUTE -> leadingInt(value)?.also { drivewayLength = it }
+                    MAX_VEHICLE_LENGTH_ATTRIBUTE -> leadingInt(value)?.also { maxRvLength = it }
+                    else -> null
                 }
-            if (capacity.isNotEmpty()) {
-                put("capacity", capacity)
-            }
-
-            val equipment = raw["equipment_types"] as? JsonArray
-            if (equipment != null && equipment.isNotEmpty()) {
-                put("equipment", equipment)
-            }
-
-            raw["campsite_reserve_type"]?.jsonPrimitive?.contentOrNull?.let { put("reserve_type", it) }
-            raw["type_of_use"]?.jsonPrimitive?.contentOrNull?.let { put("use", it) }
-            raw["capacity_rating"]?.jsonPrimitive?.contentOrNull?.let { put("capacity_rating", it) }
-
-            val attributes = recgovAttributeTags(raw["attributes"] as? JsonArray)
-            if (attributes.isNotEmpty()) {
-                put("attributes", attributes)
-            }
+            if (promoted == null) rest += CampsiteAttribute(name, value)
         }
+        raw.stringField("campsite_reserve_type")?.let { rest += CampsiteAttribute(RESERVE_TYPE_LABEL, it) }
+        raw.stringField("type_of_use")?.let { rest += CampsiteAttribute(TYPE_OF_USE_LABEL, it) }
 
-    private fun recgovAttributeTags(attributes: JsonArray?): JsonObject {
-        if (attributes == null) return JsonObject(emptyMap())
-        return buildJsonObject {
-            for (rawAttribute in attributes) {
-                val attr = rawAttribute as? JsonObject ?: continue
-                val name = attr["attribute_name"]?.jsonPrimitive?.contentOrNull ?: continue
-                val key = campsiteTagKey(name)
-                if (key.isEmpty()) continue
-                val value = attr["attribute_value"]?.jsonPrimitive?.contentOrNull ?: continue
-                put(key, value)
-            }
-        }
+        return PromotedAttributes(
+            firepit = firepit,
+            picnicTable = picnicTable,
+            adaAccessible = adaAccessible,
+            maxCars = maxCars,
+            drivewayLength = drivewayLength,
+            maxRvLength = maxRvLength,
+            attributes = rest,
+        )
     }
+
+    private fun booleanValue(value: String?): Boolean? =
+        when (value?.lowercase()) {
+            in yesValues -> true
+            in noValues -> false
+            else -> null
+        }
+
+    private fun leadingInt(value: String?): Int? = value?.let { leadingIntRegex.find(it)?.value?.toIntOrNull() }
 
     /**
      * Pull the FacilityID from the URL the fetcher captured. URL shape:
@@ -182,4 +221,15 @@ class RecGovCampsitesEtl(
             for ((k, v) in obj) put(k, v)
             for ((k, v) in values) put(k, v)
         }
+
+    /** The rec.gov attribute list split into typed columns plus whatever is left over. */
+    private data class PromotedAttributes(
+        val firepit: Boolean?,
+        val picnicTable: Boolean?,
+        val adaAccessible: Boolean?,
+        val maxCars: Int?,
+        val drivewayLength: Int?,
+        val maxRvLength: Int?,
+        val attributes: List<CampsiteAttribute>,
+    )
 }

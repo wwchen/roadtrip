@@ -817,7 +817,8 @@ describe('the site row', () => {
             catalogRow(1, {
               max_people: 6,
               firepit: true,
-              source_payload: { description: 'Walk-in tent site.', type_of_use: 'Overnight' },
+              description: 'Walk-in tent site.',
+              attributes: [{ name: 'Type of use', value: 'Overnight' }],
             }),
           ],
           { 1: BOOKING_TEMPLATE },
@@ -833,7 +834,7 @@ describe('the site row', () => {
     expect(detail.getByText('Walk-in tent site.')).toBeInTheDocument();
     expect(detail.getByText('Up to 6 people')).toBeInTheDocument();
     expect(detail.getByText('Firepit')).toBeInTheDocument();
-    expect(detail.getByText('Overnight')).toBeInTheDocument();
+    expect(detail.getByText('Type of use: Overnight')).toBeInTheDocument();
   });
 
   test('collapses on a second click', async () => {

@@ -1,19 +1,43 @@
 import { jsonGetOk, type RequestOptions } from './http';
 
+export interface CampsiteAttribute {
+  name: string;
+  value?: string | null;
+}
+
 /**
- * One catalog row. `data_provider`/`data_provider_ref` are the provider seam:
- * which vendor owns this site and its id there (see
- * docs/reservation-providers.md).
+ * Mirrors CampsiteDto. Closed: every fact the drawer renders is a typed field.
  *
- * Kept open beyond those fields because the backend model is wide and consumers
- * pin the fields they render.
+ * `data_provider`/`data_provider_ref` are the provider seam: which vendor owns
+ * this site and its id there (see docs/reservation-providers.md).
  */
 export interface Campsite {
   id: number;
-  data_provider?: string;
-  data_provider_ref?: string;
-  name?: string;
-  [key: string]: unknown;
+  campground_id: number;
+  name: string;
+  kind: string;
+  kind_listed?: string | null;
+  loop_name?: string | null;
+  description?: string | null;
+  min_people?: number | null;
+  max_people?: number | null;
+  max_cars?: number | null;
+  driveway_length?: number | null;
+  max_rv_length?: number | null;
+  max_trailer_length?: number | null;
+  firepit?: boolean | null;
+  picnic_table?: boolean | null;
+  ada_accessible?: boolean | null;
+  water_hookups?: boolean | null;
+  electric_hookups?: boolean | null;
+  sewer_hookups?: boolean | null;
+  pull_through?: boolean | null;
+  equipment: string[];
+  attributes: CampsiteAttribute[];
+  photo_url?: string | null;
+  data_provider: string;
+  data_provider_ref: string;
+  booking_provider?: string | null;
 }
 
 /** Mirrors PoiCampsitesResponseSchema. */

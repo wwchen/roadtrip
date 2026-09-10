@@ -8,8 +8,17 @@ import {
   siteListLabel,
 } from './site-list-rows';
 
-const site = (id: number, extra: Partial<Campsite> = {}) =>
-  ({ id, name: `Site ${id}`, ...extra }) as Campsite;
+const site = (id: number, extra: Partial<Campsite> = {}): Campsite => ({
+  id,
+  campground_id: 7,
+  name: `Site ${id}`,
+  kind: 'STANDARD',
+  equipment: [],
+  attributes: [],
+  data_provider: 'recgov',
+  data_provider_ref: String(id),
+  ...extra,
+});
 
 describe('resolving a day"s ids to rows', () => {
   test('keeps the id list"s order', () => {
@@ -36,32 +45,25 @@ describe('resolving a day"s ids to rows', () => {
 
 describe('the row summary', () => {
   test('combines capacity and description', () => {
-    expect(
-      rowDetails(site(1, { max_people: 6, source_payload: { description: 'By the water.' } })),
-    ).toEqual(['Sleeps up to 6', 'By the water.']);
+    expect(rowDetails({ min_people: 2, max_people: 6, description: 'By the water' })).toEqual([
+      'Sleeps 2-6',
+      'By the water',
+    ]);
   });
 
   test('phrases capacity by what is known', () => {
-    expect(rowDetails(site(1, { source_payload: { min_capacity: 2, max_capacity: 6 } }))).toEqual([
-      'Sleeps 2-6',
-    ]);
-    expect(rowDetails(site(1, { source_payload: { min_capacity: 2 } }))).toEqual(['Sleeps 2+']);
+    expect(rowDetails(site(1, { max_people: 6 }))).toEqual(['Sleeps up to 6']);
+    expect(rowDetails(site(1, { min_people: 2 }))).toEqual(['Sleeps 2+']);
   });
 
   test('is empty when the row says nothing', () => {
     expect(rowDetails(site(1))).toEqual([]);
   });
-
-  test('ignores a non-object payload', () => {
-    expect(rowDetails(site(1, { source_payload: 'nope' }))).toEqual([]);
-  });
 });
 
 describe('the description summary', () => {
-  test('flattens markup and whitespace', () => {
-    expect(descriptionSummary('<p>Walk-in   site.</p>\n<p>Shaded.</p>')).toBe(
-      'Walk-in site. Shaded.',
-    );
+  test('flattens whitespace', () => {
+    expect(descriptionSummary('Walk-in   site.\nShaded.')).toBe('Walk-in site. Shaded.');
   });
 
   test('clamps to two lines" worth', () => {
@@ -73,7 +75,7 @@ describe('the description summary', () => {
 
   test('is empty for nothing', () => {
     expect(descriptionSummary(null)).toBe('');
-    expect(descriptionSummary('<p>  </p>')).toBe('');
+    expect(descriptionSummary('   ')).toBe('');
   });
 });
 

@@ -5,7 +5,6 @@ import ca.floo.roadtrip.model.domain.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import java.time.Instant
@@ -33,7 +32,7 @@ fun campsiteFixture(
         latitude = null,
         longitude = null,
         reservationUrl = reservationUrl,
-        equipment = null,
+        equipment = emptyList(),
         kindListed = null,
         schedule = JsonObject(emptyMap()),
         price = JsonObject(emptyMap()),
@@ -49,7 +48,10 @@ fun campsiteFixture(
         drivewayLength = null,
         maxRvLength = null,
         maxTrailerLength = null,
-        photos = JsonArray(emptyList()),
+        photos = emptyList(),
+        attributes = emptyList(),
+        description = null,
+        minPeople = null,
         sourcePayload = sourcePayload ?: JsonObject(emptyMap()),
         createdAt = defaultInstant,
         updatedAt = defaultInstant,

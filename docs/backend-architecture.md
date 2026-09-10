@@ -85,7 +85,7 @@ Model names must tell callers what kind of shape they are holding:
   (`CampgroundLocation`, `CampgroundLink`, ...). Candidates and rows carry the
   type; the entity repo is the only place that encodes or decodes it. Vendor
   ETLs map upstream keys into the type, so the read path never carries
-  per-vendor key fallbacks.
+  per-vendor key fallbacks. `campsites.equipment`, `photos`, and `attributes` follow the same rule through `CatalogColumnJson`; `CampsiteRepo` is their only codec, and the API serves `CampsiteDto`, never the row.
 
 A model named after a table must not silently include provider-specific helper
 fields, selected vendor refs, API response convenience fields, or partially
