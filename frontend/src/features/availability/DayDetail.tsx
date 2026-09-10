@@ -14,10 +14,10 @@
 //   - "not available for this campground", when the provider cannot alert anyone;
 //   - "no online openings to watch", when the day itself has nothing to wait for.
 import { Button, LinkButton } from '@ui';
-import { availabilityStatusMeta, normalizeAvailabilityStatus } from '@/lib/availability-status';
+import { availabilityStatusMeta } from '@/lib/availability-status';
 import { availableCount, campsiteCount } from '@/lib/day-fields';
 import { dayCopy, gateCopy } from '@/lib/strings';
-import type { FusedDay } from './fuse';
+import type { AvailabilityDay } from '@/api/availability-api';
 import { longDayLabel } from './week-labels';
 
 /**
@@ -38,7 +38,7 @@ export type WatchUnavailableReason =
   | 'failed';
 
 export interface DayDetailProps {
-  day: FusedDay;
+  day: AvailabilityDay;
   /** Whether the user already has a watch on this day. */
   watching: boolean;
   /**
@@ -89,7 +89,7 @@ export function DayDetail({
   );
 }
 
-function StatusLine({ day }: { day: FusedDay }) {
+function StatusLine({ day }: { day: AvailabilityDay }) {
   const meta = availabilityStatusMeta(day.status);
   if (meta.value !== 'available') return <span className={meta.detailClass}>{meta.text}</span>;
   return (
@@ -109,12 +109,10 @@ function DayAction({
   onRetryWatches,
   onSignIn,
 }: DayDetailProps) {
-  const status = normalizeAvailabilityStatus(day.status);
-  // Closed and unknown days are excluded: there is no inventory state to monitor
-  // on a closed day, and on an unknown one we would be promising to notice a
-  // change we cannot currently see. An existing watch always keeps its control,
-  // so a watch set on a day that has since gone closed can still be removed.
-  const canAlert = status !== 'closed' && status !== 'unknown' && (unavailable === null || watching);
+  // `day.watchable` is the backend's answer — the statuses, the provider's polling
+  // support and the booking window already folded in. An existing watch keeps its
+  // control either way, so one set on a day that has since closed can be removed.
+  const canAlert = day.watchable && (unavailable === null || watching);
 
   if (canAlert) {
     return (

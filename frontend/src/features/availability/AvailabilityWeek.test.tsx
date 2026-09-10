@@ -32,18 +32,46 @@ const feature = (properties: Record<string, unknown> = {}, id: number = POI_ID):
   },
 });
 
-/** One campsite's availability stream. `statuses` is per-day, WEEK-aligned. */
-const stream = (campsiteId: number, statuses: string[]) => ({
-  provider: 'recgov',
-  campsite_id: campsiteId,
-  checked_at: '2026-08-09T00:00:00Z',
-  start_date: WEEK[0],
-  end_date: '2026-08-17',
-  state: 'ok',
-  season: null,
-  availability: WEEK.map((date, index) => ({ date, status: statuses[index] ?? 'unknown' })),
-  cache: { hit: true, age_seconds: 120, ttl_seconds: 600 },
-});
+/** The provider's booking horizon, as the response reports it. */
+const LATEST = '2027-02-06';
+
+/** One campsite's statuses, per day, WEEK-aligned. Fused into `days` below. */
+const stream = (campsiteId: number, statuses: string[]) => ({ campsiteId, statuses });
+type Stream = ReturnType<typeof stream>;
+
+/**
+ * The backend's own two rules, restated here so the fixture is a real response.
+ *
+ * Rollup precedence is `available > first_come > unknown > reserved`, with `closed`
+ * only by unanimity; a cell is watchable when its status is one a watch could fire
+ * on. Both are the backend's to decide now — this fixture only has to speak the
+ * shape it decides in.
+ */
+const ROLLUP_ORDER = ['available', 'first_come', 'unknown', 'reserved'];
+const WATCHABLE_STATUSES = new Set(['reserved', 'first_come']);
+
+const rollup = (statuses: string[]): string => {
+  if (statuses.length === 0) return 'unknown';
+  const found = ROLLUP_ORDER.find((candidate) => statuses.includes(candidate));
+  if (found) return found;
+  return statuses.every((status) => status === 'closed') ? 'closed' : 'unknown';
+};
+
+const fusedDay = (date: string, index: number, streams: readonly Stream[]) => {
+  const cells = Object.fromEntries(
+    streams.map((row) => {
+      const status = row.statuses[index] ?? 'unknown';
+      return [String(row.campsiteId), { status, watchable: WATCHABLE_STATUSES.has(status) }];
+    }),
+  );
+  const statuses = Object.values(cells).map((cell) => cell.status);
+  return {
+    date,
+    status: rollup(statuses),
+    watchable: Object.values(cells).some((cell) => cell.watchable),
+    cells,
+  };
+};
 
 const catalogRow = (id: number, extra: Record<string, unknown> = {}) => ({
   id,
@@ -59,7 +87,8 @@ const catalogRow = (id: number, extra: Record<string, unknown> = {}) => ({
 // --- endpoint stubs --------------------------------------------------------
 
 interface Stubs {
-  availability: (url: string) => Response;
+  /** May return a pending promise, which is how the loading state is exercised. */
+  availability: (url: string) => Response | Promise<Response>;
   campsites: () => Response;
   /** May return a pending promise, which is how the loading state is exercised. */
   watches: () => Response | Promise<Response>;
@@ -73,10 +102,27 @@ let requests: string[];
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
+const SLACK_CAPABILITIES = {
+  trigger_kinds: ['slack_notify'],
+  booking_actions: [],
+  add_to_cart: { state: 'unsupported' },
+};
+
 const availabilityBody = (
-  campsites: unknown[],
-  watchCapabilities: unknown = { trigger_kinds: ['slack_notify'], booking_actions: [] },
-) => ({ poi_id: POI_ID, start_date: WEEK[0], end_date: '2026-08-17', watch_capabilities: watchCapabilities, campsites });
+  streams: readonly Stream[],
+  watchCapabilities: unknown = SLACK_CAPABILITIES,
+  overrides: Record<string, unknown> = {},
+) => ({
+  poi_id: POI_ID,
+  start_date: WEEK[0],
+  end_date: '2026-08-17',
+  latest_date: LATEST,
+  state: streams.length === 0 ? 'empty' : 'success',
+  cache: { hit: true, age_seconds: 120, ttl_seconds: 600 },
+  days: streams.length === 0 ? [] : WEEK.map((date, index) => fusedDay(date, index, streams)),
+  watch_capabilities: watchCapabilities,
+  ...overrides,
+});
 
 const catalogBody = (rows: unknown[], templates: Record<string, string> = {}) => ({
   poi_id: POI_ID,
@@ -200,9 +246,9 @@ describe('the week grid', () => {
   test('marks a stale cache', async () => {
     stubs.availability = () =>
       json(
-        availabilityBody([
-          { ...stream(1, ['available']), cache: { hit: true, age_seconds: 3600, ttl_seconds: 600 } },
-        ]),
+        availabilityBody([stream(1, ['available'])], undefined, {
+          cache: { hit: true, age_seconds: 3600, ttl_seconds: 600 },
+        }),
       );
     await mount();
 
@@ -326,12 +372,15 @@ describe('the week"s states', () => {
     );
   });
 
+  // The banner is picked by the window's `state`, not by an empty `days`: a closed
+  // season still ships its (all-closed) days, and reading emptiness would draw a grid.
   test('a closed season reports when it reopens', async () => {
     stubs.availability = () =>
       json(
-        availabilityBody([
-          { ...stream(1, []), state: 'closed_for_season', season: { reopens_on: '2027-05-01' } },
-        ]),
+        availabilityBody([stream(1, WEEK.map(() => 'closed'))], undefined, {
+          state: 'closed_for_season',
+          season: { reopens_on: '2027-05-01' },
+        }),
       );
     render(
       <AppProviders client={testClient()}>
@@ -464,6 +513,47 @@ describe('the calendar popover', () => {
     expect(screen.getByRole('button', { name: '9' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '11' })).not.toBeDisabled();
   });
+
+  // The ceiling is the provider's real horizon — 180 days on rec.gov, 183 on
+  // ReserveCalifornia — not a flat year. A picker that offers a date past it sends
+  // the user to a request the backend refuses with `beyond_booking_horizon`.
+  test('stops at the horizon the response reported', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available'])], undefined, { latest_date: '2026-08-20' }));
+    await mount();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Pick a date' }).click();
+    });
+
+    expect(screen.getByRole('button', { name: '20' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '21' })).toBeDisabled();
+  });
+
+  test('uses the POI detail"s horizon until the week lands, and none without either', async () => {
+    stubs.availability = () => new Promise<Response>(() => {});
+    const { unmount } = render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature({ latest_date: '2026-08-20' })} />
+      </AppProviders>,
+    );
+    await act(async () => {
+      screen.getByRole('button', { name: 'Pick a date' }).click();
+    });
+    expect(screen.getByRole('button', { name: '21' })).toBeDisabled();
+    unmount();
+
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature()} />
+      </AppProviders>,
+    );
+    await act(async () => {
+      screen.getByRole('button', { name: 'Pick a date' }).click();
+    });
+    // No horizon stated anywhere: an invented ceiling would be a guess.
+    expect(screen.getByRole('button', { name: '21' })).not.toBeDisabled();
+  });
 });
 
 describe('paging weeks', () => {
@@ -592,6 +682,9 @@ describe('watches', () => {
       end_date: '2026-08-12',
       trigger_kinds: ['slack_notify'],
     });
+    // No cadence: the grid used to pin every watch at 60s, which overrode the
+    // POI's own override and the global default the resolver would have chosen.
+    expect(body).not.toHaveProperty('cadence_sec');
   });
 
   test('an anonymous visitor is asked to sign in, with no error banner', async () => {
@@ -624,7 +717,7 @@ describe('watches', () => {
       json(
         availabilityBody(
           [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
-          { trigger_kinds: [], booking_actions: [] },
+          { trigger_kinds: [], booking_actions: [], add_to_cart: { state: 'unsupported' } },
         ),
       );
     await mount();
@@ -670,6 +763,7 @@ describe('watches', () => {
         availabilityBody([stream(1, ['available', 'reserved'])], {
           trigger_kinds: ['email_notify'],
           booking_actions: [],
+          add_to_cart: { state: 'unsupported' },
         }),
       );
     await mount();
@@ -714,6 +808,7 @@ describe('watches', () => {
         availabilityBody([stream(1, ['available', 'reserved'])], {
           trigger_kinds: [],
           booking_actions: [],
+          add_to_cart: { state: 'unsupported' },
         }),
       );
     await mount();
@@ -904,7 +999,11 @@ describe('the catalog', () => {
 });
 
 /** The capability block a user who can actually hold a site gets back. */
-const ATC_CAPABILITIES = { trigger_kinds: ['slack_notify', 'atc'], booking_actions: ['add_to_cart'] };
+const ATC_CAPABILITIES = {
+  trigger_kinds: ['slack_notify', 'atc'],
+  booking_actions: ['add_to_cart'],
+  add_to_cart: { state: 'ready' },
+};
 
 describe('holding a site straight from the grid', () => {
   const armFirstCell = async () => {

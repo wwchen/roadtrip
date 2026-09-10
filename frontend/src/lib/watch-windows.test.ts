@@ -1,17 +1,22 @@
 import { describe, expect, test } from 'vitest';
 import type { Watch } from '@/api/watches-api';
+import type { AddToCartState } from '@/api/availability-api';
 import {
   NO_WATCH_CAPABILITIES,
   indexWatchesByWindow,
   normalizeWatchCapabilities,
   stayEndDate,
-  cartGate,
-  scopeSupportsAddToCart,
-  supportsAddToCart,
   supportsWatchAlerts,
   watchWindowKey,
   watchedDates,
 } from './watch-windows';
+
+/** The wire block, as the availability response and the watch envelope send it. */
+const wire = (triggerKinds: string[], addToCart: AddToCartState = 'unsupported') => ({
+  trigger_kinds: triggerKinds,
+  booking_actions: addToCart === 'unsupported' ? [] : ['add_to_cart'],
+  add_to_cart: { state: addToCart },
+});
 
 const watch = (overrides: Partial<Watch> = {}): Watch =>
   ({
@@ -31,60 +36,46 @@ const watch = (overrides: Partial<Watch> = {}): Watch =>
   }) as Watch;
 
 describe('capabilities', () => {
-  test('reads the wire arrays into sets', () => {
-    const caps = normalizeWatchCapabilities({
-      trigger_kinds: ['slack_notify', 'atc'],
-      booking_actions: ['add_to_cart'],
-    });
+  test('reads the trigger array into a set and carries the cart state through', () => {
+    const caps = normalizeWatchCapabilities(wire(['slack_notify', 'atc'], 'ready'));
 
     expect([...caps.triggerKinds]).toEqual(['slack_notify', 'atc']);
-    expect(caps.bookingActions.has('add_to_cart')).toBe(true);
+    expect(caps.addToCart).toBe('ready');
   });
 
   test('passes an already-normalised value through', () => {
     const caps = normalizeWatchCapabilities({
       triggerKinds: new Set(['email_notify']),
-      bookingActions: new Set(),
+      addToCart: 'signed_out',
     });
 
     expect(caps.triggerKinds.has('email_notify')).toBe(true);
+    expect(caps.addToCart).toBe('signed_out');
   });
 
   test('a missing block grants nothing', () => {
     expect(normalizeWatchCapabilities(null)).toEqual(NO_WATCH_CAPABILITIES);
     expect(normalizeWatchCapabilities({} as never).triggerKinds.size).toBe(0);
+    expect(normalizeWatchCapabilities({} as never).addToCart).toBe('unsupported');
   });
 
   test('either notify channel means alerts are supported', () => {
-    expect(supportsWatchAlerts(normalizeWatchCapabilities({ trigger_kinds: ['slack_notify'], booking_actions: [] }))).toBe(true);
-    expect(supportsWatchAlerts(normalizeWatchCapabilities({ trigger_kinds: ['email_notify'], booking_actions: [] }))).toBe(true);
+    expect(supportsWatchAlerts(normalizeWatchCapabilities(wire(['slack_notify'])))).toBe(true);
+    expect(supportsWatchAlerts(normalizeWatchCapabilities(wire(['email_notify'])))).toBe(true);
     expect(supportsWatchAlerts(NO_WATCH_CAPABILITIES)).toBe(false);
   });
 
-  test('add to cart needs both the action and the trigger', () => {
-    const both = normalizeWatchCapabilities({ trigger_kinds: ['atc'], booking_actions: ['add_to_cart'] });
-    const actionOnly = normalizeWatchCapabilities({ trigger_kinds: [], booking_actions: ['add_to_cart'] });
-    const triggerOnly = normalizeWatchCapabilities({ trigger_kinds: ['atc'], booking_actions: [] });
-
-    expect(supportsAddToCart(both)).toBe(true);
-    expect(supportsAddToCart(actionOnly)).toBe(false);
-    expect(supportsAddToCart(triggerOnly)).toBe(false);
-  });
-
-  test('scope support is the cart alone, so "no credentials" stays distinguishable', () => {
-    const both = normalizeWatchCapabilities({ trigger_kinds: ['atc'], booking_actions: ['add_to_cart'] });
-    const actionOnly = normalizeWatchCapabilities({ trigger_kinds: [], booking_actions: ['add_to_cart'] });
-    const noCart = normalizeWatchCapabilities({ trigger_kinds: ['slack_notify'], booking_actions: [] });
-
-    expect(scopeSupportsAddToCart(both)).toBe(true);
-    // The state the per-user gating creates: this campground has a cart, but
-    // this caller cannot drive it.
-    expect(scopeSupportsAddToCart(actionOnly)).toBe(true);
-    expect(scopeSupportsAddToCart(noCart)).toBe(false);
+  test('the cart state is the backend"s, never re-derived from the two arrays', () => {
+    // Same `booking_actions`, four different answers — which is the point of the
+    // field: the gap between "this scope has a cart" and "you can drive it" is
+    // named upstream rather than inferred from a missing `atc` trigger.
+    for (const state of ['ready', 'no_credentials', 'signed_out', 'unsupported'] as const) {
+      expect(normalizeWatchCapabilities(wire(['slack_notify'], state)).addToCart).toBe(state);
+    }
   });
 
   test('a cart-only provider still supports no alerts', () => {
-    expect(supportsWatchAlerts(normalizeWatchCapabilities({ trigger_kinds: ['atc'], booking_actions: ['add_to_cart'] }))).toBe(false);
+    expect(supportsWatchAlerts(normalizeWatchCapabilities(wire(['atc'], 'ready')))).toBe(false);
   });
 });
 
@@ -147,28 +138,5 @@ describe('indexing the user"s watches', () => {
     );
 
     expect([...watchedDates(index)].sort()).toEqual(['2026-08-11', '2026-08-14']);
-  });
-});
-
-describe('cartGate', () => {
-  const caps = (bookingActions: string[], triggerKinds: string[]) => ({
-    bookingActions: new Set(bookingActions),
-    triggerKinds: new Set(triggerKinds),
-  });
-
-  test('is unsupported when the scope has no cart', () => {
-    expect(cartGate(caps([], ['slack_notify']), true)).toBe('unsupported');
-  });
-
-  test('is ready when the scope has a cart and the caller may drive it', () => {
-    expect(cartGate(caps(['add_to_cart'], ['atc']), true)).toBe('ready');
-  });
-
-  test('is signed-out when the scope has a cart and nobody is signed in', () => {
-    expect(cartGate(caps(['add_to_cart'], []), false)).toBe('signed-out');
-  });
-
-  test('is no-credentials when signed in without the atc trigger', () => {
-    expect(cartGate(caps(['add_to_cart'], ['slack_notify']), true)).toBe('no-credentials');
   });
 });

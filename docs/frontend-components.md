@@ -84,11 +84,10 @@ Hiding it is indistinguishable from the campground not having the feature, and t
 two states need different sentences. So a gated control keeps its shape and its
 action becomes the one step that unlocks it.
 
-- `cartGate` in `@/lib/watch-windows` turns the week response's capability block
-  plus "is anyone signed in" into `ready | signed-out | no-credentials |
-  unsupported`. It needs no extra request: the scope's `add_to_cart` booking
-  action and this caller's `atc` trigger kind are separate facts already on the
-  wire, and the gap between them *is* "you have no rec.gov credentials".
+- `watch_capabilities.add_to_cart.state` on the week response is the cart gate:
+  `ready | no_credentials | signed_out | unsupported`, decided backend-side. The
+  browser renders the matching copy branch and never subtracts `booking_actions`
+  from `trigger_kinds` to guess which of the four applies.
 - `SiteMatrix`'s `watchGate` is the same idea for watches: `ready | signed-out |
   blocked`. A watchable cell is a button in the first two, and the popover it
   opens carries `WatchSignInGate` instead of `WatchEditor`.

@@ -13,10 +13,10 @@ import {
   type TriggerPayload,
   type TriggerState,
 } from '@/lib/watch-triggers';
-import { scopeSupportsAddToCart, type WatchCapabilities } from '@/lib/watch-windows';
+import type { AddToCartState } from '@/api/availability-api';
+import { type WatchCapabilities } from '@/lib/watch-windows';
 import { gateCopy, watchCopy } from '@/lib/strings';
 import { WatchPanelHead } from './WatchPanelHead';
-import { useMe } from '@/queries/auth';
 import './watch-editor.css';
 
 export interface WatchEditorProps {
@@ -86,9 +86,10 @@ export function WatchEditor({
   const canAtc = capabilities.triggerKinds.has(TRIGGER_KIND_ATC);
   // The scope has a cart but this caller cannot drive it — the state per-user
   // credentials create. Shown disabled rather than hidden, because "you could
-  // have this" is worth more here than a silently missing row.
-  const cartWithoutCredentials = !canAtc && scopeSupportsAddToCart(capabilities);
-  const signedIn = Boolean(useMe().data?.user);
+  // have this" is worth more here than a silently missing row. The backend names
+  // which of the two reasons applies; nothing here subtracts one list from another.
+  const cartWithoutCredentials =
+    capabilities.addToCart === 'no_credentials' || capabilities.addToCart === 'signed_out';
 
   return (
     <div className="rt-watch-editor" role="group" aria-label="Availability watch editor">
@@ -121,7 +122,7 @@ export function WatchEditor({
           <ToggleRow
             name="atc"
             title={watchCopy.addToCart}
-            help={atcHelp(canAtc, cartWithoutCredentials, signedIn, onSignIn, onOpenSettings)}
+            help={atcHelp(canAtc, capabilities.addToCart, onSignIn, onOpenSettings)}
             checked={state.addToCart}
             // A watch that already has ATC set stays switchable so it can be
             // turned OFF even where the provider no longer supports it. The
@@ -182,14 +183,13 @@ export function WatchEditor({
  */
 function atcHelp(
   canAtc: boolean,
-  cartWithoutCredentials: boolean,
-  signedIn: boolean,
+  addToCart: AddToCartState,
   onSignIn?: () => void,
   onOpenSettings?: () => void,
 ): ReactNode {
   if (canAtc) return watchCopy.addToCartHelp;
-  if (!cartWithoutCredentials) return watchCopy.addToCartUnavailable;
-  if (signedIn) {
+  if (addToCart === 'unsupported' || addToCart === 'ready') return watchCopy.addToCartUnavailable;
+  if (addToCart === 'no_credentials') {
     return onOpenSettings ? (
       <>
         <LinkButton onClick={onOpenSettings}>{gateCopy.editorNoCredentialsLink}</LinkButton>

@@ -27,12 +27,7 @@ import {
   type WatchListFilters,
 } from '@/domain/watch/queries';
 import type { TriggerPayload } from '@/lib/watch-triggers';
-import {
-  DEFAULT_WATCH_CADENCE_SEC,
-  indexWatchesByWindow,
-  stayEndDate,
-  watchWindowKey,
-} from '@/lib/watch-windows';
+import { indexWatchesByWindow, stayEndDate, watchWindowKey } from '@/lib/watch-windows';
 
 /** Only active watches mark cells; a `done` one is history. */
 const WATCH_LIST_STATUS = 'active';
@@ -195,12 +190,13 @@ export function useWatchMutations(poiId: string | number | null | undefined): Wa
           await updateWatch(existing.id, payload);
           return;
         }
+        // No `cadence_sec`: the backend resolver falls through to the POI
+        // override and then the global default, which a fixed 60 here overrode.
         await createWatch({
           poi_id: Number(poiId),
           campsite_filters: {},
           start_date: date,
           end_date: stayEndDate(date),
-          cadence_sec: DEFAULT_WATCH_CADENCE_SEC,
           ...payload,
         });
       }),
