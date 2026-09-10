@@ -177,9 +177,9 @@ function Row({
           <div className="cg-sites-row-details">{details.join(' · ')}</div>
         ) : null}
       </div>
-      {row.kind || bookable ? (
+      {row.kind_label || bookable ? (
         <div className="cg-sites-row-side">
-          {row.kind ? <span className="cg-sites-row-type">{row.kind}</span> : null}
+          {row.kind_label ? <span className="cg-sites-row-type">{row.kind_label}</span> : null}
           {bookable ? <span className="cg-sites-row-book">Book</span> : null}
         </div>
       ) : null}

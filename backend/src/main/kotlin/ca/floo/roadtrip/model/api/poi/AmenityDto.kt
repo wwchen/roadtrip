@@ -1,0 +1,58 @@
+package ca.floo.roadtrip.model.api.poi
+
+import ca.floo.roadtrip.model.domain.AmenityKey
+import ca.floo.roadtrip.model.domain.CampgroundAmenity
+import kotlinx.serialization.Serializable
+
+/**
+ * One campground amenity as the API serves it. The label is resolved here so
+ * the amenity vocabulary lives in one place and the frontend renders `label`
+ * verbatim — an absent amenity already reads "No showers" on the wire.
+ */
+@Serializable
+data class AmenityDto(
+    val key: String,
+    val label: String,
+    val present: Boolean,
+    val detail: String? = null,
+) {
+    companion object {
+        private const val TOILETS_LABEL_FORMAT = "%s toilets"
+        private const val DETAILED_LABEL_FORMAT = "%s: %s"
+
+        /**
+         * The served list. An absent amenity whose key has no negative label
+         * carries no fact — "No camp store" is not something a vendor states —
+         * so it is dropped rather than rendered as a chip.
+         */
+        fun fromAll(amenities: List<CampgroundAmenity>): List<AmenityDto> =
+            amenities
+                .filterNot { !it.present && it.key.negativeLabel == null }
+                .map(::from)
+
+        fun from(amenity: CampgroundAmenity): AmenityDto {
+            val detail = amenity.detail?.trim()?.takeIf { it.isNotEmpty() }
+            return AmenityDto(
+                key = amenity.key.wire,
+                label = label(amenity.key, amenity.present, detail),
+                present = amenity.present,
+                detail = detail,
+            )
+        }
+
+        private fun label(
+            key: AmenityKey,
+            present: Boolean,
+            detail: String?,
+        ): String =
+            when {
+                key == AmenityKey.OTHER -> detail ?: key.label
+                !present && key.negativeLabel != null -> key.negativeLabel
+                key == AmenityKey.TOILETS && detail != null -> TOILETS_LABEL_FORMAT.format(detail.capitalizeFirst())
+                detail != null -> DETAILED_LABEL_FORMAT.format(key.label, detail)
+                else -> key.label
+            }
+
+        private fun String.capitalizeFirst(): String = replaceFirstChar { it.uppercaseChar() }
+    }
+}

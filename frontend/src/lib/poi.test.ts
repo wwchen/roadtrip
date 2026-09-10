@@ -17,12 +17,12 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
         phone: '530.336.5521',
         email: 'lavo_info@nps.gov',
         elevation: 1798,
-        cell_coverage: 'weak',
+        cell_coverage: [{ carrier: 'verizon', label: 'Verizon', average: 3.5, count: 12 }],
         reserve_url: 'https://example.test/reserve',
         status: 'Open',
         status_description: 'Open seasonally',
-        price: { minimum: 26, maximum: 36, currency_code: 'USD' },
-        schedule: 'May-Oct',
+        price: { minimum: 26, maximum: 36, currency: 'USD' },
+        schedule: { check_in: '14:00', check_out: '11:00' },
         last_verified: '2026-06-01',
         // The vendor record verbatim. Inert for a campground — the facts above
         // are what the drawer actually reads, named, from the backend now.
@@ -72,7 +72,10 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
         power_kilowatt: 250,
         status: 'CONSTRUCTION',
         time_zone: 'America/Los_Angeles',
-        amenities: ['AMENITIES_WIFI'],
+        // A charger's vendor amenity strings ride their own field; `amenities` is
+        // the typed campground vocabulary, and a charger never populates it.
+        amenities: [],
+        charger_amenities: ['AMENITIES_WIFI'],
         twenty_four_seven: true,
         open_to_non_teslas: false,
         pricebooks: [],
@@ -169,13 +172,15 @@ describe('a campground, whose facts all arrive named', () => {
     expect(p.phone).toBe('530.336.5521');
     expect(p.email).toBe('lavo_info@nps.gov');
     expect(p.elevation).toBe(1798);
-    expect(p.cell_coverage).toBe('weak');
+    expect(p.cell_coverage).toEqual([
+      { carrier: 'verizon', label: 'Verizon', average: 3.5, count: 12 },
+    ]);
     expect(p.reserve_url).toBe('https://example.test/reserve');
     expect(p.last_verified).toBe('2026-06-01');
   });
 
   test('carries the schedule through under its own name', () => {
-    expect(flatten('campgroundNested').schedule).toBe('May-Oct');
+    expect(flatten('campgroundNested').schedule).toEqual({ check_in: '14:00', check_out: '11:00' });
   });
 
   test('takes the upstream table from the backend, whatever the vendor shipped', () => {
@@ -215,7 +220,8 @@ describe('a charger, whose facts all arrive named', () => {
       power_kilowatt: 250,
       status: 'CONSTRUCTION',
       time_zone: 'America/Los_Angeles',
-      amenities: ['AMENITIES_WIFI'],
+      amenities: [],
+      charger_amenities: ['AMENITIES_WIFI'],
       twenty_four_seven: true,
       open_to_non_teslas: false,
     });

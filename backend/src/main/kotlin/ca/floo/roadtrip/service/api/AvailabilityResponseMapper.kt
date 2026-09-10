@@ -185,6 +185,7 @@ fun availabilityResponseDto(
 
 fun availabilityErrorDto(
     error: String,
+    detail: String? = null,
     upstreamStatus: Int? = null,
     earliestDate: String? = null,
     timeZone: String? = null,
@@ -193,6 +194,7 @@ fun availabilityErrorDto(
 ): AvailabilityErrorDto =
     AvailabilityErrorDto(
         error = error,
+        detail = detail,
         upstreamStatus = upstreamStatus,
         earliestDate = earliestDate,
         timeZone = timeZone,

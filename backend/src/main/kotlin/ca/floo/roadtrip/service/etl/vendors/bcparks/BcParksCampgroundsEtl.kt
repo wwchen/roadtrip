@@ -143,6 +143,7 @@ class BcParksCampgroundsEtl(
             bookingProvider = BookingProvider.ASPIRA,
             bookingProviderRef = bookingCtaRef?.let { campgroundBookingRef(leaf, it) },
             name = leaf.name,
+            parentName = leaf.parentName,
             latitude = strapiRow.lat,
             longitude = strapiRow.lon,
             kind = subcategory,
@@ -153,7 +154,6 @@ class BcParksCampgroundsEtl(
             photos = listOfNotNull(strapiRow.photoUrl?.let(::CatalogPhoto)),
             management = CampgroundManagement(agency),
             contact = strapiRow.phone?.let { CampgroundContact(phone = it) },
-            metadata = metadataPayload(leaf, host, match.kind, strapiRow),
             sourceUrl = bookingUrl,
             sourcePayload = sourcePayload(leaf, match.kind, strapiRow),
         )
@@ -172,22 +172,6 @@ class BcParksCampgroundsEtl(
                 mapId = bookingCtaRef.mapId,
                 resourceLocationId = bookingCtaRef.resourceLocationId,
             ).serialize()
-
-    private fun metadataPayload(
-        leaf: AspiraLeaf,
-        host: String,
-        matchKind: AspiraLeafMatchKind,
-        strapiRow: BcParksStrapiRow,
-    ): JsonObject =
-        buildJsonObject {
-            put("host", host)
-            put("transaction_location_id", leaf.transactionLocationId)
-            put("map_id", leaf.mapId)
-            leaf.resourceLocationId?.let { put("resource_location_id", it) }
-            leaf.parentName?.let { put("parent_name", it) }
-            put("match_kind", matchKind.label)
-            strapiRow.orcs?.let { put("strapi_orcs", it) }
-        }
 
     private fun sourcePayload(
         leaf: AspiraLeaf,

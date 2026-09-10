@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.model.api.MAGIC_LINK_TOKEN_PARAM
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
+import ca.floo.roadtrip.route.common.BAD_REQUEST_ERROR
 import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.boundedIntQuery
@@ -17,6 +18,7 @@ import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.siteTypeFilterError
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchControllerResult
 import ca.floo.roadtrip.service.availability.WatchStatus
@@ -75,6 +77,9 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                             return@post call.respondApiError("invalid_body", HttpStatusCode.BadRequest, body.detail)
                         is RouteBodyResult.Valid -> body.value
                     }
+                siteTypeFilterError(req.campsiteFilters)?.let {
+                    return@post call.respondApiError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest, it)
+                }
                 call.respondResult(watches.create(user, req), successStatus = HttpStatusCode.Created)
             }.describeApi("watches", "Create a watch")
                 .access(RouteAccess.User)
@@ -98,6 +103,9 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                                 return@post call.respondApiError("invalid_body", HttpStatusCode.BadRequest, body.detail)
                             is RouteBodyResult.Valid -> body.value
                         }
+                    req.campsiteFilters?.let(::siteTypeFilterError)?.let {
+                        return@post call.respondApiError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest, it)
+                    }
                     call.respondResult(watches.update(call.principal(), id, req, call.magicLinkToken()))
                 }.describeApi("watches", "Modify a watch")
                     .access(RouteAccess.UserOrCapability)

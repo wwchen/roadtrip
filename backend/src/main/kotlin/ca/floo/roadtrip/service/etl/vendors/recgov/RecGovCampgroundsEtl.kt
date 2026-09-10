@@ -5,10 +5,12 @@ import ca.floo.roadtrip.model.domain.CampgroundContact
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
+import ca.floo.roadtrip.model.domain.CampgroundMetadata
+import ca.floo.roadtrip.model.domain.CampgroundRating
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.Carrier
+import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.CatalogPhoto
-import ca.floo.roadtrip.model.domain.CellSignal
-import ca.floo.roadtrip.model.domain.RatingSummary
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.Envelope
@@ -24,15 +26,11 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import kotlin.math.round
 
 // RIDB facilities feed → canonical campgrounds.
@@ -143,16 +141,14 @@ class RecGovCampgroundsEtl(
         val region = firstAddr?.AddressStateCode?.takeIf { it.isNotBlank() }
         val country = normalizeCountry(firstAddr?.AddressCountryCode) ?: DEFAULT_COUNTRY
         val infoUrl = facilityInfoUrl(row, rawObj, reservable)
-        val activities = activities(rawObj)
         val photoUrl = photoUrl(rawObj)
-        val rating = ratingSummary(enrichment)
-        val cell = cellCoverage(enrichment)
 
         return CampgroundUpsertCandidate(
             dataProviderRef = DataProviderRef.RecGov(id = row.FacilityID.toString()),
             bookingProvider = if (reservable) BookingProvider.RECGOV else null,
             bookingProviderRef = if (reservable) row.FacilityID.toString() else null,
             name = name,
+            parentName = parentRecAreaName(rawObj),
             latitude = lat,
             longitude = lon,
             kind = bucket,
@@ -161,10 +157,10 @@ class RecGovCampgroundsEtl(
             reservationUrl = infoUrl,
             links = listOfNotNull(infoUrl?.let(::CampgroundLink)),
             photos = listOfNotNull(photoUrl?.let(::CatalogPhoto)),
-            cellService = cell?.let(::cellCoveragePayload),
+            cellService = cellCoverage(enrichment),
             management = agency?.let { CampgroundManagement(it) },
             contact = row.FacilityPhone?.takeIf { it.isNotBlank() }?.let { CampgroundContact(phone = it) },
-            metadata = metadataPayload(activities, rating),
+            metadata = metadata(rawObj, enrichment),
             sourceUrl = infoUrl,
             sourcePayload = raw,
         )
@@ -183,45 +179,13 @@ class RecGovCampgroundsEtl(
         return parsed.takeIf { it != Address() }
     }
 
-    private fun metadataPayload(
-        activities: List<String>,
-        rating: RatingSummary?,
-    ): JsonObject? {
-        val payload =
-            buildJsonObject {
-                if (activities.isNotEmpty()) {
-                    put(
-                        "activities",
-                        buildJsonArray {
-                            activities.forEach { add(it) }
-                        },
-                    )
-                }
-                rating?.let {
-                    put(
-                        "rating_reviews",
-                        buildJsonObject {
-                            put("avg", it.avg)
-                            put("count", it.count)
-                        },
-                    )
-                }
-            }
-        return payload.takeIf { it.isNotEmpty() }
+    private fun metadata(
+        raw: JsonObject?,
+        enrichment: JsonObject?,
+    ): CampgroundMetadata? {
+        val parsed = CampgroundMetadata(activities = activities(raw), rating = rating(enrichment))
+        return parsed.takeIf { it != CampgroundMetadata() }
     }
-
-    private fun cellCoveragePayload(cellCoverage: Map<String, CellSignal>): JsonObject =
-        buildJsonObject {
-            for ((carrier, signal) in cellCoverage) {
-                put(
-                    carrier,
-                    buildJsonObject {
-                        put("avg", signal.avg)
-                        put("count", signal.count)
-                    },
-                )
-            }
-        }
 
     private fun agencyFrom(
         raw: JsonObject?,
@@ -239,7 +203,7 @@ class RecGovCampgroundsEtl(
             val payload = env.payload as? JsonObject ?: continue
             val id =
                 payload["facility_id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
-                    ?: (payload["aggregate"] as? JsonObject)
+                    ?: (payload[AGGREGATE_KEY] as? JsonObject)
                         ?.get("location_id")
                         ?.jsonPrimitive
                         ?.contentOrNull
@@ -251,11 +215,11 @@ class RecGovCampgroundsEtl(
     }
 
     private fun activities(raw: JsonObject?): List<String> {
-        val rows = raw?.get("ACTIVITY")?.jsonArray ?: return emptyList()
+        val rows = raw?.get(ACTIVITY_KEY)?.jsonArray ?: return emptyList()
         return rows
             .mapNotNull { entry ->
                 val name =
-                    entry.jsonObject["ActivityName"]
+                    entry.jsonObject[ACTIVITY_NAME_KEY]
                         ?.jsonPrimitive
                         ?.contentOrNull
                         ?.takeIf { it.isNotBlank() }
@@ -301,30 +265,40 @@ class RecGovCampgroundsEtl(
         return primitive.booleanOrNull == true || primitive.contentOrNull.equals("true", ignoreCase = true)
     }
 
-    private fun ratingSummary(enrichment: JsonObject?): RatingSummary? {
+    private fun rating(enrichment: JsonObject?): CampgroundRating? {
         val agg = aggregate(enrichment) ?: return null
-        val count = agg.int("number_of_ratings")
-        val avg = agg.float("average_rating")
+        val count = agg.int(RATING_COUNT_KEY)
+        val avg = agg.double(RATING_AVERAGE_KEY)
         if (count == null || count <= 0 || avg == null) return null
-        return RatingSummary(avg = round2(avg), count = count)
+        return CampgroundRating(average = round2(avg), count = count)
     }
 
-    private fun cellCoverage(enrichment: JsonObject?): Map<String, CellSignal>? {
-        val agg = aggregate(enrichment) ?: return null
-        val rows = agg["aggregate_cell_coverage_ratings"]?.jsonArray ?: return null
-        val out = linkedMapOf<String, CellSignal>()
-        for (entry in rows) {
-            val obj = runCatching { entry.jsonObject }.getOrNull() ?: continue
-            val carrier = carrierSlug[obj["carrier"]?.jsonPrimitive?.contentOrNull] ?: continue
-            val count = obj.int("number_of_ratings")
-            val avg = obj.float("average_rating")
-            if (count == null || count <= 0 || avg == null) continue
-            out[carrier] = CellSignal(avg = round2(avg), count = count)
+    /** A carrier nobody rated, or one outside the vocabulary, is dropped rather than stored at zero. */
+    private fun cellCoverage(enrichment: JsonObject?): List<CarrierSignal> {
+        val agg = aggregate(enrichment) ?: return emptyList()
+        val rows = agg[CELL_COVERAGE_KEY]?.jsonArray ?: return emptyList()
+        return rows.mapNotNull { entry ->
+            val obj = runCatching { entry.jsonObject }.getOrNull() ?: return@mapNotNull null
+            val carrier = obj[CARRIER_KEY]?.jsonPrimitive?.contentOrNull?.let(Carrier::fromVendorName) ?: return@mapNotNull null
+            val count = obj.int(RATING_COUNT_KEY) ?: return@mapNotNull null
+            val avg = obj.double(RATING_AVERAGE_KEY) ?: return@mapNotNull null
+            if (count <= 0) return@mapNotNull null
+            CarrierSignal(carrier = carrier, average = round2(avg), count = count)
         }
-        return out.takeIf { it.isNotEmpty() }
     }
 
-    private fun aggregate(enrichment: JsonObject?): JsonObject? = (enrichment?.get("aggregate") as? JsonObject) ?: enrichment
+    /** RIDB lists the containing rec areas; the first is the immediate parent park. */
+    private fun parentRecAreaName(raw: JsonObject?): String? =
+        (raw?.get(RECAREA_KEY) as? JsonArray)
+            ?.firstOrNull()
+            ?.let { it as? JsonObject }
+            ?.get(RECAREA_NAME_KEY)
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+    private fun aggregate(enrichment: JsonObject?): JsonObject? = (enrichment?.get(AGGREGATE_KEY) as? JsonObject) ?: enrichment
 
     private fun JsonObject.int(key: String): Int? =
         get(key)
@@ -332,13 +306,13 @@ class RecGovCampgroundsEtl(
             ?.contentOrNull
             ?.toIntOrNull()
 
-    private fun JsonObject.float(key: String): Float? =
+    private fun JsonObject.double(key: String): Double? =
         get(key)
             ?.jsonPrimitive
             ?.contentOrNull
-            ?.toFloatOrNull()
+            ?.toDoubleOrNull()
 
-    private fun round2(value: Float): Float = (round(value * 100f) / 100f)
+    private fun round2(value: Double): Double = round(value * RATING_ROUNDING_SCALE) / RATING_ROUNDING_SCALE
 
     private fun facilityInfoUrl(
         row: Facility,
@@ -397,13 +371,16 @@ class RecGovCampgroundsEtl(
         private const val RIDB_INPUT = "recgov-campgrounds-raw"
         private const val ENRICHMENT_INPUT = "recgov-campground-enrichment"
         private const val DEFAULT_COUNTRY = "US"
-        private val carrierSlug =
-            mapOf(
-                "Verizon" to "verizon",
-                "AT&T" to "att",
-                "T-Mobile" to "tmobile",
-                "Sprint" to "sprint",
-            )
+        private const val RECAREA_KEY = "RECAREA"
+        private const val RECAREA_NAME_KEY = "RecAreaName"
+        private const val ACTIVITY_KEY = "ACTIVITY"
+        private const val ACTIVITY_NAME_KEY = "ActivityName"
+        private const val AGGREGATE_KEY = "aggregate"
+        private const val CELL_COVERAGE_KEY = "aggregate_cell_coverage_ratings"
+        private const val CARRIER_KEY = "carrier"
+        private const val RATING_COUNT_KEY = "number_of_ratings"
+        private const val RATING_AVERAGE_KEY = "average_rating"
+        private const val RATING_ROUNDING_SCALE = 100.0
     }
 }
 

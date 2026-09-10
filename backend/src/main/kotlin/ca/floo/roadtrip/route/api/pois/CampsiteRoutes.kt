@@ -4,14 +4,19 @@ import ca.floo.roadtrip.model.api.AvailabilityErrorDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.domain.auth.userIdOrNull
+import ca.floo.roadtrip.route.common.BAD_REQUEST_ERROR
+import ca.floo.roadtrip.route.common.SiteTypeQuery
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalDateQuery
+import ca.floo.roadtrip.route.common.parseSiteTypes
 import ca.floo.roadtrip.route.common.principal
 import ca.floo.roadtrip.route.common.queryValues
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.siteTypeWireList
+import ca.floo.roadtrip.route.common.unknownSiteTypeDetail
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
@@ -31,6 +36,8 @@ private val log = LoggerFactory.getLogger("CampsiteRoutes")
 
 private const val IP_RATE_LIMIT_PER_MINUTE = 30
 
+private fun ApplicationCall.siteTypeQuery(): SiteTypeQuery = parseSiteTypes(queryValues("site_type", "siteType"))
+
 internal fun Route.campsiteRoutes(
     controller: CampsiteAvailabilityController,
     rateLimit: IpRateLimiter = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE),
@@ -43,12 +50,19 @@ internal fun Route.campsiteRoutes(
                         val poiId =
                             call.longPath("id")
                                 ?: return@get call.respondApiError("bad_id", HttpStatusCode.BadRequest)
+                        val siteTypes =
+                            when (val parsed = call.siteTypeQuery()) {
+                                is SiteTypeQuery.Unknown ->
+                                    return@get call.respondApiError(
+                                        BAD_REQUEST_ERROR,
+                                        HttpStatusCode.BadRequest,
+                                        detail = unknownSiteTypeDetail(parsed.value),
+                                    )
+                                is SiteTypeQuery.Parsed -> parsed.kinds
+                            }
                         try {
                             call.respondEncodedJson(
-                                controller.campsitesForPoi(
-                                    poiId = poiId,
-                                    siteTypes = call.queryValues("site_type", "siteType"),
-                                ),
+                                controller.campsitesForPoi(poiId = poiId, siteTypes = siteTypes),
                             )
                         } catch (e: AvailabilityServiceError.NotFound) {
                             call.respondApiError(e.error, HttpStatusCode.NotFound)
@@ -58,7 +72,7 @@ internal fun Route.campsiteRoutes(
                         summary = "Campsites linked to a campground POI",
                         description =
                             "Lists active campsite rows linked to a campground POI. " +
-                                "`site_type` optionally filters exact campsite kinds.",
+                                "`site_type` optionally filters campsite kinds; accepted values: $siteTypeWireList.",
                     ).access(RouteAccess.Anonymous)
 
                     get("/availability") {
@@ -70,6 +84,19 @@ internal fun Route.campsiteRoutes(
                             call.respondAvailabilityError("ip_throttled", HttpStatusCode.ServiceUnavailable)
                             return@get
                         }
+
+                        val siteTypes =
+                            when (val parsed = call.siteTypeQuery()) {
+                                is SiteTypeQuery.Unknown -> {
+                                    call.respondAvailabilityError(
+                                        BAD_REQUEST_ERROR,
+                                        HttpStatusCode.BadRequest,
+                                        detail = unknownSiteTypeDetail(parsed.value),
+                                    )
+                                    return@get
+                                }
+                                is SiteTypeQuery.Parsed -> parsed.kinds
+                            }
 
                         val startDate =
                             try {
@@ -90,7 +117,7 @@ internal fun Route.campsiteRoutes(
                             call.respondEncodedJson(
                                 controller.availabilityForPoi(
                                     poiId = poiId,
-                                    siteTypes = call.queryValues("site_type", "siteType"),
+                                    siteTypes = siteTypes,
                                     startDate = startDate,
                                     endDate = endDate,
                                     requester = call.principal().userIdOrNull(),
@@ -116,7 +143,7 @@ internal fun Route.campsiteRoutes(
                         description =
                             "Path key is `pois.id`. Returns one availability envelope per " +
                                 "campsite linked to this POI. The frontend fuses the per-campsite streams " +
-                                "into the campground week grid.",
+                                "into the campground week grid. `site_type` accepts: $siteTypeWireList.",
                     ).access(RouteAccess.Anonymous)
                 }
             }
@@ -168,8 +195,9 @@ private const val MAX_CAUSE_DEPTH = 8
 private suspend fun ApplicationCall.respondAvailabilityError(
     error: String,
     status: HttpStatusCode,
+    detail: String? = null,
 ) {
-    respondEncodedJson(availabilityErrorDto(error), status)
+    respondEncodedJson(availabilityErrorDto(error, detail = detail), status)
 }
 
 private suspend fun ApplicationCall.respondServiceAvailabilityError(e: AvailabilityServiceError) {

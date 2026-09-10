@@ -1,8 +1,12 @@
 package ca.floo.roadtrip.service.poi
 
 import ca.floo.roadtrip.model.api.BookingRefDto
+import ca.floo.roadtrip.model.api.poi.CarrierSignalDto
 import ca.floo.roadtrip.model.api.poi.PoiCategoryDetailSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
+import ca.floo.roadtrip.model.api.poi.PriceDto
+import ca.floo.roadtrip.model.api.poi.RatingDto
+import ca.floo.roadtrip.model.api.poi.ScheduleDto
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
@@ -312,7 +316,7 @@ class PoiServiceTest : SharedDbTest() {
         ctx.execute(
             """
             UPDATE campgrounds
-            SET status = ?, status_description = ?, kind = ?,
+            SET status = ?, status_description = ?, kind = ?, parent_name = ?,
                 price = ?::jsonb, default_campsite_schedule = ?::jsonb, amenities = ?::jsonb,
                 cell_service = ?::jsonb, max_rv_length = ?, max_trailer_length = ?,
                 has_pull_through_sites = ?, big_rig_friendly = ?,
@@ -323,18 +327,19 @@ class PoiServiceTest : SharedDbTest() {
             "Open",
             "Open seasonally",
             "federal",
-            """{"minimum":26,"maximum":36}""",
-            """{"check_in_time":"14:00"}""",
-            """{"showers":true}""",
-            """{"level":"weak"}""",
+            "Lassen Volcanic National Park",
+            """{"minimum":26,"maximum":36,"currency":"USD"}""",
+            """{"check_in":"14:00","check_out":"11:00"}""",
+            """[{"key":"showers","present":true},{"key":"water","present":false}]""",
+            """[{"carrier":"verizon","average":1.5,"count":9}]""",
             32.0,
             28.0,
             true,
             false,
             """[{"url":"https://example.test"}]""",
-            """[{"message":"road closed"}]""",
+            """[{"body":"road closed"}]""",
             """{"power":"30/50 amp"}""",
-            """{"last_updated":"2026-06-01"}""",
+            """{"last_updated":"2026-06-01","activities":["Hiking"],"rating":{"average":4.3,"count":87}}""",
             """{"agency":"NPS"}""",
             """{"email":"a@b.test"}""",
             fixture.catalogId,
@@ -345,30 +350,17 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals("Open", detail.status)
         assertEquals("Open seasonally", detail.statusDescription)
         assertEquals("federal", detail.kind)
+        assertEquals("Lassen Volcanic National Park", detail.parentName)
+        assertEquals(PriceDto(minimum = 26.0, maximum = 36.0, currency = "USD"), detail.price)
+        assertEquals(ScheduleDto(checkIn = "14:00", checkOut = "11:00"), detail.schedule)
+        // The negative label is applied backend-side, so `water` reads "No water".
+        assertEquals(listOf("showers" to "Showers", "water" to "No water"), detail.amenities.map { it.key to it.label })
         assertEquals(
-            "26",
-            detail.price!!
-                .jsonObject["minimum"]!!
-                .jsonPrimitive.content,
+            CarrierSignalDto(carrier = "verizon", label = "Verizon", average = 1.5, count = 9),
+            detail.cellCoverage.single(),
         )
-        assertEquals(
-            "14:00",
-            detail.schedule!!
-                .jsonObject["check_in_time"]!!
-                .jsonPrimitive.content,
-        )
-        assertEquals(
-            "true",
-            detail.amenities!!
-                .jsonObject["showers"]!!
-                .jsonPrimitive.content,
-        )
-        assertEquals(
-            "weak",
-            detail.cellCoverage!!
-                .jsonObject["level"]!!
-                .jsonPrimitive.content,
-        )
+        assertEquals(listOf("Hiking"), detail.activities)
+        assertEquals(RatingDto(average = 4.3, count = 87), detail.rating)
         assertEquals(32.0, detail.maxRvLength)
         assertEquals(28.0, detail.maxTrailerLength)
         assertEquals(true, detail.hasPullThroughSites)
@@ -380,23 +372,11 @@ class PoiServiceTest : SharedDbTest() {
                 .jsonObject["url"]!!
                 .jsonPrimitive.content,
         )
-        assertEquals(
-            "road closed",
-            detail.alerts!!
-                .jsonArray[0]
-                .jsonObject["message"]!!
-                .jsonPrimitive.content,
-        )
+        assertEquals("road closed", detail.alerts.single().body)
         assertEquals(
             "30/50 amp",
             detail.connections!!
                 .jsonObject["power"]!!
-                .jsonPrimitive.content,
-        )
-        assertEquals(
-            "2026-06-01",
-            detail.metadata!!
-                .jsonObject["last_updated"]!!
                 .jsonPrimitive.content,
         )
         assertEquals(
@@ -410,6 +390,36 @@ class PoiServiceTest : SharedDbTest() {
             detail.contact!!
                 .jsonObject["email"]!!
                 .jsonPrimitive.content,
+        )
+    }
+
+    // Several vendors set the parent to the campground itself, which renders as
+    // "Cold Creek, in Cold Creek". A parent is only a parent when it differs.
+    @Test
+    fun `campground detail drops a parent name that is the campground's own`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "232870",
+                name = "Cold Creek",
+                lon = -120.31,
+                lat = 39.54,
+                source = "recgov",
+            )
+        ctx.execute("UPDATE campgrounds SET parent_name = ? WHERE id = ?", "  cold creek ", fixture.catalogId)
+
+        assertNull(
+            poiService()
+                .poiDetail(fixture.poiId)!!
+                .properties.detail.parentName,
+        )
+
+        ctx.execute("UPDATE campgrounds SET parent_name = ? WHERE id = ?", "Cold Creek Recreation Area", fixture.catalogId)
+
+        assertEquals(
+            "Cold Creek Recreation Area",
+            poiService()
+                .poiDetail(fixture.poiId)!!
+                .properties.detail.parentName,
         )
     }
 
@@ -511,12 +521,8 @@ class PoiServiceTest : SharedDbTest() {
 
         assertEquals("CONSTRUCTION", detail.status)
         assertEquals("America/Los_Angeles", detail.timeZone)
-        assertEquals(
-            "AMENITIES_WIFI",
-            detail.amenities!!
-                .jsonArray[0]
-                .jsonPrimitive.content,
-        )
+        assertEquals(emptyList(), detail.amenities)
+        assertEquals(listOf("AMENITIES_WIFI"), detail.chargerAmenities)
         assertEquals(12, detail.stallCount)
         assertEquals(250, detail.powerKilowatt)
         assertEquals(
@@ -551,6 +557,29 @@ class PoiServiceTest : SharedDbTest() {
                 .jsonObject["commonSiteName"]!!
                 .jsonPrimitive.content,
         )
+    }
+
+    // The amenities column is whatever the vendor sent, so a non-string element
+    // must be skipped rather than crash the whole detail read.
+    @Test
+    fun `charger amenities keep the strings and skip everything else`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "mixed-amenities",
+                name = "Mixed",
+                lon = -122.3917,
+                lat = 40.5865,
+                poiType = "tesla_supercharger",
+            )
+        ctx.execute(
+            "UPDATE tesla_superchargers SET amenities = ?::jsonb WHERE id = ?",
+            """["AMENITIES_WIFI",{"name":"restroom"},null]""",
+            fixture.catalogId,
+        )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals(listOf("AMENITIES_WIFI"), detail.chargerAmenities)
     }
 
     // `stall_count`/`max_power_kw` read via `Int::class.java` (a JVM primitive)

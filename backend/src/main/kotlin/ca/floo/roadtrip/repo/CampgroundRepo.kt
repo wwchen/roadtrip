@@ -1,8 +1,16 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.CampgroundAlert
+import ca.floo.roadtrip.model.domain.CampgroundAmenity
+import ca.floo.roadtrip.model.domain.CampgroundLink
+import ca.floo.roadtrip.model.domain.CampgroundMetadata
+import ca.floo.roadtrip.model.domain.CampgroundPrice
+import ca.floo.roadtrip.model.domain.CampgroundSchedule
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.CatalogColumnJson
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
 import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
@@ -18,13 +26,6 @@ class CampgroundRepo(
 ) {
     private val importRunRepo = ImportRunRepo(ctx)
     private val poiRepo = PoiRepo(ctx)
-
-    data class SearchFilters(
-        val vendors: List<String> = emptyList(),
-        val vendorIds: List<String> = emptyList(),
-        val names: List<String> = emptyList(),
-        val kinds: List<String> = emptyList(),
-    )
 
     fun upsertCampgrounds(
         records: List<CampgroundUpsertCandidate>,
@@ -104,38 +105,6 @@ class CampgroundRepo(
         )
     }
 
-    fun search(
-        filters: SearchFilters,
-        limit: Int,
-        offset: Int,
-    ): List<Campground> {
-        val clauses = mutableListOf("cg.deleted_at IS NULL")
-        val params = mutableListOf<Any?>()
-        addInClause(clauses, params, "cg.data_provider", filters.vendors)
-        addInClause(clauses, params, "cg.data_provider_ref", filters.vendorIds)
-        addInClause(clauses, params, "cg.kind", filters.kinds)
-        if (filters.names.isNotEmpty()) {
-            clauses +=
-                filters.names.joinToString(prefix = "(", postfix = ")", separator = " OR ") {
-                    "cg.name ILIKE ? ESCAPE '\\'"
-                }
-            params.addAll(filters.names.map { "%${escapeLikePattern(it)}%" })
-        }
-        params += limit.coerceIn(MIN_SEARCH_LIMIT, MAX_SEARCH_LIMIT)
-        params += offset.coerceAtLeast(0)
-
-        return ctx
-            .fetch(
-                """
-                $baseSelect
-                WHERE ${clauses.joinToString(" AND ")}
-                ORDER BY cg.name, cg.id
-                LIMIT ? OFFSET ?
-                """.trimIndent(),
-                *params.toTypedArray(),
-            ).map(::fromRecord)
-    }
-
     private fun fromRecord(record: Record): Campground {
         val dataProvider = DataProvider.fromId(record.get("data_provider", String::class.java))
         val dataProviderRefStr = record.get("data_provider_ref", String::class.java)
@@ -146,29 +115,31 @@ class CampgroundRepo(
         return Campground(
             id = record.get("id", Long::class.java),
             name = record.get("name", String::class.java),
+            parentName = record.get("parent_name", String::class.java),
             status = record.get("status", String::class.java),
             statusDescription = record.get("status_description", String::class.java),
             kind = record.get("kind", String::class.java),
             shortDescription = record.get("short_description", String::class.java),
             mediumDescription = record.get("medium_description", String::class.java),
             longDescription = record.get("long_description", String::class.java),
-            location = CatalogColumnJson.decodeObject(record.get("location_text", String::class.java)),
-            defaultCampsiteSchedule = parseJsonElement(record.get("default_campsite_schedule_text", String::class.java)),
-            amenities = parseJsonElement(record.get("amenities_text", String::class.java)),
+            location = decodeObjectColumn(record.get("location_text", String::class.java)),
+            defaultCampsiteSchedule =
+                decodeObjectColumn<CampgroundSchedule>(record.get("default_campsite_schedule_text", String::class.java)),
+            amenities = decodeListColumn<CampgroundAmenity>(record.get("amenities_text", String::class.java)),
             maxRvLength = record.get("max_rv_length", Double::class.javaObjectType),
             maxTrailerLength = record.get("max_trailer_length", Double::class.javaObjectType),
             hasPullThroughSites = record.get("has_pull_through_sites", Boolean::class.javaObjectType),
             bigRigFriendly = record.get("big_rig_friendly", Boolean::class.javaObjectType),
             reservationUrl = record.get("reservation_url", String::class.java),
-            links = CatalogColumnJson.decodeArray(record.get("links_text", String::class.java)),
-            photos = CatalogColumnJson.decodeArray(record.get("photos_text", String::class.java)),
-            alerts = parseJsonElement(record.get("alerts_text", String::class.java)),
-            price = parseJsonElement(record.get("price_text", String::class.java)),
-            cellService = parseJsonElement(record.get("cell_service_text", String::class.java)),
-            management = CatalogColumnJson.decodeObject(record.get("management_text", String::class.java)),
-            contact = CatalogColumnJson.decodeObject(record.get("contact_text", String::class.java)),
+            links = decodeListColumn<CampgroundLink>(record.get("links_text", String::class.java)),
+            photos = decodeListColumn<CatalogPhoto>(record.get("photos_text", String::class.java)),
+            alerts = decodeListColumn<CampgroundAlert>(record.get("alerts_text", String::class.java)),
+            price = decodeObjectColumn<CampgroundPrice>(record.get("price_text", String::class.java)),
+            cellService = decodeListColumn<CarrierSignal>(record.get("cell_service_text", String::class.java)),
+            management = decodeObjectColumn(record.get("management_text", String::class.java)),
+            contact = decodeObjectColumn(record.get("contact_text", String::class.java)),
             connections = parseJsonElement(record.get("connections_text", String::class.java)),
-            metadata = parseJsonElement(record.get("metadata_text", String::class.java)),
+            metadata = decodeObjectColumn<CampgroundMetadata>(record.get("metadata_text", String::class.java)),
             sourcePayload = parseJsonElement(record.get("source_payload_text", String::class.java)),
             createdAt = record.instant("created_at"),
             updatedAt = record.instant("updated_at"),
@@ -177,17 +148,6 @@ class CampgroundRepo(
             bookingProvider = record.get("booking_provider", String::class.java),
             bookingProviderRef = record.get("booking_provider_ref", String::class.java),
         )
-    }
-
-    private fun addInClause(
-        clauses: MutableList<String>,
-        params: MutableList<Any?>,
-        column: String,
-        values: List<String>,
-    ) {
-        if (values.isEmpty()) return
-        clauses += values.joinToString(prefix = "$column IN (", postfix = ")") { "?" }
-        params.addAll(values)
     }
 
     private fun bulkUpsertCampgroundsTx(records: List<CampgroundUpsertCandidate>): Int {
@@ -219,7 +179,7 @@ class CampgroundRepo(
             val placeholders =
                 chunk.joinToString(", ") {
                     "(?, ?, ?, ?, " +
-                        "?, ?, ?, ?, " +
+                        "?, ?, ?, ?, ?, " +
                         "?, ?, ?, " +
                         "?::jsonb, ?::jsonb, ?::jsonb, " +
                         "?, ?, ?, ?, " +
@@ -231,7 +191,7 @@ class CampgroundRepo(
                 """
                 INSERT INTO campgrounds (
                   data_provider, data_provider_ref, booking_provider, booking_provider_ref,
-                  name, status, status_description, kind,
+                  name, parent_name, status, status_description, kind,
                   short_description, medium_description, long_description,
                   location, default_campsite_schedule, amenities,
                   max_rv_length, max_trailer_length, has_pull_through_sites, big_rig_friendly,
@@ -245,6 +205,7 @@ class CampgroundRepo(
                   booking_provider = EXCLUDED.booking_provider,
                   booking_provider_ref = EXCLUDED.booking_provider_ref,
                   name = EXCLUDED.name,
+                  parent_name = EXCLUDED.parent_name,
                   status = EXCLUDED.status,
                   status_description = EXCLUDED.status_description,
                   kind = EXCLUDED.kind,
@@ -280,6 +241,7 @@ class CampgroundRepo(
                 params += record.bookingProvider?.id
                 params += record.bookingProviderRef
                 params += record.name
+                params += record.parentName
                 params += record.status
                 params += record.statusDescription
                 params += record.kind
@@ -287,8 +249,8 @@ class CampgroundRepo(
                 params += record.mediumDescription
                 params += record.longDescription
                 params += CatalogColumnJson.encodeObject(record.location)
-                params += jsonObject(record.defaultCampsiteSchedule)
-                params += jsonObject(record.amenities)
+                params += CatalogColumnJson.encodeObject(record.defaultCampsiteSchedule)
+                params += CatalogColumnJson.encodeArray(record.amenities)
                 params += record.maxRvLength
                 params += record.maxTrailerLength
                 params += record.hasPullThroughSites
@@ -296,13 +258,13 @@ class CampgroundRepo(
                 params += record.reservationUrl
                 params += CatalogColumnJson.encodeArray(record.links)
                 params += CatalogColumnJson.encodeArray(record.photos)
-                params += jsonArray(record.alerts)
-                params += jsonObject(record.price)
-                params += jsonObject(record.cellService)
+                params += CatalogColumnJson.encodeArray(record.alerts)
+                params += CatalogColumnJson.encodeObject(record.price)
+                params += CatalogColumnJson.encodeArray(record.cellService)
                 params += CatalogColumnJson.encodeObject(record.management)
                 params += CatalogColumnJson.encodeObject(record.contact)
                 params += jsonObject(record.connections)
-                params += jsonObject(record.metadata)
+                params += CatalogColumnJson.encodeObject(record.metadata)
                 params += jsonObject(record.sourcePayload)
             }
             val returned = ctx.fetch(sql, *params.toTypedArray())
@@ -379,13 +341,12 @@ class CampgroundRepo(
 
     private companion object {
         private const val CAMPGROUND_POI_TYPE = "campground"
-        private const val MIN_SEARCH_LIMIT = 1
-        private const val MAX_SEARCH_LIMIT = 500
 
         private val baseSelectColumns =
             """
             cg.id,
             cg.name,
+            cg.parent_name,
             cg.status,
             cg.status_description,
             cg.kind,
@@ -436,5 +397,3 @@ private fun memberSourcesOf(value: Any?): List<String> =
         is Collection<*> -> value.mapNotNull { it?.toString() }
         else -> emptyList()
     }
-
-private fun escapeLikePattern(value: String): String = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

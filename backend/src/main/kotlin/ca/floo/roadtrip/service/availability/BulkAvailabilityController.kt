@@ -4,6 +4,7 @@ import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.model.api.BulkAvailabilityResponseDto
 import ca.floo.roadtrip.model.api.BulkPoiAvailabilityDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.support.causeChain
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -23,7 +24,7 @@ internal data class BulkAvailabilityRequest(
     val startDate: LocalDate?,
     val endDate: LocalDate?,
     val minNights: Int,
-    val siteTypes: List<String>,
+    val siteTypes: List<CampsiteKind>,
 )
 
 /**
@@ -34,7 +35,7 @@ internal data class BulkAvailabilityRequest(
 internal fun interface PoiAvailabilitySliceLookup {
     suspend fun poiAvailabilitySlice(
         poiId: Long,
-        siteTypes: List<String>,
+        siteTypes: List<CampsiteKind>,
         startDate: LocalDate?,
         endDate: LocalDate?,
         freshAtOrAfter: Instant?,

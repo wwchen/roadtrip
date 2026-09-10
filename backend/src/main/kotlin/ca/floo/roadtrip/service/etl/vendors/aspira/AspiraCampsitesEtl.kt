@@ -10,6 +10,7 @@ import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
+import ca.floo.roadtrip.service.etl.framework.CampsiteKinds
 import ca.floo.roadtrip.service.etl.framework.HtmlText
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -181,6 +182,7 @@ class AspiraCampsitesEtl(
                     val leaf = leafMapId?.let { leavesByMapId[it] }
                     val parentLeaf = leaf ?: inv.resourceLocationId?.let { leavesByResourceLocationId[it] }
                     if (leafMapId != null && leaf == null) unmatchedLeaf++
+                    val resourceCategory = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] }
                     yield(
                         TransformResult.Ok(
                             CampsiteUpsertCandidate(
@@ -198,8 +200,8 @@ class AspiraCampsitesEtl(
                                 // Loop is the parent leaf's name from /api/maps
                                 // (PC's "AREA WHITE RIVER" analogue).
                                 loopName = leaf?.name ?: parentLeaf?.name,
-                                kind = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] } ?: "site",
-                                kindListed = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] },
+                                kind = CampsiteKinds.aspira(resourceCategory),
+                                kindListed = resourceCategory,
                                 equipment = allowedEquipmentNames(inv.allowedEquipment, dto.dictionaries),
                                 maxPeople = inv.maxCapacity,
                                 attributes = campsiteAttributes(inv.definedAttributes, dto.dictionaries),

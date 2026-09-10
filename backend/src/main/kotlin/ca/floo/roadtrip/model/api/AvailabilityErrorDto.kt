@@ -7,6 +7,8 @@ import kotlinx.serialization.Serializable
 data class AvailabilityErrorDto(
     val state: String = "error",
     val error: String,
+    /** Names the offending input on a validation failure; absent otherwise. */
+    val detail: String? = null,
     @SerialName("upstream_status") val upstreamStatus: Int? = null,
     @SerialName("earliest_date") val earliestDate: String? = null,
     @SerialName("time_zone") val timeZone: String? = null,

@@ -2,13 +2,19 @@ package ca.floo.roadtrip.route.api.pois
 
 import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.model.api.BulkAvailabilityRequestDto
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
+import ca.floo.roadtrip.route.common.BAD_REQUEST_ERROR
 import ca.floo.roadtrip.route.common.RouteBodyResult
+import ca.floo.roadtrip.route.common.SiteTypeQuery
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.mapCatching
+import ca.floo.roadtrip.route.common.parseSiteTypes
 import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.siteTypeWireList
+import ca.floo.roadtrip.route.common.unknownSiteTypeDetail
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.BulkAvailabilityRequest
@@ -29,7 +35,7 @@ import java.time.LocalDate
  * raw `kotlinx.serialization` exception text — never safe to put on the wire.
  */
 private val bulkValidationErrorCodes =
-    setOf("bad_request", "too_many_pois", "bad_min_nights", "bad_date_window", "end_before_start")
+    setOf(BAD_REQUEST_ERROR, "too_many_pois", "bad_min_nights", "bad_date_window", "end_before_start")
 
 internal fun Route.bulkAvailabilityRoutes(
     controller: BulkAvailabilityController,
@@ -44,19 +50,37 @@ internal fun Route.bulkAvailabilityRoutes(
                     return@post
                 }
 
-                val request =
-                    when (
-                        val body =
-                            call
-                                .receiveJsonBody<BulkAvailabilityRequestDto>()
-                                .mapCatching { it.validated(config) }
-                    ) {
+                val dto =
+                    when (val body = call.receiveJsonBody<BulkAvailabilityRequestDto>()) {
                         is RouteBodyResult.Invalid -> {
-                            val code = body.detail?.takeIf { it in bulkValidationErrorCodes } ?: "bad_request"
-                            call.respondBulkError(code, HttpStatusCode.BadRequest)
+                            call.respondBulkError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest)
                             return@post
                         }
                         is RouteBodyResult.Valid -> body.value
+                    }
+
+                val siteTypes =
+                    when (val parsed = parseSiteTypes(dto.siteTypes)) {
+                        is SiteTypeQuery.Unknown ->
+                            return@post call.respondBulkError(
+                                BAD_REQUEST_ERROR,
+                                HttpStatusCode.BadRequest,
+                                detail = unknownSiteTypeDetail(parsed.value),
+                            )
+                        is SiteTypeQuery.Parsed -> parsed.kinds
+                    }
+
+                val request =
+                    when (
+                        val validated =
+                            RouteBodyResult.Valid(dto).mapCatching { it.validated(config, siteTypes) }
+                    ) {
+                        is RouteBodyResult.Invalid -> {
+                            val code = validated.detail?.takeIf { it in bulkValidationErrorCodes } ?: BAD_REQUEST_ERROR
+                            call.respondBulkError(code, HttpStatusCode.BadRequest)
+                            return@post
+                        }
+                        is RouteBodyResult.Valid -> validated.value
                     }
 
                 call.respondEncodedJson(
@@ -71,14 +95,17 @@ internal fun Route.bulkAvailabilityRoutes(
                         "min_nights?, site_type? }. Returns one entry per requested POI, in request " +
                         "order. Each entry carries either its campsites — filtered to " +
                         "`longest_run_nights >= min_nights` and sorted descending — or an error code. " +
-                        "A POI failing never fails the request.",
+                        "A POI failing never fails the request. `site_type` accepts: $siteTypeWireList.",
             ).access(RouteAccess.Anonymous)
         }
     }
 }
 
-private fun BulkAvailabilityRequestDto.validated(config: BulkAvailabilityConfig): BulkAvailabilityRequest {
-    require(poiIds.isNotEmpty()) { "bad_request" }
+private fun BulkAvailabilityRequestDto.validated(
+    config: BulkAvailabilityConfig,
+    siteTypes: List<CampsiteKind>,
+): BulkAvailabilityRequest {
+    require(poiIds.isNotEmpty()) { BAD_REQUEST_ERROR }
     require(poiIds.size <= config.maxPois) { "too_many_pois" }
     require(minNights >= 1) { "bad_min_nights" }
     // Both dates are required: with either left null each POI would resolve its own
@@ -112,6 +139,7 @@ private fun parseDate(raw: String?): LocalDate? =
 private suspend fun ApplicationCall.respondBulkError(
     error: String,
     status: HttpStatusCode,
+    detail: String? = null,
 ) {
-    respondEncodedJson(availabilityErrorDto(error), status)
+    respondEncodedJson(availabilityErrorDto(error, detail = detail), status)
 }

@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.nio.file.Files
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BcParksCampgroundsEtlTest {
@@ -47,6 +48,7 @@ class BcParksCampgroundsEtlTest {
         assertEquals("250-555-1234", cg.contact!!.phone)
         val agency = cg.management!!.agency
         assertEquals("BC Parks", agency)
+        assertNull(cg.parentName)
     }
 
     @Test
@@ -54,6 +56,8 @@ class BcParksCampgroundsEtlTest {
         val output = terminalRecords(etl, bundleWithContainer(), ctx)
         assertEquals(1, output.size)
         assertEquals("Rathtrevor Beach", output.single().name)
+        // The dropped container is still the leaf's parent map, so its title rides along.
+        assertEquals("Strathcona Park", output.single().parentName)
     }
 
     @Test
@@ -152,7 +156,7 @@ class BcParksCampgroundsEtlTest {
                           {"cultureName": "en-CA", "title": "Rathtrevor Beach"}
                         ],
                         "mapLinks": [],
-                        "parentMap": null
+                        "parentMap": {"mapId": -100}
                       }
                     ]
                     """.trimIndent(),

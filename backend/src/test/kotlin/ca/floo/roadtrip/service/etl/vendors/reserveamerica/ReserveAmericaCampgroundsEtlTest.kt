@@ -17,6 +17,7 @@ import java.io.File
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class ReserveAmericaCampgroundsEtlTest {
     private val kotlinx.serialization.json.JsonObject.contractCode: String
@@ -47,10 +48,15 @@ class ReserveAmericaCampgroundsEtlTest {
         assertEquals("Island campground on Fourth Lake.", campground.mediumDescription)
         assertEquals("https://newyorkstateparks.reserveamerica.com/photo.jpg", campground.photos.single().url)
 
-        val metadata = campground.metadata!!.jsonObject
-        assertEquals("NY", metadata["contract"]!!.jsonPrimitive.content)
-        assertEquals("ALGER ISLAND", metadata["name"]!!.jsonPrimitive.content)
-        assertEquals("Island campground on Fourth Lake.", metadata["description"]!!.jsonPrimitive.content)
+        // Provenance rides on source_payload now; the typed bags stay empty.
+        assertNull(campground.metadata)
+        assertNull(campground.parentName)
+        assertEquals(emptyList(), campground.amenities)
+        assertEquals(emptyList(), campground.cellService)
+        val extras = campground.sourcePayload!!.jsonObject
+        assertEquals("NY", extras["contract"]!!.jsonPrimitive.content)
+        assertEquals("ALGER ISLAND", extras["name"]!!.jsonPrimitive.content)
+        assertEquals("Island campground on Fourth Lake.", extras["description"]!!.jsonPrimitive.content)
     }
 
     @Test

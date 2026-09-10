@@ -524,16 +524,6 @@
   font-weight: 500;
 }
 
-.tb-card-rating {
-  color: var(--rt-rating);
-  font-weight: 500;
-}
-
-.tb-card-sites,
-.tb-card-season {
-  color: var(--rt-muted);
-}
-
 .tb-card-empty {
   padding: 14px 12px;
   color: var(--rt-muted);

@@ -9,5 +9,6 @@ data class BulkAvailabilityRequestDto(
     @SerialName("start_date") val startDate: String? = null,
     @SerialName("end_date") val endDate: String? = null,
     @SerialName("min_nights") val minNights: Int = 1,
+    /** `CampsiteKind` wire values; the route rejects anything else as `bad_request`. */
     @SerialName("site_type") val siteTypes: List<String> = emptyList(),
 )

@@ -59,8 +59,6 @@ export interface PoiIdentityProps {
   title: string;
   /** The street address, or whatever locates the place. */
   subtitle?: ReactNode;
-  /** The season verdict, when the type has one. */
-  verdict?: ReactNode;
 }
 
 /**
@@ -69,14 +67,13 @@ export interface PoiIdentityProps {
  * identity block to hang a button off — and the routed page closes with browser
  * back.
  */
-export function PoiIdentity({ eyebrow, title, subtitle, verdict }: PoiIdentityProps) {
+export function PoiIdentity({ eyebrow, title, subtitle }: PoiIdentityProps) {
   return (
     <header className="rt-poi-identity">
       <div className="rt-poi-identity-text">
         {eyebrow ? <p className="rt-poi-eyebrow">{eyebrow}</p> : null}
         <h2 className="rt-poi-title">{title}</h2>
         {subtitle ? <p className="rt-poi-subtitle">{subtitle}</p> : null}
-        {verdict ? <div className="rt-poi-verdict">{verdict}</div> : null}
       </div>
     </header>
   );
@@ -106,9 +103,9 @@ export function PoiGlance({ heading = 'At a glance', tags, extra }: PoiGlancePro
       <PoiBlockHeading>{heading}</PoiBlockHeading>
       {tags.length > 0 ? (
         <ul className="rt-poi-tags">
-          {tags.map((tag) => (
+          {tags.map((tag, index) => (
             <li
-              key={tag.label}
+              key={`${tag.label}-${index}`}
               className={tag.absent ? 'rt-poi-tag rt-poi-tag--absent' : 'rt-poi-tag'}
             >
               {tag.label}

@@ -15,10 +15,7 @@ import {
   availabilitySupported,
   campgroundCtas,
   carrierSignals,
-  isNoCta,
-  parentParkName,
   rating,
-  seasonVerdict,
   structuredDetails,
   verified,
 } from '../campground-detail';
@@ -61,14 +58,14 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
 
   const name = text(p.name) || 'Campground';
   const decorations = upstreamDecorations(p.upstream);
-  // Parent context precedence, unchanged: the upstream record's own parent, then a
-  // promoted field, then an inference from official-link titles.
+  // The containing park, from the upstream record's own parent or the backend's
+  // `parent_name` column. Both are stated by a provider; nothing is inferred any
+  // more, which is why the subline below can name it without hedging.
   const knownParent = decorations.parentName || text(p.parent_name);
-  const parent = knownParent || parentParkName(p) || text(p.typeLabel);
+  const parent = knownParent || text(p.typeLabel);
   const agency = text(p.agency).trim();
   const region = text(p.state) || text(p.country);
 
-  const verdict = seasonVerdict(p.season, p.reservable);
   const ctas = campgroundCtas(p);
   const details = structuredDetails(p);
   const signals = carrierSignals(p);
@@ -76,12 +73,9 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
   const freshness = verified(p);
   const about = descriptionHtml(p.description);
   const photo = text(p.photo_url);
-  const sites = Number(p.sites);
 
   // The step above this page: the containing park when the record states one, the
-  // region otherwise. The INFERRED parent never qualifies — `parentParkName` guesses
-  // from official-link titles, and a subline naming a guess is a hint the reader can
-  // discount, where the step above asserts containment.
+  // region otherwise.
   const parentStep = knownParent || region;
   // Whatever that step already says comes out of the subtitle, so the two lines do
   // not print the same word twice — but ONLY where the step is actually on screen.
@@ -102,7 +96,6 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
   const stay = presentSpecs([
     ...(specsFrom(details, STAY_DETAILS_GROUP) ?? []),
     decorations.stayLimit ? { label: 'Stay limit', value: decorations.stayLimit } : null,
-    Number.isFinite(sites) && sites > 0 ? { label: 'Sites', value: sites.toLocaleString() } : null,
     stars
       ? { label: 'Rating', value: `${stars.stars} ${stars.average.toFixed(1)} (${stars.count.toLocaleString()})` }
       : null,
@@ -122,27 +115,16 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
         eyebrow={eyebrowFor('Campground', name, agency)}
         title={name}
         subtitle={subtitle}
-        verdict={
-          verdict ? (
-            <span className={`rt-poi-verdict-tone rt-poi-verdict-tone--${verdict.tone}`}>
-              {verdict.text}
-            </span>
-          ) : null
-        }
       />
     ),
     actions: (
       <PoiActions>
         <DirectionsButton name={name} lng={lng} lat={lat} kind="CG" onAdded={onClose ?? noop} />
-        {isNoCta(ctas) ? (
-          <span className="rt-poi-cta-disabled">{ctas.disabledLabel}</span>
-        ) : (
-          ctas.map((cta) => (
-            <Button key={cta.url} variant={cta.variant} href={cta.url} target="_blank" rel="noreferrer">
-              {cta.label}
-            </Button>
-          ))
-        )}
+        {ctas.map((cta) => (
+          <Button key={cta.url} variant={cta.variant} href={cta.url} target="_blank" rel="noreferrer">
+            {cta.label}
+          </Button>
+        ))}
         <SharePoiButton id={feature.id} />
       </PoiActions>
     ),

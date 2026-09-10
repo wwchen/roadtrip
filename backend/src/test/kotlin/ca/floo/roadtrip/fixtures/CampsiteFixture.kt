@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.fixtures
 
 import ca.floo.roadtrip.model.domain.Campsite
-import ca.floo.roadtrip.model.domain.DEFAULT_CAMPSITE_KIND
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -18,7 +18,7 @@ fun campsiteFixture(
     bookingProvider: String? = BookingProvider.fromIdOrNull(vendor)?.id,
     bookingProviderRef: String? = vendorId,
     name: String = "Site $id",
-    kind: String? = DEFAULT_CAMPSITE_KIND,
+    kind: CampsiteKind? = CampsiteKind.OTHER,
     loopName: String? = null,
     reservationUrl: String? = null,
     sourcePayload: JsonElement? = JsonObject(emptyMap()),
@@ -27,7 +27,7 @@ fun campsiteFixture(
         id = id,
         campgroundId = campgroundId,
         name = name,
-        kind = kind ?: DEFAULT_CAMPSITE_KIND,
+        kind = kind ?: CampsiteKind.OTHER,
         loopName = loopName,
         latitude = null,
         longitude = null,

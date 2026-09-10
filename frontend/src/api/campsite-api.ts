@@ -15,7 +15,9 @@ export interface Campsite {
   id: number;
   campground_id: number;
   name: string;
+  /** A `CampsiteKind` wire value; `kind_label` is the backend's wording for it. */
   kind: string;
+  kind_label: string;
   kind_listed?: string | null;
   loop_name?: string | null;
   description?: string | null;

@@ -1,5 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
+import ca.floo.roadtrip.model.domain.CampgroundMetadata
+import ca.floo.roadtrip.model.domain.CampgroundRating
+import ca.floo.roadtrip.model.domain.Carrier
+import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
@@ -9,15 +13,11 @@ import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.terminalRecords
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.io.File
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -65,21 +65,36 @@ class RecGovCampgroundsEtlTest {
             "https://cdn.example/primary.webp",
             upperPines.photos.single().url,
         )
-        val metadata = upperPines.metadata!!.jsonObject
-        assertEquals("Camping", metadata["activities"]!!.jsonArray[0].jsonPrimitive.content)
-        assertEquals("Hiking", metadata["activities"]!!.jsonArray[1].jsonPrimitive.content)
+        assertEquals(
+            CampgroundMetadata(
+                activities = listOf("Camping", "Hiking"),
+                rating = CampgroundRating(average = 4.25, count = 8),
+            ),
+            upperPines.metadata,
+        )
+        // Boost is not in the vocabulary and drops; the rest of the vocabulary reads through.
+        assertEquals(
+            listOf(
+                CarrierSignal(Carrier.VERIZON, average = 3.5, count = 4),
+                CarrierSignal(Carrier.ATT, average = 1.25, count = 2),
+                CarrierSignal(Carrier.TMOBILE, average = 3.0, count = 5),
+                CarrierSignal(Carrier.SPRINT, average = 2.75, count = 6),
+                CarrierSignal(Carrier.US_CELLULAR, average = 2.0, count = 3),
+            ),
+            upperPines.cellService,
+        )
+        assertEquals("Yosemite National Park", upperPines.parentName)
+        assertNull(campgrounds.getValue("10083567").parentName)
+    }
 
-        val rating = assertNotNull(metadata["rating_reviews"]).jsonObject
-        assertEquals("4.25", rating["avg"]!!.jsonPrimitive.content)
-        assertEquals("8", rating["count"]!!.jsonPrimitive.content)
+    @Test
+    fun `transform leaves activities-only metadata without a rating`() {
+        val etl = RecGovCampgroundsEtl("recgov-campgrounds")
+        val campgrounds = terminalRecords(etl, bundle(), transformCtx).associateBy { it.dataProviderRef.serialize() }
 
-        val cell = assertNotNull(upperPines.cellService).jsonObject
-        val verizon = cell.getValue("verizon").jsonObject
-        assertEquals("3.5", verizon["avg"]!!.jsonPrimitive.content)
-        assertEquals("4", verizon["count"]!!.jsonPrimitive.content)
-        val att = cell.getValue("att").jsonObject
-        assertEquals("1.25", att["avg"]!!.jsonPrimitive.content)
-        assertEquals("2", att["count"]!!.jsonPrimitive.content)
+        assertEquals(CampgroundMetadata(activities = listOf("Camping", "Hiking")), campgrounds.getValue("232447").metadata)
+        assertNull(campgrounds.getValue("248965").metadata)
+        assertEquals(emptyList(), campgrounds.getValue("232447").cellService)
     }
 
     @Test
@@ -169,6 +184,10 @@ class RecGovCampgroundsEtlTest {
                             }
                           ],
                           "ORGANIZATION": [{"OrgAbbrevName": "NPS", "OrgName": "National Park Service"}],
+                          "RECAREA": [
+                            {"RecAreaID": 2782, "RecAreaName": "Yosemite National Park"},
+                            {"RecAreaID": 1234, "RecAreaName": "Ignored Second Parent"}
+                          ],
                           "FACILITYADDRESS": [
                             {
                               "AddressStateCode": "CA",
@@ -252,8 +271,23 @@ class RecGovCampgroundsEtlTest {
                           },
                           {
                             "carrier": "T-Mobile",
-                            "average_rating": null,
-                            "number_of_ratings": 0
+                            "average_rating": 3.0,
+                            "number_of_ratings": 5
+                          },
+                          {
+                            "carrier": "Sprint",
+                            "average_rating": 2.75,
+                            "number_of_ratings": 6
+                          },
+                          {
+                            "carrier": "US Cellular",
+                            "average_rating": 2.0,
+                            "number_of_ratings": 3
+                          },
+                          {
+                            "carrier": "Boost Mobile",
+                            "average_rating": 5.0,
+                            "number_of_ratings": 1
                           }
                         ]
                       }

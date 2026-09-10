@@ -86,6 +86,22 @@ Model names must tell callers what kind of shape they are holding:
   type; the entity repo is the only place that encodes or decodes it. Vendor
   ETLs map upstream keys into the type, so the read path never carries
   per-vendor key fallbacks. `campsites.equipment`, `photos`, and `attributes` follow the same rule through `CatalogColumnJson`; `CampsiteRepo` is their only codec, and the API serves `CampsiteDto`, never the row.
+- **Vocabulary enums carry their own labels.** The campground bags
+  (`amenities`, `cell_service`, `metadata`, `price`,
+  `default_campsite_schedule`, `alerts`) and `campsites.kind` follow the same
+  typed-JSONB rule: `@Serializable` domain models and enums
+  (`AmenityKey`, `CampgroundAmenity`, `Carrier`, `CarrierSignal`,
+  `CampgroundRating`, `CampgroundMetadata`, `CampgroundPrice`,
+  `CampgroundSchedule`, `CampgroundAlert`, `CampsiteKind`) live in
+  `model/domain`, `CatalogColumnJson` is the one codec, and `CampgroundRepo` /
+  `CampsiteRepo` are the only encoders/decoders. Vendor ETLs map upstream keys
+  and strings into the enums, one mapping table per vendor
+  (`service/etl/framework/CampsiteKinds.kt` for campsite kind); a client never
+  owns a translation table because the label rides on the enum itself
+  (`AmenityKey.label`/`.negativeLabel`, `Carrier.label`, `CampsiteKind.label`).
+  A migration that changes a stored shape (V57 for the campground bags, V58
+  for `campsites.kind`) canonicalizes existing rows in place and never
+  backfills; `make data-import` fills gaps by re-running the ETLs.
 
 A model named after a table must not silently include provider-specific helper
 fields, selected vendor refs, API response convenience fields, or partially

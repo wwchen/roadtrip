@@ -286,6 +286,34 @@ class CampsiteRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `GET campsites rejects a site_type outside the wire vocabulary`() =
+        testApplication {
+            application { routeTestApplication { campsiteRoutesUnderTest() } }
+            val (poiId, _) = seedRecgovPoiWithCampsite()
+
+            val resp = client.get("/api/pois/$poiId/campsites?site_type=STANDARD%20NONELECTRIC")
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_request", body["error"]!!.jsonPrimitive.content)
+            assertTrue(body["detail"]!!.jsonPrimitive.content.contains("STANDARD NONELECTRIC"))
+        }
+
+    @Test
+    fun `GET availability rejects a site_type outside the wire vocabulary`() =
+        testApplication {
+            application { routeTestApplication { campsiteRoutesUnderTest() } }
+            val (poiId, _) = seedRecgovPoiWithCampsite()
+
+            val resp = client.get("/api/pois/$poiId/campsites/availability?site_type=tent,walk-in")
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_request", body["error"]!!.jsonPrimitive.content)
+            assertTrue(body["detail"]!!.jsonPrimitive.content.contains("walk-in"))
+        }
+
+    @Test
     fun `GET availability returns 404 for an unknown POI`() =
         testApplication {
             application { routeTestApplication { campsiteRoutesUnderTest() } }

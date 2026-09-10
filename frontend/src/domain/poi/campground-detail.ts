@@ -8,8 +8,22 @@
 // live here: it goes through `lib/upstream-html.ts`, which is the only sanctioned
 // `dangerouslySetInnerHTML` path.
 
+import type { AlertDto, CampgroundDetail, PriceDto } from '@/api/poi-api';
+
 /** POI properties after `flattenHydratedPoi`, which is deliberately open. */
 type Props = Record<string, unknown>;
+
+/**
+ * The half of the bag the backend has taken ownership of.
+ *
+ * `flattenHydratedPoi` is open on purpose — most of a hydrated POI is still
+ * whatever the vendor sent — but the fields on `CampgroundDetail` are
+ * `PoiCategoryDetailSchema`'s own, typed and labelled server-side. Every reader
+ * of a campground bag field goes through this assertion rather than indexing the
+ * open bag, so a wire rename to one of them is a typecheck failure here instead
+ * of a row that silently stops rendering.
+ */
+const typed = (p: Props): Partial<CampgroundDetail> => p as Partial<CampgroundDetail>;
 
 // ---------------------------------------------------------------------------
 // Small readers, ported verbatim in behaviour
@@ -60,41 +74,6 @@ export function urlHost(url: unknown): string {
 // Amenities and activities
 // ---------------------------------------------------------------------------
 
-const AMENITY_LABELS = new Map<string, string>([
-  ['camp_store', 'Camp store'],
-  ['dump_station', 'Dump station'],
-  ['electric_hookups', 'Electric hookups'],
-  ['fires_allowed', 'Fires allowed'],
-  ['pets_allowed', 'Pets allowed'],
-  ['sewer_hookups', 'Sewer hookups'],
-  ['showers', 'Showers'],
-  ['toilets', 'Toilets'],
-  ['trash', 'Trash'],
-  ['water', 'Water'],
-  ['water_hookups', 'Water hookups'],
-  ['wifi', 'Wi-Fi'],
-]);
-
-/** Only some absences are worth stating: "No showers" is useful, "No camp store" is noise. */
-const NEGATIVE_AMENITY_LABELS = new Map<string, string>([
-  ['electric_hookups', 'No electric hookups'],
-  ['sewer_hookups', 'No sewer hookups'],
-  ['showers', 'No showers'],
-  ['water', 'No water'],
-  ['water_hookups', 'No water hookups'],
-]);
-
-/**
- * Amenity labels from either shape the field takes: a legacy array of strings, or the
- * canonical object of flags and values.
- *
- * `toilets` is skipped when `toilet_kind` is present, because the kind subsumes it
- * ("Vault toilets" rather than "Toilets" + "Vault").
- */
-export function amenityList(p: Props): string[] {
-  return amenityTags(p).map((tag) => tag.label);
-}
-
 /** An amenity, and whether the label states its absence ("No showers"). */
 export interface AmenityTag {
   label: string;
@@ -102,63 +81,29 @@ export interface AmenityTag {
 }
 
 /**
- * The same labels as `amenityList`, with the absences still identifiable.
+ * The at-a-glance amenity chips.
  *
- * The at-a-glance block gives an absence a hue and leaves every other tag neutral,
- * and by the time a label reads "No showers" that distinction has been flattened
- * into prose. Both functions come off this one so the two can never disagree about
- * which amenities are worth naming.
+ * The words are the backend's: `label` is render-ready, already "No water" for an
+ * absence and "Vault toilets" for a detailed toilets entry. `present` survives
+ * only because the chip gives an absence a hue, and a label that reads "No water"
+ * has flattened that distinction into prose.
  */
 export function amenityTags(p: Props): AmenityTag[] {
-  const value = p.amenities;
-  // The legacy array shape carries labels only — nothing says whether one is an
-  // absence, so none of them are.
-  if (Array.isArray(value)) return stringList(value).map((label) => ({ label, absent: false }));
-  if (!value || typeof value !== 'object') return [];
-
-  const record = value as Record<string, unknown>;
-  const out: AmenityTag[] = [];
-  for (const [key, raw] of Object.entries(record)) {
-    if (key === 'toilets' && record.toilet_kind) continue;
-    const label = amenityLabel(key, raw);
-    if (label) out.push({ label, absent: raw === false });
-  }
-  return out;
+  return (typed(p).amenities ?? []).map((amenity) => ({
+    label: amenity.label,
+    absent: !amenity.present,
+  }));
 }
 
 export function activityList(p: Props): string[] {
-  return stringList(p.activities);
-}
-
-function stringList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((v) => String(v).trim()).filter(Boolean);
-}
-
-function amenityLabel(key: string, value: unknown): string {
-  if (value === null || value === undefined) return '';
-  if (key === 'toilet_kind' && typeof value === 'string' && value.trim()) {
-    return `${titleCase(value)} toilets`;
-  }
-  if (value === true) return AMENITY_LABELS.get(key) ?? titleCase(key);
-  if (value === false) return NEGATIVE_AMENITY_LABELS.get(key) ?? '';
-  if (typeof value === 'string' && value.trim()) {
-    return `${AMENITY_LABELS.get(key) ?? titleCase(key)}: ${value.trim()}`;
-  }
-  return '';
+  return (typed(p).activities ?? [])
+    .map((activity) => activity.trim())
+    .filter((activity) => activity !== '');
 }
 
 // ---------------------------------------------------------------------------
 // Cell coverage
 // ---------------------------------------------------------------------------
-
-const CARRIER_LABELS = new Map<string, string>([
-  ['verizon', 'Verizon'],
-  ['att', 'AT&T'],
-  ['tmobile', 'T-Mobile'],
-  ['sprint', 'Sprint'],
-  ['uscell', 'US Cellular'],
-]);
 
 /** rec.gov reports signal on a 0-4 scale; the bucket drives the chip colour. */
 const MAX_SIGNAL_BUCKET = 4;
@@ -177,28 +122,20 @@ export interface CarrierSignal {
 /**
  * Per-carrier signal, strongest first.
  *
- * The field is `{ verizon: [avg, count], … }` on rec.gov pins and sometimes a bare
- * number per carrier; both shapes are read. Carriers with no usable average drop out
- * rather than rendering as a blank chip.
+ * The carrier's display name arrives on the wire; the ordering and the bucket are
+ * this page's, because both are about how a row of bars reads rather than what the
+ * provider measured.
  */
 export function carrierSignals(p: Props): CarrierSignal[] {
-  const value = p.cell_coverage ?? p.cell_service;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
-
-  return Object.entries(value as Record<string, unknown>)
-    .map(([carrier, raw]) => {
-      const [avg, count] = Array.isArray(raw)
-        ? [Number(raw[0]), Number(raw[1])]
-        : [Number(raw), Number.NaN];
-      return {
-        carrier,
-        label: CARRIER_LABELS.get(carrier) ?? carrier,
-        avg,
-        count: Number.isFinite(count) ? count : null,
-        bucket: Math.max(0, Math.min(MAX_SIGNAL_BUCKET, Math.round(avg))),
-      };
-    })
-    .filter((signal) => Number.isFinite(signal.avg))
+  return (typed(p).cell_coverage ?? [])
+    .filter((signal) => Number.isFinite(signal.average))
+    .map((signal) => ({
+      carrier: signal.carrier,
+      label: signal.label,
+      avg: signal.average,
+      count: signal.count ?? null,
+      bucket: Math.max(0, Math.min(MAX_SIGNAL_BUCKET, Math.round(signal.average))),
+    }))
     .sort((a, b) => b.avg - a.avg);
 }
 
@@ -214,16 +151,9 @@ export interface Rating {
 }
 
 export function rating(p: Props): Rating | null {
-  const value = p.rating_reviews;
-  if (!Array.isArray(value)) return null;
-  const average = Number(value[0]);
-  const count = Number(value[1]);
-  if (!Number.isFinite(average)) return null;
-  return {
-    average,
-    count: Number.isFinite(count) ? count : 0,
-    stars: stars(average),
-  };
+  const value = typed(p).rating;
+  if (!value) return null;
+  return { average: value.average, count: value.count, stars: stars(value.average) };
 }
 
 /** Half-stars round to the nearest whole, as the original did. */
@@ -246,8 +176,8 @@ export interface Verified {
 }
 
 export function verified(p: Props, now: Date = new Date()): Verified | null {
-  const raw = p.last_verified;
-  if (typeof raw !== 'string' || !raw.trim()) return null;
+  const raw = typed(p).last_verified;
+  if (!raw?.trim()) return null;
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return null;
   return {
@@ -280,114 +210,6 @@ function verifiedLabel(parsed: Date, now: Date): string {
 }
 
 // ---------------------------------------------------------------------------
-// Season verdict
-// ---------------------------------------------------------------------------
-
-export type VerdictTone = 'open' | 'closed' | 'fcfs';
-
-export interface SeasonVerdict {
-  tone: VerdictTone;
-  text: string;
-}
-
-const MONTHS = new Map<string, number>([
-  ['jan', 0],
-  ['feb', 1],
-  ['mar', 2],
-  ['apr', 3],
-  ['may', 4],
-  ['jun', 5],
-  ['jul', 6],
-  ['aug', 7],
-  ['sep', 8],
-  ['sept', 8],
-  ['oct', 9],
-  ['nov', 10],
-  ['dec', 11],
-]);
-
-/** "early May" / "mid June" / "late October" → a day of the month. */
-const FUZZY_DAY = new Map<string, number>([
-  ['early', 5],
-  ['mid', 15],
-  ['late', 25],
-]);
-
-/**
- * What to tell the user about the season, from a string a provider wrote by hand.
- *
- * `season` is loose — "mid-May to early October", "year-round (boat access)", null —
- * so this is a best-effort parse that says nothing rather than guessing. `reservable:
- * false` adds the first-come hint, and is the whole verdict when there is no season
- * string at all.
- */
-export function seasonVerdict(
-  season: unknown,
-  reservable: unknown,
-  now: Date = new Date(),
-): SeasonVerdict | null {
-  const fcfsHint = reservable === false ? ' · first-come' : '';
-
-  if (typeof season !== 'string' || !season.trim()) {
-    return reservable === false ? { tone: 'fcfs', text: 'First-come, first-served' } : null;
-  }
-
-  const range = parseSeasonRange(season, now.getFullYear());
-  if (range) {
-    if (now >= range.open && now <= range.close) {
-      return { tone: 'open', text: `Open through ${monthDay(range.close)}${fcfsHint}` };
-    }
-    if (now < range.open) {
-      return { tone: 'closed', text: `Closed until ${monthDay(range.open)}${fcfsHint}` };
-    }
-    // Past this year's close: the next opening is the same date next year.
-    const nextOpen = new Date(range.open);
-    nextOpen.setFullYear(nextOpen.getFullYear() + 1);
-    return { tone: 'closed', text: `Closed until ${monthDay(nextOpen)}${fcfsHint}` };
-  }
-
-  if (/year[\s-]*round/i.test(season)) {
-    return { tone: 'open', text: `Year-round${fcfsHint}` };
-  }
-  // Unparseable: show what the provider said rather than inventing a verdict.
-  return { tone: 'fcfs', text: `${season}${fcfsHint}` };
-}
-
-function parseSeasonRange(season: string, year: number): { open: Date; close: Date } | null {
-  const normalized = season.toLowerCase().replace(/[–—]/g, '-');
-  const parts = normalized.split(/\s+to\s+|\s*->\s*|\s*through\s+/);
-  if (parts.length < 2) return null;
-  const open = parseDateBit(parts[0] ?? '', year);
-  const close = parseDateBit(parts[1] ?? '', year);
-  return open && close ? { open, close } : null;
-}
-
-function parseDateBit(text: string, year: number): Date | null {
-  const fuzzy = text.match(/(early|mid|late)[\s-]+([a-z]+)/);
-  if (fuzzy) {
-    const month = monthFrom(fuzzy[2]);
-    const day = FUZZY_DAY.get(fuzzy[1] ?? '');
-    return month == null || day == null ? null : new Date(year, month, day);
-  }
-  const explicit = text.match(/([a-z]+)\.?\s+(\d{1,2})/);
-  if (explicit) {
-    const month = monthFrom(explicit[1]);
-    return month == null ? null : new Date(year, month, Number.parseInt(explicit[2] ?? '1', 10));
-  }
-  return null;
-}
-
-/** Four letters first, so "sept" beats "sep". */
-function monthFrom(word: string | undefined): number | null {
-  if (!word) return null;
-  return MONTHS.get(word.slice(0, 4)) ?? MONTHS.get(word.slice(0, 3)) ?? null;
-}
-
-function monthDay(date: Date): string {
-  return date.toLocaleString('en-US', { month: 'short', day: 'numeric' });
-}
-
-// ---------------------------------------------------------------------------
 // Calls to action
 // ---------------------------------------------------------------------------
 
@@ -397,15 +219,6 @@ export interface Cta {
   variant: 'primary' | 'secondary';
 }
 
-/** No link to offer, and the pin is known to be first-come. */
-export interface NoCta {
-  disabledLabel: string;
-}
-
-export type CtaResult = Cta[] | NoCta;
-
-export const isNoCta = (result: CtaResult): result is NoCta => !Array.isArray(result);
-
 /**
  * The buttons a campground gets.
  *
@@ -414,7 +227,7 @@ export const isNoCta = (result: CtaResult): result is NoCta => !Array.isArray(re
  * verbatim — per-vendor URL precedence is a server concern. Everything below the first
  * branch is fallback for pins the backend could not resolve.
  */
-export function campgroundCtas(p: Props): CtaResult {
+export function campgroundCtas(p: Props): Cta[] {
   const provided = normalizeCtas(p.cta)
     .map((cta, index) => toCta(cta, index))
     .filter((cta): cta is Cta => cta !== null);
@@ -425,10 +238,6 @@ export function campgroundCtas(p: Props): CtaResult {
 
   const infoUrl = safeUrl(firstText(p.info_url, p.website));
   if (infoUrl) return [{ url: infoUrl, label: 'Visit website', variant: 'primary' }];
-
-  // Marked first-come with nothing to link to: say so instead of offering a search
-  // that implies a booking flow.
-  if (p.reservable === false) return { disabledLabel: 'First-come, first-served' };
 
   // Best-effort name search. A park system's own search beats Google because its
   // results are already park entries rather than a noisy web search.
@@ -538,55 +347,6 @@ function regionalParkSearch(p: Props): { url: string; label: string } | null {
 }
 
 // ---------------------------------------------------------------------------
-// Parent park
-// ---------------------------------------------------------------------------
-
-const PARENT_PARK_TITLE =
-  /\b(park|preserve|forest|recreation area|recreation site|conservation area|wilderness|monument|seashore|lakeshore|reserve)\b/i;
-const GENERIC_TITLE = /^(official\s+(page|site|website)|website|home|homepage|map|directions?)$/i;
-// Whoever runs the place is not the place. "Forest Service Concessionaire" links to
-// camprrm.com and matches `forest` below, so without this it was inferred as Tuff
-// Campground's containing park — an operator's trade name presented as a location.
-const NON_PARENT_TITLE =
-  /\b(reservations?|booking|fees?|passes?|permits?|map|directions?|calendar|alerts?|brochure|guide|concessionaires?|conditions?|tourism|weather)\b/i;
-
-/**
- * The containing park, inferred from official-link titles.
- *
- * A campground's own name stays the drawer's title; this only clarifies which unit
- * contains it ("Deception Pass State Park"). Titles that are generic ("Official site")
- * or clearly not a parent ("Reservations", "Fees") are rejected, and a link whose
- * title is just the campground again is skipped.
- */
-export function parentParkName(p: Props): string {
-  const own = normalizeTitle(firstText(p.name));
-  if (!Array.isArray(p.links)) return '';
-
-  for (const link of p.links) {
-    if (!link || typeof link !== 'object') continue;
-    const title = firstText(
-      (link as Record<string, unknown>).title,
-      (link as Record<string, unknown>).label,
-      (link as Record<string, unknown>).name,
-    );
-    if (!title) continue;
-    const normalized = normalizeTitle(title);
-    if (!normalized || normalized === own) continue;
-    if (GENERIC_TITLE.test(title) || NON_PARENT_TITLE.test(title)) continue;
-    if (PARENT_PARK_TITLE.test(title)) return title;
-  }
-  return '';
-}
-
-function normalizeTitle(value: unknown): string {
-  return String(value ?? '')
-    .toLowerCase()
-    .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
-
-// ---------------------------------------------------------------------------
 // Structured details
 // ---------------------------------------------------------------------------
 
@@ -639,11 +399,12 @@ export const SOURCE_GROUP = 'Source metadata';
  * whether to render the accordion at all.
  */
 export function structuredDetails(p: Props): StructuredDetails {
+  const detail = typed(p);
   const stay: DetailRow[] = rows([
     ['Status', text(firstText(p.status_description, p.status ? titleCase(p.status) : ''))],
-    ['Price', text(priceRange(p.price))],
-    ['Check-in', text(scheduleTime(p.schedule, 'check_in_time'))],
-    ['Check-out', text(scheduleTime(p.schedule, 'check_out_time'))],
+    ['Price', text(priceRange(detail.price))],
+    ['Check-in', text(clockTime(detail.schedule?.check_in))],
+    ['Check-out', text(clockTime(detail.schedule?.check_out))],
     ['Max RV', text(feet(p.max_rv_length))],
     ['Max trailer', text(feet(p.max_trailer_length))],
     ['Pull-through', text(yesNo(p.has_pull_through_sites))],
@@ -658,7 +419,6 @@ export function structuredDetails(p: Props): StructuredDetails {
     ['Managed by', management(p)],
   ]);
 
-  const metadata = p.metadata as Record<string, unknown> | undefined;
   const source: DetailRow[] = rows([
     ['Data source', text(firstText(sourcesLabel(p.sources), p.source))],
     ['Source ID', text(firstText(p.source_id))],
@@ -667,7 +427,7 @@ export function structuredDetails(p: Props): StructuredDetails {
       'Booking site',
       text(firstText(p.booking_site, urlHost(firstText(p.reserve_url, p.reservation_url)))),
     ],
-    ['Last updated', text(firstText(metadata?.last_updated, p.last_verified))],
+    ['Last updated', text(firstText(detail.last_verified))],
     ['Connections', connections(p.connections)],
   ]);
 
@@ -678,7 +438,7 @@ export function structuredDetails(p: Props): StructuredDetails {
       { title: SOURCE_GROUP, rows: source },
     ].filter((group) => group.rows.length > 0),
     links: campgroundLinks(p.links),
-    alerts: campgroundAlerts(p.alerts),
+    alerts: campgroundAlerts(detail.alerts),
   };
 }
 
@@ -782,21 +542,17 @@ function campgroundLinks(value: unknown): CampgroundLink[] {
     .filter((link): link is CampgroundLink => link !== null);
 }
 
-function campgroundAlerts(value: unknown): CampgroundAlert[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((alert) => {
-      if (typeof alert === 'string') {
-        const body = alert.trim();
-        return body ? { title: '', body } : null;
-      }
-      if (!alert || typeof alert !== 'object') return null;
-      const record = alert as Record<string, unknown>;
-      const title = firstText(record.title, record.name, record.headline, record.type);
-      const body = firstText(record.description, record.message, record.body, record.text);
-      return title || body ? { title, body } : null;
-    })
-    .filter((alert): alert is CampgroundAlert => alert !== null);
+/**
+ * The notices the "Good to know" block prints.
+ *
+ * `ends_on` and `source_url` are on the wire and deliberately not rendered: the
+ * block is prose, and a date the page cannot act on reads as clutter next to the
+ * closure it qualifies.
+ */
+function campgroundAlerts(alerts: AlertDto[] | undefined): CampgroundAlert[] {
+  return (alerts ?? [])
+    .map((alert) => ({ title: firstText(alert.title), body: firstText(alert.body) }))
+    .filter((alert) => alert.title !== '' || alert.body !== '');
 }
 
 function sourcesLabel(sources: unknown): string {
@@ -808,27 +564,22 @@ function sourcesLabel(sources: unknown): string {
   return [...new Set(cleaned)].join(', ');
 }
 
+/** The currencies whose symbol a North American reader reads without being told. */
+const SYMBOL_CURRENCIES = ['USD', 'CAD'];
+const DEFAULT_CURRENCY = 'USD';
+
 /** `$25`, `$25-$40`, or `CAD 30` for currencies with no familiar symbol. */
-function priceRange(price: unknown): string {
-  if (!price || typeof price !== 'object') return '';
-  const record = price as Props;
-  const min = finiteNumber(record.minimum ?? record.min);
-  const max = finiteNumber(record.maximum ?? record.max);
+function priceRange(price: PriceDto | undefined): string {
+  const min = finiteNumber(price?.minimum);
+  const max = finiteNumber(price?.maximum);
   if (min == null && max == null) return '';
 
-  const currency = firstText(record.currency_code, record.currency) || 'USD';
-  const symbol = ['USD', 'CAD'].includes(currency.toUpperCase())
-    ? '$'
-    : `${currency.toUpperCase()} `;
+  const currency = (firstText(price?.currency) || DEFAULT_CURRENCY).toUpperCase();
+  const symbol = SYMBOL_CURRENCIES.includes(currency) ? '$' : `${currency} `;
   const format = (n: number) => `${symbol}${formatNumber(n)}`;
 
   if (min != null && max != null && min !== max) return `${format(min)}-${format(max)}`;
   return format((min ?? max) as number);
-}
-
-function scheduleTime(schedule: unknown, key: string): string {
-  if (!schedule || typeof schedule !== 'object') return '';
-  return clockTime((schedule as Props)[key]);
 }
 
 /** `14:00` → `2:00 PM`; anything that is not a clock time passes through. */

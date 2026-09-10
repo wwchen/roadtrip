@@ -71,6 +71,8 @@ internal fun JsonObject.booleanField(name: String): Boolean? =
 
 internal fun JsonObject.objectField(name: String): JsonObject? = this[name] as? JsonObject
 
+internal fun JsonObject.jsonArrayField(name: String): JsonArray? = this[name] as? JsonArray
+
 internal fun JsonObject.arrayField(name: String): JsonElement? = this[name]?.takeIf { runCatching { it.jsonArray }.isSuccess }
 
 internal fun campflareCampgroundSourceUrl(campflareId: String): String = CampflareUrls.campground(campflareId)
@@ -93,6 +95,12 @@ internal fun normalizedCoordinate(
 internal const val CAMPGROUNDS_ETL_SLUG = "campflare-campgrounds"
 internal const val CAMPSITES_ETL_SLUG = "campflare-campsites"
 internal const val CAMPFLARE_SOURCE_LINK_TITLE = "Campflare source"
+internal const val AMENITIES_FIELD = "amenities"
+internal const val ALERTS_FIELD = "alerts"
+internal const val CELL_SERVICE_FIELD = "cell_service"
+internal const val METADATA_FIELD = "metadata"
+internal const val PRICE_FIELD = "price"
+internal const val SCHEDULE_FIELD = "default_campsite_schedule"
 internal const val LINKS_FIELD = "links"
 internal const val TITLE_FIELD = "title"
 internal const val URL_FIELD = "url"

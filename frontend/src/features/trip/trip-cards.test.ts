@@ -2,14 +2,7 @@ import { describe, expect, test } from 'vitest';
 import type { LineString } from 'geojson';
 import type { TripStop } from '@/stores/tripStore';
 import { buildRouteIndex, distanceAlongRouteKm } from './route-index';
-import {
-  compactSeasonLabel,
-  hydrateCard,
-  parseRating,
-  tripCardsFromFeatures,
-  visibleCards,
-  type TripCard,
-} from './trip-cards';
+import { hydrateCard, tripCardsFromFeatures, visibleCards, type TripCard } from './trip-cards';
 
 /** Seattle → Bellingham, roughly north along the I-5 corridor. */
 const line: LineString = {
@@ -40,10 +33,6 @@ const card = (over: Partial<TripCard> = {}): TripCard => ({
   lat: 48.1,
   routeKm: 50,
   distKm: 60,
-  sites: null,
-  season: null,
-  reservable: undefined,
-  rating: null,
   hydrated: false,
   ...over,
 });
@@ -158,19 +147,13 @@ describe('hydrateCard', () => {
       name: 'Bay View State Park',
       typeLabel: 'Standard campground',
       state: 'WA',
-      sites: '46',
-      season: 'Open year-round',
-      reservable: true,
-      rating_reviews: [4.6, 812],
     });
 
     expect(hydrated).toMatchObject({
       name: 'Bay View State Park',
       sub: 'Standard campground',
       location: 'WA',
-      sites: 46,
       hydrated: true,
-      rating: [4.6, 812],
     });
   });
 
@@ -184,49 +167,6 @@ describe('hydrateCard', () => {
 
   test('falls back to country when there is no state', () => {
     expect(hydrateCard(card(), { country: 'Canada' }).location).toBe('Canada');
-  });
-
-  test('ignores a site count that is not a number', () => {
-    expect(hydrateCard(card(), { sites: 'lots' }).sites).toBeNull();
-  });
-});
-
-describe('parseRating', () => {
-  test('reads both shapes', () => {
-    expect(parseRating([4.5, 100])).toEqual([4.5, 100]);
-    expect(parseRating('[4.5,100]')).toEqual([4.5, 100]);
-  });
-
-  test('refuses anything else, without throwing', () => {
-    expect(parseRating('not json')).toBeNull();
-    expect(parseRating(undefined)).toBeNull();
-    expect(parseRating(4.5)).toBeNull();
-    expect(parseRating(['4.5'])).toBeNull();
-  });
-});
-
-describe('compactSeasonLabel', () => {
-  test('says the useful thing in the space available', () => {
-    expect(compactSeasonLabel('Open through October 25', undefined)).toBe('Open through October 25');
-    expect(compactSeasonLabel('Open May–Oct (boat access)', undefined)).toBe('Open May–Oct');
-  });
-
-  test('collapses any year-round phrasing to one word', () => {
-    expect(compactSeasonLabel('Open year-round', undefined)).toBe('Year-round');
-    expect(compactSeasonLabel('year round (boat access)', undefined)).toBe('Year-round');
-  });
-
-  test('names a first-come campground when there is no season', () => {
-    expect(compactSeasonLabel(null, false)).toBe('First-come');
-    expect(compactSeasonLabel(null, true)).toBe('');
-    expect(compactSeasonLabel(undefined, undefined)).toBe('');
-  });
-
-  test('truncates rather than blowing the card width', () => {
-    const label = compactSeasonLabel('Open from the middle of May until early October', undefined);
-
-    expect(label).toHaveLength(27);
-    expect(label.endsWith('…')).toBe(true);
   });
 });
 

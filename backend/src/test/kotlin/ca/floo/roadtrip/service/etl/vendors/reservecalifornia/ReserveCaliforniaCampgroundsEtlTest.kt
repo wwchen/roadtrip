@@ -1,5 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
+import ca.floo.roadtrip.model.domain.AmenityKey
+import ca.floo.roadtrip.model.domain.CampgroundAmenity
+import ca.floo.roadtrip.model.domain.CampgroundMetadata
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -13,6 +17,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class ReserveCaliforniaCampgroundsEtlTest {
     @Test
@@ -36,8 +41,60 @@ class ReserveCaliforniaCampgroundsEtlTest {
         assertEquals("CA", campground.location.region)
         assertEquals("US", campground.location.country)
         assertEquals("California State Parks", campground.management!!.agency)
-        val amenities = campground.amenities!!.jsonObject
-        assertEquals("true", amenities["Restrooms"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `highlight labels map onto the amenity vocabulary and activities land in metadata`() {
+        val campground =
+            records(
+                ReserveCaliforniaCampgroundsEtl("reservecalifornia-campgrounds")
+                    .transform(catalog(), transformCtx()),
+            ).single()
+
+        assertEquals(
+            listOf(
+                CampgroundAmenity(AmenityKey.TOILETS),
+                CampgroundAmenity(AmenityKey.SHOWERS),
+                CampgroundAmenity(AmenityKey.CAMP_STORE),
+                CampgroundAmenity(AmenityKey.FIRES_ALLOWED),
+                CampgroundAmenity(AmenityKey.OTHER, detail = "Museum"),
+            ),
+            campground.amenities,
+        )
+        assertEquals(CampgroundMetadata(activities = listOf("Hiking")), campground.metadata)
+        assertNull(campground.parentName)
+    }
+
+    @Test
+    fun `every spec highlight label maps onto its amenity key`() {
+        val labelToKey =
+            listOf(
+                "Restrooms" to AmenityKey.TOILETS,
+                "Toilet, Accessible" to AmenityKey.TOILETS,
+                "Comfort Station" to AmenityKey.TOILETS,
+                "Showers" to AmenityKey.SHOWERS,
+                "Rinse Showers" to AmenityKey.SHOWERS,
+                "Dump Station" to AmenityKey.DUMP_STATION,
+                "Store-convenience" to AmenityKey.CAMP_STORE,
+                "Store - Convenience" to AmenityKey.CAMP_STORE,
+                "Fire Rings" to AmenityKey.FIRES_ALLOWED,
+                "Museum" to AmenityKey.OTHER,
+                "  rinse SHOWERS " to AmenityKey.SHOWERS,
+            )
+
+        assertEquals(
+            labelToKey.map { it.second },
+            labelToKey.map { (label, _) -> highlightAmenities(listOf(label)).single().key },
+        )
+        assertEquals("Museum", highlightAmenities(listOf("Museum")).single().detail)
+    }
+
+    @Test
+    fun `two highlights naming the same amenity collapse to one`() {
+        assertEquals(
+            listOf(CampgroundAmenity(AmenityKey.TOILETS)),
+            highlightAmenities(listOf("Restrooms", "Comfort Station")),
+        )
     }
 
     @Test
@@ -55,7 +112,7 @@ class ReserveCaliforniaCampgroundsEtlTest {
         assertEquals(DataProvider.RESERVECALIFORNIA, parentDataProviderRef.provider)
         assertEquals("690", parentDataProviderRef.serialize())
         assertEquals("PINE 001", campsite.name)
-        assertEquals("Tent Site", campsite.kind)
+        assertEquals(CampsiteKind.TENT, campsite.kind)
         assertEquals("Tent Site", campsite.kindListed)
         assertEquals("Pine Loop", campsite.loopName)
 
@@ -77,7 +134,14 @@ class ReserveCaliforniaCampgroundsEtlTest {
                             unitTypeByFacilityId = mapOf(611L to "Tent Site", 612L to "Day Use"),
                             imageUrl = "https://cdn.example/emerald.jpg",
                             description = "Lakefront camping.",
-                            amenities = listOf("Restrooms"),
+                            amenities =
+                                listOf(
+                                    " restrooms ",
+                                    "Rinse Showers",
+                                    "Store - Convenience",
+                                    "Fire Rings",
+                                    "Museum",
+                                ),
                             activities = listOf("Hiking"),
                             raw = jsonObject("""{"PlaceId":690,"Name":"Emerald Bay SP"}"""),
                         ),

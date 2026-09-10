@@ -12,8 +12,9 @@ const site: Partial<Campsite> = {
   id: 1,
   name: 'Site 12',
   loop_name: 'Loop A',
-  kind: 'STANDARD NONELECTRIC',
-  kind_listed: 'Standard Nonelectric',
+  kind: 'standard',
+  kind_label: 'Standard',
+  kind_listed: 'STANDARD NONELECTRIC',
   min_people: 2,
   max_people: 6,
   equipment: ['Tent', 'RV', 'Trailer', 'Van', 'Boat'],
@@ -35,7 +36,7 @@ describe('the fact list', () => {
   test('detail facts in reading order', () => {
     expect(detailFacts(site)).toEqual([
       { label: 'Loop', value: 'Loop A' },
-      { label: 'Type', value: 'Standard Nonelectric' },
+      { label: 'Type', value: 'STANDARD NONELECTRIC' },
       { label: 'Capacity', value: '2-6 people' },
       { label: 'Equipment', value: 'Tent, RV, Trailer, Van' },
       { label: 'Provider', value: 'recgov' },
@@ -53,10 +54,8 @@ describe('the fact list', () => {
     ]);
   });
 
-  test('falls back to the raw kind when the provider listed no label', () => {
-    expect(detailFacts({ kind: 'RV NONELECTRIC' })).toEqual([
-      { label: 'Type', value: 'RV NONELECTRIC' },
-    ]);
+  test('falls back to the backend label when the provider listed no words of its own', () => {
+    expect(detailFacts({ kind: 'rv', kind_label: 'RV' })).toEqual([{ label: 'Type', value: 'RV' }]);
   });
 });
 

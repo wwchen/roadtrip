@@ -1,8 +1,11 @@
 package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
+import ca.floo.roadtrip.model.domain.AmenityKey
+import ca.floo.roadtrip.model.domain.CampgroundAmenity
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
+import ca.floo.roadtrip.model.domain.CampgroundMetadata
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -15,11 +18,8 @@ import ca.floo.roadtrip.service.etl.framework.HtmlText
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.fetchedAtOrNow
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -67,12 +67,12 @@ class ReserveCaliforniaCampgroundsEtl(
                             kind = bucket,
                             mediumDescription = place.description,
                             location = CampgroundLocation(place.latitude, place.longitude, region = REGION, country = COUNTRY),
-                            amenities = amenitiesPayload(place.amenities),
+                            amenities = highlightAmenities(place.amenities),
                             reservationUrl = parkUrl,
                             links = listOf(CampgroundLink(parkUrl)),
                             photos = listOfNotNull(place.imageUrl?.let(::CatalogPhoto)),
                             management = CampgroundManagement(agency),
-                            metadata = metadataPayload(place),
+                            metadata = placeMetadata(place),
                             sourceUrl = parkUrl,
                             sourcePayload = place.raw,
                         ),
@@ -82,23 +82,26 @@ class ReserveCaliforniaCampgroundsEtl(
         }
 }
 
-internal fun amenitiesPayload(values: List<String>): JsonObject? {
-    if (values.isEmpty()) return null
-    return buildJsonObject {
-        values.forEach { put(it, true) }
-    }
-}
-
-internal fun metadataPayload(place: ReserveCaliforniaPlace): JsonObject? {
-    val payload =
-        buildJsonObject {
-            if (place.activities.isNotEmpty()) {
-                stringArrayPayload(place.activities)?.let { put("activities", it) }
+/**
+ * ReserveCalifornia publishes free-text highlight labels, not a vocabulary. The
+ * ones that name a known amenity are mapped; the rest ride as [AmenityKey.OTHER]
+ * carrying the vendor's own words. Two labels can name the same amenity
+ * ("Restrooms", "Comfort Station"), so the result is de-duplicated.
+ */
+internal fun highlightAmenities(labels: List<String>): List<CampgroundAmenity> =
+    labels
+        .mapNotNull { raw ->
+            val label = raw.trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val key = amenityKeyByHighlight[label.lowercase()]
+            if (key == null) {
+                CampgroundAmenity(AmenityKey.OTHER, detail = label)
+            } else {
+                CampgroundAmenity(key)
             }
-            put("facility_unit_types", facilityUnitTypePayload(place))
-        }
-    return payload.takeIf { it.isNotEmpty() }
-}
+        }.distinctBy { it.key to it.detail }
+
+private fun placeMetadata(place: ReserveCaliforniaPlace): CampgroundMetadata? =
+    CampgroundMetadata(activities = place.activities).takeIf { it != CampgroundMetadata() }
 
 internal fun campsiteSourcePayload(
     unit: ReserveCaliforniaUnit,
@@ -113,20 +116,6 @@ internal fun campsiteSourcePayload(
         put(PARENT_PLACE_ID_KEY, placeId)
         grid.facilityName?.let { put("facility_name", it) }
         facility?.raw?.let { put("facility", it) }
-    }
-
-internal fun stringArrayPayload(values: List<String>): JsonElement? {
-    if (values.isEmpty()) return null
-    return buildJsonArray {
-        values.forEach { add(it) }
-    }
-}
-
-internal fun facilityUnitTypePayload(place: ReserveCaliforniaPlace): JsonObject =
-    buildJsonObject {
-        for ((facilityId, unitType) in place.unitTypeByFacilityId) {
-            put(facilityId.toString(), unitType)
-        }
     }
 
 internal fun parseCatalog(
@@ -257,6 +246,20 @@ internal fun reserveCaliforniaParkUrl(placeId: Long): String = "https://reservec
 internal const val REGION = "CA"
 internal const val COUNTRY = "US"
 internal const val PARENT_PLACE_ID_KEY = "_parent_place_id"
+
+// Highlight label (lowercased, trimmed) → the amenity it names. Everything else is OTHER.
+private val amenityKeyByHighlight =
+    mapOf(
+        "restrooms" to AmenityKey.TOILETS,
+        "toilet, accessible" to AmenityKey.TOILETS,
+        "comfort station" to AmenityKey.TOILETS,
+        "showers" to AmenityKey.SHOWERS,
+        "rinse showers" to AmenityKey.SHOWERS,
+        "dump station" to AmenityKey.DUMP_STATION,
+        "store-convenience" to AmenityKey.CAMP_STORE,
+        "store - convenience" to AmenityKey.CAMP_STORE,
+        "fire rings" to AmenityKey.FIRES_ALLOWED,
+    )
 
 internal val activityHints =
     setOf(

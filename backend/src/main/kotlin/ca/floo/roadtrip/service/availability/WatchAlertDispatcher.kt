@@ -218,7 +218,7 @@ internal class WatchAlertDispatcher(
                     WatchOpening(
                         label = r.displayName(),
                         loop = r.loopName,
-                        siteType = r.kind,
+                        siteType = r.kindListed ?: r.kind.label,
                         date = t.targetDate,
                         campgroundId = target?.parentPoiId,
                         campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { poiRepo.fetchPoiName(it) } },

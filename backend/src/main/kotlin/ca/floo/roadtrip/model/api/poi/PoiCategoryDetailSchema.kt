@@ -44,26 +44,32 @@ data class PoiCategoryDetailSchema(
     val status: String? = null,
     @SerialName("status_description") val statusDescription: String? = null,
     val kind: String? = null,
-    val price: JsonElement? = null,
-    val schedule: JsonElement? = null,
-    val amenities: JsonElement? = null,
-    @SerialName("cell_coverage") val cellCoverage: JsonElement? = null,
+    @SerialName("parent_name") val parentName: String? = null,
+    // The typed campground bags. Labels are resolved backend-side so the
+    // amenity and carrier vocabularies live in one registry, not two.
+    val amenities: List<AmenityDto> = emptyList(),
+    @SerialName("cell_coverage") val cellCoverage: List<CarrierSignalDto> = emptyList(),
+    val activities: List<String> = emptyList(),
+    val rating: RatingDto? = null,
+    val price: PriceDto? = null,
+    val schedule: ScheduleDto? = null,
     @SerialName("max_rv_length") val maxRvLength: Double? = null,
     @SerialName("max_trailer_length") val maxTrailerLength: Double? = null,
     @SerialName("has_pull_through_sites") val hasPullThroughSites: Boolean? = null,
     @SerialName("big_rig_friendly") val bigRigFriendly: Boolean? = null,
     val links: JsonElement? = null,
-    val alerts: JsonElement? = null,
+    val alerts: List<AlertDto> = emptyList(),
     val connections: JsonElement? = null,
-    val metadata: JsonElement? = null,
     val management: JsonElement? = null,
     val contact: JsonElement? = null,
     val email: String? = null,
     val elevation: Double? = null,
     @SerialName("last_verified") val lastVerified: String? = null,
     // Charger canonical columns, served as named fields for the same reason as
-    // the campground block above. `status`, `time_zone`, and `amenities` are
-    // shared with campgrounds and reused rather than duplicated.
+    // the campground block above. `status` and `time_zone` are shared with
+    // campgrounds and reused rather than duplicated; `amenities` is not —
+    // it now carries the campground vocabulary only.
+    @SerialName("charger_amenities") val chargerAmenities: List<String> = emptyList(),
     @SerialName("stall_count") val stallCount: Int? = null,
     @SerialName("power_kilowatt") val powerKilowatt: Int? = null,
     val pricebooks: JsonElement? = null,

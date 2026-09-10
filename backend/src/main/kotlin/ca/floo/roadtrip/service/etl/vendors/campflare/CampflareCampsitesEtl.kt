@@ -1,12 +1,12 @@
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
-import ca.floo.roadtrip.model.domain.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
+import ca.floo.roadtrip.service.etl.framework.CampsiteKinds
 import ca.floo.roadtrip.service.etl.framework.HtmlText
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -41,7 +41,7 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
 
         val campsiteId = id!!
         val parentId = campgroundId!!
-        val kind = raw.stringField("kind") ?: DEFAULT_CAMPSITE_KIND
+        val rawKind = raw.stringField("kind")
         val reservationUrl = raw.stringField("reservation_url")
         val recgovRef = extractRecgovCampsiteRef(reservationUrl)
         return TransformResult.Ok(
@@ -54,13 +54,13 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
                 bookingProviderRef = recgovRef ?: campsiteId,
                 parentDataProviderRef = DataProviderRef.Campflare(id = parentId),
                 name = name!!,
-                kind = kind,
+                kind = CampsiteKinds.campflare(rawKind),
                 loopName = raw.stringField("loop_name"),
                 latitude = normalizedLatitude(raw.doubleField("latitude")),
                 longitude = normalizedLongitude(raw.doubleField("longitude")),
                 reservationUrl = reservationUrl,
                 equipment = campflareEquipment(raw.arrayField("equipment")),
-                kindListed = raw.stringField("kind_listed"),
+                kindListed = raw.stringField("kind_listed") ?: rawKind,
                 schedule = raw.objectField("schedule"),
                 price = raw.objectField("price"),
                 firepit = raw.booleanField("firepit"),

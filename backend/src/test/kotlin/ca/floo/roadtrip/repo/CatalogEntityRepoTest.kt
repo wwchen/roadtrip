@@ -1,13 +1,23 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.Address
+import ca.floo.roadtrip.model.domain.AmenityKey
+import ca.floo.roadtrip.model.domain.CampgroundAlert
+import ca.floo.roadtrip.model.domain.CampgroundAmenity
 import ca.floo.roadtrip.model.domain.CampgroundContact
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
+import ca.floo.roadtrip.model.domain.CampgroundMetadata
+import ca.floo.roadtrip.model.domain.CampgroundPrice
+import ca.floo.roadtrip.model.domain.CampgroundRating
+import ca.floo.roadtrip.model.domain.CampgroundSchedule
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CampsiteAttribute
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.model.domain.Carrier
+import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
@@ -38,10 +48,10 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 latitude = 37.739,
                 longitude = -119.565,
                 location = CampgroundLocation(37.739, -119.565, address = Address(state = "CA", country = "US")),
-                amenities = json("""{"toilets":true,"water":true}"""),
+                amenities = listOf(CampgroundAmenity(AmenityKey.TOILETS), CampgroundAmenity(AmenityKey.WATER)),
                 management = CampgroundManagement("National Park Service"),
                 connections = json("""{"ridb_facility_id":"232447"}"""),
-                metadata = json("""{"last_updated":"2026-07-01T00:00:00Z"}"""),
+                metadata = CampgroundMetadata(lastUpdated = "2026-07-01T00:00:00Z"),
                 sourceUrl = "https://campflare.com/campground/upper-pines-campground-447",
                 sourcePayload = json("""{"id":"upper-pines-campground-447","name":"Upper Pines"}"""),
             )
@@ -88,18 +98,6 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals(json("""{"id":"upper-pines-campground-447","name":"Upper Pines"}"""), campground.sourcePayload)
         assertEquals(row.get("id", Long::class.java), campground.id)
         assertEquals(campgroundId, repo.findByPoi(poiId)?.id)
-        assertEquals(
-            listOf(campgroundId),
-            repo
-                .search(
-                    CampgroundRepo.SearchFilters(
-                        vendors = listOf("campflare"),
-                        names = listOf("Upper Pines"),
-                    ),
-                    limit = 10,
-                    offset = 0,
-                ).map { it.id },
-        )
     }
 
     @Test
@@ -261,7 +259,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                         dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-site-001"),
                         parentDataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
                         name = "Site 001",
-                        kind = "tent-only",
+                        kind = CampsiteKind.TENT,
                         loopName = "A",
                         latitude = 37.738,
                         longitude = -119.566,
@@ -292,7 +290,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
 
         assertNotNull(row)
         assertEquals("Site 001", row.get("name", String::class.java))
-        assertEquals("tent-only", row.get("kind", String::class.java))
+        assertEquals(CampsiteKind.TENT.wire, row.get("kind", String::class.java))
         assertEquals("A", row.get("loop_name", String::class.java))
         assertEquals("campflare", row.get("data_provider", String::class.java))
         assertEquals("upper-pines-site-001", row.get("data_provider_ref", String::class.java))
@@ -416,7 +414,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     dataProviderRef = DataProviderRef.RecGov(id = "100"),
                     parentDataProviderRef = DataProviderRef.RecGov(id = "232447"),
                     name = "Site 100",
-                    kind = "standard",
+                    kind = CampsiteKind.STANDARD,
                     sourcePayload = json("""{"site":"100"}"""),
                 ),
             ),
@@ -429,7 +427,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-site-100"),
                     parentDataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
                     name = "Campflare Site 100",
-                    kind = "standard",
+                    kind = CampsiteKind.STANDARD,
                     sourcePayload = json("""{"id":"upper-pines-site-100"}"""),
                 ),
             ),
@@ -585,7 +583,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     dataProviderRef = DataProviderRef.Campflare(id = "bulk-cs-$i"),
                     parentDataProviderRef = DataProviderRef.Campflare(id = "bulk-cg-$i"),
                     name = "Bulk Campsite $i",
-                    kind = "standard",
+                    kind = CampsiteKind.STANDARD,
                     sourcePayload = json("""{"id":"bulk-cs-$i"}"""),
                 )
             }
@@ -836,6 +834,550 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertNull(row.minPeople)
     }
 
+    @Test
+    fun `campsite kind round-trips as the wire value`() {
+        seedCampsites("cg-kind-round-trip")
+        val campgroundId = campgroundId("cg-kind-round-trip")
+        CampsiteRepo(ctx).upsertCampsiteBatch(
+            CampsiteKind.entries.map { kind ->
+                CampsiteUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = "cs-kind-${kind.wire}"),
+                    parentDataProviderRef = DataProviderRef.RecGov(id = "cg-kind-round-trip"),
+                    name = kind.label,
+                    kind = kind,
+                )
+            },
+        )
+
+        val stored = CampsiteRepo(ctx).findByCampground(campgroundId).associateBy { it.name }
+        assertEquals(
+            CampsiteKind.entries.associate { it.label to it },
+            stored.mapValues { (_, row) -> row.kind },
+        )
+        assertEquals(
+            CampsiteKind.entries.map { it.wire }.sorted(),
+            ctx
+                .fetch("SELECT kind FROM campsites ORDER BY kind")
+                .map { it.get("kind", String::class.java) },
+        )
+    }
+
+    /** One legacy row per vendor family; the full per-value table lives in `CampsiteKindsTest`. */
+    @Test
+    fun `the kind migration rewrites every vendor vocabulary and leaves wire values alone`() {
+        seedLegacyKinds()
+        seedCampsites("cg-kind-legacy")
+        val campgroundId = campgroundId("cg-kind-legacy")
+        val legacy =
+            listOf(
+                Triple("recgov", "cs-kind-recgov", "TENT ONLY NONELECTRIC"),
+                Triple("campflare", "cs-kind-campflare", "water-access"),
+                Triple("aspira", "cs-kind-aspira", "Backcountry Site"),
+                Triple("aspira", "cs-kind-aspira-cabin", "Backcountry Cabin"),
+                // The legacy provider value some deployed campsite rows still carry.
+                Triple("bcparks-strapi", "cs-kind-bcparks", "Backcountry Site"),
+                Triple("reservecalifornia", "cs-kind-reservecalifornia", "Tent Site"),
+                Triple("reservecalifornia", "cs-kind-rc-tent", "Tent Campsite"),
+                Triple("reservecalifornia", "cs-kind-rc-day-use", "Group Day Use"),
+                Triple("reservecalifornia", "cs-kind-rc-hookup", "Hook Up (E/W) Campsite"),
+                Triple("reservecalifornia", "cs-kind-rc-standard", "Campsite"),
+                Triple("reserveamerica", "cs-kind-reserveamerica", "site"),
+                Triple("recgov", "cs-kind-already-wire", "day_use"),
+            )
+        for ((vendor, ref, kind) in legacy) {
+            ctx.seedCampsite(campgroundId = campgroundId, vendor = vendor, vendorId = ref, kind = kind)
+        }
+
+        migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute)
+
+        assertEquals(
+            mapOf(
+                "cs-kind-recgov" to "tent",
+                "cs-kind-campflare" to "boat_in",
+                "cs-kind-aspira" to "backcountry",
+                "cs-kind-aspira-cabin" to "cabin",
+                "cs-kind-bcparks" to "backcountry",
+                "cs-kind-reservecalifornia" to "tent",
+                "cs-kind-rc-tent" to "tent",
+                "cs-kind-rc-day-use" to "day_use",
+                "cs-kind-rc-hookup" to "rv",
+                "cs-kind-rc-standard" to "standard",
+                "cs-kind-reserveamerica" to "other",
+                "cs-kind-already-wire" to "day_use",
+            ),
+            campsiteKindsByRef(),
+        )
+    }
+
+    /** The vendor's word is the only copy a row no later import touches has left. */
+    @Test
+    fun `the kind migration keeps the vendor word in kind_listed`() {
+        seedLegacyKinds()
+        seedCampsites("cg-kind-listed")
+        val campgroundId = campgroundId("cg-kind-listed")
+        ctx.seedCampsite(campgroundId = campgroundId, vendor = "campflare", vendorId = "cs-kind-listed", kind = "tent-only")
+
+        migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute)
+
+        assertEquals(
+            listOf("tent" to "tent-only"),
+            ctx
+                .fetch("SELECT kind, kind_listed FROM campsites WHERE data_provider_ref = ?", "cs-kind-listed")
+                .map { it.get("kind", String::class.java) to it.get("kind_listed", String::class.java) },
+        )
+    }
+
+    /** A row this repo wrote is already a wire value, so a replay of V58 must change nothing. */
+    @Test
+    fun `the kind migration is a no-op on rows this repo wrote`() {
+        seedCampsites("cg-kind-noop")
+        CampsiteRepo(ctx).upsertCampsiteBatch(
+            CampsiteKind.entries.map { kind ->
+                CampsiteUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = "cs-noop-${kind.wire}"),
+                    parentDataProviderRef = DataProviderRef.RecGov(id = "cg-kind-noop"),
+                    name = kind.label,
+                    kind = kind,
+                    kindListed = kind.label,
+                )
+            },
+        )
+        val before = campsiteKindColumnsByRef()
+
+        repeat(2) { migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute) }
+
+        assertEquals(before, campsiteKindColumnsByRef())
+    }
+
+    /** The CHECK the migration adds is what keeps the strict decode on the read path honest. */
+    @Test
+    fun `the kind check refuses a vendor string after the migration`() {
+        seedCampsites("cg-kind-check")
+        migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute)
+
+        val failure =
+            assertFailsWith<Exception> {
+                ctx.seedCampsite(
+                    campgroundId = campgroundId("cg-kind-check"),
+                    vendorId = "cs-kind-refused",
+                    kind = "TENT ONLY NONELECTRIC",
+                )
+            }
+
+        assertEquals(true, failure.causeMessages().any { "campsites_kind_wire_check" in it })
+    }
+
+    @Test
+    fun `the kind migration rewrites stored watch site_type filters`() {
+        val ownerUserId = seedWatchOwner()
+        insertWatchFilters(
+            """{"site_type": ["TENT ONLY NONELECTRIC", "tent", "Tent Campsite", "Group Day Use", "Tent Only - Walk-In", "Equestrian Group Campsite"]}""",
+            ownerUserId,
+        )
+        insertWatchFilters("""{"site_type": "water-access", "loop": "A"}""", ownerUserId)
+        insertWatchFilters("""{"site_type": ["Backcountry Site", "houseboat"]}""", ownerUserId)
+        insertWatchFilters("""{"loop": "A"}""", ownerUserId)
+
+        migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute)
+
+        assertEquals(
+            listOf(
+                """{"site_type": ["tent", "tent", "tent", "day_use", "walk_in", "group"]}""",
+                """{"loop": "A", "site_type": "boat_in"}""",
+                """{"site_type": ["backcountry", "other"]}""",
+                """{"loop": "A"}""",
+            ),
+            ctx
+                .fetch("SELECT campsite_filters::text AS filters FROM availability_watch ORDER BY id")
+                .map { it.get("filters", String::class.java) },
+        )
+    }
+
+    /**
+     * The same string means different kinds to different vendors, so a watch's own
+     * targets pick the table: `Group Walk-In Campsite` is a group site to
+     * ReserveCalifornia, and `Tent Site` is nothing at all to Aspira.
+     */
+    @Test
+    fun `the kind migration reads a watch filter through its targets' provider`() {
+        val ownerUserId = seedWatchOwner()
+        val reserveCalifornia = ctx.seedCatalogPoi("rc-watch", "RC Park", -120.0, 38.0, source = "reservecalifornia")
+        val aspira = ctx.seedCatalogPoi("aspira-watch", "Aspira Park", -123.0, 49.0, source = "aspira")
+        val recGovCampsiteId =
+            ctx.seedCampsite(
+                campgroundId = ctx.seedCampground(source = "recgov", sourceId = "recgov-watch-cg"),
+                vendorId = "cs-recgov-watch",
+            )
+        watchTarget(insertWatchFilters("""{"site_type": ["Group Walk-In Campsite"]}""", ownerUserId), poiId = reserveCalifornia.poiId)
+        watchTarget(insertWatchFilters("""{"site_type": ["Tent Site"]}""", ownerUserId), poiId = aspira.poiId)
+        watchTarget(insertWatchFilters("""{"site_type": ["TENT ONLY NONELECTRIC"]}""", ownerUserId), campsiteId = recGovCampsiteId)
+        insertWatchFilters("""{"site_type": ["Tent Only - Walk-In"]}""", ownerUserId)
+
+        migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute)
+
+        assertEquals(
+            listOf(
+                """{"site_type": ["group"]}""",
+                """{"site_type": ["other"]}""",
+                """{"site_type": ["tent"]}""",
+                """{"site_type": ["walk_in"]}""",
+            ),
+            ctx
+                .fetch("SELECT campsite_filters::text AS filters FROM availability_watch ORDER BY id")
+                .map { it.get("filters", String::class.java) },
+        )
+    }
+
+    /**
+     * `["tent"]` and `"cabin"` are already wire values, so a replay must leave both watches'
+     * JSON alone; nothing in this migration or a trigger bumps `updated_at`, so only the JSON is checked.
+     */
+    @Test
+    fun `the kind migration is a no-op on watch filters already holding wire values`() {
+        val ownerUserId = seedWatchOwner()
+        insertWatchFilters("""{"site_type": ["tent"]}""", ownerUserId)
+        insertWatchFilters("""{"site_type": "cabin"}""", ownerUserId)
+        val before =
+            ctx
+                .fetch("SELECT campsite_filters::text AS filters FROM availability_watch ORDER BY id")
+                .map { it.get("filters", String::class.java) }
+
+        repeat(2) { migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute) }
+
+        assertEquals(
+            before,
+            ctx
+                .fetch("SELECT campsite_filters::text AS filters FROM availability_watch ORDER BY id")
+                .map { it.get("filters", String::class.java) },
+        )
+    }
+
+    @Test
+    fun `campground typed bags and parent name round-trip through the repo`() {
+        val repo = CampgroundRepo(ctx)
+        repo.upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cg-bags-1"),
+                    name = "Bagged",
+                    parentName = "Yosemite National Park",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                    amenities =
+                        listOf(
+                            CampgroundAmenity(AmenityKey.TOILETS, detail = "vault"),
+                            CampgroundAmenity(AmenityKey.SHOWERS, present = false),
+                            CampgroundAmenity(AmenityKey.OTHER, detail = "Surfing"),
+                        ),
+                    cellService =
+                        listOf(
+                            CarrierSignal(Carrier.VERIZON, average = 3.5, count = 11),
+                            CarrierSignal(Carrier.US_CELLULAR, average = 2.0),
+                        ),
+                    metadata =
+                        CampgroundMetadata(
+                            activities = listOf("Camping", "Hiking"),
+                            rating = CampgroundRating(average = 4.5, count = 12),
+                            lastUpdated = "2026-07-01T00:00:00Z",
+                        ),
+                    price = CampgroundPrice(minimum = 36.0, maximum = 50.0, currency = "USD"),
+                    defaultCampsiteSchedule = CampgroundSchedule(checkIn = "14:00", checkOut = "11:00"),
+                    alerts =
+                        listOf(
+                            CampgroundAlert(title = "Fire ban", body = "No fires.", endsOn = "2026-09-30", sourceUrl = "https://a.test/"),
+                        ),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+
+        val row = checkNotNull(repo.findById(campgroundId("cg-bags-1")))
+
+        assertEquals("Yosemite National Park", row.parentName)
+        assertEquals(
+            listOf(
+                CampgroundAmenity(AmenityKey.TOILETS, detail = "vault"),
+                CampgroundAmenity(AmenityKey.SHOWERS, present = false),
+                CampgroundAmenity(AmenityKey.OTHER, detail = "Surfing"),
+            ),
+            row.amenities,
+        )
+        assertEquals(
+            listOf(CarrierSignal(Carrier.VERIZON, average = 3.5, count = 11), CarrierSignal(Carrier.US_CELLULAR, average = 2.0)),
+            row.cellService,
+        )
+        assertEquals(
+            CampgroundMetadata(listOf("Camping", "Hiking"), CampgroundRating(4.5, 12), "2026-07-01T00:00:00Z"),
+            row.metadata,
+        )
+        assertEquals(CampgroundPrice(minimum = 36.0, maximum = 50.0, currency = "USD"), row.price)
+        assertEquals(CampgroundSchedule(checkIn = "14:00", checkOut = "11:00"), row.defaultCampsiteSchedule)
+        assertEquals(
+            listOf(CampgroundAlert(title = "Fire ban", body = "No fires.", endsOn = "2026-09-30", sourceUrl = "https://a.test/")),
+            row.alerts,
+        )
+    }
+
+    @Test
+    fun `empty campground bags read back as empty lists and absent objects`() {
+        val repo = CampgroundRepo(ctx)
+        repo.upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cg-bags-empty"),
+                    name = "Bare",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+
+        val row = checkNotNull(repo.findById(campgroundId("cg-bags-empty")))
+
+        assertNull(row.parentName)
+        assertEquals(emptyList(), row.amenities)
+        assertEquals(emptyList(), row.cellService)
+        assertEquals(emptyList(), row.alerts)
+        assertNull(row.metadata)
+        assertNull(row.price)
+        assertNull(row.defaultCampsiteSchedule)
+    }
+
+    /**
+     * The bag counterpart of the V55 and V56 no-ops: a row the typed repo just
+     * wrote is already canonical, so re-running V57 over it must change
+     * nothing.
+     */
+    @Test
+    fun `the campground bags migration is a no-op on rows this repo wrote`() {
+        CampgroundRepo(ctx).upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cg-bags-canonical"),
+                    name = "Canonical Bags",
+                    parentName = "Yosemite National Park",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                    amenities =
+                        listOf(
+                            CampgroundAmenity(AmenityKey.TOILETS, detail = "vault"),
+                            CampgroundAmenity(AmenityKey.SHOWERS, present = false),
+                        ),
+                    cellService = listOf(CarrierSignal(Carrier.VERIZON, average = 3.5, count = 11)),
+                    metadata = CampgroundMetadata(listOf("Camping"), CampgroundRating(4.5, 12), "2026-07-01T00:00:00Z"),
+                    price = CampgroundPrice(minimum = 36.0, currency = "USD"),
+                    defaultCampsiteSchedule = CampgroundSchedule(checkIn = "14:00", checkOut = "11:00"),
+                    alerts = listOf(CampgroundAlert(title = "Fire ban", body = "No fires.", endsOn = "2026-09-30")),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+
+        val before = campgroundBagColumnsAsText()
+
+        migrationStatements("V57__typed_campground_bags.sql").forEach(ctx::execute)
+
+        assertEquals(before, campgroundBagColumnsAsText())
+    }
+
+    /**
+     * The bag migration's whole job: every legacy shape the live catalog holds
+     * has to decode strictly once the read path is typed. It backfills nothing
+     * — `parent_name` stays empty until the import that follows the deploy.
+     */
+    @Test
+    fun `the campground bags migration rewrites legacy vendor shapes and backfills nothing`() {
+        // Seeding pre-V57 shapes means writing objects into what V57 made array columns.
+        ctx.execute("ALTER TABLE campgrounds DROP CONSTRAINT IF EXISTS campgrounds_amenities_check")
+        ctx.execute("ALTER TABLE campgrounds DROP CONSTRAINT IF EXISTS campgrounds_cell_service_check")
+        seedLegacyCampground(
+            "campflare",
+            "legacy-campflare",
+            "amenities" to """{"toilets":true,"showers":false,"wifi":null,"toilet_kind":"vault"}""",
+            "cell_service" to """{"verizon":3.5,"uscell":2,"fakecell":1}""",
+            "price" to """{"currency":"$","currency_code":"USD","minimum":36,"maximum":50}""",
+            "default_campsite_schedule" to """{"check_in_time":"14:00","check_out_time":"11:00","uniform":true}""",
+            "alerts" to
+                """[{"title":"Fire ban","content":"No fires.","end_date":"2026-09-30","source_url":"https://a.test/"},{"title":"No body"}]""",
+            "metadata" to """{"last_updated":"2026-07-01T00:00:00Z","has_availability_alerts":true}""",
+        )
+        seedLegacyCampground(
+            "campflare",
+            "legacy-campflare-null-toilets",
+            "amenities" to """{"toilets":null,"toilet_kind":"vault","showers":true}""",
+        )
+        seedLegacyCampground(
+            "reservecalifornia",
+            "legacy-rc",
+            "amenities" to """{"Restrooms":true,"Surfing":true}""",
+        )
+        seedLegacyCampground(
+            "campflare",
+            "legacy-amenity-values",
+            "amenities" to """{"camp_kitchen":true,"boat_ramp":false,"wifi":"guest network"}""",
+        )
+        seedLegacyCampground("recgov", "legacy-activity-not-string", "metadata" to """{"activities":["Camping",5]}""")
+        seedLegacyCampground("recgov", "legacy-alert-title-not-string", "alerts" to """[{"title":5,"body":"No fires."}]""")
+        seedLegacyCampground("recgov", "legacy-alert-ends-on-not-string", "alerts" to """[{"body":"No fires.","ends_on":20260930}]""")
+        seedLegacyCampground("recgov", "legacy-alert-url-not-string", "alerts" to """[{"body":"No fires.","source_url":false}]""")
+        seedLegacyCampground("recgov", "legacy-alert-body-not-string", "alerts" to """[{"title":"Fire ban","body":5}]""")
+        seedLegacyCampground(
+            "recgov",
+            "legacy-recgov",
+            "cell_service" to """{"verizon":{"avg":3.5,"count":11},"att":{"count":4}}""",
+            "metadata" to """{"activities":["Camping","Hiking"],"rating_reviews":{"avg":4.5,"count":12}}""",
+        )
+        seedLegacyCampground(
+            "aspira",
+            "1:2",
+            "metadata" to """{"transaction_location_id":1,"map_id":2,"match_kind":"leaf"}""",
+        )
+        // An expected key holding the wrong type is as legacy as an unexpected key.
+        seedLegacyCampground("recgov", "legacy-activities-not-array", "metadata" to """{"activities":"Camping"}""")
+        seedLegacyCampground("recgov", "legacy-last-updated-not-string", "metadata" to """{"last_updated":20260701}""")
+        seedLegacyCampground(
+            "recgov",
+            "legacy-rating-not-numeric",
+            "metadata" to """{"activities":["Camping"],"rating":{"average":"4.5","count":12}}""",
+        )
+        seedLegacyCampground("recgov", "legacy-price-bounds-not-numbers", "price" to """{"minimum":"36","maximum":"50"}""")
+        seedLegacyCampground("recgov", "legacy-price-currency-not-string", "price" to """{"minimum":36,"currency":9}""")
+        seedLegacyCampground(
+            "recgov",
+            "legacy-schedule-not-strings",
+            "default_campsite_schedule" to """{"check_in":14,"check_out":"11:00"}""",
+        )
+
+        // Twice: a rerun over the rows the first pass canonicalized must change nothing.
+        repeat(2) { migrationStatements("V57__typed_campground_bags.sql").forEach(ctx::execute) }
+
+        val repo = CampgroundRepo(ctx)
+        val campflare = checkNotNull(repo.findById(campgroundId("legacy-campflare")))
+        assertEquals(
+            listOf(
+                CampgroundAmenity(AmenityKey.SHOWERS, present = false),
+                CampgroundAmenity(AmenityKey.TOILETS, detail = "vault"),
+            ),
+            campflare.amenities.sortedBy { it.key.wire },
+        )
+        assertEquals(
+            listOf(CarrierSignal(Carrier.US_CELLULAR, average = 2.0), CarrierSignal(Carrier.VERIZON, average = 3.5)),
+            campflare.cellService.sortedBy { it.carrier.wire },
+        )
+        assertEquals(CampgroundPrice(minimum = 36.0, maximum = 50.0, currency = "USD"), campflare.price)
+        assertEquals(CampgroundSchedule(checkIn = "14:00", checkOut = "11:00"), campflare.defaultCampsiteSchedule)
+        assertEquals(
+            listOf(CampgroundAlert(title = "Fire ban", body = "No fires.", endsOn = "2026-09-30", sourceUrl = "https://a.test/")),
+            campflare.alerts,
+        )
+        assertEquals(CampgroundMetadata(lastUpdated = "2026-07-01T00:00:00Z"), campflare.metadata)
+        assertNull(campflare.parentName)
+
+        // Order, not a set: the toilet_kind stand-in is prepended, so toilets reads first.
+        val nullToilets = checkNotNull(repo.findById(campgroundId("legacy-campflare-null-toilets")))
+        assertEquals(
+            listOf(
+                CampgroundAmenity(AmenityKey.TOILETS, present = true, detail = "vault"),
+                CampgroundAmenity(AmenityKey.SHOWERS, present = true),
+            ),
+            nullToilets.amenities,
+        )
+
+        val amenityValues = checkNotNull(repo.findById(campgroundId("legacy-amenity-values")))
+        assertEquals(
+            listOf(
+                CampgroundAmenity(AmenityKey.OTHER, present = false, detail = "Boat ramp"),
+                CampgroundAmenity(AmenityKey.OTHER, present = true, detail = "Camp kitchen"),
+                CampgroundAmenity(AmenityKey.WIFI, present = true, detail = "guest network"),
+            ),
+            amenityValues.amenities.sortedBy { it.detail },
+        )
+
+        val reserveCalifornia = checkNotNull(repo.findById(campgroundId("legacy-rc")))
+        assertEquals(
+            listOf(CampgroundAmenity(AmenityKey.OTHER, detail = "Restrooms"), CampgroundAmenity(AmenityKey.OTHER, detail = "Surfing")),
+            reserveCalifornia.amenities.sortedBy { it.detail },
+        )
+
+        val recGov = checkNotNull(repo.findById(campgroundId("legacy-recgov")))
+        assertEquals(listOf(CarrierSignal(Carrier.VERIZON, average = 3.5, count = 11)), recGov.cellService)
+        assertEquals(
+            CampgroundMetadata(listOf("Camping", "Hiking"), CampgroundRating(4.5, 12)),
+            recGov.metadata,
+        )
+
+        val aspira = checkNotNull(repo.findById(campgroundId("1:2")))
+        assertNull(aspira.metadata)
+
+        assertNull(checkNotNull(repo.findById(campgroundId("legacy-activities-not-array"))).metadata)
+        assertNull(checkNotNull(repo.findById(campgroundId("legacy-last-updated-not-string"))).metadata)
+        assertEquals(
+            CampgroundMetadata(activities = listOf("Camping")),
+            checkNotNull(repo.findById(campgroundId("legacy-rating-not-numeric"))).metadata,
+        )
+        assertNull(checkNotNull(repo.findById(campgroundId("legacy-price-bounds-not-numbers"))).price)
+        assertEquals(
+            CampgroundPrice(minimum = 36.0),
+            checkNotNull(repo.findById(campgroundId("legacy-price-currency-not-string"))).price,
+        )
+        assertEquals(
+            CampgroundSchedule(checkOut = "11:00"),
+            checkNotNull(repo.findById(campgroundId("legacy-schedule-not-strings"))).defaultCampsiteSchedule,
+        )
+
+        assertEquals(
+            CampgroundMetadata(activities = listOf("Camping")),
+            checkNotNull(repo.findById(campgroundId("legacy-activity-not-string"))).metadata,
+        )
+        assertEquals(
+            listOf(CampgroundAlert(body = "No fires.")),
+            checkNotNull(repo.findById(campgroundId("legacy-alert-title-not-string"))).alerts,
+        )
+        assertEquals(
+            listOf(CampgroundAlert(body = "No fires.")),
+            checkNotNull(repo.findById(campgroundId("legacy-alert-ends-on-not-string"))).alerts,
+        )
+        assertEquals(
+            listOf(CampgroundAlert(body = "No fires.")),
+            checkNotNull(repo.findById(campgroundId("legacy-alert-url-not-string"))).alerts,
+        )
+        assertEquals(emptyList(), checkNotNull(repo.findById(campgroundId("legacy-alert-body-not-string"))).alerts)
+    }
+
+    /** One bare campground row per vendor, written in the shapes that predate the typed columns. */
+    private fun seedLegacyCampground(
+        dataProvider: String,
+        dataProviderRef: String,
+        vararg columns: Pair<String, String>,
+    ) {
+        val names = columns.joinToString("") { ", ${it.first}" }
+        val placeholders = columns.joinToString("") { ", ?::jsonb" }
+        ctx.execute(
+            "INSERT INTO campgrounds (name, data_provider, data_provider_ref$names) VALUES (?, ?, ?$placeholders)",
+            *(listOf("Legacy", dataProvider, dataProviderRef) + columns.map { it.second }).toTypedArray(),
+        )
+    }
+
+    private fun campgroundId(dataProviderRef: String): Long =
+        ctx
+            .fetchOne("SELECT id FROM campgrounds WHERE data_provider_ref = ?", dataProviderRef)!!
+            .get("id", Long::class.java)
+
+    private fun campgroundBagColumnsAsText(): List<String> =
+        ctx
+            .fetch(
+                """
+                SELECT amenities::text AS amenities, cell_service::text AS cell_service, metadata::text AS metadata,
+                       price::text AS price, default_campsite_schedule::text AS schedule, alerts::text AS alerts,
+                       parent_name
+                FROM campgrounds ORDER BY id
+                """.trimIndent(),
+            ).map { row -> row.intoArray().joinToString("|") { it.toString() } }
+
     /** A parent campground plus one bare campsite per ref, for migration replays to rewrite. */
     private fun seedCampsites(
         campgroundRef: String,
@@ -863,6 +1405,56 @@ class CatalogEntityRepoTest : SharedDbTest() {
             },
         )
     }
+
+    /** Seeding pre-V58 kinds means writing vendor strings past the wire-value CHECK V58 adds. */
+    private fun seedLegacyKinds() = ctx.execute("ALTER TABLE campsites DROP CONSTRAINT IF EXISTS campsites_kind_wire_check")
+
+    private fun campsiteKindsByRef(): Map<String, String> =
+        ctx
+            .fetch("SELECT data_provider_ref, kind FROM campsites")
+            .associate { it.get("data_provider_ref", String::class.java) to it.get("kind", String::class.java) }
+
+    private fun campsiteKindColumnsByRef(): Map<String, String> =
+        ctx
+            .fetch("SELECT data_provider_ref, kind, kind_listed FROM campsites")
+            .associate {
+                it.get("data_provider_ref", String::class.java) to
+                    "${it.get("kind", String::class.java)}|${it.get("kind_listed", String::class.java)}"
+            }
+
+    private fun Throwable.causeMessages(): List<String> = generateSequence(this) { it.cause }.mapNotNull { it.message }.toList()
+
+    private fun seedWatchOwner(): Long =
+        UserRepo(ctx)
+            .create(email = "kind-wire-${System.nanoTime()}@example.com", displayName = null, isEmailVerified = true)
+            .id.value
+
+    private fun insertWatchFilters(
+        filters: String,
+        ownerUserId: Long,
+    ): Long =
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO availability_watch (campsite_filters, start_date, end_date, trigger_kinds, owner_user_id)
+                VALUES (?::jsonb, DATE '2026-07-04', DATE '2026-07-06', ARRAY['slack_notify'], ?)
+                RETURNING id
+                """.trimIndent(),
+                filters,
+                ownerUserId,
+            )!!
+            .get("id", Long::class.java)
+
+    private fun watchTarget(
+        watchId: Long,
+        poiId: Long? = null,
+        campsiteId: Long? = null,
+    ) = ctx.execute(
+        "INSERT INTO availability_watch_target (watch_id, poi_id, campsite_id) VALUES (?, ?, ?)",
+        watchId,
+        poiId,
+        campsiteId,
+    )
 
     private fun campsiteId(dataProviderRef: String): Long =
         ctx

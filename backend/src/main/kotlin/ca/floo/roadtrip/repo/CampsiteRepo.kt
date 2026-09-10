@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogColumnJson
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
@@ -12,14 +13,6 @@ class CampsiteRepo(
     private val ctx: DSLContext,
 ) {
     private val importRunRepo = ImportRunRepo(ctx)
-
-    data class SearchFilters(
-        val vendors: List<String> = emptyList(),
-        val vendorIds: List<String> = emptyList(),
-        val names: List<String> = emptyList(),
-        val loops: List<String> = emptyList(),
-        val siteTypes: List<String> = emptyList(),
-    )
 
     fun upsertCampsites(
         records: List<CampsiteUpsertCandidate>,
@@ -194,7 +187,7 @@ class CampsiteRepo(
                 params += record.bookingProviderRef
                 params += row.campgroundId
                 params += record.name
-                params += record.kind
+                params += record.kind.wire
                 params += record.loopName
                 params += record.latitude
                 params += record.longitude
@@ -262,47 +255,6 @@ class CampsiteRepo(
                 poiId,
             ).map(::campsiteFromRecord)
 
-    fun search(
-        filters: SearchFilters,
-        limit: Int,
-        offset: Int,
-    ): List<Campsite> {
-        val where = searchWhere(filters)
-        val params =
-            where.params +
-                listOf(
-                    limit.coerceIn(MIN_SEARCH_LIMIT, MAX_SEARCH_LIMIT),
-                    offset.coerceAtLeast(0),
-                )
-        return ctx
-            .fetch(
-                """
-                $campsiteSelect
-                WHERE ${where.clauses.joinToString(" AND ")}
-                ORDER BY c.name, c.id
-                LIMIT ? OFFSET ?
-                """.trimIndent(),
-                *params.toTypedArray(),
-            ).map(::campsiteFromRecord)
-    }
-
-    private fun searchWhere(filters: SearchFilters): SearchWhere {
-        val clauses = mutableListOf("c.deleted_at IS NULL")
-        val params = mutableListOf<Any?>()
-        addInClause(clauses, params, "c.data_provider", filters.vendors)
-        addInClause(clauses, params, "c.data_provider_ref", filters.vendorIds)
-        addInClause(clauses, params, "c.loop_name", filters.loops)
-        addInClause(clauses, params, "c.kind", filters.siteTypes)
-        if (filters.names.isNotEmpty()) {
-            clauses +=
-                filters.names.joinToString(prefix = "(", postfix = ")", separator = " OR ") {
-                    "c.name ILIKE ? ESCAPE '\\'"
-                }
-            params.addAll(filters.names.map { "%${escapeLikePattern(it)}%" })
-        }
-        return SearchWhere(clauses, params)
-    }
-
     fun poiIdsForCampsite(campsiteId: Long): List<Long> =
         ctx
             .fetch(
@@ -352,7 +304,7 @@ class CampsiteRepo(
             id = record.get("id", Long::class.java),
             campgroundId = record.get("campground_id", Long::class.java),
             name = record.get("name", String::class.java),
-            kind = record.get("kind", String::class.java),
+            kind = campsiteKind(record.get("kind", String::class.java)),
             loopName = record.get("loop_name", String::class.java),
             // `Double`/`Boolean`/`Int::class.java` resolve to the JVM *primitive*
             // class, so jOOQ coerces a NULL column to 0.0/false/0 instead of null.
@@ -391,6 +343,10 @@ class CampsiteRepo(
         )
     }
 
+    /** V58 canonicalized every row, and this repo only ever writes [CampsiteKind.wire]. */
+    private fun campsiteKind(wire: String): CampsiteKind =
+        CampsiteKind.fromWire(wire) ?: error("Unknown campsite kind in campsites.kind: $wire")
+
     private data class ParentKey(
         val dataProvider: String,
         val dataProviderRef: String,
@@ -401,26 +357,7 @@ class CampsiteRepo(
         val campgroundId: Long,
     )
 
-    private data class SearchWhere(
-        val clauses: List<String>,
-        val params: List<Any?>,
-    )
-
-    private fun addInClause(
-        clauses: MutableList<String>,
-        params: MutableList<Any?>,
-        column: String,
-        values: List<String>,
-    ) {
-        if (values.isEmpty()) return
-        clauses += values.joinToString(prefix = "$column IN (", postfix = ")") { "?" }
-        params.addAll(values)
-    }
-
     private companion object {
-        private const val MIN_SEARCH_LIMIT = 1
-        private const val MAX_SEARCH_LIMIT = 500
-
         private val campsiteSelect =
             """
             SELECT
@@ -464,13 +401,3 @@ class CampsiteRepo(
             """.trimIndent()
     }
 }
-
-private fun escapeLikePattern(value: String): String = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-/**
- * A SQL NULL list column is an absent list. The columns are nullable until the
- * migration that follows the old jar out of rotation, and the strict decoder
- * takes a non-null string.
- */
-private inline fun <reified T : Any> decodeListColumn(raw: String?): List<T> =
-    if (raw == null) emptyList() else CatalogColumnJson.decodeArray(raw)
