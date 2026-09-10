@@ -930,7 +930,10 @@ class CatalogEntityRepoTest : SharedDbTest() {
     @Test
     fun `the kind migration rewrites stored watch site_type filters`() {
         val ownerUserId = seedWatchOwner()
-        insertWatchFilters("""{"site_type": ["TENT ONLY NONELECTRIC", "tent", "Tent Campsite", "Group Day Use"]}""", ownerUserId)
+        insertWatchFilters(
+            """{"site_type": ["TENT ONLY NONELECTRIC", "tent", "Tent Campsite", "Group Day Use", "Tent Only - Walk-In", "Equestrian Group Campsite"]}""",
+            ownerUserId,
+        )
         insertWatchFilters("""{"site_type": "water-access", "loop": "A"}""", ownerUserId)
         insertWatchFilters("""{"site_type": ["Backcountry Site", "houseboat"]}""", ownerUserId)
         insertWatchFilters("""{"loop": "A"}""", ownerUserId)
@@ -939,7 +942,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
 
         assertEquals(
             listOf(
-                """{"site_type": ["tent", "tent", "tent", "day_use"]}""",
+                """{"site_type": ["tent", "tent", "tent", "day_use", "walk_in", "group"]}""",
                 """{"loop": "A", "site_type": "boat_in"}""",
                 """{"site_type": ["backcountry", "other"]}""",
                 """{"loop": "A"}""",

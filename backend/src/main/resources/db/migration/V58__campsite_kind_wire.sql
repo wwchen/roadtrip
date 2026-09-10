@@ -118,12 +118,14 @@ FROM (
                             'equestrian', 'backcountry', 'day_use', 'other') THEN s.value
            -- Checked first so ReserveCalifornia's "Group Day Use" beats recgov's GROUP prefix below.
            WHEN lower(btrim(s.value)) LIKE '%day use%' OR lower(btrim(s.value)) LIKE '%dailyuse%' THEN 'day_use'
+           WHEN lower(btrim(s.value)) LIKE '%walk-in%' THEN 'walk_in'
            WHEN upper(btrim(s.value)) ~ '^GROUP( |$)' THEN 'group'
            WHEN upper(btrim(s.value)) ~ '^TENT ONLY( |$)' THEN 'tent'
            WHEN upper(btrim(s.value)) ~ '^RV( |$)' THEN 'rv'
            WHEN upper(btrim(s.value)) ~ '^(CABIN|YURT|LOOKOUT|OVERNIGHT SHELTER|SHELTER)( |$)' THEN 'cabin'
            WHEN upper(btrim(s.value)) ~ '^(WALK TO|HIKE TO)( |$)' THEN 'walk_in'
            WHEN upper(btrim(s.value)) ~ '^(BOAT IN|MOORING|ANCHORAGE)( |$)' THEN 'boat_in'
+           WHEN lower(btrim(s.value)) LIKE '%group%' THEN 'group'
            WHEN upper(btrim(s.value)) ~ '^EQUESTRIAN( |$)' THEN 'equestrian'
            WHEN upper(btrim(s.value)) ~ '^STANDARD( |$)' THEN 'standard'
            WHEN upper(btrim(s.value)) ~ '^ZONE( |$)' THEN 'backcountry'
@@ -140,7 +142,6 @@ FROM (
            WHEN btrim(s.value) LIKE 'Backcountry%' OR btrim(s.value) LIKE 'Wilderness%' THEN 'backcountry'
            WHEN btrim(s.value) LIKE 'Group%' THEN 'group'
            WHEN btrim(s.value) LIKE 'Conference%' OR btrim(s.value) LIKE 'Retreat%' THEN 'day_use'
-           WHEN lower(btrim(s.value)) LIKE '%group%' THEN 'group'
            WHEN lower(btrim(s.value)) LIKE '%equestrian%' OR lower(btrim(s.value)) LIKE '%equestrain%' THEN 'equestrian'
            WHEN lower(btrim(s.value)) LIKE '%cabin%' OR lower(btrim(s.value)) LIKE '%cottage%'
                 OR lower(btrim(s.value)) LIKE '%yurt%' THEN 'cabin'
