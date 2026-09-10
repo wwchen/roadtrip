@@ -889,6 +889,9 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 Triple("campflare", "cs-kind-campflare", "water-access"),
                 Triple("aspira", "cs-kind-aspira", "Backcountry Site"),
                 Triple("aspira", "cs-kind-aspira-cabin", "Backcountry Cabin"),
+                // Legacy BC Parks rows: the parent campground's provider, not the campsite ETL's,
+                // but some deployed campsite rows still carry it (see DataProviderRef.parseBcParks).
+                Triple("bcparks-strapi", "cs-kind-bcparks", "Backcountry Site"),
                 Triple("reservecalifornia", "cs-kind-reservecalifornia", "Tent Site"),
                 Triple("reserveamerica", "cs-kind-reserveamerica", "site"),
                 Triple("recgov", "cs-kind-already-wire", "day_use"),
@@ -905,6 +908,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 "cs-kind-campflare" to "boat_in",
                 "cs-kind-aspira" to "backcountry",
                 "cs-kind-aspira-cabin" to "cabin",
+                "cs-kind-bcparks" to "backcountry",
                 "cs-kind-reservecalifornia" to "tent",
                 "cs-kind-reserveamerica" to "other",
                 "cs-kind-already-wire" to "day_use",

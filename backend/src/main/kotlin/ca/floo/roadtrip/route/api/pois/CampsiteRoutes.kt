@@ -39,24 +39,7 @@ internal val siteTypeWireList = CampsiteKind.entries.joinToString(", ") { it.wir
 
 internal fun unknownSiteTypeDetail(value: String): String = "unknown site_type '$value'; accepted values: $siteTypeWireList"
 
-/** A `site_type` query parameter set, or the first value outside the wire vocabulary. */
-private sealed interface SiteTypeQuery {
-    data class Parsed(
-        val kinds: List<CampsiteKind>,
-    ) : SiteTypeQuery
-
-    data class Unknown(
-        val value: String,
-    ) : SiteTypeQuery
-}
-
-private fun ApplicationCall.siteTypeQuery(): SiteTypeQuery {
-    val kinds = mutableListOf<CampsiteKind>()
-    for (raw in queryValues("site_type", "siteType")) {
-        kinds += CampsiteKind.fromWire(raw) ?: return SiteTypeQuery.Unknown(raw)
-    }
-    return SiteTypeQuery.Parsed(kinds)
-}
+private fun ApplicationCall.siteTypeQuery(): SiteTypeQuery = parseSiteTypes(queryValues("site_type", "siteType"))
 
 internal fun Route.campsiteRoutes(
     controller: CampsiteAvailabilityController,

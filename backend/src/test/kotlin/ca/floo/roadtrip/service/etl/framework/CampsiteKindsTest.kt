@@ -55,6 +55,14 @@ class CampsiteKindsTest {
     }
 
     @Test
+    fun `rec gov matches mixed-case input the same as upper case`() {
+        val result = CampsiteKinds.recgov("Tent Only Nonelectric")
+
+        assertEquals(CampsiteKind.TENT, result.kind)
+        assertEquals(false, result.electric)
+    }
+
+    @Test
     fun `rec gov reads electric hookups off the trailing token`() {
         assertEquals(true, CampsiteKinds.recgov("STANDARD ELECTRIC").electric)
         assertEquals(true, CampsiteKinds.recgov("RV ELECTRIC").electric)

@@ -114,6 +114,12 @@ describe('filtering', () => {
     ).toHaveLength(0);
   });
 
+  test('matches the label even when the wire value reads differently', () => {
+    const labeled = [site(9, { kind: 'walk_in', kind_label: 'Walk-in' })];
+
+    expect(filterCampsites(labeled, { ...DEFAULT_MATRIX_FILTERS, query: 'walk-in' })).toHaveLength(1);
+  });
+
   test('offers each distinct loop once, numerically ordered', () => {
     expect(
       loopOptions([

@@ -130,6 +130,7 @@ export function filterCampsites(
       row.loop_name,
       row.kind,
       row.kind_listed,
+      row.kind_label,
       row.data_provider,
       row.data_provider_ref,
       row.id,

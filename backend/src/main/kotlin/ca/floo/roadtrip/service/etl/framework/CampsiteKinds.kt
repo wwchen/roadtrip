@@ -18,6 +18,7 @@ object CampsiteKinds {
         val tokens =
             campsiteType
                 ?.trim()
+                ?.uppercase()
                 ?.split(" ")
                 ?.filter { it.isNotEmpty() }
                 .orEmpty()

@@ -32,13 +32,6 @@ import java.time.LocalDate
 private val bulkValidationErrorCodes =
     setOf(BAD_REQUEST_ERROR, "too_many_pois", "bad_min_nights", "bad_date_window", "end_before_start")
 
-/**
- * Prefix [validated] stamps on an unknown-`site_type` failure. `require`/`error`
- * carry only a message, and this marks the ones this file wrote — the rest of a
- * [RouteBodyResult.Invalid] detail is raw deserializer text.
- */
-private const val UNKNOWN_SITE_TYPE_MARKER = "site_type:"
-
 internal fun Route.bulkAvailabilityRoutes(
     controller: BulkAvailabilityController,
     config: BulkAvailabilityConfig,
@@ -52,28 +45,37 @@ internal fun Route.bulkAvailabilityRoutes(
                     return@post
                 }
 
-                val request =
-                    when (
-                        val body =
-                            call
-                                .receiveJsonBody<BulkAvailabilityRequestDto>()
-                                .mapCatching { it.validated(config) }
-                    ) {
+                val dto =
+                    when (val body = call.receiveJsonBody<BulkAvailabilityRequestDto>()) {
                         is RouteBodyResult.Invalid -> {
-                            val detail = body.detail
-                            if (detail != null && detail.startsWith(UNKNOWN_SITE_TYPE_MARKER)) {
-                                call.respondBulkError(
-                                    BAD_REQUEST_ERROR,
-                                    HttpStatusCode.BadRequest,
-                                    detail = detail.removePrefix(UNKNOWN_SITE_TYPE_MARKER),
-                                )
-                                return@post
-                            }
-                            val code = detail?.takeIf { it in bulkValidationErrorCodes } ?: BAD_REQUEST_ERROR
-                            call.respondBulkError(code, HttpStatusCode.BadRequest)
+                            call.respondBulkError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest)
                             return@post
                         }
                         is RouteBodyResult.Valid -> body.value
+                    }
+
+                val siteTypes =
+                    when (val parsed = parseSiteTypes(dto.siteTypes)) {
+                        is SiteTypeQuery.Unknown ->
+                            return@post call.respondBulkError(
+                                BAD_REQUEST_ERROR,
+                                HttpStatusCode.BadRequest,
+                                detail = unknownSiteTypeDetail(parsed.value),
+                            )
+                        is SiteTypeQuery.Parsed -> parsed.kinds
+                    }
+
+                val request =
+                    when (
+                        val validated =
+                            RouteBodyResult.Valid(dto).mapCatching { it.validated(config, siteTypes) }
+                    ) {
+                        is RouteBodyResult.Invalid -> {
+                            val code = validated.detail?.takeIf { it in bulkValidationErrorCodes } ?: BAD_REQUEST_ERROR
+                            call.respondBulkError(code, HttpStatusCode.BadRequest)
+                            return@post
+                        }
+                        is RouteBodyResult.Valid -> validated.value
                     }
 
                 call.respondEncodedJson(
@@ -94,7 +96,10 @@ internal fun Route.bulkAvailabilityRoutes(
     }
 }
 
-private fun BulkAvailabilityRequestDto.validated(config: BulkAvailabilityConfig): BulkAvailabilityRequest {
+private fun BulkAvailabilityRequestDto.validated(
+    config: BulkAvailabilityConfig,
+    siteTypes: List<CampsiteKind>,
+): BulkAvailabilityRequest {
     require(poiIds.isNotEmpty()) { BAD_REQUEST_ERROR }
     require(poiIds.size <= config.maxPois) { "too_many_pois" }
     require(minNights >= 1) { "bad_min_nights" }
@@ -113,10 +118,7 @@ private fun BulkAvailabilityRequestDto.validated(config: BulkAvailabilityConfig)
         startDate = start,
         endDate = end,
         minNights = minNights,
-        siteTypes =
-            siteTypes.map { raw ->
-                CampsiteKind.fromWire(raw) ?: error("$UNKNOWN_SITE_TYPE_MARKER${unknownSiteTypeDetail(raw)}")
-            },
+        siteTypes = siteTypes,
     )
 }
 

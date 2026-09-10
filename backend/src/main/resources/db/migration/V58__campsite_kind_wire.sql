@@ -41,7 +41,9 @@ WHERE data_provider = 'campflare'
 -- Aspira resource-category dictionary names. Exact names first, so
 -- 'Backcountry Cabin' stays a cabin rather than matching the 'Backcountry' prefix.
 -- Parks Canada and BC Parks campsites both land here: the Aspira campsite ETL
--- writes data_provider 'aspira' for every tenant, only the parent differs.
+-- writes data_provider 'aspira' for every tenant, only the parent differs. Some
+-- deployed rows still carry the legacy 'bcparks-strapi' provider value (see
+-- DataProviderRef.parseBcParks / AspiraAvailabilityProvider), so both are covered.
 UPDATE campsites SET kind = CASE
     WHEN btrim(kind) IN ('Campsite', 'Campsite/Seasonal', 'Overflow') THEN 'standard'
     WHEN btrim(kind) IN ('Cabin', 'Rustic Cabin', 'Deluxe Cabin', 'Backcountry Cabin', 'Yurt',
@@ -55,7 +57,7 @@ UPDATE campsites SET kind = CASE
     WHEN btrim(kind) LIKE 'Day Use%' OR btrim(kind) LIKE 'Conference%' OR btrim(kind) LIKE 'Retreat%' THEN 'day_use'
     ELSE 'other'
   END
-WHERE data_provider = 'aspira'
+WHERE data_provider IN ('aspira', 'bcparks-strapi')
   AND kind NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
                    'equestrian', 'backcountry', 'day_use', 'other');
 
