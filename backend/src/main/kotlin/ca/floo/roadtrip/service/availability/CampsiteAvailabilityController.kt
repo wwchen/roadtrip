@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.service.api.seasonElement
 import java.time.Instant
 import java.time.LocalDate
 
@@ -68,6 +69,8 @@ internal class CampsiteAvailabilityController(
                 poiId = poiId,
                 startDate = window.startDate,
                 endDate = window.endDate,
+                earliestDate = dateContext.earliestDate,
+                latestDate = dateResolver.latestDate(dateContext, EMPTY_WINDOW_HORIZON_DAYS),
                 allCampsites = allCampsites,
                 campsites = emptyList(),
                 batch = null,
@@ -88,6 +91,8 @@ internal class CampsiteAvailabilityController(
             poiId = poiId,
             startDate = result.startDate,
             endDate = result.endDate,
+            earliestDate = dateContext.earliestDate,
+            latestDate = result.latestDate,
             allCampsites = allCampsites,
             campsites = campsites,
             batch = result.batch,
@@ -95,7 +100,7 @@ internal class CampsiteAvailabilityController(
     }
 
     /**
-     * Per-campsite availability for one campground POI.
+     * The fused availability week for one campground POI.
      *
      * @throws AvailabilityServiceError on unknown POI/campground or a bad date window.
      * @throws ca.floo.roadtrip.model.availability.AvailabilityProviderError on upstream failure.
@@ -111,14 +116,18 @@ internal class CampsiteAvailabilityController(
     ): PoiCampsitesAvailabilityResponseDto {
         val slice = poiAvailabilitySlice(poiId, siteTypes, startDate, endDate)
         val watchCaps = watchCapabilityService.capabilitiesFor(slice.allCampsites, requester)
-        val perCampsite = slice.perCampsiteEnvelopes().map { it.response }
+        val fused = fuse(slice, watchCapabilityService::pollingSupported, slice.earliestDate)
 
         return PoiCampsitesAvailabilityResponseDto(
             poiId = poiId,
             startDate = slice.startDate.toString(),
             endDate = slice.endDate.toString(),
+            latestDate = slice.latestDate.toString(),
+            state = fused.state,
+            season = seasonElement(fused.season),
+            cache = fused.cache,
+            days = fused.days,
             watchCapabilities = watchCaps,
-            campsites = perCampsite,
         )
     }
 }

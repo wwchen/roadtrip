@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
@@ -54,6 +55,9 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
 
         assertEquals(fixture.startDate, slice.startDate)
         assertEquals(fixture.endDate, slice.endDate)
+        assertEquals(fixture.earliestDate, slice.earliestDate)
+        // The horizon comes from the serving provider's capabilities.
+        assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), slice.latestDate)
         assertEquals(2, slice.allCampsites.size)
         assertEquals(1, slice.campsites.size)
         assertNotNull(slice.batch)
@@ -75,6 +79,8 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
 
         assertEquals(0, slice.campsites.size)
         assertNull(slice.batch)
+        // No provider to ask, so the window falls back to the flat horizon.
+        assertEquals(fixture.earliestDate.plusDays(EMPTY_WINDOW_HORIZON_DAYS.toLong()), slice.latestDate)
     }
 
     /**
@@ -136,13 +142,20 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                         bookingTargets = AvailabilityBookingTargetResolver(BookingAdapterRegistry(emptyList())),
                     ),
             )
-        val start = dateResolver.contextForPoi(TEST_POI_ID).earliestDate.plusDays(WINDOW_START_OFFSET_DAYS)
-        return SliceFixture(controller = controller, startDate = start, endDate = start.plusDays(WINDOW_LENGTH_DAYS))
+        val earliest = dateResolver.contextForPoi(TEST_POI_ID).earliestDate
+        val start = earliest.plusDays(WINDOW_START_OFFSET_DAYS)
+        return SliceFixture(
+            controller = controller,
+            earliestDate = earliest,
+            startDate = start,
+            endDate = start.plusDays(WINDOW_LENGTH_DAYS),
+        )
     }
 }
 
 private data class SliceFixture(
     val controller: CampsiteAvailabilityController,
+    val earliestDate: LocalDate,
     val startDate: LocalDate,
     val endDate: LocalDate,
 )

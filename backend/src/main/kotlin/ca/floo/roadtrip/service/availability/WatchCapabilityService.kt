@@ -39,14 +39,17 @@ internal class WatchCapabilityService(
     /** Null where no credential custodian is wired: `atc` is then never offered. */
     private val recgovCredentials: RecGovCredentialsConfigured? = null,
 ) {
-    fun internalPollingSupportFor(campsites: List<Campsite>): WatchCapabilitySupport {
-        val unsupported =
-            campsites.count { campsite ->
-                val resolved = availabilityTargets.resolve(campsite) ?: return@count true
-                !resolved.provider.capabilities.supportsInternalPolling
-            }
-        return WatchCapabilitySupport(scopedCount = campsites.size, unsupportedCount = unsupported)
+    /** Whether this campsite's provider can be polled for openings at all. */
+    fun pollingSupported(campsite: Campsite): Boolean {
+        val resolved = availabilityTargets.resolve(campsite) ?: return false
+        return resolved.provider.capabilities.supportsInternalPolling
     }
+
+    fun internalPollingSupportFor(campsites: List<Campsite>): WatchCapabilitySupport =
+        WatchCapabilitySupport(
+            scopedCount = campsites.size,
+            unsupportedCount = campsites.count { !pollingSupported(it) },
+        )
 
     fun bookingSupportFor(
         action: BookingAction,

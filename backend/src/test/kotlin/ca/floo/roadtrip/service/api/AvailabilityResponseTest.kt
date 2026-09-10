@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.api
 
+import ca.floo.roadtrip.fixtures.availableIds
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
@@ -63,13 +64,15 @@ class AvailabilityResponseTest {
         assertEquals("available", availabilityDay["status"]!!.jsonPrimitive.content)
         assertNull(availabilityDay["available_count"])
         assertNull(availabilityDay["total"])
-        assertEquals(3, availabilityDay["available_campsite_ids"]!!.jsonArray.size)
-        assertEquals(
-            "first_come",
-            availabilityDay["campsite_statuses"]!!
-                .jsonObject["500"]!!
-                .jsonPrimitive.content,
-        )
+        assertNull(availabilityDay["available_campsite_ids"])
+        assertNull(availabilityDay["campsite_statuses"])
+        // One cell per campsite, ascending, each carrying its own watchability.
+        val cells = availabilityDay["cells"]!!.jsonObject
+        assertEquals(listOf("100", "200", "300", "400", "500"), cells.keys.toList())
+        assertEquals("first_come", cells["500"]!!.jsonObject["status"]!!.jsonPrimitive.content)
+        assertEquals(false, cells["100"]!!.jsonObject["watchable"]!!.jsonPrimitive.boolean)
+        assertEquals(true, cells["400"]!!.jsonObject["watchable"]!!.jsonPrimitive.boolean)
+        assertEquals(true, availabilityDay["watchable"]!!.jsonPrimitive.boolean)
         assertEquals(false, json["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
     }
 
@@ -154,7 +157,7 @@ class AvailabilityResponseTest {
         assertEquals("2026-06-10", dto.startDate)
         assertEquals("2026-06-12", dto.endDate)
         assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
-        assertEquals(listOf(100L), dto.availability[0].availableCampsiteIds)
+        assertEquals(listOf(100L), dto.availability[0].availableIds)
         assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[1].status)
     }
 
@@ -191,8 +194,8 @@ class AvailabilityResponseTest {
         assertEquals(2, dto.availability.size)
         assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
         assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[1].status)
-        assertEquals(emptyList(), dto.availability[1].availableCampsiteIds)
-        assertEquals(emptyMap(), dto.availability[1].campsiteStatuses)
+        assertEquals(emptyList(), dto.availability[1].availableIds)
+        assertEquals(emptyMap(), dto.availability[1].cells)
     }
 
     @Test

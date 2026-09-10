@@ -22,6 +22,8 @@ private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 internal data class CampsiteAvailabilityResult(
     val startDate: LocalDate,
     val endDate: LocalDate,
+    /** The serving provider's booking horizon, for the client's date picker. */
+    val latestDate: LocalDate,
     val batch: AvailabilityObservationBatch,
 )
 
@@ -92,6 +94,7 @@ internal class CampsiteAvailabilityService(
         return CampsiteAvailabilityResult(
             startDate = windows.target.startDate,
             endDate = windows.target.endDate,
+            latestDate = dateResolver.latestDate(dateContext, caps.bookingHorizonDays),
             batch = batch,
         )
     }

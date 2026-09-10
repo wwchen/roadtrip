@@ -1,8 +1,10 @@
 package ca.floo.roadtrip.service.api
 
+import ca.floo.roadtrip.model.api.AvailabilityCellDto
 import ca.floo.roadtrip.model.api.AvailabilityDayDto
 import ca.floo.roadtrip.model.api.AvailabilityErrorDto
 import ca.floo.roadtrip.model.api.AvailabilityResponseDto
+import ca.floo.roadtrip.model.api.AvailabilityWindowState
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
@@ -11,6 +13,7 @@ import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.DayClassification
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.encodeToJsonElement
 import java.time.Instant
@@ -75,7 +78,7 @@ fun availabilityResponseFromObservations(batch: AvailabilityObservationBatch): A
         endDate = batch.endDate,
         perDay = perDay,
         state = state,
-        seasonBlock = batch.seasonBlock.takeIf { state == "closed_for_season" },
+        seasonBlock = batch.seasonBlock.takeIf { state == AvailabilityWindowState.CLOSED_FOR_SEASON.wireValue },
         cacheBlock = batch.cacheBlock,
         scopeRef = batch.scope?.serialize(),
         campsiteId = batch.campsiteId,
@@ -127,9 +130,15 @@ fun rollupStatus(statuses: Iterable<AvailabilityStatus>): AvailabilityStatus {
     }
 }
 
+/**
+ * The one window state outside [AvailabilityWindowState]: a per-stream detail
+ * the fused campground response has no equivalent for.
+ */
+private const val ZERO_AVAILABLE_STATE = "zero_available"
+
 /** Roll up per-day classifications into a single window-level state. */
 fun classifyWindowState(days: List<DayClassification>): String {
-    if (days.none { it.campsiteStatuses.orEmpty().isNotEmpty() }) return "empty"
+    if (days.none { it.campsiteStatuses.orEmpty().isNotEmpty() }) return AvailabilityWindowState.EMPTY.wireValue
     val allClosed = days.all { it.campsiteStatuses.orEmpty().isNotEmpty() && it.status == AvailabilityStatus.CLOSED }
     val anySuccess =
         days.any {
@@ -139,12 +148,19 @@ fun classifyWindowState(days: List<DayClassification>): String {
         }
     val allReserved = days.all { it.campsiteStatuses.orEmpty().isNotEmpty() && it.status == AvailabilityStatus.RESERVED }
     return when {
-        allClosed -> "closed_for_season"
-        anySuccess -> "success"
-        allReserved -> "zero_available"
-        else -> "success"
+        allClosed -> AvailabilityWindowState.CLOSED_FOR_SEASON.wireValue
+        anySuccess -> AvailabilityWindowState.SUCCESS.wireValue
+        allReserved -> ZERO_AVAILABLE_STATE
+        else -> AvailabilityWindowState.SUCCESS.wireValue
     }
 }
+
+/** The season block as the wire carries it; null stays absent rather than `{}`. */
+fun seasonElement(block: AvailabilitySeasonBlock?): JsonElement? = block?.let { seasonBlockJson.encodeToJsonElement(it) }
+
+/** One cell per campsite, in ascending id order, watchable on status alone. */
+private fun statusOnlyCells(statuses: Map<Long, AvailabilityStatus>): Map<Long, AvailabilityCellDto> =
+    statuses.toSortedMap().mapValues { (_, status) -> AvailabilityCellDto(status = status, watchable = status.watchable) }
 
 /**
  * `provider` is the vendor id. `season` is an optional reopen-date hint only
@@ -170,14 +186,15 @@ fun availabilityResponseDto(
         startDate = startDate.toString(),
         endDate = endDate.toString(),
         state = state,
-        season = seasonBlock?.let { seasonBlockJson.encodeToJsonElement(it) } ?: JsonNull,
+        season = seasonElement(seasonBlock) ?: JsonNull,
         availability =
             perDay.map { day ->
+                val cells = statusOnlyCells(day.campsiteStatuses.orEmpty())
                 AvailabilityDayDto(
                     date = day.date,
                     status = day.status,
-                    availableCampsiteIds = day.availableCampsiteIds,
-                    campsiteStatuses = day.campsiteStatuses,
+                    watchable = cells.values.any { it.watchable },
+                    cells = cells,
                 )
             },
         cache = cacheBlock,

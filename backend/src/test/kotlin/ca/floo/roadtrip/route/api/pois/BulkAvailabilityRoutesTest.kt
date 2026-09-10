@@ -60,6 +60,9 @@ private const val UNKNOWN_CAMPSITE_POI_ID = 999_999L
 
 private val windowStart: LocalDate = LocalDate.of(2026, 9, 1)
 private val windowEnd: LocalDate = LocalDate.of(2026, 9, 8)
+
+/** rec.gov's horizon, so the faked slice's ceiling is a real provider's. */
+private const val BOOKING_HORIZON_DAYS = 180L
 private val observedAt: Instant = Instant.parse("2026-08-20T00:00:00Z")
 
 class BulkAvailabilityRoutesTest {
@@ -377,6 +380,8 @@ private class FakePoiAvailabilitySliceLookup : PoiAvailabilitySliceLookup {
             poiId = poiId,
             startDate = windowStart,
             endDate = windowEnd,
+            earliestDate = windowStart,
+            latestDate = windowStart.plusDays(BOOKING_HORIZON_DAYS),
             allCampsites = listOf(campsite),
             campsites = listOf(campsite),
             batch =

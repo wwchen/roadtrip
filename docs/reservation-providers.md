@@ -109,6 +109,7 @@ service/availability/
 ├── FailoverAvailabilityFetcher.kt       # walks candidates on retryable failure; records per-attempt outcomes
 ├── ProviderCooldownTracker.kt           # in-process demote-on-failure for BookingProvider
 ├── CatalogAvailabilityBatcher.kt        # groups resolved targets by (provider, parentRef, dateContext)
+├── PoiAvailabilityFusion.kt             # campsite streams → the campground week (rollup, cells, watchability)
 ├── TriggerActionHandler.kt              # fire-side registry (notification/ATC kinds; unknown kinds inert)
 ├── AtcTriggerActionHandler.kt           # `atc` → booking adapter, then the owner's Slack + email
 ├── NotifyTriggerActionHandler.kt        # `slack_notify` / `email_notify` → notification targets

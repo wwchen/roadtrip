@@ -139,11 +139,13 @@ internal fun Route.campsiteRoutes(
                         }
                     }.describeApi(
                         tag = "availability",
-                        summary = "Per-campsite availability for one campground POI",
+                        summary = "The fused availability week for one campground POI",
                         description =
-                            "Path key is `pois.id`. Returns one availability envelope per " +
-                                "campsite linked to this POI. The frontend fuses the per-campsite streams " +
-                                "into the campground week grid. `site_type` accepts: $siteTypeWireList.",
+                            "Path key is `pois.id`. Returns the campground week already fused: one " +
+                                "`days` entry per date carrying the rollup status, whether the day can be " +
+                                "watched, and a `cells` map of campsite id to that campsite's status and " +
+                                "watchability. `latest_date` is the provider's booking horizon. " +
+                                "`site_type` accepts: $siteTypeWireList.",
                     ).access(RouteAccess.Anonymous)
                 }
             }

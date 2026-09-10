@@ -4,7 +4,9 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailability
 import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
+import ca.floo.roadtrip.fixtures.availableIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.statuses
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -89,7 +91,7 @@ class AspiraObservationsTest {
                 )
 
             assertEquals(AvailabilityStatus.UNKNOWN, dto.availability.single().status)
-            assertEquals(emptyList(), dto.availability.single().availableCampsiteIds)
+            assertEquals(emptyList(), dto.availability.single().availableIds)
         }
 
     @Test
@@ -131,9 +133,9 @@ class AspiraObservationsTest {
                 )
 
             assertEquals("wa:-999:-999:null", dto.scopeRef)
-            assertEquals(listOf(1L, 3L), dto.availability[0].availableCampsiteIds)
-            assertEquals(4, dto.availability[0].campsiteStatuses!!.size)
-            assertEquals(4, dto.availability[1].campsiteStatuses!!.size)
+            assertEquals(listOf(1L, 3L), dto.availability[0].availableIds)
+            assertEquals(4, dto.availability[0].statuses.size)
+            assertEquals(4, dto.availability[1].statuses.size)
         }
 
     @Test
@@ -173,14 +175,14 @@ class AspiraObservationsTest {
                     ),
                 )
 
-            assertEquals(listOf(1L), dto.availability.single().availableCampsiteIds)
+            assertEquals(listOf(1L), dto.availability.single().availableIds)
             assertEquals(
                 mapOf(
                     1L to AvailabilityStatus.AVAILABLE,
                     2L to AvailabilityStatus.RESERVED,
                     3L to AvailabilityStatus.RESERVED,
                 ),
-                dto.availability.single().campsiteStatuses,
+                dto.availability.single().statuses,
             )
         }
 
@@ -229,10 +231,10 @@ class AspiraObservationsTest {
                     ),
                 )
 
-            assertEquals(emptyList(), dto.availability[0].availableCampsiteIds)
+            assertEquals(emptyList(), dto.availability[0].availableIds)
             assertEquals(AvailabilityStatus.RESERVED, dto.availability[0].status)
             assertEquals(AvailabilityStatus.RESERVED, dto.availability[1].status)
-            assertEquals(listOf(BC_PARKS_TEST_CAMPSITE_ID), dto.availability[2].availableCampsiteIds)
+            assertEquals(listOf(BC_PARKS_TEST_CAMPSITE_ID), dto.availability[2].availableIds)
             assertEquals(AvailabilityStatus.CLOSED, dto.availability[3].status)
         }
 
@@ -294,7 +296,7 @@ class AspiraObservationsTest {
                     ALICE_LAKE_LOOP_A_CAMPSITE_ID to AvailabilityStatus.RESERVED,
                     ALICE_LAKE_WALK_IN_CAMPSITE_ID to AvailabilityStatus.AVAILABLE,
                 ),
-                dto.availability.single().campsiteStatuses,
+                dto.availability.single().statuses,
             )
         }
 
@@ -328,7 +330,7 @@ class AspiraObservationsTest {
             assertEquals(AvailabilityStatus.UNKNOWN, dto.availability.single().status)
             assertEquals(
                 mapOf(100L to AvailabilityStatus.UNKNOWN),
-                dto.availability.single().campsiteStatuses,
+                dto.availability.single().statuses,
             )
         }
 
@@ -377,7 +379,7 @@ class AspiraObservationsTest {
                     ),
                 )
 
-            assertEquals(listOf(100L), dto.availability[0].availableCampsiteIds)
+            assertEquals(listOf(100L), dto.availability[0].availableIds)
             assertEquals(AvailabilityStatus.RESERVED, dto.availability[1].status)
         }
 }

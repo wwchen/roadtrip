@@ -29,6 +29,10 @@ enum class AvailabilityStatus(
     val isOnlineBookable: Boolean
         get() = this == AVAILABLE
 
+    /** Whether a status is one a watch could ever fire on: taken, or walk-up only. */
+    val watchable: Boolean
+        get() = this == RESERVED || this == FIRST_COME
+
     companion object {
         fun parse(raw: String?): AvailabilityStatus = entries.firstOrNull { it.wireValue == raw?.lowercase() } ?: UNKNOWN
     }

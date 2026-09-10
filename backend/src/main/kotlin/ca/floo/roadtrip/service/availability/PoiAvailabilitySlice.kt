@@ -25,6 +25,10 @@ internal data class PoiAvailabilitySlice(
     val poiId: Long,
     val startDate: LocalDate,
     val endDate: LocalDate,
+    /** The first bookable date in the POI's own time zone. */
+    val earliestDate: LocalDate,
+    /** [earliestDate] plus the serving provider's booking horizon. */
+    val latestDate: LocalDate,
     val allCampsites: List<Campsite>,
     val campsites: List<Campsite>,
     val batch: AvailabilityObservationBatch?,
