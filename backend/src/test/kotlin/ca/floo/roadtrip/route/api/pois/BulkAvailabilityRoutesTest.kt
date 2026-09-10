@@ -357,8 +357,7 @@ class BulkAvailabilityRoutesTest {
             )
         val controller =
             BulkAvailabilityController(
-                sliceLookup = FakePoiAvailabilitySliceLookup(),
-                pollingSupported = { pollingSupported },
+                sliceLookup = FakePoiAvailabilitySliceLookup(pollingSupported),
                 config = config,
             )
         if (rateLimit != null) {
@@ -385,7 +384,6 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
                     bulkAvailabilityRoutes(
                         BulkAvailabilityController(
                             sliceLookup = FakePoiAvailabilitySliceLookup(),
-                            pollingSupported = { true },
                             config = BulkAvailabilityConfig.default,
                         ),
                         BulkAvailabilityConfig.default,
@@ -445,7 +443,9 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
  * followed by a reserved one, except [RATE_LIMITED_POI_ID], which reports an
  * upstream failure.
  */
-private class FakePoiAvailabilitySliceLookup : PoiAvailabilitySliceLookup {
+private class FakePoiAvailabilitySliceLookup(
+    private val pollingSupported: Boolean = true,
+) : PoiAvailabilitySliceLookup {
     override suspend fun poiAvailabilitySlice(
         poiId: Long,
         siteTypes: List<CampsiteKind>,
@@ -481,6 +481,7 @@ private class FakePoiAvailabilitySliceLookup : PoiAvailabilitySliceLookup {
                     observations = observations,
                     cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
                 ),
+            pollingSupported = pollingSupported,
         )
     }
 }

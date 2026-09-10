@@ -325,16 +325,16 @@ mutation with `unsupported_trigger` instead of creating an active watch that
 can never fulfill its trigger.
 
 The campsite availability API exposes proposed-watch capabilities for the
-current POI scope as provider-neutral `watch_capabilities`. `booking_actions`
-is a property of the scope alone. `trigger_kinds` is a property of the scope
-*and the caller*: it includes configured notification triggers such as
-`slack_notify` and `email_notify`, and includes `atc` only when the resolved
-watch scope supports `BookingAction.ADD_TO_CART` **and** the requesting user
-has rec.gov credentials configured. Gating is on *configured*, not *proven
-working*. For anonymous and magic-link readers `atc` is simply absent, never an
-error — while `booking_actions` still reports the cart, which is what lets the
-frontend distinguish "this campground cannot be held" from "add your
-credentials in Settings".
+current POI scope as provider-neutral `watch_capabilities`. Whether the scope
+has a cart at all is a property of the scope alone, and stays inside
+`WatchCapabilityService`. `trigger_kinds` is a property of the scope *and the
+caller*: it includes configured notification triggers such as `slack_notify`
+and `email_notify`, and includes `atc` only when the resolved watch scope
+supports `BookingAction.ADD_TO_CART` **and** the requesting user has rec.gov
+credentials configured. Gating is on *configured*, not *proven working*. For
+anonymous and magic-link readers `atc` is simply absent, never an error — and
+`add_to_cart.state` below is what lets the frontend distinguish "this
+campground cannot be held" from "add your credentials in Settings".
 
 The campsite availability API states this outcome directly as
 `watch_capabilities.add_to_cart.state` (`WatchCapabilityService.addToCartState`):
@@ -343,7 +343,7 @@ ways `atc` can be unreachable for the scope — no cart, or no internal polling
 at all, since a watch that can never observe an opening can never fire one.
 `atc` appears in `trigger_kinds` exactly when this state is `ready`. The
 frontend renders the matching copy for whichever state it receives rather than
-re-deriving one by subtracting `booking_actions` from `trigger_kinds`.
+inferring one from what `trigger_kinds` omits.
 
 Email notification recipients resolve at delivery
 time from the watch owner's `user_settings.notification_email`, falling back to

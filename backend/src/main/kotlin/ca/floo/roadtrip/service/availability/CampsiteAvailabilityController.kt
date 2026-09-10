@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
-import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -32,12 +31,6 @@ internal class CampsiteAvailabilityController(
     private val dateResolver: AvailabilityDateResolver,
     private val watchCapabilityService: WatchCapabilityService,
 ) {
-    /**
-     * Whether a watch on this campsite could ever be polled — the lookup both
-     * read paths fold into a cell's `watchable`.
-     */
-    fun pollingSupported(campsite: Campsite): Boolean = watchCapabilityService.pollingSupported(campsite)
-
     /** @throws AvailabilityServiceError.NotFound when the POI has no campground. */
     fun campsitesForPoi(
         poiId: Long,
@@ -62,6 +55,9 @@ internal class CampsiteAvailabilityController(
         val allCampsites = campsitesRepo.findByCampground(campground.id)
         val campsites = allCampsites.filterBySiteTypes(siteTypes)
         val dateContext = dateResolver.contextForPoi(poiId)
+        // One provider pick for the whole slice: `watchable` is the serving
+        // provider's answer, not a per-campsite lookup.
+        val pollingSupported = availabilityService.internalPollingSupportedFor(campground)
 
         if (campsites.isEmpty()) {
             // The site_type filter dropped every campsite, but the campground
@@ -86,6 +82,7 @@ internal class CampsiteAvailabilityController(
                 allCampsites = allCampsites,
                 campsites = emptyList(),
                 batch = null,
+                pollingSupported = pollingSupported,
             )
         }
 
@@ -108,6 +105,7 @@ internal class CampsiteAvailabilityController(
             allCampsites = allCampsites,
             campsites = campsites,
             batch = result.batch,
+            pollingSupported = pollingSupported,
         )
     }
 
@@ -128,7 +126,7 @@ internal class CampsiteAvailabilityController(
     ): PoiCampsitesAvailabilityResponseDto {
         val slice = poiAvailabilitySlice(poiId, siteTypes, startDate, endDate)
         val watchCaps = watchCapabilityService.capabilitiesFor(slice.allCampsites, requester)
-        val fused = fusePoiWindow(slice, ::pollingSupported, slice.earliestDate)
+        val fused = fusePoiWindow(slice, slice.earliestDate)
 
         return PoiCampsitesAvailabilityResponseDto(
             poiId = poiId,

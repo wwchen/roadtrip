@@ -118,9 +118,9 @@ class WatchCapabilityServiceTest {
             listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY),
             capabilities.triggerKinds,
         )
-        // booking_actions stays populated regardless: the editor tells "your
-        // scope has no cart" apart from "you have no credentials" with it.
-        assertEquals(listOf(BookingAction.ADD_TO_CART.wireValue), capabilities.bookingActions)
+        // The cart still exists for the scope; `add_to_cart.state` is what tells
+        // "your scope has no cart" apart from "you have no credentials".
+        assertEquals(AddToCartState.SIGNED_OUT, capabilities.addToCart.state)
     }
 
     @Test

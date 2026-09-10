@@ -31,12 +31,16 @@ import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private const val TEST_POI_ID = 1L
 
 /** Offsets from the resolver's own earliest bookable date, so the window never goes stale. */
 private const val WINDOW_START_OFFSET_DAYS = 1L
 private const val WINDOW_LENGTH_DAYS = 7L
+
+/** Enough sites that a per-campsite lookup would be an obvious cost. */
+private const val BUSY_CAMPGROUND_SITES = 50
 
 class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
     @Test
@@ -84,6 +88,35 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
         assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), slice.latestDate)
     }
 
+    @Test
+    fun `shaping a many-campsite slice resolves no per-campsite target`() {
+        val fixture = sliceTestController(siteTypes = List(BUSY_CAMPGROUND_SITES) { CampsiteKind.TENT })
+
+        val slice =
+            runBlocking {
+                fixture.controller.poiAvailabilitySlice(
+                    poiId = TEST_POI_ID,
+                    siteTypes = listOf(CampsiteKind.TENT),
+                    startDate = fixture.startDate,
+                    endDate = fixture.endDate,
+                )
+            }
+        val fused = fusePoiWindow(slice, slice.earliestDate)
+
+        assertEquals(BUSY_CAMPGROUND_SITES, slice.campsites.size)
+        assertEquals(
+            BUSY_CAMPGROUND_SITES,
+            fused.days
+                .first()
+                .cells.size,
+        )
+        assertEquals(BUSY_CAMPGROUND_SITES, slice.perCampsiteEnvelopes().size)
+        // The serving provider was picked once for the slice; nothing asked the
+        // target resolver about a campsite, at any campground size.
+        assertEquals(0, fixture.targets.campsiteResolves)
+        assertTrue(slice.pollingSupported)
+    }
+
     /**
      * Builds a controller over a fresh POI/campground with one seeded campsite
      * per entry in [siteTypes]. Mirrors the fake repos/services
@@ -115,13 +148,15 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
         val dateResolver = AvailabilityDateResolver(PoiRepo(ctx))
         val providers = listOf(FakeAvailabilityProvider(BookingProvider.RECGOV))
         val targets =
-            DbAvailabilityTargetResolver(
-                poiRepo = PoiRepo(ctx),
-                campsitesRepo = campsitesRepo,
-                campgroundRepo = campgroundRepo,
-                availabilityProviders = providers,
-                dateResolver = dateResolver,
-                pollerRepo = AvailabilityPollerRepo(ctx),
+            CountingTargetResolver(
+                DbAvailabilityTargetResolver(
+                    poiRepo = PoiRepo(ctx),
+                    campsitesRepo = campsitesRepo,
+                    campgroundRepo = campgroundRepo,
+                    availabilityProviders = providers,
+                    dateResolver = dateResolver,
+                    pollerRepo = AvailabilityPollerRepo(ctx),
+                ),
             )
 
         val controller =
@@ -148,6 +183,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
         val start = earliest.plusDays(WINDOW_START_OFFSET_DAYS)
         return SliceFixture(
             controller = controller,
+            targets = targets,
             earliestDate = earliest,
             startDate = start,
             endDate = start.plusDays(WINDOW_LENGTH_DAYS),
@@ -157,10 +193,26 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
 
 private data class SliceFixture(
     val controller: CampsiteAvailabilityController,
+    val targets: CountingTargetResolver,
     val earliestDate: LocalDate,
     val startDate: LocalDate,
     val endDate: LocalDate,
 )
+
+/** Counts per-campsite target resolutions, each of which is three DB round trips. */
+private class CountingTargetResolver(
+    private val delegate: AvailabilityTargetResolver,
+) : AvailabilityTargetResolver {
+    var campsiteResolves = 0
+        private set
+
+    override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? {
+        campsiteResolves++
+        return delegate.resolve(campsite)
+    }
+
+    override fun resolve(poller: AvailabilityPollerRepo.Poller): PollerFetchPlan? = delegate.resolve(poller)
+}
 
 /**
  * Failover fetcher stub: skips the real upstream call and answers every

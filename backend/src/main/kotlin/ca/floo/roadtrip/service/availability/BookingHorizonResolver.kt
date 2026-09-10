@@ -6,18 +6,30 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import java.time.LocalDate
 
 /**
- * How far ahead a campground's serving provider can be asked about, for callers
- * that need the ceiling without fetching availability: the POI detail's
- * `latest_date` and the availability read path's own horizon. Null when no
- * registered provider claims the campground — the caller has no ceiling to
- * publish rather than a wrong one.
+ * The serving provider of a campground and what it can promise, for callers
+ * that need those answers without fetching availability: the POI detail's
+ * `latest_date`, the availability read path's own horizon, and whether a watch
+ * over the campground could ever be polled. Null (or false) when no registered
+ * provider claims the campground — the caller has no ceiling to publish rather
+ * than a wrong one.
  */
 internal class BookingHorizonResolver(
     private val availabilityProviders: List<AvailabilityProvider>,
     private val dateResolver: AvailabilityDateResolver,
 ) {
-    fun horizonDaysFor(campground: Campground): Int? =
-        availabilityProviders.firstOrNull { it.supportsCampground(campground) }?.capabilities?.bookingHorizonDays
+    /** The first registered provider that claims [campground], or null. */
+    fun servingProvider(campground: Campground): AvailabilityProvider? =
+        availabilityProviders.firstOrNull { it.supportsCampground(campground) }
+
+    /**
+     * Whether the serving provider can be polled for openings at all — one pick
+     * per campground, which is the granularity the read paths fold into a cell's
+     * `watchable`.
+     */
+    fun internalPollingSupported(campground: Campground): Boolean =
+        servingProvider(campground)?.capabilities?.supportsInternalPolling == true
+
+    fun horizonDaysFor(campground: Campground): Int? = servingProvider(campground)?.capabilities?.bookingHorizonDays
 
     fun latestDate(
         campground: Campground,

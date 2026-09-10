@@ -127,7 +127,6 @@ private fun bulkController(
 ): BulkAvailabilityController =
     BulkAvailabilityController(
         sliceLookup = FakePoiAvailabilitySliceLookup(recorder, meter),
-        pollingSupported = { true },
         config =
             BulkAvailabilityConfig(
                 maxPois = TEST_MAX_POIS,
@@ -252,6 +251,7 @@ private fun rankedSlice(poiId: Long): PoiAvailabilitySlice {
         allCampsites = campsites,
         campsites = campsites,
         batch = batchOf(observations),
+        pollingSupported = true,
     )
 }
 
@@ -267,6 +267,7 @@ private fun simpleSlice(poiId: Long): PoiAvailabilitySlice {
         allCampsites = listOf(campsite),
         campsites = listOf(campsite),
         batch = batchOf(observationsForRun(campsite.id, nights = 1)),
+        pollingSupported = true,
     )
 }
 
@@ -281,4 +282,5 @@ private fun noSitesSlice(poiId: Long): PoiAvailabilitySlice =
         allCampsites = emptyList(),
         campsites = emptyList(),
         batch = null,
+        pollingSupported = true,
     )

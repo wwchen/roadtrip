@@ -18,14 +18,14 @@ internal data class WatchCapabilitySupport(
 /**
  * What a proposed watch over this scope could actually do.
  *
- * Two different questions, deliberately kept apart. `booking_actions` is a
- * property of the *scope*: does this inventory have a cart at all. Trigger kinds
- * are a property of the scope **and the person asking**: `atc` needs the scope
- * to support `ADD_TO_CART` and the requester to have rec.gov credentials stored,
- * because a hold lands in their account. An anonymous or magic-link reader
- * simply does not see `atc` — absence, never an error — while `booking_actions`
- * still says the cart exists, which is what lets the editor distinguish "this
- * campground cannot be held" from "add your credentials in Settings".
+ * Two different questions, deliberately kept apart. Whether the inventory has a
+ * cart at all is a property of the *scope*, and stays internal here. Trigger
+ * kinds are a property of the scope **and the person asking**: `atc` needs the
+ * scope to support `ADD_TO_CART` and the requester to have rec.gov credentials
+ * stored, because a hold lands in their account. An anonymous or magic-link
+ * reader simply does not see `atc` — absence, never an error — and
+ * `add_to_cart.state` is what tells the editor whether that absence means "this
+ * campground cannot be held" or "add your credentials in Settings".
  *
  * Gating is on *configured*, not *proven working*: wrong credentials surface at
  * test time in Settings or at fire time in the failure notification.
@@ -97,7 +97,7 @@ internal class WatchCapabilityService(
 
     /**
      * The same question `atc`'s absence answers, but stated: the client renders
-     * the reason instead of subtracting `booking_actions` from `trigger_kinds`.
+     * the reason instead of inferring one from what `trigger_kinds` omits.
      */
     fun addToCartState(
         campsites: List<Campsite>,
@@ -125,7 +125,6 @@ internal class WatchCapabilityService(
         val bookingActions = supportedBookingActions(campsites)
         return AvailabilityWatchCapabilitiesDto(
             triggerKinds = supportedTriggerKinds(campsites, bookingActions, requester),
-            bookingActions = BookingAction.entries.filter { it in bookingActions }.map { it.wireValue },
             addToCart = AddToCartCapabilityDto(addToCartState(campsites, bookingActions, requester)),
         )
     }

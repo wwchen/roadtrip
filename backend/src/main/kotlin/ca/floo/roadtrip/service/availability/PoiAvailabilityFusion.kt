@@ -6,7 +6,6 @@ import ca.floo.roadtrip.model.api.AvailabilityWindowState
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
-import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.service.api.StreamWindowState
 import ca.floo.roadtrip.service.api.campsiteWindowStatuses
 import ca.floo.roadtrip.service.api.classifyStreamWindowState
@@ -23,13 +22,12 @@ internal data class FusedWindow(
 )
 
 /**
- * One campsite's window, narrowed from the slice's batch: a status per date,
- * whether the stream is closed for the season, and whether a watch on this
- * campsite could ever be polled.
+ * One campsite's window, narrowed from the slice's batch: a status per date and
+ * whether the stream is closed for the season. Polling support is not here — it
+ * is the serving provider's answer, the same for every stream in the slice.
  */
 internal class CampsiteStream(
     val campsiteId: Long,
-    val polls: Boolean,
     val statuses: List<AvailabilityStatus>,
     val closedForSeason: Boolean,
     val cache: AvailabilityCacheBlock,
@@ -38,12 +36,11 @@ internal class CampsiteStream(
 /**
  * Fuses one POI's campsite streams into the campground week the wire carries:
  * the day's rollup over every campsite, one cell per campsite, and the
- * watchability of both. Pure — [pollingSupported] is the only lookup and the
- * caller owns it, so this stays testable without a database.
+ * watchability of both. Pure — every input is already on the slice, including
+ * the one polling answer its serving provider gives.
  */
 internal fun fusePoiWindow(
     slice: PoiAvailabilitySlice,
-    pollingSupported: (Campsite) -> Boolean,
     earliestDate: LocalDate,
 ): FusedWindow {
     val batch = slice.batch
@@ -62,7 +59,6 @@ internal fun fusePoiWindow(
                 )
             CampsiteStream(
                 campsiteId = campsite.id,
-                polls = pollingSupported(campsite),
                 statuses = statuses,
                 closedForSeason = classifyStreamWindowState(statuses) == StreamWindowState.CLOSED_FOR_SEASON,
                 cache = batch.cacheBlock,
@@ -84,7 +80,13 @@ internal fun fusePoiWindow(
                 emptyList()
             } else {
                 (0 until dayCount).map { offset ->
-                    fusedDay(streams, offset, slice.startDate.plusDays(offset.toLong()), earliestDate)
+                    fusedDay(
+                        streams = streams,
+                        pollingSupported = slice.pollingSupported,
+                        offset = offset,
+                        date = slice.startDate.plusDays(offset.toLong()),
+                        earliestDate = earliestDate,
+                    )
                 }
             },
     )
@@ -93,6 +95,7 @@ internal fun fusePoiWindow(
 /** One date across every stream: cells in ascending campsite id, then the rollup. */
 private fun fusedDay(
     streams: List<CampsiteStream>,
+    pollingSupported: Boolean,
     offset: Int,
     date: LocalDate,
     earliestDate: LocalDate,
@@ -100,7 +103,7 @@ private fun fusedDay(
     val cells =
         streams.associate { stream ->
             stream.campsiteId to
-                AvailabilityCellDto.of(stream.statuses[offset], stream.polls, date, earliestDate)
+                AvailabilityCellDto.of(stream.statuses[offset], pollingSupported, date, earliestDate)
         }
     return AvailabilityDayDto(
         date = date.toString(),

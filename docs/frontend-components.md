@@ -88,8 +88,8 @@ action becomes the one step that unlocks it.
 
 - `watch_capabilities.add_to_cart.state` on the week response is the cart gate:
   `ready | no_credentials | signed_out | unsupported`, decided backend-side. The
-  browser renders the matching copy branch and never subtracts `booking_actions`
-  from `trigger_kinds` to guess which of the four applies.
+  browser renders the matching copy branch and never guesses which of the four
+  applies from what `trigger_kinds` omits.
 - `SiteMatrix`'s `watchGate` is the same idea for watches: `ready | signed-out |
   blocked`. A watchable cell is a button in the first two, and the popover it
   opens carries `WatchSignInGate` instead of `WatchEditor`.

@@ -5,8 +5,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * Why the cart is or is not reachable for this scope and this reader, decided
- * backend-side so the client never subtracts `booking_actions` from
- * `trigger_kinds` to guess it.
+ * backend-side so the client never guesses it from what `trigger_kinds` omits.
  */
 @Serializable
 enum class AddToCartState {

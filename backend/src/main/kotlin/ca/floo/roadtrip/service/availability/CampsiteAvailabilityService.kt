@@ -102,8 +102,7 @@ internal class CampsiteAvailabilityService(
     }
 
     private fun providerFor(campground: Campground): AvailabilityProvider =
-        availabilityProviders.firstOrNull { it.supportsCampground(campground) }
-            ?: throw AvailabilityServiceError.UnknownCampground
+        bookingHorizons.servingProvider(campground) ?: throw AvailabilityServiceError.UnknownCampground
 
     /**
      * The serving provider's booking horizon for [campground], or null when no
@@ -111,6 +110,12 @@ internal class CampsiteAvailabilityService(
      * callers (the empty-campsite branch) that have a fallback of their own.
      */
     fun bookingHorizonDaysFor(campground: Campground): Int? = bookingHorizons.horizonDaysFor(campground)
+
+    /**
+     * Whether the campground's serving provider can be polled for openings —
+     * one pick for the whole slice, not one per campsite.
+     */
+    fun internalPollingSupportedFor(campground: Campground): Boolean = bookingHorizons.internalPollingSupported(campground)
 }
 
 internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration = ApiCacheEntity.availability(providerId).defaultTtl

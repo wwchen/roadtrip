@@ -1177,7 +1177,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val capabilities = body["watch_capabilities"]!!.jsonObject
             assertEquals(listOf("slack_notify", "email_notify"), capabilities["trigger_kinds"]!!.jsonArray.map { it.jsonPrimitive.content })
-            assertTrue(capabilities["booking_actions"]!!.jsonArray.isEmpty())
+            assertEquals("unsupported", capabilities["add_to_cart"]!!.jsonObject["state"]!!.jsonPrimitive.content)
         }
 
     @Test
