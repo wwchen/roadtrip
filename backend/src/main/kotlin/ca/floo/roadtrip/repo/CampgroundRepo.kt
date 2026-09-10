@@ -27,13 +27,6 @@ class CampgroundRepo(
     private val importRunRepo = ImportRunRepo(ctx)
     private val poiRepo = PoiRepo(ctx)
 
-    data class SearchFilters(
-        val vendors: List<String> = emptyList(),
-        val vendorIds: List<String> = emptyList(),
-        val names: List<String> = emptyList(),
-        val kinds: List<String> = emptyList(),
-    )
-
     fun upsertCampgrounds(
         records: List<CampgroundUpsertCandidate>,
         source: String,
@@ -112,38 +105,6 @@ class CampgroundRepo(
         )
     }
 
-    fun search(
-        filters: SearchFilters,
-        limit: Int,
-        offset: Int,
-    ): List<Campground> {
-        val clauses = mutableListOf("cg.deleted_at IS NULL")
-        val params = mutableListOf<Any?>()
-        addInClause(clauses, params, "cg.data_provider", filters.vendors)
-        addInClause(clauses, params, "cg.data_provider_ref", filters.vendorIds)
-        addInClause(clauses, params, "cg.kind", filters.kinds)
-        if (filters.names.isNotEmpty()) {
-            clauses +=
-                filters.names.joinToString(prefix = "(", postfix = ")", separator = " OR ") {
-                    "cg.name ILIKE ? ESCAPE '\\'"
-                }
-            params.addAll(filters.names.map { "%${escapeLikePattern(it)}%" })
-        }
-        params += limit.coerceIn(MIN_SEARCH_LIMIT, MAX_SEARCH_LIMIT)
-        params += offset.coerceAtLeast(0)
-
-        return ctx
-            .fetch(
-                """
-                $baseSelect
-                WHERE ${clauses.joinToString(" AND ")}
-                ORDER BY cg.name, cg.id
-                LIMIT ? OFFSET ?
-                """.trimIndent(),
-                *params.toTypedArray(),
-            ).map(::fromRecord)
-    }
-
     private fun fromRecord(record: Record): Campground {
         val dataProvider = DataProvider.fromId(record.get("data_provider", String::class.java))
         val dataProviderRefStr = record.get("data_provider_ref", String::class.java)
@@ -187,17 +148,6 @@ class CampgroundRepo(
             bookingProvider = record.get("booking_provider", String::class.java),
             bookingProviderRef = record.get("booking_provider_ref", String::class.java),
         )
-    }
-
-    private fun addInClause(
-        clauses: MutableList<String>,
-        params: MutableList<Any?>,
-        column: String,
-        values: List<String>,
-    ) {
-        if (values.isEmpty()) return
-        clauses += values.joinToString(prefix = "$column IN (", postfix = ")") { "?" }
-        params.addAll(values)
     }
 
     private fun bulkUpsertCampgroundsTx(records: List<CampgroundUpsertCandidate>): Int {
@@ -391,8 +341,6 @@ class CampgroundRepo(
 
     private companion object {
         private const val CAMPGROUND_POI_TYPE = "campground"
-        private const val MIN_SEARCH_LIMIT = 1
-        private const val MAX_SEARCH_LIMIT = 500
 
         private val baseSelectColumns =
             """
@@ -449,5 +397,3 @@ private fun memberSourcesOf(value: Any?): List<String> =
         is Collection<*> -> value.mapNotNull { it?.toString() }
         else -> emptyList()
     }
-
-private fun escapeLikePattern(value: String): String = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

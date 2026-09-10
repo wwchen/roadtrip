@@ -529,6 +529,29 @@ class PoiServiceTest : SharedDbTest() {
         )
     }
 
+    // The amenities column is whatever the vendor sent, so a non-string element
+    // must be skipped rather than crash the whole detail read.
+    @Test
+    fun `charger amenities keep the strings and skip everything else`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "mixed-amenities",
+                name = "Mixed",
+                lon = -122.3917,
+                lat = 40.5865,
+                poiType = "tesla_supercharger",
+            )
+        ctx.execute(
+            "UPDATE tesla_superchargers SET amenities = ?::jsonb WHERE id = ?",
+            """["AMENITIES_WIFI",{"name":"restroom"},null]""",
+            fixture.catalogId,
+        )
+
+        val detail = poiService().poiDetail(fixture.poiId)!!.properties.detail
+
+        assertEquals(listOf("AMENITIES_WIFI"), detail.chargerAmenities)
+    }
+
     // `stall_count`/`max_power_kw` read via `Int::class.java` (a JVM primitive)
     // instead of `Int::class.javaObjectType`, so jOOQ silently turned a NULL
     // hardware spec into 0 rather than surfacing "unknown". Neither column is

@@ -85,18 +85,20 @@ class ReserveCaliforniaCampgroundsEtl(
 /**
  * ReserveCalifornia publishes free-text highlight labels, not a vocabulary. The
  * ones that name a known amenity are mapped; the rest ride as [AmenityKey.OTHER]
- * carrying the vendor's own words.
+ * carrying the vendor's own words. Two labels can name the same amenity
+ * ("Restrooms", "Comfort Station"), so the result is de-duplicated.
  */
 internal fun highlightAmenities(labels: List<String>): List<CampgroundAmenity> =
-    labels.mapNotNull { raw ->
-        val label = raw.trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-        val key = amenityKeyByHighlight[label.lowercase()]
-        if (key == null) {
-            CampgroundAmenity(AmenityKey.OTHER, detail = label)
-        } else {
-            CampgroundAmenity(key)
-        }
-    }
+    labels
+        .mapNotNull { raw ->
+            val label = raw.trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val key = amenityKeyByHighlight[label.lowercase()]
+            if (key == null) {
+                CampgroundAmenity(AmenityKey.OTHER, detail = label)
+            } else {
+                CampgroundAmenity(key)
+            }
+        }.distinctBy { it.key to it.detail }
 
 private fun placeMetadata(place: ReserveCaliforniaPlace): CampgroundMetadata? =
     CampgroundMetadata(activities = place.activities).takeIf { it != CampgroundMetadata() }

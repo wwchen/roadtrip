@@ -5,9 +5,10 @@ import ca.floo.roadtrip.model.api.poi.PoiDetailPropertiesSchema
 import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 
 internal class TeslaSuperchargerService(
@@ -33,7 +34,10 @@ internal class TeslaSuperchargerService(
                     raw = raw,
                     status = supercharger.siteStatus,
                     timeZone = supercharger.timeZone,
-                    chargerAmenities = supercharger.amenities.jsonArray.map { it.jsonPrimitive.content },
+                    chargerAmenities =
+                        (supercharger.amenities as? JsonArray)
+                            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+                            .orEmpty(),
                     stallCount = supercharger.stallCount,
                     powerKilowatt = supercharger.maxPowerKw,
                     pricebooks = supercharger.pricebooks,

@@ -155,9 +155,40 @@ class CampsiteKindsTest {
     }
 
     @Test
-    fun `reserve california unit types map by exact value`() {
+    fun `reserve california unit types map by substring in rule order`() {
         val expected =
             mapOf(
+                "Campsite" to CampsiteKind.STANDARD,
+                "Tent Campsite" to CampsiteKind.TENT,
+                "Premium Campsite" to CampsiteKind.STANDARD,
+                "Hook Up (E/W/S) Campsite" to CampsiteKind.RV,
+                "Primitive Campsite" to CampsiteKind.STANDARD,
+                "Hike/Bike Campsite" to CampsiteKind.WALK_IN,
+                "Hike In Primitive Campsite" to CampsiteKind.WALK_IN,
+                "Group Campsite" to CampsiteKind.GROUP,
+                "Premium Cabin (8 People)" to CampsiteKind.CABIN,
+                "Bike In Campsite" to CampsiteKind.WALK_IN,
+                "Boat In Campsite" to CampsiteKind.BOAT_IN,
+                "Mini-Group Campsite" to CampsiteKind.GROUP,
+                "Group Day Use" to CampsiteKind.DAY_USE,
+                "Group Dailyuse (B)" to CampsiteKind.DAY_USE,
+                "Tent Only - Walk-In" to CampsiteKind.WALK_IN,
+                "Yurt (6 ppl)" to CampsiteKind.CABIN,
+                "Premium Cottage_3" to CampsiteKind.CABIN,
+                "Two Room Cabin" to CampsiteKind.CABIN,
+                "Floating Camp Campsite" to CampsiteKind.BOAT_IN,
+                "Equestrian Campsite" to CampsiteKind.EQUESTRIAN,
+                "Equestrain Group Tent Primitive Campsite" to CampsiteKind.GROUP,
+                "Equestrian Group Campsite" to CampsiteKind.GROUP,
+                "Premium Double Hook Up (E/W/S) Campsite" to CampsiteKind.RV,
+                "Group Hook Up (E ) Tent Campsite" to CampsiteKind.GROUP,
+                "Environmental Campsite" to CampsiteKind.STANDARD,
+                "ADA Campsite" to CampsiteKind.STANDARD,
+                "Hook Up Campsite" to CampsiteKind.RV,
+                "Group Camping" to CampsiteKind.GROUP,
+                "Equestrian Group Primitive Campsite" to CampsiteKind.GROUP,
+                "Tent Hike In Primitive Campsite" to CampsiteKind.WALK_IN,
+                "Premium Hook Up (E/W) Campsite" to CampsiteKind.RV,
                 "Tent Site" to CampsiteKind.TENT,
                 "Day Use" to CampsiteKind.DAY_USE,
                 "site" to CampsiteKind.OTHER,
@@ -165,8 +196,17 @@ class CampsiteKindsTest {
                 "" to CampsiteKind.OTHER,
             )
 
-        assertEquals(expected, expected.keys.associateWith { CampsiteKinds.reserveCalifornia(it) })
-        assertEquals(CampsiteKind.OTHER, CampsiteKinds.reserveCalifornia(null))
+        assertEquals(expected, expected.keys.associateWith { CampsiteKinds.reserveCalifornia(it).kind })
+        assertEquals(CampsiteKind.OTHER, CampsiteKinds.reserveCalifornia(null).kind)
+    }
+
+    @Test
+    fun `reserve california reads electric hookups off a hook up name`() {
+        assertEquals(true, CampsiteKinds.reserveCalifornia("Hook Up (E/W/S) Campsite").electric)
+        assertEquals(true, CampsiteKinds.reserveCalifornia("Group Hook Up (E ) Tent Campsite").electric)
+        assertEquals(null, CampsiteKinds.reserveCalifornia("Hook Up Campsite").electric)
+        assertEquals(null, CampsiteKinds.reserveCalifornia("Tent Campsite").electric)
+        assertEquals(null, CampsiteKinds.reserveCalifornia(null).electric)
     }
 
     @Test

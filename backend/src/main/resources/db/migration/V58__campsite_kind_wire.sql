@@ -6,6 +6,13 @@
 -- Every UPDATE skips rows whose kind is already a wire value, so the script is
 -- idempotent and a row the typed repo just wrote is left alone.
 
+-- A row no later import touches would lose the vendor's word entirely, so keep it
+-- in kind_listed before the rewrite.
+UPDATE campsites SET kind_listed = kind
+WHERE kind_listed IS NULL
+  AND kind NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
+                   'equestrian', 'backcountry', 'day_use', 'other');
+
 UPDATE campsites SET kind = CASE
     WHEN upper(btrim(kind)) ~ '^GROUP( |$)' THEN 'group'
     WHEN upper(btrim(kind)) ~ '^TENT ONLY( |$)' THEN 'tent'
@@ -38,12 +45,8 @@ WHERE data_provider = 'campflare'
   AND kind NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
                    'equestrian', 'backcountry', 'day_use', 'other');
 
--- Aspira resource-category dictionary names. Exact names first, so
--- 'Backcountry Cabin' stays a cabin rather than matching the 'Backcountry' prefix.
--- Parks Canada and BC Parks campsites both land here: the Aspira campsite ETL
--- writes data_provider 'aspira' for every tenant, only the parent differs. Some
--- deployed rows still carry the legacy 'bcparks-strapi' provider value (see
--- DataProviderRef.parseBcParks / AspiraAvailabilityProvider), so both are covered.
+-- Aspira dictionary names, exact names before prefixes; 'bcparks-strapi' is the
+-- legacy provider value some deployed Aspira campsite rows still carry.
 UPDATE campsites SET kind = CASE
     WHEN btrim(kind) IN ('Campsite', 'Campsite/Seasonal', 'Overflow') THEN 'standard'
     WHEN btrim(kind) IN ('Cabin', 'Rustic Cabin', 'Deluxe Cabin', 'Backcountry Cabin', 'Yurt',
@@ -61,9 +64,20 @@ WHERE data_provider IN ('aspira', 'bcparks-strapi')
   AND kind NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
                    'equestrian', 'backcountry', 'day_use', 'other');
 
-UPDATE campsites SET kind = CASE btrim(kind)
-    WHEN 'Tent Site' THEN 'tent'
-    WHEN 'Day Use' THEN 'day_use'
+-- ReserveCalifornia unit-type names are free text, matched by substring in the
+-- order CampsiteKinds.reserveCalifornia uses; the first branch that hits wins.
+UPDATE campsites SET kind = CASE
+    WHEN lower(btrim(kind)) LIKE '%day use%' OR lower(btrim(kind)) LIKE '%dailyuse%' THEN 'day_use'
+    WHEN lower(btrim(kind)) LIKE '%group%' THEN 'group'
+    WHEN lower(btrim(kind)) LIKE '%equestrian%' OR lower(btrim(kind)) LIKE '%equestrain%' THEN 'equestrian'
+    WHEN lower(btrim(kind)) LIKE '%cabin%' OR lower(btrim(kind)) LIKE '%cottage%'
+         OR lower(btrim(kind)) LIKE '%yurt%' THEN 'cabin'
+    WHEN lower(btrim(kind)) LIKE '%boat in%' OR lower(btrim(kind)) LIKE '%floating camp%' THEN 'boat_in'
+    WHEN lower(btrim(kind)) LIKE '%hike%' OR lower(btrim(kind)) LIKE '%bike%'
+         OR lower(btrim(kind)) LIKE '%walk-in%' THEN 'walk_in'
+    WHEN lower(btrim(kind)) LIKE '%hook up%' THEN 'rv'
+    WHEN lower(btrim(kind)) LIKE '%tent%' THEN 'tent'
+    WHEN lower(btrim(kind)) LIKE '%campsite%' THEN 'standard'
     ELSE 'other'
   END
 WHERE data_provider = 'reservecalifornia'
@@ -82,11 +96,14 @@ UPDATE campsites SET kind = 'other'
 WHERE kind NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
                    'equestrian', 'backcountry', 'day_use', 'other');
 
--- Stored watch filters carry the same vendor strings. A watch is not tied to one
--- provider, so this CASE is the union of the per-provider tables above: already-wire
--- values pass through, everything else is classified, and the rest becomes 'other'.
--- Both shapes the parser accepts are handled — a bare string and an array — by
--- normalizing to an array, mapping once, and unwrapping the string case at the end.
+-- Dropped first so a replay of this script is idempotent.
+ALTER TABLE campsites DROP CONSTRAINT IF EXISTS campsites_kind_wire_check;
+ALTER TABLE campsites ADD CONSTRAINT campsites_kind_wire_check
+  CHECK (kind IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
+                  'equestrian', 'backcountry', 'day_use', 'other'));
+
+-- Stored watch filters are not tied to one provider, so this CASE is the union of the
+-- tables above, over both shapes the parser accepts (a bare string and an array).
 UPDATE availability_watch w
 SET campsite_filters = jsonb_set(
       w.campsite_filters,

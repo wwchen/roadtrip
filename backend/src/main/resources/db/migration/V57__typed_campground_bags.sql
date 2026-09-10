@@ -1,8 +1,5 @@
--- Typed campground bags, plus a parent_name column. Canonicalization only, so
--- every legacy shape in the catalog decodes strictly in the window between
--- migrate and `make data-import`; no backfill, the import right after deploy
--- rewrites every live row. Each UPDATE is guarded to be a no-op on a row the
--- typed repo wrote, which also makes the script idempotent.
+-- Typed campground bags, plus a parent_name column: canonicalization only, so every
+-- legacy shape decodes strictly between migrate and the import that follows deploy.
 
 ALTER TABLE campgrounds
   ADD COLUMN IF NOT EXISTS parent_name TEXT;
@@ -70,7 +67,10 @@ UPDATE campgrounds SET metadata = jsonb_strip_nulls(jsonb_build_object(
                        FROM jsonb_array_elements(metadata->'activities') WITH ORDINALITY AS a(v, ord)
                        WHERE jsonb_typeof(a.v) = 'string') END,
   'rating', CASE
-              WHEN jsonb_typeof(metadata->'rating') = 'object' THEN metadata->'rating'
+              WHEN jsonb_typeof(metadata#>'{rating,average}') = 'number'
+                   AND jsonb_typeof(metadata#>'{rating,count}') = 'number'
+                THEN jsonb_build_object('average', metadata#>'{rating,average}',
+                                        'count', metadata#>'{rating,count}')
               WHEN jsonb_typeof(metadata#>'{rating_reviews,avg}') = 'number'
                    AND jsonb_typeof(metadata#>'{rating_reviews,count}') = 'number'
                 THEN jsonb_build_object('average', metadata#>'{rating_reviews,avg}',
@@ -78,9 +78,15 @@ UPDATE campgrounds SET metadata = jsonb_strip_nulls(jsonb_build_object(
             END,
   'last_updated', CASE WHEN jsonb_typeof(metadata->'last_updated') = 'string' THEN metadata->'last_updated' END))
 WHERE jsonb_typeof(metadata) = 'object'
-  AND EXISTS (
-    SELECT 1 FROM jsonb_object_keys(metadata) k
-    WHERE k NOT IN ('activities', 'rating', 'last_updated'));
+  AND (
+    EXISTS (
+      SELECT 1 FROM jsonb_object_keys(metadata) k
+      WHERE k NOT IN ('activities', 'rating', 'last_updated'))
+    OR (jsonb_exists(metadata, 'activities') AND jsonb_typeof(metadata->'activities') <> 'array')
+    OR (jsonb_exists(metadata, 'last_updated') AND jsonb_typeof(metadata->'last_updated') <> 'string')
+    OR (jsonb_exists(metadata, 'rating')
+        AND (jsonb_typeof(metadata#>'{rating,average}') IS DISTINCT FROM 'number'
+             OR jsonb_typeof(metadata#>'{rating,count}') IS DISTINCT FROM 'number')));
 
 UPDATE campgrounds SET price = jsonb_strip_nulls(jsonb_build_object(
   'minimum', CASE WHEN jsonb_typeof(price->'minimum') = 'number' THEN price->'minimum' END,
@@ -88,9 +94,13 @@ UPDATE campgrounds SET price = jsonb_strip_nulls(jsonb_build_object(
   'currency', CASE WHEN jsonb_typeof(price->'currency_code') = 'string' THEN price->'currency_code'
                    WHEN jsonb_typeof(price->'currency') = 'string' THEN price->'currency' END))
 WHERE jsonb_typeof(price) = 'object'
-  AND EXISTS (
-    SELECT 1 FROM jsonb_object_keys(price) k
-    WHERE k NOT IN ('minimum', 'maximum', 'currency'));
+  AND (
+    EXISTS (
+      SELECT 1 FROM jsonb_object_keys(price) k
+      WHERE k NOT IN ('minimum', 'maximum', 'currency'))
+    OR (jsonb_exists(price, 'minimum') AND jsonb_typeof(price->'minimum') <> 'number')
+    OR (jsonb_exists(price, 'maximum') AND jsonb_typeof(price->'maximum') <> 'number')
+    OR (jsonb_exists(price, 'currency') AND jsonb_typeof(price->'currency') <> 'string'));
 
 UPDATE campgrounds SET default_campsite_schedule = jsonb_strip_nulls(jsonb_build_object(
   'check_in', CASE WHEN jsonb_typeof(default_campsite_schedule->'check_in') = 'string'
@@ -102,9 +112,14 @@ UPDATE campgrounds SET default_campsite_schedule = jsonb_strip_nulls(jsonb_build
                     WHEN jsonb_typeof(default_campsite_schedule->'check_out_time') = 'string'
                       THEN default_campsite_schedule->'check_out_time' END))
 WHERE jsonb_typeof(default_campsite_schedule) = 'object'
-  AND EXISTS (
-    SELECT 1 FROM jsonb_object_keys(default_campsite_schedule) k
-    WHERE k NOT IN ('check_in', 'check_out'));
+  AND (
+    EXISTS (
+      SELECT 1 FROM jsonb_object_keys(default_campsite_schedule) k
+      WHERE k NOT IN ('check_in', 'check_out'))
+    OR (jsonb_exists(default_campsite_schedule, 'check_in')
+        AND jsonb_typeof(default_campsite_schedule->'check_in') <> 'string')
+    OR (jsonb_exists(default_campsite_schedule, 'check_out')
+        AND jsonb_typeof(default_campsite_schedule->'check_out') <> 'string'));
 
 UPDATE campgrounds SET alerts = COALESCE((
   SELECT jsonb_agg(s.entry ORDER BY s.ord)

@@ -51,6 +51,7 @@ class ReserveCaliforniaSitesEtl(
                     continue
                 }
                 val unitType = place.unitTypeByFacilityId[grid.facilityId]
+                val siteKind = CampsiteKinds.reserveCalifornia(unitType)
                 for (unit in grid.units) {
                     yield(
                         TransformResult.Ok(
@@ -60,10 +61,11 @@ class ReserveCaliforniaSitesEtl(
                                 bookingProviderRef = unit.unitId.toString(),
                                 parentDataProviderRef = DataProviderRef.ReserveCalifornia(id = placeId.toString()),
                                 name = unit.name?.takeIf { it.isNotBlank() } ?: unit.unitId.toString(),
-                                kind = CampsiteKinds.reserveCalifornia(unitType),
+                                kind = siteKind.kind,
                                 loopName = grid.facilityName ?: facility?.name,
                                 reservationUrl = reserveCaliforniaParkUrl(placeId),
                                 kindListed = unitType,
+                                electricHookups = siteKind.electric,
                                 sourcePayload = campsiteSourcePayload(unit, grid, placeId, facility),
                             ),
                         ),

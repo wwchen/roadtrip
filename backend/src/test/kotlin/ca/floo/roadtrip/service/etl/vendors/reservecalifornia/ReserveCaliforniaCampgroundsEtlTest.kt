@@ -82,10 +82,19 @@ class ReserveCaliforniaCampgroundsEtlTest {
                 "  rinse SHOWERS " to AmenityKey.SHOWERS,
             )
 
-        val amenities = highlightAmenities(labelToKey.map { it.first })
+        assertEquals(
+            labelToKey.map { it.second },
+            labelToKey.map { (label, _) -> highlightAmenities(listOf(label)).single().key },
+        )
+        assertEquals("Museum", highlightAmenities(listOf("Museum")).single().detail)
+    }
 
-        assertEquals(labelToKey.map { it.second }, amenities.map { it.key })
-        assertEquals("Museum", amenities[labelToKey.indexOfFirst { it.first == "Museum" }].detail)
+    @Test
+    fun `two highlights naming the same amenity collapse to one`() {
+        assertEquals(
+            listOf(CampgroundAmenity(AmenityKey.TOILETS)),
+            highlightAmenities(listOf("Restrooms", "Comfort Station")),
+        )
     }
 
     @Test

@@ -2,8 +2,8 @@ package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.model.domain.CampsiteKind
 
-/** rec.gov's `campsite_type` carries the hookup fact in the same string as the type. */
-data class RecGovKind(
+/** Some vendors carry the hookup fact in the same string as the type. */
+data class VendorKind(
     val kind: CampsiteKind,
     val electric: Boolean?,
 )
@@ -14,7 +14,7 @@ data class RecGovKind(
  * mirrors these rows in SQL for rows imported before the vocabulary existed.
  */
 object CampsiteKinds {
-    fun recgov(campsiteType: String?): RecGovKind {
+    fun recgov(campsiteType: String?): VendorKind {
         val tokens =
             campsiteType
                 ?.trim()
@@ -22,13 +22,13 @@ object CampsiteKinds {
                 ?.split(" ")
                 ?.filter { it.isNotEmpty() }
                 .orEmpty()
-        if (tokens.isEmpty()) return RecGovKind(CampsiteKind.OTHER, null)
+        if (tokens.isEmpty()) return VendorKind(CampsiteKind.OTHER, null)
         val kind =
             recGovLeadingPhrases
                 .firstOrNull { (phrase, _) -> tokens.take(phrase.size) == phrase }
                 ?.second
                 ?: CampsiteKind.OTHER
-        return RecGovKind(kind, recGovElectric(tokens.last()))
+        return VendorKind(kind, recGovElectric(tokens.last()))
     }
 
     fun campflare(kind: String?): CampsiteKind = campflareKinds[kind?.trim()] ?: CampsiteKind.OTHER
@@ -40,7 +40,17 @@ object CampsiteKinds {
         return aspiraPrefixes.firstOrNull { (prefix, _) -> name.startsWith(prefix) }?.second ?: CampsiteKind.OTHER
     }
 
-    fun reserveCalifornia(unitType: String?): CampsiteKind = reserveCaliforniaUnitTypes[unitType?.trim()] ?: CampsiteKind.OTHER
+    fun reserveCalifornia(unitType: String?): VendorKind {
+        val name = unitType?.trim()?.lowercase().orEmpty()
+        if (name.isEmpty()) return VendorKind(CampsiteKind.OTHER, null)
+        val kind =
+            reserveCaliforniaSubstrings
+                .firstOrNull { (substrings, _) -> substrings.any { it in name } }
+                ?.second
+                ?: CampsiteKind.OTHER
+        val electric = RC_HOOKUP_SUBSTRING in name && RC_ELECTRIC_SUBSTRING in name
+        return VendorKind(kind, true.takeIf { electric })
+    }
 
     private fun recGovElectric(lastToken: String): Boolean? =
         when (lastToken) {
@@ -135,8 +145,25 @@ private val aspiraPrefixes: List<Pair<String, CampsiteKind>> =
         "Retreat" to CampsiteKind.DAY_USE,
     )
 
-private val reserveCaliforniaUnitTypes: Map<String, CampsiteKind> =
-    mapOf(
-        "Tent Site" to CampsiteKind.TENT,
-        "Day Use" to CampsiteKind.DAY_USE,
+private const val RC_HOOKUP_SUBSTRING = "hook up"
+private const val RC_ELECTRIC_SUBSTRING = "(e"
+
+/**
+ * ReserveCalifornia unit-type names are free-text (49 of them in the local
+ * catalog), so they are matched by substring of the lowercased name, first rule
+ * wins. Order is the precedence: `Equestrain Group Tent Primitive Campsite` is a
+ * group site, `Tent Only - Walk-In` a walk-in, `Premium Campsite` a standard one.
+ * `V58__campsite_kind_wire.sql` repeats this list in the same order.
+ */
+private val reserveCaliforniaSubstrings: List<Pair<List<String>, CampsiteKind>> =
+    listOf(
+        listOf("day use", "dailyuse") to CampsiteKind.DAY_USE,
+        listOf("group") to CampsiteKind.GROUP,
+        listOf("equestrian", "equestrain") to CampsiteKind.EQUESTRIAN,
+        listOf("cabin", "cottage", "yurt") to CampsiteKind.CABIN,
+        listOf("boat in", "floating camp") to CampsiteKind.BOAT_IN,
+        listOf("hike", "bike", "walk-in") to CampsiteKind.WALK_IN,
+        listOf(RC_HOOKUP_SUBSTRING) to CampsiteKind.RV,
+        listOf("tent") to CampsiteKind.TENT,
+        listOf("campsite") to CampsiteKind.STANDARD,
     )

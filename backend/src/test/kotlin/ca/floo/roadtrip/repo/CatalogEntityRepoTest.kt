@@ -98,18 +98,6 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals(json("""{"id":"upper-pines-campground-447","name":"Upper Pines"}"""), campground.sourcePayload)
         assertEquals(row.get("id", Long::class.java), campground.id)
         assertEquals(campgroundId, repo.findByPoi(poiId)?.id)
-        assertEquals(
-            listOf(campgroundId),
-            repo
-                .search(
-                    CampgroundRepo.SearchFilters(
-                        vendors = listOf("campflare"),
-                        names = listOf("Upper Pines"),
-                    ),
-                    limit = 10,
-                    offset = 0,
-                ).map { it.id },
-        )
     }
 
     @Test
@@ -874,13 +862,10 @@ class CatalogEntityRepoTest : SharedDbTest() {
         )
     }
 
-    /**
-     * V58's job: one legacy row per vendor family, each carrying that vendor's own
-     * type string, all of them ending up in the wire vocabulary. The full per-value
-     * table lives in `CampsiteKindsTest`; this asserts the SQL agrees with it.
-     */
+    /** One legacy row per vendor family; the full per-value table lives in `CampsiteKindsTest`. */
     @Test
     fun `the kind migration rewrites every vendor vocabulary and leaves wire values alone`() {
+        seedLegacyKinds()
         seedCampsites("cg-kind-legacy")
         val campgroundId = campgroundId("cg-kind-legacy")
         val legacy =
@@ -889,10 +874,13 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 Triple("campflare", "cs-kind-campflare", "water-access"),
                 Triple("aspira", "cs-kind-aspira", "Backcountry Site"),
                 Triple("aspira", "cs-kind-aspira-cabin", "Backcountry Cabin"),
-                // Legacy BC Parks rows: the parent campground's provider, not the campsite ETL's,
-                // but some deployed campsite rows still carry it (see DataProviderRef.parseBcParks).
+                // The legacy provider value some deployed campsite rows still carry.
                 Triple("bcparks-strapi", "cs-kind-bcparks", "Backcountry Site"),
                 Triple("reservecalifornia", "cs-kind-reservecalifornia", "Tent Site"),
+                Triple("reservecalifornia", "cs-kind-rc-tent", "Tent Campsite"),
+                Triple("reservecalifornia", "cs-kind-rc-day-use", "Group Day Use"),
+                Triple("reservecalifornia", "cs-kind-rc-hookup", "Hook Up (E/W) Campsite"),
+                Triple("reservecalifornia", "cs-kind-rc-standard", "Campsite"),
                 Triple("reserveamerica", "cs-kind-reserveamerica", "site"),
                 Triple("recgov", "cs-kind-already-wire", "day_use"),
             )
@@ -910,10 +898,32 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 "cs-kind-aspira-cabin" to "cabin",
                 "cs-kind-bcparks" to "backcountry",
                 "cs-kind-reservecalifornia" to "tent",
+                "cs-kind-rc-tent" to "tent",
+                "cs-kind-rc-day-use" to "day_use",
+                "cs-kind-rc-hookup" to "rv",
+                "cs-kind-rc-standard" to "standard",
                 "cs-kind-reserveamerica" to "other",
                 "cs-kind-already-wire" to "day_use",
             ),
             campsiteKindsByRef(),
+        )
+    }
+
+    /** The vendor's word is the only copy a row no later import touches has left. */
+    @Test
+    fun `the kind migration keeps the vendor word in kind_listed`() {
+        seedLegacyKinds()
+        seedCampsites("cg-kind-listed")
+        val campgroundId = campgroundId("cg-kind-listed")
+        ctx.seedCampsite(campgroundId = campgroundId, vendor = "campflare", vendorId = "cs-kind-listed", kind = "tent-only")
+
+        migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute)
+
+        assertEquals(
+            listOf("tent" to "tent-only"),
+            ctx
+                .fetch("SELECT kind, kind_listed FROM campsites WHERE data_provider_ref = ?", "cs-kind-listed")
+                .map { it.get("kind", String::class.java) to it.get("kind_listed", String::class.java) },
         )
     }
 
@@ -1114,6 +1124,21 @@ class CatalogEntityRepoTest : SharedDbTest() {
             "1:2",
             "metadata" to """{"transaction_location_id":1,"map_id":2,"match_kind":"leaf"}""",
         )
+        // An expected key holding the wrong type is as legacy as an unexpected key.
+        seedLegacyCampground("recgov", "legacy-activities-not-array", "metadata" to """{"activities":"Camping"}""")
+        seedLegacyCampground("recgov", "legacy-last-updated-not-string", "metadata" to """{"last_updated":20260701}""")
+        seedLegacyCampground(
+            "recgov",
+            "legacy-rating-not-numeric",
+            "metadata" to """{"activities":["Camping"],"rating":{"average":"4.5","count":12}}""",
+        )
+        seedLegacyCampground("recgov", "legacy-price-bounds-not-numbers", "price" to """{"minimum":"36","maximum":"50"}""")
+        seedLegacyCampground("recgov", "legacy-price-currency-not-string", "price" to """{"minimum":36,"currency":9}""")
+        seedLegacyCampground(
+            "recgov",
+            "legacy-schedule-not-strings",
+            "default_campsite_schedule" to """{"check_in":14,"check_out":"11:00"}""",
+        )
 
         // Twice: a rerun over the rows the first pass canonicalized must change nothing.
         repeat(2) { migrationStatements("V57__typed_campground_bags.sql").forEach(ctx::execute) }
@@ -1161,6 +1186,22 @@ class CatalogEntityRepoTest : SharedDbTest() {
 
         val aspira = checkNotNull(repo.findById(campgroundId("1:2")))
         assertNull(aspira.metadata)
+
+        assertNull(checkNotNull(repo.findById(campgroundId("legacy-activities-not-array"))).metadata)
+        assertNull(checkNotNull(repo.findById(campgroundId("legacy-last-updated-not-string"))).metadata)
+        assertEquals(
+            CampgroundMetadata(activities = listOf("Camping")),
+            checkNotNull(repo.findById(campgroundId("legacy-rating-not-numeric"))).metadata,
+        )
+        assertNull(checkNotNull(repo.findById(campgroundId("legacy-price-bounds-not-numbers"))).price)
+        assertEquals(
+            CampgroundPrice(minimum = 36.0),
+            checkNotNull(repo.findById(campgroundId("legacy-price-currency-not-string"))).price,
+        )
+        assertEquals(
+            CampgroundSchedule(checkOut = "11:00"),
+            checkNotNull(repo.findById(campgroundId("legacy-schedule-not-strings"))).defaultCampsiteSchedule,
+        )
     }
 
     /** One bare campground row per vendor, written in the shapes that predate the typed columns. */
@@ -1220,6 +1261,9 @@ class CatalogEntityRepoTest : SharedDbTest() {
             },
         )
     }
+
+    /** Seeding pre-V58 kinds means writing vendor strings past the wire-value CHECK V58 adds. */
+    private fun seedLegacyKinds() = ctx.execute("ALTER TABLE campsites DROP CONSTRAINT IF EXISTS campsites_kind_wire_check")
 
     private fun campsiteKindsByRef(): Map<String, String> =
         ctx
