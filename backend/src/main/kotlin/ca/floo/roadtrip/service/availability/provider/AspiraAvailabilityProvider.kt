@@ -11,7 +11,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
-import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -274,7 +273,7 @@ class AspiraAvailabilityProvider(
     private fun mapIdOrThrow(mapId: Long): Int = intOrThrow("mapId", mapId)
 
     private fun aspiraRefOrThrow(campground: Campground): BookingProviderRef.Aspira =
-        (campground.bookingRef() as? BookingProviderRef.Aspira)
+        (claimedRef(campground) as? BookingProviderRef.Aspira)
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
 
     private fun intOrThrow(

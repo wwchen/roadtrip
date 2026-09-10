@@ -10,7 +10,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
-import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.ReserveAmericaException
@@ -160,7 +159,7 @@ class ReserveAmericaAvailabilityProvider(
         )
 
     private fun reserveAmericaRefOrThrow(campground: Campground): BookingProviderRef.ReserveAmerica =
-        (campground.bookingRef() as? BookingProviderRef.ReserveAmerica)
+        (claimedRef(campground) as? BookingProviderRef.ReserveAmerica)
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
