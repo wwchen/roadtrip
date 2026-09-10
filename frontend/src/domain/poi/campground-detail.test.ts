@@ -63,6 +63,10 @@ describe('activityList', () => {
     expect(activityList({ activities: [] })).toEqual([]);
     expect(activityList({})).toEqual([]);
   });
+
+  test('a blank activity is trimmed away', () => {
+    expect(activityList({ activities: ['Hiking', '  ', ''] })).toEqual(['Hiking']);
+  });
 });
 
 describe('carrierSignals', () => {
@@ -103,6 +107,17 @@ describe('carrierSignals', () => {
   test('an empty list and a missing field both render nothing', () => {
     expect(carrierSignals({ cell_coverage: [] })).toEqual([]);
     expect(carrierSignals({})).toEqual([]);
+  });
+
+  test('a carrier with a non-finite average is dropped', () => {
+    const signals = carrierSignals({
+      cell_coverage: [
+        { carrier: 'verizon', label: 'Verizon', average: 3.5, count: 12 },
+        { carrier: 'att', label: 'AT&T', average: NaN },
+      ],
+    });
+
+    expect(signals.map((s) => s.carrier)).toEqual(['verizon']);
   });
 });
 

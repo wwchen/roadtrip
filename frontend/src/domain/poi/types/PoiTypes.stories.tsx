@@ -53,7 +53,6 @@ export const Campground: Story = {
         agency: 'Oregon State Parks',
         parent_name: 'Willamette Valley',
         state: 'Oregon',
-        sites: 24,
         // The wire shapes verbatim: labels are the backend's, and an absence
         // already reads "No showers" by the time it gets here.
         amenities: [
@@ -94,7 +93,6 @@ export const CampgroundFirstCome: Story = {
         agency: 'National Park Service',
         parent_name: 'Yosemite National Park',
         state: 'California',
-        sites: 36,
         availability_supported: false,
         amenities: [
           { key: 'water', label: 'Water', present: true },

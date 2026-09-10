@@ -96,7 +96,9 @@ export function amenityTags(p: Props): AmenityTag[] {
 }
 
 export function activityList(p: Props): string[] {
-  return typed(p).activities ?? [];
+  return (typed(p).activities ?? [])
+    .map((activity) => activity.trim())
+    .filter((activity) => activity !== '');
 }
 
 // ---------------------------------------------------------------------------
@@ -126,6 +128,7 @@ export interface CarrierSignal {
  */
 export function carrierSignals(p: Props): CarrierSignal[] {
   return (typed(p).cell_coverage ?? [])
+    .filter((signal) => Number.isFinite(signal.average))
     .map((signal) => ({
       carrier: signal.carrier,
       label: signal.label,

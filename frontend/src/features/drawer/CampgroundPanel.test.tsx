@@ -27,7 +27,6 @@ const campground = (properties: Record<string, unknown> = {}) => ({
     // the link titles below.
     parent_name: 'Deception Pass State Park',
     availability_supported: true,
-    sites: 20,
     cta: [{ url: 'https://www.recreation.gov/camping/campgrounds/1', label: 'Book on recreation.gov' }],
     links: [{ title: 'Deception Pass State Park', url: 'https://parks.wa.gov/deception-pass' }],
     ...properties,
@@ -152,7 +151,6 @@ describe('the campground page, at panel width', () => {
     expect(details.getByText('2:00 PM')).toBeInTheDocument();
     expect(details.getByText('Verizon')).toBeInTheDocument();
     expect(details.getByText(/4\.3/)).toBeInTheDocument();
-    expect(details.getByText('20')).toBeInTheDocument();
     expect(details.getByText('recreation.gov')).toBeInTheDocument();
   });
 
@@ -272,7 +270,6 @@ describe('the campground page, at panel width', () => {
       agency: undefined,
       links: undefined,
       parent_name: undefined,
-      sites: undefined,
       availability_supported: false,
       cta: [{ url: 'https://x.test', label: 'Info' }],
     });

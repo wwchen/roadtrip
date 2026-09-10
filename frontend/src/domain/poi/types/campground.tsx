@@ -73,7 +73,6 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
   const freshness = verified(p);
   const about = descriptionHtml(p.description);
   const photo = text(p.photo_url);
-  const sites = Number(p.sites);
 
   // The step above this page: the containing park when the record states one, the
   // region otherwise.
@@ -97,7 +96,6 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
   const stay = presentSpecs([
     ...(specsFrom(details, STAY_DETAILS_GROUP) ?? []),
     decorations.stayLimit ? { label: 'Stay limit', value: decorations.stayLimit } : null,
-    Number.isFinite(sites) && sites > 0 ? { label: 'Sites', value: sites.toLocaleString() } : null,
     stars
       ? { label: 'Rating', value: `${stars.stars} ${stars.average.toFixed(1)} (${stars.count.toLocaleString()})` }
       : null,
