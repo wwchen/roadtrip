@@ -195,12 +195,6 @@ class AspiraCampgroundsEtl(
             reservationUrl = "https://$host/",
             links = listOf(CampgroundLink("https://$host/")),
             management = CampgroundManagement(agency),
-            metadata =
-                leafExtras(
-                    leaf = leaf,
-                    host = host,
-                    matchKind = match.kind,
-                ),
             sourceUrl = "https://$host/",
             sourcePayload = aspiraSourcePayload(leaf, match.kind),
         )

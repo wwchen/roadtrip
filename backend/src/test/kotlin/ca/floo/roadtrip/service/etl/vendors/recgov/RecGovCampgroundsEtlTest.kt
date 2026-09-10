@@ -9,15 +9,11 @@ import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.terminalRecords
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.io.File
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -65,21 +61,9 @@ class RecGovCampgroundsEtlTest {
             "https://cdn.example/primary.webp",
             upperPines.photos.single().url,
         )
-        val metadata = upperPines.metadata!!.jsonObject
-        assertEquals("Camping", metadata["activities"]!!.jsonArray[0].jsonPrimitive.content)
-        assertEquals("Hiking", metadata["activities"]!!.jsonArray[1].jsonPrimitive.content)
-
-        val rating = assertNotNull(metadata["rating_reviews"]).jsonObject
-        assertEquals("4.25", rating["avg"]!!.jsonPrimitive.content)
-        assertEquals("8", rating["count"]!!.jsonPrimitive.content)
-
-        val cell = assertNotNull(upperPines.cellService).jsonObject
-        val verizon = cell.getValue("verizon").jsonObject
-        assertEquals("3.5", verizon["avg"]!!.jsonPrimitive.content)
-        assertEquals("4", verizon["count"]!!.jsonPrimitive.content)
-        val att = cell.getValue("att").jsonObject
-        assertEquals("1.25", att["avg"]!!.jsonPrimitive.content)
-        assertEquals("2", att["count"]!!.jsonPrimitive.content)
+        // The typed metadata and carrier bags stay empty until the rec.gov mapping lands.
+        assertNull(upperPines.metadata)
+        assertEquals(emptyList(), upperPines.cellService)
     }
 
     @Test

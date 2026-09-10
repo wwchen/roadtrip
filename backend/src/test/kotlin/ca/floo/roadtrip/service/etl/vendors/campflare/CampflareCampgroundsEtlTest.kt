@@ -47,12 +47,6 @@ class CampflareCampgroundsEtlTest {
                 .jsonObject["ridb_facility_id"]!!
                 .jsonPrimitive
                 .content
-        val hasToilets =
-            row.amenities!!
-                .jsonObject["toilets"]!!
-                .jsonPrimitive
-                .content
-                .toBooleanStrict()
         val sourceName =
             row.sourcePayload!!
                 .jsonObject["name"]!!
@@ -60,7 +54,8 @@ class CampflareCampgroundsEtlTest {
                 .content
         val campflareLink = row.links.last()
         assertEquals("232447", ridbFacilityId)
-        assertEquals(true, hasToilets)
+        // The typed bags stay empty until the Campflare mapping lands.
+        assertEquals(emptyList(), row.amenities)
         assertEquals(" Upper Pines ", sourceName)
         assertEquals("Campflare source", campflareLink.title)
         assertEquals("https://campflare.com/campground/upper-pines-campground-447", campflareLink.url)

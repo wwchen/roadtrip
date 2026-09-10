@@ -1,13 +1,22 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.Address
+import ca.floo.roadtrip.model.domain.AmenityKey
+import ca.floo.roadtrip.model.domain.CampgroundAlert
+import ca.floo.roadtrip.model.domain.CampgroundAmenity
 import ca.floo.roadtrip.model.domain.CampgroundContact
 import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
+import ca.floo.roadtrip.model.domain.CampgroundMetadata
+import ca.floo.roadtrip.model.domain.CampgroundPrice
+import ca.floo.roadtrip.model.domain.CampgroundRating
+import ca.floo.roadtrip.model.domain.CampgroundSchedule
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CampsiteAttribute
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.model.domain.Carrier
+import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
@@ -38,10 +47,10 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 latitude = 37.739,
                 longitude = -119.565,
                 location = CampgroundLocation(37.739, -119.565, address = Address(state = "CA", country = "US")),
-                amenities = json("""{"toilets":true,"water":true}"""),
+                amenities = listOf(CampgroundAmenity(AmenityKey.TOILETS), CampgroundAmenity(AmenityKey.WATER)),
                 management = CampgroundManagement("National Park Service"),
                 connections = json("""{"ridb_facility_id":"232447"}"""),
-                metadata = json("""{"last_updated":"2026-07-01T00:00:00Z"}"""),
+                metadata = CampgroundMetadata(lastUpdated = "2026-07-01T00:00:00Z"),
                 sourceUrl = "https://campflare.com/campground/upper-pines-campground-447",
                 sourcePayload = json("""{"id":"upper-pines-campground-447","name":"Upper Pines"}"""),
             )
@@ -835,6 +844,248 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertNull(row.description)
         assertNull(row.minPeople)
     }
+
+    @Test
+    fun `campground typed bags and parent name round-trip through the repo`() {
+        val repo = CampgroundRepo(ctx)
+        repo.upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cg-bags-1"),
+                    name = "Bagged",
+                    parentName = "Yosemite National Park",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                    amenities =
+                        listOf(
+                            CampgroundAmenity(AmenityKey.TOILETS, detail = "vault"),
+                            CampgroundAmenity(AmenityKey.SHOWERS, present = false),
+                            CampgroundAmenity(AmenityKey.OTHER, detail = "Surfing"),
+                        ),
+                    cellService =
+                        listOf(
+                            CarrierSignal(Carrier.VERIZON, average = 3.5, count = 11),
+                            CarrierSignal(Carrier.US_CELLULAR, average = 2.0),
+                        ),
+                    metadata =
+                        CampgroundMetadata(
+                            activities = listOf("Camping", "Hiking"),
+                            rating = CampgroundRating(average = 4.5, count = 12),
+                            lastUpdated = "2026-07-01T00:00:00Z",
+                        ),
+                    price = CampgroundPrice(minimum = 36.0, maximum = 50.0, currency = "USD"),
+                    defaultCampsiteSchedule = CampgroundSchedule(checkIn = "14:00", checkOut = "11:00"),
+                    alerts =
+                        listOf(
+                            CampgroundAlert(title = "Fire ban", body = "No fires.", endsOn = "2026-09-30", sourceUrl = "https://a.test/"),
+                        ),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+
+        val row = checkNotNull(repo.findById(campgroundId("cg-bags-1")))
+
+        assertEquals("Yosemite National Park", row.parentName)
+        assertEquals(
+            listOf(
+                CampgroundAmenity(AmenityKey.TOILETS, detail = "vault"),
+                CampgroundAmenity(AmenityKey.SHOWERS, present = false),
+                CampgroundAmenity(AmenityKey.OTHER, detail = "Surfing"),
+            ),
+            row.amenities,
+        )
+        assertEquals(
+            listOf(CarrierSignal(Carrier.VERIZON, average = 3.5, count = 11), CarrierSignal(Carrier.US_CELLULAR, average = 2.0)),
+            row.cellService,
+        )
+        assertEquals(
+            CampgroundMetadata(listOf("Camping", "Hiking"), CampgroundRating(4.5, 12), "2026-07-01T00:00:00Z"),
+            row.metadata,
+        )
+        assertEquals(CampgroundPrice(minimum = 36.0, maximum = 50.0, currency = "USD"), row.price)
+        assertEquals(CampgroundSchedule(checkIn = "14:00", checkOut = "11:00"), row.defaultCampsiteSchedule)
+        assertEquals(
+            listOf(CampgroundAlert(title = "Fire ban", body = "No fires.", endsOn = "2026-09-30", sourceUrl = "https://a.test/")),
+            row.alerts,
+        )
+    }
+
+    @Test
+    fun `empty campground bags read back as empty lists and absent objects`() {
+        val repo = CampgroundRepo(ctx)
+        repo.upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cg-bags-empty"),
+                    name = "Bare",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+
+        val row = checkNotNull(repo.findById(campgroundId("cg-bags-empty")))
+
+        assertNull(row.parentName)
+        assertEquals(emptyList(), row.amenities)
+        assertEquals(emptyList(), row.cellService)
+        assertEquals(emptyList(), row.alerts)
+        assertNull(row.metadata)
+        assertNull(row.price)
+        assertNull(row.defaultCampsiteSchedule)
+    }
+
+    /**
+     * The bag counterpart of the V55 and V56 no-ops: a row the typed repo just
+     * wrote is already canonical, so re-running V57 over it must change
+     * nothing.
+     */
+    @Test
+    fun `the campground bags migration is a no-op on rows this repo wrote`() {
+        CampgroundRepo(ctx).upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cg-bags-canonical"),
+                    name = "Canonical Bags",
+                    parentName = "Yosemite National Park",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                    amenities =
+                        listOf(
+                            CampgroundAmenity(AmenityKey.TOILETS, detail = "vault"),
+                            CampgroundAmenity(AmenityKey.SHOWERS, present = false),
+                        ),
+                    cellService = listOf(CarrierSignal(Carrier.VERIZON, average = 3.5, count = 11)),
+                    metadata = CampgroundMetadata(listOf("Camping"), CampgroundRating(4.5, 12), "2026-07-01T00:00:00Z"),
+                    price = CampgroundPrice(minimum = 36.0, currency = "USD"),
+                    defaultCampsiteSchedule = CampgroundSchedule(checkIn = "14:00", checkOut = "11:00"),
+                    alerts = listOf(CampgroundAlert(title = "Fire ban", body = "No fires.", endsOn = "2026-09-30")),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+
+        val before = campgroundBagColumnsAsText()
+
+        migrationStatements("V57__typed_campground_bags.sql").forEach(ctx::execute)
+
+        assertEquals(before, campgroundBagColumnsAsText())
+    }
+
+    /**
+     * The bag migration's whole job: every legacy shape the live catalog holds
+     * has to decode strictly once the read path is typed. It backfills nothing
+     * — `parent_name` stays empty until the import that follows the deploy.
+     */
+    @Test
+    fun `the campground bags migration rewrites legacy vendor shapes and backfills nothing`() {
+        // Seeding pre-V57 shapes means writing objects into what V57 made array columns.
+        ctx.execute("ALTER TABLE campgrounds DROP CONSTRAINT IF EXISTS campgrounds_amenities_check")
+        ctx.execute("ALTER TABLE campgrounds DROP CONSTRAINT IF EXISTS campgrounds_cell_service_check")
+        seedLegacyCampground(
+            "campflare",
+            "legacy-campflare",
+            "amenities" to """{"toilets":true,"showers":false,"wifi":null,"toilet_kind":"vault"}""",
+            "cell_service" to """{"verizon":3.5,"uscell":2,"fakecell":1}""",
+            "price" to """{"currency":"USD","currency_code":"usd","minimum":36,"maximum":50}""",
+            "default_campsite_schedule" to """{"check_in_time":"14:00","check_out_time":"11:00","uniform":true}""",
+            "alerts" to
+                """[{"title":"Fire ban","content":"No fires.","end_date":"2026-09-30","source_url":"https://a.test/"},{"title":"No body"}]""",
+            "metadata" to """{"last_updated":"2026-07-01T00:00:00Z","has_availability_alerts":true}""",
+        )
+        seedLegacyCampground(
+            "reservecalifornia",
+            "legacy-rc",
+            "amenities" to """{"Restrooms":true,"Surfing":true}""",
+        )
+        seedLegacyCampground(
+            "recgov",
+            "legacy-recgov",
+            "cell_service" to """{"verizon":{"avg":3.5,"count":11},"att":{"count":4}}""",
+            "metadata" to """{"activities":["Camping","Hiking"],"rating_reviews":{"avg":4.5,"count":12}}""",
+        )
+        seedLegacyCampground(
+            "aspira",
+            "1:2",
+            "metadata" to """{"transaction_location_id":1,"map_id":2,"match_kind":"leaf"}""",
+        )
+
+        // Twice: a rerun over the rows the first pass canonicalized must change nothing.
+        repeat(2) { migrationStatements("V57__typed_campground_bags.sql").forEach(ctx::execute) }
+
+        val repo = CampgroundRepo(ctx)
+        val campflare = checkNotNull(repo.findById(campgroundId("legacy-campflare")))
+        assertEquals(
+            listOf(
+                CampgroundAmenity(AmenityKey.SHOWERS, present = false),
+                CampgroundAmenity(AmenityKey.TOILETS, detail = "vault"),
+            ),
+            campflare.amenities.sortedBy { it.key.wire },
+        )
+        assertEquals(
+            listOf(CarrierSignal(Carrier.US_CELLULAR, average = 2.0), CarrierSignal(Carrier.VERIZON, average = 3.5)),
+            campflare.cellService.sortedBy { it.carrier.wire },
+        )
+        assertEquals(CampgroundPrice(minimum = 36.0, maximum = 50.0, currency = "USD"), campflare.price)
+        assertEquals(CampgroundSchedule(checkIn = "14:00", checkOut = "11:00"), campflare.defaultCampsiteSchedule)
+        assertEquals(
+            listOf(CampgroundAlert(title = "Fire ban", body = "No fires.", endsOn = "2026-09-30", sourceUrl = "https://a.test/")),
+            campflare.alerts,
+        )
+        assertEquals(CampgroundMetadata(lastUpdated = "2026-07-01T00:00:00Z"), campflare.metadata)
+        assertNull(campflare.parentName)
+
+        val reserveCalifornia = checkNotNull(repo.findById(campgroundId("legacy-rc")))
+        assertEquals(
+            listOf(CampgroundAmenity(AmenityKey.OTHER, detail = "Restrooms"), CampgroundAmenity(AmenityKey.OTHER, detail = "Surfing")),
+            reserveCalifornia.amenities.sortedBy { it.detail },
+        )
+
+        val recGov = checkNotNull(repo.findById(campgroundId("legacy-recgov")))
+        assertEquals(listOf(CarrierSignal(Carrier.VERIZON, average = 3.5, count = 11)), recGov.cellService)
+        assertEquals(
+            CampgroundMetadata(listOf("Camping", "Hiking"), CampgroundRating(4.5, 12)),
+            recGov.metadata,
+        )
+
+        val aspira = checkNotNull(repo.findById(campgroundId("1:2")))
+        assertNull(aspira.metadata)
+    }
+
+    /** One bare campground row per vendor, written in the shapes that predate the typed columns. */
+    private fun seedLegacyCampground(
+        dataProvider: String,
+        dataProviderRef: String,
+        vararg columns: Pair<String, String>,
+    ) {
+        val names = columns.joinToString("") { ", ${it.first}" }
+        val placeholders = columns.joinToString("") { ", ?::jsonb" }
+        ctx.execute(
+            "INSERT INTO campgrounds (name, data_provider, data_provider_ref$names) VALUES (?, ?, ?$placeholders)",
+            *(listOf("Legacy", dataProvider, dataProviderRef) + columns.map { it.second }).toTypedArray(),
+        )
+    }
+
+    private fun campgroundId(dataProviderRef: String): Long =
+        ctx
+            .fetchOne("SELECT id FROM campgrounds WHERE data_provider_ref = ?", dataProviderRef)!!
+            .get("id", Long::class.java)
+
+    private fun campgroundBagColumnsAsText(): List<String> =
+        ctx
+            .fetch(
+                """
+                SELECT amenities::text AS amenities, cell_service::text AS cell_service, metadata::text AS metadata,
+                       price::text AS price, default_campsite_schedule::text AS schedule, alerts::text AS alerts,
+                       parent_name
+                FROM campgrounds ORDER BY id
+                """.trimIndent(),
+            ).map { row -> row.intoArray().joinToString("|") { it.toString() } }
 
     /** A parent campground plus one bare campsite per ref, for migration replays to rewrite. */
     private fun seedCampsites(

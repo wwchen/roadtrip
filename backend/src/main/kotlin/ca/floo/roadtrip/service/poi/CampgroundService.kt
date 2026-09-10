@@ -10,12 +10,6 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.poi.campground.CampgroundCta
 import ca.floo.roadtrip.service.poi.campground.UrlHosts
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-
-private const val LAST_UPDATED_KEY = "last_updated"
 
 internal class CampgroundService(
     private val campgroundRepo: CampgroundRepo,
@@ -84,23 +78,23 @@ internal class CampgroundService(
                     status = campground.status,
                     statusDescription = campground.statusDescription,
                     kind = campground.kind,
-                    price = campground.price,
-                    schedule = campground.defaultCampsiteSchedule,
-                    amenities = campground.amenities,
-                    cellCoverage = campground.cellService,
+                    price = CatalogColumnJson.element(campground.price),
+                    schedule = CatalogColumnJson.element(campground.defaultCampsiteSchedule),
+                    amenities = CatalogColumnJson.elements(campground.amenities),
+                    cellCoverage = CatalogColumnJson.elements(campground.cellService),
                     maxRvLength = campground.maxRvLength,
                     maxTrailerLength = campground.maxTrailerLength,
                     hasPullThroughSites = campground.hasPullThroughSites,
                     bigRigFriendly = campground.bigRigFriendly,
                     links = CatalogColumnJson.elements(campground.links),
-                    alerts = campground.alerts,
+                    alerts = CatalogColumnJson.elements(campground.alerts),
                     connections = campground.connections,
-                    metadata = campground.metadata,
+                    metadata = CatalogColumnJson.element(campground.metadata),
                     management = CatalogColumnJson.element(campground.management),
                     contact = CatalogColumnJson.element(campground.contact),
                     email = campground.contact?.email,
                     elevation = campground.location?.elevation,
-                    lastVerified = campground.metadata.stringProperty(LAST_UPDATED_KEY),
+                    lastVerified = campground.metadata?.lastUpdated,
                 ),
         )
     }
@@ -110,9 +104,3 @@ internal class CampgroundService(
         const val MIN_POI_ZOOM: Int = 6
     }
 }
-
-private fun JsonElement.stringProperty(key: String): String? =
-    ((this as? JsonObject)?.get(key) as? JsonPrimitive)
-        ?.contentOrNull
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }

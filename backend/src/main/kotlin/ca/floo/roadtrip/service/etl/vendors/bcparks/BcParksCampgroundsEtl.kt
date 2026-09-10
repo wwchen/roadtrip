@@ -153,7 +153,6 @@ class BcParksCampgroundsEtl(
             photos = listOfNotNull(strapiRow.photoUrl?.let(::CatalogPhoto)),
             management = CampgroundManagement(agency),
             contact = strapiRow.phone?.let { CampgroundContact(phone = it) },
-            metadata = metadataPayload(leaf, host, match.kind, strapiRow),
             sourceUrl = bookingUrl,
             sourcePayload = sourcePayload(leaf, match.kind, strapiRow),
         )

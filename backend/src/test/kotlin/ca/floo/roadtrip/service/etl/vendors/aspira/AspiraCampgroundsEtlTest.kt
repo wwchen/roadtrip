@@ -218,10 +218,10 @@ class AspiraCampgroundsEtlTest {
     }
 
     @Test
-    fun `extras record match provenance and host`() {
+    fun `source payload records match provenance`() {
         val campground = campgrounds(dtoOf(campground)).single()
-        val extras = campground.metadata!!.jsonObject
-        assertEquals("reservation.pc.gc.ca", extras["host"]!!.jsonPrimitive.content)
+        val extras = campground.sourcePayload!!.jsonObject
+        assertEquals("Two Jack Lakeside", extras["name"]!!.jsonPrimitive.content)
         assertEquals("exact", extras["match_kind"]!!.jsonPrimitive.content)
     }
 
@@ -301,7 +301,7 @@ class AspiraCampgroundsEtlTest {
         assertEquals("Backcountry Site With No Geometry", campground.name)
         assertEquals(
             "parent",
-            campground.metadata!!
+            campground.sourcePayload!!
                 .jsonObject["match_kind"]!!
                 .jsonPrimitive.content,
         )

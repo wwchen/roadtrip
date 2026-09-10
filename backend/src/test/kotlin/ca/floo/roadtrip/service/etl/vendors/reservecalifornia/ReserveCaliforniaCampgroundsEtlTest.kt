@@ -36,8 +36,8 @@ class ReserveCaliforniaCampgroundsEtlTest {
         assertEquals("CA", campground.location.region)
         assertEquals("US", campground.location.country)
         assertEquals("California State Parks", campground.management!!.agency)
-        val amenities = campground.amenities!!.jsonObject
-        assertEquals("true", amenities["Restrooms"]!!.jsonPrimitive.content)
+        // The typed amenity bag stays empty until the ReserveCalifornia mapping lands.
+        assertEquals(emptyList(), campground.amenities)
     }
 
     @Test

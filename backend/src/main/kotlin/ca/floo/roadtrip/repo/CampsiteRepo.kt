@@ -466,11 +466,3 @@ class CampsiteRepo(
 }
 
 private fun escapeLikePattern(value: String): String = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-/**
- * A SQL NULL list column is an absent list. The columns are nullable until the
- * migration that follows the old jar out of rotation, and the strict decoder
- * takes a non-null string.
- */
-private inline fun <reified T : Any> decodeListColumn(raw: String?): List<T> =
-    if (raw == null) emptyList() else CatalogColumnJson.decodeArray(raw)

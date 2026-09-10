@@ -324,15 +324,15 @@ class PoiServiceTest : SharedDbTest() {
             "Open seasonally",
             "federal",
             """{"minimum":26,"maximum":36}""",
-            """{"check_in_time":"14:00"}""",
-            """{"showers":true}""",
-            """{"level":"weak"}""",
+            """{"check_in":"14:00"}""",
+            """[{"key":"showers","present":true}]""",
+            """[{"carrier":"verizon","average":1.5}]""",
             32.0,
             28.0,
             true,
             false,
             """[{"url":"https://example.test"}]""",
-            """[{"message":"road closed"}]""",
+            """[{"body":"road closed"}]""",
             """{"power":"30/50 amp"}""",
             """{"last_updated":"2026-06-01"}""",
             """{"agency":"NPS"}""",
@@ -346,7 +346,7 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals("Open seasonally", detail.statusDescription)
         assertEquals("federal", detail.kind)
         assertEquals(
-            "26",
+            "26.0",
             detail.price!!
                 .jsonObject["minimum"]!!
                 .jsonPrimitive.content,
@@ -354,19 +354,21 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals(
             "14:00",
             detail.schedule!!
-                .jsonObject["check_in_time"]!!
+                .jsonObject["check_in"]!!
                 .jsonPrimitive.content,
         )
         assertEquals(
-            "true",
+            "showers",
             detail.amenities!!
-                .jsonObject["showers"]!!
+                .jsonArray[0]
+                .jsonObject["key"]!!
                 .jsonPrimitive.content,
         )
         assertEquals(
-            "weak",
+            "verizon",
             detail.cellCoverage!!
-                .jsonObject["level"]!!
+                .jsonArray[0]
+                .jsonObject["carrier"]!!
                 .jsonPrimitive.content,
         )
         assertEquals(32.0, detail.maxRvLength)
@@ -384,7 +386,7 @@ class PoiServiceTest : SharedDbTest() {
             "road closed",
             detail.alerts!!
                 .jsonArray[0]
-                .jsonObject["message"]!!
+                .jsonObject["body"]!!
                 .jsonPrimitive.content,
         )
         assertEquals(

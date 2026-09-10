@@ -89,7 +89,6 @@ class ReserveAmericaCampgroundsEtl(
                             links = listOfNotNull(park.infoUrl?.let(::CampgroundLink)),
                             photos = listOfNotNull(park.photoUrl?.let(::CatalogPhoto)),
                             management = CampgroundManagement(settings.agency),
-                            metadata = parkExtras,
                             sourceUrl = park.infoUrl,
                             sourcePayload = parkExtras,
                         ),

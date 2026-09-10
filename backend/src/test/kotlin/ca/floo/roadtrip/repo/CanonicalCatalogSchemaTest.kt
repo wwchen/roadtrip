@@ -73,6 +73,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "medium_description",
                 "metadata",
                 "name",
+                "parent_name",
                 "photos",
                 "price",
                 "reservation_url",

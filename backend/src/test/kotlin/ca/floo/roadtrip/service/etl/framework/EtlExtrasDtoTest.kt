@@ -21,7 +21,6 @@ import ca.floo.roadtrip.service.etl.vendors.tesla.TeslaIndexEtl
 import ca.floo.roadtrip.service.etl.vendors.tesla.TeslaIndexRow
 import ca.floo.roadtrip.service.etl.vendors.tesla.TeslaSuperchargerFunction
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -61,7 +60,7 @@ class EtlExtrasDtoTest {
                     ),
             ).single()
 
-        val extras = campground.metadata!!.jsonObject
+        val extras = campground.sourcePayload!!.jsonObject
         assertEquals(123, extras["park_id"]!!.jsonPrimitive.int)
         assertEquals("Writing-on-Stone Provincial Park", extras["name"]!!.jsonPrimitive.content)
         assertEquals(49.083, extras["latitude"]!!.jsonPrimitive.double)
@@ -338,11 +337,11 @@ class EtlExtrasDtoTest {
     }
 
     @Test
-    fun `aspira extras preserve explicit null parent name`() {
+    fun `aspira source payload omits an absent parent name`() {
         // An emitted aspira POI always carries a non-null resourceLocationId
         // (leaves without one are park containers, dropped by
         // AspiraCampgroundsEtl before emission). parent_name stays nullable, so
-        // it is the field that exercises explicitNulls serialization here.
+        // it is the field that exercises absent-field serialization here.
         val campground =
             records(
                 AspiraCampgroundsEtl("aspira-wa-campgrounds", DataProvider.ASPIRA, "wa")
@@ -365,12 +364,12 @@ class EtlExtrasDtoTest {
                     ),
             ).single()
 
-        val extras = campground.metadata!!.jsonObject
-        assertEquals("washington.goingtocamp.com", extras["host"]!!.jsonPrimitive.content)
-        assertEquals(11, extras["transaction_location_id"]!!.jsonPrimitive.int)
-        assertEquals(22, extras["map_id"]!!.jsonPrimitive.int)
-        assertEquals(33, extras["resource_location_id"]!!.jsonPrimitive.int)
-        assertEquals(JsonNull, extras["parent_name"])
+        val extras = campground.sourcePayload!!.jsonObject
+        assertEquals("Lakeside Campground", extras["name"]!!.jsonPrimitive.content)
+        assertEquals(11, extras["transactionLocationId"]!!.jsonPrimitive.int)
+        assertEquals(22, extras["mapId"]!!.jsonPrimitive.int)
+        assertEquals(33, extras["resourceLocationId"]!!.jsonPrimitive.int)
+        assertNull(extras["parent_name"])
         assertEquals("exact", extras["match_kind"]!!.jsonPrimitive.content)
     }
 

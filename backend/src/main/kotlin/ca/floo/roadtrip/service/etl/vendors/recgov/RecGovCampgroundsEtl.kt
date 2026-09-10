@@ -143,10 +143,7 @@ class RecGovCampgroundsEtl(
         val region = firstAddr?.AddressStateCode?.takeIf { it.isNotBlank() }
         val country = normalizeCountry(firstAddr?.AddressCountryCode) ?: DEFAULT_COUNTRY
         val infoUrl = facilityInfoUrl(row, rawObj, reservable)
-        val activities = activities(rawObj)
         val photoUrl = photoUrl(rawObj)
-        val rating = ratingSummary(enrichment)
-        val cell = cellCoverage(enrichment)
 
         return CampgroundUpsertCandidate(
             dataProviderRef = DataProviderRef.RecGov(id = row.FacilityID.toString()),
@@ -161,10 +158,8 @@ class RecGovCampgroundsEtl(
             reservationUrl = infoUrl,
             links = listOfNotNull(infoUrl?.let(::CampgroundLink)),
             photos = listOfNotNull(photoUrl?.let(::CatalogPhoto)),
-            cellService = cell?.let(::cellCoveragePayload),
             management = agency?.let { CampgroundManagement(it) },
             contact = row.FacilityPhone?.takeIf { it.isNotBlank() }?.let { CampgroundContact(phone = it) },
-            metadata = metadataPayload(activities, rating),
             sourceUrl = infoUrl,
             sourcePayload = raw,
         )
