@@ -625,18 +625,20 @@ function WeekSurface({
   }
 
   if (week.data?.state === 'empty') {
-    return <div className="cg-closed-banner">No availability data for this campground.</div>;
+    return withNav(
+      <div className="cg-closed-banner">No availability data for this campground.</div>,
+    );
   }
 
   if (week.data?.state === 'closed_for_season') {
     const reopens = week.data.season?.reopens_on;
-    return (
+    return withNav(
       <div className="cg-closed-banner">
         {/* A calendar rather than the ⛰️ this shipped with: both messages this
             banner can carry are about dates, and Open Icons has no mountain. */}
         <Icon name="calendar" className="cg-closed-banner-icon" aria-hidden="true" />{' '}
         {reopens ? `Reopens ${reopens}` : 'Closed for season'}
-      </div>
+      </div>,
     );
   }
 

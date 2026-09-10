@@ -73,7 +73,7 @@ export interface PoiCampsitesAvailabilityResponse {
    * when no provider claims the campground, which leaves the picker uncapped
    * rather than capped at a guess.
    */
-  latest_date: string | null;
+  latest_date?: string | null;
   state: AvailabilityWindowState;
   /** Present only when `state` is `closed_for_season`. */
   season?: SeasonBlock | null;

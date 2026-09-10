@@ -445,6 +445,29 @@ describe('the week"s states', () => {
     await waitFor(() => expect(screen.getByText(/Reopens 2027-05-01/)).toBeInTheDocument());
   });
 
+  // A closed or empty week still replaces the grid with a banner, but the banner must
+  // not take the week nav down with it — otherwise a closed week strands the user on
+  // it with no way to page to one that isn't.
+  test('a closed week keeps its week nav', async () => {
+    stubs.availability = () =>
+      json(
+        availabilityBody([stream(1, WEEK.map(() => 'closed'))], undefined, {
+          state: 'closed_for_season',
+          season: { reopens_on: '2027-05-01' },
+          days: [],
+        }),
+      );
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature()} />
+      </AppProviders>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Reopens 2027-05-01/)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Previous week' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next week' })).toBeInTheDocument();
+  });
+
   test('a rate limit offers to watch instead, with no stale data to show', async () => {
     stubs.availability = () => json({ error: 'rate_limited', upstream_status: 429 }, 503);
     render(

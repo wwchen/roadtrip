@@ -382,8 +382,8 @@ provider supports internal polling **and** the date is not before the POI's
 earliest bookable date — one predicate, `AvailabilityCellDto.of`.
 
 `state: closed_for_season` ships `days: []`: clients gate the grid on `state`, so
-an all-closed week has nothing to draw. `state: empty` means no campsite matched
-the request at all, and also when no observations could be fetched for the
+an all-closed week has nothing to draw. `state: empty` covers two cases: no
+campsite matched the request, or no observations could be fetched for the
 window.
 
 The per-campsite `campsites[]` envelopes left this response and remain only on
