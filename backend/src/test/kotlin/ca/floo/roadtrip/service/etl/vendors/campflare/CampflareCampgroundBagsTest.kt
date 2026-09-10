@@ -44,9 +44,18 @@ class CampflareCampgroundBagsTest {
 
     @Test
     fun `toilet kind creates the toilets amenity when the boolean is json null`() {
-        val amenities = CampflareCampgroundBags.amenities(obj("""{"toilets": null, "toilet_kind": "vault"}"""))
+        val amenities =
+            CampflareCampgroundBags.amenities(
+                obj("""{"toilets": null, "toilet_kind": "vault", "water": true}"""),
+            )
 
-        assertEquals(listOf(CampgroundAmenity(AmenityKey.TOILETS, present = true, detail = "vault")), amenities)
+        assertEquals(
+            listOf(
+                CampgroundAmenity(AmenityKey.TOILETS, present = true, detail = "vault"),
+                CampgroundAmenity(AmenityKey.WATER, present = true),
+            ),
+            amenities,
+        )
     }
 
     @Test
@@ -57,16 +66,31 @@ class CampflareCampgroundBagsTest {
     }
 
     @Test
+    fun `a literal other key still lands as other carrying the key as detail`() {
+        val amenities = CampflareCampgroundBags.amenities(obj("""{"other": true}"""))
+
+        assertEquals(listOf(CampgroundAmenity(AmenityKey.OTHER, present = true, detail = "other")), amenities)
+    }
+
+    @Test
+    fun `a json string value is present even when it spells out false`() {
+        val amenities = CampflareCampgroundBags.amenities(obj("""{"wifi": "false"}"""))
+
+        assertEquals(listOf(CampgroundAmenity(AmenityKey.WIFI, present = true)), amenities)
+    }
+
+    @Test
     fun `bare number carriers become countless signals and unknown carriers drop`() {
         val carriers =
             CampflareCampgroundBags.carriers(
-                obj("""{"verizon": 0.6, "uscell": 2.5, "boost": 1.0, "att": null}"""),
+                obj("""{"verizon": 0.6, "uscell": 2.5, "tmobile": 1.8, "boost": 1.0, "att": null}"""),
             )
 
         assertEquals(
             listOf(
                 CarrierSignal(Carrier.VERIZON, average = 0.6, count = null),
                 CarrierSignal(Carrier.US_CELLULAR, average = 2.5, count = null),
+                CarrierSignal(Carrier.TMOBILE, average = 1.8, count = null),
             ),
             carriers,
         )

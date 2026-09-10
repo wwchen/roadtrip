@@ -203,7 +203,7 @@ class RecGovCampgroundsEtl(
             val payload = env.payload as? JsonObject ?: continue
             val id =
                 payload["facility_id"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
-                    ?: (payload["aggregate"] as? JsonObject)
+                    ?: (payload[AGGREGATE_KEY] as? JsonObject)
                         ?.get("location_id")
                         ?.jsonPrimitive
                         ?.contentOrNull
@@ -215,11 +215,11 @@ class RecGovCampgroundsEtl(
     }
 
     private fun activities(raw: JsonObject?): List<String> {
-        val rows = raw?.get("ACTIVITY")?.jsonArray ?: return emptyList()
+        val rows = raw?.get(ACTIVITY_KEY)?.jsonArray ?: return emptyList()
         return rows
             .mapNotNull { entry ->
                 val name =
-                    entry.jsonObject["ActivityName"]
+                    entry.jsonObject[ACTIVITY_NAME_KEY]
                         ?.jsonPrimitive
                         ?.contentOrNull
                         ?.takeIf { it.isNotBlank() }
@@ -298,7 +298,7 @@ class RecGovCampgroundsEtl(
             ?.trim()
             ?.takeIf { it.isNotBlank() }
 
-    private fun aggregate(enrichment: JsonObject?): JsonObject? = (enrichment?.get("aggregate") as? JsonObject) ?: enrichment
+    private fun aggregate(enrichment: JsonObject?): JsonObject? = (enrichment?.get(AGGREGATE_KEY) as? JsonObject) ?: enrichment
 
     private fun JsonObject.int(key: String): Int? =
         get(key)
@@ -373,6 +373,9 @@ class RecGovCampgroundsEtl(
         private const val DEFAULT_COUNTRY = "US"
         private const val RECAREA_KEY = "RECAREA"
         private const val RECAREA_NAME_KEY = "RecAreaName"
+        private const val ACTIVITY_KEY = "ACTIVITY"
+        private const val ACTIVITY_NAME_KEY = "ActivityName"
+        private const val AGGREGATE_KEY = "aggregate"
         private const val CELL_COVERAGE_KEY = "aggregate_cell_coverage_ratings"
         private const val CARRIER_KEY = "carrier"
         private const val RATING_COUNT_KEY = "number_of_ratings"

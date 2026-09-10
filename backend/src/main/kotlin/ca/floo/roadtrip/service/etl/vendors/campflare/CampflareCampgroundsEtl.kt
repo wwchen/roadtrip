@@ -8,7 +8,6 @@ import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
 class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
@@ -64,7 +63,7 @@ class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
                 reservationUrl = raw.stringField("reservation_url"),
                 links = campflareLinks(raw.arrayField("links"), sourceUrl),
                 photos = campflarePhotos(raw.arrayField("photos")),
-                alerts = CampflareCampgroundBags.alerts(raw[ALERTS_FIELD] as? JsonArray),
+                alerts = CampflareCampgroundBags.alerts(raw.jsonArrayField(ALERTS_FIELD)),
                 price = CampflareCampgroundBags.price(raw.objectField(PRICE_FIELD)),
                 cellService = raw.objectField(CELL_SERVICE_FIELD)?.let(CampflareCampgroundBags::carriers).orEmpty(),
                 management = campflareManagement(raw.objectField("management")),

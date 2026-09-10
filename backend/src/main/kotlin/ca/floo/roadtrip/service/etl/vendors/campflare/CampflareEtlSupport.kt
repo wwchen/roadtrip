@@ -71,6 +71,8 @@ internal fun JsonObject.booleanField(name: String): Boolean? =
 
 internal fun JsonObject.objectField(name: String): JsonObject? = this[name] as? JsonObject
 
+internal fun JsonObject.jsonArrayField(name: String): JsonArray? = this[name] as? JsonArray
+
 internal fun JsonObject.arrayField(name: String): JsonElement? = this[name]?.takeIf { runCatching { it.jsonArray }.isSuccess }
 
 internal fun campflareCampgroundSourceUrl(campflareId: String): String = CampflareUrls.campground(campflareId)

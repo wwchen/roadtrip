@@ -87,7 +87,7 @@ class ReserveCaliforniaCampgroundsEtl(
  * ones that name a known amenity are mapped; the rest ride as [AmenityKey.OTHER]
  * carrying the vendor's own words.
  */
-private fun highlightAmenities(labels: List<String>): List<CampgroundAmenity> =
+internal fun highlightAmenities(labels: List<String>): List<CampgroundAmenity> =
     labels.mapNotNull { raw ->
         val label = raw.trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
         val key = amenityKeyByHighlight[label.lowercase()]

@@ -72,11 +72,13 @@ class RecGovCampgroundsEtlTest {
             ),
             upperPines.metadata,
         )
-        // T-Mobile rated nobody and Boost is not in the vocabulary; both drop.
+        // Boost is not in the vocabulary and drops; the rest of the vocabulary reads through.
         assertEquals(
             listOf(
                 CarrierSignal(Carrier.VERIZON, average = 3.5, count = 4),
                 CarrierSignal(Carrier.ATT, average = 1.25, count = 2),
+                CarrierSignal(Carrier.TMOBILE, average = 3.0, count = 5),
+                CarrierSignal(Carrier.SPRINT, average = 2.75, count = 6),
                 CarrierSignal(Carrier.US_CELLULAR, average = 2.0, count = 3),
             ),
             upperPines.cellService,
@@ -269,8 +271,13 @@ class RecGovCampgroundsEtlTest {
                           },
                           {
                             "carrier": "T-Mobile",
-                            "average_rating": null,
-                            "number_of_ratings": 0
+                            "average_rating": 3.0,
+                            "number_of_ratings": 5
+                          },
+                          {
+                            "carrier": "Sprint",
+                            "average_rating": 2.75,
+                            "number_of_ratings": 6
                           },
                           {
                             "carrier": "US Cellular",

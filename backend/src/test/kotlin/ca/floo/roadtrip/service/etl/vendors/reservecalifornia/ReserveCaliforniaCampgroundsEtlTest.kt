@@ -65,6 +65,29 @@ class ReserveCaliforniaCampgroundsEtlTest {
     }
 
     @Test
+    fun `every spec highlight label maps onto its amenity key`() {
+        val labelToKey =
+            listOf(
+                "Restrooms" to AmenityKey.TOILETS,
+                "Toilet, Accessible" to AmenityKey.TOILETS,
+                "Comfort Station" to AmenityKey.TOILETS,
+                "Showers" to AmenityKey.SHOWERS,
+                "Rinse Showers" to AmenityKey.SHOWERS,
+                "Dump Station" to AmenityKey.DUMP_STATION,
+                "Store-convenience" to AmenityKey.CAMP_STORE,
+                "Store - Convenience" to AmenityKey.CAMP_STORE,
+                "Fire Rings" to AmenityKey.FIRES_ALLOWED,
+                "Museum" to AmenityKey.OTHER,
+                "  rinse SHOWERS " to AmenityKey.SHOWERS,
+            )
+
+        val amenities = highlightAmenities(labelToKey.map { it.first })
+
+        assertEquals(labelToKey.map { it.second }, amenities.map { it.key })
+        assertEquals("Museum", amenities[labelToKey.indexOfFirst { it.first == "Museum" }].detail)
+    }
+
+    @Test
     fun `site transform emits canonical campsites linked to california campgrounds`() {
         val campsites =
             okRecords(

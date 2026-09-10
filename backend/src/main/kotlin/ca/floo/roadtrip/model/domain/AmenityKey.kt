@@ -51,7 +51,7 @@ enum class AmenityKey(
     ;
 
     companion object {
-        private val byWire = entries.associateBy { it.wire }
+        private val byWire = entries.filter { it != OTHER }.associateBy { it.wire }
 
         /** A vendor key that already speaks the vocabulary; null when it does not (the caller maps it to [OTHER]). */
         fun fromWire(value: String): AmenityKey? = byWire[value]

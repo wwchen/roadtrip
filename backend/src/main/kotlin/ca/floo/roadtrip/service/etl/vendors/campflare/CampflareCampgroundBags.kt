@@ -48,7 +48,10 @@ object CampflareCampgroundBags {
                 if (amenityKey == null) {
                     CampgroundAmenity(AmenityKey.OTHER, present = true, detail = key)
                 } else {
-                    CampgroundAmenity(amenityKey, present = (value as? JsonPrimitive)?.booleanOrNull ?: true)
+                    CampgroundAmenity(
+                        amenityKey,
+                        present = (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull ?: true,
+                    )
                 }
         }
         return withToiletKind(entries, raw.stringField(TOILET_KIND_KEY))
@@ -110,7 +113,7 @@ object CampflareCampgroundBags {
     ): List<CampgroundAmenity> {
         if (toiletKind == null) return entries
         if (entries.none { it.key == AmenityKey.TOILETS }) {
-            return entries + CampgroundAmenity(AmenityKey.TOILETS, present = true, detail = toiletKind)
+            return listOf(CampgroundAmenity(AmenityKey.TOILETS, present = true, detail = toiletKind)) + entries
         }
         return entries.map { entry ->
             if (entry.key == AmenityKey.TOILETS) entry.copy(detail = toiletKind) else entry
