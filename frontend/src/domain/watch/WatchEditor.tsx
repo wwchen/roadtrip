@@ -188,10 +188,6 @@ function atcHelp(
   onOpenSettings?: () => void,
 ): ReactNode {
   if (canAtc) return watchCopy.addToCartHelp;
-  // `ready` without the `atc` kind: an existing add-to-cart watch whose trigger
-  // kinds were stripped. The scope is holdable, so calling it unavailable would
-  // be false — there is simply nothing true to add.
-  if (addToCart === 'ready') return null;
   if (addToCart === 'unsupported') return watchCopy.addToCartUnavailable;
   if (addToCart === 'no_credentials') {
     return onOpenSettings ? (

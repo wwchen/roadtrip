@@ -18,6 +18,8 @@ export interface WeekNavProps {
   showEarliest: boolean;
   /** Back is disabled at the earliest date: there is nothing before it to show. */
   canGoBack: boolean;
+  /** Forward is disabled at the last week the provider's horizon covers. */
+  canGoForward: boolean;
   onPrev: () => void;
   onNext: () => void;
   onEarliest: () => void;
@@ -42,6 +44,7 @@ export function WeekNav({
   endIso,
   showEarliest,
   canGoBack,
+  canGoForward,
   onPrev,
   onNext,
   onEarliest,
@@ -81,7 +84,13 @@ export function WeekNav({
       >
         {formatWeekLabel(startIso, endIso)}
       </button>
-      <button type="button" className="cg-week-next" aria-label="Next week" onClick={onNext}>
+      <button
+        type="button"
+        className="cg-week-next"
+        aria-label="Next week"
+        disabled={!canGoForward}
+        onClick={onNext}
+      >
         ›
       </button>
       {calendar}

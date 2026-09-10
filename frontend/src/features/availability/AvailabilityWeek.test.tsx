@@ -612,6 +612,22 @@ describe('the calendar popover', () => {
     // No horizon stated anywhere: an invented ceiling would be a guess.
     expect(screen.getByRole('button', { name: '21' })).not.toBeDisabled();
   });
+
+  // A horizon less than a week past the earliest date puts the raw ceiling
+  // *behind* the floor, and a picker whose max is before its min offers nothing
+  // at all. The earliest week is always selectable — it is the week on screen.
+  test('never puts the ceiling below the earliest bookable date', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available'])], undefined, { latest_date: '2026-08-13' }));
+    await mount();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Pick a date' }).click();
+    });
+
+    expect(screen.getByRole('button', { name: '10' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '11' })).toBeDisabled();
+  });
 });
 
 describe('paging weeks', () => {
@@ -650,6 +666,48 @@ describe('paging weeks', () => {
 
     // Seven columns ending on the 16th — an exclusive-end label would say 17.
     expect(screen.getByRole('button', { name: 'Pick a date' })).toHaveTextContent('Aug 10 – 16, 2026');
+  });
+
+  // `›` used to be clamped on the low side only, so it kept walking past the
+  // provider's horizon into requests the backend answers with
+  // `beyond_booking_horizon`.
+  test('stops at the last week the horizon allows', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available'])], undefined, { latest_date: '2026-08-24' }));
+    await mount();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Next week' }).click();
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Pick a date' })).toHaveTextContent(
+        'Aug 17 – 23, 2026',
+      ),
+    );
+
+    expect(screen.getByRole('button', { name: 'Next week' })).toBeDisabled();
+    await act(async () => {
+      screen.getByRole('button', { name: 'Next week' }).click();
+    });
+    expect(requests.filter((url) => url.includes('start_date=2026-08-24'))).toHaveLength(0);
+  });
+
+  // An error card that replaced the whole surface stranded the user on the week
+  // that failed: the one control that could get them out of it went with it.
+  test('keeps the week nav under a week the provider refused', async () => {
+    stubs.availability = () => json({ error: 'beyond_booking_horizon' }, 400);
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature()} />
+      </AppProviders>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('That date is past what this provider lets you book'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: 'Previous week' })).toBeInTheDocument();
   });
 });
 

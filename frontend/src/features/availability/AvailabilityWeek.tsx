@@ -42,7 +42,10 @@ import {
 import { TRIGGER_KIND_SLACK_NOTIFY, buildTriggerPayload, triggerStateOf } from '@/lib/watch-triggers';
 import './availability.css';
 
-/** How far back from the booking horizon the last selectable week starts, so the full week fits before it. */
+/**
+ * How far back from the booking horizon the last selectable week starts, so the
+ * full week fits before it.
+ */
 const LAST_WEEK_START_OFFSET = WEEK_DAYS;
 
 export interface AvailabilityWeekProps {
@@ -118,12 +121,34 @@ function AvailabilityWeekView({
 
   const showSkeleton = useDelayedFlag(week.isPending, SKELETON_RENDER_DELAY_MS);
 
+  /**
+   * The last week start the provider will quote for.
+   *
+   * A whole week short of the horizon, since a week start needs its full
+   * end-exclusive window to still fit under the ceiling — and never below the
+   * floor: a horizon less than a week out would otherwise put the ceiling
+   * behind `earliestDate`, leaving a picker with no selectable week at all.
+   */
+  const maxDate = useMemo(() => {
+    const raw = week.data?.latest_date ?? featureLatest;
+    if (!raw) return null;
+    const parsed = parseLocalYmd(raw);
+    if (!Number.isFinite(parsed.getTime())) return null;
+    const lastStart = addLocalDays(parsed, -LAST_WEEK_START_OFFSET);
+    return lastStart < earliestDate ? earliestDate : lastStart;
+  }, [earliestDate, featureLatest, week.data?.latest_date]);
+
+  // Clamped at both ends: paging past the horizon only buys a
+  // `beyond_booking_horizon` refusal, which is not an answer worth fetching.
   const goToWeek = useCallback(
     (next: Date) => {
-      actions.changeWeek(next < earliestDate ? earliestDate : next);
+      const floored = next < earliestDate ? earliestDate : next;
+      actions.changeWeek(maxDate && floored > maxDate ? maxDate : floored);
     },
-    [actions, earliestDate],
+    [actions, earliestDate, maxDate],
   );
+
+  const canGoForward = maxDate == null || addLocalDays(weekStart, WEEK_DAYS) <= maxDate;
 
   const days: AvailabilityDay[] = week.data?.state === 'success' ? week.data.days : [];
   const selectedDay = days.find((day) => day.date === selectedDate) ?? null;
@@ -131,14 +156,6 @@ function AvailabilityWeekView({
   // capability gate below compares against, and a new `Set` each time would make the
   // memoised callbacks that read it churn for no reason.
   const capabilities = week.data?.watchCapabilities ?? NO_WATCH_CAPABILITIES;
-
-  // The provider's real booking horizon: a whole week short, since a week start needs its full end-exclusive window to still fit.
-  const maxDate = useMemo(() => {
-    const raw = week.data?.latest_date ?? featureLatest;
-    if (!raw) return null;
-    const parsed = parseLocalYmd(raw);
-    return Number.isFinite(parsed.getTime()) ? addLocalDays(parsed, -LAST_WEEK_START_OFFSET) : null;
-  }, [featureLatest, week.data?.latest_date]);
 
   // Provider first, user second: "this campground cannot do alerts" and "sign in to
   // set one" are different sentences, and only the second is actionable — as are
@@ -293,6 +310,7 @@ function AvailabilityWeekView({
       endIso={localYmd(addLocalDays(weekStart, WEEK_DAYS - 1))}
       showEarliest={!sameLocalDay(weekStart, earliestDate)}
       canGoBack={!sameLocalDay(weekStart, earliestDate)}
+      canGoForward={canGoForward}
       onPrev={() => goToWeek(addLocalDays(weekStart, -WEEK_DAYS))}
       onNext={() => goToWeek(addLocalDays(weekStart, WEEK_DAYS))}
       onEarliest={() => goToWeek(earliestDate)}
@@ -478,15 +496,25 @@ function WeekSurface({
   // case "Show what we last saw" reveals it without a second request.
   const [showStale, setShowStale] = useState(false);
 
+  // Whatever replaces the grid keeps the nav above it. The week that failed is
+  // the one the user most needs to page away from, and a card that replaced the
+  // whole surface took the only control that could do it down with the grid.
+  const withNav = (content: React.ReactNode) => (
+    <>
+      <div className="cg-site-matrix-head">
+        <div className="cg-site-matrix-actions">{weekNav}</div>
+      </div>
+      {content}
+    </>
+  );
+
   if (week.isPending) {
     // Before the delay elapses: the nav only, so a cache hit does not flash a
     // skeleton table on its way to real data.
     return showSkeleton ? (
       <SiteMatrixSkeleton siteColumnWidth={siteColumnWidth} actions={weekNav} />
     ) : (
-      <div className="cg-site-matrix-head">
-        <div className="cg-site-matrix-actions">{weekNav}</div>
-      </div>
+      withNav(null)
     );
   }
 
@@ -501,7 +529,7 @@ function WeekSurface({
     if (kind === 'throttled') {
       const ageMin =
         week.data?.state === 'success' ? cacheAgeMinutes(week.data.cache?.age_seconds) : null;
-      return (
+      return withNav(
         <EmptyState
           icon="lock"
           title={upstreamCopy.rateLimitedTitle}
@@ -527,12 +555,12 @@ function WeekSurface({
               </Button>
             </>
           }
-        />
+        />,
       );
     }
 
     if (kind === 'server_error') {
-      return (
+      return withNav(
         <EmptyState
           icon="warning-fill"
           title={upstreamCopy.erroredTitle}
@@ -552,12 +580,12 @@ function WeekSurface({
               </Button>
             </>
           }
-        />
+        />,
       );
     }
 
     if (kind === 'unreachable') {
-      return (
+      return withNav(
         <EmptyState
           icon="warning"
           title={upstreamCopy.unreachableTitle}
@@ -582,17 +610,17 @@ function WeekSurface({
               </Button>
             </>
           }
-        />
+        />,
       );
     }
 
-    return (
+    return withNav(
       <div className="cg-summary">
         <span className="cg-error">{week.error.message || GENERIC_AVAILABILITY_ERROR}</span> ·{' '}
         <LinkButton className="cg-retry" onClick={() => void week.refetch()}>
           Retry
         </LinkButton>
-      </div>
+      </div>,
     );
   }
 
