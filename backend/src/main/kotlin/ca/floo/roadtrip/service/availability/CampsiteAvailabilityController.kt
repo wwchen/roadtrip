@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -31,7 +32,7 @@ internal class CampsiteAvailabilityController(
     /** @throws AvailabilityServiceError.NotFound when the POI has no campground. */
     fun campsitesForPoi(
         poiId: Long,
-        siteTypes: List<String>,
+        siteTypes: List<CampsiteKind>,
     ): PoiCampsitesResponseSchema = catalogService.campsitesForPoi(poiId = poiId, siteTypes = siteTypes)
 
     /**
@@ -43,7 +44,7 @@ internal class CampsiteAvailabilityController(
      */
     suspend fun poiAvailabilitySlice(
         poiId: Long,
-        siteTypes: List<String>,
+        siteTypes: List<CampsiteKind>,
         startDate: LocalDate?,
         endDate: LocalDate?,
         freshAtOrAfter: Instant? = null,
@@ -101,7 +102,7 @@ internal class CampsiteAvailabilityController(
      */
     suspend fun availabilityForPoi(
         poiId: Long,
-        siteTypes: List<String>,
+        siteTypes: List<CampsiteKind>,
         startDate: LocalDate?,
         endDate: LocalDate?,
         // Null for anonymous and magic-link readers. Capability gating narrows

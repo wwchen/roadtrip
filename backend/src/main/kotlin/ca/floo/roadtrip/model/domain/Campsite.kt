@@ -13,7 +13,7 @@ data class Campsite(
     val id: Long,
     val campgroundId: Long,
     val name: String,
-    val kind: String,
+    val kind: CampsiteKind,
     val loopName: String?,
     val latitude: Double?,
     val longitude: Double?,

@@ -8,6 +8,7 @@ import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -39,13 +40,13 @@ private const val WINDOW_LENGTH_DAYS = 7L
 class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
     @Test
     fun `slice carries the resolved window and the filtered campsites`() {
-        val fixture = sliceTestController(siteTypes = listOf("tent", "rv"))
+        val fixture = sliceTestController(siteTypes = listOf(CampsiteKind.TENT, CampsiteKind.RV))
 
         val slice =
             runBlocking {
                 fixture.controller.poiAvailabilitySlice(
                     poiId = TEST_POI_ID,
-                    siteTypes = listOf("tent"),
+                    siteTypes = listOf(CampsiteKind.TENT),
                     startDate = fixture.startDate,
                     endDate = fixture.endDate,
                 )
@@ -60,13 +61,13 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
 
     @Test
     fun `slice has a null batch when no campsite matches the site type filter`() {
-        val fixture = sliceTestController(siteTypes = listOf("tent"))
+        val fixture = sliceTestController(siteTypes = listOf(CampsiteKind.TENT))
 
         val slice =
             runBlocking {
                 fixture.controller.poiAvailabilitySlice(
                     poiId = TEST_POI_ID,
-                    siteTypes = listOf("cabin"),
+                    siteTypes = listOf(CampsiteKind.CABIN),
                     startDate = fixture.startDate,
                     endDate = fixture.endDate,
                 )
@@ -86,7 +87,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
      * with real implementations since `poiAvailabilitySlice` never exercises
      * them but the controller's constructor still requires them.
      */
-    private fun sliceTestController(siteTypes: List<String>): SliceFixture {
+    private fun sliceTestController(siteTypes: List<CampsiteKind>): SliceFixture {
         ctx.cleanCanonicalCatalogFixtures()
         val fixture =
             ctx.seedCatalogPoi(
@@ -99,7 +100,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                 bookingProviderRef = "232447",
             )
         siteTypes.forEachIndexed { index, kind ->
-            ctx.seedCampsite(campgroundId = fixture.catalogId, vendorId = "slice-$index", kind = kind)
+            ctx.seedCampsite(campgroundId = fixture.catalogId, vendorId = "slice-$index", kind = kind.wire)
         }
 
         val campsitesRepo = CampsiteRepo(ctx)

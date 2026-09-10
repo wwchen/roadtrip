@@ -4,15 +4,13 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.serialization.json.JsonElement
 
-const val DEFAULT_CAMPSITE_KIND = "site"
-
 data class CampsiteUpsertCandidate(
     val dataProviderRef: DataProviderRef,
     val bookingProvider: BookingProvider? = null,
     val bookingProviderRef: String? = null,
     val parentDataProviderRef: DataProviderRef?,
     val name: String,
-    val kind: String = DEFAULT_CAMPSITE_KIND,
+    val kind: CampsiteKind = CampsiteKind.OTHER,
     val loopName: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,

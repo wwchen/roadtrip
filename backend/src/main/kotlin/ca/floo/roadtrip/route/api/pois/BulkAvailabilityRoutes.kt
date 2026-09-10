@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route.api.pois
 
 import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.model.api.BulkAvailabilityRequestDto
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.access
@@ -29,7 +30,14 @@ import java.time.LocalDate
  * raw `kotlinx.serialization` exception text — never safe to put on the wire.
  */
 private val bulkValidationErrorCodes =
-    setOf("bad_request", "too_many_pois", "bad_min_nights", "bad_date_window", "end_before_start")
+    setOf(BAD_REQUEST_ERROR, "too_many_pois", "bad_min_nights", "bad_date_window", "end_before_start")
+
+/**
+ * Prefix [validated] stamps on an unknown-`site_type` failure. `require`/`error`
+ * carry only a message, and this marks the ones this file wrote — the rest of a
+ * [RouteBodyResult.Invalid] detail is raw deserializer text.
+ */
+private const val UNKNOWN_SITE_TYPE_MARKER = "site_type:"
 
 internal fun Route.bulkAvailabilityRoutes(
     controller: BulkAvailabilityController,
@@ -52,7 +60,16 @@ internal fun Route.bulkAvailabilityRoutes(
                                 .mapCatching { it.validated(config) }
                     ) {
                         is RouteBodyResult.Invalid -> {
-                            val code = body.detail?.takeIf { it in bulkValidationErrorCodes } ?: "bad_request"
+                            val detail = body.detail
+                            if (detail != null && detail.startsWith(UNKNOWN_SITE_TYPE_MARKER)) {
+                                call.respondBulkError(
+                                    BAD_REQUEST_ERROR,
+                                    HttpStatusCode.BadRequest,
+                                    detail = detail.removePrefix(UNKNOWN_SITE_TYPE_MARKER),
+                                )
+                                return@post
+                            }
+                            val code = detail?.takeIf { it in bulkValidationErrorCodes } ?: BAD_REQUEST_ERROR
                             call.respondBulkError(code, HttpStatusCode.BadRequest)
                             return@post
                         }
@@ -71,14 +88,14 @@ internal fun Route.bulkAvailabilityRoutes(
                         "min_nights?, site_type? }. Returns one entry per requested POI, in request " +
                         "order. Each entry carries either its campsites — filtered to " +
                         "`longest_run_nights >= min_nights` and sorted descending — or an error code. " +
-                        "A POI failing never fails the request.",
+                        "A POI failing never fails the request. `site_type` accepts: $siteTypeWireList.",
             ).access(RouteAccess.Anonymous)
         }
     }
 }
 
 private fun BulkAvailabilityRequestDto.validated(config: BulkAvailabilityConfig): BulkAvailabilityRequest {
-    require(poiIds.isNotEmpty()) { "bad_request" }
+    require(poiIds.isNotEmpty()) { BAD_REQUEST_ERROR }
     require(poiIds.size <= config.maxPois) { "too_many_pois" }
     require(minNights >= 1) { "bad_min_nights" }
     // Both dates are required: with either left null each POI would resolve its own
@@ -96,7 +113,10 @@ private fun BulkAvailabilityRequestDto.validated(config: BulkAvailabilityConfig)
         startDate = start,
         endDate = end,
         minNights = minNights,
-        siteTypes = siteTypes,
+        siteTypes =
+            siteTypes.map { raw ->
+                CampsiteKind.fromWire(raw) ?: error("$UNKNOWN_SITE_TYPE_MARKER${unknownSiteTypeDetail(raw)}")
+            },
     )
 }
 
@@ -112,6 +132,7 @@ private fun parseDate(raw: String?): LocalDate? =
 private suspend fun ApplicationCall.respondBulkError(
     error: String,
     status: HttpStatusCode,
+    detail: String? = null,
 ) {
-    respondEncodedJson(availabilityErrorDto(error), status)
+    respondEncodedJson(availabilityErrorDto(error, detail = detail), status)
 }

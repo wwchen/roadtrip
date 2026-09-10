@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 import ca.floo.roadtrip.model.domain.AmenityKey
 import ca.floo.roadtrip.model.domain.CampgroundAmenity
 import ca.floo.roadtrip.model.domain.CampgroundMetadata
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -102,7 +103,7 @@ class ReserveCaliforniaCampgroundsEtlTest {
         assertEquals(DataProvider.RESERVECALIFORNIA, parentDataProviderRef.provider)
         assertEquals("690", parentDataProviderRef.serialize())
         assertEquals("PINE 001", campsite.name)
-        assertEquals("Tent Site", campsite.kind)
+        assertEquals(CampsiteKind.TENT, campsite.kind)
         assertEquals("Tent Site", campsite.kindListed)
         assertEquals("Pine Loop", campsite.loopName)
 

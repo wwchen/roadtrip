@@ -14,6 +14,7 @@ import ca.floo.roadtrip.model.domain.CampgroundRating
 import ca.floo.roadtrip.model.domain.CampgroundSchedule
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CampsiteAttribute
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.Carrier
 import ca.floo.roadtrip.model.domain.CarrierSignal
@@ -270,7 +271,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                         dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-site-001"),
                         parentDataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
                         name = "Site 001",
-                        kind = "tent-only",
+                        kind = CampsiteKind.TENT,
                         loopName = "A",
                         latitude = 37.738,
                         longitude = -119.566,
@@ -301,7 +302,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
 
         assertNotNull(row)
         assertEquals("Site 001", row.get("name", String::class.java))
-        assertEquals("tent-only", row.get("kind", String::class.java))
+        assertEquals(CampsiteKind.TENT.wire, row.get("kind", String::class.java))
         assertEquals("A", row.get("loop_name", String::class.java))
         assertEquals("campflare", row.get("data_provider", String::class.java))
         assertEquals("upper-pines-site-001", row.get("data_provider_ref", String::class.java))
@@ -425,7 +426,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     dataProviderRef = DataProviderRef.RecGov(id = "100"),
                     parentDataProviderRef = DataProviderRef.RecGov(id = "232447"),
                     name = "Site 100",
-                    kind = "standard",
+                    kind = CampsiteKind.STANDARD,
                     sourcePayload = json("""{"site":"100"}"""),
                 ),
             ),
@@ -438,7 +439,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-site-100"),
                     parentDataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
                     name = "Campflare Site 100",
-                    kind = "standard",
+                    kind = CampsiteKind.STANDARD,
                     sourcePayload = json("""{"id":"upper-pines-site-100"}"""),
                 ),
             ),
@@ -594,7 +595,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     dataProviderRef = DataProviderRef.Campflare(id = "bulk-cs-$i"),
                     parentDataProviderRef = DataProviderRef.Campflare(id = "bulk-cg-$i"),
                     name = "Bulk Campsite $i",
-                    kind = "standard",
+                    kind = CampsiteKind.STANDARD,
                     sourcePayload = json("""{"id":"bulk-cs-$i"}"""),
                 )
             }
@@ -843,6 +844,96 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals(emptyList(), row.attributes)
         assertNull(row.description)
         assertNull(row.minPeople)
+    }
+
+    @Test
+    fun `campsite kind round-trips as the wire value`() {
+        seedCampsites("cg-kind-round-trip")
+        val campgroundId = campgroundId("cg-kind-round-trip")
+        CampsiteRepo(ctx).upsertCampsiteBatch(
+            CampsiteKind.entries.map { kind ->
+                CampsiteUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = "cs-kind-${kind.wire}"),
+                    parentDataProviderRef = DataProviderRef.RecGov(id = "cg-kind-round-trip"),
+                    name = kind.label,
+                    kind = kind,
+                )
+            },
+        )
+
+        val stored = CampsiteRepo(ctx).findByCampground(campgroundId).associateBy { it.name }
+        assertEquals(
+            CampsiteKind.entries.associate { it.label to it },
+            stored.mapValues { (_, row) -> row.kind },
+        )
+        assertEquals(
+            CampsiteKind.entries.map { it.wire }.sorted(),
+            ctx
+                .fetch("SELECT kind FROM campsites ORDER BY kind")
+                .map { it.get("kind", String::class.java) },
+        )
+    }
+
+    /**
+     * V58's job: one legacy row per vendor family, each carrying that vendor's own
+     * type string, all of them ending up in the wire vocabulary. The full per-value
+     * table lives in `CampsiteKindsTest`; this asserts the SQL agrees with it.
+     */
+    @Test
+    fun `the kind migration rewrites every vendor vocabulary and leaves wire values alone`() {
+        seedCampsites("cg-kind-legacy")
+        val campgroundId = campgroundId("cg-kind-legacy")
+        val legacy =
+            listOf(
+                Triple("recgov", "cs-kind-recgov", "TENT ONLY NONELECTRIC"),
+                Triple("campflare", "cs-kind-campflare", "water-access"),
+                Triple("aspira", "cs-kind-aspira", "Backcountry Site"),
+                Triple("aspira", "cs-kind-aspira-cabin", "Backcountry Cabin"),
+                Triple("reservecalifornia", "cs-kind-reservecalifornia", "Tent Site"),
+                Triple("reserveamerica", "cs-kind-reserveamerica", "site"),
+                Triple("recgov", "cs-kind-already-wire", "day_use"),
+            )
+        for ((vendor, ref, kind) in legacy) {
+            ctx.seedCampsite(campgroundId = campgroundId, vendor = vendor, vendorId = ref, kind = kind)
+        }
+
+        migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute)
+
+        assertEquals(
+            mapOf(
+                "cs-kind-recgov" to "tent",
+                "cs-kind-campflare" to "boat_in",
+                "cs-kind-aspira" to "backcountry",
+                "cs-kind-aspira-cabin" to "cabin",
+                "cs-kind-reservecalifornia" to "tent",
+                "cs-kind-reserveamerica" to "other",
+                "cs-kind-already-wire" to "day_use",
+            ),
+            campsiteKindsByRef(),
+        )
+    }
+
+    @Test
+    fun `the kind migration rewrites stored watch site_type filters`() {
+        val ownerUserId = seedWatchOwner()
+        insertWatchFilters("""{"site_type": ["TENT ONLY NONELECTRIC", "tent"]}""", ownerUserId)
+        insertWatchFilters("""{"site_type": "water-access", "loop": "A"}""", ownerUserId)
+        insertWatchFilters("""{"site_type": ["Backcountry Site", "houseboat"]}""", ownerUserId)
+        insertWatchFilters("""{"loop": "A"}""", ownerUserId)
+
+        migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute)
+
+        assertEquals(
+            listOf(
+                """{"site_type": ["tent", "tent"]}""",
+                """{"loop": "A", "site_type": "boat_in"}""",
+                """{"site_type": ["backcountry", "other"]}""",
+                """{"loop": "A"}""",
+            ),
+            ctx
+                .fetch("SELECT campsite_filters::text AS filters FROM availability_watch ORDER BY id")
+                .map { it.get("filters", String::class.java) },
+        )
     }
 
     @Test
@@ -1125,6 +1216,28 @@ class CatalogEntityRepoTest : SharedDbTest() {
             },
         )
     }
+
+    private fun campsiteKindsByRef(): Map<String, String> =
+        ctx
+            .fetch("SELECT data_provider_ref, kind FROM campsites")
+            .associate { it.get("data_provider_ref", String::class.java) to it.get("kind", String::class.java) }
+
+    private fun seedWatchOwner(): Long =
+        UserRepo(ctx)
+            .create(email = "kind-wire-${System.nanoTime()}@example.com", displayName = null, isEmailVerified = true)
+            .id.value
+
+    private fun insertWatchFilters(
+        filters: String,
+        ownerUserId: Long,
+    ) = ctx.execute(
+        """
+        INSERT INTO availability_watch (campsite_filters, start_date, end_date, trigger_kinds, owner_user_id)
+        VALUES (?::jsonb, DATE '2026-07-04', DATE '2026-07-06', ARRAY['slack_notify'], ?)
+        """.trimIndent(),
+        filters,
+        ownerUserId,
+    )
 
     private fun campsiteId(dataProviderRef: String): Long =
         ctx

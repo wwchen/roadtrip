@@ -13,6 +13,7 @@ import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.User
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.auth.UserStatus
@@ -992,7 +993,7 @@ class TriggerActionHandlerTest {
                 vendorId = "site-7",
                 name = "Site 12",
                 loopName = "Loop A",
-                kind = "Tent",
+                kind = CampsiteKind.TENT,
                 sourcePayload = null,
             )
         return TriggerOpening(

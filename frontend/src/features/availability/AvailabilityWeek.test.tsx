@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
 import { createTestQueryClient } from '@/test/query-client';
@@ -50,6 +50,7 @@ const catalogRow = (id: number, extra: Record<string, unknown> = {}) => ({
   name: `Site ${id}`,
   loop_name: 'Upper Loop',
   kind: 'tent',
+  kind_label: 'Tent',
   data_provider: 'recgov',
   data_provider_ref: String(id),
   ...extra,
@@ -155,6 +156,31 @@ describe('the week grid', () => {
     // Seven date headers, plus the frozen "Site" column.
     expect(screen.getAllByRole('columnheader')).toHaveLength(WEEK.length + 1);
     expect(screen.getByRole('button', { name: /View details for Upper Loop \/ Site 1/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /View details for Upper Loop \/ Site 2/ })).toBeInTheDocument();
+  });
+
+  test('the type dropdown reads as labels and filters on the wire value', async () => {
+    stubs.campsites = () =>
+      json(
+        catalogBody(
+          [catalogRow(1), catalogRow(2, { kind: 'walk_in', kind_label: 'Walk-in' })],
+          {},
+        ),
+      );
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available']), stream(2, ['reserved'])]));
+    await mount();
+
+    const typeFilter = screen.getByLabelText('Filter by site type') as HTMLSelectElement;
+    expect([...typeFilter.options].map((option) => [option.value, option.text])).toEqual([
+      ['', 'All types'],
+      ['tent', 'Tent'],
+      ['walk_in', 'Walk-in'],
+    ]);
+
+    fireEvent.change(typeFilter, { target: { value: 'walk_in' } });
+
+    expect(screen.getByText('1 of 2 Sites by date')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /View details for Upper Loop \/ Site 2/ })).toBeInTheDocument();
   });
 

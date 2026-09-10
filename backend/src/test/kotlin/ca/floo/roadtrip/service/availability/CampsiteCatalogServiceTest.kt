@@ -75,7 +75,8 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
         assertEquals(campsiteId, response.campsites.single().id)
         assertEquals("recgov", response.campsites.single().dataProvider)
         assertEquals("site-100", response.campsites.single().dataProviderRef)
-        assertEquals("site", response.campsites.single().kind)
+        assertEquals("other", response.campsites.single().kind)
+        assertEquals("Other", response.campsites.single().kindLabel)
         assertEquals(
             "provider-template://232447/recgov/site-100",
             response.reservationUrlTemplates.getValue(campsiteId),
@@ -89,7 +90,8 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 .jsonObject
         assertEquals("recgov", campsiteJson.getValue("data_provider").jsonPrimitive.content)
         assertEquals("site-100", campsiteJson.getValue("data_provider_ref").jsonPrimitive.content)
-        assertEquals("site", campsiteJson.getValue("kind").jsonPrimitive.content)
+        assertEquals("other", campsiteJson.getValue("kind").jsonPrimitive.content)
+        assertEquals("Other", campsiteJson.getValue("kind_label").jsonPrimitive.content)
         assertFalse(campsiteJson.containsKey("source_payload"))
         assertEquals(
             "provider-template://232447/recgov/site-100",

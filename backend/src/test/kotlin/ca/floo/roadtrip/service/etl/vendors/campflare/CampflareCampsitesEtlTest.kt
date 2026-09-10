@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class CampflareCampsitesEtlTest {
     @Test
@@ -32,7 +34,8 @@ class CampflareCampsitesEtlTest {
         assertEquals(DataProvider.CAMPFLARE, parentDataProviderRef.provider)
         assertEquals("upper-pines-campground-447", parentDataProviderRef.serialize())
         assertEquals("Site 001", row.name)
-        assertEquals("tent-only", row.kind)
+        assertEquals(CampsiteKind.TENT, row.kind)
+        assertEquals("Tent Site", row.kindListed)
         assertEquals("A", row.loopName)
         assertEquals(37.738, row.latitude)
         assertEquals(-119.566, row.longitude)
@@ -70,7 +73,9 @@ class CampflareCampsitesEtlTest {
             )
 
         assertEquals(listOf("missing-kind", "ok"), rows.map { it.dataProviderRef.serialize() })
-        assertEquals("site", rows.single { it.dataProviderRef.serialize() == "missing-kind" }.kind)
+        val missingKind = rows.single { it.dataProviderRef.serialize() == "missing-kind" }
+        assertEquals(CampsiteKind.OTHER, missingKind.kind)
+        assertNull(missingKind.kindListed)
     }
 
     @Test

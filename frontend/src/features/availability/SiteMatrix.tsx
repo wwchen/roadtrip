@@ -27,14 +27,16 @@ import {
   availabilityIndex,
   cellState,
   filterCampsites,
-  filterOptions,
   isWatchableKind,
+  loopOptions,
   normalizeFilters,
   rowId,
   siteName,
   siteTitleText,
   sortCampsites,
   sortedCampsites,
+  typeOptions,
+  type FilterOption,
   type MatrixFilters,
   type MatrixSort,
 } from './matrix-rows';
@@ -151,8 +153,8 @@ export function SiteMatrix(props: SiteMatrixProps) {
   const tools = (
     <MatrixTools
       filters={filters}
-      loopOptions={filterOptions(allRows, 'loop_name')}
-      typeOptions={filterOptions(allRows, 'kind')}
+      loopOptions={loopOptions(allRows)}
+      typeOptions={typeOptions(allRows)}
       onChange={events.filtersChanged}
     />
   );
@@ -472,13 +474,13 @@ function SiteColumnResizer({
 
 function MatrixTools({
   filters,
-  loopOptions,
-  typeOptions,
+  loopOptions: loops,
+  typeOptions: types,
   onChange,
 }: {
   filters: MatrixFilters;
   loopOptions: string[];
-  typeOptions: string[];
+  typeOptions: FilterOption[];
   onChange: (filters: MatrixFilters) => void;
 }) {
   return (
@@ -496,14 +498,14 @@ function MatrixTools({
         label="All loops"
         ariaLabel="Filter by loop"
         value={filters.loop}
-        options={loopOptions.map((option) => ({ value: option, label: option }))}
+        options={loops.map((option) => ({ value: option, label: option }))}
         onChange={(loop) => onChange({ ...filters, loop })}
       />
       <FilterSelect
         label="All types"
         ariaLabel="Filter by site type"
         value={filters.type}
-        options={typeOptions.map((option) => ({ value: option, label: option }))}
+        options={types}
         onChange={(type) => onChange({ ...filters, type })}
       />
       <FilterSelect

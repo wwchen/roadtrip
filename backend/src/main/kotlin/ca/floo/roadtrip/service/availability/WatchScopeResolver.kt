@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import kotlinx.serialization.json.JsonArray
@@ -35,14 +36,20 @@ class WatchScopeResolver(
         filters: JsonObject,
     ): List<Campsite> {
         val all = campsitesRepo.findByPoi(poiId)
-        val loops = collectStringFilter(filters, "loop")
-        val siteTypes = collectStringFilter(filters, "site_type")
+        val loops = collectStringFilter(filters, LOOP_FILTER_KEY)
+        // A stored value outside the wire vocabulary drops out of `siteTypes` but
+        // still counts as a filter, so such a watch keeps matching nothing.
+        val storedSiteTypes = collectStringFilter(filters, SITE_TYPE_FILTER_KEY)
+        val siteTypes = storedSiteTypes.mapNotNull(CampsiteKind::fromWire).toSet()
         return all.filter { r ->
             (loops.isEmpty() || (r.loopName != null && loops.contains(r.loopName))) &&
-                (siteTypes.isEmpty() || siteTypes.contains(r.kind))
+                (storedSiteTypes.isEmpty() || siteTypes.contains(r.kind))
         }
     }
 }
+
+private const val LOOP_FILTER_KEY = "loop"
+private const val SITE_TYPE_FILTER_KEY = "site_type"
 
 private fun collectStringFilter(
     filters: JsonObject,

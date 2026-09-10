@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.model.api.MAGIC_LINK_TOKEN_PARAM
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -1711,7 +1712,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             vendor = "recgov",
             vendorId = vendorId,
             name = name ?: "Site $vendorId",
-            kind = siteType ?: "site",
+            kind = siteType ?: CampsiteKind.OTHER.wire,
             loopName = loop,
         )
 

@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -49,6 +50,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 private const val TEST_MAX_POIS = 5
 private const val TEST_FAN_OUT_CONCURRENCY = 4
@@ -171,6 +173,26 @@ class BulkAvailabilityRoutesTest {
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("bad_request", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `rejects a site_type outside the wire vocabulary and names the value`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """{"poi_ids":[1],"start_date":"2026-07-04","end_date":"2026-07-06",""" +
+                            """"site_type":["tent","TENT ONLY NONELECTRIC"]}""",
+                    )
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_request", body["error"]!!.jsonPrimitive.content)
+            assertTrue(body["detail"]!!.jsonPrimitive.content.contains("TENT ONLY NONELECTRIC"))
         }
 
     @Test
@@ -342,7 +364,7 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
 private class FakePoiAvailabilitySliceLookup : PoiAvailabilitySliceLookup {
     override suspend fun poiAvailabilitySlice(
         poiId: Long,
-        siteTypes: List<String>,
+        siteTypes: List<CampsiteKind>,
         startDate: LocalDate?,
         endDate: LocalDate?,
         freshAtOrAfter: Instant?,

@@ -16,6 +16,8 @@ data class CampsiteDto(
     @SerialName("campground_id") val campgroundId: Long,
     val name: String,
     val kind: String,
+    /** The backend's display wording for [kind]; `kind_listed` keeps the vendor's. */
+    @SerialName("kind_label") val kindLabel: String,
     @SerialName("kind_listed") val kindListed: String? = null,
     @SerialName("loop_name") val loopName: String? = null,
     val description: String? = null,
@@ -45,7 +47,8 @@ data class CampsiteDto(
                 id = row.id,
                 campgroundId = row.campgroundId,
                 name = row.name,
-                kind = row.kind,
+                kind = row.kind.wire,
+                kindLabel = row.kind.label,
                 kindListed = row.kindListed,
                 loopName = row.loopName,
                 description = row.description,

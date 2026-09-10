@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route.api.pois
 
 import ca.floo.roadtrip.model.api.AvailabilityErrorDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.domain.auth.userIdOrNull
 import ca.floo.roadtrip.route.common.access
@@ -31,6 +32,32 @@ private val log = LoggerFactory.getLogger("CampsiteRoutes")
 
 private const val IP_RATE_LIMIT_PER_MINUTE = 30
 
+internal const val BAD_REQUEST_ERROR = "bad_request"
+
+/** Built from the enum so the docs cannot drift from what the parser accepts. */
+internal val siteTypeWireList = CampsiteKind.entries.joinToString(", ") { it.wire }
+
+internal fun unknownSiteTypeDetail(value: String): String = "unknown site_type '$value'; accepted values: $siteTypeWireList"
+
+/** A `site_type` query parameter set, or the first value outside the wire vocabulary. */
+private sealed interface SiteTypeQuery {
+    data class Parsed(
+        val kinds: List<CampsiteKind>,
+    ) : SiteTypeQuery
+
+    data class Unknown(
+        val value: String,
+    ) : SiteTypeQuery
+}
+
+private fun ApplicationCall.siteTypeQuery(): SiteTypeQuery {
+    val kinds = mutableListOf<CampsiteKind>()
+    for (raw in queryValues("site_type", "siteType")) {
+        kinds += CampsiteKind.fromWire(raw) ?: return SiteTypeQuery.Unknown(raw)
+    }
+    return SiteTypeQuery.Parsed(kinds)
+}
+
 internal fun Route.campsiteRoutes(
     controller: CampsiteAvailabilityController,
     rateLimit: IpRateLimiter = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE),
@@ -43,12 +70,19 @@ internal fun Route.campsiteRoutes(
                         val poiId =
                             call.longPath("id")
                                 ?: return@get call.respondApiError("bad_id", HttpStatusCode.BadRequest)
+                        val siteTypes =
+                            when (val parsed = call.siteTypeQuery()) {
+                                is SiteTypeQuery.Unknown ->
+                                    return@get call.respondApiError(
+                                        BAD_REQUEST_ERROR,
+                                        HttpStatusCode.BadRequest,
+                                        detail = unknownSiteTypeDetail(parsed.value),
+                                    )
+                                is SiteTypeQuery.Parsed -> parsed.kinds
+                            }
                         try {
                             call.respondEncodedJson(
-                                controller.campsitesForPoi(
-                                    poiId = poiId,
-                                    siteTypes = call.queryValues("site_type", "siteType"),
-                                ),
+                                controller.campsitesForPoi(poiId = poiId, siteTypes = siteTypes),
                             )
                         } catch (e: AvailabilityServiceError.NotFound) {
                             call.respondApiError(e.error, HttpStatusCode.NotFound)
@@ -58,7 +92,7 @@ internal fun Route.campsiteRoutes(
                         summary = "Campsites linked to a campground POI",
                         description =
                             "Lists active campsite rows linked to a campground POI. " +
-                                "`site_type` optionally filters exact campsite kinds.",
+                                "`site_type` optionally filters campsite kinds; accepted values: $siteTypeWireList.",
                     ).access(RouteAccess.Anonymous)
 
                     get("/availability") {
@@ -70,6 +104,19 @@ internal fun Route.campsiteRoutes(
                             call.respondAvailabilityError("ip_throttled", HttpStatusCode.ServiceUnavailable)
                             return@get
                         }
+
+                        val siteTypes =
+                            when (val parsed = call.siteTypeQuery()) {
+                                is SiteTypeQuery.Unknown -> {
+                                    call.respondAvailabilityError(
+                                        BAD_REQUEST_ERROR,
+                                        HttpStatusCode.BadRequest,
+                                        detail = unknownSiteTypeDetail(parsed.value),
+                                    )
+                                    return@get
+                                }
+                                is SiteTypeQuery.Parsed -> parsed.kinds
+                            }
 
                         val startDate =
                             try {
@@ -90,7 +137,7 @@ internal fun Route.campsiteRoutes(
                             call.respondEncodedJson(
                                 controller.availabilityForPoi(
                                     poiId = poiId,
-                                    siteTypes = call.queryValues("site_type", "siteType"),
+                                    siteTypes = siteTypes,
                                     startDate = startDate,
                                     endDate = endDate,
                                     requester = call.principal().userIdOrNull(),
@@ -116,7 +163,7 @@ internal fun Route.campsiteRoutes(
                         description =
                             "Path key is `pois.id`. Returns one availability envelope per " +
                                 "campsite linked to this POI. The frontend fuses the per-campsite streams " +
-                                "into the campground week grid.",
+                                "into the campground week grid. `site_type` accepts: $siteTypeWireList.",
                     ).access(RouteAccess.Anonymous)
                 }
             }
@@ -168,8 +215,9 @@ private const val MAX_CAUSE_DEPTH = 8
 private suspend fun ApplicationCall.respondAvailabilityError(
     error: String,
     status: HttpStatusCode,
+    detail: String? = null,
 ) {
-    respondEncodedJson(availabilityErrorDto(error), status)
+    respondEncodedJson(availabilityErrorDto(error, detail = detail), status)
 }
 
 private suspend fun ApplicationCall.respondServiceAvailabilityError(e: AvailabilityServiceError) {

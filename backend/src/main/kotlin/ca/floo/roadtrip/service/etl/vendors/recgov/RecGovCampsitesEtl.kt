@@ -2,13 +2,13 @@ package ca.floo.roadtrip.service.etl.vendors.recgov
 
 import ca.floo.roadtrip.model.domain.CampsiteAttribute
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
-import ca.floo.roadtrip.model.domain.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
+import ca.floo.roadtrip.service.etl.framework.CampsiteKinds
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.JsonArray
@@ -98,6 +98,7 @@ class RecGovCampsitesEtl(
                     val promoted = promoteAttributes(raw)
                     val siteName = raw.stringField("site") ?: campsiteId
                     val campsiteType = raw.stringField("campsite_type")
+                    val siteKind = CampsiteKinds.recgov(campsiteType)
                     yield(
                         TransformResult.Ok(
                             CampsiteUpsertCandidate(
@@ -107,12 +108,13 @@ class RecGovCampsitesEtl(
                                 parentDataProviderRef = DataProviderRef.RecGov(id = facilityId),
                                 name = siteName,
                                 loopName = raw.stringField("loop"),
-                                kind = campsiteType ?: DEFAULT_CAMPSITE_KIND,
+                                kind = siteKind.kind,
                                 kindListed = campsiteType,
                                 equipment = equipmentNames(raw),
                                 firepit = promoted.firepit,
                                 picnicTable = promoted.picnicTable,
                                 adaAccessible = promoted.adaAccessible,
+                                electricHookups = siteKind.electric,
                                 maxPeople = raw["max_num_people"]?.jsonPrimitive?.intOrNull,
                                 maxCars = promoted.maxCars,
                                 drivewayLength = promoted.drivewayLength,

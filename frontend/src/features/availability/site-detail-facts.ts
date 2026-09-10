@@ -27,7 +27,7 @@ export function detailFacts(site: Partial<Campsite>): SiteFact[] {
   };
 
   add('Loop', site.loop_name);
-  add('Type', site.kind_listed ?? site.kind);
+  add('Type', site.kind_listed ?? site.kind_label);
   add('Capacity', capacityLabel(site));
   add(
     'Equipment',

@@ -7,14 +7,15 @@ import {
   availableDateCount,
   cellState,
   filterCampsites,
-  filterOptions,
   isWatchableKind,
+  loopOptions,
   normalizeFilters,
   rowId,
   siteName,
   siteTitleText,
   sortCampsites,
   sortedCampsites,
+  typeOptions,
 } from './matrix-rows';
 
 const site = (id: number, extra: Partial<Campsite> = {}): Partial<Campsite> => ({ id, ...extra });
@@ -113,13 +114,33 @@ describe('filtering', () => {
     ).toHaveLength(0);
   });
 
-  test('offers each distinct column value once, numerically ordered', () => {
+  test('offers each distinct loop once, numerically ordered', () => {
     expect(
-      filterOptions(
-        [site(1, { loop_name: 'Loop 10' }), site(2, { loop_name: 'Loop 2' }), site(3, { loop_name: 'Loop 2' }), site(4, {})],
-        'loop_name',
-      ),
+      loopOptions([
+        site(1, { loop_name: 'Loop 10' }),
+        site(2, { loop_name: 'Loop 2' }),
+        site(3, { loop_name: 'Loop 2' }),
+        site(4, {}),
+      ]),
     ).toEqual(['Loop 2', 'Loop 10']);
+  });
+
+  test('offers each distinct type once as a wire value with its label, label-ordered', () => {
+    expect(
+      typeOptions([
+        site(1, { kind: 'walk_in', kind_label: 'Walk-in' }),
+        site(2, { kind: 'tent', kind_label: 'Tent' }),
+        site(3, { kind: 'tent', kind_label: 'Tent' }),
+        site(4, {}),
+      ]),
+    ).toEqual([
+      { value: 'tent', label: 'Tent' },
+      { value: 'walk_in', label: 'Walk-in' },
+    ]);
+  });
+
+  test('falls back to the wire value when a row carries no label', () => {
+    expect(typeOptions([site(1, { kind: 'tent' })])).toEqual([{ value: 'tent', label: 'tent' }]);
   });
 });
 

@@ -180,13 +180,29 @@ export function availableDateCount(row: Partial<Campsite>, context: SortContext)
   return count;
 }
 
-/** The distinct values of a filterable column, for a filter dropdown. */
-export function filterOptions(
-  rows: readonly Partial<Campsite>[],
-  key: 'loop_name' | 'kind',
-): string[] {
-  const values = rows.map((row) => row[key]).filter((value): value is string => !!value?.trim());
+/** The distinct loops present, for the loop dropdown. */
+export function loopOptions(rows: readonly Partial<Campsite>[]): string[] {
+  const values = rows.map((row) => row.loop_name).filter((value): value is string => !!value?.trim());
   return [...new Set(values)].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+/**
+ * The distinct site types present, for the type dropdown: the filter runs on the
+ * wire value, the option reads as the backend's label.
+ */
+export function typeOptions(rows: readonly Partial<Campsite>[]): FilterOption[] {
+  const byValue = new Map<string, FilterOption>();
+  for (const row of rows) {
+    const value = row.kind?.trim();
+    if (!value || byValue.has(value)) continue;
+    byValue.set(value, { value, label: row.kind_label?.trim() || value });
+  }
+  return [...byValue.values()].sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+}
+
+export interface FilterOption {
+  value: string;
+  label: string;
 }
 
 /**

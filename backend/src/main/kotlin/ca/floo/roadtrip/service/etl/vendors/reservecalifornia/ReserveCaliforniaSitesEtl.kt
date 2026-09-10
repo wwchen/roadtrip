@@ -1,12 +1,12 @@
 package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
-import ca.floo.roadtrip.model.domain.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
+import ca.floo.roadtrip.service.etl.framework.CampsiteKinds
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 
@@ -50,7 +50,7 @@ class ReserveCaliforniaSitesEtl(
                     yield(TransformResult.Bad(grid.facilityId.toString(), listOf("facility not linked from parent place $placeId")))
                     continue
                 }
-                val kind = place.unitTypeByFacilityId[grid.facilityId] ?: DEFAULT_CAMPSITE_KIND
+                val unitType = place.unitTypeByFacilityId[grid.facilityId]
                 for (unit in grid.units) {
                     yield(
                         TransformResult.Ok(
@@ -60,10 +60,10 @@ class ReserveCaliforniaSitesEtl(
                                 bookingProviderRef = unit.unitId.toString(),
                                 parentDataProviderRef = DataProviderRef.ReserveCalifornia(id = placeId.toString()),
                                 name = unit.name?.takeIf { it.isNotBlank() } ?: unit.unitId.toString(),
-                                kind = kind,
+                                kind = CampsiteKinds.reserveCalifornia(unitType),
                                 loopName = grid.facilityName ?: facility?.name,
                                 reservationUrl = reserveCaliforniaParkUrl(placeId),
-                                kindListed = kind,
+                                kindListed = unitType,
                                 sourcePayload = campsiteSourcePayload(unit, grid, placeId, facility),
                             ),
                         ),

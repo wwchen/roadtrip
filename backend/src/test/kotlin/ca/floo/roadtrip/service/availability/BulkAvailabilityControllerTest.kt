@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -135,7 +136,7 @@ private fun bulkController(
 private fun request(
     poiIds: List<Long>,
     minNights: Int = 1,
-    siteTypes: List<String> = emptyList(),
+    siteTypes: List<CampsiteKind> = emptyList(),
 ): BulkAvailabilityRequest =
     BulkAvailabilityRequest(
         poiIds = poiIds,
@@ -184,7 +185,7 @@ private class FakePoiAvailabilitySliceLookup(
 ) : PoiAvailabilitySliceLookup {
     override suspend fun poiAvailabilitySlice(
         poiId: Long,
-        siteTypes: List<String>,
+        siteTypes: List<CampsiteKind>,
         startDate: LocalDate?,
         endDate: LocalDate?,
         freshAtOrAfter: Instant?,

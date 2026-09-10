@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.fixtures.CatalogPoiFixture
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import org.jooq.DSLContext
 
@@ -198,7 +199,7 @@ fun DSLContext.seedCampsite(
     vendor: String = "recgov",
     vendorId: String,
     name: String = "Site $vendorId",
-    kind: String = "site",
+    kind: String = CampsiteKind.OTHER.wire,
     loopName: String? = null,
     reservationUrl: String? = null,
     providerRefJson: String? = null,
