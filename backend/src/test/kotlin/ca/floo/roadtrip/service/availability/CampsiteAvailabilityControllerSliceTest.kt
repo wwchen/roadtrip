@@ -79,8 +79,9 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
 
         assertEquals(0, slice.campsites.size)
         assertNull(slice.batch)
-        // No provider to ask, so the window falls back to the flat horizon.
-        assertEquals(fixture.earliestDate.plusDays(EMPTY_WINDOW_HORIZON_DAYS.toLong()), slice.latestDate)
+        // The filter matched nothing, but the campground still has a serving
+        // provider, so the horizon comes from its real booking horizon.
+        assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), slice.latestDate)
     }
 
     /**

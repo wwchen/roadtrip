@@ -50,13 +50,14 @@ internal fun fuse(
         return FusedWindow(AvailabilityWindowState.EMPTY, season = null, cache = null, days = emptyList())
     }
 
+    val observationsByCampsite = batch.observations.groupBy { it.campsiteId }
     val streams =
         slice.campsites.sortedBy { it.id }.map { campsite ->
             val days =
                 dayClassificationsFromObservations(
                     startDate = slice.startDate,
                     endDate = slice.endDate,
-                    observations = batch.observations.filter { it.campsiteId == campsite.id },
+                    observations = observationsByCampsite[campsite.id].orEmpty(),
                 )
             CampsiteStream(
                 campsiteId = campsite.id,

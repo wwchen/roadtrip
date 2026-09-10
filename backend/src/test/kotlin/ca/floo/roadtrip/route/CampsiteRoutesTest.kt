@@ -25,6 +25,7 @@ import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.EMPTY_WINDOW_HORIZON_DAYS
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
@@ -57,10 +58,8 @@ import kotlin.test.assertTrue
 private const val UNKNOWN_POI_ID = 999_999L
 private const val DEFAULT_WINDOW_DAYS = 7
 
-// The serving fake's horizon, and the flat one the empty-campsite branch falls
-// back to when no provider can bound the window.
+// The serving fake's horizon.
 private const val TEST_BOOKING_HORIZON_DAYS = 180L
-private const val EMPTY_WINDOW_HORIZON_DAYS = 365L
 
 // Every nullable campsite column the recgov ETL leaves unwritten, in the wire
 // names `CampsiteDto` serves them under.
@@ -316,7 +315,8 @@ class CampsiteRoutesTest : SharedDbTest() {
     @Test
     fun `GET availability with a site_type filter matching nothing returns an empty window`() =
         testApplication {
-            application { routeTestApplication { campsiteRoutesUnderTest() } }
+            // No provider registered, so the campground has none to resolve either.
+            application { routeTestApplication { campsiteRoutesUnderTest(providers = emptyList()) } }
             val (poiId, _) = seedRecgovPoiWithCampsite()
 
             val resp = client.get("/api/pois/$poiId/campsites/availability?site_type=rv")
@@ -330,9 +330,9 @@ class CampsiteRoutesTest : SharedDbTest() {
             val startDate = LocalDate.parse(body["start_date"]!!.jsonPrimitive.content)
             val endDate = LocalDate.parse(body["end_date"]!!.jsonPrimitive.content)
             assertEquals(DEFAULT_WINDOW_DAYS.toLong(), ChronoUnit.DAYS.between(startDate, endDate))
-            // No provider bounds an empty campsite set, so the flat fallback horizon applies.
+            // No provider resolves for the campground, so the flat fallback horizon applies.
             assertEquals(
-                startDate.plusDays(EMPTY_WINDOW_HORIZON_DAYS).toString(),
+                startDate.plusDays(EMPTY_WINDOW_HORIZON_DAYS.toLong()).toString(),
                 body["latest_date"]!!.jsonPrimitive.content,
             )
         }

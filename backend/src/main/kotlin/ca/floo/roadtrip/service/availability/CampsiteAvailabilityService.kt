@@ -102,6 +102,14 @@ internal class CampsiteAvailabilityService(
     private fun providerFor(campground: Campground): AvailabilityProvider =
         availabilityProviders.firstOrNull { it.supportsCampground(campground) }
             ?: throw AvailabilityServiceError.UnknownCampground
+
+    /**
+     * The serving provider's booking horizon for [campground], or null when no
+     * provider claims it. Non-throwing counterpart to [providerFor], for
+     * callers (the empty-campsite branch) that have a fallback of their own.
+     */
+    fun bookingHorizonDaysFor(campground: Campground): Int? =
+        availabilityProviders.firstOrNull { it.supportsCampground(campground) }?.capabilities?.bookingHorizonDays
 }
 
 internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration = ApiCacheEntity.availability(providerId).defaultTtl

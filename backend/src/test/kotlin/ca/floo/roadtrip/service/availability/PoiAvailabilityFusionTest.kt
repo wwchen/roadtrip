@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.service.api.rollupStatus
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.LocalDate
@@ -87,6 +88,22 @@ class PoiAvailabilityFusionTest {
     fun `an unrecognised upstream status parses to unknown`() {
         assertEquals(AvailabilityStatus.AVAILABLE, AvailabilityStatus.parse("Available"))
         assertEquals(AvailabilityStatus.UNKNOWN, AvailabilityStatus.parse("gibberish"))
+    }
+
+    @Test
+    fun `no sites at all is unknown, not closed`() {
+        assertEquals(AvailabilityStatus.UNKNOWN, rollupStatus(emptyList()))
+
+        // Ported through fuse: a campsite with zero observations across the
+        // whole window rolls every day up to unknown, with an unknown cell.
+        val fused = fuse(sliceOf(mapOf(7L to emptyMap()), days = 3), everythingPolls, windowStart)
+
+        assertEquals(List(3) { AvailabilityStatus.UNKNOWN }, fused.days.map { it.status })
+        assertTrue(
+            fused.days.all {
+                it.cells == mapOf(7L to AvailabilityCellDto(AvailabilityStatus.UNKNOWN, watchable = false))
+            },
+        )
     }
 
     // --- cells, ported from the frontend's fuseDay cases ---

@@ -42,6 +42,7 @@ import io.ktor.http.contentType
 import io.ktor.server.routing.Route
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -57,6 +58,9 @@ private const val TEST_FAN_OUT_CONCURRENCY = 4
 private const val TEST_IP_RATE_LIMIT_PER_MINUTE = 10
 private const val RATE_LIMITED_POI_ID = 100L
 private const val UNKNOWN_CAMPSITE_POI_ID = 999_999L
+
+/** [FakePoiAvailabilitySliceLookup]'s campsite id is derived from the poi id by this factor. */
+private const val FAKE_SLICE_CAMPSITE_ID_MULTIPLIER = 1000L
 
 private val windowStart: LocalDate = LocalDate.of(2026, 9, 1)
 private val windowEnd: LocalDate = LocalDate.of(2026, 9, 8)
@@ -248,6 +252,21 @@ class BulkAvailabilityRoutesTest {
             val pois = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["pois"]!!.jsonArray
             assertEquals(2, pois.size)
             assertEquals("rate_limited", pois[1].jsonObject["error"]!!.jsonPrimitive.content)
+
+            // The successful poi's stream: one campsite, one cell keyed by its own id.
+            val successfulPoiCampsiteId = 1L * FAKE_SLICE_CAMPSITE_ID_MULTIPLIER
+            val cells =
+                pois[0]
+                    .jsonObject["campsites"]!!
+                    .jsonArray[0]
+                    .jsonObject["availability"]!!
+                    .jsonArray[0]
+                    .jsonObject["cells"]!!
+                    .jsonObject
+            assertEquals(setOf(successfulPoiCampsiteId.toString()), cells.keys)
+            val cell = cells[successfulPoiCampsiteId.toString()]!!.jsonObject
+            assertEquals("available", cell["status"]!!.jsonPrimitive.content)
+            assertEquals(false, cell["watchable"]!!.jsonPrimitive.boolean)
         }
 
     @Test
@@ -373,7 +392,7 @@ private class FakePoiAvailabilitySliceLookup : PoiAvailabilitySliceLookup {
         freshAtOrAfter: Instant?,
     ): PoiAvailabilitySlice {
         if (poiId == RATE_LIMITED_POI_ID) throw AvailabilityProviderError.RateLimited()
-        val campsite = campsiteFixture(id = poiId * 1000, campgroundId = poiId)
+        val campsite = campsiteFixture(id = poiId * FAKE_SLICE_CAMPSITE_ID_MULTIPLIER, campgroundId = poiId)
         val observations =
             listOf(CampsiteDayObservation(campsite.id, windowStart, observedAt, AvailabilityStatus.AVAILABLE))
         return PoiAvailabilitySlice(

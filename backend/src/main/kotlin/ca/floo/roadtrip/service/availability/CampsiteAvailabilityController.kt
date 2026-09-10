@@ -10,8 +10,9 @@ import ca.floo.roadtrip.service.api.seasonElement
 import java.time.Instant
 import java.time.LocalDate
 
-// The empty-campsite branch has no provider whose capabilities could bound the
-// requested window, so it validates against these fixed fallback bounds.
+// The empty-campsite branch still tries to resolve the campground's serving
+// provider for its real booking horizon; these are the fallback bounds for
+// when no provider claims the campground.
 internal const val EMPTY_WINDOW_DEFAULT_DAYS = 7
 internal const val EMPTY_WINDOW_MAX_DAYS = 60
 internal const val EMPTY_WINDOW_HORIZON_DAYS = 365
@@ -56,12 +57,16 @@ internal class CampsiteAvailabilityController(
         val dateContext = dateResolver.contextForPoi(poiId)
 
         if (campsites.isEmpty()) {
+            // The site_type filter dropped every campsite, but the campground
+            // may still have a serving provider — ask it for the real horizon
+            // before falling back to the flat default.
+            val horizonDays = availabilityService.bookingHorizonDaysFor(campground) ?: EMPTY_WINDOW_HORIZON_DAYS
             val window =
                 dateResolver.resolveWindow(
                     startDate = startDate,
                     endDate = endDate,
                     context = dateContext,
-                    bookingHorizonDays = EMPTY_WINDOW_HORIZON_DAYS,
+                    bookingHorizonDays = horizonDays,
                     maxDays = EMPTY_WINDOW_MAX_DAYS,
                     defaultDays = EMPTY_WINDOW_DEFAULT_DAYS,
                 )
@@ -70,7 +75,7 @@ internal class CampsiteAvailabilityController(
                 startDate = window.startDate,
                 endDate = window.endDate,
                 earliestDate = dateContext.earliestDate,
-                latestDate = dateResolver.latestDate(dateContext, EMPTY_WINDOW_HORIZON_DAYS),
+                latestDate = dateResolver.latestDate(dateContext, horizonDays),
                 allCampsites = allCampsites,
                 campsites = emptyList(),
                 batch = null,
