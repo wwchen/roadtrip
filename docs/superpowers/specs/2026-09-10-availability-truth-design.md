@@ -27,8 +27,7 @@ The POI availability response carries the fused week; the browser renders it.
 @Serializable data class AddToCartCapabilityDto(val state: AddToCartState) // ready | no_credentials | signed_out | unsupported
 @Serializable data class AvailabilityWatchCapabilitiesDto(
     @SerialName("trigger_kinds") val triggerKinds: List<String>,
-    @SerialName("booking_actions") val bookingActions: List<String>,
-    @SerialName("add_to_cart") val addToCart: AddToCartCapabilityDto,
+    @SerialName("add_to_cart") val addToCart: AddToCartCapabilityDto,   // booking_actions left the wire: no reader
 )
 @Serializable data class PoiCampsitesAvailabilityResponseDto(
     @SerialName("poi_id") val poiId: Long,
@@ -48,7 +47,7 @@ The POI availability response carries the fused week; the browser renders it.
 ### Rules, all in `service/availability`
 
 - **Rollup** (`AvailabilityResponseMapper.rollupStatus`, unchanged precedence) runs once per day over every campsite in the slice, so the day's `status` is the campground's status. A day with no observations for a campsite gets `unknown` for that cell.
-- **Cell watchable** = the cell's status is `reserved` or `first_come`, the campsite's provider `supportsInternalPolling`, and the day is not before the window's earliest date. `AvailabilityStatus.watchable` names the first condition on the enum; `WatchCapabilityService` supplies the second per campsite. `day.watchable` is any cell watchable.
+- **Cell watchable** = the cell's status is `reserved` or `first_come`, the campsite's provider `supportsInternalPolling`, and the day is not before the window's earliest date. `AvailabilityStatus.watchable` names the first condition on the enum; the second is the slice's serving provider (`BookingHorizonResolver.servingProvider`, one pick per campground, so a read costs no per-campsite resolution); `AvailabilityCellDto.of` is the one predicate for both endpoints. `day.watchable` is any cell watchable.
 - **Window state**: `empty` when the slice has no campsites; `closed_for_season` when every campsite's stream classifies as `closed_for_season` (the existing `classifyWindowState` per stream), with the first non-null season block; else `success`. Bulk keeps its per-stream `state`.
 - **Cache**: the stream with the greatest `age_seconds`, or null.
 - **Add-to-cart state**: `unsupported` when the scope does not support `ADD_TO_CART`; else `signed_out` when there is no requester; else `no_credentials` when `canFulfilAddToCart` is false; else `ready`. `trigger_kinds` keeps its meaning (`atc` present only when `ready`).
