@@ -62,10 +62,6 @@ export interface Watch {
   last_run_error?: string | null;
 }
 
-// One mirror of AvailabilityWatchCapabilitiesDto, not two: the availability week
-// and the single-watch envelope carry the same block.
-export type { WatchCapabilities };
-
 /** Mirrors AvailabilityWatchListResponse — the GET /api/watches envelope. */
 export interface WatchListResponse {
   total: number;

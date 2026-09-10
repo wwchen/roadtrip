@@ -682,7 +682,7 @@ function MatrixCell({
     // A watched cell stays interactive even for a user who can no longer create
     // watches, so an existing one can always be managed. A signed-out visitor gets
     // the same cell: it opens the sign-in gate rather than the editor.
-    if (cell.watchable && (watchGate !== 'blocked' || watched)) {
+    if ((cell.watchable || watched) && (watchGate !== 'blocked' || watched)) {
       const signedOut = watchGate === 'signed-out' && !watched;
       return (
         <td className={cellClass}>

@@ -6,7 +6,7 @@
 // campsite streams up per day and answers what to draw, so nothing here is
 // re-derived client-side.
 import type { AvailabilityStatus } from '@/lib/availability-status';
-import type { RequestOptions } from './http';
+import { CREDENTIALS, type RequestOptions } from './http';
 
 const START_DATE_PARAM = 'start_date';
 const END_DATE_PARAM = 'end_date';
@@ -96,8 +96,10 @@ export function requestPoiCampsitesAvailability(
   if (siteType) params.set(SITE_TYPE_PARAM, siteType);
   const query = params.toString();
   const suffix = query ? `?${query}` : '';
+  // Per-principal: the response's `watch_capabilities` depend on who is asking,
+  // so the session cookie has to ride along like every other write in `http.ts`.
   return fetch(
     `/api/pois/${encodeURIComponent(String(poiId))}/campsites/availability${suffix}`,
-    { signal },
+    { credentials: CREDENTIALS, signal },
   );
 }

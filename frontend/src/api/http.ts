@@ -6,7 +6,7 @@
 // Deliberately not 'include': the API is same-origin, and 'include' would also
 // attach cookies to cross-origin requests, widening what a mistaken absolute
 // URL would leak.
-const CREDENTIALS: RequestCredentials = 'same-origin';
+export const CREDENTIALS: RequestCredentials = 'same-origin';
 
 export interface RequestOptions {
   signal?: AbortSignal;

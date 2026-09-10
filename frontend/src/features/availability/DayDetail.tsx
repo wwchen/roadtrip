@@ -112,7 +112,7 @@ function DayAction({
   // `day.watchable` is the backend's answer — the statuses, the provider's polling
   // support and the booking window already folded in. An existing watch keeps its
   // control either way, so one set on a day that has since closed can be removed.
-  const canAlert = day.watchable && (unavailable === null || watching);
+  const canAlert = (day.watchable || watching) && (unavailable === null || watching);
 
   if (canAlert) {
     return (

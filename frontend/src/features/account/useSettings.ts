@@ -109,7 +109,12 @@ export function useSaveBooking() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: UpdateBookingFields) => updateBooking(input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.settings() }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+      // The week's `add_to_cart.state` is decided per-reader from these very
+      // credentials, so a saved login has to re-open the grid's cart gate.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.availability.all() });
+    },
   });
 }
 

@@ -238,7 +238,7 @@ describe('what a cell means', () => {
     expect(cellState(site(1), d).status).toBe('reserved');
   });
 
-  test('watchable is the backend"s answer, not one derived from the status', () => {
+  test('watchable is the backend’s answer, not one derived from the status', () => {
     // Same status, different answer: this provider cannot be internally polled.
     const d = day('2026-08-10', { 1: { status: 'reserved', watchable: false } });
 

@@ -24,6 +24,24 @@ export const NO_WATCH_CAPABILITIES: WatchCapabilities = {
   addToCart: 'unsupported',
 };
 
+const ADD_TO_CART_STATES: ReadonlySet<string> = new Set<AddToCartState>([
+  'ready',
+  'no_credentials',
+  'signed_out',
+  'unsupported',
+]);
+
+/**
+ * Coerce the wire's cart state, the way `normalizeAvailabilityStatus` coerces a
+ * status: a value this build has no copy for degrades to "no cart" rather than
+ * reaching the editor as a string it cannot render.
+ */
+function coerceAddToCartState(raw: unknown): AddToCartState {
+  return ADD_TO_CART_STATES.has(String(raw))
+    ? (raw as AddToCartState)
+    : NO_WATCH_CAPABILITIES.addToCart;
+}
+
 /**
  * The wire block as sets.
  *
@@ -41,8 +59,7 @@ export function normalizeWatchCapabilities(
       asSets?.triggerKinds instanceof Set
         ? asSets.triggerKinds
         : new Set(Array.isArray(asWire?.trigger_kinds) ? asWire.trigger_kinds : []),
-    addToCart:
-      asSets?.addToCart ?? asWire?.add_to_cart?.state ?? NO_WATCH_CAPABILITIES.addToCart,
+    addToCart: coerceAddToCartState(asSets?.addToCart ?? asWire?.add_to_cart?.state),
   };
 }
 

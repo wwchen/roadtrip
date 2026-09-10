@@ -351,6 +351,46 @@ the owner's login email; watches cannot override or persist a recipient. The FE
 renders the Email and Add to cart toggles from this contract; create/update
 validation is the authoritative gate.
 
+## The campground availability wire
+
+`GET /api/pois/{id}/campsites/availability` serves the campground week already
+fused: the rollup, the cell grid and every watchability answer are decided here,
+not in a browser.
+
+```jsonc
+{
+  "state": "success",          // success | empty | closed_for_season
+  "season": { "reopens_on": "2027-05-01" },  // only when closed_for_season
+  "cache": { "hit": true, "age_seconds": 120, "ttl_seconds": 600 },
+  "latest_date": "2027-02-06", // earliest bookable date + the provider's horizon
+  "days": [
+    {
+      "date": "2026-08-10",
+      "status": "reserved",    // rollup over `cells`
+      "watchable": true,       // true when any cell is
+      "cells": { "100": { "status": "reserved", "watchable": true } }
+    }
+  ],
+  "watch_capabilities": { }    // see the block above
+}
+```
+
+The day's `status` rolls its cells up as `available > first_come > unknown >
+reserved`, with `closed` only by unanimity. A cell is `watchable` when its status
+is one a watch could fire on (`reserved` or `first_come`) **and** the serving
+provider supports internal polling **and** the date is not before the POI's
+earliest bookable date — one predicate, `AvailabilityCellDto.of`.
+
+`state: closed_for_season` ships `days: []`: clients gate the grid on `state`, so
+an all-closed week has nothing to draw. `state: empty` means no campsite matched
+the request at all.
+
+The per-campsite `campsites[]` envelopes left this response and remain only on
+`POST /api/pois/availability/bulk`, which carries one `AvailabilityResponseDto`
+per campsite with the same `cells` shape (a single cell per day, that campsite's)
+and the same watchable predicate — the two endpoints share the mapping so they
+cannot answer it differently.
+
 ## Capabilities
 
 Every `AvailabilityProvider` serves availability. Capability flags only describe

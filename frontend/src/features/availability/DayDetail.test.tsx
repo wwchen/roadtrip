@@ -19,11 +19,12 @@ function renderDetail(
   day: AvailabilityDay = reservedDay,
   onSignIn = vi.fn(),
   onRetryWatches = vi.fn(),
+  watching = false,
 ) {
   render(
     <DayDetail
       day={day}
-      watching={false}
+      watching={watching}
       unavailable={unavailable}
       busy={false}
       onToggleWatch={vi.fn()}
@@ -70,7 +71,21 @@ describe('the day panel', () => {
     expect(screen.getByRole('button', { name: 'Set watch' })).toBeInTheDocument();
   });
 
-  test('takes the day"s own watchable flag, not its status', () => {
+  test('an existing watch keeps its control on a day that is no longer watchable', () => {
+    // The provider stopped polling, or the day closed, after the watch was set.
+    // Removing it has to stay possible, so the toggle survives `watchable: false`.
+    renderDetail(
+      null,
+      { ...reservedDay, watchable: false, cells: { '1': { status: 'reserved', watchable: false } } },
+      undefined,
+      undefined,
+      true,
+    );
+
+    expect(screen.getByRole('button', { name: 'Watching - tap to remove' })).toBeInTheDocument();
+  });
+
+  test('takes the day’s own watchable flag, not its status', () => {
     // Reserved, and still unwatchable: the provider cannot be internally polled,
     // which is a fact only the backend has.
     renderDetail(null, {

@@ -103,6 +103,20 @@ describe('what the form offers', () => {
     expect(onSignIn).toHaveBeenCalledOnce();
   });
 
+  test('a ready cart the editor cannot offer says nothing rather than something false', () => {
+    // `ready` without `atc` in the trigger kinds: an existing add-to-cart watch
+    // whose kinds were stripped. The scope is holdable and this reader has
+    // credentials, so "unavailable for this watch scope" would be a lie.
+    open({
+      capabilities: caps(['slack_notify'], 'ready'),
+      watch: watch({ trigger_kinds: ['slack_notify', 'atc'] }),
+    });
+
+    expect(toggle('Add to cart')).toBeInTheDocument();
+    expect(screen.queryByText('Unavailable for this watch scope.')).toBeNull();
+    expect(screen.queryByText(/in Settings to hold sites/)).toBeNull();
+  });
+
   test('a scope with no cart at all keeps the unavailable copy', () => {
     open({
       capabilities: caps(['slack_notify']),

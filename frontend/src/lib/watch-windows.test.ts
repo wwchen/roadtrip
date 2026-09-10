@@ -74,6 +74,20 @@ describe('capabilities', () => {
     }
   });
 
+  test('an unrecognised cart state coerces to unsupported, as statuses do', () => {
+    // A backend that grows a fifth state must degrade to "no cart for you"
+    // rather than leaking a string the editor has no copy for.
+    expect(normalizeWatchCapabilities(wire(['slack_notify'], 'pending' as never)).addToCart).toBe(
+      'unsupported',
+    );
+    expect(
+      normalizeWatchCapabilities({
+        trigger_kinds: ['slack_notify'],
+        booking_actions: [],
+      } as never).addToCart,
+    ).toBe('unsupported');
+  });
+
   test('a cart-only provider still supports no alerts', () => {
     expect(supportsWatchAlerts(normalizeWatchCapabilities(wire(['atc'], 'ready')))).toBe(false);
   });
