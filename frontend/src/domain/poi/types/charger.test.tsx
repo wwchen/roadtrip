@@ -40,4 +40,18 @@ describe('the charger page', () => {
     });
     expect(screen.getByText('24/7')).toBeInTheDocument();
   });
+
+  // Tesla's vendor strings live under their own field: `amenities` is the typed
+  // campground vocabulary and is always empty for a charger, so reading it here
+  // rendered no tags at all.
+  test('tags the vendor amenities from charger_amenities', () => {
+    renderCharger({
+      category: 'tesla_supercharger',
+      name: 'Cold Creek',
+      amenities: [],
+      charger_amenities: ['AMENITIES_WIFI', 'AMENITIES_RESTROOMS'],
+    });
+    expect(screen.getByText('Wi-Fi')).toBeInTheDocument();
+    expect(screen.getByText('Restrooms')).toBeInTheDocument();
+  });
 });

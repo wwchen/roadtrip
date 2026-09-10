@@ -2,16 +2,12 @@
 //
 // The shape of the problem is why this is split out. `/api/pois/on-route` answers with
 // SLIM features — an id, a point, a category, an agency — so a card starts as a
-// placeholder and gains its name, site count, season and rating when
-// `GET /api/pois/{id}` lands. Sorting, filtering and copy all have to work on both.
+// placeholder and gains its name, type and region when `GET /api/pois/{id}` lands.
+// Sorting, filtering and copy all have to work on both.
 import { distanceKm } from '@/lib/geo';
 import { UNCATEGORIZED_AGENCY } from '@/map/agencies';
 import type { TripStop } from '@/stores/tripStore';
 import { distanceAlongRouteKm, type RouteIndex } from './route-index';
-
-/** Longer than this and a season string would blow the card's width. */
-const MAX_SEASON_CHARS = 28;
-const TRUNCATED_SEASON_CHARS = 26;
 
 export interface TripCard {
   id: string | number;
@@ -28,12 +24,6 @@ export interface TripCard {
   routeKm: number;
   /** Straight-line kilometres from the origin. Carried for parity; not rendered. */
   distKm: number;
-  sites: number | null;
-  season: string | null;
-  /** `false` marks a first-come campground, which changes the season label. */
-  reservable: boolean | undefined;
-  /** `[rating, reviewCount]`, when the provider supplies one. */
-  rating: readonly number[] | null;
   hydrated: boolean;
 }
 
@@ -85,10 +75,6 @@ export function tripCardsFromFeatures(
       lat,
       routeKm: distanceAlongRouteKm(routeIndex, lng, lat),
       distKm: origin ? distanceKm(origin.lat, origin.lng, lat, lng) : 0,
-      sites: null,
-      season: null,
-      reservable: undefined,
-      rating: null,
       hydrated: false,
     });
   }
@@ -97,65 +83,20 @@ export function tripCardsFromFeatures(
   return cards.sort((a, b) => a.routeKm - b.routeKm);
 }
 
-/**
- * A rating pair, from either shape the backend sends it in.
- *
- * `rating_reviews` arrives as an array from the POI detail endpoint and as a JSON
- * string from some provider payloads; the vanilla parsed both, and a card that
- * silently loses its stars for one provider is worse than the parse.
- */
-export function parseRating(value: unknown): readonly number[] | null {
-  if (Array.isArray(value)) return value.every((n) => typeof n === 'number') ? value : null;
-  if (typeof value !== 'string') return null;
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Fold a hydrated POI's flattened properties into its placeholder card. */
 export function hydrateCard(
   card: TripCard,
   properties: Record<string, unknown> | null | undefined,
 ): TripCard {
   const p = properties ?? {};
-  const sites = Number(p.sites);
   return {
     ...card,
     name: (p.name as string | undefined) || 'Campground',
     sub: (p.typeLabel as string | undefined) || '',
     location: (p.state as string | undefined) || (p.country as string | undefined) || '',
     agency: (p.agency as string | undefined) || card.agency,
-    sites: Number.isFinite(sites) ? sites : null,
-    season: (p.season as string | undefined) || null,
-    reservable: p.reservable as boolean | undefined,
-    rating: parseRating(p.rating_reviews),
     hydrated: true,
   };
-}
-
-/**
- * The season, in the few words a card has room for.
- *
- * A lightweight re-implementation of what the drawer parses, kept deliberately
- * independent of it: the card list must not pull the drawer's detail modules in to
- * render one line of text. Returns '' when there is nothing worth asserting — but a
- * campground the provider marks unreservable gets "First-come", because that is the
- * single most useful thing to know about it from a list.
- */
-export function compactSeasonLabel(
-  season: string | null | undefined,
-  reservable: boolean | undefined,
-): string {
-  if (!season) return reservable === false ? 'First-come' : '';
-  if (/year[\s-]*round/i.test(season)) return 'Year-round';
-  // Parenthetical qualifiers ("year-round (boat access)") are the first thing to go.
-  const cleaned = season.replace(/\s*\([^)]*\)/g, '').trim();
-  return cleaned.length > MAX_SEASON_CHARS
-    ? `${cleaned.slice(0, TRUNCATED_SEASON_CHARS)}…`
-    : cleaned;
 }
 
 export interface CardFilter {

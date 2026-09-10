@@ -65,6 +65,82 @@ export interface PoiPinProperties {
   agency?: string;
 }
 
+// ---------------------------------------------------------------------------
+// The campground detail bags, as the backend types them
+// ---------------------------------------------------------------------------
+//
+// One mirror per DTO in `model/api/poi/`. These are the fields the campground
+// page reads, and the backend owns both their shape AND their words: `label` on
+// an amenity or a carrier is render-ready, so the frontend never keeps a
+// vocabulary of its own. A rename on either side is a typecheck failure here
+// rather than a row that silently stops rendering.
+//
+// Optional here means absent on the wire, which is what `null` encodes to; the
+// five lists are always sent, empty when there is nothing.
+
+/** `AmenityDto`. `label` already reads "No water" when `present` is false. */
+export interface AmenityDto {
+  key: string;
+  label: string;
+  present: boolean;
+  detail?: string;
+}
+
+/** `CarrierSignalDto`. `average` is rec.gov's 0-4 scale; `label` is the carrier's name. */
+export interface CarrierSignalDto {
+  carrier: string;
+  label: string;
+  average: number;
+  count?: number;
+}
+
+/** `RatingDto`. */
+export interface RatingDto {
+  average: number;
+  count: number;
+}
+
+/** `PriceDto`. Nightly range; every part is optional because vendors differ. */
+export interface PriceDto {
+  minimum?: number;
+  maximum?: number;
+  currency?: string;
+}
+
+/** `ScheduleDto`. `HH:mm`, as the vendor stated it. */
+export interface ScheduleDto {
+  check_in?: string;
+  check_out?: string;
+}
+
+/** `AlertDto`. `body` is the only part every alert has. */
+export interface AlertDto {
+  title?: string;
+  body: string;
+  ends_on?: string;
+  source_url?: string;
+}
+
+/**
+ * The typed half of a campground's `PoiCategoryDetailSchema`.
+ *
+ * Not the whole payload: the rest of a hydrated campground (name, status, the
+ * address bag, `upstream`, the provider CTAs) stays open, because it is still
+ * whatever the vendor sent. These are the fields the backend has taken
+ * ownership of.
+ */
+export interface CampgroundDetail {
+  amenities: AmenityDto[];
+  cell_coverage: CarrierSignalDto[];
+  activities: string[];
+  rating?: RatingDto;
+  price?: PriceDto;
+  schedule?: ScheduleDto;
+  alerts: AlertDto[];
+  parent_name?: string;
+  last_verified?: string;
+}
+
 export type PoiPinFeature = Feature<Point, PoiPinProperties>;
 export type PoiPinCollection = FeatureCollection<Point, PoiPinProperties>;
 

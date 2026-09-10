@@ -2,107 +2,115 @@ import { describe, expect, test } from 'vitest';
 import {
   STALE_AFTER_DAYS,
   activityList,
-  amenityList,
+  amenityTags,
   availabilitySupported,
   campgroundCtas,
   carrierSignals,
   hasDetails,
-  isNoCta,
-  parentParkName,
   rating,
-  seasonVerdict,
   stars,
   structuredDetails,
   titleCase,
   verified,
-  type Cta,
 } from './campground-detail';
 
-const ctas = (p: Record<string, unknown>): Cta[] => {
-  const result = campgroundCtas(p);
-  if (isNoCta(result)) throw new Error('expected buttons, got a disabled label');
-  return result;
-};
+const ctas = campgroundCtas;
 
-describe('amenities', () => {
-  test('reads the legacy array shape', () => {
-    expect(amenityList({ amenities: [' Showers ', 'Water', ''] })).toEqual(['Showers', 'Water']);
-  });
-
-  test('labels canonical flags, including the useful negatives', () => {
-    expect(amenityList({ amenities: { showers: true, water: false, camp_store: true } })).toEqual([
-      'Showers',
-      'No water',
-      'Camp store',
+// The wire shapes below are `PoiDetailDtoTest`'s own encoding, verbatim. The
+// backend resolves every label — "No water", "Vault toilets", "Verizon" — so
+// these suites are about what the page does with a label, never about what the
+// label should say.
+describe('amenityTags', () => {
+  test('renders the backend label and marks an absence', () => {
+    expect(
+      amenityTags({
+        amenities: [
+          { key: 'showers', label: 'Showers', present: true },
+          { key: 'water', label: 'No water', present: false },
+        ],
+      }),
+    ).toEqual([
+      { label: 'Showers', absent: false },
+      { label: 'No water', absent: true },
     ]);
   });
 
-  test('drops a false flag that has no negative label', () => {
-    expect(amenityList({ amenities: { camp_store: false } })).toEqual([]);
+  test('a detailed amenity is already one phrase on the wire', () => {
+    expect(
+      amenityTags({
+        amenities: [{ key: 'toilets', label: 'Vault toilets', present: true, detail: 'vault' }],
+      }),
+    ).toEqual([{ label: 'Vault toilets', absent: false }]);
   });
 
-  test('a valued flag reads as label: value', () => {
-    expect(amenityList({ amenities: { wifi: 'lodge only' } })).toEqual(['Wi-Fi: lodge only']);
+  test("an `other` amenity is the vendor's own words", () => {
+    expect(
+      amenityTags({
+        amenities: [{ key: 'other', label: 'Horse corral', present: true, detail: 'Horse corral' }],
+      }),
+    ).toEqual([{ label: 'Horse corral', absent: false }]);
   });
 
-  test('toilet_kind replaces the plain toilets flag', () => {
-    expect(amenityList({ amenities: { toilets: true, toilet_kind: 'vault' } })).toEqual([
-      'Vault toilets',
-    ]);
+  test('an empty list and a missing field both render nothing', () => {
+    expect(amenityTags({ amenities: [] })).toEqual([]);
+    expect(amenityTags({})).toEqual([]);
   });
+});
 
-  test('an unknown key falls back to title case', () => {
-    expect(amenityList({ amenities: { horse_corral: true } })).toEqual(['Horse Corral']);
-  });
-
-  test('activities are read as a plain list', () => {
-    expect(activityList({ activities: ['Hiking', ' Fishing'] })).toEqual(['Hiking', 'Fishing']);
+describe('activityList', () => {
+  test('is the wire list', () => {
+    expect(activityList({ activities: ['Hiking', 'Fishing'] })).toEqual(['Hiking', 'Fishing']);
+    expect(activityList({ activities: [] })).toEqual([]);
     expect(activityList({})).toEqual([]);
   });
 });
 
 describe('carrierSignals', () => {
-  test('reads [avg, count] and sorts strongest first', () => {
-    const signals = carrierSignals({ cell_coverage: { att: [2.1, 9], verizon: [3.8, 41] } });
+  test('carries the backend carrier name and sorts strongest first', () => {
+    const signals = carrierSignals({
+      cell_coverage: [
+        { carrier: 'att', label: 'AT&T', average: 1.0 },
+        { carrier: 'verizon', label: 'Verizon', average: 3.5, count: 12 },
+      ],
+    });
 
     expect(signals.map((s) => s.carrier)).toEqual(['verizon', 'att']);
-    expect(signals[0]).toMatchObject({ label: 'Verizon', avg: 3.8, count: 41, bucket: 4 });
-  });
-
-  test('reads a bare number, with no report count', () => {
-    expect(carrierSignals({ cell_coverage: { tmobile: 1.2 } })[0]).toMatchObject({
-      label: 'T-Mobile',
-      avg: 1.2,
-      count: null,
-      bucket: 1,
+    expect(signals[0]).toEqual({
+      carrier: 'verizon',
+      label: 'Verizon',
+      avg: 3.5,
+      count: 12,
+      bucket: 4,
     });
   });
 
-  test('falls back to the legacy field name', () => {
-    expect(carrierSignals({ cell_service: { att: [1, 1] } })).toHaveLength(1);
+  test('a reading with no report count keeps the bar and loses the tooltip', () => {
+    expect(carrierSignals({ cell_coverage: [{ carrier: 'att', label: 'AT&T', average: 1.0 }] })[0])
+      .toEqual({ carrier: 'att', label: 'AT&T', avg: 1, count: null, bucket: 1 });
   });
 
-  test('drops carriers with no usable average', () => {
-    expect(carrierSignals({ cell_coverage: { att: 'unknown', verizon: [2, 3] } })).toHaveLength(1);
-  });
-
-  test('clamps the bucket to the 0-4 scale', () => {
-    const signals = carrierSignals({ cell_coverage: { a: 9, b: -3 } });
+  test('the bucket is clamped to the 0-4 scale the bar paints', () => {
+    const signals = carrierSignals({
+      cell_coverage: [
+        { carrier: 'a', label: 'A', average: 9 },
+        { carrier: 'b', label: 'B', average: -3 },
+      ],
+    });
 
     expect(signals.map((s) => s.bucket)).toEqual([4, 0]);
   });
 
-  test('a missing or wrongly-shaped field yields nothing', () => {
+  test('an empty list and a missing field both render nothing', () => {
+    expect(carrierSignals({ cell_coverage: [] })).toEqual([]);
     expect(carrierSignals({})).toEqual([]);
-    expect(carrierSignals({ cell_coverage: [1, 2] })).toEqual([]);
   });
 });
 
 describe('rating', () => {
-  test('reads the [average, count] pair', () => {
-    expect(rating({ rating_reviews: [4.3, 1234] })).toEqual({
+  test('reads the typed bag and stars the average', () => {
+    expect(rating({ rating: { average: 4.3, count: 87 } })).toEqual({
       average: 4.3,
-      count: 1234,
+      count: 87,
       stars: '★★★★☆',
     });
   });
@@ -113,37 +121,8 @@ describe('rating', () => {
     expect(stars(0)).toBe('☆☆☆☆☆');
   });
 
-  test('no rating without a usable average', () => {
+  test('an absent rating is no rating', () => {
     expect(rating({})).toBeNull();
-    expect(rating({ rating_reviews: ['x', 2] })).toBeNull();
-  });
-});
-
-describe('parentParkName', () => {
-  const linked = (...titles: string[]) => ({
-    name: 'Tuff Campground',
-    links: titles.map((title) => ({ title, url: 'https://example.test' })),
-  });
-
-  test('infers the containing park from an official link title', () => {
-    expect(parentParkName(linked('Inyo National Forest'))).toBe('Inyo National Forest');
-  });
-
-  // "Forest Service Concessionaire" matches `forest`, and camprrm.com is an operator
-  // rather than a place — this was showing up as Tuff Campground's parent park.
-  test('an operator is not a parent, however park-shaped its name', () => {
-    expect(parentParkName(linked('Forest Service Concessionaire'))).toBe('');
-  });
-
-  test('state services that mention a place are not the place', () => {
-    expect(parentParkName(linked('California State Road Conditions'))).toBe('');
-    expect(parentParkName(linked('California State Tourism'))).toBe('');
-  });
-
-  test('the real parent still wins when both kinds of link are present', () => {
-    expect(parentParkName(linked('Forest Service Concessionaire', 'Inyo National Forest'))).toBe(
-      'Inyo National Forest',
-    );
   });
 });
 
@@ -183,64 +162,6 @@ describe('verified', () => {
   });
 });
 
-describe('seasonVerdict', () => {
-  const JULY = new Date(2026, 6, 15);
-
-  test('no season and no reservable flag says nothing', () => {
-    expect(seasonVerdict(null, undefined, JULY)).toBeNull();
-  });
-
-  test('a non-reservable pin with no season is first-come', () => {
-    expect(seasonVerdict(null, false, JULY)).toEqual({
-      tone: 'fcfs',
-      text: 'First-come, first-served',
-    });
-  });
-
-  test('inside a fuzzy range, it says when it closes', () => {
-    expect(seasonVerdict('mid-May to early October', true, JULY)).toEqual({
-      tone: 'open',
-      text: 'Open through Oct 5',
-    });
-  });
-
-  test('before the range opens, it says when', () => {
-    expect(seasonVerdict('mid-May to early October', true, new Date(2026, 2, 1))).toEqual({
-      tone: 'closed',
-      text: 'Closed until May 15',
-    });
-  });
-
-  test('after the range closes, it rolls to next year', () => {
-    expect(seasonVerdict('mid-May to early October', true, new Date(2026, 10, 1))).toEqual({
-      tone: 'closed',
-      text: 'Closed until May 15',
-    });
-  });
-
-  test('explicit dates parse too, and "sept" is not confused with "sep"', () => {
-    expect(seasonVerdict('May 1 to Sept 30', true, JULY)?.text).toBe('Open through Sep 30');
-  });
-
-  test('year-round is recognised', () => {
-    expect(seasonVerdict('year-round (boat access)', true, JULY)).toEqual({
-      tone: 'open',
-      text: 'Year-round',
-    });
-  });
-
-  test('the first-come hint rides along with a parsed verdict', () => {
-    expect(seasonVerdict('year-round', false, JULY)?.text).toBe('Year-round · first-come');
-  });
-
-  test('an unparseable season is passed through', () => {
-    expect(seasonVerdict('Depends on snowpack', true, JULY)).toEqual({
-      tone: 'fcfs',
-      text: 'Depends on snowpack',
-    });
-  });
-});
-
 describe('campgroundCtas', () => {
   test('renders the backend list verbatim, first one primary', () => {
     const result = ctas({
@@ -260,11 +181,11 @@ describe('campgroundCtas', () => {
     expect(ctas({ cta: { url: 'https://x.test', label: 'Go' } })).toHaveLength(1);
   });
 
-  test('drops a CTA with an unsafe url', () => {
+  test('drops a CTA with an unsafe url, and falls through to the search', () => {
     // eslint-disable-next-line no-script-url
-    const result = campgroundCtas({ cta: [{ url: 'javascript:alert(1)', label: 'Nope' }], reservable: false });
+    const result = campgroundCtas({ cta: [{ url: 'javascript:alert(1)', label: 'Nope' }] });
 
-    expect(isNoCta(result)).toBe(true);
+    expect(result.map((cta) => cta.label)).toEqual(['Search Google']);
   });
 
   test('falls back to the reserve url, naming the vendor', () => {
@@ -281,13 +202,7 @@ describe('campgroundCtas', () => {
     expect(ctas({ info_url: 'https://parks.test/a' })[0]).toMatchObject({ label: 'Visit website' });
   });
 
-  test('a first-come pin with no links offers no button', () => {
-    const result = campgroundCtas({ reservable: false });
-
-    expect(isNoCta(result) && result.disabledLabel).toBe('First-come, first-served');
-  });
-
-  test('otherwise a park-system search beats a web search', () => {
+  test('a park-system search beats a web search', () => {
     expect(ctas({ name: 'Bowron Lake', state: 'BC', country: 'CA' })[0]).toMatchObject({
       label: 'Search BC Parks',
     });
@@ -304,36 +219,6 @@ describe('campgroundCtas', () => {
   });
 });
 
-describe('parentParkName', () => {
-  test('picks a link title that names a containing unit', () => {
-    expect(
-      parentParkName({
-        name: 'Bowman Bay',
-        links: [{ title: 'Deception Pass State Park' }],
-      }),
-    ).toBe('Deception Pass State Park');
-  });
-
-  test('ignores generic and non-parent titles', () => {
-    expect(
-      parentParkName({
-        name: 'Bowman Bay',
-        links: [{ title: 'Official site' }, { title: 'Reservations' }, { title: 'Park map' }],
-      }),
-    ).toBe('');
-  });
-
-  test('ignores a link that just repeats the campground', () => {
-    expect(parentParkName({ name: 'Steel Creek Park', links: [{ title: 'Steel Creek Park' }] })).toBe(
-      '',
-    );
-  });
-
-  test('no links, no parent', () => {
-    expect(parentParkName({ name: 'x' })).toBe('');
-  });
-});
-
 describe('structuredDetails', () => {
   test('drops empty rows and empty groups', () => {
     const details = structuredDetails({});
@@ -345,8 +230,8 @@ describe('structuredDetails', () => {
   test('formats the stay details a booker reads', () => {
     const details = structuredDetails({
       status: 'open_seasonal',
-      price: { minimum: 25, maximum: 40, currency_code: 'USD' },
-      schedule: { check_in_time: '14:00', check_out_time: '11:00' },
+      price: { minimum: 25, maximum: 40, currency: 'USD' },
+      schedule: { check_in: '14:00', check_out: '11:00' },
       max_rv_length: 32,
       has_pull_through_sites: true,
       big_rig_friendly: false,
@@ -373,10 +258,26 @@ describe('structuredDetails', () => {
   });
 
   test('an unfamiliar currency keeps its code', () => {
-    const rows =
-      structuredDetails({ price: { minimum: 30, currency_code: 'EUR' } }).groups[0]?.rows ?? [];
+    const rows = structuredDetails({ price: { minimum: 30, currency: 'EUR' } }).groups[0]?.rows ?? [];
 
     expect(rows[0]?.value).toEqual({ kind: 'text', text: 'EUR 30' });
+  });
+
+  test('only a check-out time still renders its row', () => {
+    const rows = structuredDetails({ schedule: { check_out: '11:00' } }).groups[0]?.rows ?? [];
+
+    expect(rows).toEqual([{ label: 'Check-out', value: { kind: 'text', text: '11:00 AM' } }]);
+  });
+
+  // `metadata` left the wire with the typed bags; `last_verified` is the only
+  // freshness stamp now, and the row would silently empty if this still read it.
+  test('the last-updated row comes off last_verified', () => {
+    const rows =
+      structuredDetails({ last_verified: '2026-06-01' }).groups.find(
+        (g) => g.title === 'Source metadata',
+      )?.rows ?? [];
+
+    expect(rows[0]?.value).toEqual({ kind: 'text', text: '2026-06-01' });
   });
 
   test('email and managing agency come back as links', () => {
@@ -454,16 +355,26 @@ describe('structuredDetails', () => {
         { url: 'javascript:alert(1)', title: 'Bad' },
         { href: 'https://alt.test' },
       ],
-      alerts: ['Bears active', { title: 'Road work', description: 'Expect delays' }, {}],
+      alerts: [
+        { body: 'Bears active' },
+        {
+          title: 'Road closed',
+          body: 'Highway 89 is closed north of the entrance.',
+          ends_on: '2026-10-01',
+          source_url: 'https://example.test/alert',
+        },
+      ],
     });
 
     expect(details.links).toEqual([
       { href: 'https://ok.test', label: 'Official' },
       { href: 'https://alt.test', label: 'https://alt.test' },
     ]);
+    // The extra alert keys are on the wire and deliberately not rendered: the
+    // block is two lines of prose, and a date the page cannot act on is noise.
     expect(details.alerts).toEqual([
       { title: '', body: 'Bears active' },
-      { title: 'Road work', body: 'Expect delays' },
+      { title: 'Road closed', body: 'Highway 89 is closed north of the entrance.' },
     ]);
     expect(hasDetails(details)).toBe(true);
   });

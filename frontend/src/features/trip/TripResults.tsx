@@ -9,7 +9,7 @@ import { useMapContext } from '@/map/context';
 import { useMapStore } from '@/stores/mapStore';
 import { CorridorSlider } from './CorridorSlider';
 import { formatDistanceAlongRoute } from './route-summary';
-import { compactSeasonLabel, visibleCards, type TripCard } from './trip-cards';
+import { visibleCards, type TripCard } from './trip-cards';
 import { shouldAutoFocus } from '@/domain/trip/viewport';
 
 /** Where a card click puts the camera: tight enough to see the pin, wide enough to place it. */
@@ -123,11 +123,6 @@ export function TripResults({
                   {card.sub ? <span className="tb-card-sub">{card.sub}</span> : null}
                   <span className="tb-card-meta">
                     <span className="tb-card-dist">{formatDistanceAlongRoute(card.routeKm)}</span>
-                    {card.rating?.[0] != null ? (
-                      <span className="tb-card-rating">★ {card.rating[0].toFixed(1)}</span>
-                    ) : null}
-                    {card.sites ? <span className="tb-card-sites">{card.sites} sites</span> : null}
-                    <CardSeason card={card} />
                   </span>
                 </span>
               </button>
@@ -137,9 +132,4 @@ export function TripResults({
       </div>
     </div>
   );
-}
-
-function CardSeason({ card }: { card: TripCard }) {
-  const label = compactSeasonLabel(card.season, card.reservable);
-  return label ? <span className="tb-card-season">{label}</span> : null;
 }

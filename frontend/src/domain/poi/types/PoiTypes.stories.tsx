@@ -53,13 +53,24 @@ export const Campground: Story = {
         agency: 'Oregon State Parks',
         parent_name: 'Willamette Valley',
         state: 'Oregon',
-        season: 'year-round',
-        reservable: true,
         sites: 24,
-        amenities: { water: true, showers: false, toilet_kind: 'flush', pets_allowed: true },
+        // The wire shapes verbatim: labels are the backend's, and an absence
+        // already reads "No showers" by the time it gets here.
+        amenities: [
+          { key: 'water', label: 'Water', present: true },
+          { key: 'showers', label: 'No showers', present: false },
+          { key: 'toilets', label: 'Flush toilets', present: true, detail: 'flush' },
+          { key: 'pets_allowed', label: 'Pets allowed', present: true },
+        ],
+        cell_coverage: [
+          { carrier: 'verizon', label: 'Verizon', average: 3.5, count: 12 },
+          { carrier: 'att', label: 'AT&T', average: 1 },
+        ],
         activities: ['Fishing', 'Hiking'],
-        price: { minimum: 24, maximum: 29 },
-        schedule: { check_in_time: '14:00' },
+        rating: { average: 4.3, count: 87 },
+        price: { minimum: 24, maximum: 29, currency: 'USD' },
+        schedule: { check_in: '14:00', check_out: '11:00' },
+        alerts: [{ title: 'Road work', body: 'Expect delays on the park road until October.' }],
         phone: '+1 (541) 937-1173',
         management: 'Oregon State Parks',
         source: 'oregonstateparks',
@@ -83,10 +94,12 @@ export const CampgroundFirstCome: Story = {
         agency: 'National Park Service',
         parent_name: 'Yosemite National Park',
         state: 'California',
-        reservable: false,
         sites: 36,
         availability_supported: false,
-        amenities: { water: true, showers: false },
+        amenities: [
+          { key: 'water', label: 'Water', present: true },
+          { key: 'showers', label: 'No showers', present: false },
+        ],
       }}
     />
   ),
@@ -108,7 +121,7 @@ export const Charger: Story = {
         power_kilowatt: 250,
         twenty_four_seven: true,
         open_to_non_teslas: true,
-        amenities: ['restrooms', 'shopping'],
+        charger_amenities: ['AMENITIES_RESTROOMS', 'AMENITIES_SHOPPING'],
       }}
     />
   ),

@@ -90,7 +90,10 @@ export function ChargerPoiPage({ feature, variant, onClose }: PoiTypeProps) {
 
   const tags: PoiTag[] = [
     ...(p.trailer_friendly ? [{ label: 'Trailer-friendly' }] : []),
-    ...amenityLabels(p.amenities).map((label) => ({ label })),
+    // `charger_amenities`, not `amenities`: the latter is the typed campground
+    // vocabulary the backend resolves labels for, and a charger never populates it.
+    // Tesla's own strings ride their own field, and this page still names them.
+    ...amenityLabels(p.charger_amenities).map((label) => ({ label })),
   ];
 
   const blocks: PoiBlockSlots = {

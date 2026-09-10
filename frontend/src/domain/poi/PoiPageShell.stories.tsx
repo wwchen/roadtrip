@@ -45,7 +45,6 @@ const campgroundBlocks: PoiBlockSlots = {
       eyebrow="Campground · Oregon State Parks"
       title="Jasper State Recreation Site"
       subtitle="85581 Jasper Park Rd, Pleasant Hill, OR 97455"
-      verdict={<span className="rt-poi-verdict-tone rt-poi-verdict-tone--open">Year-round</span>}
     />
   ),
   actions: (

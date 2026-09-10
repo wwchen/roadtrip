@@ -23,8 +23,9 @@ const campground = (properties: Record<string, unknown> = {}) => ({
     // here and misrepresent the endpoint. Pinned in poi.test.ts.
     address: { state: 'WA' },
     agency: 'Washington State Parks',
-    season: 'year-round',
-    reservable: true,
+    // The containing park is the backend's own column now, not an inference from
+    // the link titles below.
+    parent_name: 'Deception Pass State Park',
     availability_supported: true,
     sites: 20,
     cta: [{ url: 'https://www.recreation.gov/camping/campgrounds/1', label: 'Book on recreation.gov' }],
@@ -99,12 +100,6 @@ describe('the campground page, at panel width', () => {
     expect(header.getByText('Deception Pass State Park · WA')).toBeInTheDocument();
   });
 
-  test('renders the season verdict', async () => {
-    await openCampground();
-
-    expect(screen.getByText('Year-round')).toBeInTheDocument();
-  });
-
   test('renders the backend CTA rather than inventing a link', async () => {
     await openCampground();
 
@@ -113,10 +108,10 @@ describe('the campground page, at panel width', () => {
     expect(cta).toHaveAttribute('target', '_blank');
   });
 
-  test('a first-come pin with no links offers no button', async () => {
-    await openCampground({ cta: undefined, reservable: false, season: undefined });
+  test('a pin with no CTA falls back to a park-system search', async () => {
+    await openCampground({ cta: undefined });
 
-    expect(screen.getAllByText('First-come, first-served')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Search WA State Parks' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /recreation\.gov/ })).toBeNull();
   });
 
@@ -141,10 +136,10 @@ describe('the campground page, at panel width', () => {
 
   test('shows the details a booker reads, below the rule', async () => {
     await openCampground({
-      price: { minimum: 25, maximum: 40 },
-      schedule: { check_in_time: '14:00' },
-      cell_coverage: { verizon: [3.8, 41] },
-      rating_reviews: [4.3, 1234],
+      price: { minimum: 25, maximum: 40, currency: 'USD' },
+      schedule: { check_in: '14:00' },
+      cell_coverage: [{ carrier: 'verizon', label: 'Verizon', average: 3.8, count: 41 }],
+      rating: { average: 4.3, count: 1234 },
       booking_system: 'recreation.gov',
     });
 
@@ -163,7 +158,10 @@ describe('the campground page, at panel width', () => {
 
   test('renders amenities and activities as tags, and marks the absences', async () => {
     await openCampground({
-      amenities: { showers: true, water: false },
+      amenities: [
+        { key: 'showers', label: 'Showers', present: true },
+        { key: 'water', label: 'No water', present: false },
+      ],
       activities: ['Hiking'],
     });
 
@@ -171,6 +169,21 @@ describe('the campground page, at panel width', () => {
     // An absence is the one tag that takes a hue.
     expect(screen.getByText('No water')).toHaveClass('rt-poi-tag--absent');
     expect(screen.getByText('Hiking')).toBeInTheDocument();
+  });
+
+  test('renders an alert from its title and body', async () => {
+    await openCampground({
+      alerts: [
+        {
+          title: 'Road closed',
+          body: 'Highway 89 is closed north of the entrance.',
+          ends_on: '2026-10-01',
+        },
+      ],
+    });
+
+    const alert = panel().querySelector('.rt-poi-alert')!;
+    expect(alert.textContent).toBe('Road closed — Highway 89 is closed north of the entrance.');
   });
 
   test('sanitises the provider description and fee markup', async () => {
@@ -258,7 +271,7 @@ describe('the campground page, at panel width', () => {
       address: undefined,
       agency: undefined,
       links: undefined,
-      season: undefined,
+      parent_name: undefined,
       sites: undefined,
       availability_supported: false,
       cta: [{ url: 'https://x.test', label: 'Info' }],

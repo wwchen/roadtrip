@@ -754,13 +754,19 @@ describe('the results list', () => {
       type: 'Feature',
       id: 11,
       geometry: { type: 'Point', coordinates: [-122.64, 48.4] },
-      properties: { name: 'Bowman Bay', state: 'WA', sites: 20, rating_reviews: [4.6, 812] },
+      // Region arrives nested: the flattener derives `state` from `address` and
+      // overwrites a flat one. Same reasoning as `CampgroundPanel.test.tsx`.
+      properties: {
+        name: 'Bowman Bay',
+        address: { state: 'WA' },
+        typeLabel: 'Standard campground',
+      },
     },
     22: {
       type: 'Feature',
       id: 22,
       geometry: { type: 'Point', coordinates: [-122.35, 47.7] },
-      properties: { name: 'Denny Creek', state: 'WA', season: 'Open through October 25' },
+      properties: { name: 'Denny Creek', country: 'US' },
     },
   };
 
@@ -804,9 +810,9 @@ describe('the results list', () => {
     mount();
 
     await waitFor(() => expect(screen.getByText('Bowman Bay')).toBeInTheDocument());
-    expect(screen.getByText('★ 4.6')).toBeInTheDocument();
-    expect(screen.getByText('20 sites')).toBeInTheDocument();
-    expect(screen.getByText('Open through October 25')).toBeInTheDocument();
+    expect(screen.getByText('Standard campground')).toBeInTheDocument();
+    expect(screen.getByText('WA')).toBeInTheDocument();
+    expect(screen.getByText('US')).toBeInTheDocument();
     // "N km in", not "away": the number is how far into the drive it sits.
     expect(screen.getAllByText(/km in$/).length).toBe(2);
   });
