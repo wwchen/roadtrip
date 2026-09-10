@@ -13,6 +13,7 @@ import ca.floo.roadtrip.model.domain.CatalogColumnJson
 import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.poi.campground.CampgroundCta
 import ca.floo.roadtrip.service.poi.campground.UrlHosts
 import kotlinx.serialization.json.Json
@@ -20,6 +21,7 @@ import kotlinx.serialization.json.Json
 internal class CampgroundService(
     private val campgroundRepo: CampgroundRepo,
     private val dateResolver: AvailabilityDateResolver,
+    private val bookingHorizons: BookingHorizonResolver,
     private val cta: CampgroundCta = CampgroundCta.default,
 ) : PoiDetailService {
     override val poiType: String = POI_TYPE
@@ -62,6 +64,7 @@ internal class CampgroundService(
                     availabilityProvider = availabilityProvider,
                     timeZone = dateContext.timeZone.id,
                     earliestDate = dateContext.earliestDate.toString(),
+                    latestDate = bookingHorizons.latestDate(campground, dateContext)?.toString(),
                     unitName = null,
                     reserveUrl = campground.reservationUrl,
                     bookingSite = campground.reservationUrl?.let(UrlHosts::extract),

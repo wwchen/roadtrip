@@ -81,8 +81,16 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                     return@post call.respondApiError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest, it)
                 }
                 call.respondResult(watches.create(user, req), successStatus = HttpStatusCode.Created)
-            }.describeApi("watches", "Create a watch")
-                .access(RouteAccess.User)
+            }.describeApi(
+                tag = "watches",
+                summary = "Create a watch",
+                description =
+                    "`cadence_sec` is optional: omit it and the poller resolves the watch's " +
+                        "cadence from the POI override, then the global default. The response's " +
+                        "`watch_capabilities.add_to_cart.state` says why the cart is or is not " +
+                        "reachable for the owner (ready, no_credentials, signed_out, unsupported); " +
+                        "`atc` appears in `trigger_kinds` exactly when that state is ready.",
+            ).access(RouteAccess.User)
 
             route("/{id}") {
                 get {

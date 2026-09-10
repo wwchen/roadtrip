@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.model.api.AddToCartCapabilityDto
+import ca.floo.roadtrip.model.api.AddToCartState
 import ca.floo.roadtrip.model.api.AvailabilityWatchCapabilitiesDto
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.domain.Campsite
@@ -88,6 +90,21 @@ internal class WatchCapabilityService(
         return recgovCredentials?.isConfigured(user) == true
     }
 
+    /**
+     * The same question `atc`'s absence answers, but stated: the client renders
+     * the reason instead of subtracting `booking_actions` from `trigger_kinds`.
+     */
+    fun addToCartState(
+        campsites: List<Campsite>,
+        requester: UserId?,
+    ): AddToCartState =
+        when {
+            BookingAction.ADD_TO_CART !in supportedBookingActions(campsites) -> AddToCartState.UNSUPPORTED
+            requester == null -> AddToCartState.SIGNED_OUT
+            !canFulfilAddToCart(requester) -> AddToCartState.NO_CREDENTIALS
+            else -> AddToCartState.READY
+        }
+
     fun capabilitiesFor(
         campsites: List<Campsite>,
         requester: UserId?,
@@ -96,6 +113,7 @@ internal class WatchCapabilityService(
         return AvailabilityWatchCapabilitiesDto(
             triggerKinds = supportedTriggerKinds(campsites, requester),
             bookingActions = BookingAction.entries.filter { it in bookingActions }.map { it.wireValue },
+            addToCart = AddToCartCapabilityDto(addToCartState(campsites, requester)),
         )
     }
 }

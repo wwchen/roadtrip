@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.model.api.AddToCartState
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
@@ -131,6 +132,44 @@ class WatchCapabilityServiceTest {
             listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY),
             service.supportedTriggerKinds(listOf(unsupported), credentialedUser),
         )
+    }
+
+    @Test
+    fun `add to cart state names the reason the cart is out of reach`() {
+        val cartless = campsite(2L, "")
+        val cartlessService = service(campsites = listOf(cartless))
+        assertEquals(AddToCartState.UNSUPPORTED, cartlessService.addToCartState(listOf(cartless), credentialedUser))
+
+        val campsite = campsite(1L, "site-1")
+        val service = service(campsites = listOf(campsite))
+        assertEquals(AddToCartState.SIGNED_OUT, service.addToCartState(listOf(campsite), requester = null))
+        assertEquals(AddToCartState.NO_CREDENTIALS, service.addToCartState(listOf(campsite), uncredentialedUser))
+        assertEquals(AddToCartState.READY, service.addToCartState(listOf(campsite), credentialedUser))
+    }
+
+    @Test
+    fun `capabilities carry the add to cart state and offer atc exactly when it is ready`() {
+        val campsite = campsite(1L, "site-1")
+        val service = service(campsites = listOf(campsite))
+
+        val ready = service.capabilitiesFor(listOf(campsite), credentialedUser)
+        assertEquals(AddToCartState.READY, ready.addToCart.state)
+        assertTrue(AvailabilityTriggerKinds.ATC in ready.triggerKinds)
+
+        for (requester in listOf(null, uncredentialedUser)) {
+            val capabilities = service.capabilitiesFor(listOf(campsite), requester)
+            assertFalse(AvailabilityTriggerKinds.ATC in capabilities.triggerKinds)
+        }
+        assertEquals(AddToCartState.SIGNED_OUT, service.capabilitiesFor(listOf(campsite), null).addToCart.state)
+        assertEquals(
+            AddToCartState.NO_CREDENTIALS,
+            service.capabilitiesFor(listOf(campsite), uncredentialedUser).addToCart.state,
+        )
+
+        val cartless = campsite(2L, "")
+        val cartlessCapabilities = service(campsites = listOf(cartless)).capabilitiesFor(listOf(cartless), credentialedUser)
+        assertEquals(AddToCartState.UNSUPPORTED, cartlessCapabilities.addToCart.state)
+        assertFalse(AvailabilityTriggerKinds.ATC in cartlessCapabilities.triggerKinds)
     }
 
     @Test

@@ -36,6 +36,7 @@ internal class CampsiteAvailabilityService(
     private val snapshotFreshnessTtl: (provider: AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
 ) {
     private val availabilityLoader = AvailabilityLoader(availabilityRepo, clock)
+    private val bookingHorizons = BookingHorizonResolver(availabilityProviders, dateResolver)
 
     suspend fun fetchAvailability(
         campground: Campground,
@@ -108,8 +109,7 @@ internal class CampsiteAvailabilityService(
      * provider claims it. Non-throwing counterpart to [providerFor], for
      * callers (the empty-campsite branch) that have a fallback of their own.
      */
-    fun bookingHorizonDaysFor(campground: Campground): Int? =
-        availabilityProviders.firstOrNull { it.supportsCampground(campground) }?.capabilities?.bookingHorizonDays
+    fun bookingHorizonDaysFor(campground: Campground): Int? = bookingHorizons.horizonDaysFor(campground)
 }
 
 internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration = ApiCacheEntity.availability(providerId).defaultTtl

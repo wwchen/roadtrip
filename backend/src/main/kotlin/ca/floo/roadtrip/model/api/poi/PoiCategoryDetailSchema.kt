@@ -12,6 +12,9 @@ data class PoiCategoryDetailSchema(
     @SerialName("availability_provider") val availabilityProvider: String? = null,
     @SerialName("time_zone") val timeZone: String? = null,
     @SerialName("earliest_date") val earliestDate: String? = null,
+    // The serving provider's booking horizon: the date picker's ceiling.
+    // Null when no provider claims this pin.
+    @SerialName("latest_date") val latestDate: String? = null,
     @SerialName("unit_name") val unitName: String? = null,
     @SerialName("reserve_url") val reserveUrl: String? = null,
     @SerialName("booking_site") val bookingSite: String? = null,
