@@ -80,11 +80,14 @@ interface RoadtripMetrics {
      * rate/trend layer that answers "are holds still landing" and "which
      * failure is taking them".
      *
-     * [error] is a `RecGovSessionCodes`-style code — a bounded registry, so it
-     * is safe as an attribute; null becomes `none`. Watch ids and campsite ids
-     * are deliberately absent: unbounded cardinality.
+     * [provider] is the booking provider that answered, so one panel serves
+     * every vendor and a per-vendor view is a label filter; null where the fire
+     * never reached one, and becomes `none`. [error] is an adapter's own code —
+     * a bounded registry, so it is safe as an attribute; null becomes `none`.
+     * Watch ids and campsite ids are deliberately absent: unbounded cardinality.
      */
-    fun recgovAtcFired(
+    fun atcFired(
+        provider: BookingProvider?,
         outcome: AtcOutcome,
         error: String? = null,
         durationMs: Int? = null,
@@ -121,7 +124,8 @@ interface RoadtripMetrics {
 
         override fun recgovKeepaliveProfile(outcome: KeepaliveOutcome) = Unit
 
-        override fun recgovAtcFired(
+        override fun atcFired(
+            provider: BookingProvider?,
             outcome: AtcOutcome,
             error: String?,
             durationMs: Int?,

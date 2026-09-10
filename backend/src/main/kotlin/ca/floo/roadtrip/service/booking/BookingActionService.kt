@@ -1,15 +1,14 @@
 package ca.floo.roadtrip.service.booking
 
-import ca.floo.roadtrip.model.api.RECGOV_CART_URL
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.auth.UserId
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
-import ca.floo.roadtrip.service.settings.RecGovCredentialsConfigured
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
@@ -28,7 +27,7 @@ object BookingActionCodes {
      */
     const val ATC_EXCEPTION = "atc_exception"
 
-    /** The caller has no rec.gov credentials, so no cart to hold it in. */
+    /** The caller has no credentials with the provider, so no cart to hold it in. */
     const val CREDENTIALS_REQUIRED = "credentials_required"
 
     /** A recent observation says this site is taken. Not merely unknown. */
@@ -37,17 +36,8 @@ object BookingActionCodes {
     /** The window was not a positive number of nights. */
     const val INVALID_WINDOW = "invalid_window"
 
-    /** The browser reached rec.gov and it declined to add the site. */
+    /** The browser reached the vendor and it declined to add the site. */
     const val CART_NOT_ADDED = "cart_not_added"
-
-    /** Rec.gov offered the site but not a bookable confirmation control. */
-    const val CONFIRMATION_DISABLED = "recgov_confirmation_disabled"
-
-    /** Rec.gov's calendar refused the requested arrival date outright. */
-    const val DATES_NOT_OFFERED = "recgov_dates_not_offered"
-
-    /** Rec.gov showed the site but offered no Reserve/Add-to-Cart control. */
-    const val NO_RESERVE_BUTTON = "recgov_no_reserve_button"
 }
 
 /**
@@ -79,8 +69,13 @@ internal fun interface CurrentAvailabilityLookup {
  * companion is. The route maps these onto statuses in one place.
  */
 internal sealed interface AddToCartOutcome {
+    /**
+     * Both fields come from the adapter that made the hold: the service names
+     * no vendor's cart, and the copy above it can say whose cart this is.
+     */
     data class Held(
         val cartUrl: String,
+        val provider: BookingProvider,
     ) : AddToCartOutcome
 
     /** A gate refused before the browser was ever driven. */
@@ -115,11 +110,13 @@ internal interface BookingActionPort {
 /**
  * The user-initiated half of the booking seam.
  *
- * Same adapter, same profile threading and same one-shot re-login as
- * `AtcTriggerActionHandler` — the difference is only who asked and who is
- * listening. A watch fires unattended and reports by email and Slack; this
- * caller is watching a spinner, so the answer is the HTTP response and nothing
- * is sent anywhere.
+ * Same adapter and same gates as `AtcTriggerActionHandler` — the difference is
+ * only who asked and who is listening. A watch fires unattended and reports by
+ * email and Slack; this caller is watching a spinner, so the answer is the HTTP
+ * response and nothing is sent anywhere.
+ *
+ * It names no vendor. Which cart a hold lands in, whether this caller has one,
+ * and what a refusal code means are all the adapter's to answer.
  *
  * Gates run cheapest-first and each rules out a *different* reason the hold
  * cannot happen, so the caller learns the actual blocker rather than a generic
@@ -129,7 +126,6 @@ internal class BookingActionService(
     private val campsites: BookingCampsiteLookup,
     private val availabilityTargets: AvailabilityTargetResolver,
     private val bookingTargets: AvailabilityBookingTargetResolver,
-    private val credentials: RecGovCredentialsConfigured,
     private val availability: CurrentAvailabilityLookup,
     private val bookings: BookingAdapterRegistry,
 ) : BookingActionPort {
@@ -151,10 +147,14 @@ internal class BookingActionService(
         val target =
             bookingTargets.targetFor(BookingAction.ADD_TO_CART, resolved)
                 ?: return AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET)
+        // The registry disagreeing with the resolver means the two are out of
+        // step; report it as the same "we cannot book this" the gate does.
+        val adapter = bookings.adapterFor(target) ?: return AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET)
 
-        // 2. Does this caller have somewhere to put it? Configured, not proven —
-        //    the same gate the `atc` trigger uses.
-        if (!credentials.isConfigured(caller)) return AddToCartOutcome.Refused(BookingActionCodes.CREDENTIALS_REQUIRED)
+        // 2. Does this caller have somewhere to put it? The adapter answers for
+        //    its own vendor — configured, not proven — and it is the same gate
+        //    the `atc` trigger applies.
+        if (!adapter.canFulfil(caller)) return AddToCartOutcome.Refused(BookingActionCodes.CREDENTIALS_REQUIRED)
 
         // 3. Do we already KNOW this is taken? Only a recent observation
         //    saying "not bookable" stops us here. This is a cheap way to catch
@@ -177,10 +177,15 @@ internal class BookingActionService(
                 allowUnattendedRelogin = false,
             )
 
-        return when (val result = bookings.addToCart(request)) {
+        return when (val result = adapter.addToCart(request)) {
             is AddToCartResult.Completed -> {
-                log.info("direct ATC held campsite_id={} for user_id={}", campsiteId, caller.value)
-                AddToCartOutcome.Held(RECGOV_CART_URL)
+                log.info(
+                    "direct ATC held campsite_id={} for user_id={} provider={}",
+                    campsiteId,
+                    caller.value,
+                    result.providerId,
+                )
+                AddToCartOutcome.Held(result.cartUrl, result.providerId)
             }
             is AddToCartResult.Failed -> {
                 log.info(
@@ -192,8 +197,8 @@ internal class BookingActionService(
                 )
                 AddToCartOutcome.Failed(result.error, result.detail, result.category)
             }
-            // The registry disagreeing with the resolver means the two are out
-            // of step; report it as the same "we cannot book this" the gate does.
+            // The adapter disowning a target it claimed means the two answers are
+            // out of step; the caller hears the same "we cannot book this".
             AddToCartResult.Unsupported -> AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET)
         }
     }

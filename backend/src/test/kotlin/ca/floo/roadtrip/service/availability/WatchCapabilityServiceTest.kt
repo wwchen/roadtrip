@@ -1,19 +1,17 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
+import ca.floo.roadtrip.fixtures.FakeBookingAdapter
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.api.AddToCartState
 import ca.floo.roadtrip.model.availability.PoiDateContext
-import ca.floo.roadtrip.model.booking.AddToCartRequest
-import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
-import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.service.availability.provider.testCampground
@@ -31,6 +29,10 @@ import kotlin.test.assertTrue
 private const val TEST_PARENT_POI_ID = 100L
 private val credentialedUser = UserId(11L)
 private val uncredentialedUser = UserId(12L)
+
+/** Holds an account with the second vendor, and none with the first. */
+private val otherProviderUser = UserId(13L)
+private const val OTHER_PROVIDER_DISPLAY_NAME = "Other Bookings"
 
 class WatchCapabilityServiceTest {
     @Test
@@ -133,6 +135,43 @@ class WatchCapabilityServiceTest {
     }
 
     @Test
+    fun `credentials are asked of the adapter that would hold this scope, not of one vendor`() {
+        // Two vendors, one account each. The gate has to follow the scope: the
+        // rec.gov user is ready on a rec.gov campground and short a credential
+        // on a Campflare one, and the Campflare user is the mirror image. A
+        // single vendor-shaped gate answered the same for both scopes.
+        val adapters =
+            listOf(
+                FakeBookingAdapter(
+                    id = BookingProvider.RECGOV,
+                    credentialed = { it == credentialedUser },
+                ),
+                FakeBookingAdapter(
+                    id = BookingProvider.CAMPFLARE,
+                    displayName = OTHER_PROVIDER_DISPLAY_NAME,
+                    credentialed = { it == otherProviderUser },
+                ),
+            )
+
+        val recgovSite = campsite(1L, "site-1")
+        val recgov = service(campsites = listOf(recgovSite), adapters = adapters)
+        assertEquals(AddToCartState.READY, recgov.addToCartState(listOf(recgovSite), credentialedUser))
+        assertEquals(AddToCartState.NO_CREDENTIALS, recgov.addToCartState(listOf(recgovSite), otherProviderUser))
+        assertEquals(FAKE_PROVIDER_DISPLAY_NAME, recgov.addToCartProviderName(listOf(recgovSite)))
+
+        val otherSite = campsite(2L, "site-2", provider = BookingProvider.CAMPFLARE)
+        val other =
+            service(
+                campsites = listOf(otherSite),
+                provider = BookingProvider.CAMPFLARE,
+                adapters = adapters,
+            )
+        assertEquals(AddToCartState.READY, other.addToCartState(listOf(otherSite), otherProviderUser))
+        assertEquals(AddToCartState.NO_CREDENTIALS, other.addToCartState(listOf(otherSite), credentialedUser))
+        assertEquals(OTHER_PROVIDER_DISPLAY_NAME, other.addToCartProviderName(listOf(otherSite)))
+    }
+
+    @Test
     fun `credentials alone do not add atc to a scope with no cart`() {
         val unsupported = campsite(2L, "")
         val service = service(campsites = listOf(unsupported), configuredUsers = setOf(credentialedUser.value))
@@ -207,43 +246,17 @@ class WatchCapabilityServiceTest {
                 AvailabilityTriggerKinds.EMAIL_NOTIFY,
             ),
         configuredUsers: Set<Long> = setOf(credentialedUser.value),
+        provider: BookingProvider = BookingProvider.RECGOV,
+        adapters: List<BookingAdapter> =
+            listOf(FakeBookingAdapter(id = provider, credentialed = { it.value in configuredUsers })),
     ): WatchCapabilityService {
-        val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider))
+        val registry = BookingAdapterRegistry(adapters)
         return WatchCapabilityService(
-            availabilityTargets = FakeTargetResolver(campsites, supportsInternalPolling),
+            availabilityTargets = FakeTargetResolver(campsites, supportsInternalPolling, provider),
             bookingTargets = AvailabilityBookingTargetResolver(registry),
             notificationTriggerKinds = notificationTriggerKinds,
-            recgovCredentials = { userId -> userId.value in configuredUsers },
+            bookings = registry,
         )
-    }
-
-    private object RecGovOnlyBookingProvider : BookingAdapter {
-        override val id: BookingProvider = BookingProvider.RECGOV
-
-        override fun targetFor(
-            parentRef: BookingProviderRef,
-            campsiteId: Long,
-            vendorSiteId: String,
-        ): BookingTarget? {
-            if (parentRef !is BookingProviderRef.RecGov) return null
-            return BookingTarget(
-                providerId = id,
-                parentRef = parentRef,
-                campsiteId = campsiteId,
-                vendorSiteId = vendorSiteId,
-            )
-        }
-
-        override fun can(
-            action: BookingAction,
-            target: BookingTarget,
-        ): Boolean =
-            action == BookingAction.ADD_TO_CART &&
-                target.providerId == BookingProvider.RECGOV &&
-                target.parentRef is BookingProviderRef.RecGov &&
-                target.vendorSiteId.isNotBlank()
-
-        override suspend fun addToCart(request: AddToCartRequest): AddToCartResult = AddToCartResult.Unsupported
     }
 
     private fun fakeCampground(): Campground =
@@ -279,15 +292,16 @@ class WatchCapabilityServiceTest {
     private class FakeTargetResolver(
         private val campsites: List<Campsite>,
         supportsInternalPolling: Boolean,
+        bookingProvider: BookingProvider,
     ) : AvailabilityTargetResolver {
         private val byId = campsites.associateBy { it.id }
         private val provider =
             FakeAvailabilityProvider(
-                id = BookingProvider.RECGOV,
+                id = bookingProvider,
                 supportsInternalPolling = supportsInternalPolling,
                 bookingHorizonDays = FAKE_PROVIDER_YEAR_HORIZON_DAYS,
             )
-        private val campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "facility-1")
+        private val campground = testCampground(bookingProvider = bookingProvider.id, bookingProviderRef = "facility-1")
 
         override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? {
             val known = byId[campsite.id] ?: return null
@@ -309,10 +323,11 @@ class WatchCapabilityServiceTest {
     private fun campsite(
         id: Long,
         vendorId: String,
+        provider: BookingProvider = BookingProvider.RECGOV,
     ): Campsite =
         campsiteFixture(
             id = id,
-            vendor = "recgov",
+            vendor = provider.id,
             vendorId = vendorId,
             name = "Site $id",
             loopName = null,

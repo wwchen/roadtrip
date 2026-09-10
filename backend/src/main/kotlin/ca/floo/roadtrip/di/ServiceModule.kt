@@ -226,9 +226,15 @@ val serviceModule =
             listOfNotNull(
                 get<CompanionChannel>().atc?.let { executor ->
                     // The credential service is the fire path's session authority:
-                    // it answers per-profile health and owns the one unattended
-                    // re-login, because it is where the sealed password lives.
-                    RecGovBookingAdapter(executor, get<RecGovCredentialService>(), get<RecentAtcFires>())
+                    // it answers per-profile health, owns the one unattended
+                    // re-login, and knows whose cart a hold could land in,
+                    // because it is where the sealed password lives.
+                    RecGovBookingAdapter(
+                        companionAtc = executor,
+                        session = get<RecGovCredentialService>(),
+                        recentFires = get<RecentAtcFires>(),
+                        credentials = get<RecGovCredentialService>(),
+                    )
                 },
             )
         }
@@ -241,7 +247,6 @@ val serviceModule =
                 campsites = get<CampsiteRepo>()::findById,
                 availabilityTargets = get<DbAvailabilityTargetResolver>(),
                 bookingTargets = get<AvailabilityBookingTargetResolver>(),
-                credentials = get<RecGovCredentialService>(),
                 availability = { campsiteId, nights ->
                     get<AvailabilityRepo>()
                         .freshlyUnavailableDates(campsiteId, nights, get<AppConfig>().booking.freshnessMaxAge)
@@ -256,9 +261,9 @@ val serviceModule =
                 availabilityTargets = get<DbAvailabilityTargetResolver>(),
                 bookingTargets = get<AvailabilityBookingTargetResolver>(),
                 notificationTriggerKinds = notificationTriggerKinds(emailConfigured = config.email != null),
-                // `atc` is offered only to a user whose rec.gov credentials are
-                // stored; the credential service is the one place that knows.
-                recgovCredentials = get<RecGovCredentialService>(),
+                // `atc` is offered only to a user the claiming adapter can hold
+                // for; the adapter is the one place that knows its credentials.
+                bookings = get<BookingAdapterRegistry>(),
             )
         }
         single {

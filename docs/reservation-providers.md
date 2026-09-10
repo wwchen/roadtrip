@@ -301,6 +301,25 @@ system can differ. For example, Campflare may provide availability for inventory
 whose booking action still happens on rec.gov, Aspira, ReserveAmerica, or
 another vendor site.
 
+**The adapter owns its vendor**, not just its targets:
+
+| the adapter answers | how |
+| --- | --- |
+| whose cart a hold lands in | `AddToCartResult.Completed.cartUrl`; `RecGovBookingAdapter` owns `RECGOV_CART_URL` |
+| whether this caller has one | `canFulfil(user)` — rec.gov reads `RecGovCredentialsConfigured` |
+| what its refusal codes mean | `failureCategories`; the `recgov_*` codes live in `RecGovBookingCodes` |
+| what a person calls it | `displayName` (`"Recreation.gov"`) |
+
+So `BookingActionService` names no vendor: it resolves the target, asks the
+claiming adapter `canFulfil`, and returns what the adapter returns.
+`WatchCapabilityService.canFulfilAddToCart(requester, campsites)` asks the
+adapter the scope resolves to, so the `atc` gate and the validator's
+"atc requires &lt;provider&gt; credentials in Settings" follow the provider that
+would actually hold the site. ATC telemetry is one instrument for every vendor
+— `roadtrip.booking.atc` and `roadtrip.booking.atc.duration`, labelled
+`provider` — and `grafana/dashboards/recgov-atc.json` filters it to
+`provider="recgov"`. The keepalive metric stays rec.gov's, because the sweep is.
+
 Booking targets compose two identities:
 
 - Parent booking context from the campground/facility provider ref.

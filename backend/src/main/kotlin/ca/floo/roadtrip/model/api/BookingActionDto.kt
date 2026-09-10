@@ -3,9 +3,6 @@ package ca.floo.roadtrip.model.api
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** Where a held site actually is. The response's only job beyond "it worked". */
-const val RECGOV_CART_URL = "https://www.recreation.gov/cart"
-
 /** Wire vocabulary for [AddToCartResponseDto.status]. */
 object BookingActionStatus {
     const val COMPLETED = "completed"
@@ -28,5 +25,6 @@ data class AddToCartRequestDto(
 data class AddToCartResponseDto(
     /** [BookingActionStatus.COMPLETED]; a failure is an HTTP error, not a status. */
     val status: String,
+    /** Where the site is held — the booking provider's own cart, as it reported it. */
     @SerialName("cart_url") val cartUrl: String,
 )

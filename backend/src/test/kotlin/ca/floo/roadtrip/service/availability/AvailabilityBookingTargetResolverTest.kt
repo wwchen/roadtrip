@@ -2,12 +2,10 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
+import ca.floo.roadtrip.fixtures.FakeBookingAdapter
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.PoiDateContext
-import ca.floo.roadtrip.model.booking.AddToCartRequest
-import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
-import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingAlias
@@ -15,7 +13,6 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import kotlinx.serialization.json.JsonNull
 import org.junit.jupiter.api.Test
@@ -45,7 +42,7 @@ class AvailabilityBookingTargetResolverTest {
 
     @Test
     fun `targetFor skips availability-only campflare candidate and returns recgov booking target`() {
-        val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
+        val registry = BookingAdapterRegistry(listOf(FakeBookingAdapter()))
         val resolver = AvailabilityBookingTargetResolver(registry)
         val resolved =
             resolvedTarget(
@@ -68,7 +65,7 @@ class AvailabilityBookingTargetResolverTest {
         // availability candidates yields a Campflare ref no booking adapter
         // serves, so add_to_cart.state came back empty for a campground that is
         // perfectly bookable.
-        val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
+        val registry = BookingAdapterRegistry(listOf(FakeBookingAdapter()))
         val resolver = AvailabilityBookingTargetResolver(registry)
 
         val target =
@@ -91,7 +88,7 @@ class AvailabilityBookingTargetResolverTest {
     fun `a campflare campsite with no rec_gov alias is correctly unbookable`() {
         // The campground is sold on rec.gov but this particular site was never
         // linked to a rec.gov id — there is nothing to put in a cart.
-        val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
+        val registry = BookingAdapterRegistry(listOf(FakeBookingAdapter()))
         val resolver = AvailabilityBookingTargetResolver(registry)
 
         val target =
@@ -110,7 +107,7 @@ class AvailabilityBookingTargetResolverTest {
     @Test
     fun `a campflare-only campground and campsite yield no booking target`() {
         // Nothing aliases this row onto a vendor anyone can hold a site with.
-        val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
+        val registry = BookingAdapterRegistry(listOf(FakeBookingAdapter()))
         val resolver = AvailabilityBookingTargetResolver(registry)
 
         val target =
@@ -133,7 +130,7 @@ class AvailabilityBookingTargetResolverTest {
         // overrides. That is safe only because a provider with no registered
         // booking adapter never reaches the cart through this path — its
         // declared ref finds nothing and the candidate walk decides instead.
-        val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
+        val registry = BookingAdapterRegistry(listOf(FakeBookingAdapter()))
         val resolver = AvailabilityBookingTargetResolver(registry)
         val aspiraDeclared =
             resolvedTarget(candidates = listOf(recgovProvider))
@@ -174,40 +171,12 @@ class AvailabilityBookingTargetResolverTest {
 
     @Test
     fun `targetFor returns null when no candidate maps to supported booking provider`() {
-        val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
+        val registry = BookingAdapterRegistry(listOf(FakeBookingAdapter()))
         val resolver = AvailabilityBookingTargetResolver(registry)
 
         val target = resolver.targetFor(BookingAction.ADD_TO_CART, resolvedTarget(candidates = listOf(campflareProvider)))
 
         assertNull(target)
-    }
-
-    private class RecGovOnlyBookingProvider : BookingAdapter {
-        override val id: BookingProvider = BookingProvider.RECGOV
-
-        override fun targetFor(
-            parentRef: BookingProviderRef,
-            campsiteId: Long,
-            vendorSiteId: String,
-        ): BookingTarget? {
-            if (parentRef !is BookingProviderRef.RecGov) return null
-            return BookingTarget(
-                providerId = id,
-                parentRef = parentRef,
-                campsiteId = campsiteId,
-                vendorSiteId = vendorSiteId,
-            )
-        }
-
-        override fun can(
-            action: BookingAction,
-            target: BookingTarget,
-        ): Boolean =
-            action == BookingAction.ADD_TO_CART &&
-                target.providerId == BookingProvider.RECGOV &&
-                target.parentRef is BookingProviderRef.RecGov
-
-        override suspend fun addToCart(request: AddToCartRequest): AddToCartResult = AddToCartResult.Unsupported
     }
 
     private fun resolvedTarget(

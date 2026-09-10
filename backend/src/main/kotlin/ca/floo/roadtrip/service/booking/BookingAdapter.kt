@@ -3,15 +3,46 @@ package ca.floo.roadtrip.service.booking
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.booking.BookingTarget
+import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.Dispatchable
 
+/**
+ * One booking vendor, and everything vendor-specific about holding a site with
+ * it: its cart, its credentials, its codes, and the name a person reads.
+ *
+ * The layers above route to an adapter and repeat what it says. They do not
+ * know which vendor answered, so adding a second one is a registration rather
+ * than a sweep through the service, the capability gates, and the copy.
+ */
 internal interface BookingAdapter : Dispatchable<BookingProvider> {
     val id: BookingProvider
 
+    /** This vendor as a person reads it, for copy that has to name it. */
+    val displayName: String
+
+    /**
+     * Every code this adapter can surface, and who has to act on it.
+     *
+     * Its own table, because only this adapter knows what its vendor's codes
+     * mean. Anything absent is [BookingFailureCategory.UPSTREAM] — an
+     * unfamiliar failure is ours until someone classifies it.
+     */
+    val failureCategories: Map<String, BookingFailureCategory>
+        get() = emptyMap()
+
     override fun canHandle(key: BookingProvider): Boolean = key == id
+
+    /**
+     * Whether [user] has somewhere at this vendor for a hold to land.
+     *
+     * *Configured*, never *proven working*: wrong credentials surface at test
+     * time in Settings or at fire time in the failure notification.
+     */
+    fun canFulfil(user: UserId): Boolean
 
     fun targetFor(
         parentRef: BookingProviderRef,

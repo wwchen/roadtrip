@@ -3,6 +3,8 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.client.resend.EmailDeliveryClient
 import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
 import ca.floo.roadtrip.config.EmailConfig
+import ca.floo.roadtrip.fixtures.FAKE_CART_URL
+import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campsiteFixture
@@ -365,6 +367,7 @@ class TriggerActionHandlerTest {
                     resultFactory = { request: AddToCartRequest ->
                         AddToCartResult.Completed(
                             providerId = BookingProvider.RECGOV,
+                            cartUrl = FAKE_CART_URL,
                             request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                             response =
                                 buildJsonObject {
@@ -693,7 +696,7 @@ class TriggerActionHandlerTest {
                 )
 
             assertFalse(delivered)
-            assertEquals(listOf(AtcOutcome.EXCEPTION), metrics.fires.map { it.first })
+            assertEquals(listOf(AtcOutcome.EXCEPTION), metrics.fires.map { it.outcome })
             val result = notifications.atcResults.single()
             assertEquals("failed", result.status)
             assertEquals(BookingActionCodes.ATC_EXCEPTION, result.error)
@@ -702,16 +705,25 @@ class TriggerActionHandlerTest {
             assertTrue(result.detail!!.isNotBlank())
         }
 
+    /** One counted fire, with every attribute the dashboard slices by. */
+    private data class RecordedFire(
+        val provider: BookingProvider?,
+        val outcome: AtcOutcome,
+        val error: String?,
+        val durationMs: Int?,
+    )
+
     /** Records what the handler counted, so every exit's outcome is assertable. */
     private class RecordingMetrics : RoadtripMetrics by RoadtripMetrics.NoOp {
-        val fires = mutableListOf<Triple<AtcOutcome, String?, Int?>>()
+        val fires = mutableListOf<RecordedFire>()
 
-        override fun recgovAtcFired(
+        override fun atcFired(
+            provider: BookingProvider?,
             outcome: AtcOutcome,
             error: String?,
             durationMs: Int?,
         ) {
-            fires += Triple(outcome, error, durationMs)
+            fires += RecordedFire(provider, outcome, error, durationMs)
         }
     }
 
@@ -737,7 +749,11 @@ class TriggerActionHandlerTest {
                 openings = listOf(triggerOpening(parentRef = BookingProviderRef.Campflare("campflare-1"))),
             )
 
-            assertEquals(listOf(AtcOutcome.NO_TARGET), metrics.fires.map { it.first })
+            assertEquals(listOf(AtcOutcome.NO_TARGET), metrics.fires.map { it.outcome })
+            // No booking adapter answered, so the series carries the provider the
+            // opening was seen under — the Campflare row nobody can hold — rather
+            // than a blank label for the one exit nobody is told about.
+            assertEquals(listOf(BookingProvider.CAMPFLARE), metrics.fires.map { it.provider })
         }
 
     @Test
@@ -761,12 +777,15 @@ class TriggerActionHandlerTest {
             )
 
             val fire = metrics.fires.single()
-            assertEquals(AtcOutcome.HELD, fire.first)
+            assertEquals(AtcOutcome.HELD, fire.outcome)
+            // One metric for every vendor; which one held is a label, so a
+            // per-vendor panel is a filter rather than a second instrument.
+            assertEquals(BookingProvider.RECGOV, fire.provider)
             // assertNotNull returns the unwrapped value, so asserting last would
             // make this method's return type Int — and JUnit silently skips a
             // non-void @Test. Keep a Unit-returning assertion last.
             assertTrue(
-                fire.third != null,
+                fire.durationMs != null,
                 "a fire without a duration cannot answer 'are holds still fast enough'",
             )
         }
@@ -938,6 +957,10 @@ class TriggerActionHandlerTest {
 
         override val id: BookingProvider = BookingProvider.RECGOV
 
+        override val displayName: String = FAKE_PROVIDER_DISPLAY_NAME
+
+        override fun canFulfil(user: UserId): Boolean = true
+
         override fun targetFor(
             parentRef: BookingProviderRef,
             campsiteId: Long,
@@ -966,6 +989,7 @@ class TriggerActionHandlerTest {
             resultFactory?.let { return it(request) }
             return AddToCartResult.Completed(
                 providerId = BookingProvider.RECGOV,
+                cartUrl = FAKE_CART_URL,
                 request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                 response =
                     buildJsonObject {

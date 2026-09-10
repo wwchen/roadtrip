@@ -1,12 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
-import ca.floo.roadtrip.model.booking.AddToCartRequest
-import ca.floo.roadtrip.model.booking.AddToCartResult
-import ca.floo.roadtrip.model.booking.BookingAction
-import ca.floo.roadtrip.model.booking.BookingTarget
+import ca.floo.roadtrip.fixtures.FakeBookingAdapter
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
@@ -27,7 +23,6 @@ import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.alert.WatchAlertScope
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
@@ -121,7 +116,6 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 AvailabilityTriggerKinds.SLACK_NOTIFY,
                 AvailabilityTriggerKinds.EMAIL_NOTIFY,
             ),
-        recgovConfigured: Boolean = true,
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
@@ -153,7 +147,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                             availabilityTargets = targets,
                             bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
                             notificationTriggerKinds = notificationTriggerKinds,
-                            recgovCredentials = { recgovConfigured },
+                            bookings = bookingProviders,
                         ),
                 ),
             lifecycleNotifications = ignoredLifecycleNotifications(),
@@ -487,7 +481,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     fun `create allows an atc watch when recgov booking provider supports its scoped campsite`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
-        val svc = bookingValidatedService(BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider)))
+        val svc = bookingValidatedService(BookingAdapterRegistry(listOf(FakeBookingAdapter())))
 
         val watch = svc.createForTest(poiInput(poiId))
 
@@ -503,8 +497,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val svc =
             bookingValidatedService(
-                bookingProviders = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider)),
-                recgovConfigured = false,
+                bookingProviders = BookingAdapterRegistry(listOf(FakeBookingAdapter(credentialed = { false }))),
             )
 
         val error = assertFailsWith<AvailabilityWatchValidationException> { svc.createForTest(poiInput(poiId)) }
@@ -519,7 +512,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val svc =
             bookingValidatedService(
-                bookingProviders = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider)),
+                bookingProviders = BookingAdapterRegistry(listOf(FakeBookingAdapter())),
                 availabilityProvider = nonPollableProvider,
             )
 
@@ -543,7 +536,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val svc =
             bookingValidatedService(
-                bookingProviders = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider)),
+                bookingProviders = BookingAdapterRegistry(listOf(FakeBookingAdapter())),
                 availabilityProvider = nonPollableProvider,
             )
 
@@ -779,34 +772,5 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         ) {
             events += watch.id to AlertEvent.DEACTIVATED
         }
-    }
-
-    private object RecGovOnlyBookingProvider : BookingAdapter {
-        override val id: BookingProvider = BookingProvider.RECGOV
-
-        override fun targetFor(
-            parentRef: BookingProviderRef,
-            campsiteId: Long,
-            vendorSiteId: String,
-        ): BookingTarget? {
-            if (parentRef !is BookingProviderRef.RecGov) return null
-            return BookingTarget(
-                providerId = id,
-                parentRef = parentRef,
-                campsiteId = campsiteId,
-                vendorSiteId = vendorSiteId,
-            )
-        }
-
-        override fun can(
-            action: BookingAction,
-            target: BookingTarget,
-        ): Boolean =
-            action == BookingAction.ADD_TO_CART &&
-                target.providerId == BookingProvider.RECGOV &&
-                target.parentRef is BookingProviderRef.RecGov &&
-                target.vendorSiteId.isNotBlank()
-
-        override suspend fun addToCart(request: AddToCartRequest): AddToCartResult = AddToCartResult.Unsupported
     }
 }

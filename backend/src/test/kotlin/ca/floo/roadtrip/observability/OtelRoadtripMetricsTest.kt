@@ -169,4 +169,39 @@ class OtelRoadtripMetricsTest {
 
         assertEquals(mapOf("refreshed" to 1L, "unavailable" to 1L), points)
     }
+
+    @Test
+    fun `an ATC fire is counted and timed under one vendor-neutral name, labelled by provider`() {
+        // `grafana/dashboards/recgov-atc.json` reads these two as
+        // roadtrip_booking_atc_total{provider="recgov"} and the matching
+        // duration series. The provider label is what keeps that dashboard
+        // rec.gov's while the instrument serves every vendor.
+        metrics.atcFired(BookingProvider.RECGOV, AtcOutcome.HELD, durationMs = 4_200)
+
+        val collected = collect()
+        assertEquals(
+            mapOf("provider" to "recgov", "outcome" to "held", "error" to "none"),
+            collected.getValue("roadtrip.booking.atc").longSumAttributes(),
+        )
+        assertEquals(
+            4_200.0,
+            collected
+                .getValue("roadtrip.booking.atc.duration")
+                .histogramData.points
+                .single()
+                .sum,
+        )
+    }
+
+    @Test
+    fun `a fire that reached no provider is still counted, under an explicit label`() {
+        metrics.atcFired(provider = null, outcome = AtcOutcome.NO_TARGET)
+
+        assertEquals(
+            mapOf("provider" to "none", "outcome" to "no_target", "error" to "none"),
+            collect().getValue("roadtrip.booking.atc").longSumAttributes(),
+        )
+        // No timing means the fire never ran; 0ms would drag the percentiles.
+        assertTrue("roadtrip.booking.atc.duration" !in collect())
+    }
 }

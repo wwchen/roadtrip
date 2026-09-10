@@ -30,6 +30,12 @@ enum class BookingFailureCategory {
 sealed interface AddToCartResult {
     data class Completed(
         val providerId: BookingProvider,
+        /**
+         * Where the held site now is — the adapter's own cart, never a constant
+         * the layers above keep. It travels with the result because only the
+         * adapter that made the hold knows which vendor is holding it.
+         */
+        val cartUrl: String,
         val request: JsonObject,
         val response: JsonObject,
     ) : AddToCartResult

@@ -56,6 +56,9 @@ internal class AtcTriggerActionHandler(
             }
         if (pending.isEmpty()) {
             log.warn("ATC trigger unsupported for watch_id={} openings={}", watch.id, openings.size)
+            // No booking adapter answered, so the availability provider the
+            // opening was seen under is the closest thing to a provider there is.
+            val seenUnder = openings.firstOrNull()?.resolvedTarget
             reportResult(
                 watch = watch,
                 // No booking provider was reached, so the vendor the owner saw
@@ -67,7 +70,7 @@ internal class AtcTriggerActionHandler(
                 error = BookingActionCodes.UNSUPPORTED_TARGET,
                 detail = NO_TARGET_DETAIL,
             )
-            metrics.recgovAtcFired(AtcOutcome.NO_TARGET)
+            metrics.atcFired(seenUnder?.provider?.id, AtcOutcome.NO_TARGET)
             return false
         }
         if (pending.size > 1) {
@@ -105,7 +108,7 @@ internal class AtcTriggerActionHandler(
                     request = result.request,
                     response = result.response,
                 )
-                metrics.recgovAtcFired(AtcOutcome.HELD, durationMs = elapsedMsSince(startedAt))
+                metrics.atcFired(result.providerId, AtcOutcome.HELD, durationMs = elapsedMsSince(startedAt))
                 true
             }
             is AddToCartResult.Failed -> {
@@ -130,7 +133,7 @@ internal class AtcTriggerActionHandler(
                     error = result.error,
                     detail = result.detail,
                 )
-                metrics.recgovAtcFired(AtcOutcome.FAILED, result.error, elapsedMsSince(startedAt))
+                metrics.atcFired(result.providerId, AtcOutcome.FAILED, result.error, elapsedMsSince(startedAt))
                 false
             }
             AddToCartResult.Unsupported -> {
@@ -149,7 +152,7 @@ internal class AtcTriggerActionHandler(
                     error = BookingActionCodes.UNSUPPORTED_TARGET,
                     detail = UNSUPPORTED_DETAIL,
                 )
-                metrics.recgovAtcFired(AtcOutcome.UNSUPPORTED, durationMs = elapsedMsSince(startedAt))
+                metrics.atcFired(nextTarget.providerId, AtcOutcome.UNSUPPORTED, durationMs = elapsedMsSince(startedAt))
                 false
             }
             null -> {
@@ -164,7 +167,7 @@ internal class AtcTriggerActionHandler(
                     error = BookingActionCodes.ATC_EXCEPTION,
                     detail = ATC_EXCEPTION_DETAIL,
                 )
-                metrics.recgovAtcFired(AtcOutcome.EXCEPTION, durationMs = elapsedMsSince(startedAt))
+                metrics.atcFired(nextTarget.providerId, AtcOutcome.EXCEPTION, durationMs = elapsedMsSince(startedAt))
                 false
             }
         }

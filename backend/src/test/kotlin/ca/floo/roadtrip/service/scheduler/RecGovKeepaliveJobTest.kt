@@ -315,7 +315,8 @@ class RecGovKeepaliveJobTest {
             keepalives += outcome
         }
 
-        override fun recgovAtcFired(
+        override fun atcFired(
+            provider: BookingProvider?,
             outcome: AtcOutcome,
             error: String?,
             durationMs: Int?,
