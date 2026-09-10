@@ -111,6 +111,23 @@ class PoiDetailDtoTest {
         assertEquals("No toilets", labelOf(AmenityKey.TOILETS, present = false, detail = "vault"))
     }
 
+    // "No camp store" is not a fact any vendor states, so an absent amenity with
+    // no negative label says nothing and must not reach the wire as a chip.
+    @Test
+    fun `an absent amenity without a negative label stays off the wire`() {
+        assertEquals(
+            """[{"key":"water","label":"No water","present":false}]""",
+            encodeApiJson(
+                AmenityDto.fromAll(
+                    listOf(
+                        CampgroundAmenity(key = AmenityKey.CAMP_STORE, present = false),
+                        CampgroundAmenity(key = AmenityKey.WATER, present = false),
+                    ),
+                ),
+            ),
+        )
+    }
+
     @Test
     fun `a blank detail is dropped rather than sent blank`() {
         assertEquals(

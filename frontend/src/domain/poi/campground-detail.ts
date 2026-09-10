@@ -18,10 +18,10 @@ type Props = Record<string, unknown>;
  *
  * `flattenHydratedPoi` is open on purpose — most of a hydrated POI is still
  * whatever the vendor sent — but the fields on `CampgroundDetail` are
- * `PoiCategoryDetailSchema`'s own, typed and labelled server-side. This is the
- * single place that assertion is made; every reader below goes through it
- * rather than indexing the open bag, so a wire rename is a typecheck failure in
- * one file instead of a row that silently stops rendering.
+ * `PoiCategoryDetailSchema`'s own, typed and labelled server-side. Every reader
+ * of a campground bag field goes through this assertion rather than indexing the
+ * open bag, so a wire rename to one of them is a typecheck failure here instead
+ * of a row that silently stops rendering.
  */
 const typed = (p: Props): Partial<CampgroundDetail> => p as Partial<CampgroundDetail>;
 

@@ -103,9 +103,9 @@ export function PoiGlance({ heading = 'At a glance', tags, extra }: PoiGlancePro
       <PoiBlockHeading>{heading}</PoiBlockHeading>
       {tags.length > 0 ? (
         <ul className="rt-poi-tags">
-          {tags.map((tag) => (
+          {tags.map((tag, index) => (
             <li
-              key={tag.label}
+              key={`${tag.label}-${index}`}
               className={tag.absent ? 'rt-poi-tag rt-poi-tag--absent' : 'rt-poi-tag'}
             >
               {tag.label}

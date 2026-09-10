@@ -85,7 +85,7 @@ internal class CampgroundService(
                     statusDescription = campground.statusDescription,
                     kind = campground.kind,
                     parentName = campground.parentName,
-                    amenities = campground.amenities.map(AmenityDto::from),
+                    amenities = AmenityDto.fromAll(campground.amenities),
                     cellCoverage = campground.cellService.map(CarrierSignalDto::from),
                     activities = campground.metadata?.activities.orEmpty(),
                     rating = campground.metadata?.rating?.let(RatingDto::from),

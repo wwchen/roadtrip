@@ -265,7 +265,6 @@
   --rt-reserved:       var(--rt-c-grey-500);
   --rt-watching:       var(--rt-c-blue-500);
   --rt-paused:         var(--rt-c-grey-450);
-  --rt-rating:         var(--rt-c-amber-300);
 
   /* Cell-signal strength, per carrier — rec.gov's 0–4 reception scale,
      rendered as chips on the campground drawer card. NOT availability:

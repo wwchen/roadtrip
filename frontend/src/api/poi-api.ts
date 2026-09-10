@@ -86,7 +86,7 @@ export interface AmenityDto {
   detail?: string;
 }
 
-/** `CarrierSignalDto`. `average` is rec.gov's 0-4 scale; `label` is the carrier's name. */
+/** `CarrierSignalDto`. `average` is the vendor's own reception score; `label` is the carrier's name. */
 export interface CarrierSignalDto {
   carrier: string;
   label: string;

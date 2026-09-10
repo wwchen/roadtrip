@@ -145,8 +145,8 @@ describe('filtering', () => {
     ]);
   });
 
-  test('falls back to the wire value when a row carries no label', () => {
-    expect(typeOptions([site(1, { kind: 'tent' })])).toEqual([{ value: 'tent', label: 'tent' }]);
+  test('reads Other, never the wire value, when a row carries no label', () => {
+    expect(typeOptions([site(1, { kind: 'tent' })])).toEqual([{ value: 'tent', label: 'Other' }]);
   });
 });
 

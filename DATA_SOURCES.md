@@ -51,9 +51,10 @@ activities but no ratings or cell coverage.
 rating plus per-carrier coverage on rec.gov's 0–4 scale (0 none … 4 excellent)
 for Verizon/AT&T/T-Mobile/Sprint. No key; it is the endpoint the rec.gov SPA
 itself uses. One request at a time behind a configurable `--min-gap`, with 429
-backoff and `--resume` for partial backfills. `RecGovCampgroundsEtl` promotes
-`rating_reviews` (`[avg, count]`) and `cell_coverage` (`{carrier: [avg, count]}`)
-into `pois.properties`.
+backoff and `--resume` for partial backfills. `RecGovCampgroundsEtl` writes
+`campgrounds.metadata.rating` (`{average, count}`) and `campgrounds.cell_service`
+as a typed carrier list; the API serves them as `rating` and
+`cell_coverage: [{carrier, label, average, count}]`.
 
 **rec.gov campsites (federal)** — the same monthly availability endpoint used
 at request time, walked once per facility for the *catalog* half of the payload

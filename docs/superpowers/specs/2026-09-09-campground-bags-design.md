@@ -32,9 +32,9 @@ enum class AmenityKey(val wire: String, val label: String, val negativeLabel: St
     ELECTRIC_HOOKUPS("electric_hookups", "Electric hookups", "No electric hookups"),
     FIRES_ALLOWED("fires_allowed", "Fires allowed"), PETS_ALLOWED("pets_allowed", "Pets allowed"),
     SEWER_HOOKUPS("sewer_hookups", "Sewer hookups", "No sewer hookups"),
-    SHOWERS("showers", "Showers", "No showers"), TOILETS("toilets", "Toilets"), TRASH("trash", "Trash"),
+    SHOWERS("showers", "Showers", "No showers"), TOILETS("toilets", "Toilets", "No toilets"), TRASH("trash", "Trash"),
     WATER("water", "Water", "No water"), WATER_HOOKUPS("water_hookups", "Water hookups", "No water hookups"),
-    WIFI("wifi", "Wi-Fi"), OTHER("other", "");
+    WIFI("wifi", "Wi-Fi"), OTHER("other", "Other");
 }
 data class CampgroundAmenity(val key: AmenityKey, val present: Boolean = true, val detail: String? = null)
 // detail: TOILETS carries Campflare's toilet_kind ("vault"); OTHER carries the vendor label verbatim.
@@ -67,7 +67,7 @@ Schema: `ADD COLUMN parent_name TEXT`. Canonicalization only, so strict decode n
 
 ### API (`PoiCategoryDetailSchema`)
 
-`amenities: List<AmenityDto(key, label, present, detail)>`, `cell_coverage: List<CarrierSignalDto(carrier, label, average, count)>`, `activities: List<String>`, `rating: RatingDto(average, count)?`, `price: PriceDto?`, `schedule: ScheduleDto?`, `alerts: List<AlertDto>`, `parent_name: String?`. `metadata` leaves the wire (`last_verified` stays). `connections`, `upstream`, `links`, `management`, `contact`, `address` unchanged. Labels ride on the wire because the audit's rule is that vendor vocabularies live in one backend registry; the frontend renders `label`, `negativeLabel` is applied server-side (`label` is already "No showers" when `present` is false).
+`amenities: List<AmenityDto(key, label, present, detail)>`, `cell_coverage: List<CarrierSignalDto(carrier, label, average, count)>`, `activities: List<String>`, `rating: RatingDto(average, count)?`, `price: PriceDto?`, `schedule: ScheduleDto?`, `alerts: List<AlertDto>`, `parent_name: String?`. `metadata` leaves the wire (`last_verified` stays). `connections`, `upstream`, `links`, `management`, `contact`, `address` unchanged. Labels ride on the wire because the audit's rule is that vendor vocabularies live in one backend registry; the frontend renders `label`, `negativeLabel` is applied server-side (`label` is already "No showers" when `present` is false). An absent amenity whose key has no negative label states no fact, so it is not served at all.
 
 ### Frontend
 

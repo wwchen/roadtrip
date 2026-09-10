@@ -36,7 +36,6 @@ const FALLBACKS: Readonly<Record<string, string>> = {
   '--rt-first-come': '#f1a04a',
   '--rt-paused': '#8a8f96',
   '--rt-error': '#f56565',
-  '--rt-rating': '#f5a623',
   '--rt-layer-supercharger': '#a87826',
   '--rt-layer-supercharger-pin': '#a87826',
   '--rt-layer-cg': '#2a8b8a',

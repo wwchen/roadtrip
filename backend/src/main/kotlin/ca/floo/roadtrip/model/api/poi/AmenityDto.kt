@@ -19,6 +19,16 @@ data class AmenityDto(
     companion object {
         private const val TOILETS_LABEL_FORMAT = "%s toilets"
 
+        /**
+         * The served list. An absent amenity whose key has no negative label
+         * carries no fact — "No camp store" is not something a vendor states —
+         * so it is dropped rather than rendered as a chip.
+         */
+        fun fromAll(amenities: List<CampgroundAmenity>): List<AmenityDto> =
+            amenities
+                .filterNot { !it.present && it.key.negativeLabel == null }
+                .map(::from)
+
         fun from(amenity: CampgroundAmenity): AmenityDto {
             val detail = amenity.detail?.trim()?.takeIf { it.isNotEmpty() }
             return AmenityDto(
