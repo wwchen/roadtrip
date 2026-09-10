@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.domain.CampgroundSchedule
 import ca.floo.roadtrip.model.domain.Carrier
 import ca.floo.roadtrip.model.domain.CarrierSignal
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -22,6 +23,9 @@ import kotlinx.serialization.json.doubleOrNull
  */
 object CampflareCampgroundBags {
     private const val TOILET_KIND_KEY = "toilet_kind"
+    private const val CARRIER_AVERAGE_KEY = "avg"
+    private const val CARRIER_COUNT_KEY = "count"
+    private const val KEY_WORD_SEPARATOR = '_'
     private const val PRICE_MINIMUM_KEY = "minimum"
     private const val PRICE_MAXIMUM_KEY = "maximum"
     private const val PRICE_CURRENCY_KEY = "currency"
@@ -45,24 +49,26 @@ object CampflareCampgroundBags {
             if (key == TOILET_KIND_KEY || value is JsonNull) continue
             val amenityKey = AmenityKey.fromWire(key)
             entries +=
-                if (amenityKey == null) {
-                    CampgroundAmenity(AmenityKey.OTHER, present = true, detail = key)
-                } else {
-                    CampgroundAmenity(
-                        amenityKey,
-                        present = (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull ?: true,
-                    )
-                }
+                CampgroundAmenity(
+                    amenityKey ?: AmenityKey.OTHER,
+                    present = (value as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull ?: true,
+                    detail = if (amenityKey == null) humanizeKey(key) else (value as? JsonPrimitive)?.takeIf { it.isString }?.content,
+                )
         }
         return withToiletKind(entries, raw.stringField(TOILET_KIND_KEY))
     }
 
-    /** Campflare rates a carrier with a bare number and no sample count. */
+    /** Campflare rates a carrier with a bare number, or with an `{avg, count}` object. */
     fun carriers(raw: JsonObject): List<CarrierSignal> =
         raw.mapNotNull { (key, value) ->
             val carrier = Carrier.fromWire(key) ?: return@mapNotNull null
-            val average = (value as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null
-            CarrierSignal(carrier = carrier, average = average, count = null)
+            val average = value.numberField() ?: (value as? JsonObject)?.get(CARRIER_AVERAGE_KEY)?.numberField()
+            if (average == null) return@mapNotNull null
+            CarrierSignal(
+                carrier = carrier,
+                average = average,
+                count = (value as? JsonObject)?.get(CARRIER_COUNT_KEY)?.numberField()?.toInt(),
+            )
         }
 
     fun price(raw: JsonObject?): CampgroundPrice? {
@@ -105,6 +111,15 @@ object CampflareCampgroundBags {
         val parsed = CampgroundMetadata(lastUpdated = raw.stringField(LAST_UPDATED_KEY))
         return parsed.takeIf { it != CampgroundMetadata() }
     }
+
+    /** A key with no `AmenityKey` is shown verbatim, so `camp_kitchen` has to read "Camp kitchen". */
+    private fun humanizeKey(key: String): String =
+        key
+            .replace(KEY_WORD_SEPARATOR, ' ')
+            .replaceFirstChar { it.uppercaseChar() }
+
+    /** A quoted number is upstream noise, not a rating, and V57 drops it too. */
+    private fun JsonElement.numberField(): Double? = (this as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
 
     /** `toilet_kind` is a detail of the toilets amenity, and stands in for it when the flag is absent. */
     private fun withToiletKind(

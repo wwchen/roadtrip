@@ -4,12 +4,17 @@ import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.model.api.BulkAvailabilityRequestDto
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
+import ca.floo.roadtrip.route.common.BAD_REQUEST_ERROR
 import ca.floo.roadtrip.route.common.RouteBodyResult
+import ca.floo.roadtrip.route.common.SiteTypeQuery
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.mapCatching
+import ca.floo.roadtrip.route.common.parseSiteTypes
 import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.siteTypeWireList
+import ca.floo.roadtrip.route.common.unknownSiteTypeDetail
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.BulkAvailabilityRequest

@@ -2,17 +2,21 @@ package ca.floo.roadtrip.route.api.pois
 
 import ca.floo.roadtrip.model.api.AvailabilityErrorDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
-import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.domain.auth.userIdOrNull
+import ca.floo.roadtrip.route.common.BAD_REQUEST_ERROR
+import ca.floo.roadtrip.route.common.SiteTypeQuery
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalDateQuery
+import ca.floo.roadtrip.route.common.parseSiteTypes
 import ca.floo.roadtrip.route.common.principal
 import ca.floo.roadtrip.route.common.queryValues
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.siteTypeWireList
+import ca.floo.roadtrip.route.common.unknownSiteTypeDetail
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
@@ -31,13 +35,6 @@ import org.slf4j.LoggerFactory
 private val log = LoggerFactory.getLogger("CampsiteRoutes")
 
 private const val IP_RATE_LIMIT_PER_MINUTE = 30
-
-internal const val BAD_REQUEST_ERROR = "bad_request"
-
-/** Built from the enum so the docs cannot drift from what the parser accepts. */
-internal val siteTypeWireList = CampsiteKind.entries.joinToString(", ") { it.wire }
-
-internal fun unknownSiteTypeDetail(value: String): String = "unknown site_type '$value'; accepted values: $siteTypeWireList"
 
 private fun ApplicationCall.siteTypeQuery(): SiteTypeQuery = parseSiteTypes(queryValues("site_type", "siteType"))
 

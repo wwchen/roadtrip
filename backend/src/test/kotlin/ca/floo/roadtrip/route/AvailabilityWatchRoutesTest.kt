@@ -41,6 +41,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -48,6 +49,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.application.install
 import io.ktor.server.routing.Route
+import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
@@ -107,6 +109,19 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
     private fun createBody(poiId: Long): String =
         """{"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-06", "cadence_sec": 60, "trigger_kinds": ["atc"]}"""
+
+    private suspend fun ApplicationTestBuilder.createWatch(
+        poiId: Long,
+        filters: String,
+    ): HttpResponse =
+        client.post(WATCHES_PATH) {
+            asUser(USER_TOKEN)
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"poi_id": $poiId, "campsite_filters": $filters, "start_date": "2026-07-04", """ +
+                    """"end_date": "2026-07-06", "cadence_sec": 60, "trigger_kinds": ["atc"]}""",
+            )
+        }
 
     @BeforeEach
     fun cleanup() {
@@ -311,6 +326,84 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals(false, obj.containsKey("target_dates"))
             assertEquals(false, obj.containsKey("min_nights"))
             assertEquals("active", obj["status"]!!.jsonPrimitive.content)
+        }
+
+    /**
+     * A stored `site_type` outside the wire vocabulary silently matches nothing
+     * when the watch runs, so it is refused at the door instead.
+     */
+    @Test
+    fun `POST validates the site_type filter against the wire vocabulary`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication {
+                    availabilityWatchRoutes(
+                        ctx,
+                        watchService(),
+                    )
+                }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "p-site-type", name = "Site Type")
+
+            for (filters in listOf("""{"site_type": "TENT ONLY NONELECTRIC"}""", """{"site_type": ["tent", 7]}""")) {
+                val resp = createWatch(poiId, filters)
+                assertEquals(HttpStatusCode.BadRequest, resp.status)
+                val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+                assertEquals("bad_request", obj["error"]!!.jsonPrimitive.content)
+                assertEquals(true, obj["detail"]!!.jsonPrimitive.content.startsWith("unknown site_type"))
+                assertEquals(true, "walk_in" in obj["detail"]!!.jsonPrimitive.content)
+            }
+
+            assertEquals(HttpStatusCode.Created, createWatch(poiId, """{"site_type": ["tent", "walk_in"]}""").status)
+            assertEquals(HttpStatusCode.Created, createWatch(poiId, """{"site_type": "tent"}""").status)
+            assertEquals(HttpStatusCode.Created, createWatch(poiId, """{"loop": "A"}""").status)
+        }
+
+    @Test
+    fun `POST modify validates the site_type filter against the wire vocabulary`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication {
+                    availabilityWatchRoutes(
+                        ctx,
+                        watchService(),
+                    )
+                }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "p-site-type-modify", name = "Site Type Modify")
+            val id =
+                Json
+                    .parseToJsonElement(createWatch(poiId, """{"loop": "A"}""").bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            val refused =
+                client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"campsite_filters": {"site_type": {"kind": "tent"}}}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, refused.status)
+            assertEquals(
+                "bad_request",
+                Json
+                    .parseToJsonElement(refused.bodyAsText())
+                    .jsonObject["error"]!!
+                    .jsonPrimitive.content,
+            )
+
+            val accepted =
+                client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"campsite_filters": {"site_type": ["walk_in"]}}""")
+                }
+            assertEquals(HttpStatusCode.OK, accepted.status)
         }
 
     @Test

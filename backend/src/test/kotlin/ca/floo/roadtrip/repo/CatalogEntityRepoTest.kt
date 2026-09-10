@@ -927,6 +927,46 @@ class CatalogEntityRepoTest : SharedDbTest() {
         )
     }
 
+    /** A row this repo wrote is already a wire value, so a replay of V58 must change nothing. */
+    @Test
+    fun `the kind migration is a no-op on rows this repo wrote`() {
+        seedCampsites("cg-kind-noop")
+        CampsiteRepo(ctx).upsertCampsiteBatch(
+            CampsiteKind.entries.map { kind ->
+                CampsiteUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = "cs-noop-${kind.wire}"),
+                    parentDataProviderRef = DataProviderRef.RecGov(id = "cg-kind-noop"),
+                    name = kind.label,
+                    kind = kind,
+                    kindListed = kind.label,
+                )
+            },
+        )
+        val before = campsiteKindColumnsByRef()
+
+        repeat(2) { migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute) }
+
+        assertEquals(before, campsiteKindColumnsByRef())
+    }
+
+    /** The CHECK the migration adds is what keeps the strict decode on the read path honest. */
+    @Test
+    fun `the kind check refuses a vendor string after the migration`() {
+        seedCampsites("cg-kind-check")
+        migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute)
+
+        val failure =
+            assertFailsWith<Exception> {
+                ctx.seedCampsite(
+                    campgroundId = campgroundId("cg-kind-check"),
+                    vendorId = "cs-kind-refused",
+                    kind = "TENT ONLY NONELECTRIC",
+                )
+            }
+
+        assertEquals(true, failure.causeMessages().any { "campsites_kind_wire_check" in it })
+    }
+
     @Test
     fun `the kind migration rewrites stored watch site_type filters`() {
         val ownerUserId = seedWatchOwner()
@@ -946,6 +986,41 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 """{"loop": "A", "site_type": "boat_in"}""",
                 """{"site_type": ["backcountry", "other"]}""",
                 """{"loop": "A"}""",
+            ),
+            ctx
+                .fetch("SELECT campsite_filters::text AS filters FROM availability_watch ORDER BY id")
+                .map { it.get("filters", String::class.java) },
+        )
+    }
+
+    /**
+     * The same string means different kinds to different vendors, so a watch's own
+     * targets pick the table: `Group Walk-In Campsite` is a group site to
+     * ReserveCalifornia, and `Tent Site` is nothing at all to Aspira.
+     */
+    @Test
+    fun `the kind migration reads a watch filter through its targets' provider`() {
+        val ownerUserId = seedWatchOwner()
+        val reserveCalifornia = ctx.seedCatalogPoi("rc-watch", "RC Park", -120.0, 38.0, source = "reservecalifornia")
+        val aspira = ctx.seedCatalogPoi("aspira-watch", "Aspira Park", -123.0, 49.0, source = "aspira")
+        val recGovCampsiteId =
+            ctx.seedCampsite(
+                campgroundId = ctx.seedCampground(source = "recgov", sourceId = "recgov-watch-cg"),
+                vendorId = "cs-recgov-watch",
+            )
+        watchTarget(insertWatchFilters("""{"site_type": ["Group Walk-In Campsite"]}""", ownerUserId), poiId = reserveCalifornia.poiId)
+        watchTarget(insertWatchFilters("""{"site_type": ["Tent Site"]}""", ownerUserId), poiId = aspira.poiId)
+        watchTarget(insertWatchFilters("""{"site_type": ["TENT ONLY NONELECTRIC"]}""", ownerUserId), campsiteId = recGovCampsiteId)
+        insertWatchFilters("""{"site_type": ["Tent Only - Walk-In"]}""", ownerUserId)
+
+        migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute)
+
+        assertEquals(
+            listOf(
+                """{"site_type": ["group"]}""",
+                """{"site_type": ["other"]}""",
+                """{"site_type": ["tent"]}""",
+                """{"site_type": ["walk_in"]}""",
             ),
             ctx
                 .fetch("SELECT campsite_filters::text AS filters FROM availability_watch ORDER BY id")
@@ -1109,13 +1184,23 @@ class CatalogEntityRepoTest : SharedDbTest() {
         seedLegacyCampground(
             "campflare",
             "legacy-campflare-null-toilets",
-            "amenities" to """{"toilets":null,"toilet_kind":"vault"}""",
+            "amenities" to """{"toilets":null,"toilet_kind":"vault","showers":true}""",
         )
         seedLegacyCampground(
             "reservecalifornia",
             "legacy-rc",
             "amenities" to """{"Restrooms":true,"Surfing":true}""",
         )
+        seedLegacyCampground(
+            "campflare",
+            "legacy-amenity-values",
+            "amenities" to """{"camp_kitchen":true,"boat_ramp":false,"wifi":"guest network"}""",
+        )
+        seedLegacyCampground("recgov", "legacy-activity-not-string", "metadata" to """{"activities":["Camping",5]}""")
+        seedLegacyCampground("recgov", "legacy-alert-title-not-string", "alerts" to """[{"title":5,"body":"No fires."}]""")
+        seedLegacyCampground("recgov", "legacy-alert-ends-on-not-string", "alerts" to """[{"body":"No fires.","ends_on":20260930}]""")
+        seedLegacyCampground("recgov", "legacy-alert-url-not-string", "alerts" to """[{"body":"No fires.","source_url":false}]""")
+        seedLegacyCampground("recgov", "legacy-alert-body-not-string", "alerts" to """[{"title":"Fire ban","body":5}]""")
         seedLegacyCampground(
             "recgov",
             "legacy-recgov",
@@ -1168,10 +1253,24 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals(CampgroundMetadata(lastUpdated = "2026-07-01T00:00:00Z"), campflare.metadata)
         assertNull(campflare.parentName)
 
+        // Order, not a set: the toilet_kind stand-in is prepended, so toilets reads first.
         val nullToilets = checkNotNull(repo.findById(campgroundId("legacy-campflare-null-toilets")))
         assertEquals(
-            listOf(CampgroundAmenity(AmenityKey.TOILETS, present = true, detail = "vault")),
+            listOf(
+                CampgroundAmenity(AmenityKey.TOILETS, present = true, detail = "vault"),
+                CampgroundAmenity(AmenityKey.SHOWERS, present = true),
+            ),
             nullToilets.amenities,
+        )
+
+        val amenityValues = checkNotNull(repo.findById(campgroundId("legacy-amenity-values")))
+        assertEquals(
+            listOf(
+                CampgroundAmenity(AmenityKey.OTHER, present = false, detail = "Boat ramp"),
+                CampgroundAmenity(AmenityKey.OTHER, present = true, detail = "Camp kitchen"),
+                CampgroundAmenity(AmenityKey.WIFI, present = true, detail = "guest network"),
+            ),
+            amenityValues.amenities.sortedBy { it.detail },
         )
 
         val reserveCalifornia = checkNotNull(repo.findById(campgroundId("legacy-rc")))
@@ -1205,6 +1304,24 @@ class CatalogEntityRepoTest : SharedDbTest() {
             CampgroundSchedule(checkOut = "11:00"),
             checkNotNull(repo.findById(campgroundId("legacy-schedule-not-strings"))).defaultCampsiteSchedule,
         )
+
+        assertEquals(
+            CampgroundMetadata(activities = listOf("Camping")),
+            checkNotNull(repo.findById(campgroundId("legacy-activity-not-string"))).metadata,
+        )
+        assertEquals(
+            listOf(CampgroundAlert(body = "No fires.")),
+            checkNotNull(repo.findById(campgroundId("legacy-alert-title-not-string"))).alerts,
+        )
+        assertEquals(
+            listOf(CampgroundAlert(body = "No fires.")),
+            checkNotNull(repo.findById(campgroundId("legacy-alert-ends-on-not-string"))).alerts,
+        )
+        assertEquals(
+            listOf(CampgroundAlert(body = "No fires.")),
+            checkNotNull(repo.findById(campgroundId("legacy-alert-url-not-string"))).alerts,
+        )
+        assertEquals(emptyList(), checkNotNull(repo.findById(campgroundId("legacy-alert-body-not-string"))).alerts)
     }
 
     /** One bare campground row per vendor, written in the shapes that predate the typed columns. */
@@ -1273,6 +1390,16 @@ class CatalogEntityRepoTest : SharedDbTest() {
             .fetch("SELECT data_provider_ref, kind FROM campsites")
             .associate { it.get("data_provider_ref", String::class.java) to it.get("kind", String::class.java) }
 
+    private fun campsiteKindColumnsByRef(): Map<String, String> =
+        ctx
+            .fetch("SELECT data_provider_ref, kind, kind_listed FROM campsites")
+            .associate {
+                it.get("data_provider_ref", String::class.java) to
+                    "${it.get("kind", String::class.java)}|${it.get("kind_listed", String::class.java)}"
+            }
+
+    private fun Throwable.causeMessages(): List<String> = generateSequence(this) { it.cause }.mapNotNull { it.message }.toList()
+
     private fun seedWatchOwner(): Long =
         UserRepo(ctx)
             .create(email = "kind-wire-${System.nanoTime()}@example.com", displayName = null, isEmailVerified = true)
@@ -1281,13 +1408,28 @@ class CatalogEntityRepoTest : SharedDbTest() {
     private fun insertWatchFilters(
         filters: String,
         ownerUserId: Long,
+    ): Long =
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO availability_watch (campsite_filters, start_date, end_date, trigger_kinds, owner_user_id)
+                VALUES (?::jsonb, DATE '2026-07-04', DATE '2026-07-06', ARRAY['slack_notify'], ?)
+                RETURNING id
+                """.trimIndent(),
+                filters,
+                ownerUserId,
+            )!!
+            .get("id", Long::class.java)
+
+    private fun watchTarget(
+        watchId: Long,
+        poiId: Long? = null,
+        campsiteId: Long? = null,
     ) = ctx.execute(
-        """
-        INSERT INTO availability_watch (campsite_filters, start_date, end_date, trigger_kinds, owner_user_id)
-        VALUES (?::jsonb, DATE '2026-07-04', DATE '2026-07-06', ARRAY['slack_notify'], ?)
-        """.trimIndent(),
-        filters,
-        ownerUserId,
+        "INSERT INTO availability_watch_target (watch_id, poi_id, campsite_id) VALUES (?, ?, ?)",
+        watchId,
+        poiId,
+        campsiteId,
     )
 
     private fun campsiteId(dataProviderRef: String): Long =

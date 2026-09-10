@@ -1,10 +1,107 @@
 -- campsites.kind moves from each vendor's own type string to the CampsiteKind
--- wire vocabulary. The CASE expressions below mirror
--- service/etl/framework/CampsiteKinds.kt one row at a time; anything the table
--- cannot classify becomes 'other' and the next import reclassifies it.
+-- wire vocabulary. campsite_wire_kind() mirrors
+-- service/etl/framework/CampsiteKinds.kt one vendor at a time; anything it
+-- cannot classify becomes 'other' and the next import reclassifies it. The
+-- function is dropped at the end of this script.
 --
 -- Every UPDATE skips rows whose kind is already a wire value, so the script is
 -- idempotent and a row the typed repo just wrote is left alone.
+
+-- One expression for both uses below, so they cannot drift; the last arm is the
+-- vendor-agnostic union, for a value whose provider is unknown.
+CREATE OR REPLACE FUNCTION campsite_wire_kind(provider text, raw text) RETURNS text
+LANGUAGE sql IMMUTABLE AS $fn$
+  SELECT CASE
+    WHEN raw IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
+                 'equestrian', 'backcountry', 'day_use', 'other') THEN raw
+    WHEN provider = 'recgov' THEN CASE
+        WHEN upper(btrim(raw)) ~ '^GROUP( |$)' THEN 'group'
+        WHEN upper(btrim(raw)) ~ '^TENT ONLY( |$)' THEN 'tent'
+        WHEN upper(btrim(raw)) ~ '^RV( |$)' THEN 'rv'
+        WHEN upper(btrim(raw)) ~ '^(CABIN|YURT|LOOKOUT|OVERNIGHT SHELTER|SHELTER)( |$)' THEN 'cabin'
+        WHEN upper(btrim(raw)) ~ '^(WALK TO|HIKE TO)( |$)' THEN 'walk_in'
+        WHEN upper(btrim(raw)) ~ '^(BOAT IN|MOORING|ANCHORAGE)( |$)' THEN 'boat_in'
+        WHEN upper(btrim(raw)) ~ '^EQUESTRIAN( |$)' THEN 'equestrian'
+        WHEN upper(btrim(raw)) ~ '^STANDARD( |$)' THEN 'standard'
+        WHEN upper(btrim(raw)) ~ '^ZONE( |$)' THEN 'backcountry'
+        WHEN upper(btrim(raw)) ~ '^(PICNIC|PARKING|DAY USE)( |$)' THEN 'day_use'
+        ELSE 'other'
+      END
+    WHEN provider = 'campflare' THEN CASE btrim(raw)
+        WHEN 'standard' THEN 'standard'
+        WHEN 'tent-only' THEN 'tent'
+        WHEN 'rv' THEN 'rv'
+        WHEN 'cabin' THEN 'cabin'
+        WHEN 'group' THEN 'group'
+        WHEN 'walk-to' THEN 'walk_in'
+        WHEN 'water-access' THEN 'boat_in'
+        WHEN 'equestrian' THEN 'equestrian'
+        ELSE 'other'
+      END
+    WHEN provider IN ('aspira', 'bcparks-strapi') THEN CASE
+        WHEN btrim(raw) IN ('Campsite', 'Campsite/Seasonal', 'Overflow') THEN 'standard'
+        WHEN btrim(raw) IN ('Cabin', 'Rustic Cabin', 'Deluxe Cabin', 'Backcountry Cabin', 'Yurt',
+                            'oTENTik', 'Ôasis', 'MicrOcube', 'Teepee', 'Prospector Tent',
+                            'Platform Tent', 'Adirondack', 'Equipped Camping', 'Vacation House') THEN 'cabin'
+        WHEN btrim(raw) = 'Equestrian' THEN 'equestrian'
+        WHEN btrim(raw) IN ('Marina', 'Mooring Buoy', 'Marine Trail', 'Annual Marina') THEN 'boat_in'
+        WHEN btrim(raw) IN ('Daily Fishing', 'Guided Event', 'Hiking Trip', 'Ferry') THEN 'day_use'
+        WHEN btrim(raw) LIKE 'Backcountry%' OR btrim(raw) LIKE 'Wilderness%' THEN 'backcountry'
+        WHEN btrim(raw) LIKE 'Group%' THEN 'group'
+        WHEN btrim(raw) LIKE 'Day Use%' OR btrim(raw) LIKE 'Conference%' OR btrim(raw) LIKE 'Retreat%' THEN 'day_use'
+        ELSE 'other'
+      END
+    WHEN provider = 'reservecalifornia' THEN CASE
+        WHEN lower(btrim(raw)) LIKE '%day use%' OR lower(btrim(raw)) LIKE '%dailyuse%' THEN 'day_use'
+        WHEN lower(btrim(raw)) LIKE '%group%' THEN 'group'
+        WHEN lower(btrim(raw)) LIKE '%equestrian%' OR lower(btrim(raw)) LIKE '%equestrain%' THEN 'equestrian'
+        WHEN lower(btrim(raw)) LIKE '%cabin%' OR lower(btrim(raw)) LIKE '%cottage%'
+             OR lower(btrim(raw)) LIKE '%yurt%' THEN 'cabin'
+        WHEN lower(btrim(raw)) LIKE '%boat in%' OR lower(btrim(raw)) LIKE '%floating camp%' THEN 'boat_in'
+        WHEN lower(btrim(raw)) LIKE '%hike%' OR lower(btrim(raw)) LIKE '%bike%'
+             OR lower(btrim(raw)) LIKE '%walk-in%' THEN 'walk_in'
+        WHEN lower(btrim(raw)) LIKE '%hook up%' THEN 'rv'
+        WHEN lower(btrim(raw)) LIKE '%tent%' THEN 'tent'
+        WHEN lower(btrim(raw)) LIKE '%campsite%' THEN 'standard'
+        ELSE 'other'
+      END
+    WHEN provider = 'reserveamerica' THEN 'other'
+    ELSE CASE
+        WHEN lower(btrim(raw)) LIKE '%day use%' OR lower(btrim(raw)) LIKE '%dailyuse%' THEN 'day_use'
+        WHEN lower(btrim(raw)) LIKE '%group%' THEN 'group'
+        WHEN lower(btrim(raw)) LIKE '%walk-in%' THEN 'walk_in'
+        WHEN upper(btrim(raw)) ~ '^TENT ONLY( |$)' THEN 'tent'
+        WHEN upper(btrim(raw)) ~ '^RV( |$)' THEN 'rv'
+        WHEN upper(btrim(raw)) ~ '^(CABIN|YURT|LOOKOUT|OVERNIGHT SHELTER|SHELTER)( |$)' THEN 'cabin'
+        WHEN upper(btrim(raw)) ~ '^(WALK TO|HIKE TO)( |$)' THEN 'walk_in'
+        WHEN upper(btrim(raw)) ~ '^(BOAT IN|MOORING|ANCHORAGE)( |$)' THEN 'boat_in'
+        WHEN upper(btrim(raw)) ~ '^EQUESTRIAN( |$)' THEN 'equestrian'
+        WHEN upper(btrim(raw)) ~ '^STANDARD( |$)' THEN 'standard'
+        WHEN upper(btrim(raw)) ~ '^ZONE( |$)' THEN 'backcountry'
+        WHEN upper(btrim(raw)) ~ '^(PICNIC|PARKING|DAY USE)( |$)' THEN 'day_use'
+        WHEN btrim(raw) = 'tent-only' THEN 'tent'
+        WHEN btrim(raw) = 'walk-to' THEN 'walk_in'
+        WHEN btrim(raw) = 'water-access' THEN 'boat_in'
+        WHEN btrim(raw) IN ('Campsite', 'Campsite/Seasonal', 'Overflow') THEN 'standard'
+        WHEN btrim(raw) IN ('Cabin', 'Rustic Cabin', 'Deluxe Cabin', 'Backcountry Cabin', 'Yurt',
+                            'oTENTik', 'Ôasis', 'MicrOcube', 'Teepee', 'Prospector Tent',
+                            'Platform Tent', 'Adirondack', 'Equipped Camping', 'Vacation House') THEN 'cabin'
+        WHEN btrim(raw) IN ('Marina', 'Mooring Buoy', 'Marine Trail', 'Annual Marina') THEN 'boat_in'
+        WHEN btrim(raw) IN ('Daily Fishing', 'Guided Event', 'Hiking Trip', 'Ferry') THEN 'day_use'
+        WHEN btrim(raw) LIKE 'Backcountry%' OR btrim(raw) LIKE 'Wilderness%' THEN 'backcountry'
+        WHEN btrim(raw) LIKE 'Conference%' OR btrim(raw) LIKE 'Retreat%' THEN 'day_use'
+        WHEN lower(btrim(raw)) LIKE '%equestrian%' OR lower(btrim(raw)) LIKE '%equestrain%' THEN 'equestrian'
+        WHEN lower(btrim(raw)) LIKE '%cabin%' OR lower(btrim(raw)) LIKE '%cottage%'
+             OR lower(btrim(raw)) LIKE '%yurt%' THEN 'cabin'
+        WHEN lower(btrim(raw)) LIKE '%boat in%' OR lower(btrim(raw)) LIKE '%floating camp%' THEN 'boat_in'
+        WHEN lower(btrim(raw)) LIKE '%hike%' OR lower(btrim(raw)) LIKE '%bike%' THEN 'walk_in'
+        WHEN lower(btrim(raw)) LIKE '%hook up%' THEN 'rv'
+        WHEN lower(btrim(raw)) LIKE '%tent%' THEN 'tent'
+        WHEN lower(btrim(raw)) LIKE '%campsite%' THEN 'standard'
+        ELSE 'other'
+      END
+  END
+$fn$;
 
 -- A row no later import touches would lose the vendor's word entirely, so keep it
 -- in kind_listed before the rewrite.
@@ -13,97 +110,45 @@ WHERE kind_listed IS NULL
   AND kind NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
                    'equestrian', 'backcountry', 'day_use', 'other');
 
-UPDATE campsites SET kind = CASE
-    WHEN upper(btrim(kind)) ~ '^GROUP( |$)' THEN 'group'
-    WHEN upper(btrim(kind)) ~ '^TENT ONLY( |$)' THEN 'tent'
-    WHEN upper(btrim(kind)) ~ '^RV( |$)' THEN 'rv'
-    WHEN upper(btrim(kind)) ~ '^(CABIN|YURT|LOOKOUT|OVERNIGHT SHELTER|SHELTER)( |$)' THEN 'cabin'
-    WHEN upper(btrim(kind)) ~ '^(WALK TO|HIKE TO)( |$)' THEN 'walk_in'
-    WHEN upper(btrim(kind)) ~ '^(BOAT IN|MOORING|ANCHORAGE)( |$)' THEN 'boat_in'
-    WHEN upper(btrim(kind)) ~ '^EQUESTRIAN( |$)' THEN 'equestrian'
-    WHEN upper(btrim(kind)) ~ '^STANDARD( |$)' THEN 'standard'
-    WHEN upper(btrim(kind)) ~ '^ZONE( |$)' THEN 'backcountry'
-    WHEN upper(btrim(kind)) ~ '^(PICNIC|PARKING|DAY USE)( |$)' THEN 'day_use'
-    ELSE 'other'
-  END
-WHERE data_provider = 'recgov'
-  AND kind NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
-                   'equestrian', 'backcountry', 'day_use', 'other');
-
-UPDATE campsites SET kind = CASE btrim(kind)
-    WHEN 'standard' THEN 'standard'
-    WHEN 'tent-only' THEN 'tent'
-    WHEN 'rv' THEN 'rv'
-    WHEN 'cabin' THEN 'cabin'
-    WHEN 'group' THEN 'group'
-    WHEN 'walk-to' THEN 'walk_in'
-    WHEN 'water-access' THEN 'boat_in'
-    WHEN 'equestrian' THEN 'equestrian'
-    ELSE 'other'
-  END
-WHERE data_provider = 'campflare'
-  AND kind NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
-                   'equestrian', 'backcountry', 'day_use', 'other');
-
--- Aspira dictionary names, exact names before prefixes; 'bcparks-strapi' is the
--- legacy provider value some deployed Aspira campsite rows still carry.
-UPDATE campsites SET kind = CASE
-    WHEN btrim(kind) IN ('Campsite', 'Campsite/Seasonal', 'Overflow') THEN 'standard'
-    WHEN btrim(kind) IN ('Cabin', 'Rustic Cabin', 'Deluxe Cabin', 'Backcountry Cabin', 'Yurt',
-                         'oTENTik', 'Ôasis', 'MicrOcube', 'Teepee', 'Prospector Tent',
-                         'Platform Tent', 'Adirondack', 'Equipped Camping', 'Vacation House') THEN 'cabin'
-    WHEN btrim(kind) = 'Equestrian' THEN 'equestrian'
-    WHEN btrim(kind) IN ('Marina', 'Mooring Buoy', 'Marine Trail', 'Annual Marina') THEN 'boat_in'
-    WHEN btrim(kind) IN ('Daily Fishing', 'Guided Event', 'Hiking Trip', 'Ferry') THEN 'day_use'
-    WHEN btrim(kind) LIKE 'Backcountry%' OR btrim(kind) LIKE 'Wilderness%' THEN 'backcountry'
-    WHEN btrim(kind) LIKE 'Group%' THEN 'group'
-    WHEN btrim(kind) LIKE 'Day Use%' OR btrim(kind) LIKE 'Conference%' OR btrim(kind) LIKE 'Retreat%' THEN 'day_use'
-    ELSE 'other'
-  END
-WHERE data_provider IN ('aspira', 'bcparks-strapi')
-  AND kind NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
-                   'equestrian', 'backcountry', 'day_use', 'other');
-
--- ReserveCalifornia unit-type names are free text, matched by substring in the
--- order CampsiteKinds.reserveCalifornia uses; the first branch that hits wins.
-UPDATE campsites SET kind = CASE
-    WHEN lower(btrim(kind)) LIKE '%day use%' OR lower(btrim(kind)) LIKE '%dailyuse%' THEN 'day_use'
-    WHEN lower(btrim(kind)) LIKE '%group%' THEN 'group'
-    WHEN lower(btrim(kind)) LIKE '%equestrian%' OR lower(btrim(kind)) LIKE '%equestrain%' THEN 'equestrian'
-    WHEN lower(btrim(kind)) LIKE '%cabin%' OR lower(btrim(kind)) LIKE '%cottage%'
-         OR lower(btrim(kind)) LIKE '%yurt%' THEN 'cabin'
-    WHEN lower(btrim(kind)) LIKE '%boat in%' OR lower(btrim(kind)) LIKE '%floating camp%' THEN 'boat_in'
-    WHEN lower(btrim(kind)) LIKE '%hike%' OR lower(btrim(kind)) LIKE '%bike%'
-         OR lower(btrim(kind)) LIKE '%walk-in%' THEN 'walk_in'
-    WHEN lower(btrim(kind)) LIKE '%hook up%' THEN 'rv'
-    WHEN lower(btrim(kind)) LIKE '%tent%' THEN 'tent'
-    WHEN lower(btrim(kind)) LIKE '%campsite%' THEN 'standard'
-    ELSE 'other'
-  END
-WHERE data_provider = 'reservecalifornia'
-  AND kind NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
-                   'equestrian', 'backcountry', 'day_use', 'other');
-
--- ReserveAmerica's calendar carries no upstream site type at all.
-UPDATE campsites SET kind = 'other'
-WHERE data_provider = 'reserveamerica'
-  AND kind NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
-                   'equestrian', 'backcountry', 'day_use', 'other');
-
--- Anything left unclassified (a provider retired before this migration) is 'other',
--- so the column is wholly in the wire vocabulary and the read path can decode strictly.
-UPDATE campsites SET kind = 'other'
+UPDATE campsites SET kind = campsite_wire_kind(data_provider, kind)
 WHERE kind NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
                    'equestrian', 'backcountry', 'day_use', 'other');
 
--- Dropped first so a replay of this script is idempotent.
+-- Dropped first so a replay of this script is idempotent, and added NOT VALID so
+-- the validating scan runs without ACCESS EXCLUSIVE.
 ALTER TABLE campsites DROP CONSTRAINT IF EXISTS campsites_kind_wire_check;
 ALTER TABLE campsites ADD CONSTRAINT campsites_kind_wire_check
   CHECK (kind IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
-                  'equestrian', 'backcountry', 'day_use', 'other'));
+                  'equestrian', 'backcountry', 'day_use', 'other')) NOT VALID;
+ALTER TABLE campsites VALIDATE CONSTRAINT campsites_kind_wire_check;
 
--- Stored watch filters are not tied to one provider, so this CASE is the union of the
--- tables above, over both shapes the parser accepts (a bare string and an array).
+-- A campsite target names its own provider, a POI target its campground's; targets
+-- that disagree, or resolve none, fall through to the union arm above.
+WITH watch_provider AS (
+  SELECT w2.id,
+         CASE WHEN count(DISTINCT COALESCE(cs.data_provider, cg.data_provider)) = 1
+              THEN min(COALESCE(cs.data_provider, cg.data_provider)) END AS provider
+  FROM availability_watch w2
+  LEFT JOIN availability_watch_target t ON t.watch_id = w2.id
+  LEFT JOIN campsites cs ON cs.id = t.campsite_id
+  LEFT JOIN poi_campgrounds pc ON pc.poi_id = t.poi_id
+  LEFT JOIN campgrounds cg ON cg.id = pc.campground_id
+  GROUP BY w2.id
+), site_type_value AS (
+  SELECT w2.id, p.provider, e.value, e.ord
+  FROM availability_watch w2
+  JOIN watch_provider p ON p.id = w2.id,
+       LATERAL jsonb_array_elements_text(
+         CASE WHEN jsonb_typeof(w2.campsite_filters -> 'site_type') = 'string'
+              THEN jsonb_build_array(w2.campsite_filters -> 'site_type')
+              ELSE w2.campsite_filters -> 'site_type' END
+       ) WITH ORDINALITY AS e(value, ord)
+  WHERE jsonb_typeof(w2.campsite_filters -> 'site_type') IN ('string', 'array')
+), mapped_site_type AS (
+  SELECT id, jsonb_agg(to_jsonb(campsite_wire_kind(provider, value)) ORDER BY ord) AS mapped
+  FROM site_type_value
+  GROUP BY id
+)
 UPDATE availability_watch w
 SET campsite_filters = jsonb_set(
       w.campsite_filters,
@@ -111,58 +156,7 @@ SET campsite_filters = jsonb_set(
       CASE WHEN jsonb_typeof(w.campsite_filters -> 'site_type') = 'string'
            THEN m.mapped -> 0
            ELSE m.mapped END)
-FROM (
-  SELECT s.id,
-         jsonb_agg(to_jsonb(CASE
-           WHEN s.value IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
-                            'equestrian', 'backcountry', 'day_use', 'other') THEN s.value
-           -- Checked first so ReserveCalifornia's "Group Day Use" beats recgov's GROUP prefix below.
-           WHEN lower(btrim(s.value)) LIKE '%day use%' OR lower(btrim(s.value)) LIKE '%dailyuse%' THEN 'day_use'
-           WHEN lower(btrim(s.value)) LIKE '%walk-in%' THEN 'walk_in'
-           WHEN upper(btrim(s.value)) ~ '^GROUP( |$)' THEN 'group'
-           WHEN upper(btrim(s.value)) ~ '^TENT ONLY( |$)' THEN 'tent'
-           WHEN upper(btrim(s.value)) ~ '^RV( |$)' THEN 'rv'
-           WHEN upper(btrim(s.value)) ~ '^(CABIN|YURT|LOOKOUT|OVERNIGHT SHELTER|SHELTER)( |$)' THEN 'cabin'
-           WHEN upper(btrim(s.value)) ~ '^(WALK TO|HIKE TO)( |$)' THEN 'walk_in'
-           WHEN upper(btrim(s.value)) ~ '^(BOAT IN|MOORING|ANCHORAGE)( |$)' THEN 'boat_in'
-           WHEN lower(btrim(s.value)) LIKE '%group%' THEN 'group'
-           WHEN upper(btrim(s.value)) ~ '^EQUESTRIAN( |$)' THEN 'equestrian'
-           WHEN upper(btrim(s.value)) ~ '^STANDARD( |$)' THEN 'standard'
-           WHEN upper(btrim(s.value)) ~ '^ZONE( |$)' THEN 'backcountry'
-           WHEN upper(btrim(s.value)) ~ '^(PICNIC|PARKING|DAY USE)( |$)' THEN 'day_use'
-           WHEN btrim(s.value) = 'tent-only' THEN 'tent'
-           WHEN btrim(s.value) = 'walk-to' THEN 'walk_in'
-           WHEN btrim(s.value) = 'water-access' THEN 'boat_in'
-           WHEN btrim(s.value) IN ('Campsite', 'Campsite/Seasonal', 'Overflow') THEN 'standard'
-           WHEN btrim(s.value) IN ('Cabin', 'Rustic Cabin', 'Deluxe Cabin', 'Backcountry Cabin', 'Yurt',
-                                   'oTENTik', 'Ôasis', 'MicrOcube', 'Teepee', 'Prospector Tent',
-                                   'Platform Tent', 'Adirondack', 'Equipped Camping', 'Vacation House') THEN 'cabin'
-           WHEN btrim(s.value) IN ('Marina', 'Mooring Buoy', 'Marine Trail', 'Annual Marina') THEN 'boat_in'
-           WHEN btrim(s.value) IN ('Daily Fishing', 'Guided Event', 'Hiking Trip', 'Ferry') THEN 'day_use'
-           WHEN btrim(s.value) LIKE 'Backcountry%' OR btrim(s.value) LIKE 'Wilderness%' THEN 'backcountry'
-           WHEN btrim(s.value) LIKE 'Group%' THEN 'group'
-           WHEN btrim(s.value) LIKE 'Conference%' OR btrim(s.value) LIKE 'Retreat%' THEN 'day_use'
-           WHEN lower(btrim(s.value)) LIKE '%equestrian%' OR lower(btrim(s.value)) LIKE '%equestrain%' THEN 'equestrian'
-           WHEN lower(btrim(s.value)) LIKE '%cabin%' OR lower(btrim(s.value)) LIKE '%cottage%'
-                OR lower(btrim(s.value)) LIKE '%yurt%' THEN 'cabin'
-           WHEN lower(btrim(s.value)) LIKE '%boat in%' OR lower(btrim(s.value)) LIKE '%floating camp%' THEN 'boat_in'
-           WHEN lower(btrim(s.value)) LIKE '%hike%' OR lower(btrim(s.value)) LIKE '%bike%'
-                OR lower(btrim(s.value)) LIKE '%walk-in%' THEN 'walk_in'
-           WHEN lower(btrim(s.value)) LIKE '%hook up%' THEN 'rv'
-           WHEN lower(btrim(s.value)) LIKE '%tent%' THEN 'tent'
-           WHEN lower(btrim(s.value)) LIKE '%campsite%' THEN 'standard'
-           ELSE 'other'
-         END) ORDER BY s.ord) AS mapped
-  FROM (
-    SELECT w2.id, e.value, e.ord
-    FROM availability_watch w2,
-         LATERAL jsonb_array_elements_text(
-           CASE WHEN jsonb_typeof(w2.campsite_filters -> 'site_type') = 'string'
-                THEN jsonb_build_array(w2.campsite_filters -> 'site_type')
-                ELSE w2.campsite_filters -> 'site_type' END
-         ) WITH ORDINALITY AS e(value, ord)
-    WHERE jsonb_typeof(w2.campsite_filters -> 'site_type') IN ('string', 'array')
-  ) s
-  GROUP BY s.id
-) m
+FROM mapped_site_type m
 WHERE w.id = m.id;
+
+DROP FUNCTION IF EXISTS campsite_wire_kind(text, text);

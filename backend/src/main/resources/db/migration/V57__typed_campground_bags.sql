@@ -21,8 +21,12 @@ UPDATE campgrounds SET amenities = COALESCE((
                       'key', e.k,
                       'present', CASE WHEN jsonb_typeof(e.v) = 'boolean' THEN e.v = 'true'::jsonb ELSE true END,
                       'detail', CASE WHEN e.k = 'toilets' AND jsonb_typeof(amenities->'toilet_kind') = 'string'
-                                       THEN to_jsonb(amenities->>'toilet_kind') END))
-             ELSE jsonb_build_object('key', 'other', 'present', true, 'detail', e.k)
+                                       THEN to_jsonb(amenities->>'toilet_kind')
+                                     WHEN jsonb_typeof(e.v) = 'string' THEN e.v END))
+             ELSE jsonb_build_object(
+                    'key', 'other',
+                    'present', CASE WHEN jsonb_typeof(e.v) = 'boolean' THEN e.v = 'true'::jsonb ELSE true END,
+                    'detail', upper(left(replace(e.k, '_', ' '), 1)) || substr(replace(e.k, '_', ' '), 2))
            END AS entry
     FROM jsonb_each(amenities) WITH ORDINALITY AS e(k, v, ord)
     WHERE e.k <> 'toilet_kind'
@@ -56,8 +60,11 @@ UPDATE campgrounds SET cell_service = '[]'::jsonb WHERE jsonb_typeof(cell_servic
 ALTER TABLE campgrounds ALTER COLUMN amenities SET DEFAULT '[]'::jsonb;
 ALTER TABLE campgrounds ALTER COLUMN cell_service SET DEFAULT '[]'::jsonb;
 
-ALTER TABLE campgrounds ADD CONSTRAINT campgrounds_amenities_check CHECK (jsonb_typeof(amenities) = 'array');
-ALTER TABLE campgrounds ADD CONSTRAINT campgrounds_cell_service_check CHECK (jsonb_typeof(cell_service) = 'array');
+-- NOT VALID first, so the validating scan runs without ACCESS EXCLUSIVE.
+ALTER TABLE campgrounds ADD CONSTRAINT campgrounds_amenities_check CHECK (jsonb_typeof(amenities) = 'array') NOT VALID;
+ALTER TABLE campgrounds ADD CONSTRAINT campgrounds_cell_service_check CHECK (jsonb_typeof(cell_service) = 'array') NOT VALID;
+ALTER TABLE campgrounds VALIDATE CONSTRAINT campgrounds_amenities_check;
+ALTER TABLE campgrounds VALIDATE CONSTRAINT campgrounds_cell_service_check;
 
 -- metadata keeps activities, rating and last_updated; the provenance extras the
 -- HTML-scraping vendors duplicated out of source_payload go away.
@@ -83,6 +90,10 @@ WHERE jsonb_typeof(metadata) = 'object'
       SELECT 1 FROM jsonb_object_keys(metadata) k
       WHERE k NOT IN ('activities', 'rating', 'last_updated'))
     OR (jsonb_exists(metadata, 'activities') AND jsonb_typeof(metadata->'activities') <> 'array')
+    OR (jsonb_typeof(metadata->'activities') = 'array'
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements(metadata->'activities') a
+          WHERE jsonb_typeof(a) <> 'string'))
     OR (jsonb_exists(metadata, 'last_updated') AND jsonb_typeof(metadata->'last_updated') <> 'string')
     OR (jsonb_exists(metadata, 'rating')
         AND (jsonb_typeof(metadata#>'{rating,average}') IS DISTINCT FROM 'number'
@@ -141,5 +152,8 @@ WHERE jsonb_typeof(alerts) = 'array'
     SELECT 1 FROM jsonb_array_elements(alerts) a
     WHERE jsonb_typeof(a) <> 'object'
        OR jsonb_typeof(a->'body') IS DISTINCT FROM 'string'
+       OR jsonb_typeof(a->'title') NOT IN ('string', 'null')
+       OR jsonb_typeof(a->'ends_on') NOT IN ('string', 'null')
+       OR jsonb_typeof(a->'source_url') NOT IN ('string', 'null')
        OR jsonb_exists(a, 'content')
        OR jsonb_exists(a, 'end_date'));

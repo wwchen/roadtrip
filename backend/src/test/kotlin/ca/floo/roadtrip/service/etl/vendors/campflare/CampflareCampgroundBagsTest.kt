@@ -59,24 +59,37 @@ class CampflareCampgroundBagsTest {
     }
 
     @Test
-    fun `an unknown amenity key lands as other carrying the key as detail`() {
-        val amenities = CampflareCampgroundBags.amenities(obj("""{"kayak_launch": true, "boat_ramp": null}"""))
+    fun `an unknown amenity key lands as other carrying the humanized key as detail`() {
+        val amenities = CampflareCampgroundBags.amenities(obj("""{"camp_kitchen": true, "boat_ramp": null}"""))
 
-        assertEquals(listOf(CampgroundAmenity(AmenityKey.OTHER, present = true, detail = "kayak_launch")), amenities)
+        assertEquals(listOf(CampgroundAmenity(AmenityKey.OTHER, present = true, detail = "Camp kitchen")), amenities)
+    }
+
+    /** OTHER has no negative label, so this one never reaches the wire — but false is what upstream said. */
+    @Test
+    fun `an unknown amenity key keeps the vendor's false`() {
+        val amenities = CampflareCampgroundBags.amenities(obj("""{"camp_kitchen": false}"""))
+
+        assertEquals(listOf(CampgroundAmenity(AmenityKey.OTHER, present = false, detail = "Camp kitchen")), amenities)
     }
 
     @Test
     fun `a literal other key still lands as other carrying the key as detail`() {
         val amenities = CampflareCampgroundBags.amenities(obj("""{"other": true}"""))
 
-        assertEquals(listOf(CampgroundAmenity(AmenityKey.OTHER, present = true, detail = "other")), amenities)
+        assertEquals(listOf(CampgroundAmenity(AmenityKey.OTHER, present = true, detail = "Other")), amenities)
     }
 
     @Test
-    fun `a json string value is present even when it spells out false`() {
-        val amenities = CampflareCampgroundBags.amenities(obj("""{"wifi": "false"}"""))
-
-        assertEquals(listOf(CampgroundAmenity(AmenityKey.WIFI, present = true)), amenities)
+    fun `a json string value is present and rides along as the detail`() {
+        assertEquals(
+            listOf(CampgroundAmenity(AmenityKey.WIFI, present = true, detail = "guest network")),
+            CampflareCampgroundBags.amenities(obj("""{"wifi": "guest network"}""")),
+        )
+        assertEquals(
+            listOf(CampgroundAmenity(AmenityKey.WIFI, present = true, detail = "false")),
+            CampflareCampgroundBags.amenities(obj("""{"wifi": "false"}""")),
+        )
     }
 
     @Test
@@ -94,6 +107,14 @@ class CampflareCampgroundBagsTest {
             ),
             carriers,
         )
+    }
+
+    /** The `{avg, count}` shape V57 canonicalizes; a quoted number is noise either way. */
+    @Test
+    fun `object carriers keep their sample count and string numbers drop`() {
+        val carriers = CampflareCampgroundBags.carriers(obj("""{"verizon": {"avg": 3, "count": 5}, "att": "4", "tmobile": {"count": 5}}"""))
+
+        assertEquals(listOf(CarrierSignal(Carrier.VERIZON, average = 3.0, count = 5)), carriers)
     }
 
     @Test
