@@ -30,6 +30,12 @@ internal class AvailabilityDateResolver(
         return if (localNow.toLocalTime().isBefore(cutoff)) localDate else localDate.plusDays(1)
     }
 
+    /** The last date this provider can be asked about: the picker's ceiling. */
+    fun latestDate(
+        context: PoiDateContext,
+        bookingHorizonDays: Int,
+    ): LocalDate = context.earliestDate.plusDays(bookingHorizonDays.toLong())
+
     fun resolveWindow(
         startDate: LocalDate?,
         endDate: LocalDate?,
@@ -48,7 +54,7 @@ internal class AvailabilityDateResolver(
         val start = startDate ?: earliestDate
         val end = endDate ?: start.plusDays(defaultDays.toLong())
         if (!end.isAfter(start)) throw AvailabilityServiceError.BadDateWindow.EndBeforeStart
-        val latestDate = earliestDate.plusDays(bookingHorizonDays.toLong())
+        val latestDate = latestDate(context, bookingHorizonDays)
         if (end.isAfter(latestDate)) {
             throw AvailabilityServiceError.BadDateWindow.BeyondBookingHorizon(latestDate = latestDate)
         }

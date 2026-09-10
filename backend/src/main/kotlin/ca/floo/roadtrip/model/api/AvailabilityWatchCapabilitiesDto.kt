@@ -6,5 +6,5 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class AvailabilityWatchCapabilitiesDto(
     @SerialName("trigger_kinds") val triggerKinds: List<String>,
-    @SerialName("booking_actions") val bookingActions: List<String>,
+    @SerialName("add_to_cart") val addToCart: AddToCartCapabilityDto,
 )

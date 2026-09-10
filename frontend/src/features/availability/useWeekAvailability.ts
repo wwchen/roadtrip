@@ -10,7 +10,6 @@ import type { PoiCampsitesAvailabilityResponse } from '@/api/availability-api';
 import { addLocalDays, localYmd } from '@/lib/local-date';
 import { queryKeys } from '@/queries/keys';
 import { formatAvailabilityError } from './availability-errors';
-import { fusePoiCampsitesAvailability, type FusedWeek } from './fuse';
 import {
   NO_WATCH_CAPABILITIES,
   normalizeWatchCapabilities,
@@ -24,8 +23,13 @@ export const SKELETON_RENDER_DELAY_MS = 150;
 /** Cache age at which the freshness pill starts warning. */
 export const STALE_THRESHOLD_MIN = 10;
 
-export interface WeekAvailability extends FusedWeek {
-  /** What this provider will let a watch do, from the same response. */
+/**
+ * The response, plus its capability block read into the shape the gates use.
+ *
+ * Nothing else is derived: `state`, `days`, `cells` and `latest_date` are rendered
+ * as served.
+ */
+export interface WeekAvailability extends PoiCampsitesAvailabilityResponse {
   watchCapabilities: WatchCapabilities;
 }
 
@@ -86,7 +90,8 @@ export function useWeekAvailability(
       }
       const json = (await response.json()) as PoiCampsitesAvailabilityResponse;
       return {
-        ...fusePoiCampsitesAvailability(json, startDate, endDate),
+        ...json,
+        days: Array.isArray(json?.days) ? json.days : [],
         watchCapabilities: json?.watch_capabilities
           ? normalizeWatchCapabilities(json.watch_capabilities)
           : NO_WATCH_CAPABILITIES,

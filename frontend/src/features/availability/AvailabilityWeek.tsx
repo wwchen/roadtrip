@@ -9,7 +9,6 @@ import { settingsErrorMessage } from '@/lib/settings-errors';
 import { addToCart } from '@/api/booking-api';
 import { isCartActionPending } from './cart-action';
 import { signIn } from '@/api/auth-api';
-import { useMe } from '@/queries/auth';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { bookingCopy, upstreamCopy } from '@/lib/strings';
 import { DayDetail, type WatchUnavailableReason } from './DayDetail';
@@ -20,7 +19,7 @@ import { WatchPopover } from './WatchPopover';
 import { WeekNav } from './WeekNav';
 import { GENERIC_AVAILABILITY_ERROR, classifyAvailabilityErrorCode } from './availability-errors';
 import { reservationUrlFromTemplate } from './booking-links';
-import type { FusedDay } from './fuse';
+import type { AvailabilityDay } from '@/api/availability-api';
 import { DEFAULT_SITE_COLUMN_WIDTH } from './site-column';
 import { useAvailabilityController } from './availability-controller';
 import { useCampsites } from './useCampsites';
@@ -37,16 +36,17 @@ import { WatchAuthError, usePoiWatches, useWatchMutations, watchForDate } from '
 import {
   NO_WATCH_CAPABILITIES,
   stayEndDate,
-  cartGate,
-  supportsAddToCart,
   supportsWatchAlerts,
   watchedDates as watchedDatesOf,
 } from '@/lib/watch-windows';
 import { TRIGGER_KIND_SLACK_NOTIFY, buildTriggerPayload, triggerStateOf } from '@/lib/watch-triggers';
 import './availability.css';
 
-/** How far ahead the calendar lets someone jump — every provider's horizon or less. */
-const CALENDAR_MAX_DAYS_OUT = 365;
+/**
+ * How far back from the booking horizon the last selectable week starts, so the
+ * full week fits before it.
+ */
+const LAST_WEEK_START_OFFSET = WEEK_DAYS;
 
 export interface AvailabilityWeekProps {
   /** The hydrated campground feature: supplies the POI id, name and earliest date. */
@@ -97,6 +97,7 @@ function AvailabilityWeekView({
   // and "Earliest" returns to it — which is not the same as "today" for a campground
   // that only opens a booking window months out.
   const earliestDate = useMemo(() => featureEarliestDate(feature), [feature]);
+  const featureLatest = useMemo(() => featureLatestDate(feature), [feature]);
   const openSettings = useSettingsStore((state) => state.openSettings);
   const { state, actions } = useAvailabilityController(earliestDate);
   const {
@@ -120,14 +121,36 @@ function AvailabilityWeekView({
 
   const showSkeleton = useDelayedFlag(week.isPending, SKELETON_RENDER_DELAY_MS);
 
+  /**
+   * The last week start the provider will quote for.
+   *
+   * A whole week short of the horizon, since a week start needs its full
+   * end-exclusive window to still fit under the ceiling — and never below the
+   * floor: a horizon less than a week out would otherwise put the ceiling
+   * behind `earliestDate`, leaving a picker with no selectable week at all.
+   */
+  const maxDate = useMemo(() => {
+    const raw = week.data?.latest_date ?? featureLatest;
+    if (!raw) return null;
+    const parsed = parseLocalYmd(raw);
+    if (!Number.isFinite(parsed.getTime())) return null;
+    const lastStart = addLocalDays(parsed, -LAST_WEEK_START_OFFSET);
+    return lastStart < earliestDate ? earliestDate : lastStart;
+  }, [earliestDate, featureLatest, week.data?.latest_date]);
+
+  // Clamped at both ends: paging past the horizon only buys a
+  // `beyond_booking_horizon` refusal, which is not an answer worth fetching.
   const goToWeek = useCallback(
     (next: Date) => {
-      actions.changeWeek(next < earliestDate ? earliestDate : next);
+      const floored = next < earliestDate ? earliestDate : next;
+      actions.changeWeek(maxDate && floored > maxDate ? maxDate : floored);
     },
-    [actions, earliestDate],
+    [actions, earliestDate, maxDate],
   );
 
-  const days: FusedDay[] = week.data?.state === 'success' ? week.data.days : [];
+  const canGoForward = maxDate == null || addLocalDays(weekStart, WEEK_DAYS) <= maxDate;
+
+  const days: AvailabilityDay[] = week.data?.state === 'success' ? week.data.days : [];
   const selectedDay = days.find((day) => day.date === selectedDate) ?? null;
   // The shared empty value, not a fresh object per render: it is the identity every
   // capability gate below compares against, and a new `Set` each time would make the
@@ -159,13 +182,9 @@ function AvailabilityWeekView({
     [actions],
   );
 
-  // The same condition that enables the watch editor's ATC toggle: the scope
-  // supports a cart AND this caller has credentials. One source of truth, so a
-  // user can never be offered a hold the write path would refuse.
-  // The scope's cart and this caller's ability to drive it are separate facts, and
-  // the gate is what lets the grid say which of the two is missing.
-  const signedIn = Boolean(useMe().data?.user);
-  const cart = cartGate(capabilities, signedIn);
+  // Why the cart is or is not reachable, decided backend-side: the grid names the
+  // one missing step rather than subtracting one capability list from another.
+  const cart = capabilities.addToCart;
 
   const holdSite = useCallback(
     (campsiteId: string, date: string) => {
@@ -291,6 +310,7 @@ function AvailabilityWeekView({
       endIso={localYmd(addLocalDays(weekStart, WEEK_DAYS - 1))}
       showEarliest={!sameLocalDay(weekStart, earliestDate)}
       canGoBack={!sameLocalDay(weekStart, earliestDate)}
+      canGoForward={canGoForward}
       onPrev={() => goToWeek(addLocalDays(weekStart, -WEEK_DAYS))}
       onNext={() => goToWeek(addLocalDays(weekStart, WEEK_DAYS))}
       onEarliest={() => goToWeek(earliestDate)}
@@ -301,7 +321,7 @@ function AvailabilityWeekView({
             viewMonth={weekStart}
             today={earliestDate}
             selectedDate={weekStart}
-            maxDate={addLocalDays(earliestDate, CALENDAR_MAX_DAYS_OUT)}
+            maxDate={maxDate}
             onPick={goToWeek}
             onClose={() => actions.toggleCalendar(false)}
           />
@@ -348,7 +368,7 @@ function AvailabilityWeekView({
               armedBook,
               watchedDates: watchedDatesOf(watches.byWindow),
               watchGate,
-              cartGate: cart,
+              cart,
               cartAction,
             }}
             events={{
@@ -415,7 +435,6 @@ function AvailabilityWeekView({
           date={watchTarget.date}
           watch={watchForDate(watches, watchTarget.date)}
           capabilities={capabilities}
-          supportsAddToCart={supportsAddToCart(capabilities)}
           gate={watchGate === 'signed-out' ? 'signed-out' : undefined}
           onSignIn={() => signIn()}
           onOpenSettings={() => openSettings('booking')}
@@ -450,8 +469,9 @@ function AvailabilityWeekView({
 /**
  * The grid, or the banner that replaces it.
  *
- * `empty` and `closed_for_season` are separate branches with separate copy, which is
- * the distinction `fuse.ts` preserves: one is permanent, one is a date.
+ * `empty` and `closed_for_season` are separate branches with separate copy, and the
+ * response's `state` is what picks one: both ship an empty `days`, so the grid alone
+ * cannot tell them apart. One is permanent, one is a date.
  */
 function WeekSurface({
   week,
@@ -476,15 +496,25 @@ function WeekSurface({
   // case "Show what we last saw" reveals it without a second request.
   const [showStale, setShowStale] = useState(false);
 
+  // Whatever replaces the grid keeps the nav above it. The week that failed is
+  // the one the user most needs to page away from, and a card that replaced the
+  // whole surface took the only control that could do it down with the grid.
+  const withNav = (content: React.ReactNode) => (
+    <>
+      <div className="cg-site-matrix-head">
+        <div className="cg-site-matrix-actions">{weekNav}</div>
+      </div>
+      {content}
+    </>
+  );
+
   if (week.isPending) {
     // Before the delay elapses: the nav only, so a cache hit does not flash a
     // skeleton table on its way to real data.
     return showSkeleton ? (
       <SiteMatrixSkeleton siteColumnWidth={siteColumnWidth} actions={weekNav} />
     ) : (
-      <div className="cg-site-matrix-head">
-        <div className="cg-site-matrix-actions">{weekNav}</div>
-      </div>
+      withNav(null)
     );
   }
 
@@ -498,8 +528,8 @@ function WeekSurface({
 
     if (kind === 'throttled') {
       const ageMin =
-        week.data?.state === 'success' ? cacheAgeMinutes(week.data.cacheBlock?.age_seconds) : null;
-      return (
+        week.data?.state === 'success' ? cacheAgeMinutes(week.data.cache?.age_seconds) : null;
+      return withNav(
         <EmptyState
           icon="lock"
           title={upstreamCopy.rateLimitedTitle}
@@ -525,12 +555,12 @@ function WeekSurface({
               </Button>
             </>
           }
-        />
+        />,
       );
     }
 
     if (kind === 'server_error') {
-      return (
+      return withNav(
         <EmptyState
           icon="warning-fill"
           title={upstreamCopy.erroredTitle}
@@ -550,12 +580,12 @@ function WeekSurface({
               </Button>
             </>
           }
-        />
+        />,
       );
     }
 
     if (kind === 'unreachable') {
-      return (
+      return withNav(
         <EmptyState
           icon="warning"
           title={upstreamCopy.unreachableTitle}
@@ -580,33 +610,35 @@ function WeekSurface({
               </Button>
             </>
           }
-        />
+        />,
       );
     }
 
-    return (
+    return withNav(
       <div className="cg-summary">
         <span className="cg-error">{week.error.message || GENERIC_AVAILABILITY_ERROR}</span> ·{' '}
         <LinkButton className="cg-retry" onClick={() => void week.refetch()}>
           Retry
         </LinkButton>
-      </div>
+      </div>,
     );
   }
 
   if (week.data?.state === 'empty') {
-    return <div className="cg-closed-banner">No availability data for this campground.</div>;
+    return withNav(
+      <div className="cg-closed-banner">No availability data for this campground.</div>,
+    );
   }
 
   if (week.data?.state === 'closed_for_season') {
     const reopens = week.data.season?.reopens_on;
-    return (
+    return withNav(
       <div className="cg-closed-banner">
         {/* A calendar rather than the ⛰️ this shipped with: both messages this
             banner can carry are about dates, and Open Icons has no mountain. */}
         <Icon name="calendar" className="cg-closed-banner-icon" aria-hidden="true" />{' '}
         {reopens ? `Reopens ${reopens}` : 'Closed for season'}
-      </div>
+      </div>,
     );
   }
 
@@ -627,7 +659,7 @@ function Freshness({
   week: ReturnType<typeof useWeekAvailability>;
   onRefresh: () => void;
 }) {
-  const cache = week.data?.state === 'success' ? week.data.cacheBlock : null;
+  const cache = week.data?.state === 'success' ? week.data.cache : null;
   // A non-breaking space, so the row keeps its height and the grid does not jump
   // when the pill appears.
   if (!cache) return <>&nbsp;</>;
@@ -654,6 +686,19 @@ function featureEarliestDate(feature: PoiFeature): Date {
   const raw = properties.earliest_date ?? properties.earliestDate;
   const parsed = parseLocalYmd(raw);
   return Number.isFinite(parsed.getTime()) ? parsed : localToday();
+}
+
+/**
+ * The provider's horizon as the POI detail reported it, for the first paint.
+ *
+ * Nullable all the way down: a campground no registered provider claims has no
+ * horizon to state, and inventing one would put dates in the picker that the
+ * booking site will not quote.
+ */
+function featureLatestDate(feature: PoiFeature): string | null {
+  const properties = feature.properties ?? {};
+  const raw = properties.latest_date ?? properties.latestDate;
+  return typeof raw === 'string' && raw ? raw : null;
 }
 
 export { DEFAULT_SITE_COLUMN_WIDTH };

@@ -10,7 +10,7 @@
 import { Icon, LinkButton } from '@ui';
 import type { Campsite, PoiCampsitesResponse } from '@/api/campsite-api';
 import { availableCampsiteIds, availableCount } from '@/lib/day-fields';
-import type { FusedDay } from './fuse';
+import type { AvailabilityDay } from '@/api/availability-api';
 import { siteName } from './matrix-rows';
 import {
   campsitesForIds,
@@ -33,7 +33,7 @@ export interface SiteListProps {
   onToggle: () => void;
   onRetry: () => void;
   /** The selected day, only when it actually has openings. */
-  selectedDay: FusedDay | null;
+  selectedDay: AvailabilityDay | null;
   /** Exclusive end of the one-night stay being booked. */
   selectedEndDate: string | null;
 }

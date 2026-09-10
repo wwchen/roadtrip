@@ -1,52 +1,28 @@
 // Reading a per-day availability row.
 //
-// A day carries `campsite_statuses` (every campsite → its status) and usually
-// `available_campsite_ids` as well. The ids are authoritative when present; when
-// they are absent they are derived from the statuses, which is what makes the
-// count agree between a fused week response and a raw provider one.
-import { normalizeAvailabilityStatus } from './availability-status';
+// A day carries one cell per campsite, so a count is a filter over `cells` and
+// nothing here decides what a status means.
+import type { AvailabilityCell, AvailabilityDay } from '@/api/availability-api';
+
+type Day = Pick<AvailabilityDay, 'cells'> | null | undefined;
 
 /**
- * A per-day availability row, as `fuse.ts` produces and the API returns.
- *
- * Module-private: callers pass whatever their query gave them and read a count
- * off it, so exporting the shape would invite a second declaration of the same
- * response to drift against the API client's.
+ * An array or a scalar in `cells` is no cells at all: `Object.entries` would read
+ * an array as a map keyed by index and invent campsite ids nobody sent.
  */
-interface DayRow {
-  date: string;
-  status?: unknown;
-  available_campsite_ids?: unknown;
-  campsite_statuses?: unknown;
+function cells(day: Day): Record<string, AvailabilityCell> {
+  const value = day?.cells;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
+  return value;
 }
 
-/**
- * `{ campsiteId: status }` for a day, or `{}`.
- *
- * Arrays are rejected as well as non-objects: `campsite_statuses` arriving as `[]`
- * from a provider that ships empty collections as arrays would otherwise index by
- * position and produce campsite ids of `0`, `1`, `2`.
- */
-function campsiteStatuses(day: DayRow | null | undefined): Record<string, unknown> {
-  const statuses = day?.campsite_statuses;
-  return statuses && typeof statuses === 'object' && !Array.isArray(statuses)
-    ? (statuses as Record<string, unknown>)
-    : {};
+/** Bookable campsite ids for a day, as strings — the order the backend sent. */
+export function availableCampsiteIds(day: Day): string[] {
+  return Object.entries(cells(day))
+    .filter(([, cell]) => cell?.status === 'available')
+    .map(([id]) => id);
 }
 
-/** Bookable campsite ids for a day, as strings. */
-export function availableCampsiteIds(day: DayRow | null | undefined): string[] {
-  const ids = day?.available_campsite_ids;
-  if (Array.isArray(ids)) return ids.map(String);
-  return Object.entries(campsiteStatuses(day))
-    .filter(([, status]) => normalizeAvailabilityStatus(status) === 'available')
-    .map(([id]) => String(id));
-}
-
-export function availableCount(day: DayRow | null | undefined): number {
+export function availableCount(day: Day): number {
   return availableCampsiteIds(day).length;
-}
-
-export function campsiteCount(day: DayRow | null | undefined): number {
-  return Object.keys(campsiteStatuses(day)).length;
 }

@@ -1,13 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import type { Campsite } from '@/api/campsite-api';
-import type { FusedDay } from './fuse';
+import type { AvailabilityCell, AvailabilityDay } from '@/api/availability-api';
 import {
   DEFAULT_MATRIX_FILTERS,
-  availabilityIndex,
   availableDateCount,
   cellState,
   filterCampsites,
-  isWatchableKind,
   loopOptions,
   normalizeFilters,
   rowId,
@@ -20,20 +18,22 @@ import {
 
 const site = (id: number, extra: Partial<Campsite> = {}): Partial<Campsite> => ({ id, ...extra });
 
+/** A fused day: `cells` is what the endpoint sends and the only thing read here. */
 const day = (
   date: string,
-  statuses: Record<string, string>,
-  overrides: Partial<FusedDay> = {},
-): FusedDay =>
-  ({
-    date,
-    status: 'available',
-    campsite_statuses: statuses,
-    available_campsite_ids: Object.entries(statuses)
-      .filter(([, status]) => status === 'available')
-      .map(([id]) => Number(id)),
-    ...overrides,
-  }) as FusedDay;
+  cells: Record<string, AvailabilityCell>,
+  overrides: Partial<AvailabilityDay> = {},
+): AvailabilityDay => ({
+  date,
+  status: 'available',
+  watchable: Object.values(cells).some((cell) => cell.watchable),
+  cells,
+  ...overrides,
+});
+
+/** The two cells every case below is built from. */
+const open: AvailabilityCell = { status: 'available', watchable: false };
+const taken: AvailabilityCell = { status: 'reserved', watchable: true };
 
 describe('naming a site', () => {
   test('prefers the provider name', () => {
@@ -71,15 +71,15 @@ describe('the row set', () => {
     expect(rows.map((row) => row.name)).toEqual(['Aaa', 'Zed']);
   });
 
-  test('synthesises rows from the days when the catalog is empty', () => {
-    const rows = sortedCampsites([], [day('2026-08-10', { 5: 'available', 3: 'reserved' })]);
+  test('synthesises rows from the days" cells when the catalog is empty', () => {
+    const rows = sortedCampsites([], [day('2026-08-10', { 5: open, 3: taken })]);
 
     expect(rows.map(rowId)).toEqual(['3', '5']);
     expect(siteName(rows[0]!)).toBe('Site #3');
   });
 
   test('prefers the catalog when it has anything at all', () => {
-    const rows = sortedCampsites([site(9, { name: 'Real' })], [day('2026-08-10', { 5: 'available' })]);
+    const rows = sortedCampsites([site(9, { name: 'Real' })], [day('2026-08-10', { 5: open })]);
 
     expect(rows.map((row) => row.name)).toEqual(['Real']);
   });
@@ -151,11 +151,13 @@ describe('filtering', () => {
 });
 
 describe('sorting', () => {
-  const days = [day('2026-08-10', { 1: 'available', 2: 'reserved' }), day('2026-08-11', { 1: 'available', 2: 'available' })];
-  const context = { availabilityByDate: availabilityIndex(days), visibleDays: days };
+  const days = [
+    day('2026-08-10', { 1: open, 2: taken }),
+    day('2026-08-11', { 1: open, 2: open }),
+  ];
 
   test('available-first ranks by how many days are open', () => {
-    const rows = sortCampsites([site(2, { name: 'B' }), site(1, { name: 'A' })], 'available', context);
+    const rows = sortCampsites([site(2, { name: 'B' }), site(1, { name: 'A' })], 'available', days);
 
     expect(rows.map((row) => row.name)).toEqual(['A', 'B']);
   });
@@ -164,14 +166,14 @@ describe('sorting', () => {
     // Ids the days say nothing about, so both score zero openings.
     const tied = [site(7, { name: 'Zed', loop_name: 'B' }), site(8, { name: 'Aaa', loop_name: 'A' })];
 
-    expect(sortCampsites(tied, 'available', context).map((row) => row.name)).toEqual(['Aaa', 'Zed']);
+    expect(sortCampsites(tied, 'available', days).map((row) => row.name)).toEqual(['Aaa', 'Zed']);
   });
 
   test('site order ignores the loop', () => {
     const rows = sortCampsites(
       [site(1, { name: 'Zed', loop_name: 'A' }), site(2, { name: 'Aaa', loop_name: 'B' })],
       'site',
-      context,
+      days,
     );
 
     expect(rows.map((row) => row.name)).toEqual(['Aaa', 'Zed']);
@@ -185,7 +187,7 @@ describe('sorting', () => {
         site(3, { name: 'A', kind: 'tent' }),
       ],
       'type',
-      context,
+      days,
     );
 
     expect(rows.map((row) => [row.kind, row.name])).toEqual([
@@ -202,94 +204,44 @@ describe('sorting', () => {
 });
 
 describe('counting a row"s open days', () => {
-  test('counts explicit availables', () => {
-    const days = [day('2026-08-10', { 1: 'available' }), day('2026-08-11', { 1: 'reserved' })];
+  test('counts the days whose cell for this row is available', () => {
+    const days = [day('2026-08-10', { 1: open }), day('2026-08-11', { 1: taken })];
 
-    expect(
-      availableDateCount(site(1), { availabilityByDate: availabilityIndex(days), visibleDays: days }),
-    ).toBe(1);
+    expect(availableDateCount(site(1), days)).toBe(1);
   });
 
-  test('falls back to the day"s id list when the site has no explicit status', () => {
-    const days = [
-      day('2026-08-10', {}, { available_campsite_ids: [1], campsite_statuses: {} }),
-    ];
+  test('a day with no cell for the row counts as nothing, not as the rollup', () => {
+    // The day rolled up to `available` on someone else's cell.
+    const days = [day('2026-08-10', { 2: open })];
 
-    expect(
-      availableDateCount(site(1), { availabilityByDate: availabilityIndex(days), visibleDays: days }),
-    ).toBe(1);
-  });
-
-  test('an explicit reserved beats the id list', () => {
-    const days = [day('2026-08-10', { 1: 'reserved' }, { available_campsite_ids: [1] })];
-
-    expect(
-      availableDateCount(site(1), { availabilityByDate: availabilityIndex(days), visibleDays: days }),
-    ).toBe(0);
+    expect(availableDateCount(site(1), days)).toBe(0);
   });
 });
 
 describe('what a cell means', () => {
-  const ids = (day: FusedDay) => availabilityIndex([day]).get(day.date);
+  test('is the cell the day carries for that row', () => {
+    const d = day('2026-08-10', { 1: { status: 'first_come', watchable: true } });
 
-  test('an explicit status wins', () => {
-    const d = day('2026-08-10', { 1: 'first_come' });
-
-    expect(cellState(site(1), d, ids(d)).value).toBe('first_come');
+    expect(cellState(site(1), d)).toEqual({ status: 'first_come', watchable: true });
   });
 
-  test('the id list covers a site with no explicit status', () => {
-    const d = day('2026-08-10', {}, { available_campsite_ids: [1], campsite_statuses: {} });
+  test('a row the day has no cell for is unknown and unwatchable', () => {
+    // Rolled up to `available`, which says nothing about site 1.
+    const d = day('2026-08-10', { 2: open });
 
-    expect(cellState(site(1), d, ids(d)).value).toBe('available');
+    expect(cellState(site(1), d)).toEqual({ status: 'unknown', watchable: false });
   });
 
-  test('a site absent from an available day"s id list reads reserved', () => {
-    const d = day('2026-08-10', {}, {
-      status: 'available',
-      available_campsite_ids: [2],
-      campsite_statuses: {},
-    });
+  test('the rollup never overrides a cell', () => {
+    const d = day('2026-08-10', { 1: taken }, { status: 'available' });
 
-    expect(cellState(site(1), d, ids(d)).value).toBe('reserved');
+    expect(cellState(site(1), d).status).toBe('reserved');
   });
 
-  test('with no id list at all the day"s status stands', () => {
-    const d = day('2026-08-10', {}, {
-      status: 'available',
-      available_campsite_ids: [],
-      campsite_statuses: {},
-    });
+  test('watchable is the backend’s answer, not one derived from the status', () => {
+    // Same status, different answer: this provider cannot be internally polled.
+    const d = day('2026-08-10', { 1: { status: 'reserved', watchable: false } });
 
-    expect(cellState(site(1), d, undefined).value).toBe('available');
-  });
-
-  test('an unreadable explicit status is unknown, not inherited', () => {
-    const d = day('2026-08-10', { 1: 'nonsense' }, { status: 'available', available_campsite_ids: [] });
-
-    expect(cellState(site(1), d, ids(d)).value).toBe('unknown');
-  });
-
-  test('a closed day is closed for every row', () => {
-    const d = day('2026-08-10', {}, { status: 'closed', available_campsite_ids: [], campsite_statuses: {} });
-
-    expect(cellState(site(1), d, ids(d)).value).toBe('closed');
-  });
-});
-
-describe('which cells can be watched', () => {
-  test('reserved and first-come are watchable', () => {
-    expect(isWatchableKind('reserved')).toBe(true);
-    expect(isWatchableKind('first-come')).toBe(true);
-  });
-
-  test('nothing else is', () => {
-    for (const kind of ['available', 'closed', 'unknown', 'past']) {
-      expect(isWatchableKind(kind)).toBe(false);
-    }
-  });
-
-  test('matches the CSS kind, not the wire value', () => {
-    expect(isWatchableKind('first_come')).toBe(false);
+    expect(cellState(site(1), d).watchable).toBe(false);
   });
 });

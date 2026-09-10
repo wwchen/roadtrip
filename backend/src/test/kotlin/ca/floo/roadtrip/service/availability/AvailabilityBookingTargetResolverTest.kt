@@ -64,7 +64,7 @@ class AvailabilityBookingTargetResolverTest {
         // POI 8149 "Icicle Group Campground": the catalog row is Campflare, but
         // campgrounds.booking_provider says recgov/234784 and the campsite row
         // carries the rec.gov site id. Walking only the availability candidates
-        // yields a Campflare ref no booking adapter serves, so booking_actions
+        // yields a Campflare ref no booking adapter serves, so add_to_cart.state
         // came back empty for a campground that is perfectly bookable.
         val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
         val resolver = AvailabilityBookingTargetResolver(registry)

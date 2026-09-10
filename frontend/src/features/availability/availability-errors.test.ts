@@ -11,6 +11,8 @@ describe('formatting a provider fault', () => {
       ['unsupported', 'Provider not supported'],
       ['provider_misconfigured', 'Provider misconfigured — we are on it'],
       ['ip_throttled', 'Too many requests — slow down'],
+      // A stale shared link can ask past the horizon; the raw code is not an answer.
+      ['beyond_booking_horizon', 'That date is past what this provider lets you book'],
     ];
     for (const [code, expected] of cases) {
       expect(formatAvailabilityError({ error: code }, 503)).toBe(expected);

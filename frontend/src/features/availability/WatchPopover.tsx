@@ -36,8 +36,6 @@ export interface WatchPopoverProps {
   /** The user's existing watch for that day, if any. */
   watch: Watch | undefined;
   capabilities: WatchCapabilities;
-  /** Whether this provider can hold a site, gating the add-to-cart trigger. */
-  supportsAddToCart: boolean;
   /** Renders the sign-in gate in the editor's place. */
   gate?: 'signed-out';
   /** Starts the hosted sign-in flow, from the gate or the add-to-cart row. */
@@ -55,7 +53,6 @@ export function WatchPopover({
   date,
   watch,
   capabilities,
-  supportsAddToCart,
   gate,
   onSignIn,
   onOpenSettings,
@@ -102,7 +99,7 @@ export function WatchPopover({
 
   useDismiss(hostRef, onClose);
 
-  const editorCapabilities = capabilitiesForEditor(capabilities, supportsAddToCart);
+  const editorCapabilities = capabilitiesForEditor(capabilities);
 
   return createPortal(
     <div
@@ -220,16 +217,13 @@ function clamp(value: number, min: number, max: number): number {
  * What the editor may offer, which is not quite what the provider advertises.
  *
  * Carried over from `capabilitiesForEditor` in the vanilla popover, including its one
- * surprising rule: **an empty capability set enables Slack** (and add-to-cart, when
- * the caller says the provider has a cart). An empty set means the response carried no
- * capability block at all — an older backend, or a field that failed to serialise —
- * and treating "we do not know" as "nothing is possible" would have taken watches away
- * from every provider during that rollout. A populated set is trusted exactly.
+ * surprising rule: **an empty capability set enables Slack**. An empty set means the
+ * response carried no capability block at all — an older backend, or a field that
+ * failed to serialise — and treating "we do not know" as "nothing is possible" would
+ * have taken watches away from every provider during that rollout. A populated set is
+ * trusted exactly.
  */
-function capabilitiesForEditor(
-  capabilities: WatchCapabilities,
-  supportsAddToCart: boolean,
-): WatchCapabilities {
+function capabilitiesForEditor(capabilities: WatchCapabilities): WatchCapabilities {
   const normalized = normalizeWatchCapabilities(capabilities);
   const unknown = normalized.triggerKinds.size === 0;
   const triggerKinds = new Set<string>();
@@ -239,8 +233,10 @@ function capabilitiesForEditor(
   if (normalized.triggerKinds.has(TRIGGER_KIND_EMAIL_NOTIFY)) {
     triggerKinds.add(TRIGGER_KIND_EMAIL_NOTIFY);
   }
-  if (supportsAddToCart && (normalized.triggerKinds.has(TRIGGER_KIND_ATC) || unknown)) {
+  // No `|| unknown` here: `ready` can only come from a block that also listed the
+  // notification kinds, so an empty set and a ready cart cannot coexist.
+  if (normalized.addToCart === 'ready' && normalized.triggerKinds.has(TRIGGER_KIND_ATC)) {
     triggerKinds.add(TRIGGER_KIND_ATC);
   }
-  return { triggerKinds, bookingActions: normalized.bookingActions };
+  return { triggerKinds, addToCart: normalized.addToCart };
 }

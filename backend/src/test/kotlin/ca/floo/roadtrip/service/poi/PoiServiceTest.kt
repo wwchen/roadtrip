@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.poi
 
+import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
+import ca.floo.roadtrip.fixtures.testBookingHorizons
 import ca.floo.roadtrip.model.api.BookingRefDto
 import ca.floo.roadtrip.model.api.poi.CarrierSignalDto
 import ca.floo.roadtrip.model.api.poi.PoiCategoryDetailSchema
@@ -10,6 +12,7 @@ import ca.floo.roadtrip.model.api.poi.ScheduleDto
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
@@ -19,12 +22,14 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -47,6 +52,19 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals("aspira", ref.provider)
         assertEquals("pc:-2147483647:-2147483026:-2147483640", ref.ref)
         assertEquals(aspiraBookingRef, row.bookingRef)
+    }
+
+    @Test
+    fun `detail row publishes the serving provider's horizon as latest_date`() {
+        val poiId = seedPoi()
+        val provider = FakeAvailabilityProvider(id = BookingProvider.ASPIRA, bookingHorizonDays = TEST_BOOKING_HORIZON_DAYS)
+
+        val detail = poiService(listOf(provider)).poiDetail(poiId)!!.campgroundDetail()
+
+        val earliest = LocalDate.parse(detail.earliestDate!!)
+        assertEquals(earliest.plusDays(TEST_BOOKING_HORIZON_DAYS.toLong()).toString(), detail.latestDate)
+        // No registered provider claims the pin: no ceiling rather than a wrong one.
+        assertNull(poiService().poiDetail(poiId)!!.campgroundDetail().latestDate)
     }
 
     @Test
@@ -682,7 +700,7 @@ class PoiServiceTest : SharedDbTest() {
                 bookingProviderRef = "pc:-2147483647:-2147483026:-2147483640",
             ).poiId
 
-    private fun poiService(): PoiService =
+    private fun poiService(availabilityProviders: List<AvailabilityProvider> = emptyList()): PoiService =
         PoiService(
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf(SOURCE, "campflare", "recgov")),
             detailServices =
@@ -692,6 +710,7 @@ class PoiServiceTest : SharedDbTest() {
                         dateResolver =
                             ca.floo.roadtrip.service.availability
                                 .AvailabilityDateResolver(PoiRepo(ctx)),
+                        bookingHorizons = testBookingHorizons(ctx, availabilityProviders),
                     ),
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
@@ -704,6 +723,7 @@ class PoiServiceTest : SharedDbTest() {
 
     private companion object {
         const val SOURCE = "aspira"
+        const val TEST_BOOKING_HORIZON_DAYS = 183
         const val GYM_LOCATION_ID = "node-448794721"
         val vancouverBbox = Bbox(west = -125.0, south = 47.0, east = -120.0, north = 51.0)
         val aspiraBookingRef =

@@ -32,17 +32,73 @@ const feature = (properties: Record<string, unknown> = {}, id: number = POI_ID):
   },
 });
 
-/** One campsite's availability stream. `statuses` is per-day, WEEK-aligned. */
-const stream = (campsiteId: number, statuses: string[]) => ({
-  provider: 'recgov',
-  campsite_id: campsiteId,
-  checked_at: '2026-08-09T00:00:00Z',
-  start_date: WEEK[0],
-  end_date: '2026-08-17',
-  state: 'ok',
-  season: null,
-  availability: WEEK.map((date, index) => ({ date, status: statuses[index] ?? 'unknown' })),
-  cache: { hit: true, age_seconds: 120, ttl_seconds: 600 },
+/** The provider's booking horizon, as the response reports it. */
+const LATEST = '2027-02-06';
+
+/** One campsite's statuses, per day, WEEK-aligned. Fused into `days` below. */
+const stream = (campsiteId: number, statuses: string[]) => ({ campsiteId, statuses });
+type Stream = ReturnType<typeof stream>;
+
+/**
+ * The backend's own two rules, restated here so the fixture is a real response.
+ *
+ * Rollup precedence is `available > first_come > unknown > reserved`, with `closed`
+ * only by unanimity; a cell is watchable when its status is one a watch could fire
+ * on. Both are the backend's to decide now — this fixture only has to speak the
+ * shape it decides in.
+ */
+const ROLLUP_ORDER = ['available', 'first_come', 'unknown', 'reserved'];
+const WATCHABLE_STATUSES = new Set(['reserved', 'first_come']);
+
+const rollup = (statuses: string[]): string => {
+  if (statuses.length === 0) return 'unknown';
+  const found = ROLLUP_ORDER.find((candidate) => statuses.includes(candidate));
+  if (found) return found;
+  return statuses.every((status) => status === 'closed') ? 'closed' : 'unknown';
+};
+
+const fusedDay = (date: string, index: number, streams: readonly Stream[]) => {
+  const cells = Object.fromEntries(
+    streams.map((row) => {
+      const status = row.statuses[index] ?? 'unknown';
+      return [String(row.campsiteId), { status, watchable: WATCHABLE_STATUSES.has(status) }];
+    }),
+  );
+  const statuses = Object.values(cells).map((cell) => cell.status);
+  return {
+    date,
+    status: rollup(statuses),
+    watchable: Object.values(cells).some((cell) => cell.watchable),
+    cells,
+  };
+};
+
+/**
+ * A day exactly as the wire sent it: `status` and `watchable` are given, never
+ * re-derived from `cells`. A fixture that derived them could not tell a component
+ * that reads the wire from one that quietly re-rolls the day itself.
+ */
+const wireDay = (
+  date: string,
+  status: string,
+  watchable: boolean,
+  cells: Record<string, { status: string; watchable: boolean }>,
+) => ({ date, status, watchable, cells });
+
+/** One active watch on this POI covering the night starting `startDate`. */
+const watchOn = (startDate: string, endDate: string) => ({
+  id: 9,
+  targets: [{ poi_id: POI_ID }],
+  poi_id: POI_ID,
+  campsite_filters: {},
+  start_date: startDate,
+  end_date: endDate,
+  trigger_kinds: ['slack_notify'],
+  trigger_config: {},
+  stop_when_triggered: true,
+  status: 'active',
+  created_at: '2026-08-01T00:00:00Z',
+  updated_at: '2026-08-01T00:00:00Z',
 });
 
 const catalogRow = (id: number, extra: Record<string, unknown> = {}) => ({
@@ -59,7 +115,8 @@ const catalogRow = (id: number, extra: Record<string, unknown> = {}) => ({
 // --- endpoint stubs --------------------------------------------------------
 
 interface Stubs {
-  availability: (url: string) => Response;
+  /** May return a pending promise, which is how the loading state is exercised. */
+  availability: (url: string) => Response | Promise<Response>;
   campsites: () => Response;
   /** May return a pending promise, which is how the loading state is exercised. */
   watches: () => Response | Promise<Response>;
@@ -73,10 +130,32 @@ let requests: string[];
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
+const SLACK_CAPABILITIES = {
+  trigger_kinds: ['slack_notify'],
+  add_to_cart: { state: 'unsupported' },
+};
+
+/** A provider the poller cannot reach: no trigger the backend would accept. */
+const NO_CAPABILITIES = {
+  trigger_kinds: [],
+  add_to_cart: { state: 'unsupported' },
+};
+
 const availabilityBody = (
-  campsites: unknown[],
-  watchCapabilities: unknown = { trigger_kinds: ['slack_notify'], booking_actions: [] },
-) => ({ poi_id: POI_ID, start_date: WEEK[0], end_date: '2026-08-17', watch_capabilities: watchCapabilities, campsites });
+  streams: readonly Stream[],
+  watchCapabilities: unknown = SLACK_CAPABILITIES,
+  overrides: Record<string, unknown> = {},
+) => ({
+  poi_id: POI_ID,
+  start_date: WEEK[0],
+  end_date: '2026-08-17',
+  latest_date: LATEST,
+  state: streams.length === 0 ? 'empty' : 'success',
+  cache: { hit: true, age_seconds: 120, ttl_seconds: 600 },
+  days: streams.length === 0 ? [] : WEEK.map((date, index) => fusedDay(date, index, streams)),
+  watch_capabilities: watchCapabilities,
+  ...overrides,
+});
 
 const catalogBody = (rows: unknown[], templates: Record<string, string> = {}) => ({
   poi_id: POI_ID,
@@ -184,6 +263,26 @@ describe('the week grid', () => {
     expect(screen.getByRole('button', { name: /View details for Upper Loop \/ Site 2/ })).toBeInTheDocument();
   });
 
+  test('draws the day the response sent, not one it could have derived', async () => {
+    // The wire contradicts both rules a client might re-derive: an all-`reserved`
+    // day rolled up to `first_come`, and a `reserved` cell the backend calls
+    // unwatchable. A grid that re-fused the day would disagree with each.
+    stubs.availability = () =>
+      json(
+        availabilityBody([stream(1, ['reserved'])], undefined, {
+          days: [wireDay(WEEK[0], 'first_come', false, { 1: { status: 'reserved', watchable: false } })],
+        }),
+      );
+    await mount();
+
+    await act(async () => {
+      screen.getAllByRole('columnheader')[1]!.querySelector('button')!.click();
+    });
+
+    expect(screen.getByText('First come first served')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
+  });
+
   test('counts the rows in the title', async () => {
     await mount();
 
@@ -200,9 +299,9 @@ describe('the week grid', () => {
   test('marks a stale cache', async () => {
     stubs.availability = () =>
       json(
-        availabilityBody([
-          { ...stream(1, ['available']), cache: { hit: true, age_seconds: 3600, ttl_seconds: 600 } },
-        ]),
+        availabilityBody([stream(1, ['available'])], undefined, {
+          cache: { hit: true, age_seconds: 3600, ttl_seconds: 600 },
+        }),
       );
     await mount();
 
@@ -326,12 +425,16 @@ describe('the week"s states', () => {
     );
   });
 
+  // The banner is picked by the window's `state`: a closed season ships no days at
+  // all, and a client that read emptiness alone could not tell it from `empty`.
   test('a closed season reports when it reopens', async () => {
     stubs.availability = () =>
       json(
-        availabilityBody([
-          { ...stream(1, []), state: 'closed_for_season', season: { reopens_on: '2027-05-01' } },
-        ]),
+        availabilityBody([stream(1, WEEK.map(() => 'closed'))], undefined, {
+          state: 'closed_for_season',
+          season: { reopens_on: '2027-05-01' },
+          days: [],
+        }),
       );
     render(
       <AppProviders client={testClient()}>
@@ -340,6 +443,29 @@ describe('the week"s states', () => {
     );
 
     await waitFor(() => expect(screen.getByText(/Reopens 2027-05-01/)).toBeInTheDocument());
+  });
+
+  // A closed or empty week still replaces the grid with a banner, but the banner must
+  // not take the week nav down with it — otherwise a closed week strands the user on
+  // it with no way to page to one that isn't.
+  test('a closed week keeps its week nav', async () => {
+    stubs.availability = () =>
+      json(
+        availabilityBody([stream(1, WEEK.map(() => 'closed'))], undefined, {
+          state: 'closed_for_season',
+          season: { reopens_on: '2027-05-01' },
+          days: [],
+        }),
+      );
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature()} />
+      </AppProviders>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Reopens 2027-05-01/)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Previous week' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Next week' })).toBeInTheDocument();
   });
 
   test('a rate limit offers to watch instead, with no stale data to show', async () => {
@@ -464,6 +590,67 @@ describe('the calendar popover', () => {
     expect(screen.getByRole('button', { name: '9' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '11' })).not.toBeDisabled();
   });
+
+  // The ceiling is the provider's real horizon — 180 days on rec.gov, 183 on
+  // ReserveCalifornia — not a flat year, and the picker picks a *week start*: the
+  // last one that fits is seven days back from the horizon. Offering the horizon
+  // itself sends the user to a request the backend refuses with
+  // `beyond_booking_horizon`.
+  test('stops a week short of the horizon the response reported', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available'])], undefined, { latest_date: '2026-08-20' }));
+    await mount();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Pick a date' }).click();
+    });
+
+    expect(screen.getByRole('button', { name: '13' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '14' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '20' })).toBeDisabled();
+  });
+
+  test('uses the POI detail’s horizon until the week lands, and none without either', async () => {
+    stubs.availability = () => new Promise<Response>(() => {});
+    const { unmount } = render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature({ latest_date: '2026-08-20' })} />
+      </AppProviders>,
+    );
+    await act(async () => {
+      screen.getByRole('button', { name: 'Pick a date' }).click();
+    });
+    expect(screen.getByRole('button', { name: '13' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '14' })).toBeDisabled();
+    unmount();
+
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature()} />
+      </AppProviders>,
+    );
+    await act(async () => {
+      screen.getByRole('button', { name: 'Pick a date' }).click();
+    });
+    // No horizon stated anywhere: an invented ceiling would be a guess.
+    expect(screen.getByRole('button', { name: '21' })).not.toBeDisabled();
+  });
+
+  // A horizon less than a week past the earliest date puts the raw ceiling
+  // *behind* the floor, and a picker whose max is before its min offers nothing
+  // at all. The earliest week is always selectable — it is the week on screen.
+  test('never puts the ceiling below the earliest bookable date', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available'])], undefined, { latest_date: '2026-08-13' }));
+    await mount();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Pick a date' }).click();
+    });
+
+    expect(screen.getByRole('button', { name: '10' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '11' })).toBeDisabled();
+  });
 });
 
 describe('paging weeks', () => {
@@ -502,6 +689,48 @@ describe('paging weeks', () => {
 
     // Seven columns ending on the 16th — an exclusive-end label would say 17.
     expect(screen.getByRole('button', { name: 'Pick a date' })).toHaveTextContent('Aug 10 – 16, 2026');
+  });
+
+  // `›` used to be clamped on the low side only, so it kept walking past the
+  // provider's horizon into requests the backend answers with
+  // `beyond_booking_horizon`.
+  test('stops at the last week the horizon allows', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available'])], undefined, { latest_date: '2026-08-24' }));
+    await mount();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Next week' }).click();
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Pick a date' })).toHaveTextContent(
+        'Aug 17 – 23, 2026',
+      ),
+    );
+
+    expect(screen.getByRole('button', { name: 'Next week' })).toBeDisabled();
+    await act(async () => {
+      screen.getByRole('button', { name: 'Next week' }).click();
+    });
+    expect(requests.filter((url) => url.includes('start_date=2026-08-24'))).toHaveLength(0);
+  });
+
+  // An error card that replaced the whole surface stranded the user on the week
+  // that failed: the one control that could get them out of it went with it.
+  test('keeps the week nav under a week the provider refused', async () => {
+    stubs.availability = () => json({ error: 'beyond_booking_horizon' }, 400);
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature()} />
+      </AppProviders>,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('That date is past what this provider lets you book'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: 'Previous week' })).toBeInTheDocument();
   });
 });
 
@@ -592,6 +821,9 @@ describe('watches', () => {
       end_date: '2026-08-12',
       trigger_kinds: ['slack_notify'],
     });
+    // No cadence: the grid used to pin every watch at 60s, which overrode the
+    // POI's own override and the global default the resolver would have chosen.
+    expect(body).not.toHaveProperty('cadence_sec');
   });
 
   test('an anonymous visitor is asked to sign in, with no error banner', async () => {
@@ -624,7 +856,7 @@ describe('watches', () => {
       json(
         availabilityBody(
           [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
-          { trigger_kinds: [], booking_actions: [] },
+          { trigger_kinds: [], add_to_cart: { state: 'unsupported' } },
         ),
       );
     await mount();
@@ -669,7 +901,7 @@ describe('watches', () => {
       json(
         availabilityBody([stream(1, ['available', 'reserved'])], {
           trigger_kinds: ['email_notify'],
-          booking_actions: [],
+          add_to_cart: { state: 'unsupported' },
         }),
       );
     await mount();
@@ -713,7 +945,7 @@ describe('watches', () => {
       json(
         availabilityBody([stream(1, ['available', 'reserved'])], {
           trigger_kinds: [],
-          booking_actions: [],
+          add_to_cart: { state: 'unsupported' },
         }),
       );
     await mount();
@@ -802,27 +1034,26 @@ describe('watches', () => {
     expect(screen.queryByRole('button', { name: /Site 1 2026-08-16:/ })).toBeNull();
   });
 
+  test('a watched cell keeps its control when the provider can no longer be watched', async () => {
+    // The provider stopped supporting internal polling after this watch was set:
+    // the wire says the cell is unwatchable and the capability block blocks the
+    // gate, yet the one existing watch still has to be reachable.
+    stubs.availability = () =>
+      json(
+        availabilityBody([stream(1, ['reserved'])], NO_CAPABILITIES, {
+          days: [wireDay(WEEK[0], 'reserved', false, { 1: { status: 'reserved', watchable: false } })],
+        }),
+      );
+    stubs.watches = () => json({ watches: [watchOn(WEEK[0], WEEK[1])], total: 1 });
+    await mount();
+
+    const watched = cell('Site 1', WEEK[0]);
+    expect(watched.className).toContain('is-watched');
+    expect(watched).toHaveAccessibleName(/availability watch set, tap to manage/);
+  });
+
   test('an existing watch marks its column and offers removal', async () => {
-    stubs.watches = () =>
-      json({
-        watches: [
-          {
-            id: 9,
-            targets: [{ poi_id: POI_ID }],
-            poi_id: POI_ID,
-            campsite_filters: {},
-            start_date: '2026-08-11',
-            end_date: '2026-08-12',
-            trigger_kinds: ['slack_notify'],
-            trigger_config: {},
-            stop_when_triggered: true,
-            status: 'active',
-            created_at: '2026-08-01T00:00:00Z',
-            updated_at: '2026-08-01T00:00:00Z',
-          },
-        ],
-        total: 1,
-      });
+    stubs.watches = () => json({ watches: [watchOn(WEEK[1], WEEK[2])], total: 1 });
     await mount();
 
     expect(cell('Site 1', WEEK[1]).className).toContain('is-watched');
@@ -904,7 +1135,10 @@ describe('the catalog', () => {
 });
 
 /** The capability block a user who can actually hold a site gets back. */
-const ATC_CAPABILITIES = { trigger_kinds: ['slack_notify', 'atc'], booking_actions: ['add_to_cart'] };
+const ATC_CAPABILITIES = {
+  trigger_kinds: ['slack_notify', 'atc'],
+  add_to_cart: { state: 'ready' },
+};
 
 describe('holding a site straight from the grid', () => {
   const armFirstCell = async () => {

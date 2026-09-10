@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.client.mapbox.MapboxDirections
 import ca.floo.roadtrip.config.RouteConfig
+import ca.floo.roadtrip.fixtures.testBookingHorizons
 import ca.floo.roadtrip.model.routing.RouteResponse
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
@@ -65,6 +66,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                         dateResolver =
                             ca.floo.roadtrip.service.availability
                                 .AvailabilityDateResolver(PoiRepo(ctx)),
+                        bookingHorizons = testBookingHorizons(ctx),
                     ),
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),

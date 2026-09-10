@@ -93,9 +93,10 @@ internal fun Route.bulkAvailabilityRoutes(
                 description =
                     "Body: { poi_ids: [pois.id, ...1..${config.maxPois}], start_date, end_date, " +
                         "min_nights?, site_type? }. Returns one entry per requested POI, in request " +
-                        "order. Each entry carries either its campsites — filtered to " +
-                        "`longest_run_nights >= min_nights` and sorted descending — or an error code. " +
-                        "A POI failing never fails the request. `site_type` accepts: $siteTypeWireList.",
+                        "order. Each entry carries either its campsites — one envelope per campsite, " +
+                        "each day a single cell — filtered to `longest_run_nights >= min_nights` and " +
+                        "sorted descending, or an error code. A POI failing never fails the request. " +
+                        "`site_type` accepts: $siteTypeWireList.",
             ).access(RouteAccess.Anonymous)
         }
     }

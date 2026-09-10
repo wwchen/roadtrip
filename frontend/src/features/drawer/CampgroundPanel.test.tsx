@@ -50,8 +50,13 @@ const respondFor = (url: string): Response => {
       poi_id: ID,
       start_date: '2026-08-09',
       end_date: '2026-08-16',
-      watch_capabilities: { trigger_kinds: [], booking_actions: [] },
-      campsites: [],
+      latest_date: '2027-02-08',
+      state: 'empty',
+      days: [],
+      watch_capabilities: {
+        trigger_kinds: [],
+        add_to_cart: { state: 'unsupported' },
+      },
     });
   }
   if (url.includes('/campsites')) {

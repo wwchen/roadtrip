@@ -21,6 +21,7 @@ import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.route.api.pois.campsiteRoutes
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
@@ -51,10 +52,14 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val UNKNOWN_POI_ID = 999_999L
 private const val DEFAULT_WINDOW_DAYS = 7
+
+// The serving fake's horizon.
+private const val TEST_BOOKING_HORIZON_DAYS = 180L
 
 // Every nullable campsite column the recgov ETL leaves unwritten, in the wire
 // names `CampsiteDto` serves them under.
@@ -119,6 +124,7 @@ class CampsiteRoutesTest : SharedDbTest() {
                     availabilityProviders = providers,
                     dateResolver = dateResolver,
                     failoverFetcher = FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))),
+                    bookingHorizons = BookingHorizonResolver(providers, dateResolver),
                     availabilityRepo = AvailabilityRepo(ctx),
                 ),
             dateResolver = dateResolver,
@@ -236,7 +242,7 @@ class CampsiteRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `GET availability returns one envelope per campsite with watch capabilities`() =
+    fun `GET availability returns the fused week with watch capabilities`() =
         testApplication {
             application { routeTestApplication { campsiteRoutesUnderTest() } }
             val (poiId, campsiteId) = seedRecgovPoiWithCampsite()
@@ -250,6 +256,13 @@ class CampsiteRoutesTest : SharedDbTest() {
             val startDate = LocalDate.parse(body["start_date"]!!.jsonPrimitive.content)
             val endDate = LocalDate.parse(body["end_date"]!!.jsonPrimitive.content)
             assertEquals(DEFAULT_WINDOW_DAYS.toLong(), ChronoUnit.DAYS.between(startDate, endDate))
+            // The picker's ceiling is the serving provider's booking horizon.
+            assertEquals(
+                startDate.plusDays(TEST_BOOKING_HORIZON_DAYS).toString(),
+                body["latest_date"]!!.jsonPrimitive.content,
+            )
+            assertEquals("success", body["state"]!!.jsonPrimitive.content)
+            assertEquals(false, body["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
 
             // Watch capabilities are computed from the same campsite set.
             val capabilities = body["watch_capabilities"]!!.jsonObject
@@ -258,20 +271,53 @@ class CampsiteRoutesTest : SharedDbTest() {
                 capabilities["trigger_kinds"]!!.jsonArray.map { it.jsonPrimitive.content },
             )
 
-            val envelope = body["campsites"]!!.jsonArray.single().jsonObject
-            assertEquals("recgov", envelope["provider"]!!.jsonPrimitive.content)
-            assertEquals(campsiteId, envelope["campsite_id"]!!.jsonPrimitive.long)
-            assertEquals("success", envelope["state"]!!.jsonPrimitive.content)
-            val days = envelope["availability"]!!.jsonArray
+            val days = body["days"]!!.jsonArray
             assertEquals(DEFAULT_WINDOW_DAYS, days.size)
+            assertEquals(
+                Json.parseToJsonElement(
+                    """
+                    {"date":"$startDate","status":"available","watchable":false,
+                     "cells":{"$campsiteId":{"status":"available","watchable":false}}}
+                    """.trimIndent(),
+                ),
+                days.first(),
+            )
             assertTrue(days.all { it.jsonObject["status"]!!.jsonPrimitive.content == "available" })
-            assertEquals(false, envelope["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
+        }
+
+    @Test
+    fun `GET availability marks a reserved day watchable on a polling provider`() =
+        testApplication {
+            application {
+                routeTestApplication { campsiteRoutesUnderTest(listOf(ServingRecgovProvider(AvailabilityStatus.RESERVED))) }
+            }
+            val (poiId, campsiteId) = seedRecgovPoiWithCampsite()
+
+            val resp = client.get("/api/pois/$poiId/campsites/availability")
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val day =
+                Json
+                    .parseToJsonElement(resp.bodyAsText())
+                    .jsonObject["days"]!!
+                    .jsonArray
+                    .first()
+                    .jsonObject
+            assertEquals(true, day["watchable"]!!.jsonPrimitive.boolean)
+            assertEquals(
+                true,
+                day["cells"]!!
+                    .jsonObject["$campsiteId"]!!
+                    .jsonObject["watchable"]!!
+                    .jsonPrimitive.boolean,
+            )
         }
 
     @Test
     fun `GET availability with a site_type filter matching nothing returns an empty window`() =
         testApplication {
-            application { routeTestApplication { campsiteRoutesUnderTest() } }
+            // No provider registered, so the campground has none to resolve either.
+            application { routeTestApplication { campsiteRoutesUnderTest(providers = emptyList()) } }
             val (poiId, _) = seedRecgovPoiWithCampsite()
 
             val resp = client.get("/api/pois/$poiId/campsites/availability?site_type=rv")
@@ -279,10 +325,15 @@ class CampsiteRoutesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(poiId, body["poi_id"]!!.jsonPrimitive.long)
-            assertTrue(body["campsites"]!!.jsonArray.isEmpty())
+            assertEquals("empty", body["state"]!!.jsonPrimitive.content)
+            assertTrue(body["days"]!!.jsonArray.isEmpty())
+            assertNull(body["cache"])
             val startDate = LocalDate.parse(body["start_date"]!!.jsonPrimitive.content)
             val endDate = LocalDate.parse(body["end_date"]!!.jsonPrimitive.content)
             assertEquals(DEFAULT_WINDOW_DAYS.toLong(), ChronoUnit.DAYS.between(startDate, endDate))
+            // No provider resolves for the campground, so there is no horizon to
+            // state: the fallback bounds the window, it is not a ceiling to publish.
+            assertNull(body["latest_date"])
         }
 
     @Test
@@ -364,12 +415,14 @@ class CampsiteRoutesTest : SharedDbTest() {
  * every day of whatever window it is asked for, so the route test controls the
  * whole pipeline without any upstream call.
  */
-private class ServingRecgovProvider : AvailabilityProvider {
+private class ServingRecgovProvider(
+    private val status: AvailabilityStatus = AvailabilityStatus.AVAILABLE,
+) : AvailabilityProvider {
     override val id: BookingProvider = BookingProvider.RECGOV
     override val capabilities =
         AvailabilityProviderCapabilities(
             supportsInternalPolling = true,
-            bookingHorizonDays = 180,
+            bookingHorizonDays = TEST_BOOKING_HORIZON_DAYS.toInt(),
             maxPollWindowDays = 60,
         )
 
@@ -400,7 +453,7 @@ private class ServingRecgovProvider : AvailabilityProvider {
                             campsiteId = campsite.id,
                             date = startDate.plusDays(offset.toLong()),
                             observedAt = observedAt,
-                            status = AvailabilityStatus.AVAILABLE,
+                            status = status,
                         )
                     }
                 },

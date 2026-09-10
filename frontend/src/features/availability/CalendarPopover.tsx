@@ -27,8 +27,8 @@ export interface CalendarPopoverProps {
   today: Date;
   /** Highlighted day: the visible week's start. */
   selectedDate: Date | null;
-  /** The provider's booking horizon. */
-  maxDate: Date;
+  /** The provider's booking horizon, or null when nothing has stated one. */
+  maxDate: Date | null;
   onPick: (date: Date) => void;
   onClose: () => void;
 }
@@ -48,7 +48,7 @@ export function CalendarPopover({
 
   const todayIso = localYmd(today);
   const selectedIso = selectedDate ? localYmd(selectedDate) : null;
-  const maxIso = localYmd(maxDate);
+  const maxIso = maxDate ? localYmd(maxDate) : null;
   const title = month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
@@ -103,7 +103,7 @@ export function CalendarPopover({
                 className={classes}
                 key={iso}
                 data-date={iso}
-                disabled={iso < todayIso || iso > maxIso}
+                disabled={iso < todayIso || (maxIso !== null && iso > maxIso)}
                 onClick={() => onPick(parseLocalYmd(iso))}
               >
                 {date.getDate()}

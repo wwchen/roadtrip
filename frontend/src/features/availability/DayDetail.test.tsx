@@ -2,24 +2,29 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
 import { DayDetail, type WatchUnavailableReason } from './DayDetail';
-import type { FusedDay } from './fuse';
+import type { AvailabilityDay } from '@/api/availability-api';
 
-const reservedDay: FusedDay = {
+const reservedDay: AvailabilityDay = {
   date: '2026-09-08',
   status: 'reserved',
-  available_campsite_ids: [],
-  campsite_statuses: { '1': 'reserved', '2': 'reserved' },
+  watchable: true,
+  cells: {
+    '1': { status: 'reserved', watchable: true },
+    '2': { status: 'reserved', watchable: true },
+  },
 };
 
 function renderDetail(
   unavailable: WatchUnavailableReason | null,
+  day: AvailabilityDay = reservedDay,
   onSignIn = vi.fn(),
   onRetryWatches = vi.fn(),
+  watching = false,
 ) {
   render(
     <DayDetail
-      day={reservedDay}
-      watching={false}
+      day={day}
+      watching={watching}
       unavailable={unavailable}
       busy={false}
       onToggleWatch={vi.fn()}
@@ -58,5 +63,38 @@ describe('the day panel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(onRetryWatches).toHaveBeenCalledOnce();
+  });
+
+  test('offers the watch when the day says it is watchable', () => {
+    renderDetail(null);
+
+    expect(screen.getByRole('button', { name: 'Set watch' })).toBeInTheDocument();
+  });
+
+  test('an existing watch keeps its control on a day that is no longer watchable', () => {
+    // The provider stopped polling, or the day closed, after the watch was set.
+    // Removing it has to stay possible, so the toggle survives `watchable: false`.
+    renderDetail(
+      null,
+      { ...reservedDay, watchable: false, cells: { '1': { status: 'reserved', watchable: false } } },
+      undefined,
+      undefined,
+      true,
+    );
+
+    expect(screen.getByRole('button', { name: 'Watching - tap to remove' })).toBeInTheDocument();
+  });
+
+  test('takes the day’s own watchable flag, not its status', () => {
+    // Reserved, and still unwatchable: the provider cannot be internally polled,
+    // which is a fact only the backend has.
+    renderDetail(null, {
+      ...reservedDay,
+      watchable: false,
+      cells: { '1': { status: 'reserved', watchable: false } },
+    });
+
+    expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
+    expect(screen.getByText(/no online openings to watch/i)).toBeInTheDocument();
   });
 });

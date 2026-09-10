@@ -32,6 +32,10 @@ private const val NORMAL_SLICE_DELAY_MS = 20L
 
 private val windowStart: LocalDate = LocalDate.of(2026, 9, 1)
 private val windowEnd: LocalDate = LocalDate.of(2026, 9, 8)
+
+/** rec.gov's horizon, so the faked slice's ceiling is a real provider's. */
+private const val BOOKING_HORIZON_DAYS = 180L
+private val windowLatest: LocalDate = windowStart.plusDays(BOOKING_HORIZON_DAYS)
 private val observedAt: Instant = Instant.parse("2026-08-20T00:00:00Z")
 
 class BulkAvailabilityControllerTest {
@@ -242,9 +246,12 @@ private fun rankedSlice(poiId: Long): PoiAvailabilitySlice {
         poiId = poiId,
         startDate = windowStart,
         endDate = windowEnd,
+        earliestDate = windowStart,
+        latestDate = windowLatest,
         allCampsites = campsites,
         campsites = campsites,
         batch = batchOf(observations),
+        pollingSupported = true,
     )
 }
 
@@ -255,9 +262,12 @@ private fun simpleSlice(poiId: Long): PoiAvailabilitySlice {
         poiId = poiId,
         startDate = windowStart,
         endDate = windowEnd,
+        earliestDate = windowStart,
+        latestDate = windowLatest,
         allCampsites = listOf(campsite),
         campsites = listOf(campsite),
         batch = batchOf(observationsForRun(campsite.id, nights = 1)),
+        pollingSupported = true,
     )
 }
 
@@ -267,7 +277,10 @@ private fun noSitesSlice(poiId: Long): PoiAvailabilitySlice =
         poiId = poiId,
         startDate = windowStart,
         endDate = windowEnd,
+        earliestDate = windowStart,
+        latestDate = windowLatest,
         allCampsites = emptyList(),
         campsites = emptyList(),
         batch = null,
+        pollingSupported = true,
     )

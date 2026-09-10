@@ -72,14 +72,18 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
         clock: Clock = Clock.systemUTC(),
         snapshotFreshnessTtl: (AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
         availabilityRepo: AvailabilityRepo? = null,
-    ) = CampsiteAvailabilityService(
-        availabilityProviders = providers,
-        dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
-        failoverFetcher = fetcher,
-        availabilityRepo = availabilityRepo,
-        clock = clock,
-        snapshotFreshnessTtl = snapshotFreshnessTtl,
-    )
+    ): CampsiteAvailabilityService {
+        val dateResolver = AvailabilityDateResolver(PoiRepo(ctx))
+        return CampsiteAvailabilityService(
+            availabilityProviders = providers,
+            dateResolver = dateResolver,
+            failoverFetcher = fetcher,
+            bookingHorizons = BookingHorizonResolver(providers, dateResolver),
+            availabilityRepo = availabilityRepo,
+            clock = clock,
+            snapshotFreshnessTtl = snapshotFreshnessTtl,
+        )
+    }
 
     @Test
     fun `a cache hit still carries the provider's parent ref as scope`() {

@@ -19,15 +19,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LinkButton } from '@ui';
 import type { Campsite } from '@/api/campsite-api';
-import type { FusedDay } from './fuse';
+import type { AddToCartState, AvailabilityDay } from '@/api/availability-api';
+import { availabilityStatusMeta } from '@/lib/availability-status';
 import { SiteDetail } from './SiteDetail';
 import {
   DEFAULT_MATRIX_FILTERS,
   SORT_OPTIONS,
-  availabilityIndex,
   cellState,
   filterCampsites,
-  isWatchableKind,
   loopOptions,
   normalizeFilters,
   rowId,
@@ -45,7 +44,6 @@ import { dayOfMonthLabel, dowLabel } from './week-labels';
 import { clampSiteColumnWidth, saveSiteColumnWidth } from './site-column';
 import { CellBookPopover } from './CellBookPopover';
 import { cartActionFor, isCartActionPending, type CartAction } from './cart-action';
-import type { CartGate } from '@/lib/watch-windows';
 
 /** Width of one date column, matching `.cg-site-matrix-date` in the stylesheet. */
 const DATE_COLUMN_WIDTH_PX = 66;
@@ -68,7 +66,7 @@ export interface ArmedBook {
 }
 
 export interface SiteMatrixProps {
-  days: readonly FusedDay[];
+  days: readonly AvailabilityDay[];
   catalog: {
     campsites: readonly Campsite[];
     reservationUrlTemplates: ReservationUrlTemplates;
@@ -83,9 +81,8 @@ export interface SiteMatrixProps {
     armedBook: ArmedBook | null;
     watchedDates: ReadonlySet<string>;
     watchGate: WatchGate;
-    /** True when this caller could actually hold a site — the same condition
-     *  that enables the watch editor's ATC toggle. */
-    cartGate: CartGate;
+    /** The backend's reason the cart is or is not reachable for this reader. */
+    cart: AddToCartState;
     cartAction: CartAction | null;
   };
   events: {
@@ -144,11 +141,7 @@ export function SiteMatrix(props: SiteMatrixProps) {
   }
 
   const filters = normalizeFilters(view.filters);
-  const availabilityByDate = availabilityIndex(visibleDays);
-  const rows = sortCampsites(filterCampsites(allRows, filters), filters.sort, {
-    availabilityByDate,
-    visibleDays,
-  });
+  const rows = sortCampsites(filterCampsites(allRows, filters), filters.sort, visibleDays);
 
   const tools = (
     <MatrixTools
@@ -207,14 +200,13 @@ export function SiteMatrix(props: SiteMatrixProps) {
                 key={rowId(row)}
                 row={row}
                 visibleDays={visibleDays}
-                availabilityByDate={availabilityByDate}
                 selectedSiteId={view.selectedSiteId}
                 onSelectSite={events.siteSelected}
                 reservationUrlTemplates={catalog.reservationUrlTemplates}
                 armedBook={view.armedBook}
                 onArmBook={events.bookingArmed}
                 onOpenBooking={events.bookingOpened}
-                cartGate={view.cartGate}
+                cart={view.cart}
                 cartAction={view.cartAction}
                 onAddToCart={events.cartRequested}
                 onSignIn={events.signInRequested}
@@ -552,10 +544,9 @@ function FilterSelect({
 }
 
 /** The row's own inputs, plus the cell inputs it forwards unchanged. */
-type MatrixRowProps = Omit<MatrixCellProps, 'row' | 'day' | 'availableIds' | 'siteLabel'> & {
+type MatrixRowProps = Omit<MatrixCellProps, 'row' | 'day' | 'siteLabel'> & {
   row: Partial<Campsite>;
-  visibleDays: readonly FusedDay[];
-  availabilityByDate: Map<string, Set<string>>;
+  visibleDays: readonly AvailabilityDay[];
   selectedSiteId: string | null;
   onSelectSite: (campsiteId: string | null) => void;
 };
@@ -563,14 +554,13 @@ type MatrixRowProps = Omit<MatrixCellProps, 'row' | 'day' | 'availableIds' | 'si
 function MatrixRow({
   row,
   visibleDays,
-  availabilityByDate,
   selectedSiteId,
   onSelectSite,
   reservationUrlTemplates,
   armedBook,
   onArmBook,
   onOpenBooking,
-  cartGate,
+  cart,
   cartAction,
   onAddToCart,
   onSignIn,
@@ -608,13 +598,12 @@ function MatrixRow({
             key={day.date}
             row={row}
             day={day}
-            availableIds={availabilityByDate.get(day.date)}
             siteLabel={label}
             reservationUrlTemplates={reservationUrlTemplates}
             armedBook={armedBook}
             onArmBook={onArmBook}
             onOpenBooking={onOpenBooking}
-            cartGate={cartGate}
+            cart={cart}
             cartAction={cartAction}
             onAddToCart={onAddToCart}
             onSignIn={onSignIn}
@@ -647,14 +636,13 @@ function MatrixRow({
  */
 interface MatrixCellProps {
   row: Partial<Campsite>;
-  day: FusedDay;
-  availableIds: Set<string> | undefined;
+  day: AvailabilityDay;
   siteLabel: string;
   reservationUrlTemplates: ReservationUrlTemplates;
   armedBook: ArmedBook | null;
   onArmBook: (armed: ArmedBook | null) => void;
   onOpenBooking: (campsiteId: string, date: string) => void;
-  cartGate: CartGate;
+  cart: AddToCartState;
   cartAction: CartAction | null;
   onAddToCart: (campsiteId: string, date: string) => void;
   /** Offered from a gated cart row. */
@@ -668,13 +656,12 @@ interface MatrixCellProps {
 function MatrixCell({
   row,
   day,
-  availableIds,
   siteLabel,
   reservationUrlTemplates,
   armedBook,
   onArmBook,
   onOpenBooking,
-  cartGate,
+  cart,
   cartAction,
   onAddToCart,
   onSignIn,
@@ -684,7 +671,8 @@ function MatrixCell({
   onOpenWatch,
 }: MatrixCellProps) {
   const [cellAnchor, setCellAnchor] = useState<HTMLElement | null>(null);
-  const state = cellState(row, day, availableIds);
+  const cell = cellState(row, day);
+  const state = availabilityStatusMeta(cell.status);
   const id = rowId(row);
   const aria = `${siteLabel} ${day.date}: ${state.aria}`;
   const cellClass = `cg-site-matrix-cell cg-site-matrix-cell-${state.kind}`;
@@ -694,7 +682,7 @@ function MatrixCell({
     // A watched cell stays interactive even for a user who can no longer create
     // watches, so an existing one can always be managed. A signed-out visitor gets
     // the same cell: it opens the sign-in gate rather than the editor.
-    if (isWatchableKind(state.kind) && (watchGate !== 'blocked' || watched)) {
+    if ((cell.watchable || watched) && (watchGate !== 'blocked' || watched)) {
       const signedOut = watchGate === 'signed-out' && !watched;
       return (
         <td className={cellClass}>
@@ -763,9 +751,9 @@ function MatrixCell({
     );
   }
 
-  // The popover opens wherever the scope has a cart: the gate decides what the
+  // The popover opens wherever the scope has a cart: the state decides what the
   // second row says, not whether there is a choice to make.
-  const hasCartRow = cartGate !== 'unsupported';
+  const hasCartRow = cart !== 'unsupported';
   const openPopover = armed && hasCartRow;
 
   return (
@@ -795,13 +783,13 @@ function MatrixCell({
           anchor={cellAnchor}
           onOpenBooking={() => onOpenBooking(id, day.date)}
           cart={
-            cartGate === 'ready'
+            cart === 'ready'
               ? {
                   state: 'ready',
                   onAddToCart: () => onAddToCart(id, day.date),
                   busy: isCartActionPending(cartAction),
                 }
-              : cartGate === 'signed-out'
+              : cart === 'signed_out'
                 ? { state: 'signed-out', onSignIn }
                 : { state: 'no-credentials', onOpenSettings }
           }

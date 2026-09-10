@@ -109,6 +109,7 @@ service/availability/
 ├── FailoverAvailabilityFetcher.kt       # walks candidates on retryable failure; records per-attempt outcomes
 ├── ProviderCooldownTracker.kt           # in-process demote-on-failure for BookingProvider
 ├── CatalogAvailabilityBatcher.kt        # groups resolved targets by (provider, parentRef, dateContext)
+├── PoiAvailabilityFusion.kt             # campsite streams → the campground week (rollup, cells, watchability)
 ├── TriggerActionHandler.kt              # fire-side registry (notification/ATC kinds; unknown kinds inert)
 ├── AtcTriggerActionHandler.kt           # `atc` → booking adapter, then the owner's Slack + email
 ├── NotifyTriggerActionHandler.kt        # `slack_notify` / `email_notify` → notification targets
@@ -324,20 +325,72 @@ mutation with `unsupported_trigger` instead of creating an active watch that
 can never fulfill its trigger.
 
 The campsite availability API exposes proposed-watch capabilities for the
-current POI scope as provider-neutral `watch_capabilities`. `booking_actions`
-is a property of the scope alone. `trigger_kinds` is a property of the scope
-*and the caller*: it includes configured notification triggers such as
-`slack_notify` and `email_notify`, and includes `atc` only when the resolved
-watch scope supports `BookingAction.ADD_TO_CART` **and** the requesting user
-has rec.gov credentials configured. Gating is on *configured*, not *proven
-working*. For anonymous and magic-link readers `atc` is simply absent, never an
-error — while `booking_actions` still reports the cart, which is what lets the
-frontend distinguish "this campground cannot be held" from "add your
-credentials in Settings". Email notification recipients resolve at delivery
+current POI scope as provider-neutral `watch_capabilities`. Whether the scope
+has a cart at all is a property of the scope alone, and stays inside
+`WatchCapabilityService`. `trigger_kinds` is a property of the scope *and the
+caller*: it includes configured notification triggers such as `slack_notify`
+and `email_notify`, and includes `atc` only when the resolved watch scope
+supports `BookingAction.ADD_TO_CART` **and** the requesting user has rec.gov
+credentials configured. Gating is on *configured*, not *proven working*. For
+anonymous and magic-link readers `atc` is simply absent, never an error — and
+`add_to_cart.state` below is what lets the frontend distinguish "this
+campground cannot be held" from "add your credentials in Settings".
+
+The campsite availability API states this outcome directly as
+`watch_capabilities.add_to_cart.state` (`WatchCapabilityService.addToCartState`):
+`ready | no_credentials | signed_out | unsupported`. `unsupported` covers both
+ways `atc` can be unreachable for the scope — no cart, or no internal polling
+at all, since a watch that can never observe an opening can never fire one.
+`atc` appears in `trigger_kinds` exactly when this state is `ready`. The
+frontend renders the matching copy for whichever state it receives rather than
+inferring one from what `trigger_kinds` omits.
+
+Email notification recipients resolve at delivery
 time from the watch owner's `user_settings.notification_email`, falling back to
 the owner's login email; watches cannot override or persist a recipient. The FE
 renders the Email and Add to cart toggles from this contract; create/update
 validation is the authoritative gate.
+
+## The campground availability wire
+
+`GET /api/pois/{id}/campsites/availability` serves the campground week already
+fused: the rollup, the cell grid and every watchability answer are decided here,
+not in a browser.
+
+```jsonc
+{
+  "state": "success",          // success | empty | closed_for_season
+  "season": { "reopens_on": "2027-05-01" },  // only when closed_for_season
+  "cache": { "hit": true, "age_seconds": 120, "ttl_seconds": 600 },
+  "latest_date": "2027-02-06", // earliest bookable date + the provider's horizon
+  "days": [
+    {
+      "date": "2026-08-10",
+      "status": "reserved",    // rollup over `cells`
+      "watchable": true,       // true when any cell is
+      "cells": { "100": { "status": "reserved", "watchable": true } }
+    }
+  ],
+  "watch_capabilities": { }    // see the block above
+}
+```
+
+The day's `status` rolls its cells up as `available > first_come > unknown >
+reserved`, with `closed` only by unanimity. A cell is `watchable` when its status
+is one a watch could fire on (`reserved` or `first_come`) **and** the serving
+provider supports internal polling **and** the date is not before the POI's
+earliest bookable date — one predicate, `AvailabilityCellDto.of`.
+
+`state: closed_for_season` ships `days: []`: clients gate the grid on `state`, so
+an all-closed week has nothing to draw. `state: empty` covers two cases: no
+campsite matched the request, or no observations could be fetched for the
+window.
+
+The per-campsite `campsites[]` envelopes left this response and remain only on
+`POST /api/pois/availability/bulk`, which carries one `AvailabilityResponseDto`
+per campsite with the same `cells` shape (a single cell per day, that campsite's)
+and the same watchable predicate — the two endpoints share the mapping so they
+cannot answer it differently.
 
 ## Capabilities
 
@@ -357,6 +410,12 @@ data class AvailabilityProviderCapabilities(
 
 The API can surface this struct for the campground behind a POI so the
 drawer can hide affordances the provider doesn't support.
+
+`bookingHorizonDays` also drives the campsite availability response's
+`latest_date`: the earliest servable date plus the serving provider's horizon
+(`BookingHorizonResolver`), not a client-side guess at a horizon shared by
+every vendor. A request past `latest_date` is a `beyond_booking_horizon`
+`bad_date_window` error, not a silently clamped window.
 
 ## Supported monitoring actions
 
@@ -423,10 +482,10 @@ above the adapter, inside the generic poller.
 
 ### Cadence is layered config, not a constant
 
-Cadence resolves through a fall-through chain:
+Cadence resolves through a fall-through chain, per watch:
 
 ```
-alert override  →  campground override  →  global default
+watch override  →  POI override  →  global default
 ```
 
 The principle: **different campgrounds have different cancellation
@@ -437,8 +496,8 @@ cadence is wrong for both.
 
 What the platform owns:
 
-- The fall-through resolver. Adapters never see "what's my cadence" —
-  they're called when the poller decides it's time.
+- The fall-through resolver (`ResolveCadence.kt`). Adapters never see "what's
+  my cadence" — they're called when the poller decides it's time.
 - The reconciliation between the configured cadence and upstream
   health. Rate limits, exponential backoff on failure, and adapter-
   level throttles all override the resolver. Cadence is a *target*,
@@ -451,9 +510,15 @@ The global rung is `roadtrip.availability.poller.default-cadence` (default
 default in code (`AvailabilityPollerConfig`) and are overridable in
 `application.yaml` per environment.
 
-What's deferred (see RFC 0007): the per-alert and per-campground override
-columns and the admin UI to set them. v1 ships the resolver with the global
-config rung only; overrides plug in later without changing call sites.
+The watch rung is the nullable `availability_watch.cadence_sec`; the POI rung
+is `pois.cadence_override_sec`, resolved against a poller's representative POI
+(`AvailabilityPollerRepo.cadenceOverrideForPoller`). A poller takes the
+tightest (min) resolved cadence across its live watches. Both override columns
+have existed since PR4 — what kept the lower rungs dead was the caller: the
+watch API used to receive an explicit `cadence_sec: 60` on every create, so
+the watch rung always won. Watch creation now omits `cadence_sec` by default,
+so a watch with no real preference actually reaches the POI override and the
+global default.
 
 ## How a watch becomes API calls
 

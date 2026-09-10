@@ -22,6 +22,8 @@ private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 internal data class CampsiteAvailabilityResult(
     val startDate: LocalDate,
     val endDate: LocalDate,
+    /** The serving provider's booking horizon, for the client's date picker. */
+    val latestDate: LocalDate,
     val batch: AvailabilityObservationBatch,
 )
 
@@ -29,6 +31,7 @@ internal class CampsiteAvailabilityService(
     private val availabilityProviders: List<AvailabilityProvider>,
     private val dateResolver: AvailabilityDateResolver,
     private val failoverFetcher: FailoverAvailabilityFetcher,
+    private val bookingHorizons: BookingHorizonResolver,
     availabilityRepo: AvailabilityRepo? = null,
     private val clock: Clock = Clock.systemUTC(),
     private val snapshotFreshnessTtl: (provider: AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
@@ -92,13 +95,27 @@ internal class CampsiteAvailabilityService(
         return CampsiteAvailabilityResult(
             startDate = windows.target.startDate,
             endDate = windows.target.endDate,
+            // providerFor above already found a provider for this campground, so the same pick here can't miss.
+            latestDate = bookingHorizons.latestDate(campground, dateContext)!!,
             batch = batch,
         )
     }
 
     private fun providerFor(campground: Campground): AvailabilityProvider =
-        availabilityProviders.firstOrNull { it.supportsCampground(campground) }
-            ?: throw AvailabilityServiceError.UnknownCampground
+        bookingHorizons.servingProvider(campground) ?: throw AvailabilityServiceError.UnknownCampground
+
+    /**
+     * The serving provider's booking horizon for [campground], or null when no
+     * provider claims it. Non-throwing counterpart to [providerFor], for
+     * callers (the empty-campsite branch) that have a fallback of their own.
+     */
+    fun bookingHorizonDaysFor(campground: Campground): Int? = bookingHorizons.horizonDaysFor(campground)
+
+    /**
+     * Whether the campground's serving provider can be polled for openings —
+     * one pick for the whole slice, not one per campsite.
+     */
+    fun internalPollingSupportedFor(campground: Campground): Boolean = bookingHorizons.internalPollingSupported(campground)
 }
 
 internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration = ApiCacheEntity.availability(providerId).defaultTtl

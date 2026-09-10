@@ -1,16 +1,17 @@
 import { describe, expect, test, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClientProvider } from '@tanstack/react-query';
 import { HttpError } from '@/api/http';
 import type { Watch } from '@/api/watches-api';
+import type { AddToCartState } from '@/api/availability-api';
 import { WatchEditor } from './WatchEditor';
 import { normalizeWatchCapabilities } from '@/lib/watch-windows';
-import { queryKeys } from '@/queries/keys';
-import { createTestQueryClient } from '@/test/query-client';
 
-const caps = (triggerKinds: string[], bookingActions: string[] = []) =>
-  normalizeWatchCapabilities({ trigger_kinds: triggerKinds, booking_actions: bookingActions });
+const caps = (triggerKinds: string[], addToCart: AddToCartState = 'unsupported') =>
+  normalizeWatchCapabilities({
+    trigger_kinds: triggerKinds,
+    add_to_cart: { state: addToCart },
+  });
 
 const watch = (overrides: Partial<Watch> = {}): Partial<Watch> => ({
   id: 1,
@@ -21,32 +22,20 @@ const watch = (overrides: Partial<Watch> = {}): Partial<Watch> => ({
 });
 
 /**
- * The editor reads identity from the `/api/me` query to choose its add-to-cart
- * copy, so every render needs a client. Seeded rather than fetched: these are
- * rendering tests, and a pending query would make the copy race the assertion.
+ * The editor needs no client: which add-to-cart sentence it shows comes from the
+ * capability block's `add_to_cart.state`, not from asking `/api/me` who is here.
  */
-const open = (
-  props: Partial<React.ComponentProps<typeof WatchEditor>> = {},
-  { signedIn = true }: { signedIn?: boolean } = {},
-) => {
+const open = (props: Partial<React.ComponentProps<typeof WatchEditor>> = {}) => {
   const onSave = vi.fn(async () => {});
-  const client = createTestQueryClient();
-  client.setQueryData(queryKeys.me(), {
-    authenticated: signedIn,
-    auth_enabled: true,
-    user: signedIn ? { id: 1, email: 'a@b.test', email_verified: true, roles: [] } : null,
-  });
   const view = render(
-    <QueryClientProvider client={client}>
-      <WatchEditor
-        title="Watch Bowman Bay"
-        subtitle="Tue, Aug 11"
-        watch={null}
-        capabilities={caps(['slack_notify'])}
-        onSave={onSave}
-        {...props}
-      />
-    </QueryClientProvider>,
+    <WatchEditor
+      title="Watch Bowman Bay"
+      subtitle="Tue, Aug 11"
+      watch={null}
+      capabilities={caps(['slack_notify'])}
+      onSave={onSave}
+      {...props}
+    />,
   );
   return { ...view, onSave };
 };
@@ -83,10 +72,10 @@ describe('what the form offers', () => {
     expect(screen.getByText('Unavailable for this watch scope.')).toBeInTheDocument();
   });
 
-  test('a signed-in user whose scope has a cart is pointed at Settings', () => {
-    // booking_actions says the campground can be held; the missing `atc` trigger
-    // says this user has no rec.gov credentials. Disabled, not hidden.
-    open({ capabilities: caps(['slack_notify'], ['add_to_cart']) });
+  test('a user whose scope has a cart but no credentials is pointed at Settings', () => {
+    // The backend says `no_credentials`: the campground can be held, this reader
+    // cannot hold it. Disabled, not hidden.
+    open({ capabilities: caps(['slack_notify'], 'no_credentials') });
 
     const atc = toggle('Add to cart');
     expect(atc).toBeDisabled();
@@ -96,7 +85,7 @@ describe('what the form offers', () => {
 
   test('the Settings hint is the control that opens Settings', async () => {
     const onOpenSettings = vi.fn();
-    open({ capabilities: caps(['slack_notify'], ['add_to_cart']), onOpenSettings });
+    open({ capabilities: caps(['slack_notify'], 'no_credentials'), onOpenSettings });
 
     await userEvent.click(screen.getByRole('button', { name: 'Add your rec.gov login' }));
 
@@ -105,7 +94,7 @@ describe('what the form offers', () => {
 
   test('an anonymous viewer is asked to sign in instead', async () => {
     const onSignIn = vi.fn();
-    open({ capabilities: caps(['slack_notify'], ['add_to_cart']), onSignIn }, { signedIn: false });
+    open({ capabilities: caps(['slack_notify'], 'signed_out'), onSignIn });
 
     expect(toggle('Add to cart')).toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));

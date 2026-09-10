@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { QueryClientProvider } from '@tanstack/react-query';
 import { CellBookPopover, type CellCart } from './CellBookPopover';
 import { WatchSignInGate } from '@/domain/watch/WatchSignInGate';
 import { WatchEditor } from '@/domain/watch/WatchEditor';
 import { normalizeWatchCapabilities } from '@/lib/watch-windows';
-import { queryKeys } from '@/queries/keys';
-import { createTestQueryClient } from '@/test/query-client';
 import './availability.css';
 
 /** The class the production shells put on `<html>`. */
@@ -48,24 +45,16 @@ function AnchoredCell({
 }
 
 /**
- * The editor reads identity from `/api/me` to choose its add-to-cart copy, so it
- * needs a client. Seeded rather than fetched: a pending query would show the wrong
- * branch for a beat, and Storybook has no backend to answer it.
+ * The theme boundary the editor is drawn inside.
+ *
+ * No query client: which add-to-cart sentence the editor shows comes from the
+ * capability block it is handed, so the story has nothing to seed.
  */
-function SignedIn({ children }: { children: ReactNode }) {
-  const [client] = useState(() => {
-    const created = createTestQueryClient();
-    created.setQueryData(queryKeys.me(), {
-      authenticated: true,
-      auth_enabled: true,
-      user: { id: 1, email: 'ada@example.test', email_verified: true, roles: [] },
-    });
-    return created;
-  });
+function Themed({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.classList.add(ZION_THEME_CLASS);
   }, []);
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return <>{children}</>;
 }
 
 const bookPopover = (cart: CellCart) => (
@@ -139,7 +128,7 @@ export const WatchGate: Story = {
  */
 export const EditorWithoutCredentials: Story = {
   render: () => (
-    <SignedIn>
+    <Themed>
       <div style={{ padding: 24 }}>
         <WatchEditor
           title="Watch Bowman Bay"
@@ -147,7 +136,7 @@ export const EditorWithoutCredentials: Story = {
           watch={null}
           capabilities={normalizeWatchCapabilities({
             trigger_kinds: ['slack_notify', 'email_notify'],
-            booking_actions: ['add_to_cart'],
+            add_to_cart: { state: 'no_credentials' },
           })}
           onSave={async () => {}}
           onSignIn={() => {}}
@@ -155,6 +144,6 @@ export const EditorWithoutCredentials: Story = {
           onClose={() => {}}
         />
       </div>
-    </SignedIn>
+    </Themed>
   ),
 };

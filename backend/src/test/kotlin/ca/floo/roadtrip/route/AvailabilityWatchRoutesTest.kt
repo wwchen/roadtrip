@@ -63,6 +63,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import ca.floo.roadtrip.route.api.availability.availabilityWatchRoutes as installAvailabilityWatchRoutes
 
@@ -326,6 +327,43 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals(false, obj.containsKey("target_dates"))
             assertEquals(false, obj.containsKey("min_nights"))
             assertEquals("active", obj["status"]!!.jsonPrimitive.content)
+        }
+
+    /**
+     * A create that omits `cadence_sec` stores NULL rather than a client-chosen
+     * default, which is what lets the poller's `watch ?? poi override ?? global
+     * default` fall-through reach its lower rungs.
+     */
+    @Test
+    fun `POST without cadence_sec stores a null cadence`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication {
+                    availabilityWatchRoutes(
+                        ctx,
+                        watchService(),
+                    )
+                }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "p-no-cadence", name = "No Cadence")
+            val body =
+                """
+                {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-06", "trigger_kinds": ["slack_notify"]}
+                """.trimIndent()
+
+            val resp =
+                client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+
+            assertEquals(HttpStatusCode.Created, resp.status)
+            val watch = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
+            assertEquals(false, watch.containsKey("cadence_sec"))
+            assertNull(AvailabilityWatchRepo(ctx).findById(watch["id"]!!.jsonPrimitive.long)!!.cadenceSec)
         }
 
     /**
@@ -1139,7 +1177,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val capabilities = body["watch_capabilities"]!!.jsonObject
             assertEquals(listOf("slack_notify", "email_notify"), capabilities["trigger_kinds"]!!.jsonArray.map { it.jsonPrimitive.content })
-            assertTrue(capabilities["booking_actions"]!!.jsonArray.isEmpty())
+            assertEquals("unsupported", capabilities["add_to_cart"]!!.jsonObject["state"]!!.jsonPrimitive.content)
         }
 
     @Test

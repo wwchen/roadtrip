@@ -5,29 +5,42 @@
 // watch on this cell" is answered from the backend's own capability block and not
 // from whether a button would look good there.
 import { addLocalDays, localYmd, parseLocalYmd } from '@/lib/local-date';
-import {
-  TRIGGER_KIND_ATC,
-  TRIGGER_KIND_EMAIL_NOTIFY,
-  TRIGGER_KIND_SLACK_NOTIFY,
-} from '@/lib/watch-triggers';
+import { TRIGGER_KIND_EMAIL_NOTIFY, TRIGGER_KIND_SLACK_NOTIFY } from '@/lib/watch-triggers';
 import type { Watch } from '@/api/watches-api';
-import type { WatchCapabilities as WireWatchCapabilities } from '@/api/availability-api';
+import type {
+  AddToCartState,
+  WatchCapabilities as WireWatchCapabilities,
+} from '@/api/availability-api';
 
-/** How often a watch polls, when the grid creates one. */
-export const DEFAULT_WATCH_CADENCE_SEC = 60;
-/** The booking action a provider must support before "add to cart" is offered. */
-const BOOKING_ACTION_ADD_TO_CART = 'add_to_cart';
-
-/** What this provider can do, as sets rather than the wire arrays. */
+/** What this provider can do, with the trigger list as a set rather than an array. */
 export interface WatchCapabilities {
   triggerKinds: ReadonlySet<string>;
-  bookingActions: ReadonlySet<string>;
+  /** The backend's reason the cart is or is not reachable for this reader. */
+  addToCart: AddToCartState;
 }
 
 export const NO_WATCH_CAPABILITIES: WatchCapabilities = {
   triggerKinds: new Set(),
-  bookingActions: new Set(),
+  addToCart: 'unsupported',
 };
+
+const ADD_TO_CART_STATES: ReadonlySet<string> = new Set<AddToCartState>([
+  'ready',
+  'no_credentials',
+  'signed_out',
+  'unsupported',
+]);
+
+/**
+ * Coerce the wire's cart state, the way `normalizeAvailabilityStatus` coerces a
+ * status: a value this build has no copy for degrades to "no cart" rather than
+ * reaching the editor as a string it cannot render.
+ */
+function coerceAddToCartState(raw: unknown): AddToCartState {
+  return ADD_TO_CART_STATES.has(String(raw))
+    ? (raw as AddToCartState)
+    : NO_WATCH_CAPABILITIES.addToCart;
+}
 
 /**
  * The wire block as sets.
@@ -46,10 +59,7 @@ export function normalizeWatchCapabilities(
       asSets?.triggerKinds instanceof Set
         ? asSets.triggerKinds
         : new Set(Array.isArray(asWire?.trigger_kinds) ? asWire.trigger_kinds : []),
-    bookingActions:
-      asSets?.bookingActions instanceof Set
-        ? asSets.bookingActions
-        : new Set(Array.isArray(asWire?.booking_actions) ? asWire.booking_actions : []),
+    addToCart: coerceAddToCartState(asSets?.addToCart ?? asWire?.add_to_cart?.state),
   };
 }
 
@@ -65,29 +75,6 @@ export function supportsWatchAlerts(capabilities: WatchCapabilities): boolean {
     capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY) ||
     capabilities.triggerKinds.has(TRIGGER_KIND_EMAIL_NOTIFY)
   );
-}
-
-/**
- * Whether this inventory has a cart at all.
- *
- * A property of the scope alone, independent of who is asking — so it stays true
- * for a signed-out visitor and for a signed-in user with no rec.gov credentials.
- * That is what lets the editor say "add your credentials" instead of pretending
- * the campground cannot be held.
- */
-export function scopeSupportsAddToCart(capabilities: WatchCapabilities): boolean {
-  return capabilities.bookingActions.has(BOOKING_ACTION_ADD_TO_CART);
-}
-
-/**
- * Whether "add to cart" can be offered as a working trigger *right now*.
- *
- * Needs both halves: the booking action says the provider has a cart, the trigger
- * says this caller may drive it — which since per-user profiles also means they
- * have credentials stored. One without the other is a button that fails.
- */
-export function supportsAddToCart(capabilities: WatchCapabilities): boolean {
-  return scopeSupportsAddToCart(capabilities) && capabilities.triggerKinds.has(TRIGGER_KIND_ATC);
 }
 
 /**
@@ -142,18 +129,4 @@ export function watchedDates(watchesByWindow: ReadonlyMap<string, Watch>): Set<s
     if (watch?.start_date) out.add(watch.start_date);
   }
   return out;
-}
-
-/**
- * Why add-to-cart is unavailable, or `ready` when it is not.
- *
- * `signed-out` and `no-credentials` are the two actionable causes and they need
- * different sentences: one is a sign-in, the other two minutes in Settings.
- */
-export type CartGate = 'ready' | 'signed-out' | 'no-credentials' | 'unsupported';
-
-export function cartGate(capabilities: WatchCapabilities, signedIn: boolean): CartGate {
-  if (!scopeSupportsAddToCart(capabilities)) return 'unsupported';
-  if (supportsAddToCart(capabilities)) return 'ready';
-  return signedIn ? 'no-credentials' : 'signed-out';
 }

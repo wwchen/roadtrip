@@ -5,6 +5,7 @@
 // Note the envelopes: the list route answers
 // `{ total, limit, offset, watches }` and the single-watch routes answer
 // `{ watch, watch_capabilities? }`.
+import type { WatchCapabilities } from './availability-api';
 import type { Campsite } from './campsite-api';
 import { HttpError, jsonGetOk, type RequestOptions } from './http';
 
@@ -59,12 +60,6 @@ export interface Watch {
   last_run_at?: string | null;
   last_run_status?: string | null;
   last_run_error?: string | null;
-}
-
-/** Mirrors AvailabilityWatchCapabilitiesDto. */
-export interface WatchCapabilities {
-  trigger_kinds: string[];
-  booking_actions: string[];
 }
 
 /** Mirrors AvailabilityWatchListResponse — the GET /api/watches envelope. */

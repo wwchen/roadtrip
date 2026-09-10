@@ -59,6 +59,8 @@ compose multiple features to exercise a page, but production composition belongs
 
 The `Campsite` type in `api/campsite-api.ts` is the closed mirror of `CampsiteDto`: every field is explicitly typed, with no index signature. When the drawer needs a new fact, the vendor ETL promotes it to a typed column and the DTO gains a field; nothing in the frontend reads a `source_payload` or reconciles vendor spellings. `features/availability/site-detail-facts.ts` is the one place campsite facts are turned into copy.
 
+The availability grid is the same rule applied to state. `GET /api/pois/{id}/campsites/availability` serves the week already fused (see `docs/reservation-providers.md`), and the grid renders `days[].cells` as they arrive: the day's rollup, whether a day or a cell is watchable, and whether add-to-cart is reachable are all read off the wire, never re-derived. `features/availability/matrix-rows.ts` looks a row's cell up by campsite id and falls back to `unknown`/unwatchable when the day has no cell for it; it never lets the day's rollup stand in for a missing cell. The only availability states the browser owns are the ones the server cannot know: the watch list is loading, the watch list failed, and nobody is signed in.
+
 Amenity, carrier, and campsite-kind labels are the same rule applied to display text: the backend owns the vocabulary (`AmenityKey`, `Carrier`, `CampsiteKind`) and ships one render-ready `label` per amenity and carrier entry — already "No showers" for an absence — plus `kind_label` on `CampsiteDto`, so the frontend keeps no vocabulary of its own; it renders the string it is given. `features/availability/matrix-rows.ts` builds the Type dropdown's options from each row's `kind`/`kind_label` pair and filters on the wire `kind`, never the label, so a rename of display text can never change which sites a filter matches.
 
 ## Where copy lives
@@ -84,11 +86,10 @@ Hiding it is indistinguishable from the campground not having the feature, and t
 two states need different sentences. So a gated control keeps its shape and its
 action becomes the one step that unlocks it.
 
-- `cartGate` in `@/lib/watch-windows` turns the week response's capability block
-  plus "is anyone signed in" into `ready | signed-out | no-credentials |
-  unsupported`. It needs no extra request: the scope's `add_to_cart` booking
-  action and this caller's `atc` trigger kind are separate facts already on the
-  wire, and the gap between them *is* "you have no rec.gov credentials".
+- `watch_capabilities.add_to_cart.state` on the week response is the cart gate:
+  `ready | no_credentials | signed_out | unsupported`, decided backend-side. The
+  browser renders the matching copy branch and never guesses which of the four
+  applies from what `trigger_kinds` omits.
 - `SiteMatrix`'s `watchGate` is the same idea for watches: `ready | signed-out |
   blocked`. A watchable cell is a button in the first two, and the popover it
   opens carries `WatchSignInGate` instead of `WatchEditor`.

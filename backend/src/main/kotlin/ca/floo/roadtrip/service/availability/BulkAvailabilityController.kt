@@ -56,7 +56,11 @@ internal class BulkAvailabilityController(
         campsiteController: CampsiteAvailabilityController,
         config: BulkAvailabilityConfig,
         clock: Clock = Clock.systemUTC(),
-    ) : this(PoiAvailabilitySliceLookup(campsiteController::poiAvailabilitySlice), config, clock)
+    ) : this(
+        PoiAvailabilitySliceLookup(campsiteController::poiAvailabilitySlice),
+        config,
+        clock,
+    )
 
     suspend fun availabilityForPois(request: BulkAvailabilityRequest): BulkAvailabilityResponseDto {
         val freshAtOrAfter = Instant.now(clock).minus(config.tolerance)

@@ -1,11 +1,10 @@
-// Which rows the matrix shows, in what order, and what each cell means.
+// Which rows the matrix shows and in what order.
 //
-// Given a campsite catalog, the fused days and the
-// filter state, it answers "which rows, in which order" and "what is this cell".
-import { availabilityStatusMeta, normalizeAvailabilityStatus } from '@/lib/availability-status';
-import type { AvailabilityStatusMeta } from '@/lib/availability-status';
+// Given a campsite catalog, the week the API served and the filter state, it
+// answers "which rows, in which order". What a cell means is not decided here:
+// the response carries one cell per campsite per day.
 import type { Campsite } from '@/api/campsite-api';
-import type { FusedDay } from './fuse';
+import type { AvailabilityCell, AvailabilityDay } from '@/api/availability-api';
 
 export type MatrixSort = 'site' | 'available' | 'loop' | 'type';
 
@@ -33,22 +32,11 @@ export const DEFAULT_MATRIX_FILTERS: MatrixFilters = {
   sort: 'available',
 };
 
-/**
- * Cell statuses a watch can be set on.
- *
- * Occupied now, but able to open up. Excludes `available` (already bookable, so the
- * cell is a booking button instead), `closed` and `unknown` (nothing to wait for),
- * and `past`. Hyphenated because these are `AvailabilityStatusMeta.kind` values,
- * not wire values — `first_come` renders as `first-come`.
- */
-const WATCHABLE_KINDS: ReadonlySet<string> = new Set(['reserved', 'first-come']);
-
 /** Sorts loop-less rows last: they are Aspira's resource-id-only rows. */
 const NO_LOOP_SORT_KEY = '￿';
 
-export function isWatchableKind(kind: string): boolean {
-  return WATCHABLE_KINDS.has(kind);
-}
+/** What a row with no cell for a day reads as: nothing known, nothing to watch. */
+const NO_CELL: Readonly<AvailabilityCell> = Object.freeze({ status: 'unknown', watchable: false });
 
 /** A campsite's display name, however little the provider gave us. */
 export function siteName(row: Partial<Campsite>): string {
@@ -79,18 +67,17 @@ export function siteTitleText(row: Partial<Campsite>, label = siteName(row)): st
  */
 export function sortedCampsites(
   campsites: readonly Partial<Campsite>[] | null | undefined,
-  days: readonly FusedDay[] = [],
+  days: readonly AvailabilityDay[] = [],
 ): Partial<Campsite>[] {
   const catalogRows = Array.isArray(campsites) ? campsites : [];
   const rows = catalogRows.length > 0 ? catalogRows : fallbackCampsitesFromDays(days);
   return [...rows].sort(compareCampsite);
 }
 
-function fallbackCampsitesFromDays(days: readonly FusedDay[]): Partial<Campsite>[] {
+function fallbackCampsitesFromDays(days: readonly AvailabilityDay[]): Partial<Campsite>[] {
   const ids = new Set<string>();
   for (const day of Array.isArray(days) ? days : []) {
-    for (const id of Object.keys(day?.campsite_statuses ?? {})) ids.add(String(id));
-    for (const id of day?.available_campsite_ids ?? []) ids.add(String(id));
+    for (const id of Object.keys(day?.cells ?? {})) ids.add(id);
   }
   return [...ids].sort().map((id) => ({ id: id as unknown as number, data_provider_ref: id }));
 }
@@ -142,22 +129,16 @@ export function filterCampsites(
   });
 }
 
-export interface SortContext {
-  /** `date → set of bookable campsite ids`, as strings. */
-  availabilityByDate: Map<string, Set<string>>;
-  visibleDays: readonly FusedDay[];
-}
-
 /** Rows in the chosen order. Every sort falls back to loop-then-site for stability. */
 export function sortCampsites(
   rows: readonly Partial<Campsite>[],
   sortKey: MatrixSort,
-  context: SortContext,
+  visibleDays: readonly AvailabilityDay[],
 ): Partial<Campsite>[] {
   return [...rows].sort((a, b) => {
     if (sortKey === 'available') {
-      const countA = availableDateCount(a, context);
-      const countB = availableDateCount(b, context);
+      const countA = availableDateCount(a, visibleDays);
+      const countB = availableDateCount(b, visibleDays);
       if (countA !== countB) return countB - countA;
       return compareCampsite(a, b);
     }
@@ -168,17 +149,11 @@ export function sortCampsites(
 }
 
 /** How many of the visible days this site is bookable on. */
-export function availableDateCount(row: Partial<Campsite>, context: SortContext): number {
-  const campsiteId = rowId(row);
-  let count = 0;
-  for (const day of context.visibleDays) {
-    const status = campsiteStatus(day, campsiteId);
-    if (status === 'available') count += 1;
-    // Only when the day carried no explicit status for this site: the derived
-    // id list must not override a stream that said "reserved".
-    else if (!status && context.availabilityByDate.get(day.date)?.has(campsiteId)) count += 1;
-  }
-  return count;
+export function availableDateCount(
+  row: Partial<Campsite>,
+  visibleDays: readonly AvailabilityDay[],
+): number {
+  return visibleDays.filter((day) => cellState(row, day).status === 'available').length;
 }
 
 /** The distinct loops present, for the loop dropdown. */
@@ -209,48 +184,18 @@ export interface FilterOption {
 }
 
 /**
- * That site's status on that day.
+ * That site's cell on that day.
  *
- * Precedence, and it matters: an explicit per-campsite status wins; then the day's
- * derived id list; and only then the day's rolled-up status. The last branch is the
- * subtle one — a day that rolled up to `available` says nothing about *this* site,
- * so when the day also carried an id list (i.e. we know which sites are open, and
- * this is not one of them) the honest answer is `reserved`, not `available`.
+ * A straight lookup, because the backend already folded the streams together and
+ * answered both halves — the status and whether a watch could be set on it. A day
+ * that carries no cell for this row is a row the campground does not have that
+ * day, which reads as `unknown` rather than being inferred from the rollup.
  */
 export function cellState(
   row: Partial<Campsite>,
-  day: FusedDay,
-  availableIds: Set<string> | undefined,
-): Readonly<AvailabilityStatusMeta> {
-  const campsiteId = rowId(row);
-  const direct = campsiteStatus(day, campsiteId);
-  if (direct) return availabilityStatusMeta(direct);
-  if (availableIds?.has(campsiteId)) return availabilityStatusMeta('available');
-
-  const status = normalizeAvailabilityStatus(day.status);
-  if (status === 'available' && availableIds) return availabilityStatusMeta('reserved');
-  return availabilityStatusMeta(status);
-}
-
-/**
- * A day's explicit status for one campsite, or null when it carried none.
- *
- * `hasOwnProperty` rather than a truthiness check, because "absent" and "present
- * but unreadable" are different: an absent id falls through to the derived list,
- * where a present-but-junk one must resolve to `unknown` and stop there.
- */
-function campsiteStatus(day: FusedDay | null | undefined, campsiteId: string): string | null {
-  const statuses = day?.campsite_statuses;
-  if (!statuses || typeof statuses !== 'object') return null;
-  if (!Object.prototype.hasOwnProperty.call(statuses, campsiteId)) return null;
-  return normalizeAvailabilityStatus(statuses[campsiteId]);
-}
-
-/** `date → bookable campsite ids`, the index the sorts and cells share. */
-export function availabilityIndex(days: readonly FusedDay[]): Map<string, Set<string>> {
-  return new Map(
-    days.map((day) => [day.date, new Set((day.available_campsite_ids ?? []).map(String))]),
-  );
+  day: AvailabilityDay,
+): Readonly<AvailabilityCell> {
+  return day?.cells?.[rowId(row)] ?? NO_CELL;
 }
 
 function compareCampsite(a: Partial<Campsite>, b: Partial<Campsite>): number {

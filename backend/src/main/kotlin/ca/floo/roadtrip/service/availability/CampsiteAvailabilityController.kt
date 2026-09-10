@@ -6,11 +6,13 @@ import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.service.api.seasonElement
 import java.time.Instant
 import java.time.LocalDate
 
-// The empty-campsite branch has no provider whose capabilities could bound the
-// requested window, so it validates against these fixed fallback bounds.
+// The empty-campsite branch still tries to resolve the campground's serving
+// provider for its real booking horizon; these are the fallback bounds for
+// when no provider claims the campground.
 internal const val EMPTY_WINDOW_DEFAULT_DAYS = 7
 internal const val EMPTY_WINDOW_MAX_DAYS = 60
 internal const val EMPTY_WINDOW_HORIZON_DAYS = 365
@@ -53,14 +55,21 @@ internal class CampsiteAvailabilityController(
         val allCampsites = campsitesRepo.findByCampground(campground.id)
         val campsites = allCampsites.filterBySiteTypes(siteTypes)
         val dateContext = dateResolver.contextForPoi(poiId)
+        // One provider pick for the whole slice: `watchable` is the serving
+        // provider's answer, not a per-campsite lookup.
+        val pollingSupported = availabilityService.internalPollingSupportedFor(campground)
 
         if (campsites.isEmpty()) {
+            // The site_type filter dropped every campsite, but the campground
+            // may still have a serving provider — ask it for the real horizon
+            // before falling back to the flat default.
+            val horizonDays = availabilityService.bookingHorizonDaysFor(campground)
             val window =
                 dateResolver.resolveWindow(
                     startDate = startDate,
                     endDate = endDate,
                     context = dateContext,
-                    bookingHorizonDays = EMPTY_WINDOW_HORIZON_DAYS,
+                    bookingHorizonDays = horizonDays ?: EMPTY_WINDOW_HORIZON_DAYS,
                     maxDays = EMPTY_WINDOW_MAX_DAYS,
                     defaultDays = EMPTY_WINDOW_DEFAULT_DAYS,
                 )
@@ -68,9 +77,14 @@ internal class CampsiteAvailabilityController(
                 poiId = poiId,
                 startDate = window.startDate,
                 endDate = window.endDate,
+                earliestDate = dateContext.earliestDate,
+                // The fallback above only bounds the window it had to compute;
+                // with no provider there is no horizon to publish as truth.
+                latestDate = horizonDays?.let { dateResolver.latestDate(dateContext, it) },
                 allCampsites = allCampsites,
                 campsites = emptyList(),
                 batch = null,
+                pollingSupported = pollingSupported,
             )
         }
 
@@ -88,14 +102,17 @@ internal class CampsiteAvailabilityController(
             poiId = poiId,
             startDate = result.startDate,
             endDate = result.endDate,
+            earliestDate = dateContext.earliestDate,
+            latestDate = result.latestDate,
             allCampsites = allCampsites,
             campsites = campsites,
             batch = result.batch,
+            pollingSupported = pollingSupported,
         )
     }
 
     /**
-     * Per-campsite availability for one campground POI.
+     * The fused availability week for one campground POI.
      *
      * @throws AvailabilityServiceError on unknown POI/campground or a bad date window.
      * @throws ca.floo.roadtrip.model.availability.AvailabilityProviderError on upstream failure.
@@ -111,14 +128,18 @@ internal class CampsiteAvailabilityController(
     ): PoiCampsitesAvailabilityResponseDto {
         val slice = poiAvailabilitySlice(poiId, siteTypes, startDate, endDate)
         val watchCaps = watchCapabilityService.capabilitiesFor(slice.allCampsites, requester)
-        val perCampsite = slice.perCampsiteEnvelopes().map { it.response }
+        val fused = fusePoiWindow(slice, slice.earliestDate)
 
         return PoiCampsitesAvailabilityResponseDto(
             poiId = poiId,
             startDate = slice.startDate.toString(),
             endDate = slice.endDate.toString(),
+            latestDate = slice.latestDate?.toString(),
+            state = fused.state,
+            season = seasonElement(fused.season),
+            cache = fused.cache,
+            days = fused.days,
             watchCapabilities = watchCaps,
-            campsites = perCampsite,
         )
     }
 }

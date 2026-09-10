@@ -2,7 +2,11 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.recgov.Campsite
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
+import ca.floo.roadtrip.fixtures.availableCellIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.cellStatuses
+import ca.floo.roadtrip.model.api.AvailabilityResponseDto
+import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -61,7 +65,7 @@ class RecGovObservationsTest {
             }
         val body =
             encodeApiJson(
-                availabilityResponseFromObservations(
+                responseOf(
                     runBlocking {
                         p.catalogAvailability(testCampground(), campsites, today, today.plusDays(days.toLong()))
                     },
@@ -77,7 +81,7 @@ class RecGovObservationsTest {
         val p = RecGovAvailabilityProvider(client, enabled = true)
         val body =
             encodeApiJson(
-                availabilityResponseFromObservations(
+                responseOf(
                     runBlocking { p.availability(testCampground(), today, today.plusDays(days.toLong())) },
                 ),
             )
@@ -170,12 +174,10 @@ class RecGovObservationsTest {
 
         assertEquals("success", body["state"]!!.jsonPrimitive.content)
         assertEquals("first_come", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day["available_campsite_ids"]!!.jsonArray.size)
+        assertEquals(0, day.availableCellIds().size)
         assertEquals(
             "first_come",
-            day["campsite_statuses"]!!
-                .jsonObject["100"]!!
-                .jsonPrimitive.content,
+            day.cellStatuses()["100"],
         )
     }
 
@@ -187,9 +189,7 @@ class RecGovObservationsTest {
 
         assertEquals(
             "unknown",
-            day["campsite_statuses"]!!
-                .jsonObject["100"]!!
-                .jsonPrimitive.content,
+            day.cellStatuses()["100"],
         )
     }
 
@@ -231,9 +231,7 @@ class RecGovObservationsTest {
 
         assertEquals(
             "reserved",
-            day["campsite_statuses"]!!
-                .jsonObject["100"]!!
-                .jsonPrimitive.content,
+            day.cellStatuses()["100"],
         )
     }
 
@@ -247,9 +245,7 @@ class RecGovObservationsTest {
         assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
         assertEquals(
             "unknown",
-            day["campsite_statuses"]!!
-                .jsonObject["100"]!!
-                .jsonPrimitive.content,
+            day.cellStatuses()["100"],
         )
     }
 
@@ -263,9 +259,7 @@ class RecGovObservationsTest {
         assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
         assertEquals(
             "unknown",
-            day["campsite_statuses"]!!
-                .jsonObject["100"]!!
-                .jsonPrimitive.content,
+            day.cellStatuses()["100"],
         )
     }
 
@@ -279,7 +273,7 @@ class RecGovObservationsTest {
         val p = RecGovAvailabilityProvider(clientReturning(emptyMap()), enabled = true)
         val body =
             encodeApiJson(
-                availabilityResponseFromObservations(
+                responseOf(
                     runBlocking {
                         p.catalogAvailability(testCampground(), campsites, today, today.plusDays(1))
                     },
@@ -288,19 +282,15 @@ class RecGovObservationsTest {
         val day = parseJson(body)["availability"]!!.jsonArray.single().jsonObject
 
         assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day["available_campsite_ids"]!!.jsonArray.size)
-        assertEquals(2, day["campsite_statuses"]!!.jsonObject.size)
+        assertEquals(0, day.availableCellIds().size)
+        assertEquals(2, day.cellStatuses().size)
         assertEquals(
             "unknown",
-            day["campsite_statuses"]!!
-                .jsonObject["100"]!!
-                .jsonPrimitive.content,
+            day.cellStatuses()["100"],
         )
         assertEquals(
             "unknown",
-            day["campsite_statuses"]!!
-                .jsonObject["200"]!!
-                .jsonPrimitive.content,
+            day.cellStatuses()["200"],
         )
     }
 
@@ -396,13 +386,7 @@ class RecGovObservationsTest {
         val body = classify(clientReturning(map), days = 1)
         val avail = body["availability"]!!.jsonArray
         assertEquals("available", avail[0].jsonObject["status"]!!.jsonPrimitive.content)
-        assertEquals(
-            listOf("100"),
-            avail[0]
-                .jsonObject["available_campsite_ids"]!!
-                .jsonArray
-                .map { it.jsonPrimitive.content },
-        )
+        assertEquals(listOf("100"), avail[0].jsonObject.availableCellIds())
     }
 
     @Test
@@ -427,8 +411,8 @@ class RecGovObservationsTest {
         val body = classify(clientReturning(map), days = 1, catalogSiteIds = listOf("100", "200"))
         val day = body["availability"]!!.jsonArray[0].jsonObject
         assertEquals("available", day["status"]!!.jsonPrimitive.content)
-        assertEquals(2, day["available_campsite_ids"]!!.jsonArray.size)
-        assertEquals(2, day["campsite_statuses"]!!.jsonObject.size)
+        assertEquals(2, day.availableCellIds().size)
+        assertEquals(2, day.cellStatuses().size)
     }
 
     @Test
@@ -452,12 +436,7 @@ class RecGovObservationsTest {
             )
         val body = classify(clientReturning(map), days = 1, catalogSiteIds = listOf("100", "200"))
         val day = body["availability"]!!.jsonArray[0].jsonObject
-        val ids =
-            day["available_campsite_ids"]!!
-                .jsonArray
-                .map { it.jsonPrimitive.content }
-
-        assertEquals(listOf("100", "200"), ids)
+        assertEquals(listOf("100", "200"), day.availableCellIds())
     }
 
     @Test
@@ -473,3 +452,10 @@ class RecGovObservationsTest {
         assertEquals("available", day["status"]!!.jsonPrimitive.content)
     }
 }
+
+/**
+ * These tests read parsed statuses, not watchability, so every window is quoted
+ * from its own start date by a provider the poller can reach.
+ */
+private fun responseOf(batch: AvailabilityObservationBatch): AvailabilityResponseDto =
+    availabilityResponseFromObservations(batch, pollingSupported = true, earliestDate = batch.startDate)

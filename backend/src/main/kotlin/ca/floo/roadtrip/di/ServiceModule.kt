@@ -31,6 +31,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityRunService
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
+import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
@@ -191,6 +192,12 @@ val serviceModule =
         single {
             CoordinateTimeZones.warmUp()
             AvailabilityDateResolver(poiRepo = get<PoiRepo>())
+        }
+        single {
+            BookingHorizonResolver(
+                availabilityProviders = get(named("availabilityProviders")),
+                dateResolver = get<AvailabilityDateResolver>(),
+            )
         }
         single { WatchScopeResolver(get<CampsiteRepo>()) }
         single {
@@ -391,6 +398,7 @@ val serviceModule =
                 CampgroundService(
                     campgroundRepo = get<CampgroundRepo>(),
                     dateResolver = get<AvailabilityDateResolver>(),
+                    bookingHorizons = get<BookingHorizonResolver>(),
                 ),
                 TeslaSuperchargerService(get<TeslaSuperchargerRepo>()),
                 PlanetFitnessLocationService(get<PlanetFitnessLocationRepo>()),

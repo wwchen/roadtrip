@@ -21,7 +21,7 @@ import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
  *     a ref of its own. This still matters for providers that derive a booking
  *     ref the campground row does not carry.
  *
- * Walking only (2) is what left `booking_actions` empty for POI 8149 "Icicle
+ * Walking only (2) is what left the cart unreachable for POI 8149 "Icicle
  * Group Campground": the Campflare provider answers with a Campflare ref, no
  * booking adapter serves Campflare, and the row's own `recgov/234784` was never
  * consulted.
