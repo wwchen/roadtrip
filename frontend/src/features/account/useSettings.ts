@@ -130,8 +130,7 @@ export function useRemoveRecgov() {
     mutationFn: () => removeRecgov(),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
-      // Removing the login closes the grid's cart gate, the same way saving one
-      // opens it: `add_to_cart.state` is decided from these credentials.
+      // Removing the login closes the grid's cart gate, the same way saving one opens it, since `add_to_cart.state` is decided from these credentials.
       void queryClient.invalidateQueries({ queryKey: queryKeys.availability.all() });
     },
   });

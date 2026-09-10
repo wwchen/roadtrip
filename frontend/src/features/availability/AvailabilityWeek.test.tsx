@@ -582,8 +582,8 @@ describe('the calendar popover', () => {
       screen.getByRole('button', { name: 'Pick a date' }).click();
     });
 
-    expect(screen.getByRole('button', { name: '14' })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: '15' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '13' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '14' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '20' })).toBeDisabled();
   });
 
@@ -597,8 +597,8 @@ describe('the calendar popover', () => {
     await act(async () => {
       screen.getByRole('button', { name: 'Pick a date' }).click();
     });
-    expect(screen.getByRole('button', { name: '14' })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: '15' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '13' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '14' })).toBeDisabled();
     unmount();
 
     render(

@@ -42,8 +42,8 @@ import {
 import { TRIGGER_KIND_SLACK_NOTIFY, buildTriggerPayload, triggerStateOf } from '@/lib/watch-triggers';
 import './availability.css';
 
-/** How far back from the booking horizon the last selectable week starts. */
-const LAST_WEEK_START_OFFSET = WEEK_DAYS - 1;
+/** How far back from the booking horizon the last selectable week starts, so the full week fits before it. */
+const LAST_WEEK_START_OFFSET = WEEK_DAYS;
 
 export interface AvailabilityWeekProps {
   /** The hydrated campground feature: supplies the POI id, name and earliest date. */
@@ -132,12 +132,7 @@ function AvailabilityWeekView({
   // memoised callbacks that read it churn for no reason.
   const capabilities = week.data?.watchCapabilities ?? NO_WATCH_CAPABILITIES;
 
-  // The provider's real booking horizon, so the picker cannot offer a week the
-  // backend answers with `beyond_booking_horizon`. What is picked is a week *start*,
-  // so the ceiling is a whole week short of the horizon — a week starting on it
-  // would ask for six days past it. The week's own `latest_date` is the authority;
-  // the POI detail carries the same number for the first paint, and with neither the
-  // picker simply has no ceiling.
+  // The provider's real booking horizon: a whole week short, since a week start needs its full end-exclusive window to still fit.
   const maxDate = useMemo(() => {
     const raw = week.data?.latest_date ?? featureLatest;
     if (!raw) return null;

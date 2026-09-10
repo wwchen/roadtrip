@@ -149,19 +149,7 @@ export class WatchAuthError extends Error {
 export function useWatchMutations(poiId: string | number | null | undefined): WatchMutations {
   const invalidateWatches = useInvalidateWatches();
 
-  /**
-   * Run a mutation, mapping a 401 to `WatchAuthError` and refetching the list.
-   *
-   * The refetch is what collapses the UI to its signed-out state: the list request
-   * 401s too, `canManage` goes false, and every watch affordance in the grid becomes
-   * "Sign in to set availability alerts." Without it the user would keep being
-   * offered a control that cannot work.
-   *
-   * Wrapped around the `mutationFn` rather than handled in `onError`, which was the
-   * first attempt and does not work: `onError` is a notification callback, so what it
-   * throws is discarded and `mutateAsync` still rejects with the original error — the
-   * editor would go on saying "Could not save. Try again." for a dead session.
-   */
+  /** Run a mutation, mapping a 401 to `WatchAuthError` and refetching the list so the grid collapses to signed-out. */
   const withAuthMapping = useCallback(
     async <T,>(run: () => Promise<T>): Promise<T> => {
       try {

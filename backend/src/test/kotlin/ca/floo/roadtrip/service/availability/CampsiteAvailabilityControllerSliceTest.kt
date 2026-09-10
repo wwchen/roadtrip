@@ -124,8 +124,8 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
      * DB, a [FakeAvailabilityProvider] standing in for rec.gov, and a
      * failover fetcher stubbed to answer with a canned batch instead of
      * calling out. `catalogService` and `watchCapabilityService` are wired
-     * with real implementations since `poiAvailabilitySlice` never exercises
-     * them but the controller's constructor still requires them.
+     * with real implementations because the constructor requires them, and
+     * `watchCapabilityService` now shares `targets`, so it is load-bearing for the zero-resolution assertion above.
      */
     private fun sliceTestController(siteTypes: List<CampsiteKind>): SliceFixture {
         ctx.cleanCanonicalCatalogFixtures()
