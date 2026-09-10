@@ -201,7 +201,8 @@ class PoiServiceTest : SharedDbTest() {
         val detail = poiService(listOf(recgov)).poiDetail(fixture.poiId)!!.campgroundDetail()
 
         // The row's primary is Campflare, but rec.gov claims it through the alias.
-        assertEquals(BookingRefDto("recgov", "234784"), detail.bookingRef)
+        assertEquals(BookingRefDto(BookingProvider.RECGOV.id, "234784"), detail.bookingRef)
+        assertEquals(BookingProvider.RECGOV.id, detail.availabilityProvider)
         assertEquals(true, detail.availabilitySupported)
         assertEquals("Recreation.gov", detail.bookingSystem)
         assertEquals("Reserve on recreation.gov", detail.cta?.first()?.label)
@@ -223,14 +224,15 @@ class PoiServiceTest : SharedDbTest() {
                 lat = 48.39,
                 source = "campflare",
                 providerRefJson = """{"campflare_id":"cranberry-lake-wsp"}""",
-                bookingProvider = "campflare",
+                bookingProvider = BookingProvider.CAMPFLARE.id,
                 bookingProviderRef = "cranberry-lake-wsp",
             )
         val campflare = FakeAvailabilityProvider(id = BookingProvider.CAMPFLARE)
 
         val detail = poiService(listOf(campflare)).poiDetail(fixture.poiId)!!.campgroundDetail()
 
-        assertEquals(BookingRefDto("campflare", "cranberry-lake-wsp"), detail.bookingRef)
+        assertEquals(BookingRefDto(BookingProvider.CAMPFLARE.id, "cranberry-lake-wsp"), detail.bookingRef)
+        assertEquals(BookingProvider.CAMPFLARE.id, detail.availabilityProvider)
         assertEquals("Campflare", detail.bookingSystem)
         assertEquals("View on Campflare", detail.cta?.single()?.label)
     }
@@ -773,9 +775,9 @@ class PoiServiceTest : SharedDbTest() {
             lat = 47.55,
             source = "campflare",
             providerRefJson = """{"campflare_id":"icicle-group-campground-8149"}""",
-            bookingProvider = "campflare",
+            bookingProvider = BookingProvider.CAMPFLARE.id,
             bookingProviderRef = "icicle-group-campground-8149",
-            bookingAliasesJson = """[{"provider":"recgov","ref":"234784"}]""",
+            bookingAliasesJson = """[{"provider":"${BookingProvider.RECGOV.id}","ref":"234784"}]""",
         )
 
     private fun campgroundDetailRow(poiId: Long): CampgroundPoiDetail = CampgroundRepo(ctx).findPoiDetailByPoi(poiId)!!

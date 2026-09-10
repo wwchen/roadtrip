@@ -65,7 +65,8 @@ internal class AvailabilityBookingTargetResolver(
 internal fun Campsite.bookingIdentities(): List<BookingAlias> {
     val provider = bookingProvider?.let(BookingProvider::fromIdOrNull)
     val primary = bookingProviderRef?.takeIf { it.isNotBlank() }
-    return listOfNotNull(
-        provider?.let { p -> primary?.let { BookingAlias(p, it) } },
-    ) + bookingAliases
+    return buildList {
+        provider?.let { p -> primary?.let { add(BookingAlias(p, it)) } }
+        bookingAliases.forEach { alias -> if (alias.ref.isNotBlank()) add(alias) }
+    }
 }
