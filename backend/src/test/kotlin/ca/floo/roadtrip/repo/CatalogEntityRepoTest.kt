@@ -1028,6 +1028,30 @@ class CatalogEntityRepoTest : SharedDbTest() {
         )
     }
 
+    /**
+     * `["tent"]` and `"cabin"` are already wire values, so a replay must leave both watches'
+     * JSON alone; nothing in this migration or a trigger bumps `updated_at`, so only the JSON is checked.
+     */
+    @Test
+    fun `the kind migration is a no-op on watch filters already holding wire values`() {
+        val ownerUserId = seedWatchOwner()
+        insertWatchFilters("""{"site_type": ["tent"]}""", ownerUserId)
+        insertWatchFilters("""{"site_type": "cabin"}""", ownerUserId)
+        val before =
+            ctx
+                .fetch("SELECT campsite_filters::text AS filters FROM availability_watch ORDER BY id")
+                .map { it.get("filters", String::class.java) }
+
+        repeat(2) { migrationStatements("V58__campsite_kind_wire.sql").forEach(ctx::execute) }
+
+        assertEquals(
+            before,
+            ctx
+                .fetch("SELECT campsite_filters::text AS filters FROM availability_watch ORDER BY id")
+                .map { it.get("filters", String::class.java) },
+        )
+    }
+
     @Test
     fun `campground typed bags and parent name round-trip through the repo`() {
         val repo = CampgroundRepo(ctx)

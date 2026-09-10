@@ -157,6 +157,19 @@ SET campsite_filters = jsonb_set(
            THEN m.mapped -> 0
            ELSE m.mapped END)
 FROM mapped_site_type m
-WHERE w.id = m.id;
+WHERE w.id = m.id
+  -- Skip a watch whose site_type values are already all wire values, so a replay is a no-op.
+  AND (
+    (jsonb_typeof(w.campsite_filters -> 'site_type') = 'string'
+       AND w.campsite_filters ->> 'site_type' NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in',
+                       'boat_in', 'equestrian', 'backcountry', 'day_use', 'other'))
+    OR (jsonb_typeof(w.campsite_filters -> 'site_type') = 'array'
+       AND EXISTS (
+         SELECT 1 FROM jsonb_array_elements_text(w.campsite_filters -> 'site_type') AS v(value)
+         WHERE v.value NOT IN ('standard', 'tent', 'rv', 'cabin', 'group', 'walk_in', 'boat_in',
+                       'equestrian', 'backcountry', 'day_use', 'other')
+       )
+    )
+  );
 
 DROP FUNCTION IF EXISTS campsite_wire_kind(text, text);
