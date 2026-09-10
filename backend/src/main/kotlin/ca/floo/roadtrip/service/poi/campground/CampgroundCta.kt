@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.api.poi.PoiCtaSchema
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AspiraBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.AspiraBookingUrl
+import ca.floo.roadtrip.service.availability.provider.CampflareBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.RecGovBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
 import ca.floo.roadtrip.service.availability.provider.ReserveAmericaBookingDisplay
@@ -18,7 +19,6 @@ import java.time.ZoneId
 // verbatim — the FE doesn't own per-vendor precedence or URL construction.
 private const val INFO_CTA_KIND = "info"
 private const val RESERVE_CTA_KIND = "reserve"
-private const val CAMPFLARE_CTA_LABEL = "View on Campflare"
 
 internal class CampgroundCta(
     clock: Clock = Clock.systemUTC(),
@@ -29,6 +29,7 @@ internal class CampgroundCta(
             AspiraCampgroundCtaProvider(clock),
             ReserveAmericaCampgroundCtaProvider,
             ReserveCaliforniaCampgroundCtaProvider,
+            CampflareCampgroundCtaProvider,
         )
 
     // Display name for the booking system that reservations on this pin
@@ -70,7 +71,7 @@ internal class CampgroundCta(
         val campflare = providerRef as? BookingProviderRef.Campflare ?: return null
         return PoiCtaSchema(
             url = CampflareUrls.campground(campflare.campgroundId),
-            label = CAMPFLARE_CTA_LABEL,
+            label = CampflareBookingDisplay.CAMPGROUND_CTA_LABEL,
             kind = INFO_CTA_KIND,
         )
     }
@@ -167,6 +168,20 @@ private class AspiraCampgroundCtaProvider(
         // an EST anchor produces a usable today/tomorrow booking page.
         val aspiraAnchorTimeZone: ZoneId = ZoneId.of("America/New_York")
     }
+}
+
+/**
+ * Only a row no other provider claims reaches this branch: the detail resolves
+ * the serving provider's ref first, so an aliased Campflare row sold on
+ * rec.gov arrives as a rec.gov ref and never gets here. Its reserve CTA is the
+ * public Campflare page, appended by [CampgroundCta.computeCtas] for every
+ * Campflare ref rather than as a `reserveCta` — Campflare sells nothing itself.
+ */
+private object CampflareCampgroundCtaProvider : CampgroundCtaProvider {
+    override fun bookingSystem(
+        providerRef: BookingProviderRef?,
+        infoUrl: String?,
+    ): String? = (providerRef as? BookingProviderRef.Campflare)?.let { CampflareBookingDisplay.BOOKING_SYSTEM_LABEL }
 }
 
 private object ReserveAmericaCampgroundCtaProvider : CampgroundCtaProvider {

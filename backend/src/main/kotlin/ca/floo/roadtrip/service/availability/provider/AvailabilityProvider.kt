@@ -5,7 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
-import ca.floo.roadtrip.model.domain.bookingRef
+import ca.floo.roadtrip.model.domain.bookingRefFor
 import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
@@ -46,12 +46,7 @@ interface AvailabilityProvider {
      * nowhere. One rule for every provider — a Campflare row that rec.gov also
      * sells is claimed by both, through the primary and the alias respectively.
      */
-    fun claimedRef(campground: Campground): BookingProviderRef? {
-        val primary = campground.bookingRef()
-        if (primary?.provider == id) return primary
-        val alias = campground.bookingAliases.firstOrNull { it.provider == id } ?: return null
-        return BookingProviderRef.parse(id, alias.ref)
-    }
+    fun claimedRef(campground: Campground): BookingProviderRef? = campground.bookingRefFor(id)
 
     fun supportsCampground(campground: Campground): Boolean = isEnabled() && claimedRef(campground) != null
 

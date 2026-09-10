@@ -51,3 +51,15 @@ fun Campground.bookingRef(): BookingProviderRef? {
     val provider = bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
     return bookingProviderRef?.let { BookingProviderRef.parse(provider, it) }
 }
+
+/**
+ * This campground's identity *on [provider]*: its primary booking ref when
+ * that ref is this provider's, else the matching [BookingAlias] parsed as this
+ * provider's ref. Null when the row names the provider nowhere.
+ */
+fun Campground.bookingRefFor(provider: BookingProvider): BookingProviderRef? {
+    val primary = bookingRef()
+    if (primary?.provider == provider) return primary
+    val alias = bookingAliases.firstOrNull { it.provider == provider } ?: return null
+    return BookingProviderRef.parse(provider, alias.ref)
+}

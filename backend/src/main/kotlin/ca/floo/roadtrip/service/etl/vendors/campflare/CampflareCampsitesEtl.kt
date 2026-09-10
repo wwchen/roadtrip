@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.ParseResult
@@ -47,11 +48,9 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
         return TransformResult.Ok(
             CampsiteUpsertCandidate(
                 dataProviderRef = DataProviderRef.Campflare(id = campsiteId),
-                bookingProvider =
-                    recgovRef
-                        ?.let { BookingProvider.RECGOV }
-                        ?: BookingProvider.CAMPFLARE,
-                bookingProviderRef = recgovRef ?: campsiteId,
+                bookingProvider = BookingProvider.CAMPFLARE,
+                bookingProviderRef = campsiteId,
+                bookingAliases = listOfNotNull(recgovRef?.let { BookingAlias(BookingProvider.RECGOV, it) }),
                 parentDataProviderRef = DataProviderRef.Campflare(id = parentId),
                 name = name!!,
                 kind = CampsiteKinds.campflare(rawKind),

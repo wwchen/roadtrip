@@ -10,6 +10,7 @@ import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -60,12 +61,13 @@ class AvailabilityBookingTargetResolverTest {
     }
 
     @Test
-    fun `campflare availability with rec_gov booking resolves the campground's declared identity`() {
-        // POI 8149 "Icicle Group Campground": the catalog row is Campflare, but
-        // campgrounds.booking_provider says recgov/234784 and the campsite row
-        // carries the rec.gov site id. Walking only the availability candidates
-        // yields a Campflare ref no booking adapter serves, so add_to_cart.state
-        // came back empty for a campground that is perfectly bookable.
+    fun `an aliased campflare campsite resolves to its rec_gov booking identity`() {
+        // POI 8149 "Icicle Group Campground": the catalog row is Campflare and
+        // so is its primary booking identity, with rec.gov/234784 riding along
+        // as an alias on both the campground and the site. Walking only the
+        // availability candidates yields a Campflare ref no booking adapter
+        // serves, so add_to_cart.state came back empty for a campground that is
+        // perfectly bookable.
         val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
         val resolver = AvailabilityBookingTargetResolver(registry)
 
@@ -74,7 +76,8 @@ class AvailabilityBookingTargetResolverTest {
                 BookingAction.ADD_TO_CART,
                 resolvedTarget(
                     candidates = listOf(campflareProvider),
-                    campsite = crossProviderCampsite(),
+                    campground = aliasedCampflareCampground(),
+                    campsite = aliasedCampflareCampsite(),
                 ),
             )
 
@@ -85,9 +88,9 @@ class AvailabilityBookingTargetResolverTest {
     }
 
     @Test
-    fun `a cross-provider campsite with no rec_gov site ref is correctly unbookable`() {
-        // The campground declares rec.gov booking but this particular site was
-        // never linked to a rec.gov id — there is nothing to put in a cart.
+    fun `a campflare campsite with no rec_gov alias is correctly unbookable`() {
+        // The campground is sold on rec.gov but this particular site was never
+        // linked to a rec.gov id — there is nothing to put in a cart.
         val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
         val resolver = AvailabilityBookingTargetResolver(registry)
 
@@ -96,7 +99,27 @@ class AvailabilityBookingTargetResolverTest {
                 BookingAction.ADD_TO_CART,
                 resolvedTarget(
                     candidates = listOf(campflareProvider),
-                    campsite = crossProviderCampsite(recgovSiteId = null),
+                    campground = aliasedCampflareCampground(),
+                    campsite = aliasedCampflareCampsite(recgovSiteId = null),
+                ),
+            )
+
+        assertNull(target)
+    }
+
+    @Test
+    fun `a campflare-only campground and campsite yield no booking target`() {
+        // Nothing aliases this row onto a vendor anyone can hold a site with.
+        val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
+        val resolver = AvailabilityBookingTargetResolver(registry)
+
+        val target =
+            resolver.targetFor(
+                BookingAction.ADD_TO_CART,
+                resolvedTarget(
+                    candidates = listOf(campflareProvider),
+                    campground = aliasedCampflareCampground(recgovFacilityId = null),
+                    campsite = aliasedCampflareCampsite(recgovSiteId = null),
                 ),
             )
 
@@ -190,27 +213,27 @@ class AvailabilityBookingTargetResolverTest {
     private fun resolvedTarget(
         candidates: List<AvailabilityProvider>,
         campsite: Campsite = campsite(),
-    ): ResolvedAvailabilityTarget {
-        val cg =
+        campground: Campground =
             campground(
                 bookingProvider = "recgov",
                 bookingProviderRef = TEST_RECGOV_PARENT_ID,
                 dataProviderRef = DataProviderRef.RecGov(id = TEST_RECGOV_PARENT_ID),
-            )
-        return ResolvedAvailabilityTarget(
+            ),
+    ): ResolvedAvailabilityTarget =
+        ResolvedAvailabilityTarget(
             campsite = campsite,
             provider = candidates.first(),
-            campground = cg,
+            campground = campground,
             parentPoiId = 100L,
             dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
             candidates = candidates,
         )
-    }
 
     private fun campground(
         bookingProvider: String?,
         bookingProviderRef: String?,
         dataProviderRef: DataProviderRef = DataProviderRef.Campflare(id = TEST_CAMPFLARE_PARENT_ID),
+        bookingAliases: List<BookingAlias> = emptyList(),
     ): Campground =
         Campground(
             id = 1L,
@@ -239,10 +262,19 @@ class AvailabilityBookingTargetResolverTest {
             dataProviderRef = dataProviderRef,
             bookingProvider = bookingProvider,
             bookingProviderRef = bookingProviderRef,
+            bookingAliases = bookingAliases,
         )
 
-    /** A Campflare catalog row whose booking identity is rec.gov's. */
-    private fun crossProviderCampsite(recgovSiteId: String? = TEST_RECGOV_SITE_ID): Campsite =
+    /** A Campflare campground rec.gov also sells, under its own facility id. */
+    private fun aliasedCampflareCampground(recgovFacilityId: String? = TEST_RECGOV_PARENT_ID): Campground =
+        campground(
+            bookingProvider = BookingProvider.CAMPFLARE.id,
+            bookingProviderRef = TEST_CAMPFLARE_PARENT_ID,
+            bookingAliases = listOfNotNull(recgovFacilityId?.let { BookingAlias(BookingProvider.RECGOV, it) }),
+        )
+
+    /** A Campflare catalog site rec.gov also sells, under its own site id. */
+    private fun aliasedCampflareCampsite(recgovSiteId: String? = TEST_RECGOV_SITE_ID): Campsite =
         campsiteFixture(
             id = TEST_CAMPSITE_ID,
             vendor = "campflare",
@@ -251,8 +283,9 @@ class AvailabilityBookingTargetResolverTest {
             loopName = null,
             kind = null,
             sourcePayload = null,
-            bookingProvider = recgovSiteId?.let { BookingProvider.RECGOV.id },
-            bookingProviderRef = recgovSiteId,
+            bookingProvider = BookingProvider.CAMPFLARE.id,
+            bookingProviderRef = "eb203fd1-6b28-4cb1-9d67-cb657299a825",
+            bookingAliases = listOfNotNull(recgovSiteId?.let { BookingAlias(BookingProvider.RECGOV, it) }),
         )
 
     private fun campsite(): Campsite =

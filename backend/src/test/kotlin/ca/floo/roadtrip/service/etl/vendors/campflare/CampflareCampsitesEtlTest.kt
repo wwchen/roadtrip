@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.etl.vendors.campflare
 
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.CatalogPhoto
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
@@ -49,8 +50,37 @@ class CampflareCampsitesEtlTest {
         assertEquals(6, row.maxPeople)
         assertEquals("Quiet site", row.description)
         assertEquals("Site 001", sourceName)
-        assertEquals(BookingProvider.RECGOV, row.bookingProvider)
-        assertEquals("001", row.bookingProviderRef)
+        assertEquals(BookingProvider.CAMPFLARE, row.bookingProvider)
+        assertEquals("upper-pines-site-001", row.bookingProviderRef)
+        assertEquals(listOf(BookingAlias(BookingProvider.RECGOV, "001")), row.bookingAliases)
+    }
+
+    @Test
+    fun `a campsite with no rec_gov reservation url carries no alias`() {
+        val etl = CampflareCampsitesEtl()
+        val rows =
+            terminalRecords(
+                etl,
+                bundle(
+                    """
+                    [
+                      {
+                        "id":"cranberry-lake-site-4",
+                        "campground_id":"cranberry-lake-wsp",
+                        "name":"Site 4",
+                        "kind":"standard",
+                        "reservation_url":"https://washington.goingtocamp.com/"
+                      }
+                    ]
+                    """.trimIndent(),
+                ),
+                transformCtx(),
+            )
+
+        val row = rows.single()
+        assertEquals(BookingProvider.CAMPFLARE, row.bookingProvider)
+        assertEquals("cranberry-lake-site-4", row.bookingProviderRef)
+        assertEquals(emptyList(), row.bookingAliases)
     }
 
     @Test

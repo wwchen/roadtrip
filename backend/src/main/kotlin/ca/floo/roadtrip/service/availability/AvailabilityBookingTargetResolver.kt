@@ -3,7 +3,8 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.Campsite
-import ca.floo.roadtrip.model.domain.bookingRef
+import ca.floo.roadtrip.model.domain.bookingRefFor
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 
@@ -12,19 +13,10 @@ import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
  *
  * Availability can be served by one provider while booking happens on another —
  * a Campflare catalog row whose sites are actually held on rec.gov is the
- * common case, not an edge one. Two sources of a booking identity, in order:
- *
- *  1. **The campground's own declared booking ref** (`booking_provider` +
- *     `booking_provider_ref`). This is the *stated* answer to "where is this
- *     booked", so it is tried first.
- *  2. The availability candidates, each asked to translate the campground into
- *     a ref of its own. This still matters for providers that derive a booking
- *     ref the campground row does not carry.
- *
- * Walking only (2) is what left the cart unreachable for POI 8149 "Icicle
- * Group Campground": the Campflare provider answers with a Campflare ref, no
- * booking adapter serves Campflare, and the row's own `recgov/234784` was never
- * consulted.
+ * common case, not an edge one. The rows' own declared identities go first
+ * (primary, then each alias, the first adapter claim winning), then the
+ * availability candidates, which still matter for providers that derive a
+ * booking ref no column carries.
  */
 internal class AvailabilityBookingTargetResolver(
     private val bookings: BookingAdapterRegistry,
@@ -50,38 +42,30 @@ internal class AvailabilityBookingTargetResolver(
     }
 
     /**
-     * The target implied by the campground row's own booking columns.
+     * The target implied by the rows' own booking identities, primary first.
      *
-     * The cart needs the site id *on the booking vendor*, which for a
-     * cross-provider row is not the availability catalog's id — Campflare's
-     * campsite uuid means nothing to rec.gov. The campsite row carries it in
-     * its own `booking_provider`/`booking_provider_ref` pair; when that pair
-     * does not name the booking vendor, this site genuinely has no bookable
-     * identity and null is the honest answer.
-     *
-     * **Load-bearing constraint.** This reads the stored ref *raw*, where the
-     * candidate walk below goes through [AvailabilityProvider.vendorSiteIdFor]
-     * and so picks up per-provider overrides (Aspira derives a resource id
-     * rather than using the column). That is sound only while every adapter
-     * registered for booking treats its `booking_provider_ref` as the literal
-     * vendor site id — true today, where rec.gov is the only one. Register a
-     * second adapter whose ref needs deriving and this path would hand it the
-     * stored string: give the *booking* seam its own `vendorSiteIdFor` at that
-     * point rather than reaching for the availability provider's, which may not
-     * even be the same vendor. Until then an unregistered provider's declared
-     * ref simply finds no adapter and falls through to the candidate walk,
-     * which is what keeps this safe rather than merely lucky.
+     * The cart needs the site id *on the booking vendor*, which for an aliased
+     * row is not the availability catalog's id — a Campflare campsite uuid
+     * means nothing to rec.gov. Each of the campsite's identities is paired
+     * with the campground's ref on that same provider; a site that names no
+     * provider any adapter serves genuinely has no bookable identity, and null
+     * is the honest answer.
      */
     private fun declaredTarget(
         action: BookingAction,
         resolved: ResolvedAvailabilityTarget,
-    ): BookingTarget? {
-        val ref = resolved.campground.bookingRef() ?: return null
-        val vendorSiteId = resolved.campsite.bookingRefFor(ref.provider) ?: return null
-        return bookings.targetFor(action, ref, resolved.campsite.id, vendorSiteId)
-    }
+    ): BookingTarget? =
+        resolved.campsite.bookingIdentities().firstNotNullOfOrNull { identity ->
+            val parentRef = resolved.campground.bookingRefFor(identity.provider) ?: return@firstNotNullOfOrNull null
+            bookings.targetFor(action, parentRef, resolved.campsite.id, identity.ref)
+        }
 }
 
-/** This campsite's id *on [provider]*, when it declares one. */
-internal fun Campsite.bookingRefFor(provider: BookingProvider): String? =
-    bookingProviderRef?.takeIf { bookingProvider == provider.id && it.isNotBlank() }
+/** This campsite's ids on every provider it names: its primary first, then each alias. */
+internal fun Campsite.bookingIdentities(): List<BookingAlias> {
+    val provider = bookingProvider?.let(BookingProvider::fromIdOrNull)
+    val primary = bookingProviderRef?.takeIf { it.isNotBlank() }
+    return listOfNotNull(
+        provider?.let { p -> primary?.let { BookingAlias(p, it) } },
+    ) + bookingAliases
+}

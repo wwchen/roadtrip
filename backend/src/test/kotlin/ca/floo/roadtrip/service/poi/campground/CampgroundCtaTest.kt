@@ -280,6 +280,33 @@ class CampgroundCtaTest {
     }
 
     @Test
+    fun `a campflare row nobody else claims books through Campflare`() {
+        val ref = BookingProviderRef.Campflare(campgroundId = "cranberry-lake-wsp")
+
+        assertEquals(
+            "Campflare",
+            cta.bookingSystem(bookingRef = ref, reserveUrl = null, infoUrl = "https://parks.wa.gov/find-parks"),
+        )
+    }
+
+    @Test
+    fun `an aliased campflare row served by rec_gov keeps the rec_gov CTA and label`() {
+        // The serving provider resolves the pin to its rec.gov alias before the
+        // CTA sees it, so the drawer reads exactly as a rec.gov-primary pin.
+        val ref = BookingProviderRef.RecGov(facilityId = "234784")
+
+        val out = cta.computeCtas(bookingRef = ref, reserveUrl = null, infoUrl = "https://www.recreation.gov/camping/campgrounds/234784")
+
+        assertEquals(1, out.size)
+        assertEquals("Reserve on recreation.gov", out.single().label)
+        assertEquals("reserve", out.single().kind)
+        assertEquals(
+            "Recreation.gov",
+            cta.bookingSystem(bookingRef = ref, reserveUrl = null, infoUrl = "https://www.recreation.gov/camping/campgrounds/234784"),
+        )
+    }
+
+    @Test
     fun `bookingSystem labels`() {
         assertEquals(
             "Recreation.gov",

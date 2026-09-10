@@ -42,9 +42,15 @@ internal class CampgroundService(
                 lng = campground.location?.longitude,
             )
         val availabilityProvider = campground.bookingProvider
+        // The identity the pin actually books through. An aliased row (Campflare
+        // primary, rec.gov alias) reads as rec.gov's here, so the ref, the CTA,
+        // and the footer label all name the vendor that serves it. With no
+        // registered provider claiming the row, its own declared primary is the
+        // honest fallback.
+        val bookingRef = bookingHorizons.servingProvider(campground)?.parentRefFor(campground) ?: detail.bookingRef
         val computedCtas =
             cta.computeCtas(
-                bookingRef = detail.bookingRef,
+                bookingRef = bookingRef,
                 reserveUrl = campground.reservationUrl,
                 infoUrl = infoUrl,
             )
@@ -73,12 +79,12 @@ internal class CampgroundService(
                     address = CatalogColumnJson.element(campground.location),
                     description = description,
                     photoUrl = photoUrl,
-                    bookingRef = detail.bookingRef?.let(BookingRefDto::from),
-                    availabilitySupported = (detail.bookingRef != null).takeIf { it },
+                    bookingRef = bookingRef?.let(BookingRefDto::from),
+                    availabilitySupported = (bookingRef != null).takeIf { it },
                     cta = ctas,
                     bookingSystem =
                         cta.bookingSystem(
-                            bookingRef = detail.bookingRef,
+                            bookingRef = bookingRef,
                             reserveUrl = campground.reservationUrl,
                             infoUrl = infoUrl,
                         ),

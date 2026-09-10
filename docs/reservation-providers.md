@@ -61,9 +61,12 @@ service/availability/provider/
 
 `booking_provider` + `booking_provider_ref` (the colon-delimited
 `BookingProviderRef.serialize()` form) is the row's *primary* booking identity.
-The POI detail API emits it as `booking_ref: {provider, ref}` and the
-availability API as `scope_ref`. Nothing on the serving path reads
-`source_payload`; a key an ETL writes there is provenance, not behaviour.
+The availability API emits it as `scope_ref`. The POI detail's
+`booking_ref: {provider, ref}` — and with it `booking_system`, the CTAs, and
+`availability_supported` — is instead the *serving* provider's ref, which is
+the primary only when no other provider claims the row. Nothing on the serving
+path reads `source_payload`; a key an ETL writes there is provenance, not
+behaviour.
 
 The same inventory can be sold by more than one vendor, so `campgrounds` and
 `campsites` also carry `booking_aliases`: a JSONB array of
