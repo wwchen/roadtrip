@@ -144,7 +144,8 @@ internal fun Route.campsiteRoutes(
                             "Path key is `pois.id`. Returns the campground week already fused: one " +
                                 "`days` entry per date carrying the rollup status, whether the day can be " +
                                 "watched, and a `cells` map of campsite id to that campsite's status and " +
-                                "watchability. `latest_date` is the provider's booking horizon. " +
+                                "watchability. `latest_date` is the provider's booking horizon, " +
+                                "absent when no registered provider claims the campground. " +
                                 "`watch_capabilities.add_to_cart.state` says why the cart is or is " +
                                 "not reachable for this reader (ready, no_credentials, signed_out, " +
                                 "unsupported). `site_type` accepts: $siteTypeWireList.",

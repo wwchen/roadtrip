@@ -68,8 +68,12 @@ export interface PoiCampsitesAvailabilityResponse {
   poi_id: number;
   start_date: string;
   end_date: string;
-  /** The provider's booking horizon: the last date the picker may offer. */
-  latest_date: string;
+  /**
+   * The provider's booking horizon: the last date the picker may offer. Null
+   * when no provider claims the campground, which leaves the picker uncapped
+   * rather than capped at a guess.
+   */
+  latest_date: string | null;
   state: AvailabilityWindowState;
   /** Present only when `state` is `closed_for_season`. */
   season?: SeasonBlock | null;

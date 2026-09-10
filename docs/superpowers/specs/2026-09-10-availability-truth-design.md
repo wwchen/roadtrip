@@ -34,7 +34,7 @@ The POI availability response carries the fused week; the browser renders it.
     @SerialName("poi_id") val poiId: Long,
     @SerialName("start_date") val startDate: String,
     @SerialName("end_date") val endDate: String,
-    @SerialName("latest_date") val latestDate: String,   // earliest + provider bookingHorizonDays, the picker's ceiling
+    @SerialName("latest_date") val latestDate: String? = null, // earliest + provider bookingHorizonDays; null when no provider claims it
     val state: AvailabilityWindowState,                    // success | empty | closed_for_season
     val season: JsonElement? = null,                       // the provider's block when closed_for_season
     val cache: AvailabilityCacheBlock? = null,             // the stalest block across the streams
@@ -53,7 +53,7 @@ The POI availability response carries the fused week; the browser renders it.
 - **Cache**: the stream with the greatest `age_seconds`, or null.
 - **Add-to-cart state**: `unsupported` when the scope does not support `ADD_TO_CART`; else `signed_out` when there is no requester; else `no_credentials` when `canFulfilAddToCart` is false; else `ready`. `trigger_kinds` keeps its meaning (`atc` present only when `ready`).
 - **Cadence**: the frontend stops sending `cadence_sec`; the request mapper already accepts null; the resolver's rungs apply. No backend change beyond a test proving a create without `cadence_sec` stores NULL.
-- **Horizon**: `latest_date` = `AvailabilityDateResolver`'s `latestDate` for the slice's provider; the POI detail schema gains the same `latest_date` next to `earliest_date`.
+- **Horizon**: `latest_date` = `AvailabilityDateResolver`'s `latestDate` for the slice's provider, and null when no registered provider claims the campground; the POI detail schema gains the same `latest_date` next to `earliest_date`.
 
 ### Frontend
 

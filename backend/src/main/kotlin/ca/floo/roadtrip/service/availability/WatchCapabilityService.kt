@@ -16,6 +16,18 @@ internal data class WatchCapabilitySupport(
 }
 
 /**
+ * A watch scope with each campsite already resolved to its availability target
+ * — null where it has none.
+ *
+ * Resolving is three DB round trips per campsite, and the capability questions
+ * below each need the same answers. Asking them of a scope rather than of a
+ * campsite list is what keeps one request to one resolution per campsite.
+ */
+internal class ResolvedWatchScope(
+    val targets: List<ResolvedAvailabilityTarget?>,
+)
+
+/**
  * What a proposed watch over this scope could actually do.
  *
  * Two different questions, deliberately kept apart. Whether the inventory has a
@@ -41,46 +53,48 @@ internal class WatchCapabilityService(
     /** Null where no credential custodian is wired: `atc` is then never offered. */
     private val recgovCredentials: RecGovCredentialsConfigured? = null,
 ) {
-    /** Whether this campsite's provider can be polled for openings at all. */
-    fun pollingSupported(campsite: Campsite): Boolean {
-        val resolved = availabilityTargets.resolve(campsite) ?: return false
-        return resolved.provider.capabilities.supportsInternalPolling
-    }
+    fun internalPollingSupportFor(campsites: List<Campsite>): WatchCapabilitySupport = internalPollingSupportFor(resolve(campsites))
 
-    fun internalPollingSupportFor(campsites: List<Campsite>): WatchCapabilitySupport =
+    private fun internalPollingSupportFor(scope: ResolvedWatchScope): WatchCapabilitySupport =
         WatchCapabilitySupport(
-            scopedCount = campsites.size,
-            unsupportedCount = campsites.count { !pollingSupported(it) },
+            scopedCount = scope.targets.size,
+            unsupportedCount = scope.targets.count { it?.provider?.capabilities?.supportsInternalPolling != true },
         )
 
     fun bookingSupportFor(
         action: BookingAction,
         campsites: List<Campsite>,
+    ): WatchCapabilitySupport = bookingSupportFor(action, resolve(campsites))
+
+    private fun bookingSupportFor(
+        action: BookingAction,
+        scope: ResolvedWatchScope,
     ): WatchCapabilitySupport {
         val unsupported =
-            campsites.count { campsite ->
-                val resolved = availabilityTargets.resolve(campsite) ?: return@count true
-                bookingTargets.targetFor(action, resolved) == null
+            scope.targets.count { resolved ->
+                resolved == null || bookingTargets.targetFor(action, resolved) == null
             }
-        return WatchCapabilitySupport(scopedCount = campsites.size, unsupportedCount = unsupported)
+        return WatchCapabilitySupport(scopedCount = scope.targets.size, unsupportedCount = unsupported)
     }
 
-    fun supportedBookingActions(campsites: List<Campsite>): Set<BookingAction> =
+    fun supportedBookingActions(campsites: List<Campsite>): Set<BookingAction> = supportedBookingActions(resolve(campsites))
+
+    private fun supportedBookingActions(scope: ResolvedWatchScope): Set<BookingAction> =
         BookingAction.entries
-            .filter { bookingSupportFor(it, campsites).supported }
+            .filter { bookingSupportFor(it, scope).supported }
             .toSet()
 
     fun supportedTriggerKinds(
         campsites: List<Campsite>,
         requester: UserId?,
-    ): List<String> = supportedTriggerKinds(campsites, supportedBookingActions(campsites), requester)
+    ): List<String> = resolve(campsites).let { supportedTriggerKinds(it, supportedBookingActions(it), requester) }
 
     private fun supportedTriggerKinds(
-        campsites: List<Campsite>,
+        scope: ResolvedWatchScope,
         bookingActions: Set<BookingAction>,
         requester: UserId?,
     ): List<String> {
-        if (!internalPollingSupportFor(campsites).supported) return emptyList()
+        if (!internalPollingSupportFor(scope).supported) return emptyList()
         return buildList {
             addAll(notificationTriggerKinds)
             if (BookingAction.ADD_TO_CART in bookingActions && canFulfilAddToCart(requester)) {
@@ -102,16 +116,16 @@ internal class WatchCapabilityService(
     fun addToCartState(
         campsites: List<Campsite>,
         requester: UserId?,
-    ): AddToCartState = addToCartState(campsites, supportedBookingActions(campsites), requester)
+    ): AddToCartState = resolve(campsites).let { addToCartState(it, supportedBookingActions(it), requester) }
 
     private fun addToCartState(
-        campsites: List<Campsite>,
+        scope: ResolvedWatchScope,
         bookingActions: Set<BookingAction>,
         requester: UserId?,
     ): AddToCartState =
         when {
             // A scope that can't be polled can never fire a hold either.
-            !internalPollingSupportFor(campsites).supported -> AddToCartState.UNSUPPORTED
+            !internalPollingSupportFor(scope).supported -> AddToCartState.UNSUPPORTED
             BookingAction.ADD_TO_CART !in bookingActions -> AddToCartState.UNSUPPORTED
             requester == null -> AddToCartState.SIGNED_OUT
             !canFulfilAddToCart(requester) -> AddToCartState.NO_CREDENTIALS
@@ -122,10 +136,15 @@ internal class WatchCapabilityService(
         campsites: List<Campsite>,
         requester: UserId?,
     ): AvailabilityWatchCapabilitiesDto {
-        val bookingActions = supportedBookingActions(campsites)
+        // One resolution per campsite for the whole call: the three questions
+        // below share it rather than each walking the scope for themselves.
+        val scope = resolve(campsites)
+        val bookingActions = supportedBookingActions(scope)
         return AvailabilityWatchCapabilitiesDto(
-            triggerKinds = supportedTriggerKinds(campsites, bookingActions, requester),
-            addToCart = AddToCartCapabilityDto(addToCartState(campsites, bookingActions, requester)),
+            triggerKinds = supportedTriggerKinds(scope, bookingActions, requester),
+            addToCart = AddToCartCapabilityDto(addToCartState(scope, bookingActions, requester)),
         )
     }
+
+    private fun resolve(campsites: List<Campsite>): ResolvedWatchScope = ResolvedWatchScope(campsites.map(availabilityTargets::resolve))
 }

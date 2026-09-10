@@ -63,13 +63,13 @@ internal class CampsiteAvailabilityController(
             // The site_type filter dropped every campsite, but the campground
             // may still have a serving provider — ask it for the real horizon
             // before falling back to the flat default.
-            val horizonDays = availabilityService.bookingHorizonDaysFor(campground) ?: EMPTY_WINDOW_HORIZON_DAYS
+            val horizonDays = availabilityService.bookingHorizonDaysFor(campground)
             val window =
                 dateResolver.resolveWindow(
                     startDate = startDate,
                     endDate = endDate,
                     context = dateContext,
-                    bookingHorizonDays = horizonDays,
+                    bookingHorizonDays = horizonDays ?: EMPTY_WINDOW_HORIZON_DAYS,
                     maxDays = EMPTY_WINDOW_MAX_DAYS,
                     defaultDays = EMPTY_WINDOW_DEFAULT_DAYS,
                 )
@@ -78,7 +78,9 @@ internal class CampsiteAvailabilityController(
                 startDate = window.startDate,
                 endDate = window.endDate,
                 earliestDate = dateContext.earliestDate,
-                latestDate = dateResolver.latestDate(dateContext, horizonDays),
+                // The fallback above only bounds the window it had to compute;
+                // with no provider there is no horizon to publish as truth.
+                latestDate = horizonDays?.let { dateResolver.latestDate(dateContext, it) },
                 allCampsites = allCampsites,
                 campsites = emptyList(),
                 batch = null,
@@ -132,7 +134,7 @@ internal class CampsiteAvailabilityController(
             poiId = poiId,
             startDate = slice.startDate.toString(),
             endDate = slice.endDate.toString(),
-            latestDate = slice.latestDate.toString(),
+            latestDate = slice.latestDate?.toString(),
             state = fused.state,
             season = seasonElement(fused.season),
             cache = fused.cache,

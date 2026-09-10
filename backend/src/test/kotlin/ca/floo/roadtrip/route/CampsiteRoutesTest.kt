@@ -26,7 +26,6 @@ import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
-import ca.floo.roadtrip.service.availability.EMPTY_WINDOW_HORIZON_DAYS
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
@@ -332,11 +331,9 @@ class CampsiteRoutesTest : SharedDbTest() {
             val startDate = LocalDate.parse(body["start_date"]!!.jsonPrimitive.content)
             val endDate = LocalDate.parse(body["end_date"]!!.jsonPrimitive.content)
             assertEquals(DEFAULT_WINDOW_DAYS.toLong(), ChronoUnit.DAYS.between(startDate, endDate))
-            // No provider resolves for the campground, so the flat fallback horizon applies.
-            assertEquals(
-                startDate.plusDays(EMPTY_WINDOW_HORIZON_DAYS.toLong()).toString(),
-                body["latest_date"]!!.jsonPrimitive.content,
-            )
+            // No provider resolves for the campground, so there is no horizon to
+            // state: the fallback bounds the window, it is not a ceiling to publish.
+            assertNull(body["latest_date"])
         }
 
     @Test

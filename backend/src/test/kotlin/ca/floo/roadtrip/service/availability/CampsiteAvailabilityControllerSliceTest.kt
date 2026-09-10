@@ -29,6 +29,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -118,6 +119,76 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
     }
 
     /**
+     * The detail endpoint's real per-campsite cost, measured end to end.
+     *
+     * `availabilityForPoi` is the whole path — slice, watch capabilities,
+     * fusion — and watch capabilities are the only part that needs a
+     * per-campsite target at all. One resolution per campsite is the floor;
+     * this pins it there, because the three capability questions each used to
+     * walk the scope for themselves and charge 3N.
+     */
+    @Test
+    fun `a detail request resolves each campsite exactly once`() {
+        val fixture = sliceTestController(siteTypes = List(BUSY_CAMPGROUND_SITES) { CampsiteKind.TENT })
+
+        val response =
+            runBlocking {
+                fixture.controller.availabilityForPoi(
+                    poiId = TEST_POI_ID,
+                    siteTypes = listOf(CampsiteKind.TENT),
+                    startDate = fixture.startDate,
+                    endDate = fixture.endDate,
+                )
+            }
+
+        assertEquals(
+            BUSY_CAMPGROUND_SITES,
+            response.days
+                .first()
+                .cells.size,
+        )
+        assertEquals(BUSY_CAMPGROUND_SITES, fixture.targets.campsiteResolves)
+    }
+
+    @Test
+    fun `slice reports no polling support when the serving provider cannot poll`() {
+        val fixture =
+            sliceTestController(
+                siteTypes = listOf(CampsiteKind.TENT),
+                providers = listOf(FakeAvailabilityProvider(BookingProvider.RECGOV, supportsInternalPolling = false)),
+            )
+
+        val slice =
+            runBlocking {
+                fixture.controller.poiAvailabilitySlice(
+                    poiId = TEST_POI_ID,
+                    siteTypes = listOf(CampsiteKind.TENT),
+                    startDate = fixture.startDate,
+                    endDate = fixture.endDate,
+                )
+            }
+
+        assertFalse(slice.pollingSupported)
+    }
+
+    @Test
+    fun `slice has no latest date when no provider claims the campground`() {
+        val fixture = sliceTestController(siteTypes = listOf(CampsiteKind.TENT), providers = emptyList())
+
+        val slice =
+            runBlocking {
+                fixture.controller.poiAvailabilitySlice(
+                    poiId = TEST_POI_ID,
+                    siteTypes = listOf(CampsiteKind.CABIN),
+                    startDate = fixture.startDate,
+                    endDate = fixture.endDate,
+                )
+            }
+
+        assertNull(slice.latestDate)
+    }
+
+    /**
      * Builds a controller over a fresh POI/campground with one seeded campsite
      * per entry in [siteTypes]. Mirrors the fake repos/services
      * `CampsiteAvailabilityServiceTest` builds: real repos over the shared test
@@ -125,9 +196,13 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
      * failover fetcher stubbed to answer with a canned batch instead of
      * calling out. `catalogService` and `watchCapabilityService` are wired
      * with real implementations because the constructor requires them, and
-     * `watchCapabilityService` now shares `targets`, so it is load-bearing for the zero-resolution assertion above.
+     * `watchCapabilityService` now shares `targets`, so it is load-bearing
+     * for the resolution-count assertions above.
      */
-    private fun sliceTestController(siteTypes: List<CampsiteKind>): SliceFixture {
+    private fun sliceTestController(
+        siteTypes: List<CampsiteKind>,
+        providers: List<AvailabilityProvider> = listOf(FakeAvailabilityProvider(BookingProvider.RECGOV)),
+    ): SliceFixture {
         ctx.cleanCanonicalCatalogFixtures()
         val fixture =
             ctx.seedCatalogPoi(
@@ -146,7 +221,6 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val campgroundRepo = CampgroundRepo(ctx)
         val dateResolver = AvailabilityDateResolver(PoiRepo(ctx))
-        val providers = listOf(FakeAvailabilityProvider(BookingProvider.RECGOV))
         val targets =
             CountingTargetResolver(
                 DbAvailabilityTargetResolver(
