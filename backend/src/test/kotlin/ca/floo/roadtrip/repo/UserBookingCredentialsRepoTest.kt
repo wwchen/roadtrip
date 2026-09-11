@@ -1,5 +1,8 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.fixtures.ROLL_FORWARD_CREDENTIALS_HEADING
+import ca.floo.roadtrip.fixtures.bookingPortRunbook
+import ca.floo.roadtrip.fixtures.runbookSqlStatements
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import org.jooq.impl.DSL
@@ -121,6 +124,32 @@ class UserBookingCredentialsRepoTest : SharedDbTest() {
         val stored = repo.find(user, BookingProvider.RECGOV)!!
         assertEquals("grace@example.com", stored.username)
         assertContentEquals(byteArrayOf(9), stored.secretCipher)
+        assertEquals(1, storedRowCount(user))
+    }
+
+    /**
+     * Roll-forward guard, run straight out of `docs/reservation-providers.md`:
+     * V60 is versioned and will not re-run, and its `DO NOTHING` would leave a
+     * stale row winning anyway. The runbook's upsert has to carry a password
+     * changed under the rolled-back jar — which lives only in the V53 columns —
+     * over the credential row V60 wrote.
+     */
+    @Test fun `the roll-forward runbook's SQL brings the newer legacy secret forward`() {
+        val user = seedLegacyCredentials("ada@example.com", byteArrayOf(1, 2))
+        migrationStatements(CREDENTIALS_MIGRATION).forEach(ctx::execute)
+        // The old jar took a new password: the V53 columns move, the table does not.
+        ctx.execute(
+            "UPDATE user_settings SET recgov_username = ?, recgov_password_cipher = ? WHERE user_id = ?",
+            "grace@example.com",
+            byteArrayOf(9, 9),
+            user.value,
+        )
+
+        runbookSqlStatements(bookingPortRunbook, ROLL_FORWARD_CREDENTIALS_HEADING).forEach(ctx::execute)
+
+        val stored = repo.find(user, BookingProvider.RECGOV)!!
+        assertEquals("grace@example.com", stored.username)
+        assertContentEquals(byteArrayOf(9, 9), stored.secretCipher)
         assertEquals(1, storedRowCount(user))
     }
 

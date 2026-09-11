@@ -168,7 +168,7 @@ class RecGovBookingAdapterTest {
             assertEquals(RecGovSessionCodes.MFA_REQUIRED, failed.error)
             val detail = assertNotNull(failed.detail)
             assertTrue(detail.contains("Settings"), detail)
-            assertTrue(detail.contains(RecGovSessionCodes.MFA_REQUIRED), "the code stays, for support: $detail")
+            assertFalse(detail.contains(RecGovSessionCodes.MFA_REQUIRED), "the code travels in `error`, not in the sentence: $detail")
         }
 
     @Test

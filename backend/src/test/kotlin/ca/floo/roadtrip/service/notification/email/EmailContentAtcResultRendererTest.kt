@@ -152,6 +152,22 @@ class EmailContentAtcResultRendererTest {
     }
 
     @Test
+    fun `the adapter's stand-in sentence reaches the inbox with no code in it`() {
+        // What a null-detail `cart_not_added` failure now carries: the adapter's
+        // category sentence, code-free — the code travels in the notice's
+        // `error` field, which this email never prints.
+        val content =
+            EmailContentAtcResultRenderer.render(
+                notice(error = "cart_not_added", detail = "the hold could not be made this time"),
+                magicLinkUrl = null,
+            )
+
+        assertTrue(content.text.contains("the hold could not be made this time"), content.text)
+        assertFalse(content.text.contains("cart_not_added"), content.text)
+        assertFalse(content.html.contains("cart_not_added"), content.html)
+    }
+
+    @Test
     fun `a failure carries the companion's reason so the owner knows what to do`() {
         val content =
             EmailContentAtcResultRenderer.render(

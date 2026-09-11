@@ -163,7 +163,7 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "(100 * sum(increase(roadtrip_booking_atc_total{provider=\"recgov\",outcome=\"held\"}[$__range])) / sum(increase(roadtrip_booking_atc_total{provider=\"recgov\"}[$__range]))) and on() (sum(increase(roadtrip_booking_atc_total{provider=\"recgov\"}[$__range])) > 0)",
+          "expr": "(100 * sum(increase(roadtrip_booking_atc_total{provider=\"recgov\",outcome=\"held\"}[$__range])) / sum(increase(roadtrip_booking_atc_total{provider=~\"recgov|none\"}[$__range]))) and on() (sum(increase(roadtrip_booking_atc_total{provider=~\"recgov|none\"}[$__range])) > 0)",
           "legendFormat": "Hold success rate",
           "range": true,
           "refId": "A"
@@ -395,7 +395,7 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (outcome) (increase(roadtrip_booking_atc_total{provider=\"recgov\"}[$__interval])) or on() vector(0)",
+          "expr": "sum by (outcome) (increase(roadtrip_booking_atc_total{provider=~\"recgov|none\"}[$__interval])) or on() vector(0)",
           "legendFormat": "{{outcome}}",
           "range": true,
           "refId": "A"

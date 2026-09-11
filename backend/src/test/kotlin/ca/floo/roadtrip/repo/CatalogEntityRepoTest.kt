@@ -1,5 +1,9 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.fixtures.ROLLBACK_HEADING
+import ca.floo.roadtrip.fixtures.ROLL_FORWARD_HEADING
+import ca.floo.roadtrip.fixtures.bookingPortRunbook
+import ca.floo.roadtrip.fixtures.runbookSqlStatements
 import ca.floo.roadtrip.model.domain.Address
 import ca.floo.roadtrip.model.domain.AmenityKey
 import ca.floo.roadtrip.model.domain.CampgroundAlert
@@ -33,32 +37,6 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class CatalogEntityRepoTest : SharedDbTest() {
-    /**
-     * The rollback runbook's own SQL (`docs/reservation-providers.md`, "Deploying
-     * and rolling back the booking port"), verbatim; see the guard test below.
-     * Keep this byte-identical with that doc section if either changes.
-     */
-    private val rollbackCampgroundsSql =
-        """
-        UPDATE campgrounds SET
-          booking_provider = 'recgov',
-          booking_provider_ref = (SELECT a->>'ref' FROM jsonb_array_elements(booking_aliases) a
-                                  WHERE a->>'provider' = 'recgov' LIMIT 1)
-        WHERE data_provider = 'campflare' AND booking_provider = 'campflare'
-          AND booking_aliases @> '[{"provider":"recgov"}]'::jsonb
-        """.trimIndent()
-
-    /** The campsites half of [rollbackCampgroundsSql]; same doc section, same rule. */
-    private val rollbackCampsitesSql =
-        """
-        UPDATE campsites SET
-          booking_provider = 'recgov',
-          booking_provider_ref = (SELECT a->>'ref' FROM jsonb_array_elements(booking_aliases) a
-                                  WHERE a->>'provider' = 'recgov' LIMIT 1)
-        WHERE data_provider = 'campflare' AND booking_provider = 'campflare'
-          AND booking_aliases @> '[{"provider":"recgov"}]'::jsonb
-        """.trimIndent()
-
     @BeforeEach
     fun resetCatalog() {
         ctx.cleanCanonicalCatalogFixtures()
@@ -1598,16 +1576,49 @@ class CatalogEntityRepoTest : SharedDbTest() {
     }
 
     /**
-     * Rollback runbook guard: `docs/reservation-providers.md`'s "Deploying and
-     * rolling back the booking port" section restores the pre-V59 shape with a
-     * correlated subquery rather than a `jsonb_array_elements()` in the UPDATE's
-     * own FROM list — PostgreSQL rejects the latter because a set-returning
-     * function there cannot see the target table's columns. [rollbackCampgroundsSql]
-     * and [rollbackCampsitesSql] must stay byte-identical with that doc section;
-     * update both together if either changes.
+     * Rollback runbook guard, run straight out of the doc: the SQL under
+     * `docs/reservation-providers.md`'s "Rolling back past V59" restores the
+     * pre-V59 shape with a correlated subquery rather than a
+     * `jsonb_array_elements()` in the UPDATE's own FROM list — PostgreSQL
+     * rejects the latter because a set-returning function there cannot see the
+     * target table's columns.
      */
     @Test
     fun `the rollback runbook's SQL runs on PostgreSQL and restores the pre-V59 shape`() {
+        seedAliasedBookingRows()
+
+        runbookSqlStatements(bookingPortRunbook, ROLLBACK_HEADING).forEach(ctx::execute)
+
+        assertBookingIdentity(campgroundProvider = "recgov", campgroundRef = "232447")
+        assertCampsiteBookingIdentity(provider = "recgov", ref = "330257")
+    }
+
+    /**
+     * Roll-forward guard: V59 is versioned, so Flyway will not re-run it after
+     * the rollback above. The doc's "Rolling forward again" statements are the
+     * hand-run replacement, and they have to land the same shape V59 did.
+     */
+    @Test
+    fun `the roll-forward runbook's SQL restores the post-V59 shape`() {
+        seedAliasedBookingRows()
+        runbookSqlStatements(bookingPortRunbook, ROLLBACK_HEADING).forEach(ctx::execute)
+
+        runbookSqlStatements(bookingPortRunbook, ROLL_FORWARD_HEADING).forEach(ctx::execute)
+
+        assertBookingIdentity(campgroundProvider = "campflare", campgroundRef = "upper-pines-campground-447")
+        assertCampsiteBookingIdentity(provider = "campflare", ref = "lower-pines-site-100")
+        assertEquals(
+            listOf(BookingAlias(BookingProvider.RECGOV, "232447")),
+            checkNotNull(CampgroundRepo(ctx).findById(campgroundId("upper-pines-campground-447"))).bookingAliases,
+        )
+        assertEquals(
+            listOf(BookingAlias(BookingProvider.RECGOV, "330257")),
+            checkNotNull(CampsiteRepo(ctx).findById(campsiteId("lower-pines-site-100"))).bookingAliases,
+        )
+    }
+
+    /** One campground and one campsite in the pre-V59 shape, already carried to post-V59 by the migration. */
+    private fun seedAliasedBookingRows() {
         seedBookingRow("campflare", "upper-pines-campground-447", "recgov", "232447")
         val parentCampgroundId = ctx.seedCampground(source = "campflare", sourceId = "lower-pines-campground-448")
         ctx.seedCampsite(
@@ -1617,21 +1628,25 @@ class CatalogEntityRepoTest : SharedDbTest() {
             bookingProvider = "recgov",
             bookingProviderRef = "330257",
         )
-
-        // Get to the post-V59 shape the runbook is written against.
         migrationStatements("V59__booking_aliases.sql").forEach(ctx::execute)
+    }
 
-        // The runbook's own statements, verbatim.
-        ctx.execute(rollbackCampgroundsSql)
-        ctx.execute(rollbackCampsitesSql)
-
+    private fun assertBookingIdentity(
+        campgroundProvider: String,
+        campgroundRef: String,
+    ) {
         val campground = checkNotNull(CampgroundRepo(ctx).findById(campgroundId("upper-pines-campground-447")))
-        assertEquals("recgov", campground.bookingProvider)
-        assertEquals("232447", campground.bookingProviderRef)
+        assertEquals(campgroundProvider, campground.bookingProvider)
+        assertEquals(campgroundRef, campground.bookingProviderRef)
+    }
 
+    private fun assertCampsiteBookingIdentity(
+        provider: String,
+        ref: String,
+    ) {
         val campsite = checkNotNull(CampsiteRepo(ctx).findById(campsiteId("lower-pines-site-100")))
-        assertEquals("recgov", campsite.bookingProvider)
-        assertEquals("330257", campsite.bookingProviderRef)
+        assertEquals(provider, campsite.bookingProvider)
+        assertEquals(ref, campsite.bookingProviderRef)
     }
 
     /** One bare campground carrying only its identity columns, for the alias migration to rewrite. */

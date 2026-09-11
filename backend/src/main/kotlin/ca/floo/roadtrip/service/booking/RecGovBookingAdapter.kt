@@ -49,15 +49,13 @@ private const val FIELD_PROFILE_ID = "profile_id"
 /**
  * A sentence for a refusal the companion did not explain, so the owner does not
  * read a bare code like `mfa_required`. One per category, not per code: what the
- * owner can do about it is a category-level fact.
+ * owner can do about it is a category-level fact, and the code itself travels in
+ * [AddToCartResult.Failed.error] for anyone who needs it.
  */
-private fun undetailed(
-    code: String,
-    category: BookingFailureCategory,
-): String =
+private fun undetailed(category: BookingFailureCategory): String =
     when (category) {
-        BookingFailureCategory.CALLER_ACTION -> "$code — this needs your attention in Settings"
-        BookingFailureCategory.RETRY_LATER -> "$code — the hold could not be made this time"
+        BookingFailureCategory.CALLER_ACTION -> "this needs your attention in Settings"
+        BookingFailureCategory.RETRY_LATER -> "the hold could not be made this time"
         BookingFailureCategory.UPSTREAM -> COMPANION_ERROR_DETAIL
     }
 
@@ -263,7 +261,7 @@ internal class RecGovBookingAdapter(
         return AddToCartResult.Failed(
             providerId = id,
             error = code,
-            detail = detail ?: undetailed(code, category),
+            detail = detail ?: undetailed(category),
             category = category,
             request = payload,
             response = response,

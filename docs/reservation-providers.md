@@ -497,12 +497,22 @@ hold.
 
 ## Deploying and rolling back the booking port
 
+**V59 locks both catalog tables while the old jar serves.** Its two `UPDATE`s
+hold `ACCESS EXCLUSIVE` on `campgrounds` and `campsites` for the whole run — 17s
+on the local copy — and the jar still serving reads through that lock. Deploy it
+in a window where a POI or availability read stalling for that long is
+acceptable, and expect the same on any hand-run roll-forward below.
+
 **V59 blinds a jar that predates it.** V59 canonicalizes the Campflare rows
 that were stamped with rec.gov as their *primary* booking identity: the row
 becomes Campflare primary and rec.gov's ref moves into `booking_aliases`. A jar
 rolled back past the alias-aware resolver reads only `booking_provider` /
 `booking_provider_ref`, so those campgrounds stop matching the rec.gov pollers
-entirely. To restore the pre-V59 shape before starting an old jar:
+entirely.
+
+### Rolling back past V59
+
+Restore the pre-V59 shape before starting an old jar:
 
 ```sql
 UPDATE campgrounds SET
@@ -520,8 +530,49 @@ WHERE data_provider = 'campflare' AND booking_provider = 'campflare'
   AND booking_aliases @> '[{"provider":"recgov"}]'::jsonb;
 ```
 
-Rolling forward needs no undo of that: V59's own `WHERE` re-canonicalizes the
-rows it just un-did, and leaves everything else alone.
+### Rolling forward again
+
+V59 and V60 are versioned migrations: Flyway has their history rows already and
+will not re-run them, so the rows the rollback restored stay restored and the
+new jar would find nobody claiming them. Run these by hand *before* starting the
+new jar — V59's own two `UPDATE`s, verbatim, so a rerun of the migration and a
+hand run leave the same shape:
+
+```sql
+UPDATE campgrounds
+SET booking_aliases = jsonb_build_array(jsonb_build_object('provider', 'recgov', 'ref', booking_provider_ref)),
+    booking_provider = 'campflare',
+    booking_provider_ref = data_provider_ref
+WHERE data_provider = 'campflare'
+  AND booking_provider = 'recgov'
+  AND booking_provider_ref IS NOT NULL;
+
+UPDATE campsites
+SET booking_aliases = jsonb_build_array(jsonb_build_object('provider', 'recgov', 'ref', booking_provider_ref)),
+    booking_provider = 'campflare',
+    booking_provider_ref = data_provider_ref
+WHERE data_provider = 'campflare'
+  AND booking_provider = 'recgov'
+  AND booking_provider_ref IS NOT NULL;
+```
+
+### Rolling forward rec.gov credentials
+
+Credentials come forward with an upsert rather than V60's `DO NOTHING`: a
+password changed under the old jar lives only in the V53 columns, and
+`DO NOTHING` would leave the stale `user_booking_credentials` row winning.
+
+```sql
+INSERT INTO user_booking_credentials (user_id, provider, username, secret_cipher)
+SELECT user_id, 'recgov', recgov_username, recgov_password_cipher
+FROM user_settings
+WHERE recgov_username IS NOT NULL
+  AND recgov_password_cipher IS NOT NULL
+ON CONFLICT (user_id, provider) DO UPDATE SET
+  username = EXCLUDED.username,
+  secret_cipher = EXCLUDED.secret_cipher,
+  updated_at = now();
+```
 
 **Credentials survive a rollback.** V60 moved rec.gov accounts into
 `user_booking_credentials`, and V53's `user_settings.recgov_username` /

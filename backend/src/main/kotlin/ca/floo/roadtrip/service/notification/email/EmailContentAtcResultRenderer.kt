@@ -27,9 +27,10 @@ private const val FIELD_DETAIL = "detail"
  * Slack card is fail-closed on a personal token most users never configure, so
  * without this a hold — or a missed one — was announced to nobody.
  *
- * A failure carries the companion's own reason verbatim, because the two the
- * owner can act on ("session expired — re-login in Settings", a captcha) are
- * exactly the ones a generic message would hide.
+ * A failure carries the companion's own reason when it gave one, because the
+ * two the owner can act on ("session expired — re-login in Settings", a
+ * captcha) are exactly the ones a generic message would hide. When it gave
+ * none, the adapter's category sentence stands in — never a bare code.
  */
 internal object EmailContentAtcResultRenderer {
     private const val FAILED_BODY_PREFIX = "Roadtrip found a matching site but could not hold it:"
