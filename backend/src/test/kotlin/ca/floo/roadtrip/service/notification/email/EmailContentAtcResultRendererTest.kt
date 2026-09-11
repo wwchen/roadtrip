@@ -86,6 +86,30 @@ class EmailContentAtcResultRendererTest {
     }
 
     @Test
+    fun `a failed notice names the provider that would have held it but links no cart`() {
+        // The adapter can fail after it already knows whose cart it was trying
+        // for; the failure copy still names that provider, but there is no hold
+        // to link back to.
+        val content =
+            EmailContentAtcResultRenderer.render(
+                notice(
+                    vendor = "campflare",
+                    status = "failed",
+                    bookingSystem = "Campflare",
+                    cartUrl = "https://cart.example.test/hold",
+                    error = "captcha_required",
+                ),
+                magicLinkUrl = null,
+            )
+
+        assertTrue(content.text.contains("Provider: Campflare"), content.text)
+        assertTrue(content.html.contains("Campflare"), content.html)
+        assertFalse(content.text.contains("cart.example.test"), content.text)
+        assertFalse(content.html.contains("cart.example.test"), content.html)
+        assertFalse(content.text.contains("Open Campflare cart"), content.text)
+    }
+
+    @Test
     fun `a failure carries the companion's reason so the owner knows what to do`() {
         val content =
             EmailContentAtcResultRenderer.render(

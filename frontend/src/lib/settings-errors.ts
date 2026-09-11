@@ -12,7 +12,15 @@
  */
 import { VENDOR, accountCopy } from './strings';
 
-const MESSAGES = new Map<string, string>([
+/**
+ * Most values are the message itself. A few are generic booking-action codes
+ * that `BookingActionService` returns for every provider's add-to-cart call —
+ * those take the campground's own `booking_system` (the same name the hold
+ * toast already carries) instead of hardcoding rec.gov.
+ */
+type SettingsErrorMessage = string | ((bookingSystem?: string) => string);
+
+const MESSAGES = new Map<string, SettingsErrorMessage>([
   ['invalid_field', 'Please check the highlighted fields.'],
   ['slack_invalid_auth', 'Slack rejected this token.'],
   ['slack_not_configured', 'No Slack token is set.'],
@@ -79,10 +87,26 @@ const MESSAGES = new Map<string, string>([
     'recgov_no_reserve_button',
     `${VENDOR} showed no way to book this site for those dates — it may be taken or not bookable online.`,
   ],
-  ['cart_not_added', `${VENDOR} would not add it — someone else likely took it. Try again.`],
+  // Generic: `BookingActionService` returns this for any provider's cart, so
+  // it takes the campground's own `booking_system` rather than naming rec.gov
+  // for a hold that may never have touched rec.gov.
+  [
+    'cart_not_added',
+    (bookingSystem?: string) =>
+      bookingSystem
+        ? `${bookingSystem} would not add it — someone else likely took it. Try again.`
+        : 'Could not add it to your cart — someone else likely took it. Try again.',
+  ],
   ['recgov_confirmation_disabled', `${VENDOR} would not add it — someone else likely took it.`],
   ['unsupported_target', 'This campground cannot be held from Roadtrip.'],
-  ['credentials_required', `Add your ${VENDOR} credentials in Settings first.`],
+  // Generic for the same reason as `cart_not_added` above.
+  [
+    'credentials_required',
+    (bookingSystem?: string) =>
+      bookingSystem
+        ? `Add your ${bookingSystem} credentials in Settings first.`
+        : 'Add your booking credentials in Settings first.',
+  ],
   ['recgov_session_expired', `Your ${VENDOR} session expired — test login in Settings.`],
   // The same user condition as `recgov_session_expired`, reached by a different
   // layer. The grid's add-to-cart preflights session health, then drives a
@@ -126,10 +150,17 @@ function unmappedMessage(code: string | undefined | null): string {
  * Total by construction — every input yields a string, including `undefined` — so
  * callers never guard the result. That is the original's contract and the reason
  * call sites can write `settingsErrorMessage(err.code)` directly.
+ *
+ * [bookingSystem] is only read by the handful of generic booking-action codes
+ * above; every other entry is a plain string and ignores it. Callers outside
+ * the cart flow (settings, Slack, email) have no campground in hand and pass
+ * nothing, which is exactly the neutral fallback those entries are for.
  */
-export function settingsErrorMessage(code: string | undefined | null): string {
+export function settingsErrorMessage(code: string | undefined | null, bookingSystem?: string): string {
+  const entry = code == null ? undefined : MESSAGES.get(code);
+  if (typeof entry === 'function') return entry(bookingSystem);
   // `??`, not `||`: a mapped message is shown as written, including one deliberately
   // set to the empty string. `||` would silently substitute the default for it,
   // which is the kind of difference that only shows up the day someone adds one.
-  return (code == null ? undefined : MESSAGES.get(code)) ?? unmappedMessage(code);
+  return entry ?? unmappedMessage(code);
 }

@@ -29,14 +29,16 @@
 export const VENDOR = 'rec.gov';
 
 /**
- * What the cart copy calls a booking site the POI does not name — the hold
- * still happened, and "your cart" is true of every vendor.
+ * What every one of `bookingCopy`'s provider-naming functions falls back to
+ * when the POI carries no `booking_system` — one neutral name so a reader
+ * meets the same "no vendor known" voice everywhere, not a different filler
+ * word per sentence.
  */
 const UNNAMED_BOOKING_SITE = 'the booking site';
 
 export const bookingCopy = {
   /** The popover's escape hatch to the provider's own page. */
-  openProvider: `Book on ${VENDOR}`,
+  openProvider: (bookingSystem?: string) => `Book on ${bookingSystem ?? UNNAMED_BOOKING_SITE}`,
   addToCart: 'Add to cart',
   /** The armed cell's label, before the second tap. */
   book: 'Book',

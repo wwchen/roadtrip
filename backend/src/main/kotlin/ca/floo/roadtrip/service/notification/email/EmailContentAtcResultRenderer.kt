@@ -42,7 +42,7 @@ internal object EmailContentAtcResultRenderer {
         appRootUrl: String? = null,
     ): EmailContent {
         val completed = notice.status == ATC_STATUS_COMPLETED
-        val header = if (completed) "Site held in your cart" else "Could not hold the site"
+        val header = if (completed) heldHeader(notice.bookingSystem) else "Could not hold the site"
         val body =
             if (completed) {
                 completedBody(notice.bookingSystem)
@@ -54,11 +54,18 @@ internal object EmailContentAtcResultRenderer {
                 if (completed) notice.cartUrl?.let { add(EmailLink(cartLinkLabel(notice.bookingSystem), it)) }
                 addAll(watchControlLinks(appRootUrl, notice.watchId, magicLinkUrl))
             }
+        val providerLabel = notice.bookingSystem ?: notice.vendor
         return EmailContent(
             subject = "Roadtrip watch #${notice.watchId}: $header",
-            text = renderText(notice.watchId, notice.vendor, header, body, links),
-            html = renderHtml(notice.watchId, notice.vendor, header, body, links),
+            text = renderText(notice.watchId, providerLabel, header, body, links),
+            html = renderHtml(notice.watchId, providerLabel, header, body, links),
         )
+    }
+
+    /** Mirrors the web toast's title exactly: named when [bookingSystem] is known, neutral otherwise. */
+    private fun heldHeader(bookingSystem: String?): String {
+        val whoseCart = bookingSystem?.let { "$it " }.orEmpty()
+        return "Site held in your ${whoseCart}cart"
     }
 
     /**
@@ -73,18 +80,19 @@ internal object EmailContentAtcResultRenderer {
             "$finishOn soon. Roadtrip stops at the cart — it never pays."
     }
 
-    private fun cartLinkLabel(bookingSystem: String?): String = bookingSystem?.let { "Open your $it cart" } ?: CART_LINK_LABEL
+    /** Aligned with the web toast's cart link: named when [bookingSystem] is known, neutral otherwise. */
+    private fun cartLinkLabel(bookingSystem: String?): String = bookingSystem?.let { "Open $it cart" } ?: CART_LINK_LABEL
 
     private fun renderText(
         watchId: Long,
-        vendor: String,
+        providerLabel: String,
         header: String,
         body: String,
         links: List<EmailLink>,
     ): String =
         buildString {
             appendLine("$header for watch #$watchId")
-            appendLine("Provider: $vendor")
+            appendLine("Provider: $providerLabel")
             appendLine()
             appendLine(body)
             links.takeIf { it.isNotEmpty() }?.let {
@@ -95,7 +103,7 @@ internal object EmailContentAtcResultRenderer {
 
     private fun renderHtml(
         watchId: Long,
-        vendor: String,
+        providerLabel: String,
         header: String,
         body: String,
         links: List<EmailLink>,
@@ -104,7 +112,7 @@ internal object EmailContentAtcResultRenderer {
             h2 { +"$header for watch #$watchId" }
             p {
                 strong { +"Provider:" }
-                +" $vendor"
+                +" $providerLabel"
                 br()
             }
             p { +body }

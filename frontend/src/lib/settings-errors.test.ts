@@ -122,6 +122,28 @@ describe('settingsErrorMessage', () => {
     expect(dates).not.toMatch(/try again/i);
   });
 
+  test('the generic add-to-cart codes name the campground’s own provider, not rec.gov', () => {
+    // `BookingActionService` returns these for any provider's cart, so they
+    // must not hardcode rec.gov — Campflare's failure should say Campflare.
+    expect(settingsErrorMessage('cart_not_added', 'Campflare')).toBe(
+      'Campflare would not add it — someone else likely took it. Try again.',
+    );
+    expect(settingsErrorMessage('credentials_required', 'Campflare')).toBe(
+      'Add your Campflare credentials in Settings first.',
+    );
+  });
+
+  test('the generic add-to-cart codes read neutrally when no provider is known', () => {
+    expect(settingsErrorMessage('cart_not_added')).toBe(
+      'Could not add it to your cart — someone else likely took it. Try again.',
+    );
+    expect(settingsErrorMessage('credentials_required')).toBe(
+      'Add your booking credentials in Settings first.',
+    );
+    expect(settingsErrorMessage('cart_not_added')).not.toMatch(/rec\.gov/i);
+    expect(settingsErrorMessage('credentials_required')).not.toMatch(/rec\.gov/i);
+  });
+
   test('falls back for a missing code', () => {
     expect(settingsErrorMessage(undefined)).toBe(DEFAULT);
     expect(settingsErrorMessage(null)).toBe(DEFAULT);

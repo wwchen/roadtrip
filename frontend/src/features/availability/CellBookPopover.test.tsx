@@ -5,11 +5,17 @@ import { CellBookPopover, type CellCart } from './CellBookPopover';
 
 const anchors: HTMLElement[] = [];
 
-function renderPopover(cart: CellCart, onOpenBooking = vi.fn()) {
+function renderPopover(cart: CellCart, onOpenBooking = vi.fn(), bookingSystem?: string) {
   const anchor = document.body.appendChild(document.createElement('button'));
   anchors.push(anchor);
   render(
-    <CellBookPopover anchor={anchor} onOpenBooking={onOpenBooking} cart={cart} onClose={vi.fn()} />,
+    <CellBookPopover
+      anchor={anchor}
+      onOpenBooking={onOpenBooking}
+      cart={cart}
+      onClose={vi.fn()}
+      bookingSystem={bookingSystem}
+    />,
   );
   return { onOpenBooking };
 }
@@ -21,15 +27,22 @@ afterEach(() => {
 });
 
 describe('the cell booking popover', () => {
-  test('always offers the provider’s own booking page', async () => {
-    const { onOpenBooking } = renderPopover({
-      state: 'signed-out',
-      onSignIn: vi.fn(),
-    });
+  test('always offers the provider’s own booking page, named for the campground’s own vendor', async () => {
+    const { onOpenBooking } = renderPopover(
+      { state: 'signed-out', onSignIn: vi.fn() },
+      undefined,
+      'Campflare',
+    );
 
-    await userEvent.click(screen.getByRole('button', { name: 'Book on rec.gov' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Book on Campflare' }));
 
     expect(onOpenBooking).toHaveBeenCalledOnce();
+  });
+
+  test('names no vendor of its own when the campground’s booking system is unknown', () => {
+    renderPopover({ state: 'signed-out', onSignIn: vi.fn() });
+
+    expect(screen.getByRole('button', { name: 'Book on the booking site' })).toBeInTheDocument();
   });
 
   test('holds the site when the caller may drive the cart', async () => {

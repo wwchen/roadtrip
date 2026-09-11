@@ -39,9 +39,17 @@ export interface CellBookPopoverProps {
   onOpenBooking: () => void;
   cart: CellCart;
   onClose: () => void;
+  /** The POI's own `booking_system` — the same source the cart copy takes it from. */
+  bookingSystem?: string;
 }
 
-export function CellBookPopover({ anchor, onOpenBooking, cart, onClose }: CellBookPopoverProps) {
+export function CellBookPopover({
+  anchor,
+  onOpenBooking,
+  cart,
+  onClose,
+  bookingSystem,
+}: CellBookPopoverProps) {
   const width = cart.state === 'ready' ? POPOVER_WIDTH_PX : POPOVER_WIDTH_WITH_HINT_PX;
   const hostRef = useRef<HTMLDivElement>(null);
   const firstRowRef = useRef<HTMLButtonElement>(null);
@@ -120,7 +128,7 @@ export function CellBookPopover({ anchor, onOpenBooking, cart, onClose }: CellBo
         }}
       >
         <Icon name="external" className="cg-cell-book-pop-icon" aria-hidden="true" />
-        <span>{bookingCopy.openProvider}</span>
+        <span>{bookingCopy.openProvider(bookingSystem)}</span>
       </button>
       <button
         type="button"

@@ -1163,20 +1163,33 @@ describe('holding a site straight from the grid', () => {
 
     await armFirstCell();
 
+    // The default fixture names no booking system, so the escape hatch reads
+    // neutrally too — it must not default to rec.gov for a provider it does
+    // not actually know.
     const popover = await screen.findByRole('group', { name: 'Booking actions' });
-    expect(within(popover).getByRole('button', { name: /Book on rec\.gov/ })).toBeInTheDocument();
+    expect(within(popover).getByRole('button', { name: 'Book on the booking site' })).toBeInTheDocument();
     expect(within(popover).getByRole('button', { name: /Add to cart/ })).toBeInTheDocument();
   });
 
-  test('the rec.gov row still opens the provider, as the flip used to', async () => {
+  test('the escape-hatch row opens the provider, as the flip used to', async () => {
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
     await mount();
     await armFirstCell();
 
-    await userEvent.click(await screen.findByRole('button', { name: /Book on rec\.gov/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Book on the booking site' }));
 
     expect(window.open).toHaveBeenCalled();
+  });
+
+  test('the escape-hatch row names the campground’s own booking system', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    await mount({ booking_system: 'Campflare' });
+    await armFirstCell();
+
+    const popover = await screen.findByRole('group', { name: 'Booking actions' });
+    expect(within(popover).getByRole('button', { name: 'Book on Campflare' })).toBeInTheDocument();
   });
 
   test('a hold in flight locks the cell and says so at the bottom of the panel', async () => {
@@ -1303,7 +1316,7 @@ describe('holding a site straight from the grid', () => {
     await userEvent.click(armed);
 
     // A keyboard user lands on the choice, not on a button whose meaning changed.
-    await waitFor(() => expect(screen.getByRole('button', { name: /Book on rec\.gov/ })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Book on the booking site' })).toHaveFocus());
 
     await userEvent.keyboard('{Escape}');
 

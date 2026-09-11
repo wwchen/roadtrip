@@ -227,7 +227,7 @@ function AvailabilityWeekView({
           toast({
             status: 'warning',
             title: 'Could not hold the site',
-            children: settingsErrorMessage(code),
+            children: settingsErrorMessage(code, bookingSystem),
           });
         });
     },
@@ -374,6 +374,7 @@ function AvailabilityWeekView({
               watchGate,
               cart,
               cartAction,
+              bookingSystem,
             }}
             events={{
               filtersChanged: actions.changeFilters,
