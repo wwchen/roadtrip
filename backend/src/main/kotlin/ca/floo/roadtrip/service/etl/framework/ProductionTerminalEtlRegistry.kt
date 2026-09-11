@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
+import ca.floo.roadtrip.model.metadata.registry.GeometryFormat
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.Repos
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampgroundsEtl
@@ -55,7 +56,12 @@ internal val poiAdapters: Map<String, PoiAdapterSpec> =
                         etlSlug = entry.slug,
                         dataProviderValue = DataProvider.ASPIRA,
                         aspiraTenant = entry.args.require("tenant"),
-                        stateFilter = entry.args["state_filter"],
+                        // Task 3 replaces this with the whole policy.
+                        stateFilter =
+                            entry.geometry
+                                ?.sources
+                                ?.firstOrNull { it.format == GeometryFormat.USCAMPGROUNDS_CSV }
+                                ?.state,
                     ),
                 )
             },

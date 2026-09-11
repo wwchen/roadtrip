@@ -331,7 +331,13 @@ poi_data:
         args:
           host: washington.goingtocamp.com
           tenant: wa
-          state_filter: WA
+        geometry:
+          sources:
+            - input: uscampgrounds
+              format: uscampgrounds_csv
+              state: WA
+          match:
+            parent_fallback: true
 
   - name: BC Provincial Parks
     category: campground
@@ -344,6 +350,12 @@ poi_data:
         args:
           tenant: bc
           host: camping.bcparks.ca
+        geometry:
+          sources:
+            - input: bcparks-strapi
+              format: bcparks_strapi
+          match:
+            parent_fallback: true
 
   - name: Parks Canada
     category: campground
@@ -356,7 +368,15 @@ poi_data:
         args:
           host: reservation.pc.gc.ca
           tenant: pc
-          parent_name_fallback: true
+        geometry:
+          sources:
+            - input: apca-accommodation
+              format: geojson_points
+              name_property: Name_e
+            - input: apca-places
+              format: arcgis_centroids
+          match:
+            parent_fallback: true
 
   - name: Alberta Provincial Parks
     category: campground

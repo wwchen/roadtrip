@@ -20,19 +20,26 @@ private const val POI_DATA_SECTION = "poi_data"
 @Suppress("TopLevelPropertyNaming")
 private val TENANT_ARG_KEYS =
     mapOf(
-        BookingProvider.ASPIRA to "tenant",
+        BookingProvider.ASPIRA to ARG_TENANT,
         BookingProvider.RESERVEAMERICA to "contract",
     )
 
 private const val ARG_HOST = "host"
+private const val ARG_TENANT = "tenant"
+
+private const val ASPIRA_CAMPGROUNDS_ADAPTER = "AspiraCampgroundsEtl"
+private const val BC_PARKS_CAMPGROUNDS_ADAPTER = "BcParksCampgroundsEtl"
+
+private const val MIN_FUZZY_THRESHOLD_EXCLUSIVE = 0.0
+private const val MAX_FUZZY_THRESHOLD_INCLUSIVE = 1.0
 
 /** Tenant-scoped adapter name → the vendor whose tenant its args must name. */
 @Suppress("TopLevelPropertyNaming")
 private val TENANT_SCOPED_ADAPTER_PROVIDERS =
     mapOf(
-        "AspiraCampgroundsEtl" to BookingProvider.ASPIRA,
+        ASPIRA_CAMPGROUNDS_ADAPTER to BookingProvider.ASPIRA,
         "AspiraCampsitesEtl" to BookingProvider.ASPIRA,
-        "BcParksCampgroundsEtl" to BookingProvider.ASPIRA,
+        BC_PARKS_CAMPGROUNDS_ADAPTER to BookingProvider.ASPIRA,
         "ReserveAmericaCampgroundsEtl" to BookingProvider.RESERVEAMERICA,
         "ReserveAmericaSitesEtl" to BookingProvider.RESERVEAMERICA,
     )
@@ -44,8 +51,27 @@ private val TENANT_SCOPED_ADAPTER_PROVIDERS =
 @Suppress("TopLevelPropertyNaming")
 private val HOST_REQUIRED_ADAPTERS =
     setOf(
-        "AspiraCampgroundsEtl",
-        "BcParksCampgroundsEtl",
+        ASPIRA_CAMPGROUNDS_ADAPTER,
+        BC_PARKS_CAMPGROUNDS_ADAPTER,
+    )
+
+/** Adapters that join their vendor's leaves to a sibling geometry feed by name. */
+@Suppress("TopLevelPropertyNaming")
+private val GEOMETRY_ADAPTERS =
+    setOf(
+        ASPIRA_CAMPGROUNDS_ADAPTER,
+        BC_PARKS_CAMPGROUNDS_ADAPTER,
+    )
+
+/**
+ * Adapter name → the complete `args` key set it accepts. A key outside the set
+ * is a boot error: a dead or misspelled arg used to boot cleanly and do nothing.
+ */
+@Suppress("TopLevelPropertyNaming")
+private val ACCEPTED_ARG_KEYS =
+    mapOf(
+        ASPIRA_CAMPGROUNDS_ADAPTER to setOf(ARG_HOST, ARG_TENANT),
+        BC_PARKS_CAMPGROUNDS_ADAPTER to setOf(ARG_HOST, ARG_TENANT),
     )
 
 // In-memory representation of the configured POI registry.
@@ -147,6 +173,8 @@ class PoiRegistry(
             allEtlSlugs = etlSlugs,
             errs = errs,
         )
+        validateAdapterPolicies(POI_DATA_SECTION, poiData.map { EtlRowRef(it.name, it.etls) }, errs)
+        validateAdapterPolicies(CAMPSITE_DATA_SECTION, campsiteData.map { EtlRowRef(it.name, it.etls) }, errs)
 
         // Global cycle detection over data_sources.depends_on + every
         // etl.inputs across both etl-bearing sections. Edges run
@@ -306,6 +334,78 @@ class PoiRegistry(
         }
     }
 
+    /**
+     * The `geometry:` block and the closed `args` key set for the adapters that
+     * join geometry by name. Runs after [validateBookingProviders] so nothing
+     * here can suppress that method's own tenant cross-check.
+     */
+    private fun validateAdapterPolicies(
+        label: String,
+        rows: List<EtlRowRef>,
+        errs: MutableList<String>,
+    ) {
+        for (row in rows) {
+            for (etl in row.etls) {
+                val where = "$label '${row.name}' etl '${etl.slug}'"
+                ACCEPTED_ARG_KEYS[etl.adapter]?.let { accepted ->
+                    for (key in etl.args.keys - accepted) {
+                        errs += "$where adapter '${etl.adapter}' does not accept arg '$key' " +
+                            "(accepted: ${accepted.sorted().joinToString()})"
+                    }
+                }
+                if (etl.adapter !in GEOMETRY_ADAPTERS) {
+                    if (etl.geometry != null) {
+                        errs += "$where adapter '${etl.adapter}' does not join geometry, so it must not declare 'geometry'"
+                    }
+                    continue
+                }
+                val geometry = etl.geometry
+                if (geometry == null || geometry.sources.isEmpty()) {
+                    errs += "$where adapter '${etl.adapter}' must declare 'geometry' with at least one source"
+                    continue
+                }
+                validateGeometrySources(where, etl, geometry, errs)
+                val threshold = geometry.match.fuzzyThreshold
+                if (threshold <= MIN_FUZZY_THRESHOLD_EXCLUSIVE || threshold > MAX_FUZZY_THRESHOLD_INCLUSIVE) {
+                    errs += "$where match.fuzzy_threshold=$threshold is outside " +
+                        "($MIN_FUZZY_THRESHOLD_EXCLUSIVE, $MAX_FUZZY_THRESHOLD_INCLUSIVE]"
+                }
+            }
+        }
+    }
+
+    private fun validateGeometrySources(
+        where: String,
+        etl: EtlEntry,
+        geometry: GeometryPolicy,
+        errs: MutableList<String>,
+    ) {
+        val seen = mutableSetOf<String>()
+        for (source in geometry.sources) {
+            if (source.input !in etl.inputs) {
+                errs += "$where geometry source input '${source.input}' is not one of the etl's inputs"
+            }
+            if (!seen.add(source.input)) {
+                errs += "$where declares geometry source input '${source.input}' twice"
+            }
+            if (source.state != null && source.format != GeometryFormat.USCAMPGROUNDS_CSV) {
+                errs += "$where geometry source '${source.input}' declares 'state', " +
+                    "which only '${GeometryFormat.USCAMPGROUNDS_CSV.wire}' honours"
+            }
+            if (source.nameProperty != null && source.format != GeometryFormat.GEOJSON_POINTS) {
+                errs += "$where geometry source '${source.input}' declares 'name_property', " +
+                    "which only '${GeometryFormat.GEOJSON_POINTS.wire}' honours"
+            }
+        }
+        if (etl.adapter == BC_PARKS_CAMPGROUNDS_ADAPTER) {
+            val only = geometry.sources.singleOrNull()
+            if (only == null || only.format != GeometryFormat.BCPARKS_STRAPI) {
+                errs += "$where adapter '$BC_PARKS_CAMPGROUNDS_ADAPTER' must declare exactly one geometry source " +
+                    "with format '${GeometryFormat.BCPARKS_STRAPI.wire}'"
+            }
+        }
+    }
+
     /** Section-agnostic row pointer used by [validateEtlSection]. */
     private data class EtlRowRef(
         val name: String,
@@ -356,7 +456,7 @@ class PoiRegistry(
         private val yaml =
             Yaml(
                 configuration =
-                    com.charleskorn.kaml.YamlConfiguration(strictMode = false),
+                    com.charleskorn.kaml.YamlConfiguration(strictMode = true),
             )
 
         fun load(file: File): PoiRegistry =
