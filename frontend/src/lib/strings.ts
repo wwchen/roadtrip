@@ -39,12 +39,26 @@ const UNNAMED_BOOKING_ACCOUNT = 'your booking';
 /** The bare noun, for the one sentence that already supplies its own "your". */
 const UNNAMED_BOOKING_LABEL = 'booking';
 
+/**
+ * The one template for the booking verb plus a name.
+ *
+ * Both surfaces that offer a named booking link — the cell popover's escape
+ * hatch and the site-detail anchor — go through this, so a wording pass is one
+ * edit rather than two that can drift apart.
+ */
+const bookOn = (bookingSystem: string) => `Book on ${bookingSystem}`;
+
 export const bookingCopy = {
+  /** Named after whoever takes the booking at that link. Callers that have no
+   *  name of their own fall back to [openProvider]'s neutral noun. */
+  bookOn,
   /** The popover's escape hatch, named after whoever takes the booking at that link. */
-  openProvider: (bookingSystem?: string) => `Book on ${bookingSystem ?? UNNAMED_BOOKING_SITE}`,
+  openProvider: (bookingSystem?: string) => bookOn(bookingSystem ?? UNNAMED_BOOKING_SITE),
   addToCart: 'Add to cart',
   /** The armed cell's label, before the second tap. */
   book: 'Book',
+  /** The drawer's fallback when a pin carries a bare reserve URL and no label. */
+  reserve: 'Reserve',
   holdRunning: 'Holding site… usually under a minute; can take a few',
   // The three lines of the hold toast. Each takes the name of the provider that
   // actually held the site, rather than naming one vendor for all of them.

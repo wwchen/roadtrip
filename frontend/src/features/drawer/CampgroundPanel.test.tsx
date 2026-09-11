@@ -27,7 +27,7 @@ const campground = (properties: Record<string, unknown> = {}) => ({
     // the link titles below.
     parent_name: 'Deception Pass State Park',
     availability_supported: true,
-    cta: [{ url: 'https://www.recreation.gov/camping/campgrounds/1', label: 'Book on recreation.gov' }],
+    cta: [{ url: 'https://www.recreation.gov/camping/campgrounds/1', label: 'Reserve on Recreation.gov' }],
     links: [{ title: 'Deception Pass State Park', url: 'https://parks.wa.gov/deception-pass' }],
     ...properties,
   },
@@ -107,7 +107,7 @@ describe('the campground page, at panel width', () => {
   test('renders the backend CTA rather than inventing a link', async () => {
     await openCampground();
 
-    const cta = screen.getByRole('button', { name: 'Book on recreation.gov' });
+    const cta = screen.getByRole('button', { name: 'Reserve on Recreation.gov' });
     expect(cta).toHaveAttribute('href', 'https://www.recreation.gov/camping/campgrounds/1');
     expect(cta).toHaveAttribute('target', '_blank');
   });

@@ -71,9 +71,11 @@ User-facing copy for the availability, watch and booking surfaces is in
 as one voice. Anything that varies is a function there, so a caller cannot
 assemble a sentence out of fragments and get the word order wrong.
 
-`VENDOR` is the one name for recreation.gov, and it is **rec.gov**. The product
-used to say "Recreation.gov", "recreation.gov" and "rec.gov" for the same vendor
-across banners, field labels and booking rows.
+`VENDOR` is the one name for recreation.gov, and it is **Recreation.gov** — the
+`booking_providers` row's `display_name`, so the copy constant and the registry
+spell the vendor the same way. The product used to say "Recreation.gov",
+"recreation.gov" and "rec.gov" for the same vendor across banners, field labels
+and booking rows.
 
 Aria labels stay next to the control that computes them: they describe state, not
 prose. The account and POI surfaces still hold their own copy; move a surface in

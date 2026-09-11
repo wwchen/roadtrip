@@ -181,13 +181,13 @@ describe('campgroundCtas', () => {
   test('renders the backend list verbatim, first one primary', () => {
     const result = ctas({
       cta: [
-        { url: 'https://recreation.gov/camping/123', label: 'Book on recreation.gov' },
+        { url: 'https://recreation.gov/camping/123', label: 'Reserve on Recreation.gov' },
         { url: 'https://nps.gov/x', label: 'Park info' },
       ],
     });
 
     expect(result).toEqual([
-      { url: 'https://recreation.gov/camping/123', label: 'Book on recreation.gov', variant: 'primary' },
+      { url: 'https://recreation.gov/camping/123', label: 'Reserve on Recreation.gov', variant: 'primary' },
       { url: 'https://nps.gov/x', label: 'Park info', variant: 'secondary' },
     ]);
   });
@@ -203,12 +203,11 @@ describe('campgroundCtas', () => {
     expect(result.map((cta) => cta.label)).toEqual(['Search Google']);
   });
 
-  test('falls back to the reserve url, naming the vendor', () => {
-    expect(ctas({ reserve_url: 'https://www.recreation.gov/camping/campgrounds/1' })[0]).toMatchObject(
-      { label: 'View on Recreation.gov' },
-    );
+  test('labels a bare reserve_url neutrally; the backend labels the real ones', () => {
+    const [cta] = campgroundCtas({ reserve_url: 'https://www.recreation.gov/camping/campgrounds/1' });
+    expect(cta.label).toBe('Reserve');
     expect(ctas({ reservation_url: 'https://reservecalifornia.com/x' })[0]).toMatchObject({
-      label: 'View on ReserveCalifornia',
+      label: 'Reserve',
     });
     expect(ctas({ reserve_url: 'https://someplace.test/x' })[0]).toMatchObject({ label: 'Reserve' });
   });
@@ -293,6 +292,23 @@ describe('structuredDetails', () => {
       )?.rows ?? [];
 
     expect(rows[0]?.value).toEqual({ kind: 'text', text: '2026-06-01' });
+  });
+
+  test('the booking host row is the served host, under a label no name collides with', () => {
+    // "Booking via <BC Parks>" is one accordion up. This row is a hostname, so
+    // it says so rather than reusing the word the name row already owns.
+    const rows = (booking: Record<string, unknown>) =>
+      structuredDetails(booking).groups.find((g) => g.title === 'Source metadata')?.rows ?? [];
+
+    expect(rows({ booking_site: 'camping.bcparks.ca' })).toContainEqual({
+      label: 'Booking host',
+      value: { kind: 'text', text: 'camping.bcparks.ca' },
+    });
+    // No client-side host derivation: the backend serves this field, so its
+    // silence is an answer and not a gap for the browser to fill in.
+    expect(
+      rows({ reserve_url: 'https://www.recreation.gov/camping/campgrounds/1' }).map((r) => r.label),
+    ).not.toContain('Booking host');
   });
 
   test('email and managing agency come back as links', () => {

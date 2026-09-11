@@ -2,6 +2,8 @@ package ca.floo.roadtrip.route.api.pois
 
 import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
+import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
@@ -13,7 +15,6 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
-import ca.floo.roadtrip.repo.RefLinkRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.route.routeTestApplication
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
@@ -22,7 +23,6 @@ import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
-import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.PoiAvailabilitySlice
@@ -32,7 +32,6 @@ import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
-import ca.floo.roadtrip.service.ref.DbRefResolver
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -418,7 +417,7 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
         return CampsiteAvailabilityController(
             campgroundRepo = campgroundRepo,
             campsitesRepo = campsitesRepo,
-            catalogService = CampsiteCatalogService(DbRefResolver(RefLinkRepo(ctx)), campsitesRepo, targets),
+            catalogService = testCampsiteCatalogService(ctx, campsitesRepo, targets),
             availabilityService =
                 CampsiteAvailabilityService(
                     availabilityProviders = providers,
@@ -432,6 +431,7 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
                 WatchCapabilityService(
                     availabilityTargets = targets,
                     bookingTargets = AvailabilityBookingTargetResolver(BookingAdapterRegistry(emptyList())),
+                    tenants = shippedTenantRegistry(),
                 ),
         )
     }

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
@@ -109,6 +109,7 @@ const catalogRow = (id: number, extra: Record<string, unknown> = {}) => ({
   kind_label: 'Tent',
   data_provider: 'recgov',
   data_provider_ref: String(id),
+  booking_system: 'Recreation.gov',
   ...extra,
 });
 
@@ -172,7 +173,13 @@ beforeEach(() => {
     availability: () => json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])])),
     campsites: () => json(catalogBody([catalogRow(1)], { 1: BOOKING_TEMPLATE })),
     watches: () => json({ watches: [], total: 0 }),
-    addToCart: () => json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart', provider: 'recgov' }),
+    addToCart: () =>
+      json({
+        status: 'completed',
+        cart_url: 'https://www.recreation.gov/cart',
+        provider: 'recgov',
+        provider_display: 'Recreation.gov',
+      }),
   };
   vi.stubGlobal(
     'fetch',
@@ -1156,6 +1163,31 @@ describe('holding a site straight from the grid', () => {
     expect(window.open).toHaveBeenCalled();
   });
 
+  test('without a cart row the armed cell names the site it would open', async () => {
+    // The popover is what usually carries the name, and there is no popover
+    // here — so the cell's accessible name says where "Book" goes. The visible
+    // label stays the bare verb: the column is 66px wide.
+    await mount();
+
+    await armFirstCell();
+
+    const armed = cell('Site 1', WEEK[0]);
+    expect(armed).toHaveTextContent(/^Book$/);
+    expect(armed).toHaveAccessibleName(/; Book on Recreation\.gov, click to open booking page$/);
+  });
+
+  test('the armed cell reads neutral when the row names no booking site', async () => {
+    stubs.campsites = () =>
+      json(catalogBody([catalogRow(1, { booking_system: undefined })], { 1: BOOKING_TEMPLATE }));
+    await mount();
+
+    await armFirstCell();
+
+    const armed = cell('Site 1', WEEK[0]);
+    expect(armed).toHaveTextContent(/^Book$/);
+    expect(armed).toHaveAccessibleName(/; Book on the booking site, click to open booking page$/);
+  });
+
   test('with the capability an armed cell offers the two actions', async () => {
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
@@ -1163,7 +1195,7 @@ describe('holding a site straight from the grid', () => {
 
     await armFirstCell();
 
-    // Named after the host of the template this row would actually open.
+    // Named after the booking site the backend served on this catalog row.
     const popover = await screen.findByRole('group', { name: 'Booking actions' });
     expect(within(popover).getByRole('button', { name: 'Book on Recreation.gov' })).toBeInTheDocument();
     expect(within(popover).getByRole('button', { name: /Add to cart/ })).toBeInTheDocument();
@@ -1180,26 +1212,41 @@ describe('holding a site straight from the grid', () => {
     expect(window.open).toHaveBeenCalled();
   });
 
-  test('the escape-hatch row names whoever takes the booking at the link it opens', async () => {
-    // An aliased campground: Campflare serves availability, but the campsite's
-    // template is rec.gov's, and this row opens that template. Labelling it from
-    // `booking_system` sent the user to a page the button had misnamed.
+  test('the escape-hatch row names the booking site served on the row', async () => {
+    // An aliased campground: the POI is served by Campflare, but the campsite
+    // row's own `booking_system` is what the button opens. The row's name wins.
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
     await mount({ booking_system: 'Campflare' });
     await armFirstCell();
 
     const popover = await screen.findByRole('group', { name: 'Booking actions' });
-    const host = new URL(BOOKING_TEMPLATE).hostname.replace(/^www\./, '');
-    const book = within(popover).getByRole('button', { name: /^Book on / });
-    expect(book.textContent?.toLowerCase()).toBe(`book on ${host}`);
+    expect(within(popover).getByRole('button', { name: 'Book on Recreation.gov' })).toBeInTheDocument();
     expect(within(popover).queryByRole('button', { name: 'Book on Campflare' })).toBeNull();
   });
 
-  test('the escape-hatch row follows a non-recgov template', async () => {
+  test('the escape-hatch row reads neutral when the row names no booking site', async () => {
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
-    stubs.campsites = () => json(catalogBody([catalogRow(1)], { 1: 'https://camping.bcparks.ca/site/1' }));
+    // `undefined` drops the key from the serialized body, so the row arrives
+    // with no `booking_system` at all — nothing for the button to name.
+    stubs.campsites = () => json(catalogBody([catalogRow(1, { booking_system: undefined })], { 1: BOOKING_TEMPLATE }));
+    await mount();
+    await armFirstCell();
+
+    const popover = await screen.findByRole('group', { name: 'Booking actions' });
+    expect(within(popover).getByRole('button', { name: 'Book on the booking site' })).toBeInTheDocument();
+  });
+
+  test('the escape-hatch row follows a non-recgov row', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.campsites = () =>
+      json(
+        catalogBody([catalogRow(1, { booking_system: 'BC Parks' })], {
+          1: 'https://camping.bcparks.ca/site/1',
+        }),
+      );
     await mount({ booking_system: 'Campflare' });
     await armFirstCell();
 
@@ -1223,7 +1270,14 @@ describe('holding a site straight from the grid', () => {
     expect(screen.getByText(/Holding site… usually under a minute/)).toBeInTheDocument();
 
     await act(async () => {
-      release?.(json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart', provider: 'recgov' }));
+      release?.(
+        json({
+          status: 'completed',
+          cart_url: 'https://www.recreation.gov/cart',
+          provider: 'recgov',
+          provider_display: 'Recreation.gov',
+        }),
+      );
     });
   });
 
@@ -1235,7 +1289,7 @@ describe('holding a site straight from the grid', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
 
-    // The POI names no booking system; the hold's own provider does.
+    // The POI names no booking system; the envelope's `provider_display` does.
     expect(await screen.findByText('Site held in your Recreation.gov cart')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Open Recreation\.gov cart/ })).toHaveAttribute(
       'href',
@@ -1246,14 +1300,20 @@ describe('holding a site straight from the grid', () => {
     expect(screen.queryByText(/Holding site…/)).toBeNull();
   });
 
-  test('the hold toast names the booking system this campground is served by', async () => {
-    // The cart is whichever provider holds the site, and the drawer already
-    // knows which one that is — the copy must not say Recreation.gov on a hold that
-    // landed somewhere else.
+  it('names the holding site from provider_display', async () => {
+    // The cart is whichever provider held the site, and the envelope is the one
+    // thing that knows which — the copy must not say Recreation.gov on a hold
+    // that landed somewhere else.
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
-    stubs.addToCart = () => json({ status: 'completed', cart_url: 'https://campflare.example/cart', provider: 'campflare' });
-    await mount({ booking_system: 'Campflare' });
+    stubs.addToCart = () =>
+      json({
+        status: 'completed',
+        cart_url: 'https://campflare.example/cart',
+        provider: 'campflare',
+        provider_display: 'Campflare',
+      });
+    await mount();
     await armFirstCell();
 
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
@@ -1272,7 +1332,13 @@ describe('holding a site straight from the grid', () => {
     // cart. Only the wire knows which, so the toast follows it.
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
-    stubs.addToCart = () => json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart', provider: 'recgov' });
+    stubs.addToCart = () =>
+      json({
+        status: 'completed',
+        cart_url: 'https://www.recreation.gov/cart',
+        provider: 'recgov',
+        provider_display: 'Recreation.gov',
+      });
     await mount({ booking_system: 'Campflare' });
     await armFirstCell();
 
@@ -1335,7 +1401,14 @@ describe('holding a site straight from the grid', () => {
     expect(cartRequests).toBe(1);
 
     await act(async () => {
-      release?.(json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart', provider: 'recgov' }));
+      release?.(
+        json({
+          status: 'completed',
+          cart_url: 'https://www.recreation.gov/cart',
+          provider: 'recgov',
+          provider_display: 'Recreation.gov',
+        }),
+      );
     });
   });
 
@@ -1373,12 +1446,13 @@ describe('holding a site straight from the grid', () => {
     expect(screen.queryByText(/Holding site…/)).toBeNull();
   });
 
-  test('a refusal names the provider that refused, not the one serving the POI', async () => {
+  it('names the refusing site from the envelope', async () => {
     // Campflare serves this campground; Recreation.gov was asked to hold the
     // site and said no. Only the envelope knows which, so the copy follows it.
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
-    stubs.addToCart = () => json({ error: 'cart_not_added', provider: 'recgov' }, 409);
+    stubs.addToCart = () =>
+      json({ error: 'cart_not_added', provider: 'recgov', provider_display: 'Recreation.gov' }, 409);
     await mount({ booking_system: 'Campflare' });
     await armFirstCell();
 
@@ -1414,7 +1488,11 @@ describe('holding a site straight from the grid', () => {
           { trigger_kinds: ['slack_notify', 'atc'], add_to_cart: { state: 'ready', provider: 'recgov', provider_display: 'Recreation.gov' } },
         ),
       );
-    stubs.addToCart = () => json({ error: 'cart_not_added', provider: 'reserveamerica' }, 409);
+    stubs.addToCart = () =>
+      json(
+        { error: 'cart_not_added', provider: 'reserveamerica', provider_display: 'ReserveAmerica' },
+        409,
+      );
     await mount({ booking_system: 'Campflare' });
     await armFirstCell();
 
@@ -1423,40 +1501,26 @@ describe('holding a site straight from the grid', () => {
     expect(await screen.findByText(/ReserveAmerica would not add it/)).toBeInTheDocument();
   });
 
-  test('a refusal from a vendor we have no name for reads as a humanised one', async () => {
-    // No row in the vendor table for this slug, and the capability block names
-    // someone else. The copy humanises the refuser rather than blaming rec.gov.
+  it('reads neutral when the envelope names no site', async () => {
+    // A vendor the registry has no display name for: the envelope carries the
+    // id without a name, and the toast says "your cart" rather than inventing
+    // one out of the slug.
     stubs.availability = () =>
-      json(
-        availabilityBody(
-          [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
-          { trigger_kinds: ['slack_notify', 'atc'], add_to_cart: { state: 'ready', provider: 'recgov', provider_display: 'Recreation.gov' } },
-        ),
-      );
-    stubs.addToCart = () => json({ error: 'cart_not_added', provider: 'some_vendor' }, 409);
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () =>
+      json({
+        status: 'completed',
+        cart_url: 'https://cart.example.test/1',
+        provider: 'recgov',
+        provider_display: '',
+      });
     await mount({ booking_system: 'Campflare' });
     await armFirstCell();
 
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
 
-    expect(await screen.findByText(/Some Vendor would not add it/)).toBeInTheDocument();
-    expect(screen.queryByText(/Recreation\.gov would not add it/)).toBeNull();
-  });
-
-  test('the hold toast prefers the served name over a humanised guess', async () => {
-    // The vendor table and the POI's own `booking_system` agree on
-    // "ReserveAmerica"; the humanised "Reserveamerica" never reaches the toast.
-    stubs.availability = () =>
-      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
-    stubs.addToCart = () =>
-      json({ status: 'completed', cart_url: 'https://ra.example/cart', provider: 'reserveamerica' });
-    await mount({ booking_system: 'ReserveAmerica' });
-    await armFirstCell();
-
-    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
-
-    expect(await screen.findByText('Site held in your ReserveAmerica cart')).toBeInTheDocument();
-    expect(screen.queryByText(/Reserveamerica/)).toBeNull();
+    expect(await screen.findByText('Site held in your cart')).toBeInTheDocument();
+    expect(screen.queryByText(/Campflare cart/)).toBeNull();
   });
 
   test('the cart gate names the provider whose login is missing', async () => {

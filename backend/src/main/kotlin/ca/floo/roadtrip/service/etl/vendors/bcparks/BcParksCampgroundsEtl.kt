@@ -34,13 +34,17 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 
+/** The registry names the slug per row; this stands in where no row does. */
+private const val DEFAULT_ETL_SLUG = "aspira-bc-campgrounds"
+
 /**
  * Merge ETL for BC Parks campgrounds: joins Aspira booking data with BC Parks
  * Strapi metadata to produce campgrounds enriched with Strapi description,
  * photos, contact, and URL. Campsites are handled separately by AspiraCampsitesEtl.
  */
 class BcParksCampgroundsEtl(
-    override val etlSlug: String = "aspira-bc-campgrounds",
+    private val aspiraTenant: String,
+    override val etlSlug: String = DEFAULT_ETL_SLUG,
 ) : CampgroundEtl<BcParksCampgroundsDto> {
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
@@ -167,7 +171,7 @@ class BcParksCampgroundsEtl(
     ): String =
         BookingProviderRef
             .Aspira(
-                tenant = ASPIRA_TENANT,
+                tenant = aspiraTenant,
                 transactionLocationId = leaf.transactionLocationId,
                 mapId = bookingCtaRef.mapId,
                 resourceLocationId = bookingCtaRef.resourceLocationId,
@@ -250,7 +254,6 @@ class BcParksCampgroundsEtl(
     }
 
     private companion object {
-        const val ASPIRA_TENANT = "bc"
         const val REGION = "BC"
         const val COUNTRY = "CA"
     }

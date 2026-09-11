@@ -57,10 +57,16 @@ function Themed({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-const bookPopover = (cart: CellCart) => (
+const bookPopover = (cart: CellCart, bookingAgency?: string) => (
   <AnchoredCell label="Book">
     {(anchor) => (
-      <CellBookPopover anchor={anchor} onOpenBooking={() => {}} cart={cart} onClose={() => {}} />
+      <CellBookPopover
+        anchor={anchor}
+        onOpenBooking={() => {}}
+        cart={cart}
+        onClose={() => {}}
+        bookingAgency={bookingAgency}
+      />
     )}
   </AnchoredCell>
 );
@@ -73,9 +79,11 @@ const meta = {
         component:
           'What the grid shows when a capability is present but this caller cannot ' +
           'use it. The control keeps its shape and the action becomes the one step ' +
-          'that unlocks it: a sign-in, or Recreation.gov credentials in Settings. Hiding ' +
-          'the control instead is what made both features look absent rather than ' +
-          'one step away.',
+          'that unlocks it: a sign-in, or that booking site’s credentials in ' +
+          'Settings. Hiding the control instead is what made both features look ' +
+          'absent rather than one step away. Each gate names whichever vendor the ' +
+          'backend served for that pin, so every state has a named and a neutral ' +
+          'story below.',
       },
     },
   },
@@ -99,9 +107,22 @@ export const CartSignedOut: Story = {
   render: () => bookPopover({ state: 'signed-out', onSignIn: () => {} }),
 };
 
-/** Signed in with no Recreation.gov login: the row opens Settings on Booking. */
+/** Signed in with no login for that site: the row opens Settings on Booking. */
 export const CartWithoutCredentials: Story = {
   render: () => bookPopover({ state: 'no-credentials', onOpenSettings: () => {} }),
+};
+
+/**
+ * The same gate once the backend names the vendor: the escape hatch takes the
+ * pin's booking site and the hint takes the adapter that would hold it. They
+ * are two different resolvers and are shown as two different names on purpose.
+ */
+export const CartWithoutCredentialsNamed: Story = {
+  render: () =>
+    bookPopover(
+      { state: 'no-credentials', onOpenSettings: () => {}, providerDisplay: 'Campflare' },
+      'BC Parks',
+    ),
 };
 
 /** A reserved night, signed out. The watch editor's shell, carrying the offer. */
@@ -127,7 +148,16 @@ export const WatchGate: Story = {
  * visible and disabled, and its help line is the way to fix that.
  */
 export const EditorWithoutCredentials: Story = {
-  render: () => (
+  render: () => editorWithoutCredentials(),
+};
+
+/** The same editor once the backend names the adapter that would hold the site. */
+export const EditorWithoutCredentialsNamed: Story = {
+  render: () => editorWithoutCredentials('Campflare'),
+};
+
+function editorWithoutCredentials(providerDisplay?: string) {
+  return (
     <Themed>
       <div style={{ padding: 24 }}>
         <WatchEditor
@@ -136,7 +166,7 @@ export const EditorWithoutCredentials: Story = {
           watch={null}
           capabilities={normalizeWatchCapabilities({
             trigger_kinds: ['slack_notify', 'email_notify'],
-            add_to_cart: { state: 'no_credentials' },
+            add_to_cart: { state: 'no_credentials', provider_display: providerDisplay },
           })}
           onSave={async () => {}}
           onSignIn={() => {}}
@@ -145,5 +175,5 @@ export const EditorWithoutCredentials: Story = {
         />
       </div>
     </Themed>
-  ),
-};
+  );
+}

@@ -269,12 +269,17 @@ route should branch on that vendor.
 The booking seam under `service/booking/` follows the same shape one layer
 over: `BookingAdapter` is the port, and each vendor's adapter (e.g.
 `RecGovBookingAdapter`) owns everything specific to it — its cart URL, its
-`canFulfil` credential check, its failure codes, and its display name —
-behind `BookingAdapterRegistry`. `BookingActionService` and
+`canFulfil` credential check, and its failure codes — behind
+`BookingAdapterRegistry`. `BookingActionService` and
 `WatchCapabilityService` ask the registry for the claiming adapter and return
 what it says; they never hold a vendor constant, a vendor credential port, or
 a vendor code table themselves. Adding a second booking vendor is a new
 adapter file and a registry entry, not a sweep through those services.
+
+`TenantRegistry` sits beside `BookingAdapterRegistry`: it is loaded from the
+`booking_providers` section at boot and is the only place a vendor's or
+tenant's display name and CTA verb live. Services ask it; routes never do —
+the outcome or DTO a service returns already carries the name.
 
 When adding an ETL source, add transform code under
 `service/etl/vendors/<vendor>/` and pure DTOs under `models/` when they are

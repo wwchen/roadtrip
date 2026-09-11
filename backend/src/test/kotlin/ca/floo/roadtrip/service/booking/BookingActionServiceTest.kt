@@ -4,7 +4,9 @@ import ca.floo.roadtrip.fixtures.FAKE_CART_URL
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.FakeBookingAdapter
+import ca.floo.roadtrip.fixtures.RECGOV_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingFailureCategory
@@ -29,10 +31,22 @@ import kotlin.test.assertTrue
 private val caller = UserId(7L)
 private const val TEST_CAMPSITE_ID = 42L
 
+/** An Aspira ref whose tenant the shipped registry names differently from the vendor. */
+private const val BC_TENANT_CODE = "bc"
+private const val BC_TENANT_DISPLAY_NAME = "BC Parks"
+
 private const val ADAPTER_FAILURE_CODE = "provider_busy"
 private const val ADAPTER_FAILURE_DETAIL = "another operation holds this profile"
 private val arrival: LocalDate = LocalDate.parse("2026-07-04")
 private val checkout: LocalDate = LocalDate.parse("2026-07-06")
+
+private val bcParksRef =
+    BookingProviderRef.Aspira(
+        tenant = BC_TENANT_CODE,
+        transactionLocationId = 1L,
+        mapId = 2L,
+        resourceLocationId = null,
+    )
 
 class BookingActionServiceTest {
     @Test
@@ -41,8 +55,12 @@ class BookingActionServiceTest {
             val adapter = FakeBookingAdapter()
             val outcome = service(adapter = adapter).addToCart(caller, TEST_CAMPSITE_ID, arrival, checkout)
 
-            // The cart the ADAPTER named. The service knows no vendor's URL.
-            assertEquals(AddToCartOutcome.Held(FAKE_CART_URL, BookingProvider.RECGOV), outcome)
+            // The cart the ADAPTER named, and the name the REGISTRY did. The
+            // service knows no vendor's URL and no vendor's name.
+            assertEquals(
+                AddToCartOutcome.Held(FAKE_CART_URL, BookingProvider.RECGOV, RECGOV_DISPLAY_NAME),
+                outcome,
+            )
             val request = adapter.requests.single()
             // The hold lands in the CALLER's cart, and no watch fired it.
             assertEquals(caller.value, request.ownerUserId)
@@ -52,6 +70,22 @@ class BookingActionServiceTest {
             assertEquals(arrival, request.arrivalDate)
             assertEquals(checkout, request.checkoutDate)
             assertTrue(!request.stopWhenTriggered)
+        }
+
+    @Test
+    fun `the held name follows the target's ref, not the adapter's vendor`() =
+        runBlocking {
+            // `bc` is an Aspira tenant the shipped registry names BC Parks. A
+            // name taken off the adapter would read the vendor, Aspira NextGen.
+            val adapter = FakeBookingAdapter(id = BookingProvider.ASPIRA)
+            val outcome =
+                service(adapter = adapter, parentRef = bcParksRef)
+                    .addToCart(caller, TEST_CAMPSITE_ID, arrival, checkout)
+
+            assertEquals(
+                AddToCartOutcome.Held(FAKE_CART_URL, BookingProvider.ASPIRA, BC_TENANT_DISPLAY_NAME),
+                outcome,
+            )
         }
 
     @Test
@@ -82,7 +116,10 @@ class BookingActionServiceTest {
             val adapter = FakeBookingAdapter(credentialed = { false })
             val outcome = service(adapter = adapter).addToCart(caller, TEST_CAMPSITE_ID, arrival, checkout)
 
-            assertEquals(AddToCartOutcome.Refused(BookingActionCodes.CREDENTIALS_REQUIRED, BookingProvider.RECGOV), outcome)
+            assertEquals(
+                AddToCartOutcome.Refused(BookingActionCodes.CREDENTIALS_REQUIRED, BookingProvider.RECGOV, RECGOV_DISPLAY_NAME),
+                outcome,
+            )
             assertTrue(adapter.requests.isEmpty(), "no cart to hold it in, so no browser is driven")
         }
 
@@ -95,7 +132,10 @@ class BookingActionServiceTest {
                     .addToCart(caller, TEST_CAMPSITE_ID, arrival, checkout)
 
             // Positive, recent evidence the second night is booked.
-            assertEquals(AddToCartOutcome.Refused(BookingActionCodes.NOT_AVAILABLE, BookingProvider.RECGOV), outcome)
+            assertEquals(
+                AddToCartOutcome.Refused(BookingActionCodes.NOT_AVAILABLE, BookingProvider.RECGOV, RECGOV_DISPLAY_NAME),
+                outcome,
+            )
             assertTrue(adapter.requests.isEmpty())
         }
 
@@ -162,6 +202,7 @@ class BookingActionServiceTest {
                     ADAPTER_FAILURE_DETAIL,
                     BookingFailureCategory.RETRY_LATER,
                     BookingProvider.RECGOV,
+                    RECGOV_DISPLAY_NAME,
                 ),
                 outcome,
             )
@@ -182,6 +223,7 @@ class BookingActionServiceTest {
             bookingTargets = AvailabilityBookingTargetResolver(registry),
             availability = { _, nights -> nights.filter { it in freshlyUnavailableNights }.toSet() },
             bookings = registry,
+            tenants = shippedTenantRegistry(),
         )
     }
 

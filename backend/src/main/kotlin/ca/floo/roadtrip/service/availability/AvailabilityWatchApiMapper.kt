@@ -58,7 +58,9 @@ internal class AvailabilityWatchApiMapper(
                 },
             poiId = firstTarget?.poiId,
             campsiteId = firstTarget?.campsiteId,
-            campsite = singleCampsite?.let(CampsiteDto::from),
+            // A watch card names its POI, not a booking site; resolving an
+            // identity here would be a DB round trip nothing renders.
+            campsite = singleCampsite?.let { CampsiteDto.from(it, bookingSystem = null) },
             campsiteFilters = watch.campsiteFilters,
             startDate = watch.startDate.toString(),
             endDate = watch.endDate.toString(),

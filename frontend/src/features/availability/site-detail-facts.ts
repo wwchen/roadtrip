@@ -1,5 +1,4 @@
 // Facts a camper cares about, read from the typed catalog row.
-import { providerLabel } from './booking-links';
 import type { Campsite } from '@/api/campsite-api';
 
 /** Feature chips past this are noise in a row that is already dense. */
@@ -17,8 +16,8 @@ export interface SiteFact {
  * The labelled facts, in reading order.
  *
  * Order is not alphabetical: where the site is, what kind it is, and how many
- * people fit are what a camper checks first; the provider and its id are last
- * because they are for us, not for them.
+ * people fit are what a camper checks first; the booking site and the provider's
+ * id are last because they are for us, not for them.
  */
 export function detailFacts(site: Partial<Campsite>): SiteFact[] {
   const facts: SiteFact[] = [];
@@ -34,7 +33,7 @@ export function detailFacts(site: Partial<Campsite>): SiteFact[] {
     'Equipment',
     (site.equipment ?? []).filter(isNotBlank).slice(0, MAX_EQUIPMENT_ITEMS).join(', '),
   );
-  add('Provider', providerLabel(site.data_provider));
+  add('Booking site', site.booking_system);
   add('Provider ID', site.data_provider_ref);
   return facts;
 }

@@ -11,6 +11,42 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 
 private const val CAMPSITE_DATA_SECTION = "campsite_data"
+private const val POI_DATA_SECTION = "poi_data"
+
+/**
+ * The one place an ETL arg key is tied to a vendor. Everything else names the
+ * vendor and derives the key from here, so the two facts cannot drift.
+ */
+@Suppress("TopLevelPropertyNaming")
+private val TENANT_ARG_KEYS =
+    mapOf(
+        BookingProvider.ASPIRA to "tenant",
+        BookingProvider.RESERVEAMERICA to "contract",
+    )
+
+private const val ARG_HOST = "host"
+
+/** Tenant-scoped adapter name → the vendor whose tenant its args must name. */
+@Suppress("TopLevelPropertyNaming")
+private val TENANT_SCOPED_ADAPTER_PROVIDERS =
+    mapOf(
+        "AspiraCampgroundsEtl" to BookingProvider.ASPIRA,
+        "AspiraCampsitesEtl" to BookingProvider.ASPIRA,
+        "BcParksCampgroundsEtl" to BookingProvider.ASPIRA,
+        "ReserveAmericaCampgroundsEtl" to BookingProvider.RESERVEAMERICA,
+        "ReserveAmericaSitesEtl" to BookingProvider.RESERVEAMERICA,
+    )
+
+/**
+ * Adapters whose `transform` reads `args.host` and fails the run without it.
+ * Boot is where that should be caught, not the first row-insert.
+ */
+@Suppress("TopLevelPropertyNaming")
+private val HOST_REQUIRED_ADAPTERS =
+    setOf(
+        "AspiraCampgroundsEtl",
+        "BcParksCampgroundsEtl",
+    )
 
 // In-memory representation of the configured POI registry.
 //
@@ -23,6 +59,9 @@ private const val CAMPSITE_DATA_SECTION = "campsite_data"
 //   - campsite_data: campsite catalogs. Terminal etl emits canonical campsite
 //     rows. Same shape as poi_data, minus category/subcategory
 //     (campsites aren't map pins).
+//   - booking_providers: one row per booking vendor — the name a person calls
+//     it, whether they book on its own site, and the tenants it runs.
+//     Projected by TenantRegistry; no etls.
 // ETL semantics (poi_data + campsite_data):
 //   - Each row has exactly one terminal ETL.
 //   - ETL inputs may only reference data_source slugs.
@@ -53,6 +92,8 @@ class PoiRegistry(
     val poiData: List<PoiDataEntry>,
     @kotlinx.serialization.SerialName("campsite_data")
     val campsiteData: List<CampsiteDataEntry> = emptyList(),
+    @kotlinx.serialization.SerialName("booking_providers")
+    val bookingProviders: List<BookingProviderEntry> = emptyList(),
 ) {
     /**
      * Sanity-check the registry after deserialization. Catches typos /
@@ -91,8 +132,9 @@ class PoiRegistry(
                 errs += "poi_data '${row.name}' has invalid agency: ${e.message}"
             }
         }
+        validateBookingProviders(errs)
         validateEtlSection(
-            label = "poi_data",
+            label = POI_DATA_SECTION,
             rows = poiData.map { EtlRowRef(it.name, it.etls) },
             dsSlugs = dsSlugs,
             allEtlSlugs = etlSlugs,
@@ -178,6 +220,92 @@ class PoiRegistry(
         }
     }
 
+    /**
+     * The `booking_providers` section: one row per [BookingProvider] member,
+     * every name and host a real string, at least one tenant per vendor, tenant
+     * codes unique per vendor, hosts unique across the section, and every ETL
+     * row that names a tenant naming a real one at the right vendor.
+     */
+    private fun validateBookingProviders(errs: MutableList<String>) {
+        // Only this method's own errors may skip the cross-check below: an
+        // unrelated typo elsewhere in the file must not cost a second boot.
+        val before = errs.size
+        val byProvider = bookingProviders.groupBy { it.id }
+        for (provider in BookingProvider.entries) {
+            val rows = byProvider[provider].orEmpty()
+            if (rows.isEmpty()) errs += "booking_providers is missing a row for '${provider.id}'"
+            if (rows.size > 1) errs += "booking_providers has ${rows.size} rows for '${provider.id}'"
+        }
+        val hosts = mutableSetOf<String>()
+        for (entry in bookingProviders) {
+            val vendor = entry.id.id
+            if (entry.displayName.isBlank()) errs += "booking_providers '$vendor' has a blank display_name"
+            // A vendor with no tenant can be named by no host, so the CTA guard
+            // and every info-link label silently stop matching it.
+            if (entry.tenants.isEmpty()) errs += "booking_providers '$vendor' declares no tenants"
+            val codes = mutableSetOf<String?>()
+            for (tenant in entry.tenants) {
+                if (!codes.add(tenant.code)) {
+                    errs += "booking_providers '$vendor' has duplicate tenant code '${tenant.code}'"
+                }
+                // Absent is how a single-tenant vendor says "no code"; blank is
+                // a distinct key that nothing stores and nothing looks up.
+                if (tenant.code != null && tenant.code.isBlank()) {
+                    errs += "booking_providers '$vendor' has a blank tenant code (omit `code` instead)"
+                }
+                if (tenant.displayName != null && tenant.displayName.isBlank()) {
+                    errs += "booking_providers '$vendor' tenant '${tenant.code}' has a blank display_name"
+                }
+                if (tenant.host.isBlank()) {
+                    errs += "booking_providers '$vendor' tenant '${tenant.code}' has a blank host"
+                    continue
+                }
+                val host = TenantRegistry.normalizeHost(tenant.host)
+                if (!hosts.add(host)) errs += "duplicate booking_providers host '$host'"
+            }
+        }
+        if (errs.size > before) return
+        val registry = TenantRegistry.from(bookingProviders)
+        validateEtlTenantArgs(POI_DATA_SECTION, poiData.map { EtlRowRef(it.name, it.etls) }, registry, errs)
+        validateEtlTenantArgs(CAMPSITE_DATA_SECTION, campsiteData.map { EtlRowRef(it.name, it.etls) }, registry, errs)
+    }
+
+    private fun validateEtlTenantArgs(
+        label: String,
+        rows: List<EtlRowRef>,
+        registry: TenantRegistry,
+        errs: MutableList<String>,
+    ) {
+        for (row in rows) {
+            for (etl in row.etls) {
+                val requiredArgKeys =
+                    buildList {
+                        TENANT_SCOPED_ADAPTER_PROVIDERS[etl.adapter]?.let { add(TENANT_ARG_KEYS.getValue(it)) }
+                        if (etl.adapter in HOST_REQUIRED_ADAPTERS) add(ARG_HOST)
+                    }
+                for (key in requiredArgKeys) {
+                    if (key !in etl.args) {
+                        errs += "$label '${row.name}' etl '${etl.slug}' adapter '${etl.adapter}' " +
+                            "is missing required arg '$key'"
+                    }
+                }
+                for ((provider, argKey) in TENANT_ARG_KEYS) {
+                    val code = etl.args[argKey] ?: continue
+                    val tenant = registry.tenant(provider, code)
+                    if (tenant == null) {
+                        errs += "$label '${row.name}' etl '${etl.slug}' args.$argKey='$code' is not a tenant of '${provider.id}'"
+                        continue
+                    }
+                    val declaredHost = etl.args[ARG_HOST] ?: continue
+                    if (TenantRegistry.normalizeHost(declaredHost) != TenantRegistry.normalizeHost(tenant.host)) {
+                        errs += "$label '${row.name}' etl '${etl.slug}' args.host='$declaredHost' " +
+                            "does not match tenant '$code' host '${tenant.host}'"
+                    }
+                }
+            }
+        }
+    }
+
     /** Section-agnostic row pointer used by [validateEtlSection]. */
     private data class EtlRowRef(
         val name: String,
@@ -223,41 +351,6 @@ class PoiRegistry(
         }
         return out
     }
-
-    /**
-     * ReserveAmerica terminal ETL sources with their Active Network tenant
-     * config. Unlike Aspira, these tenants are fully config-driven because the
-     * contract code, host, and booking horizon are all declared on the
-     * terminal ETL row.
-     */
-    fun reserveAmericaSources(): List<ReserveAmericaSourceConfig> =
-        poiData
-            .mapNotNull { row -> row.etls.lastOrNull() }
-            .filter { it.adapter == "ReserveAmericaCampgroundsEtl" }
-            .filter { row ->
-                val provider = row.args["provider"]?.trim()?.lowercase() ?: BookingProvider.RESERVEAMERICA.id
-                BookingProvider.fromIdOrNull(provider) == BookingProvider.RESERVEAMERICA
-            }.map { terminal ->
-                val contract =
-                    terminal.args["contract"]
-                        ?: error("ReserveAmerica source '${terminal.slug}' is missing args.contract")
-                val host =
-                    terminal.args["host"]
-                        ?: error("ReserveAmerica source '${terminal.slug}' is missing args.host")
-                val horizon =
-                    terminal.args["booking_horizon_days"]
-                        ?.toIntOrNull()
-                        ?: error("ReserveAmerica source '${terminal.slug}' has invalid args.booking_horizon_days")
-                require(horizon > 0) {
-                    "ReserveAmerica source '${terminal.slug}' args.booking_horizon_days must be positive"
-                }
-                ReserveAmericaSourceConfig(
-                    source = terminal.slug,
-                    host = host,
-                    contractCode = contract,
-                    bookingHorizonDays = horizon,
-                )
-            }
 
     companion object {
         private val yaml =

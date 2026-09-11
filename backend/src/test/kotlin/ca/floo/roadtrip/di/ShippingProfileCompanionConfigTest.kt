@@ -13,16 +13,21 @@ private val shippingProfiles = listOf("local", "compose-local", "prod")
 private val companionBaseUrlLine = Regex("""^\s*$COMPANION_BASE_URL_KEY:(.*)$""", RegexOption.MULTILINE)
 
 /**
- * `bookingAdapters` registers `RecGovBookingAdapter` only when the companion
- * channel has an ATC client, and the channel exists only with
- * `companion-base-url` set. The drawer's rec.gov identity is resolved through
- * that same registry, so a profile that ships without the companion URL would
- * silently drop the Reserve on Recreation.gov CTA from every aliased pin —
- * a display regression with no error anywhere.
+ * `bookingAdapters` registers `RecGovBookingAdapter` only inside
+ * `get<CompanionChannel>().atc?.let { … }`, and that channel exists only with
+ * `companion-base-url` set. A profile shipped without it therefore registers no
+ * booking adapter at all: `atc` is never offered, `add_to_cart` is
+ * `UNSUPPORTED`, and every hold refuses with `UNSUPPORTED_TARGET` — with no
+ * error anywhere. `docs/reservation-providers.md` states the requirement; this
+ * is what enforces it.
+ *
+ * The drawer's CTA no longer depends on it (phase 4b resolves an aliased pin's
+ * identity through `BookingIdentityResolver` and the registry's `sells`), so
+ * the `atc` action is the whole of what this guards.
  */
 class ShippingProfileCompanionConfigTest {
     @Test
-    fun `every shipping profile sets the companion URL, so aliased pins keep their rec_gov CTA`() {
+    fun `every shipping profile sets the companion URL, so a hold has an adapter to run on`() {
         for (profile in shippingProfiles) {
             val path = "$RESOURCES_DIR/application-$profile.yaml"
             val value =
@@ -35,8 +40,8 @@ class ShippingProfileCompanionConfigTest {
 
             assertTrue(
                 !value.isNullOrBlank(),
-                "$path must set $COMPANION_BASE_URL_KEY; without it the rec.gov booking adapter is " +
-                    "never registered and aliased pins lose their Recreation.gov CTA",
+                "$path must set $COMPANION_BASE_URL_KEY; without it RecGovBookingAdapter is never " +
+                    "registered, `atc` is never offered and every hold refuses",
             )
         }
     }

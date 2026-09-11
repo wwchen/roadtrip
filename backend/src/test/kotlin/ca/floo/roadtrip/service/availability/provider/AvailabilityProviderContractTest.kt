@@ -8,7 +8,9 @@ import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
@@ -22,23 +24,12 @@ class AvailabilityProviderContractTest {
             listOf(
                 RecGovAvailabilityProvider(availabilityClient = stubRecgovClient(), enabled = true),
                 AspiraAvailabilityProvider(
-                    tenants =
-                        mapOf(
-                            "pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365),
-                        ),
+                    tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
                     availabilityClient = stubAspiraClient(),
                     enabled = true,
                 ),
                 ReserveAmericaAvailabilityProvider(
-                    tenants =
-                        mapOf(
-                            "NY" to
-                                ReserveAmericaTenant(
-                                    host = "newyorkstateparks.reserveamerica.com",
-                                    contractCode = "NY",
-                                    bookingHorizonDays = 270,
-                                ),
-                        ),
+                    tenants = shippedTenantRegistry().tenantsOf(BookingProvider.RESERVEAMERICA),
                     availabilityClient = stubReserveAmericaClient(),
                     enabled = true,
                 ),

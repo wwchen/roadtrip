@@ -60,8 +60,8 @@ internal class WatchAlertDispatcher(
     private val triggerActions: TriggerActionRegistry,
     private val grafanaRootUrl: String?,
     private val appRootUrl: String?,
+    private val campgroundCta: CampgroundCta,
     private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
-    private val campgroundCta: CampgroundCta = CampgroundCta.default,
 ) {
     suspend fun dispatch(
         liveWatches: List<AvailabilityWatchRepo.Watch>,
@@ -235,12 +235,7 @@ internal class WatchAlertDispatcher(
                         // The same registry that names the booking site on the
                         // campground page, so an alert and the drawer call the
                         // vendor the same thing.
-                        bookingSystem =
-                            campgroundCta.bookingSystem(
-                                bookingRef = target?.parentRef,
-                                reserveUrl = bookingUrl,
-                                infoUrl = null,
-                            ),
+                        bookingSystem = campgroundCta.bookingSystem(target?.parentRef),
                         vendor =
                             target
                                 ?.provider

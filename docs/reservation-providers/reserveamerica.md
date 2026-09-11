@@ -1,7 +1,7 @@
 # ReserveAmerica / Active Network
 
-Wire details for the ReserveAmerica (Active Network) tenants: `alberta-provincial`
-(Alberta provincial parks) and `new-york-state-parks` (New York state parks).
+Wire details for the ReserveAmerica (Active Network) tenants: `ABPP`
+(Alberta Parks) and `NY` (New York State Parks).
 This doc owns the vendor wire shapes; `../reservation-providers.md` owns the
 architecture contract.
 
@@ -10,8 +10,8 @@ architecture contract.
 ReserveAmerica exposes **two** Active Network systems, and neither is complete
 alone:
 
-- **Consumer reservation site** (`shop.albertaparks.ca`,
-  `newyorkstateparks.reserveamerica.com`) — scraped over HTTP, no key. Serves
+- **Consumer reservation site** (one host per tenant, see
+  [Tenants](#tenants)) — scraped over HTTP, no key. Serves
   both live availability (`campsiteCalendar.do`) **and** the site roster (the
   same page). This is what we use, for both availability and the catalog.
 - **Developer API** (`api.amp.active.com`) — documents a richer catalog but is
@@ -23,14 +23,14 @@ keys on — catalog rows bind to availability by construction.
 
 ## Tenants
 
-| `source` | contract | host |
-|---|---|---|
-| `alberta-provincial` | `ABPP` | `shop.albertaparks.ca` |
-| `new-york-state-parks` | `NY` | `newyorkstateparks.reserveamerica.com` |
-
-Add a tenant by appending to the `TENANTS` table in
-`scripts/fetch_reserveamerica.py` and registering its data sources + a SitesEtl
-instance (see `backend/src/main/resources/poi-registry.yaml`).
+Tenants are `booking_providers.reserveamerica.tenants` in
+`backend/src/main/resources/poi-registry.yaml` — `ABPP` / Alberta Parks,
+`NY` / New York State Parks. Adding one is a row there plus the `poi_data` /
+`campsite_data` rows whose `args.contract` names it (and the `TENANTS` table in
+`scripts/fetch_reserveamerica.py`, which is fetch-side); there is no Kotlin
+tenant table any more. The booking horizon stays
+`ReserveAmericaAvailabilityProvider.capabilities.bookingHorizonDays` — the
+registry does not restate what the adapter declares.
 
 ## ID model
 

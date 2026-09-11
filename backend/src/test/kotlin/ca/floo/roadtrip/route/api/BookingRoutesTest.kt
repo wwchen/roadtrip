@@ -36,6 +36,10 @@ private const val USER_TOKEN = "user-token"
 
 /** Whatever the provider's cart is; the route passes it through untouched. */
 private const val HELD_CART_URL = "https://cart.example.test/hold"
+
+/** Deliberately not a real vendor's: the route passes the name through untouched,
+ *  and proves nothing about what the registry would have said. */
+private const val HELD_PROVIDER_DISPLAY = "Test Bookings"
 private val testUser = UserId(7L)
 
 private const val VALID_BODY = """{"campsite_id":42,"start_date":"2026-07-04","end_date":"2026-07-06"}"""
@@ -54,7 +58,7 @@ private fun HttpRequestBuilder.asUser() = header(HttpHeaders.Cookie, "$SESSION_C
 
 /** Answers a fixed outcome and records what the route asked for. */
 private class StubBookingActions(
-    private val outcome: AddToCartOutcome = AddToCartOutcome.Held(HELD_CART_URL, BookingProvider.RECGOV),
+    private val outcome: AddToCartOutcome = AddToCartOutcome.Held(HELD_CART_URL, BookingProvider.RECGOV, HELD_PROVIDER_DISPLAY),
 ) : BookingActionPort {
     var calls = 0
     var lastCaller: UserId? = null
@@ -169,7 +173,7 @@ class BookingRoutesTest {
             testApplication {
                 mount(
                     StubBookingActions(
-                        AddToCartOutcome.Failed("provider_said_no", "why", category, BookingProvider.RECGOV),
+                        AddToCartOutcome.Failed("provider_said_no", "why", category, BookingProvider.RECGOV, HELD_PROVIDER_DISPLAY),
                     ),
                 )
 
@@ -216,6 +220,7 @@ class BookingRoutesTest {
                         detail = null,
                         category = BookingFailureCategory.RETRY_LATER,
                         provider = BookingProvider.RECGOV,
+                        providerDisplay = HELD_PROVIDER_DISPLAY,
                     ),
                 ),
             )
@@ -237,6 +242,51 @@ class BookingRoutesTest {
         }
 
     @Test
+    fun `a hold names the booking site beside the provider slug`() =
+        testApplication {
+            mount(StubBookingActions())
+
+            val resp =
+                client.post(ADD_TO_CART) {
+                    asUser()
+                    contentType(ContentType.Application.Json)
+                    setBody(VALID_BODY)
+                }
+
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(BookingProvider.RECGOV.id, body["provider"]!!.jsonPrimitive.content)
+            // The slug is for the client's logic, the name for its copy: the
+            // frontend has no table to turn one into the other.
+            assertEquals(HELD_PROVIDER_DISPLAY, body["provider_display"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `a refusal names the booking site beside the provider slug`() =
+        testApplication {
+            mount(
+                StubBookingActions(
+                    AddToCartOutcome.Refused(
+                        BookingActionCodes.CREDENTIALS_REQUIRED,
+                        BookingProvider.RECGOV,
+                        HELD_PROVIDER_DISPLAY,
+                    ),
+                ),
+            )
+
+            val resp =
+                client.post(ADD_TO_CART) {
+                    asUser()
+                    contentType(ContentType.Application.Json)
+                    setBody(VALID_BODY)
+                }
+
+            assertEquals(HttpStatusCode.Forbidden, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(BookingProvider.RECGOV.id, body["provider"]!!.jsonPrimitive.content)
+            assertEquals(HELD_PROVIDER_DISPLAY, body["provider_display"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `a refusal with no adapter behind it carries no provider at all`() =
         testApplication {
             mount(StubBookingActions(AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET)))
@@ -248,10 +298,9 @@ class BookingRoutesTest {
                     setBody(VALID_BODY)
                 }
 
-            assertNull(
-                Json.parseToJsonElement(resp.bodyAsText()).jsonObject["provider"],
-                "no adapter was consulted, so naming one would be a guess",
-            )
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertNull(body["provider"], "no adapter was consulted, so naming one would be a guess")
+            assertNull(body["provider_display"])
         }
 
     @Test
@@ -287,6 +336,7 @@ class BookingRoutesTest {
                         "refused",
                         BookingFailureCategory.UPSTREAM,
                         BookingProvider.RECGOV,
+                        HELD_PROVIDER_DISPLAY,
                     ),
                 ),
             )

@@ -2,8 +2,10 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.api.CampsiteDto
 import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteKind
+import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.ref.RefResolver
 import ca.floo.roadtrip.service.ref.RefValue
@@ -12,35 +14,59 @@ import ca.floo.roadtrip.service.ref.resolve
 internal class CampsiteCatalogService(
     private val refResolver: RefResolver,
     private val campsitesRepo: CampsiteRepo,
+    private val campgroundRepo: CampgroundRepo,
     private val targets: AvailabilityTargetResolver,
+    private val identities: BookingIdentityResolver,
 ) {
     fun campsitesForPoi(
         poiId: Long,
         siteTypes: List<CampsiteKind>,
     ): PoiCampsitesResponseSchema {
-        val campgrounds = refResolver.resolve<RefValue.CampgroundId>(RefValue.PoiId(poiId))
-        if (campgrounds.isEmpty()) throw AvailabilityServiceError.NotFound
-        val campsites =
+        val campgroundIds = refResolver.resolve<RefValue.CampgroundId>(RefValue.PoiId(poiId))
+        if (campgroundIds.isEmpty()) throw AvailabilityServiceError.NotFound
+        // Only read where a row has no resolved target: a row whose provider is
+        // disabled still names the booking site its own campground books
+        // through, but on the common path every row resolves and this map is a
+        // query and a multi-kB parse nothing would look at.
+        val campgroundsById by lazy { campgroundIds.mapNotNull { campgroundRepo.findById(it.id) }.associateBy { it.id } }
+        val rows =
             campsitesRepo
                 .findByPoi(poiId)
                 .filterBySiteTypes(siteTypes)
+                .map { campsite -> campsite to targets.resolve(campsite) }
         return PoiCampsitesResponseSchema(
             poiId = poiId,
             type = CAMPSITE_RESPONSE_TYPE,
-            campsites = campsites.map(CampsiteDto::from),
+            campsites =
+                rows.map { (campsite, resolved) ->
+                    CampsiteDto.from(
+                        campsite,
+                        bookingSystem = bookingSystem(campsite, resolved) { campgroundsById },
+                    )
+                },
             reservationUrlTemplates =
-                campsites
-                    .mapNotNull { campsite ->
-                        reservationUrlTemplate(campsite)?.let { campsite.id to it }
+                rows
+                    .mapNotNull { (campsite, resolved) ->
+                        reservationUrlTemplate(campsite, resolved)?.let { campsite.id to it }
                     }.toMap(),
         )
     }
 
-    private fun reservationUrlTemplate(campsite: Campsite): String? =
-        targets.resolve(campsite)?.let { resolved ->
-            resolved.parentRef?.let { ref ->
-                resolved.provider.reservationUrlTemplate(campsite, ref)
-            }
+    private fun bookingSystem(
+        campsite: Campsite,
+        resolved: ResolvedAvailabilityTarget?,
+        campgroundsById: () -> Map<Long, Campground>,
+    ): String? {
+        val campground = resolved?.campground ?: campgroundsById()[campsite.campgroundId] ?: return null
+        return identities.bookingSiteName(resolved, campground)
+    }
+
+    private fun reservationUrlTemplate(
+        campsite: Campsite,
+        resolved: ResolvedAvailabilityTarget?,
+    ): String? =
+        resolved?.parentRef?.let { ref ->
+            resolved.provider.reservationUrlTemplate(campsite, ref)
         }
 }
 

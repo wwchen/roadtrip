@@ -40,9 +40,14 @@ data class CampsiteDto(
     @SerialName("data_provider") val dataProvider: String,
     @SerialName("data_provider_ref") val dataProviderRef: String,
     @SerialName("booking_provider") val bookingProvider: String? = null,
+    /** The site this row's booking identity opens, by the same resolver as the drawer. */
+    @SerialName("booking_system") val bookingSystem: String? = null,
 ) {
     companion object {
-        fun from(row: Campsite): CampsiteDto =
+        fun from(
+            row: Campsite,
+            bookingSystem: String?,
+        ): CampsiteDto =
             CampsiteDto(
                 id = row.id,
                 campgroundId = row.campgroundId,
@@ -71,6 +76,7 @@ data class CampsiteDto(
                 dataProvider = row.dataProvider,
                 dataProviderRef = row.dataProviderRefValue,
                 bookingProvider = row.bookingProvider,
+                bookingSystem = bookingSystem,
             )
     }
 }

@@ -8,7 +8,6 @@ import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.service.availability.provider.RecGovBookingDisplay
 import ca.floo.roadtrip.service.settings.BookingCredentialsConfigured
 import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionSessionHealth
@@ -77,8 +76,6 @@ internal class RecGovBookingAdapter(
     private val log = LoggerFactory.getLogger(javaClass)
 
     override val id: BookingProvider = BookingProvider.RECGOV
-
-    override val displayName: String = RecGovBookingDisplay.BOOKING_SYSTEM_LABEL
 
     /**
      * Every companion code this adapter can surface, and who has to act on it.

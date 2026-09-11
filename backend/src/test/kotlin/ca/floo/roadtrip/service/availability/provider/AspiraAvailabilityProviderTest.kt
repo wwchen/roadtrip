@@ -5,6 +5,7 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.provider.BookingAlias
@@ -25,7 +26,7 @@ class AspiraAvailabilityProviderTest {
     fun `aspira advertises internal polling through catalog availability`() {
         val adapter =
             AspiraAvailabilityProvider(
-                tenants = mapOf("pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365)),
+                tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
                 availabilityClient = fakeAspiraClient(),
                 enabled = true,
             )
@@ -65,10 +66,7 @@ class AspiraAvailabilityProviderTest {
                 )
             val adapter =
                 AspiraAvailabilityProvider(
-                    tenants =
-                        mapOf(
-                            "pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365),
-                        ),
+                    tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
                     availabilityClient = availabilityClient,
                     enabled = true,
                 )
@@ -130,10 +128,7 @@ class AspiraAvailabilityProviderTest {
                 )
             val adapter =
                 AspiraAvailabilityProvider(
-                    tenants =
-                        mapOf(
-                            "pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365),
-                        ),
+                    tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
                     availabilityClient = availabilityClient,
                     enabled = true,
                     occupancyEnabled = true,
@@ -188,10 +183,7 @@ class AspiraAvailabilityProviderTest {
                 )
             val adapter =
                 AspiraAvailabilityProvider(
-                    tenants =
-                        mapOf(
-                            "pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365),
-                        ),
+                    tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
                     availabilityClient = availabilityClient,
                     enabled = true,
                     occupancyEnabled = false,
@@ -230,10 +222,7 @@ class AspiraAvailabilityProviderTest {
                 )
             val adapter =
                 AspiraAvailabilityProvider(
-                    tenants =
-                        mapOf(
-                            "bc" to AspiraTenant(host = "camping.bcparks.ca", vendorCode = "aspira_bc", bookingHorizonDays = 365),
-                        ),
+                    tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
                     availabilityClient = availabilityClient,
                     enabled = true,
                 )
@@ -281,10 +270,7 @@ class AspiraAvailabilityProviderTest {
                 )
             val adapter =
                 AspiraAvailabilityProvider(
-                    tenants =
-                        mapOf(
-                            "pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365),
-                        ),
+                    tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
                     availabilityClient = availabilityClient,
                     enabled = true,
                 )
@@ -321,10 +307,7 @@ class AspiraAvailabilityProviderTest {
     fun `booking url builds the tenant's goingtocamp deep link for the single night`() {
         val adapter =
             AspiraAvailabilityProvider(
-                tenants =
-                    mapOf(
-                        "wa" to AspiraTenant(host = "washington.goingtocamp.com", vendorCode = "aspira_wa", bookingHorizonDays = 365),
-                    ),
+                tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
                 availabilityClient = fakeAspiraClient(),
                 enabled = true,
             )
@@ -435,7 +418,7 @@ class AspiraAvailabilityProviderTest {
     fun `aspira claims a campground through its alias when the primary belongs to another provider`() {
         val adapter =
             AspiraAvailabilityProvider(
-                tenants = mapOf("pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365)),
+                tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
                 availabilityClient = fakeAspiraClient(),
                 enabled = true,
             )
@@ -453,7 +436,7 @@ class AspiraAvailabilityProviderTest {
     fun `an alias for an unconfigured tenant is not supported`() {
         val adapter =
             AspiraAvailabilityProvider(
-                tenants = emptyMap(),
+                tenants = emptyList(),
                 availabilityClient = fakeAspiraClient(),
                 enabled = true,
             )
@@ -470,10 +453,7 @@ class AspiraAvailabilityProviderTest {
 
 private fun bcAdapter(): AspiraAvailabilityProvider =
     AspiraAvailabilityProvider(
-        tenants =
-            mapOf(
-                "bc" to AspiraTenant(host = "camping.bcparks.ca", vendorCode = "aspira_bc", bookingHorizonDays = 365),
-            ),
+        tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
         availabilityClient = fakeAspiraClient(),
         enabled = true,
     )

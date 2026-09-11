@@ -1,9 +1,7 @@
 package ca.floo.roadtrip.route
 
-import ca.floo.roadtrip.fixtures.testBookingHorizons
-import ca.floo.roadtrip.repo.CampgroundRepo
+import ca.floo.roadtrip.fixtures.testCampgroundService
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
-import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
@@ -11,9 +9,6 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.refreshCanonicalCatalogViews
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.route.api.pois.poiRoutes
-import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
-import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
-import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.POI_LIMIT
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiService
@@ -47,12 +42,7 @@ class PoiRoutesTest : SharedDbTest() {
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf("recgov")),
             detailServices =
                 listOf(
-                    CampgroundService(
-                        campgroundRepo = CampgroundRepo(ctx),
-                        dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
-                        bookingHorizons = testBookingHorizons(ctx),
-                        bookingAdapters = BookingAdapterRegistry(emptyList()),
-                    ),
+                    testCampgroundService(ctx),
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
                 ),

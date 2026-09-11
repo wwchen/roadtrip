@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route
 
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.api.MAGIC_LINK_TOKEN_PARAM
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.CampsiteKind
@@ -199,6 +200,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         return WatchCapabilityService(
             availabilityTargets = targets,
             bookingTargets = AvailabilityBookingTargetResolver(BookingAdapterRegistry(emptyList())),
+            tenants = shippedTenantRegistry(),
         )
     }
 
@@ -224,6 +226,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         WatchCapabilityService(
                             availabilityTargets = targets,
                             bookingTargets = AvailabilityBookingTargetResolver(BookingAdapterRegistry(emptyList())),
+                            tenants = shippedTenantRegistry(),
                         ),
                 ),
             lifecycleNotifications = ignoredLifecycleNotifications(),

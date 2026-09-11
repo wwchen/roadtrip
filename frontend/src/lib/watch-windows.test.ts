@@ -86,6 +86,36 @@ describe('capabilities', () => {
     ).toBe('unsupported');
   });
 
+  test('carries the served provider name through, trimmed', () => {
+    expect(
+      normalizeWatchCapabilities({
+        trigger_kinds: ['slack_notify'],
+        add_to_cart: { state: 'no_credentials', provider_display: '  Campflare  ' },
+      }).addToCartProviderDisplay,
+    ).toBe('Campflare');
+  });
+
+  test('a blank served provider name is absent, not an empty name', () => {
+    // The two gate sentences interpolate this. An `''` that survives renders
+    // "Add  login in Settings" — a sentence with a hole — rather than the
+    // neutral fallback the copy has for exactly this case.
+    for (const provider_display of ['', '   ']) {
+      expect(
+        normalizeWatchCapabilities({
+          trigger_kinds: ['slack_notify'],
+          add_to_cart: { state: 'no_credentials', provider_display },
+        }).addToCartProviderDisplay,
+      ).toBeUndefined();
+    }
+    expect(
+      normalizeWatchCapabilities({
+        triggerKinds: new Set(['slack_notify']),
+        addToCart: 'no_credentials',
+        addToCartProviderDisplay: '  ',
+      }).addToCartProviderDisplay,
+    ).toBeUndefined();
+  });
+
   test('a cart-only provider still supports no alerts', () => {
     expect(supportsWatchAlerts(normalizeWatchCapabilities(wire(['atc'], 'ready')))).toBe(false);
   });

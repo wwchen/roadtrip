@@ -51,6 +51,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
+import ca.floo.roadtrip.service.availability.BookingIdentityResolver
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
@@ -91,6 +92,7 @@ internal fun Application.registerKoinRoutes() {
     val availabilityProviders: List<AvailabilityProvider> by inject(named("availabilityProviders"))
     val dateResolver: AvailabilityDateResolver by inject()
     val bookingHorizons: BookingHorizonResolver by inject()
+    val bookingIdentities: BookingIdentityResolver by inject()
     val failoverFetcher: FailoverAvailabilityFetcher by inject()
     val poiService: PoiReader by inject()
     val poisOnRouteService: PoisOnRouteService by inject()
@@ -136,6 +138,7 @@ internal fun Application.registerKoinRoutes() {
                 failoverFetcher = failoverFetcher,
                 watchCapabilities = watchCapabilities,
                 cacheConfig = config.cache,
+                identities = bookingIdentities,
             )
         campsiteRoutes(campsiteController)
         bulkAvailabilityRoutes(
@@ -198,6 +201,7 @@ private fun campsiteAvailabilityController(
     failoverFetcher: FailoverAvailabilityFetcher,
     watchCapabilities: WatchCapabilityService,
     cacheConfig: ApiCacheConfig,
+    identities: BookingIdentityResolver,
 ): CampsiteAvailabilityController {
     val campsitesRepo = CampsiteRepo(ctx)
     val campgroundRepo = CampgroundRepo(ctx)
@@ -213,7 +217,14 @@ private fun campsiteAvailabilityController(
     return CampsiteAvailabilityController(
         campgroundRepo = campgroundRepo,
         campsitesRepo = campsitesRepo,
-        catalogService = CampsiteCatalogService(DbRefResolver(RefLinkRepo(ctx)), campsitesRepo, targets),
+        catalogService =
+            CampsiteCatalogService(
+                refResolver = DbRefResolver(RefLinkRepo(ctx)),
+                campsitesRepo = campsitesRepo,
+                campgroundRepo = campgroundRepo,
+                targets = targets,
+                identities = identities,
+            ),
         availabilityService =
             CampsiteAvailabilityService(
                 availabilityProviders = availabilityProviders,

@@ -333,7 +333,6 @@ class RecGovBookingAdapterTest {
 
             assertEquals("https://www.recreation.gov/cart", completed.cartUrl)
             assertEquals(RECGOV_CART_URL, completed.cartUrl)
-            assertEquals("Recreation.gov", provider().displayName)
         }
 
     @Test

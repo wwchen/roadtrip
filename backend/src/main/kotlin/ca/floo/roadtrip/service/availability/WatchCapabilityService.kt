@@ -4,8 +4,10 @@ import ca.floo.roadtrip.model.api.AddToCartCapabilityDto
 import ca.floo.roadtrip.model.api.AddToCartState
 import ca.floo.roadtrip.model.api.AvailabilityWatchCapabilitiesDto
 import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.auth.UserId
+import ca.floo.roadtrip.model.metadata.registry.TenantRegistry
 import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 
@@ -31,11 +33,13 @@ internal class ResolvedWatchScope(
 /**
  * What a proposed watch over this scope could actually do: a cart is a property
  * of the scope, `atc` of the scope and the asker both. `add_to_cart` says which
- * of the two is missing, and names the adapter that would hold the site.
+ * of the two is missing, and names the tenant off the target's ref — the site a
+ * person would sign in to, not the adapter that talks to it.
  */
 internal class WatchCapabilityService(
     private val availabilityTargets: AvailabilityTargetResolver,
     private val bookingTargets: AvailabilityBookingTargetResolver,
+    private val tenants: TenantRegistry,
     private val notificationTriggerKinds: List<String> =
         listOf(
             AvailabilityTriggerKinds.SLACK_NOTIFY,
@@ -109,11 +113,11 @@ internal class WatchCapabilityService(
         scope: ResolvedWatchScope,
     ): Boolean {
         val user = requester ?: return false
-        val adapters = addToCartAdapters(scope)
+        val claims = addToCartClaims(scope)
         // Every provider in scope, not just the first: a hold on any campsite in
         // it lands in that provider's account, so one missing credential is a
         // scope this requester cannot fulfil.
-        return adapters.isNotEmpty() && adapters.all { it.canFulfil(user) }
+        return claims.isNotEmpty() && claims.all { (_, adapter) -> adapter.canFulfil(user) }
     }
 
     /** Whose cart this scope's holds would land in, as a person reads it: the
@@ -130,28 +134,29 @@ internal class WatchCapabilityService(
     internal fun addToCartProviderName(
         owner: UserId,
         scope: ResolvedWatchScope,
-    ): String? = addToCartAdapter(owner, scope)?.displayName
+    ): String? = addToCartClaim(owner, scope)?.let { (target, _) -> tenants.displayName(target.parentRef) }
 
     /**
-     * The adapter a hold on this scope is about: the first one [requester] would
-     * have to add credentials for, else simply the first in scope. It is what
-     * [addToCartState] consults, so the state and the name always agree.
+     * The claim a hold on this scope is about: the first adapter [requester]
+     * would have to add credentials for, else simply the first in scope. It is
+     * what [addToCartState] consults, so the state and the name always agree.
+     * The target travels with the adapter because the name comes off its ref.
      */
-    private fun addToCartAdapter(
+    private fun addToCartClaim(
         requester: UserId?,
         scope: ResolvedWatchScope,
-    ): BookingAdapter? {
-        val adapters = addToCartAdapters(scope)
-        val user = requester ?: return adapters.firstOrNull()
-        return adapters.firstOrNull { !it.canFulfil(user) } ?: adapters.firstOrNull()
+    ): Pair<BookingTarget, BookingAdapter>? {
+        val claims = addToCartClaims(scope)
+        val user = requester ?: return claims.firstOrNull()
+        return claims.firstOrNull { (_, adapter) -> !adapter.canFulfil(user) } ?: claims.firstOrNull()
     }
 
-    /** The adapters that would hold this scope's sites, each named once. */
-    private fun addToCartAdapters(scope: ResolvedWatchScope): List<BookingAdapter> =
+    /** The targets that would hold this scope's sites, one per claiming adapter. */
+    private fun addToCartClaims(scope: ResolvedWatchScope): List<Pair<BookingTarget, BookingAdapter>> =
         scope.targets
             .mapNotNull { resolved -> resolved?.let { bookingTargets.targetFor(BookingAction.ADD_TO_CART, it) } }
-            .mapNotNull(bookings::adapterFor)
-            .distinctBy { it.id }
+            .mapNotNull { target -> bookings.adapterFor(target)?.let { target to it } }
+            .distinctBy { (_, adapter) -> adapter.id }
 
     /**
      * The same question `atc`'s absence answers, but stated: the client renders
@@ -187,14 +192,14 @@ internal class WatchCapabilityService(
         val state = addToCartState(scope, bookingActions, requester)
         // Nobody to name when no adapter claims the scope; anywhere else the
         // gate copy needs the adapter this state was decided against.
-        val adapter = if (state == AddToCartState.UNSUPPORTED) null else addToCartAdapter(requester, scope)
+        val claim = if (state == AddToCartState.UNSUPPORTED) null else addToCartClaim(requester, scope)
         return AvailabilityWatchCapabilitiesDto(
             triggerKinds = supportedTriggerKinds(scope, bookingActions, requester),
             addToCart =
                 AddToCartCapabilityDto(
                     state = state,
-                    provider = adapter?.id?.id,
-                    providerDisplay = adapter?.displayName,
+                    provider = claim?.second?.id?.id,
+                    providerDisplay = claim?.let { (target, _) -> tenants.displayName(target.parentRef) },
                 ),
         )
     }

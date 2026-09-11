@@ -21,6 +21,7 @@ import ca.floo.roadtrip.db.dataSourceFor
 import ca.floo.roadtrip.db.dsl
 import ca.floo.roadtrip.db.migrate
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.metadata.registry.TenantRegistry
 import ca.floo.roadtrip.observability.OtelRoadtripMetrics
 import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.ApiCacheRepo
@@ -86,6 +87,8 @@ fun infraModule(baseConfig: ApplicationConfig) =
                 )
             }
         }
+
+        single<TenantRegistry> { TenantRegistry.from(get<PoiRegistry>()) }
 
         single<RecGovAvailabilityClient> { HttpRecgovAvailabilityClient() }
         single<AspiraAvailabilityClient> { HttpAspiraAvailabilityClient() }

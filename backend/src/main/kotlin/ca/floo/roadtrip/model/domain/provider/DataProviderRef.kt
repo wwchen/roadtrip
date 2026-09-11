@@ -49,7 +49,7 @@ sealed interface DataProviderRef {
     }
 
     data class BcParksCampsite(
-        val tenant: String = "bc",
+        val tenant: String,
         val resourceLocationId: Long,
     ) : DataProviderRef {
         override val provider = DataProvider.STRAPI

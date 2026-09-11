@@ -13,6 +13,7 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingTenant
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.service.api.availabilityErrorDto
@@ -33,11 +34,13 @@ private val aspiraBlockedStatuses = setOf(HTTP_UNAUTHORIZED, HTTP_FORBIDDEN, HTT
 private const val WAF_MESSAGE_MARKER = "WAF"
 
 class AspiraAvailabilityProvider(
-    private val tenants: Map<String, AspiraTenant>,
+    tenants: List<BookingTenant>,
     private val availabilityClient: AspiraAvailabilityClient,
     private val enabled: Boolean,
     private val occupancyEnabled: Boolean = false,
 ) : AvailabilityProvider {
+    private val tenantsByCode: Map<String, BookingTenant> = tenants.byCode()
+
     private val log = LoggerFactory.getLogger(javaClass)
 
     override val id: BookingProvider = BookingProvider.ASPIRA
@@ -53,7 +56,7 @@ class AspiraAvailabilityProvider(
 
     override fun supportsCampground(campground: Campground): Boolean {
         val ref = claimedRef(campground) ?: return false
-        return isEnabled() && ref is BookingProviderRef.Aspira && ref.tenant in tenants
+        return isEnabled() && ref is BookingProviderRef.Aspira && ref.tenant in tenantsByCode
     }
 
     override suspend fun availability(
@@ -69,7 +72,9 @@ class AspiraAvailabilityProvider(
                 host = tenant.host,
                 startDate = startDate,
                 endDate = endDate,
-                campsiteVendor = tenant.vendorCode,
+                // A campground-level fetch under a known tenant classifies the
+                // per-resource rows when the upstream returns any.
+                preferResourceRows = true,
             )
         }
     }
@@ -147,7 +152,7 @@ class AspiraAvailabilityProvider(
         parentRef: BookingProviderRef,
     ): String? {
         val aspiraRef = parentRef as? BookingProviderRef.Aspira ?: return null
-        val tenant = tenants[aspiraRef.tenant] ?: return null
+        val tenant = tenantsByCode[aspiraRef.tenant] ?: return null
         // A park's sites are split across sibling loop maps, so the site's own
         // map is the grid its "Book" link belongs on; the parent fills the gaps.
         val campsiteRef = campsite.aspiraBookingRef(aspiraRef.tenant)
@@ -164,7 +169,7 @@ class AspiraAvailabilityProvider(
         host: String,
         startDate: LocalDate,
         endDate: LocalDate,
-        campsiteVendor: String? = null,
+        preferResourceRows: Boolean = false,
     ): AvailabilityObservationBatch {
         val days = daysBetween(startDate, endDate)
         val observedAt = Instant.now()
@@ -173,7 +178,7 @@ class AspiraAvailabilityProvider(
             provider = "aspira",
             startDate = startDate,
             endDate = endDate,
-            observations = observationsFromAvailability(data, startDate, days, observedAt, campsiteVendor),
+            observations = observationsFromAvailability(data, startDate, days, observedAt, preferResourceRows),
             cacheBlock = directFetchCacheBlock(),
             scope = scope,
         )
@@ -262,8 +267,8 @@ class AspiraAvailabilityProvider(
         )
     }
 
-    private fun tenantForRef(ref: BookingProviderRef.Aspira): AspiraTenant =
-        tenants[ref.tenant]
+    private fun tenantForRef(ref: BookingProviderRef.Aspira): BookingTenant =
+        tenantsByCode[ref.tenant]
             ?: throw AvailabilityProviderError.Misconfigured(
                 providerId = id.name.lowercase(),
                 reason = "tenant '${ref.tenant}' is not configured",
@@ -340,9 +345,9 @@ private fun observationsFromAvailability(
     start: LocalDate,
     days: Int,
     observedAt: Instant,
-    campsiteVendor: String? = null,
+    preferResourceRows: Boolean = false,
 ): List<CampsiteDayObservation> {
-    if (campsiteVendor != null && avail.byResource.isNotEmpty()) {
+    if (preferResourceRows && avail.byResource.isNotEmpty()) {
         return observationsFromResourceCatalog(avail.byResource, start, days, observedAt)
     }
     val sub = avail.byMapLink.values.toList()

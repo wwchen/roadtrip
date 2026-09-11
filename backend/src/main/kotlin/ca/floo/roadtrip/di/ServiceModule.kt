@@ -7,6 +7,7 @@ import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.config.ReadPathProviderConfig
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.metadata.registry.TenantRegistry
 import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -33,6 +34,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityRunService
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
+import ca.floo.roadtrip.service.availability.BookingIdentityResolver
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
@@ -49,7 +51,6 @@ import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AspiraAvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AspiraTenants
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.CampflareAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.RecGovAvailabilityProvider
@@ -72,6 +73,7 @@ import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoiService
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.poi.TeslaSuperchargerService
+import ca.floo.roadtrip.service.poi.campground.CampgroundCta
 import ca.floo.roadtrip.service.poi.defaultPoiTypes
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.routing.RouteCache
@@ -179,12 +181,12 @@ val serviceModule =
                     enabled = config.isProviderEnabled(BookingProvider.RESERVECALIFORNIA),
                 ),
                 AspiraAvailabilityProvider(
-                    tenants = AspiraTenants.all().associateBy { it.vendorCode.removePrefix("aspira_") },
+                    tenants = get<TenantRegistry>().tenantsOf(BookingProvider.ASPIRA),
                     availabilityClient = get(),
                     enabled = config.isProviderEnabled(BookingProvider.ASPIRA),
                 ),
                 ReserveAmericaAvailabilityProvider(
-                    tenants = ReserveAmericaAvailabilityProvider.tenants,
+                    tenants = get<TenantRegistry>().tenantsOf(BookingProvider.RESERVEAMERICA),
                     availabilityClient = get(),
                     enabled = config.isProviderEnabled(BookingProvider.RESERVEAMERICA),
                 ),
@@ -201,6 +203,8 @@ val serviceModule =
                 dateResolver = get<AvailabilityDateResolver>(),
             )
         }
+        single { BookingIdentityResolver(get<TenantRegistry>()) }
+        single { CampgroundCta(get<TenantRegistry>()) }
         single { WatchScopeResolver(get<CampsiteRepo>()) }
         single {
             DbAvailabilityTargetResolver(
@@ -254,6 +258,7 @@ val serviceModule =
                         .freshlyUnavailableDates(campsiteId, nights, get<AppConfig>().booking.freshnessMaxAge)
                 },
                 bookings = get<BookingAdapterRegistry>(),
+                tenants = get<TenantRegistry>(),
             )
         }
 
@@ -266,6 +271,7 @@ val serviceModule =
                 // `atc` is offered only to a user the claiming adapter can hold
                 // for; the adapter is the one place that knows its credentials.
                 bookings = get<BookingAdapterRegistry>(),
+                tenants = get<TenantRegistry>(),
             )
         }
         single {
@@ -295,6 +301,7 @@ val serviceModule =
                     bookingTargets = get<AvailabilityBookingTargetResolver>(),
                     notifications = get<NotificationFanout>(),
                     targetResolver = get<WatchNotificationTargetResolver>(),
+                    tenants = get<TenantRegistry>(),
                     metrics = get<RoadtripMetrics>(),
                 ),
             )
@@ -315,6 +322,7 @@ val serviceModule =
                 grafanaRootUrl = config.grafana?.rootUrl,
                 appRootUrl = config.webApp?.rootUrl,
                 metrics = get<RoadtripMetrics>(),
+                campgroundCta = get<CampgroundCta>(),
             )
         }
 
@@ -407,7 +415,8 @@ val serviceModule =
                     campgroundRepo = get<CampgroundRepo>(),
                     dateResolver = get<AvailabilityDateResolver>(),
                     bookingHorizons = get<BookingHorizonResolver>(),
-                    bookingAdapters = get<BookingAdapterRegistry>(),
+                    identities = get<BookingIdentityResolver>(),
+                    cta = get<CampgroundCta>(),
                 ),
                 TeslaSuperchargerService(get<TeslaSuperchargerRepo>()),
                 PlanetFitnessLocationService(get<PlanetFitnessLocationRepo>()),

@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.Campground
@@ -30,6 +31,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
 class CampsiteCatalogServiceTest : SharedDbTest() {
+    private val tenants = shippedTenantRegistry()
+    private val identities = BookingIdentityResolver(tenants)
+
     @BeforeEach
     fun cleanup() {
         ctx.cleanCanonicalCatalogFixtures()
@@ -68,7 +72,14 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
-        val service = CampsiteCatalogService(refResolver, campsitesRepo, targets)
+        val service =
+            CampsiteCatalogService(
+                refResolver = refResolver,
+                campsitesRepo = campsitesRepo,
+                campgroundRepo = CampgroundRepo(ctx),
+                targets = targets,
+                identities = identities,
+            )
 
         val response = service.campsitesForPoi(poiId, siteTypes = emptyList())
 
@@ -141,7 +152,14 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
-        val service = CampsiteCatalogService(refResolver, campsitesRepo, targets)
+        val service =
+            CampsiteCatalogService(
+                refResolver = refResolver,
+                campsitesRepo = campsitesRepo,
+                campgroundRepo = CampgroundRepo(ctx),
+                targets = targets,
+                identities = identities,
+            )
 
         val response = service.campsitesForPoi(poi.poiId, siteTypes = emptyList())
 

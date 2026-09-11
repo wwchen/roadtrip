@@ -8,7 +8,7 @@
 // live here: it goes through `lib/upstream-html.ts`, which is the only sanctioned
 // `dangerouslySetInnerHTML` path.
 
-import { VENDOR } from '@/lib/strings';
+import { bookingCopy } from '@/lib/strings';
 import type { AlertDto, CampgroundDetail, PriceDto } from '@/api/poi-api';
 
 /** POI properties after `flattenHydratedPoi`, which is deliberately open. */
@@ -61,14 +61,6 @@ export function titleCase(value: unknown): string {
 export function safeUrl(url: unknown): string {
   const value = firstText(url);
   return value && /^(https?:|mailto:|tel:|\/|#)/i.test(value) ? value : '';
-}
-
-export function urlHost(url: unknown): string {
-  try {
-    return new URL(String(url)).hostname.toLowerCase().replace(/^www\./, '');
-  } catch {
-    return '';
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -235,7 +227,7 @@ export function campgroundCtas(p: Props): Cta[] {
   if (provided.length > 0) return provided;
 
   const reserveUrl = safeUrl(firstText(p.reserve_url, p.reservation_url));
-  if (reserveUrl) return [{ url: reserveUrl, label: reserveLabel(reserveUrl), variant: 'primary' }];
+  if (reserveUrl) return [{ url: reserveUrl, label: bookingCopy.reserve, variant: 'primary' }];
 
   const infoUrl = safeUrl(firstText(p.info_url, p.website));
   if (infoUrl) return [{ url: infoUrl, label: 'Visit website', variant: 'primary' }];
@@ -272,16 +264,6 @@ function toCta(cta: Record<string, unknown>, index: number): Cta | null {
     // Only the first CTA is the primary action; the rest are alternates.
     variant: index === 0 ? 'primary' : 'secondary',
   };
-}
-
-/** Name the destination, so "Reserve" is not a mystery link. */
-function reserveLabel(url: string): string {
-  const host = urlHost(url);
-  if (host.endsWith('recreation.gov')) return `View on ${VENDOR}`;
-  if (host.endsWith('reserveamerica.com')) return 'View on ReserveAmerica';
-  if (host.endsWith('reservecalifornia.com')) return 'View on ReserveCalifornia';
-  if (host.endsWith('parks.canada.ca') || host.endsWith('pc.gc.ca')) return 'View on Parks Canada';
-  return 'Reserve';
 }
 
 /**
@@ -424,10 +406,11 @@ export function structuredDetails(p: Props): StructuredDetails {
     ['Data source', text(firstText(sourcesLabel(p.sources), p.source))],
     ['Source ID', text(firstText(p.source_id))],
     ['Availability provider', text(firstText(p.availability_provider, p.provider_source))],
-    [
-      'Booking site',
-      text(firstText(p.booking_site, urlHost(firstText(p.reserve_url, p.reservation_url)))),
-    ],
+    // Source metadata, not a name a person reads: the row one accordion up is
+    // "Booking via <BC Parks>". And it is only ever the served host — deriving
+    // one from a reserve URL would be the frontend guessing where the backend
+    // deliberately said nothing.
+    ['Booking host', text(firstText(p.booking_site))],
     ['Last updated', text(firstText(detail.last_verified))],
     ['Connections', connections(p.connections)],
   ]);

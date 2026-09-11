@@ -3,43 +3,13 @@
 // The backend hands us a per-campsite URL template because it depends on the stay window the
 // user picked — so a booking link cannot be built until a date is selected, and
 // this module is the only thing that knows that.
-import { VENDOR, bookingCopy } from '@/lib/strings';
+import { bookingCopy } from '@/lib/strings';
 import type { Campsite } from '@/api/campsite-api';
 
 /** Substitutions a template may ask for. A template with none is already a URL. */
 const TEMPLATE_PLACEHOLDERS = ['{start_date}', '{end_date}', '{nights}'] as const;
 
 const MS_PER_DAY = 86_400_000;
-
-/**
- * Host → the name a user recognises.
- *
- * A table because the mapping is data: adding a provider should be a row, not
- * another `if`. A `Map` rather than an object literal for the reason the other
- * registries in this codebase are — the key comes from a URL.
- */
-const AGENCY_BY_HOST = new Map<string, string>([
-  ['recreation.gov', VENDOR],
-  ['www.recreation.gov', VENDOR],
-  ['reservation.pc.gc.ca', 'Parks Canada'],
-  ['camping.bcparks.ca', 'BC Parks'],
-  ['discovercamping.ca', 'BC Parks'],
-  ['washington.goingtocamp.com', 'Washington State Parks'],
-  ['campflare.com', 'Campflare'],
-  ['shop.albertaparks.ca', 'Alberta Parks'],
-  ['newyorkstateparks.reserveamerica.com', 'New York State Parks'],
-  ['reservecalifornia.com', 'ReserveCalifornia'],
-  ['www.reservecalifornia.com', 'ReserveCalifornia'],
-]);
-
-/** Vendor slug → display name, matching the backend's per-vendor display objects. */
-const AGENCY_BY_VENDOR = new Map<string, string>([
-  ['recgov', VENDOR],
-  ['campflare', 'Campflare'],
-  ['aspira', 'Aspira'],
-  ['reserveamerica', 'ReserveAmerica'],
-  ['reservecalifornia', 'ReserveCalifornia'],
-]);
 
 /** `campsiteId → template`, as `/api/pois/{id}/campsites` returns it. */
 export type ReservationUrlTemplates =
@@ -95,51 +65,21 @@ export function hasReservationUrlTemplate(
   return !!reservationUrlTemplate(row, reservationUrlTemplates);
 }
 
-/** "Book on <whoever the link opens>", or plain "Book" when nothing names them. */
-export function bookingLabel(
-  row: Partial<Campsite> | null | undefined,
-  reservationUrlTemplates: ReservationUrlTemplates,
-): string {
-  const agency = agencyLabel(row, reservationUrlTemplates);
-  return agency ? `Book on ${agency}` : bookingCopy.book;
-}
-
 /**
- * A vendor slug as a person reads it. The add-to-cart wire answers with the id
- * of the provider that actually held the site, which on an aliased campground
- * is not the one serving availability.
+ * "Book on <whoever takes the booking>", or plain "Book".
+ *
+ * The name is the backend's `booking_system` for this row — the same resolver
+ * the drawer uses. The frontend no longer guesses one from a URL host or a
+ * vendor slug, which is how `aspira` used to read "Aspira" here and
+ * "Aspira NextGen" one screen over.
+ *
+ * The named branch is `bookingCopy.bookOn`, shared with the cell popover's
+ * escape hatch; only the unnamed fallback differs, because a 66px cell has no
+ * room for the popover's "the booking site".
  */
-export function providerLabel(providerId: string | null | undefined): string {
-  const vendor = String(providerId || '').toLowerCase();
-  return vendor ? knownProviderLabel(vendor) || humanizeAgency(vendor) : '';
-}
-
-/**
- * The same lookup without the humanised guess: `''` means we have no name for
- * this vendor, which lets a caller prefer a real one it holds elsewhere.
- */
-export function knownProviderLabel(providerId: string | null | undefined): string {
-  return AGENCY_BY_VENDOR.get(String(providerId || '').toLowerCase()) || '';
-}
-
-/**
- * Who takes the booking at the link this row opens. A named host wins — an
- * aliased row's vendor slug names a different site than the button opens — but
- * a vendor we do have a name for beats a word guessed off an unmapped host,
- * which is how `shop.albertaparks.ca` stops reading as "Shop".
- */
-export function agencyLabel(
-  row: Partial<Campsite> | null | undefined,
-  reservationUrlTemplates: ReservationUrlTemplates,
-): string {
-  const host = hostFromUrl(reservationUrlTemplate(row, reservationUrlTemplates));
-  const vendor = String(row?.booking_provider || row?.data_provider || '').toLowerCase();
-  return (
-    AGENCY_BY_HOST.get(host) ||
-    AGENCY_BY_VENDOR.get(vendor) ||
-    labelFromHost(host) ||
-    humanizeAgency(vendor)
-  );
+export function bookingLabel(row: Partial<Campsite> | null | undefined): string {
+  const site = String(row?.booking_system || '').trim();
+  return site ? bookingCopy.bookOn(site) : bookingCopy.book;
 }
 
 function reservationUrlTemplate(
@@ -178,27 +118,4 @@ function nightsBetween(startDate: string, endDate: string): number {
   const end = Date.parse(`${endDate}T00:00:00Z`);
   if (!Number.isFinite(start) || !Number.isFinite(end)) return NaN;
   return Math.round((end - start) / MS_PER_DAY);
-}
-
-function hostFromUrl(url: string): string {
-  if (!url) return '';
-  try {
-    return new URL(url).hostname.toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-function labelFromHost(host: string): string {
-  const base = String(host || '')
-    .replace(/^www\./, '')
-    .split('.')[0];
-  return base ? humanizeAgency(base) : '';
-}
-
-function humanizeAgency(key: string): string {
-  return String(key)
-    .replace(/[_-]+/g, ' ')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
 }

@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.metadata.registry.TenantRegistry
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
 import org.slf4j.LoggerFactory
@@ -69,23 +70,22 @@ internal fun interface CurrentAvailabilityLookup {
  * companion is. The route maps these onto statuses in one place.
  */
 internal sealed interface AddToCartOutcome {
-    /**
-     * Both fields come from the adapter that made the hold: the service names
-     * no vendor's cart, and the copy above it can say whose cart this is.
-     */
+    /** The vendor slug and the name a person reads, both from the target's ref. */
     data class Held(
         val cartUrl: String,
         val provider: BookingProvider,
+        val providerDisplay: String,
     ) : AddToCartOutcome
 
     /**
      * A gate refused before the browser was ever driven. [provider] is the
-     * adapter the gate consulted, and is null for the gates that run before one
-     * is chosen — naming a vendor there would be a guess.
+     * vendor the refusal is about, and is null only for the gates that run
+     * before a target resolves — naming a vendor there would be a guess.
      */
     data class Refused(
         val code: String,
         val provider: BookingProvider? = null,
+        val providerDisplay: String? = null,
     ) : AddToCartOutcome
 
     /**
@@ -100,6 +100,7 @@ internal sealed interface AddToCartOutcome {
         val detail: String?,
         val category: BookingFailureCategory,
         val provider: BookingProvider,
+        val providerDisplay: String,
     ) : AddToCartOutcome
 }
 
@@ -134,6 +135,7 @@ internal class BookingActionService(
     private val bookingTargets: AvailabilityBookingTargetResolver,
     private val availability: CurrentAvailabilityLookup,
     private val bookings: BookingAdapterRegistry,
+    private val tenants: TenantRegistry,
 ) : BookingActionPort {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -153,15 +155,20 @@ internal class BookingActionService(
         val target =
             bookingTargets.targetFor(BookingAction.ADD_TO_CART, resolved)
                 ?: return AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET)
+        // The booking site's own name, from the ref the hold would use. Known as
+        // soon as a target is, so every refusal from here down can name it.
+        val providerDisplay = tenants.displayName(target.parentRef)
         // The registry disagreeing with the resolver means the two are out of
         // step; report it as the same "we cannot book this" the gate does.
-        val adapter = bookings.adapterFor(target) ?: return AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET)
+        val adapter =
+            bookings.adapterFor(target)
+                ?: return AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET, target.providerId, providerDisplay)
 
         // 2. Does this caller have somewhere to put it? The adapter answers for
         //    its own vendor — configured, not proven — and it is the same gate
         //    the `atc` trigger applies.
         if (!adapter.canFulfil(caller)) {
-            return AddToCartOutcome.Refused(BookingActionCodes.CREDENTIALS_REQUIRED, adapter.id)
+            return AddToCartOutcome.Refused(BookingActionCodes.CREDENTIALS_REQUIRED, adapter.id, providerDisplay)
         }
 
         // 3. Do we already KNOW this is taken? Only a recent observation
@@ -169,7 +176,7 @@ internal class BookingActionService(
         //    a stale tab, not an authority — so it may only veto on evidence,
         //    never on the absence of it.
         if (knownTaken(campsiteId, startDate, endDate)) {
-            return AddToCartOutcome.Refused(BookingActionCodes.NOT_AVAILABLE, adapter.id)
+            return AddToCartOutcome.Refused(BookingActionCodes.NOT_AVAILABLE, adapter.id, providerDisplay)
         }
 
         val request =
@@ -195,7 +202,7 @@ internal class BookingActionService(
                     caller.value,
                     result.providerId,
                 )
-                AddToCartOutcome.Held(result.cartUrl, result.providerId)
+                AddToCartOutcome.Held(result.cartUrl, result.providerId, providerDisplay)
             }
             is AddToCartResult.Failed -> {
                 log.info(
@@ -205,11 +212,12 @@ internal class BookingActionService(
                     result.error,
                     result.detail,
                 )
-                AddToCartOutcome.Failed(result.error, result.detail, result.category, result.providerId)
+                AddToCartOutcome.Failed(result.error, result.detail, result.category, result.providerId, providerDisplay)
             }
             // The adapter disowning a target it claimed means the two answers are
             // out of step; the caller hears the same "we cannot book this".
-            AddToCartResult.Unsupported -> AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET, adapter.id)
+            AddToCartResult.Unsupported ->
+                AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET, adapter.id, providerDisplay)
         }
     }
 

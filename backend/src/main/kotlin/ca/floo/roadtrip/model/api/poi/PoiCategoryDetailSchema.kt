@@ -35,8 +35,9 @@ data class PoiCategoryDetailSchema(
     // usable upstream link (FE falls back to name search).
     val cta: List<PoiCtaSchema>? = null,
     // Display name for the booking system that reservations on this pin
-    // flow through ("Recreation.gov", "Aspira NextGen (BC Parks)", …).
-    // Used by the drawer footer; null when the pin has no known provider.
+    // flow through — the tenant, not the platform ("Recreation.gov",
+    // "BC Parks", …). Used by the drawer footer; null when the pin has no
+    // known provider.
     @SerialName("booking_system") val bookingSystem: String? = null,
     val raw: JsonElement? = null,
     // Key/values for the drawer's "Upstream data" table. Backend-shaped so the

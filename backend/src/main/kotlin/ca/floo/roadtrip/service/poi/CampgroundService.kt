@@ -9,16 +9,13 @@ import ca.floo.roadtrip.model.api.poi.PoiDetailPropertiesSchema
 import ca.floo.roadtrip.model.api.poi.PriceDto
 import ca.floo.roadtrip.model.api.poi.RatingDto
 import ca.floo.roadtrip.model.api.poi.ScheduleDto
-import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.CatalogColumnJson
 import ca.floo.roadtrip.model.domain.bookingIdentities
 import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
+import ca.floo.roadtrip.service.availability.BookingIdentityResolver
 import ca.floo.roadtrip.service.poi.campground.CampgroundCta
 import ca.floo.roadtrip.service.poi.campground.UrlHosts
 import kotlinx.serialization.json.Json
@@ -27,8 +24,8 @@ internal class CampgroundService(
     private val campgroundRepo: CampgroundRepo,
     private val dateResolver: AvailabilityDateResolver,
     private val bookingHorizons: BookingHorizonResolver,
-    private val bookingAdapters: BookingAdapterRegistry,
-    private val cta: CampgroundCta = CampgroundCta.default,
+    private val identities: BookingIdentityResolver,
+    private val cta: CampgroundCta,
 ) : PoiDetailService {
     override val poiType: String = POI_TYPE
 
@@ -49,12 +46,14 @@ internal class CampgroundService(
             )
         val servingProvider = bookingHorizons.servingProvider(campground)
         val availabilityProvider = servingProvider?.id?.id ?: campground.bookingProvider
-        val bookingRef = bookingRef(campground, servingProvider, detail.bookingRef)
+        val bookingRef = identities.forCampground(campground, servingProvider)
         val computedCtas =
             cta.computeCtas(
                 bookingRef = bookingRef,
                 reserveUrl = campground.reservationUrl,
                 infoUrl = infoUrl,
+                dateContext = dateContext,
+                identities = campground.bookingIdentities(),
             )
         val ctas = computedCtas.takeIf { it.isNotEmpty() }
         return PoiDetailPropertiesSchema(
@@ -84,12 +83,7 @@ internal class CampgroundService(
                     bookingRef = bookingRef?.let(BookingRefDto::from),
                     availabilitySupported = (bookingRef != null).takeIf { it },
                     cta = ctas,
-                    bookingSystem =
-                        cta.bookingSystem(
-                            bookingRef = bookingRef,
-                            reserveUrl = campground.reservationUrl,
-                            infoUrl = infoUrl,
-                        ),
+                    bookingSystem = cta.bookingSystem(bookingRef),
                     // The source record, sent once — no longer also as `raw`.
                     upstream = raw,
                     status = campground.status,
@@ -121,26 +115,6 @@ internal class CampgroundService(
                 ),
         )
     }
-
-    /**
-     * The identity the pin books through: the first vendor the row names —
-     * primary, then aliases in order — that this process has a booking adapter
-     * for, else the serving availability provider's claim, else the row's
-     * declared primary.
-     *
-     * Booking follows the booking registry, not whoever answers for
-     * availability: rec.gov sells the aliased Campflare rows whether or not its
-     * availability adapter is enabled. `availability_provider` still reports
-     * the serving provider.
-     */
-    private fun bookingRef(
-        campground: Campground,
-        servingProvider: AvailabilityProvider?,
-        declaredPrimary: BookingProviderRef?,
-    ): BookingProviderRef? =
-        campground.bookingIdentities().firstOrNull { bookingAdapters.handles(it.provider) }
-            ?: servingProvider?.claimedRef(campground)
-            ?: declaredPrimary
 
     companion object {
         const val POI_TYPE = "campground"

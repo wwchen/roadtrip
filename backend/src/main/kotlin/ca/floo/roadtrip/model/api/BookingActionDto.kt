@@ -29,4 +29,6 @@ data class AddToCartResponseDto(
     @SerialName("cart_url") val cartUrl: String,
     /** Whose cart it is: an aliased campground is served by one vendor and booked through another. */
     val provider: String,
+    /** The same vendor as a person reads it, from the tenant registry. */
+    @SerialName("provider_display") val providerDisplay: String,
 )

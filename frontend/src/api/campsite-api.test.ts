@@ -68,7 +68,7 @@ describe('fetchPoiCampsites', () => {
       firepit: true,
       data_provider: 'recgov',
       data_provider_ref: '100',
-      booking_provider: 'recgov',
+      booking_system: 'Recreation.gov',
     };
     const fetchStub = stubFetch(
       jsonResponse({

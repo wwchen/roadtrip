@@ -223,6 +223,14 @@ of the constructor. Classes instantiated once per tenant
 take the slug from `entry.slug`; an unknown `adapter:` string fails boot with
 `Unknown poi_data adapter: …`.
 
+If a `poi_data` / `campsite_data` etl row is a tenant of a booking vendor, its
+`args.tenant` / `args.contract` must name a `booking_providers` tenant and its
+`args.host` must match that tenant's host — the boot validator rejects the
+registry otherwise. The check covers those two sections only: a `data_sources`
+fetcher's own `args` are passed to the Python script unvalidated, and its
+`tenant:` key means whatever that script reads it as (ReserveAmerica's fetchers,
+for instance, pass a contract code under that name).
+
 **Verify** the registry compiles and the backend boots clean:
 
 ```bash

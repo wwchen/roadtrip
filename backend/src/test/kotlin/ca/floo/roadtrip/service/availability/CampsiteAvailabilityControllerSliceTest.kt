@@ -2,6 +2,8 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
+import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
@@ -15,14 +17,12 @@ import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
-import ca.floo.roadtrip.repo.RefLinkRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
-import ca.floo.roadtrip.service.ref.DbRefResolver
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import java.time.Duration
@@ -237,7 +237,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
             CampsiteAvailabilityController(
                 campgroundRepo = campgroundRepo,
                 campsitesRepo = campsitesRepo,
-                catalogService = CampsiteCatalogService(DbRefResolver(RefLinkRepo(ctx)), campsitesRepo, targets),
+                catalogService = testCampsiteCatalogService(ctx, campsitesRepo, targets),
                 availabilityService =
                     CampsiteAvailabilityService(
                         availabilityProviders = providers,
@@ -251,6 +251,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                     WatchCapabilityService(
                         availabilityTargets = targets,
                         bookingTargets = AvailabilityBookingTargetResolver(BookingAdapterRegistry(emptyList())),
+                        tenants = shippedTenantRegistry(),
                     ),
             )
         val earliest = dateResolver.contextForPoi(TEST_POI_ID).earliestDate

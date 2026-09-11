@@ -20,7 +20,7 @@ import kotlin.test.assertNull
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BcParksCampgroundsEtlTest {
     private lateinit var ctx: TransformCtx
-    private val etl = BcParksCampgroundsEtl()
+    private val etl = BcParksCampgroundsEtl(aspiraTenant = "bc")
 
     @BeforeAll
     fun setUp() {

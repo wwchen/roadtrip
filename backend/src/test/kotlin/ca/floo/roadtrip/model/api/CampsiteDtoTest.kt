@@ -7,8 +7,10 @@ import ca.floo.roadtrip.route.common.roadtripApiJson
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 // The row carries the whole DB record; the drawer gets the facts it renders and
 // nothing else.
@@ -65,5 +67,12 @@ class CampsiteDtoTest {
         assertEquals(emptyList(), neverOnTheWire.filter(json::containsKey))
     }
 
-    private fun encoded(): JsonObject = roadtripApiJson.encodeToJsonElement(CampsiteDto.from(row)).jsonObject
+    @Test
+    fun `booking_system is omitted when unknown and present when served`() {
+        assertNull(encoded()["booking_system"])
+        val named = roadtripApiJson.encodeToJsonElement(CampsiteDto.from(row, bookingSystem = "BC Parks")).jsonObject
+        assertEquals("BC Parks", named["booking_system"]?.jsonPrimitive?.content)
+    }
+
+    private fun encoded(): JsonObject = roadtripApiJson.encodeToJsonElement(CampsiteDto.from(row, bookingSystem = null)).jsonObject
 }

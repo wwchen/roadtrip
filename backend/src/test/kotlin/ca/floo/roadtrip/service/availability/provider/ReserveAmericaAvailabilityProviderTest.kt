@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability.provider
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -46,15 +47,7 @@ class ReserveAmericaAvailabilityProviderTest {
                 }
             val adapter =
                 ReserveAmericaAvailabilityProvider(
-                    tenants =
-                        mapOf(
-                            "NY" to
-                                ReserveAmericaTenant(
-                                    host = "newyorkstateparks.reserveamerica.com",
-                                    contractCode = "NY",
-                                    bookingHorizonDays = 270,
-                                ),
-                        ),
+                    tenants = shippedTenantRegistry().tenantsOf(BookingProvider.RESERVEAMERICA),
                     availabilityClient = availabilityClient,
                     enabled = true,
                 )
@@ -86,15 +79,7 @@ class ReserveAmericaAvailabilityProviderTest {
     fun `reserveamerica claims a campground through its alias when the primary belongs to another provider`() {
         val adapter =
             ReserveAmericaAvailabilityProvider(
-                tenants =
-                    mapOf(
-                        "NY" to
-                            ReserveAmericaTenant(
-                                host = "newyorkstateparks.reserveamerica.com",
-                                contractCode = "NY",
-                                bookingHorizonDays = 270,
-                            ),
-                    ),
+                tenants = shippedTenantRegistry().tenantsOf(BookingProvider.RESERVEAMERICA),
                 availabilityClient = ReserveAmericaAvailabilityClient { _, _, _, _, _ -> error("not stubbed") },
                 enabled = true,
             )
@@ -112,7 +97,7 @@ class ReserveAmericaAvailabilityProviderTest {
     fun `an alias for an unconfigured contract is not supported`() {
         val adapter =
             ReserveAmericaAvailabilityProvider(
-                tenants = emptyMap(),
+                tenants = emptyList(),
                 availabilityClient = ReserveAmericaAvailabilityClient { _, _, _, _, _ -> error("not stubbed") },
                 enabled = true,
             )

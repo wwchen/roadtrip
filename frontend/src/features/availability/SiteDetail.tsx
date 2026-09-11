@@ -79,7 +79,7 @@ export function SiteDetail({
 
       {url ? (
         <a className="cg-site-detail-book" href={url} target="_blank" rel="noreferrer">
-          {bookingLabel(site, reservationUrlTemplates)}
+          {bookingLabel(site)}
         </a>
       ) : null}
     </section>
