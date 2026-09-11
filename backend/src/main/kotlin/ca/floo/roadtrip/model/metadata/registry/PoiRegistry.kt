@@ -23,6 +23,17 @@ private val TENANT_ARG_PROVIDERS =
 
 private const val ARG_HOST = "host"
 
+/** Tenant-scoped adapter name → the ETL arg key that must name its tenant. */
+@Suppress("TopLevelPropertyNaming")
+private val TENANT_SCOPED_ADAPTER_ARG_KEYS =
+    mapOf(
+        "AspiraCampgroundsEtl" to "tenant",
+        "AspiraCampsitesEtl" to "tenant",
+        "BcParksCampgroundsEtl" to "tenant",
+        "ReserveAmericaCampgroundsEtl" to "contract",
+        "ReserveAmericaSitesEtl" to "contract",
+    )
+
 // In-memory representation of the configured POI registry.
 //
 // Four sections:
@@ -229,6 +240,11 @@ class PoiRegistry(
     ) {
         for (row in rows) {
             for (etl in row.etls) {
+                val requiredArgKey = TENANT_SCOPED_ADAPTER_ARG_KEYS[etl.adapter]
+                if (requiredArgKey != null && requiredArgKey !in etl.args) {
+                    errs += "$label '${row.name}' etl '${etl.slug}' adapter '${etl.adapter}' " +
+                        "is missing required arg '$requiredArgKey'"
+                }
                 for ((argKey, provider) in TENANT_ARG_PROVIDERS) {
                     val code = etl.args[argKey] ?: continue
                     val tenant = registry.tenant(provider, code)

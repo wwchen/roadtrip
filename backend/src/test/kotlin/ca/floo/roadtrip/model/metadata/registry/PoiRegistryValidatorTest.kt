@@ -461,6 +461,43 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
+    fun `an AspiraCampgroundsEtl row without args tenant fails`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS +
+                        "\n" +
+                        """
+                        data_sources:
+                          - slug: aspira-maps-bc
+                            name: Aspira BC maps
+                            fetcher:
+                              executor: python3
+                              filename: scripts/fetch_aspira.py
+                              output_dir_prefix: data/raw/aspira-maps-bc
+                        poi_data:
+                          - name: BC Provincial Parks
+                            category: campground
+                            agency: BC Parks
+                            etls:
+                              - slug: aspira-bc-campgrounds
+                                adapter: AspiraCampgroundsEtl
+                                inputs: [aspira-maps-bc]
+                                args:
+                                  host: camping.bcparks.ca
+                        """.trimIndent(),
+                )
+            }
+        assertTrue(
+            err.message!!.contains(
+                "poi_data 'BC Provincial Parks' etl 'aspira-bc-campgrounds' adapter 'AspiraCampgroundsEtl' " +
+                    "is missing required arg 'tenant'",
+            ),
+            err.message,
+        )
+    }
+
+    @Test
     fun `an etl args host disagreeing with its tenant fails`() {
         val err =
             assertFailsWith<IllegalArgumentException> {

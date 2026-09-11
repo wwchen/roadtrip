@@ -1,11 +1,17 @@
 package ca.floo.roadtrip.service.availability.provider
 
+/** File-private: dies with [labelsByHost] in Task 4. */
+private data class TenantLabels(
+    val bookingSystem: String,
+    val cta: String,
+)
+
 /** Temporary copy of the per-tenant labels; Task 4 moves these callers onto TenantRegistry. */
-private val labelsByHost: Map<String, Pair<String, String>> =
+private val labelsByHost: Map<String, TenantLabels> =
     mapOf(
-        "reservation.pc.gc.ca" to ("Aspira NextGen (Parks Canada)" to "Reserve on parks.canada.ca"),
-        "camping.bcparks.ca" to ("Aspira NextGen (BC Parks)" to "Book on BC Parks"),
-        "washington.goingtocamp.com" to ("Aspira NextGen (WA State Parks)" to "Book WA State Park"),
+        "reservation.pc.gc.ca" to TenantLabels("Aspira NextGen (Parks Canada)", "Reserve on parks.canada.ca"),
+        "camping.bcparks.ca" to TenantLabels("Aspira NextGen (BC Parks)", "Book on BC Parks"),
+        "washington.goingtocamp.com" to TenantLabels("Aspira NextGen (WA State Parks)", "Book WA State Park"),
     )
 
 internal object AspiraBookingDisplay {
@@ -13,7 +19,7 @@ internal object AspiraBookingDisplay {
 
     fun bookingSystemLabel(host: String?): String {
         if (host == null) return DEFAULT_BOOKING_SYSTEM_LABEL
-        return labelsByHost[host]?.first
+        return labelsByHost[host]?.bookingSystem
             ?: when {
                 host.endsWith("reservation.pc.gc.ca") || host.endsWith("pc.gc.ca") ->
                     "Aspira NextGen (Parks Canada)"
@@ -22,7 +28,7 @@ internal object AspiraBookingDisplay {
     }
 
     fun ctaLabel(host: String): String =
-        labelsByHost[host]?.second
+        labelsByHost[host]?.cta
             ?: when {
                 host.endsWith("reservation.pc.gc.ca") || host.endsWith("pc.gc.ca") ->
                     "Reserve on parks.canada.ca"

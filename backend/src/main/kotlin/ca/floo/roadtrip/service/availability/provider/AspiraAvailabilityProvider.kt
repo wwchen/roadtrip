@@ -39,8 +39,7 @@ class AspiraAvailabilityProvider(
     private val enabled: Boolean,
     private val occupancyEnabled: Boolean = false,
 ) : AvailabilityProvider {
-    private val tenantsByCode: Map<String, BookingTenant> =
-        tenants.mapNotNull { tenant -> tenant.code?.let { it to tenant } }.toMap()
+    private val tenantsByCode: Map<String, BookingTenant> = tenants.byCode()
 
     private val log = LoggerFactory.getLogger(javaClass)
 

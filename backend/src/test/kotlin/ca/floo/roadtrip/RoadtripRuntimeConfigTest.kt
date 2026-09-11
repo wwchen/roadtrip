@@ -115,7 +115,6 @@ class RoadtripRuntimeConfigTest {
                 mapOf(
                     "contract" to "NY",
                     "host" to "newyorkstateparks.reserveamerica.com",
-                    "booking_horizon_days" to "270",
                     "provider" to "reserveamerica",
                 )
             else -> emptyMap()

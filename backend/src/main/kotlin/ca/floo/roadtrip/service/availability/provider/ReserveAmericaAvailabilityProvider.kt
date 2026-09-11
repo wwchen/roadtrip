@@ -26,8 +26,7 @@ class ReserveAmericaAvailabilityProvider(
     private val availabilityClient: ReserveAmericaAvailabilityClient,
     private val enabled: Boolean,
 ) : AvailabilityProvider {
-    private val tenantsByCode: Map<String, BookingTenant> =
-        tenants.mapNotNull { tenant -> tenant.code?.let { it to tenant } }.toMap()
+    private val tenantsByCode: Map<String, BookingTenant> = tenants.byCode()
 
     override val id: BookingProvider = BookingProvider.RESERVEAMERICA
 
