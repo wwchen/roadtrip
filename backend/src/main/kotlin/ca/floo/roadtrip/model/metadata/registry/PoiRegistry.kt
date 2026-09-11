@@ -13,25 +13,28 @@ import java.nio.charset.StandardCharsets
 private const val CAMPSITE_DATA_SECTION = "campsite_data"
 private const val POI_DATA_SECTION = "poi_data"
 
-/** ETL arg key → the vendor whose tenant it must name. */
+/**
+ * The one place an ETL arg key is tied to a vendor. Everything else names the
+ * vendor and derives the key from here, so the two facts cannot drift.
+ */
 @Suppress("TopLevelPropertyNaming")
-private val TENANT_ARG_PROVIDERS =
+private val TENANT_ARG_KEYS =
     mapOf(
-        "tenant" to BookingProvider.ASPIRA,
-        "contract" to BookingProvider.RESERVEAMERICA,
+        BookingProvider.ASPIRA to "tenant",
+        BookingProvider.RESERVEAMERICA to "contract",
     )
 
 private const val ARG_HOST = "host"
 
-/** Tenant-scoped adapter name → the ETL arg key that must name its tenant. */
+/** Tenant-scoped adapter name → the vendor whose tenant its args must name. */
 @Suppress("TopLevelPropertyNaming")
-private val TENANT_SCOPED_ADAPTER_ARG_KEYS =
+private val TENANT_SCOPED_ADAPTER_PROVIDERS =
     mapOf(
-        "AspiraCampgroundsEtl" to "tenant",
-        "AspiraCampsitesEtl" to "tenant",
-        "BcParksCampgroundsEtl" to "tenant",
-        "ReserveAmericaCampgroundsEtl" to "contract",
-        "ReserveAmericaSitesEtl" to "contract",
+        "AspiraCampgroundsEtl" to BookingProvider.ASPIRA,
+        "AspiraCampsitesEtl" to BookingProvider.ASPIRA,
+        "BcParksCampgroundsEtl" to BookingProvider.ASPIRA,
+        "ReserveAmericaCampgroundsEtl" to BookingProvider.RESERVEAMERICA,
+        "ReserveAmericaSitesEtl" to BookingProvider.RESERVEAMERICA,
     )
 
 // In-memory representation of the configured POI registry.
@@ -45,6 +48,9 @@ private val TENANT_SCOPED_ADAPTER_ARG_KEYS =
 //   - campsite_data: campsite catalogs. Terminal etl emits canonical campsite
 //     rows. Same shape as poi_data, minus category/subcategory
 //     (campsites aren't map pins).
+//   - booking_providers: one row per booking vendor — the name a person calls
+//     it, whether they book on its own site, and the tenants it runs.
+//     Projected by TenantRegistry; no etls.
 // ETL semantics (poi_data + campsite_data):
 //   - Each row has exactly one terminal ETL.
 //   - ETL inputs may only reference data_source slugs.
@@ -240,12 +246,12 @@ class PoiRegistry(
     ) {
         for (row in rows) {
             for (etl in row.etls) {
-                val requiredArgKey = TENANT_SCOPED_ADAPTER_ARG_KEYS[etl.adapter]
+                val requiredArgKey = TENANT_SCOPED_ADAPTER_PROVIDERS[etl.adapter]?.let { TENANT_ARG_KEYS.getValue(it) }
                 if (requiredArgKey != null && requiredArgKey !in etl.args) {
                     errs += "$label '${row.name}' etl '${etl.slug}' adapter '${etl.adapter}' " +
                         "is missing required arg '$requiredArgKey'"
                 }
-                for ((argKey, provider) in TENANT_ARG_PROVIDERS) {
+                for ((provider, argKey) in TENANT_ARG_KEYS) {
                     val code = etl.args[argKey] ?: continue
                     val tenant = registry.tenant(provider, code)
                     if (tenant == null) {

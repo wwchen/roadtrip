@@ -31,6 +31,7 @@ class TenantRegistry private constructor(
 
     fun tenantsOf(provider: BookingProvider): List<BookingTenant> = profile(provider).tenants
 
+    /** Codes are matched verbatim — unlike hosts, which normalize case and `www.`. */
     fun tenant(
         provider: BookingProvider,
         code: String?,

@@ -37,8 +37,9 @@ private const val USER_TOKEN = "user-token"
 /** Whatever the provider's cart is; the route passes it through untouched. */
 private const val HELD_CART_URL = "https://cart.example.test/hold"
 
-/** Whatever the service read off the registry; the route passes it through too. */
-private const val HELD_PROVIDER_DISPLAY = "Recreation.gov"
+/** Deliberately not a real vendor's: the route passes the name through untouched,
+ *  and proves nothing about what the registry would have said. */
+private const val HELD_PROVIDER_DISPLAY = "Test Bookings"
 private val testUser = UserId(7L)
 
 private const val VALID_BODY = """{"campsite_id":42,"start_date":"2026-07-04","end_date":"2026-07-06"}"""

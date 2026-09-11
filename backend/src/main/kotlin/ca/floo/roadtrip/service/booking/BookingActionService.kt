@@ -79,8 +79,8 @@ internal sealed interface AddToCartOutcome {
 
     /**
      * A gate refused before the browser was ever driven. [provider] is the
-     * adapter the gate consulted, and is null for the gates that run before one
-     * is chosen — naming a vendor there would be a guess.
+     * vendor the refusal is about, and is null only for the gates that run
+     * before a target resolves — naming a vendor there would be a guess.
      */
     data class Refused(
         val code: String,
@@ -155,11 +155,14 @@ internal class BookingActionService(
         val target =
             bookingTargets.targetFor(BookingAction.ADD_TO_CART, resolved)
                 ?: return AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET)
+        // The booking site's own name, from the ref the hold would use. Known as
+        // soon as a target is, so every refusal from here down can name it.
+        val providerDisplay = tenants.displayName(target.parentRef)
         // The registry disagreeing with the resolver means the two are out of
         // step; report it as the same "we cannot book this" the gate does.
-        val adapter = bookings.adapterFor(target) ?: return AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET)
-        // The booking site's own name, from the ref the hold will use.
-        val providerDisplay = tenants.displayName(target.parentRef)
+        val adapter =
+            bookings.adapterFor(target)
+                ?: return AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET, target.providerId, providerDisplay)
 
         // 2. Does this caller have somewhere to put it? The adapter answers for
         //    its own vendor — configured, not proven — and it is the same gate

@@ -1,8 +1,10 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.CAMPFLARE_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.FakeBookingAdapter
+import ca.floo.roadtrip.fixtures.RECGOV_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.api.AddToCartState
@@ -33,11 +35,6 @@ private val uncredentialedUser = UserId(12L)
 
 /** Holds an account with the second vendor, and none with the first. */
 private val otherProviderUser = UserId(13L)
-
-/** The shipped names of the two providers these fakes claim. The service reads
- *  them off the registry by ref, so a fake cannot invent its own any more. */
-private const val RECGOV_DISPLAY_NAME = "Recreation.gov"
-private const val CAMPFLARE_DISPLAY_NAME = "Campflare"
 
 class WatchCapabilityServiceTest {
     @Test

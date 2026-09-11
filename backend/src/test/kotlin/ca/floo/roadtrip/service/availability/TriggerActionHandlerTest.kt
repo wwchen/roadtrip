@@ -6,6 +6,7 @@ import ca.floo.roadtrip.config.EmailConfig
 import ca.floo.roadtrip.fixtures.FAKE_CART_URL
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
+import ca.floo.roadtrip.fixtures.RECGOV_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.PoiDateContext
@@ -67,9 +68,6 @@ import kotlin.test.assertTrue
 
 /** What the companion says when rec.gov stops an unattended login for a code. */
 private const val MFA_BLOCKED_DETAIL = "rec.gov asked for a verification code"
-
-/** What the shipped registry calls the rec.gov ref these openings resolve to. */
-private const val RECGOV_DISPLAY_NAME = "Recreation.gov"
 
 /** Loaded once: every handler below reads the booking site's name off it. */
 private val tenantRegistry = shippedTenantRegistry()
