@@ -20,22 +20,23 @@ import kotlin.test.assertNull
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BcParksCampgroundsEtlTest {
     private lateinit var ctx: TransformCtx
+    private val slug = "aspira-bc-campgrounds"
+    private val registry = PoiRegistry.loadResource("poi-registry.yaml")
     private val etl =
         BcParksCampgroundsEtl(
-            etlSlug = "aspira-bc-campgrounds",
+            etlSlug = slug,
             aspiraTenant = "bc",
             geometry =
-                PoiRegistry
-                    .loadResource("poi-registry.yaml")
-                    .poiData
-                    .flatMap { it.etls }
-                    .single { it.slug == "aspira-bc-campgrounds" }
-                    .geometry!!,
+                checkNotNull(
+                    registry.poiData
+                        .flatMap { it.etls }
+                        .single { it.slug == slug }
+                        .geometry,
+                ),
         )
 
     @BeforeAll
     fun setUp() {
-        val registry = PoiRegistry.loadResource("poi-registry.yaml")
         val tmp = Files.createTempDirectory("bcparks-merge-").toFile()
         tmp.deleteOnExit()
         ctx = TransformCtx.load(tmp, registry)

@@ -1,7 +1,9 @@
 package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.model.domain.provider.DataProvider
+import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampgroundsEtl
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -50,8 +52,15 @@ class ProductionTerminalEtlRegistryTest {
         assertEquals(listOf("aspira-wa-campgrounds", "aspira-pc-campgrounds"), entries.map { it.slug })
 
         for (entry in entries) {
-            assertNotNull(entry.geometry)
-            assertNotNull(poiAdapters["AspiraCampgroundsEtl"]?.create?.invoke(entry), entry.slug)
+            val geometry = checkNotNull(entry.geometry) { entry.slug }
+            val definition = poiAdapters["AspiraCampgroundsEtl"]?.create?.invoke(entry)
+            assertNotNull(definition, entry.slug)
+
+            // The policy has to reach the ETL, not merely sit on the entry: the
+            // sources it builds are the ones the row declared, in that order.
+            val etl = definition.etl as AspiraCampgroundsEtl
+            val bundle = InputBundle(LinkedHashMap(entry.inputs.associateWith { emptyList<Envelope>() }))
+            assertEquals(geometry.sources.map { it.input }, etl.geometrySourcesFor(bundle).map { it.first }, entry.slug)
         }
     }
 }

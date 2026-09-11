@@ -63,9 +63,11 @@ class AspiraCampgroundsEtl(
     override fun parse(inputs: InputBundle): Sequence<ParseResult<AspiraJoinDto>> =
         sequence {
             val slugs = inputs.dataSourceSlugs()
-            val mapsSlug = slugs.firstOrNull { it.contains(MAPS_INPUT_MARKER) }
-            val inventorySlug = slugs.firstOrNull { it.contains(INVENTORY_INPUT_MARKER) }
-            val dictionarySlug = slugs.firstOrNull { it.contains(DICTIONARIES_INPUT_MARKER) }
+            val declared = geometry.sources.map { it.input }.toSet()
+            val roleSlugs = slugs.filterNot { it in declared }
+            val mapsSlug = roleSlugs.firstOrNull { it.contains(AspiraInputRoles.MAPS) }
+            val inventorySlug = roleSlugs.firstOrNull { it.contains(AspiraInputRoles.INVENTORY) }
+            val dictionarySlug = roleSlugs.firstOrNull { it.contains(AspiraInputRoles.DICTIONARIES) }
 
             val errs = mutableListOf<String>()
             for (spec in geometry.sources) {
@@ -74,7 +76,7 @@ class AspiraCampgroundsEtl(
                     inputs.envelopes(spec.input).isEmpty() -> errs += "declared geometry source '${spec.input}' has no envelopes"
                 }
             }
-            val accounted = geometry.sources.map { it.input }.toSet() + setOfNotNull(mapsSlug, inventorySlug, dictionarySlug)
+            val accounted = declared + setOfNotNull(mapsSlug, inventorySlug, dictionarySlug)
             for (slug in slugs - accounted) {
                 errs += "input '$slug' is neither a declared geometry source nor the maps, inventory or dictionaries feed"
             }
@@ -203,10 +205,6 @@ class AspiraCampgroundsEtl(
         private const val ASPIRA_TRANSACTION_LOCATION_ID_KEY = "transactionLocationId"
         private const val ASPIRA_MAP_ID_KEY = "mapId"
         private const val ASPIRA_RESOURCE_LOCATION_ID_KEY = "resourceLocationId"
-
-        private const val MAPS_INPUT_MARKER = "maps"
-        private const val INVENTORY_INPUT_MARKER = "inventory"
-        private const val DICTIONARIES_INPUT_MARKER = "dictionaries"
     }
 }
 

@@ -17,6 +17,7 @@ import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraBookingCtaRef
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraBookingCtaRefs
+import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraInputRoles
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraInventoryCategories
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeaf
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeafMatch
@@ -47,11 +48,11 @@ class BcParksCampgroundsEtl(
 
     override fun parse(inputs: InputBundle): Sequence<ParseResult<BcParksCampgroundsDto>> =
         sequence {
-            val slugs = inputs.dataSourceSlugs()
-            val mapsSlug = slugs.first { it.contains(MAPS_INPUT_MARKER) }
             val strapiSlug = geometry.sources.single().input
-            val inventorySlug = slugs.first { it.contains(INVENTORY_INPUT_MARKER) }
-            val dictionarySlug = slugs.firstOrNull { it.contains(DICTIONARIES_INPUT_MARKER) }
+            val roleSlugs = inputs.dataSourceSlugs().filterNot { it == strapiSlug }
+            val mapsSlug = roleSlugs.first { it.contains(AspiraInputRoles.MAPS) }
+            val inventorySlug = roleSlugs.first { it.contains(AspiraInputRoles.INVENTORY) }
+            val dictionarySlug = roleSlugs.firstOrNull { it.contains(AspiraInputRoles.DICTIONARIES) }
 
             val mapsArray = inputs.envelope(mapsSlug).payload.jsonArray
             val leaves = AspiraLeavesWalk.walk(mapsArray)
@@ -190,9 +191,5 @@ class BcParksCampgroundsEtl(
     private companion object {
         const val REGION = "BC"
         const val COUNTRY = "CA"
-
-        const val MAPS_INPUT_MARKER = "maps"
-        const val INVENTORY_INPUT_MARKER = "inventory"
-        const val DICTIONARIES_INPUT_MARKER = "dictionaries"
     }
 }

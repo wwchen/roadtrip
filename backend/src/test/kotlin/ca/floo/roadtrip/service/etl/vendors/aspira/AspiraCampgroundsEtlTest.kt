@@ -176,6 +176,23 @@ class AspiraCampgroundsEtlTest {
             fetchedAt = Instant.parse("2026-07-05T00:00:00Z"),
         )
 
+    /** One bookable `/api/maps` leaf, named to match the seeded geometry. */
+    private fun mapsEnvelope(): Envelope =
+        envelopeOf(
+            """
+            [
+              {
+                "mapId": -2147483641,
+                "transactionLocationId": "1002",
+                "resourceLocationId": "9002",
+                "localizedValues": [{"cultureName": "en-CA", "title": "Two Jack Lakeside"}],
+                "mapLinks": [],
+                "parentMap": null
+              }
+            ]
+            """.trimIndent(),
+        )
+
     private fun envelopeOf(payloadJson: String): Envelope =
         Json.decodeFromString(
             Envelope.serializer(),
@@ -251,6 +268,50 @@ class AspiraCampgroundsEtlTest {
     }
 
     @Test
+    fun `a declared geometry source missing from this run's inputs fails parse`() {
+        val etl =
+            AspiraCampgroundsEtl(
+                etlSlug = slug,
+                aspiraTenant = "pc",
+                geometry = GeometryPolicy(sources = listOf(GeometrySourceSpec("test-geom", GeometryFormat.GEOJSON_POINTS))),
+            )
+        val inputs = InputBundle(linkedMapOf("aspira-maps-pc" to listOf(mapsEnvelope())))
+
+        val bad = etl.parse(inputs).single() as ParseResult.Bad
+        assertTrue(
+            bad.errors.any { it == "declared geometry source 'test-geom' is not among this run's inputs" },
+            bad.errors.toString(),
+        )
+    }
+
+    /**
+     * The role feeds are looked for only among the inputs geometry did not
+     * claim, so a declared source whose own slug contains `maps` cannot shadow
+     * the real `/api/maps` feed — which, declared second, would otherwise lose
+     * the `firstOrNull` and be reported as an unaccounted input.
+     */
+    @Test
+    fun `a declared geometry input whose slug contains maps does not shadow the maps feed`() {
+        val etl =
+            AspiraCampgroundsEtl(
+                etlSlug = slug,
+                aspiraTenant = "pc",
+                geometry = GeometryPolicy(sources = listOf(GeometrySourceSpec("apca-maps-geom", GeometryFormat.GEOJSON_POINTS))),
+            )
+        val inputs =
+            InputBundle(
+                linkedMapOf(
+                    "apca-maps-geom" to listOf(geomEnvelope()),
+                    "aspira-maps-pc" to listOf(mapsEnvelope()),
+                ),
+            )
+
+        val dto = (etl.parse(inputs).single() as ParseResult.Ok).dto
+        assertEquals(listOf("Two Jack Lakeside"), dto.leaves.map { it.name })
+        assertEquals(listOf("apca-maps-geom"), dto.geomSources.map { it.first })
+    }
+
+    @Test
     fun `parse builds one source per declared geometry input, in declared order`() {
         val etl =
             AspiraCampgroundsEtl(
@@ -268,13 +329,16 @@ class AspiraCampgroundsEtlTest {
         val inputs =
             InputBundle(
                 linkedMapOf(
-                    "aspira-maps-pc" to listOf(envelopeOf("[]")),
+                    "aspira-maps-pc" to listOf(mapsEnvelope()),
                     "test-centroids" to listOf(envelopeOf("""{"features":[]}""")),
                     "test-geom" to listOf(geomEnvelope()),
                 ),
             )
 
-        assertEquals(listOf("test-geom", "test-centroids"), etl.geometrySourcesFor(inputs).map { it.first })
+        val sources = (etl.parse(inputs).single() as ParseResult.Ok).dto.geomSources
+        assertEquals(listOf("test-geom", "test-centroids"), sources.map { it.first })
+        assertTrue(sources[0].second is GeoJsonFeaturesSource, sources[0].second.toString())
+        assertTrue(sources[1].second is ArcGisCentroidSource, sources[1].second.toString())
     }
 
     @Test
