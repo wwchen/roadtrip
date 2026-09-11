@@ -213,10 +213,11 @@ walks show up in the Grafana call-trace panels without extra plumbing.
 **Cooldown duration:** `roadtrip.availability.provider-cooldown` (default
 `5m`). In-process only; expires lazily on the next `isCooling` check.
 
-**Preference wiring:** `GET /api/pois/{id}` reads its `availability_provider`
-field straight from the campground row's own `booking_provider` column
-(`CampgroundService`) — there is no separate candidate-ordering lookup for
-this field.
+**Preference wiring:** `GET /api/pois/{id}`'s `availability_provider` field
+follows the serving provider (`BookingHorizonResolver.servingProvider`,
+read by `CampgroundService`) — the same first-claim lookup that resolves
+`booking_ref` and the CTAs — falling back to the row's own declared
+`booking_provider` column only when no registered provider claims it.
 
 ## Alert seam
 

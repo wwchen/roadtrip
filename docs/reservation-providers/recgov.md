@@ -17,13 +17,19 @@ Rec.gov exposes two surfaces we use, and they serve different phases:
 
 ## ID model
 
-- **POI / campground** `booking_provider_ref` = the rec.gov `FacilityID` string,
-  parsed as `BookingProviderRef.RecGov(facilityId)`. A campground whose ref is
-  any other variant is rejected with `AvailabilityProviderError.WrongRefType`.
+- **POI / campground** `booking_provider_ref` = the rec.gov `FacilityID`
+  string when rec.gov is the row's primary, parsed as
+  `BookingProviderRef.RecGov(facilityId)`. A Campflare-primary row that
+  rec.gov also sells carries the same facility id as a `booking_aliases`
+  entry instead — `AvailabilityProvider.claimedRef` checks the primary, then
+  the alias, so either shape resolves to one `BookingProviderRef.RecGov`
+  before it reaches this adapter. A campground whose ref is neither is
+  rejected with `AvailabilityProviderError.WrongRefType`.
 - **Campsite** `vendor_id` is the rec.gov campsite id (the key in the
-  `campsites` object of the month payload). The adapter resolves it via
-  `bookingProviderRef` when `booking_provider = recgov`, else falls back to the
-  serialized `dataProviderRef`.
+  `campsites` object of the month payload). The adapter resolves it from the
+  campsite's primary ref when `booking_provider = recgov`, else its rec.gov
+  `booking_aliases` entry, else falls back to the serialized `dataProviderRef`
+  (`AvailabilityProvider.vendorSiteIdFor`'s default).
 
 ## Endpoint catalog
 

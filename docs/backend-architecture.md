@@ -86,6 +86,11 @@ Model names must tell callers what kind of shape they are holding:
   type; the entity repo is the only place that encodes or decodes it. Vendor
   ETLs map upstream keys into the type, so the read path never carries
   per-vendor key fallbacks. `campsites.equipment`, `photos`, and `attributes` follow the same rule through `CatalogColumnJson`; `CampsiteRepo` is their only codec, and the API serves `CampsiteDto`, never the row.
+  `campgrounds.booking_aliases` / `campsites.booking_aliases`
+  (`BookingAlias(provider, ref)` — another vendor's identity for the same
+  inventory, V59) are the same pattern again: `CampgroundRepo` / `CampsiteRepo`
+  are the only codec, and `RefLinkRepo`'s ref lookups match the JSONB column
+  alongside the row's own `booking_provider`/`booking_provider_ref` primary.
 - **Vocabulary enums carry their own labels.** The campground bags
   (`amenities`, `cell_service`, `metadata`, `price`,
   `default_campsite_schedule`, `alerts`) and `campsites.kind` follow the same
@@ -260,6 +265,16 @@ or provider-neutral models at the adapter/service boundary.
 When adding a new availability provider, add an adapter in
 `service/availability/provider/` and wire it through the provider list. No
 route should branch on that vendor.
+
+The booking seam under `service/booking/` follows the same shape one layer
+over: `BookingAdapter` is the port, and each vendor's adapter (e.g.
+`RecGovBookingAdapter`) owns everything specific to it — its cart URL, its
+`canFulfil` credential check, its failure codes, and its display name —
+behind `BookingAdapterRegistry`. `BookingActionService` and
+`WatchCapabilityService` ask the registry for the claiming adapter and return
+what it says; they never hold a vendor constant, a vendor credential port, or
+a vendor code table themselves. Adding a second booking vendor is a new
+adapter file and a registry entry, not a sweep through those services.
 
 When adding an ETL source, add transform code under
 `service/etl/vendors/<vendor>/` and pure DTOs under `models/` when they are
