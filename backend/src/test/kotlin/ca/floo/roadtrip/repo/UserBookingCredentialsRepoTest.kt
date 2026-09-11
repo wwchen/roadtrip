@@ -60,6 +60,26 @@ class UserBookingCredentialsRepoTest : SharedDbTest() {
         assertEquals("grace@example.com", repo.find(user, BookingProvider.CAMPFLARE)!!.username)
     }
 
+    @Test fun `updateUsername renames in place and leaves the sealed secret alone`() {
+        val user = newUser()
+        repo.save(user, BookingProvider.RECGOV, "ada@example.com", byteArrayOf(1))
+
+        assertTrue(repo.updateUsername(user, BookingProvider.RECGOV, "grace@example.com"))
+
+        val stored = repo.find(user, BookingProvider.RECGOV)!!
+        assertEquals("grace@example.com", stored.username)
+        assertContentEquals(byteArrayOf(1), stored.secretCipher)
+    }
+
+    @Test fun `updateUsername is false when there is no row, and writes nothing`() {
+        val user = newUser()
+
+        assertFalse(repo.updateUsername(user, BookingProvider.RECGOV, "grace@example.com"))
+
+        assertNull(repo.find(user, BookingProvider.RECGOV))
+        assertEquals(0, storedRowCount(user))
+    }
+
     @Test fun `clear reports whether a row existed`() {
         val user = newUser()
         assertFalse(repo.clear(user, BookingProvider.RECGOV), "nothing was stored")

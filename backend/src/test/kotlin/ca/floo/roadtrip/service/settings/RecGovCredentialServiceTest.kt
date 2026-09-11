@@ -69,6 +69,16 @@ private class FakeCredentialsRepo : UserBookingCredentialsRepo(ctx = detachedCtx
         stored = BookingCredentials(username, secretCipher)
     }
 
+    override fun updateUsername(
+        user: UserId,
+        provider: BookingProvider,
+        username: String,
+    ): Boolean {
+        val current = stored ?: return false
+        stored = BookingCredentials(username, current.secretCipher)
+        return true
+    }
+
     override fun clear(
         user: UserId,
         provider: BookingProvider,
@@ -112,6 +122,9 @@ private class FakeCompanion(
     /** A true wipe needs this to succeed; default it to working. */
     var destroyResult: CompanionActionResult = CompanionActionResult.Ok
 
+    /** Runs inside [destroyProfile], so a test can race a write against the wipe. */
+    var onDestroy: (() -> Unit)? = null
+
     override suspend fun login(
         profileId: String,
         username: String,
@@ -140,6 +153,7 @@ private class FakeCompanion(
 
     override suspend fun destroyProfile(profileId: String): CompanionActionResult {
         destroyCalls += profileId
+        onDestroy?.invoke()
         return destroyResult
     }
 
@@ -287,6 +301,33 @@ class RecGovCredentialServiceTest {
             assertEquals("hunter2-secret", cipher.open(repo.stored!!.secretCipher))
         }
 
+    @Test
+    fun `a username-only save cannot resurrect a credential removed mid-save`() =
+        runBlocking {
+            // The wipe is a companion round trip, so a removal can land between
+            // the read and the write. Re-writing the cipher read beforehand
+            // would re-create the row the user just deleted.
+            val repo = configuredRepo()
+            val companion = FakeCompanion().also { it.onDestroy = { repo.clear(testUserId, BookingProvider.RECGOV) } }
+            val service = service(repo, companion)
+
+            val dto = service.save(testUserId, UpdateRecgovRequest("grace@example.com", null))
+
+            assertNull(repo.stored, "the removal must stand")
+            assertFalse(dto.recgovConfigured)
+            assertFalse(service.isConfigured(BookingProvider.RECGOV, testUserId))
+        }
+
+    @Test
+    fun `isConfigured answers for rec dot gov only`() {
+        // Another provider's custodian holds its own accounts; this one would
+        // be guessing, and a wrong yes sends an ATC fire at an empty row.
+        val service = service(configuredRepo())
+
+        assertTrue(service.isConfigured(BookingProvider.RECGOV, testUserId))
+        assertFalse(service.isConfigured(BookingProvider.CAMPFLARE, testUserId))
+    }
+
     // ── removal ──────────────────────────────────────────────────────────────
 
     @Test
@@ -302,6 +343,15 @@ class RecGovCredentialServiceTest {
             assertTrue(dto.companionSignedOut)
             assertEquals(listOf(PROFILE_ID), companion.logoutCalls)
             assertNull(repo.stored, "the stored account is gone, not blanked")
+        }
+
+    @Test
+    fun `removal with nothing stored reports that no account was deleted`() =
+        runBlocking {
+            val dto = service(FakeCredentialsRepo(), FakeCompanion()).remove(testUserId)
+
+            assertFalse(dto.removed, "there was no account to delete")
+            assertTrue(dto.profileDestroyed, "the session wipe still ran")
         }
 
     @Test

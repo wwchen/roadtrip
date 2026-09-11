@@ -200,14 +200,15 @@ class RecGovCredentialService(
         val previous = stored?.username
         if (previous != null && previous != username) wipeProfileOrRefuse(userId)
 
-        credentialsRepo.save(
-            user = userId,
-            provider = PROVIDER,
-            username = username,
-            // A username-only edit keeps the sealed password it was saved with;
-            // the guard above is what makes this non-null.
-            secretCipher = sealed ?: checkNotNull(stored).secretCipher,
-        )
+        if (sealed != null) {
+            credentialsRepo.save(user = userId, provider = PROVIDER, username = username, secretCipher = sealed)
+        } else {
+            // Rename in place. Writing back the cipher read above would
+            // resurrect a credential removed while the wipe was in flight; a
+            // false answer means it was, and the response reads back
+            // unconfigured rather than re-creating the row.
+            credentialsRepo.updateUsername(userId, PROVIDER, username)
+        }
         return bookingSettingsDto(storedCredentials(userId), cipher)
     }
 
@@ -265,9 +266,8 @@ class RecGovCredentialService(
         val signedOut = companion?.logout(profileId(userId)) == CompanionActionResult.Ok
         val destroyed = wipeProfileOrRefuse(userId)
 
-        credentialsRepo.clear(userId, PROVIDER)
         return RecgovRemovedDto(
-            removed = true,
+            removed = credentialsRepo.clear(userId, PROVIDER),
             strandedAtcWatches = stranded,
             companionSignedOut = signedOut,
             profileDestroyed = destroyed,

@@ -10,10 +10,24 @@ import java.time.OffsetDateTime
  * One provider account as it is stored: an identifier in the clear and a sealed
  * secret. Opening the secret is the credential service's job, not this repo's.
  */
-data class BookingCredentials(
+class BookingCredentials(
     val username: String,
     val secretCipher: ByteArray,
-)
+) {
+    /** Value equality: the array's contents, not its identity. */
+    override fun equals(other: Any?): Boolean =
+        this === other ||
+            (other is BookingCredentials && username == other.username && secretCipher.contentEquals(other.secretCipher))
+
+    override fun hashCode(): Int = HASH_SEED * username.hashCode() + secretCipher.contentHashCode()
+
+    /** Never prints the cipher: one log line is all a leak would take. */
+    override fun toString(): String = "BookingCredentials(username=$username, secretCipher=<sealed>)"
+
+    private companion object {
+        const val HASH_SEED = 31
+    }
+}
 
 /**
  * Persistence for `user_booking_credentials` — one row per user per booking
@@ -44,7 +58,7 @@ open class UserBookingCredentialsRepo(
      *
      * Both halves are required: a username with no sealed secret cannot log in,
      * so "partially configured" is not a state this table can hold. A caller
-     * changing only the username passes the secret it already read back.
+     * changing only the username uses [updateUsername] instead.
      */
     open fun save(
         user: UserId,
@@ -67,6 +81,26 @@ open class UserBookingCredentialsRepo(
             .set(USER_BOOKING_CREDENTIALS.UPDATED_AT, now)
             .execute()
     }
+
+    /**
+     * Renames the stored account in place, leaving the sealed secret untouched.
+     *
+     * False when there was no row to rename. That is what lets a caller editing
+     * only the username avoid re-writing a secret it read earlier: the row may
+     * have been removed in between, and an upsert would bring it back.
+     */
+    open fun updateUsername(
+        user: UserId,
+        provider: BookingProvider,
+        username: String,
+    ): Boolean =
+        ctx
+            .update(USER_BOOKING_CREDENTIALS)
+            .set(USER_BOOKING_CREDENTIALS.USERNAME, username)
+            .set(USER_BOOKING_CREDENTIALS.UPDATED_AT, OffsetDateTime.now())
+            .where(USER_BOOKING_CREDENTIALS.USER_ID.eq(user.value))
+            .and(USER_BOOKING_CREDENTIALS.PROVIDER.eq(provider.id))
+            .execute() > 0
 
     /** True when a row was removed, so the caller can tell a wipe from a no-op. */
     open fun clear(
