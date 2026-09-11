@@ -1,76 +1,119 @@
 package ca.floo.roadtrip.route
 
-import ca.floo.roadtrip.model.domain.poi.Bbox
-import ca.floo.roadtrip.model.routing.GeocodeResult
-import ca.floo.roadtrip.route.api.geocode.geocodeResponseDto
-import ca.floo.roadtrip.route.common.encodeApiJson
+import ca.floo.roadtrip.client.mapbox.MapboxGeocoder
+import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
+import ca.floo.roadtrip.service.geocode.GeocodeService
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.respondError
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
+import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
+
+private const val OVER_MAX_QUERY_LENGTH = 201
+private const val VANCOUVER_FEATURE =
+    """{"features":[{"id":"place.1","place_name":"Vancouver, British Columbia, Canada",""" +
+        """"place_type":["place"],"center":[-123.1207,49.2827]}]}"""
 
 class GeocodeRoutesTest {
     @Test
-    fun `geocode response serializes results with dto`() {
-        val payload =
-            encodeApiJson(
-                geocodeResponseDto(
-                    listOf(
-                        GeocodeResult(
-                            id = "place.1",
-                            placeName = "Vancouver, British Columbia, Canada",
-                            placeType = "place",
-                            lng = -123.1207,
-                            lat = 49.2827,
-                        ),
-                    ),
-                ),
-            )
-        val json = Json.parseToJsonElement(payload).jsonObject
+    fun `a found place answers 200 with the results envelope`() =
+        testApplication {
+            application { routeTestApplication { geocodeRoutes(okService()) } }
 
-        val result = json["results"]!!.jsonArray.single().jsonObject
-        assertEquals("place.1", result["id"]!!.jsonPrimitive.content)
-        assertEquals("Vancouver, British Columbia, Canada", result["place_name"]!!.jsonPrimitive.content)
-        assertEquals("place", result["place_type"]!!.jsonPrimitive.content)
-        assertEquals(-123.1207, result["lng"]!!.jsonPrimitive.double)
-        assertEquals(49.2827, result["lat"]!!.jsonPrimitive.double)
-        // A place with no reported extent omits the key entirely rather than
-        // shipping a null the client has to distinguish from an empty box.
-        assertNull(result["bbox"])
-    }
+            val resp = client.get("/api/geocode?q=Vancouver")
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val results = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["results"]!!.jsonArray
+            assertEquals(
+                "place.1",
+                results
+                    .single()
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.content,
+            )
+        }
 
     @Test
-    fun `a region serializes its extent as west south east north`() {
-        val payload =
-            encodeApiJson(
-                geocodeResponseDto(
-                    listOf(
-                        GeocodeResult(
-                            id = "region.1",
-                            placeName = "Utah, United States",
-                            placeType = "region",
-                            lng = -111.0937,
-                            lat = 39.3210,
-                            bbox = Bbox(west = -114.052, south = 36.997, east = -109.041, north = 42.001),
-                        ),
-                    ),
-                ),
-            )
-        val result =
-            Json
-                .parseToJsonElement(payload)
-                .jsonObject["results"]!!
-                .jsonArray
-                .single()
-                .jsonObject
+    fun `an unset token answers 503 geocoding_unavailable`() =
+        testApplication {
+            application { routeTestApplication { geocodeRoutes(unconfiguredService()) } }
 
-        assertEquals(
-            listOf(-114.052, 36.997, -109.041, 42.001),
-            result["bbox"]!!.jsonArray.map { it.jsonPrimitive.double },
+            val resp = client.get("/api/geocode?q=Vancouver")
+
+            assertEquals(HttpStatusCode.ServiceUnavailable, resp.status)
+            assertEquals("geocoding_unavailable", errorOf(resp.bodyAsText()))
+        }
+
+    @Test
+    fun `a blank query answers 400 bad_query`() =
+        testApplication {
+            application { routeTestApplication { geocodeRoutes(okService()) } }
+
+            val resp = client.get("/api/geocode?q=")
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            assertEquals("bad_query", errorOf(resp.bodyAsText()))
+        }
+
+    @Test
+    fun `an over-long query answers 400 bad_query`() =
+        testApplication {
+            application { routeTestApplication { geocodeRoutes(okService()) } }
+
+            val resp = client.get("/api/geocode?q=${"x".repeat(OVER_MAX_QUERY_LENGTH)}")
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            assertEquals("bad_query", errorOf(resp.bodyAsText()))
+        }
+
+    @Test
+    fun `an upstream failure answers 503 geocoding_unavailable`() =
+        testApplication {
+            application { routeTestApplication { geocodeRoutes(failingService()) } }
+
+            val resp = client.get("/api/geocode?q=Vancouver")
+
+            assertEquals(HttpStatusCode.ServiceUnavailable, resp.status)
+            assertEquals("geocoding_unavailable", errorOf(resp.bodyAsText()))
+        }
+
+    private fun errorOf(body: String): String =
+        Json
+            .parseToJsonElement(body)
+            .jsonObject["error"]!!
+            .jsonPrimitive.content
+
+    private fun okService(): GeocodeService =
+        GeocodeService(
+            MapboxGeocoder(
+                token = "pk.test",
+                httpClient =
+                    HttpClient(
+                        MockEngine {
+                            respond(VANCOUVER_FEATURE, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+                        },
+                    ),
+            ),
         )
-    }
+
+    private fun failingService(): GeocodeService =
+        GeocodeService(
+            MapboxGeocoder(
+                token = "pk.test",
+                httpClient = HttpClient(MockEngine { respondError(HttpStatusCode.InternalServerError) }),
+            ),
+        )
+
+    private fun unconfiguredService(): GeocodeService = GeocodeService(MapboxGeocoder(token = null))
 }

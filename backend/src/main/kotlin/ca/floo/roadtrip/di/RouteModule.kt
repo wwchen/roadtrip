@@ -65,6 +65,7 @@ import ca.floo.roadtrip.service.availability.configuredSnapshotFreshnessTtl
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingActionService
 import ca.floo.roadtrip.service.etl.framework.IngestController
+import ca.floo.roadtrip.service.geocode.GeocodeService
 import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
@@ -107,7 +108,7 @@ internal fun Application.registerKoinRoutes() {
     val poisOnRouteService: PoisOnRouteService by inject()
     val routePlanService: RoutePlanService by inject()
     val routeResponseMapper: RouteResponseMapper by inject()
-    val mapboxGeocoder: ca.floo.roadtrip.client.mapbox.MapboxGeocoder by inject()
+    val geocodeService: GeocodeService by inject()
     val ingestController: IngestController by inject()
     val userSettings: UserSettingsService by inject()
     val recgovCredentials: RecGovCredentialService by inject()
@@ -175,7 +176,7 @@ internal fun Application.registerKoinRoutes() {
         )
         poisOnRouteRoutes(poisOnRouteService, config.route)
         routeRoutes(routePlanService, routeResponseMapper, config.route)
-        geocodeRoutes(mapboxGeocoder)
+        geocodeRoutes(geocodeService)
         buildInfoRoutes(config.buildInfo)
         healthRoutes(readiness)
         adminIngestRoutes(ingestController)

@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.client.companion.CompanionSessionClient
+import ca.floo.roadtrip.client.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.client.slack.SlackClient
 import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.AppConfig
@@ -63,6 +64,7 @@ import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
 import ca.floo.roadtrip.service.booking.RecentAtcFires
 import ca.floo.roadtrip.service.etl.framework.dataProviderForAdapter
+import ca.floo.roadtrip.service.geocode.GeocodeService
 import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.health.ReadinessServiceImpl
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
@@ -432,6 +434,7 @@ val serviceModule =
         single { RouteCorridorService(get<RouteCorridorRepo>()) }
         single { RoutePlanService(routeCache = get(), corridorService = get<RouteCorridorService>()) }
         single { RouteResponseMapper() }
+        single { GeocodeService(get<MapboxGeocoder>()) }
         single {
             PoiService(
                 poiRepo = get<PoiServingRepo>(),
