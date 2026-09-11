@@ -4,6 +4,7 @@ import {
   agencyLabel,
   bookingLabel,
   hasReservationUrlTemplate,
+  providerLabel,
   reservationUrlFromTemplate,
 } from './booking-links';
 
@@ -135,6 +136,13 @@ describe('naming who takes the booking', () => {
 
   test('humanises an unknown vendor slug', () => {
     expect(agencyLabel(site(7, { data_provider: 'some_vendor' }), {})).toBe('Some Vendor');
+  });
+
+  test('names a provider id straight from the wire, humanising an unknown one', () => {
+    expect(providerLabel('recgov')).toBe('rec.gov');
+    expect(providerLabel('campflare')).toBe('Campflare');
+    expect(providerLabel('some_vendor')).toBe('Some Vendor');
+    expect(providerLabel(undefined)).toBe('');
   });
 
   test('labels the button, and degrades to plain Book', () => {

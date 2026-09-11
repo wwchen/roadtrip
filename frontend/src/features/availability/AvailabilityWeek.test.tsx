@@ -172,7 +172,7 @@ beforeEach(() => {
     availability: () => json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])])),
     campsites: () => json(catalogBody([catalogRow(1)], { 1: BOOKING_TEMPLATE })),
     watches: () => json({ watches: [], total: 0 }),
-    addToCart: () => json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart' }),
+    addToCart: () => json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart', provider: 'recgov' }),
   };
   vi.stubGlobal(
     'fetch',
@@ -1208,7 +1208,7 @@ describe('holding a site straight from the grid', () => {
     expect(screen.getByText(/Holding site… usually under a minute/)).toBeInTheDocument();
 
     await act(async () => {
-      release?.(json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart' }));
+      release?.(json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart', provider: 'recgov' }));
     });
   });
 
@@ -1220,9 +1220,9 @@ describe('holding a site straight from the grid', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
 
-    // The POI names no booking system, so the copy names none either.
-    expect(await screen.findByText('Site held in your cart')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Open your cart/ })).toHaveAttribute(
+    // The POI names no booking system; the hold's own provider does.
+    expect(await screen.findByText('Site held in your rec.gov cart')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open rec\.gov cart/ })).toHaveAttribute(
       'href',
       'https://www.recreation.gov/cart',
     );
@@ -1237,7 +1237,7 @@ describe('holding a site straight from the grid', () => {
     // landed somewhere else.
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
-    stubs.addToCart = () => json({ status: 'completed', cart_url: 'https://campflare.example/cart' });
+    stubs.addToCart = () => json({ status: 'completed', cart_url: 'https://campflare.example/cart', provider: 'campflare' });
     await mount({ booking_system: 'Campflare' });
     await armFirstCell();
 
@@ -1250,6 +1250,22 @@ describe('holding a site straight from the grid', () => {
       'https://campflare.example/cart',
     );
     expect(screen.queryByText(/rec\.gov/)).toBeNull();
+  });
+
+  test('the hold toast names the provider that held it, not the one serving the POI', async () => {
+    // An aliased campground: Campflare serves availability, rec.gov holds the
+    // cart. Only the wire knows which, so the toast follows it.
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () => json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart', provider: 'recgov' });
+    await mount({ booking_system: 'Campflare' });
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(await screen.findByText('Site held in your rec.gov cart')).toBeInTheDocument();
+    expect(screen.getByText(/Check out on rec\.gov within 15 minutes/)).toBeInTheDocument();
+    expect(screen.queryByText(/Campflare cart/)).toBeNull();
   });
 
   test('the request carries campsite_id as a NUMBER, matching the backend DTO', async () => {
@@ -1268,7 +1284,7 @@ describe('holding a site straight from the grid', () => {
     await armFirstCell();
 
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
-    await screen.findByText('Site held in your cart');
+    await screen.findByText('Site held in your rec.gov cart');
 
     expect(sentBody).toContain('"campsite_id":1');
     expect(sentBody).not.toContain('"campsite_id":"1"');
@@ -1304,7 +1320,7 @@ describe('holding a site straight from the grid', () => {
     expect(cartRequests).toBe(1);
 
     await act(async () => {
-      release?.(json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart' }));
+      release?.(json({ status: 'completed', cart_url: 'https://www.recreation.gov/cart', provider: 'recgov' }));
     });
   });
 

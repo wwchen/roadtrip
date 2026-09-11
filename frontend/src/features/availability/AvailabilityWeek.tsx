@@ -18,7 +18,7 @@ import { SiteMatrix, SiteMatrixSkeleton, type WatchGate } from './SiteMatrix';
 import { WatchPopover } from './WatchPopover';
 import { WeekNav } from './WeekNav';
 import { GENERIC_AVAILABILITY_ERROR, classifyAvailabilityErrorCode } from './availability-errors';
-import { reservationUrlFromTemplate } from './booking-links';
+import { providerLabel, reservationUrlFromTemplate } from './booking-links';
 import type { AvailabilityDay } from '@/api/availability-api';
 import { DEFAULT_SITE_COLUMN_WIDTH } from './site-column';
 import { useAvailabilityController } from './availability-controller';
@@ -208,14 +208,15 @@ function AvailabilityWeekView({
       void addToCart({ campsite_id: Number(campsiteId), start_date: date, end_date: stayEndDate(date) })
         .then((answer) => {
           actions.cartActionChanged({ type: 'held', cell, cartUrl: answer.cart_url });
+          const holder = holdProviderName(answer.provider, bookingSystem);
           toast({
             status: 'success',
-            title: bookingCopy.heldTitle(bookingSystem),
+            title: bookingCopy.heldTitle(holder),
             children: (
               <>
-                {bookingCopy.checkOutSoon(bookingSystem)}{' '}
+                {bookingCopy.checkOutSoon(holder)}{' '}
                 <a href={answer.cart_url} target="_blank" rel="noreferrer noopener">
-                  {bookingCopy.openCart(bookingSystem)}
+                  {bookingCopy.openCart(holder)}
                 </a>
               </>
             ),
@@ -704,6 +705,18 @@ function featureLatestDate(feature: PoiFeature): string | null {
   const properties = feature.properties ?? {};
   const raw = properties.latest_date ?? properties.latestDate;
   return typeof raw === 'string' && raw ? raw : null;
+}
+
+/**
+ * Whose cart the hold landed in. The wire's provider id wins over the POI's
+ * `booking_system` — an aliased campground is served by one vendor and booked
+ * through another — but the served name is kept when the two agree, so the
+ * toast reads the same as the rest of the page.
+ */
+function holdProviderName(provider: string | undefined, bookingSystem: string | undefined) {
+  const held = providerLabel(provider);
+  if (!held) return bookingSystem;
+  return bookingSystem && bookingSystem.toLowerCase() === held.toLowerCase() ? bookingSystem : held;
 }
 
 export { DEFAULT_SITE_COLUMN_WIDTH };

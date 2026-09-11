@@ -109,6 +109,9 @@ class BookingRoutesTest {
             assertEquals("completed", json["status"]!!.jsonPrimitive.content)
             // Verbatim from the outcome: the route knows no vendor's cart either.
             assertEquals(HELD_CART_URL, json["cart_url"]!!.jsonPrimitive.content)
+            // Who actually holds it — an aliased campground is served by one
+            // vendor and booked through another, so the POI cannot say.
+            assertEquals(BookingProvider.RECGOV.id, json["provider"]!!.jsonPrimitive.content)
             // The caller is taken from the session, never from the body.
             assertEquals(testUser, service.lastCaller)
             assertEquals(42L, service.lastCampsiteId)

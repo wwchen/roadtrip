@@ -21,6 +21,8 @@ export interface AddToCartResponse {
   status: 'completed';
   /** Where the held site is. Shown to the user; they finish checkout there. */
   cart_url: string;
+  /** The provider id whose cart it is — not always the one serving availability. */
+  provider: string;
 }
 
 /**

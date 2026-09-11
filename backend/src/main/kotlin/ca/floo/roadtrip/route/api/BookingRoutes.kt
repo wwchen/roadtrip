@@ -81,7 +81,13 @@ internal fun Route.bookingRoutes(service: BookingActionPort) {
 private suspend fun ApplicationCall.respondOutcome(outcome: AddToCartOutcome) =
     when (outcome) {
         is AddToCartOutcome.Held ->
-            respondEncodedJson(AddToCartResponseDto(status = BookingActionStatus.COMPLETED, cartUrl = outcome.cartUrl))
+            respondEncodedJson(
+                AddToCartResponseDto(
+                    status = BookingActionStatus.COMPLETED,
+                    cartUrl = outcome.cartUrl,
+                    provider = outcome.provider.id,
+                ),
+            )
         is AddToCartOutcome.Refused -> respondApiError(outcome.code, refusalStatus(outcome.code))
         is AddToCartOutcome.Failed ->
             respondApiError(

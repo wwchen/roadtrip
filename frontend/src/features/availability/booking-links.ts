@@ -98,6 +98,16 @@ export function bookingLabel(
 }
 
 /**
+ * A vendor slug as a person reads it. The add-to-cart wire answers with the id
+ * of the provider that actually held the site, which on an aliased campground
+ * is not the one serving availability.
+ */
+export function providerLabel(providerId: string | null | undefined): string {
+  const vendor = String(providerId || '').toLowerCase();
+  return vendor ? AGENCY_BY_VENDOR.get(vendor) || humanizeAgency(vendor) : '';
+}
+
+/**
  * Who takes the booking, by preference: the template's host, then the row's
  * vendor slug, then a guess humanised from whichever we have.
  */

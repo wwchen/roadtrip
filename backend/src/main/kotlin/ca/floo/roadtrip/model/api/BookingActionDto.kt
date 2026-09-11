@@ -27,4 +27,6 @@ data class AddToCartResponseDto(
     val status: String,
     /** Where the site is held — the booking provider's own cart, as it reported it. */
     @SerialName("cart_url") val cartUrl: String,
+    /** Whose cart it is: an aliased campground is served by one vendor and booked through another. */
+    val provider: String,
 )
