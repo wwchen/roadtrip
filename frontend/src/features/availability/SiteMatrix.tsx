@@ -39,7 +39,7 @@ import {
   type MatrixFilters,
   type MatrixSort,
 } from './matrix-rows';
-import { hasReservationUrlTemplate, type ReservationUrlTemplates } from './booking-links';
+import { agencyLabel, hasReservationUrlTemplate, type ReservationUrlTemplates } from './booking-links';
 import { dayOfMonthLabel, dowLabel } from './week-labels';
 import { clampSiteColumnWidth, saveSiteColumnWidth } from './site-column';
 import { CellBookPopover } from './CellBookPopover';
@@ -84,8 +84,6 @@ export interface SiteMatrixProps {
     /** The backend's reason the cart is or is not reachable for this reader. */
     cart: AddToCartState;
     cartAction: CartAction | null;
-    /** The POI's `booking_system` — the same source the hold toast names its provider from. */
-    bookingSystem?: string;
   };
   events: {
     filtersChanged: (filters: MatrixFilters) => void;
@@ -216,7 +214,6 @@ export function SiteMatrix(props: SiteMatrixProps) {
                 watchedDates={view.watchedDates}
                 watchGate={view.watchGate}
                 onOpenWatch={events.watchOpened}
-                bookingSystem={view.bookingSystem}
               />
             ))}
           </tbody>
@@ -571,7 +568,6 @@ function MatrixRow({
   watchedDates,
   watchGate,
   onOpenWatch,
-  bookingSystem,
 }: MatrixRowProps) {
   const id = rowId(row);
   const label = siteName(row);
@@ -615,7 +611,6 @@ function MatrixRow({
             watchedDates={watchedDates}
             watchGate={watchGate}
             onOpenWatch={onOpenWatch}
-            bookingSystem={bookingSystem}
           />
         ))}
       </tr>
@@ -656,8 +651,6 @@ interface MatrixCellProps {
   watchedDates: ReadonlySet<string>;
   watchGate: WatchGate;
   onOpenWatch: (anchor: HTMLElement, date: string) => void;
-  /** The POI's `booking_system` — the same source the hold toast names its provider from. */
-  bookingSystem?: string;
 }
 
 function MatrixCell({
@@ -676,7 +669,6 @@ function MatrixCell({
   watchedDates,
   watchGate,
   onOpenWatch,
-  bookingSystem,
 }: MatrixCellProps) {
   const [cellAnchor, setCellAnchor] = useState<HTMLElement | null>(null);
   const cell = cellState(row, day);
@@ -802,7 +794,9 @@ function MatrixCell({
                 : { state: 'no-credentials', onOpenSettings }
           }
           onClose={() => onArmBook(null)}
-          bookingSystem={bookingSystem}
+          // Labelled from what the row actually opens: an aliased campground's
+          // template can be rec.gov's even when Campflare serves it.
+          bookingAgency={agencyLabel(row, reservationUrlTemplates) || undefined}
         />
       ) : null}
     </td>

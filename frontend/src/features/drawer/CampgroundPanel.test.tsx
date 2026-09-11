@@ -9,7 +9,7 @@ import { PoiDrawer } from './PoiDrawer';
 
 const ID = 232447;
 
-/** A rec.gov-shaped campground, wide as `/api/pois/{id}` returns it. */
+/** A Recreation.gov-shaped campground, wide as `/api/pois/{id}` returns it. */
 const campground = (properties: Record<string, unknown> = {}) => ({
   type: 'Feature',
   id: ID,

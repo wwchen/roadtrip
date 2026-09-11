@@ -5,7 +5,7 @@ import { CellBookPopover, type CellCart } from './CellBookPopover';
 
 const anchors: HTMLElement[] = [];
 
-function renderPopover(cart: CellCart, onOpenBooking = vi.fn(), bookingSystem?: string) {
+function renderPopover(cart: CellCart, onOpenBooking = vi.fn(), bookingAgency?: string) {
   const anchor = document.body.appendChild(document.createElement('button'));
   anchors.push(anchor);
   render(
@@ -14,7 +14,7 @@ function renderPopover(cart: CellCart, onOpenBooking = vi.fn(), bookingSystem?: 
       onOpenBooking={onOpenBooking}
       cart={cart}
       onClose={vi.fn()}
-      bookingSystem={bookingSystem}
+      bookingAgency={bookingAgency}
     />,
   );
   return { onOpenBooking };
@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe('the cell booking popover', () => {
-  test('always offers the provider’s own booking page, named for the campground’s own vendor', async () => {
+  test('always offers the booking page, named for whoever takes the booking there', async () => {
     const { onOpenBooking } = renderPopover(
       { state: 'signed-out', onSignIn: vi.fn() },
       undefined,
@@ -39,7 +39,7 @@ describe('the cell booking popover', () => {
     expect(onOpenBooking).toHaveBeenCalledOnce();
   });
 
-  test('names no vendor of its own when the campground’s booking system is unknown', () => {
+  test('names no vendor of its own when the booking link names none', () => {
     renderPopover({ state: 'signed-out', onSignIn: vi.fn() });
 
     expect(screen.getByRole('button', { name: 'Book on the booking site' })).toBeInTheDocument();
@@ -64,11 +64,11 @@ describe('the cell booking popover', () => {
     expect(onSignIn).toHaveBeenCalledOnce();
   });
 
-  test('sends a user without rec.gov credentials to Settings', async () => {
+  test('sends a user without Recreation.gov credentials to Settings', async () => {
     const onOpenSettings = vi.fn();
     renderPopover({ state: 'no-credentials', onOpenSettings });
 
-    expect(screen.getByText('Add rec.gov login in Settings')).toBeInTheDocument();
+    expect(screen.getByText('Add Recreation.gov login in Settings')).toBeInTheDocument();
     await userEvent.click(cartRow());
 
     expect(onOpenSettings).toHaveBeenCalledOnce();

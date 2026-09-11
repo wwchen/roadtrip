@@ -87,7 +87,7 @@ describe('what the form offers', () => {
     const onOpenSettings = vi.fn();
     open({ capabilities: caps(['slack_notify'], 'no_credentials'), onOpenSettings });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Add your rec.gov login' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add your Recreation.gov login' }));
 
     expect(onOpenSettings).toHaveBeenCalledOnce();
   });

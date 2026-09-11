@@ -92,9 +92,8 @@ function AvailabilityWeekView({
   feature: PoiFeature;
 }) {
   const poiName = (feature.properties?.name as string | undefined) || 'this campground';
-  // Whose cart a hold lands in: the backend-computed booking system for this
-  // campground, the same string the drawer shows under "Booking via". Absent
-  // when no provider claims the POI, and the cart copy stays neutral there.
+  // Who serves this campground, as the drawer's "Booking via" says. The hold's
+  // own provider outranks it; this is the fallback and the failure copy's name.
   const bookingSystem = (feature.properties?.booking_system as string | undefined) || undefined;
 
   // The first date this provider will quote. Everything paginates forward from here,
@@ -375,7 +374,6 @@ function AvailabilityWeekView({
               watchGate,
               cart,
               cartAction,
-              bookingSystem,
             }}
             events={{
               filtersChanged: actions.changeFilters,

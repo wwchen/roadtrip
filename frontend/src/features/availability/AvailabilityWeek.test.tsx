@@ -477,7 +477,7 @@ describe('the week"s states', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText('rec.gov is limiting our checks')).toBeInTheDocument(),
+      expect(screen.getByText('Recreation.gov is limiting our checks')).toBeInTheDocument(),
     );
     expect(screen.getByText("They've throttled us, so we're holding off.")).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Show what we last saw' })).toBeNull();
@@ -493,7 +493,7 @@ describe('the week"s states', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText('rec.gov returned an error')).toBeInTheDocument(),
+      expect(screen.getByText('Recreation.gov returned an error')).toBeInTheDocument(),
     );
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Report it' })).toBeInTheDocument();
@@ -532,7 +532,7 @@ describe('the week"s states', () => {
       </AppProviders>,
     );
 
-    await waitFor(() => expect(screen.getByText("We can't reach rec.gov")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("We can't reach Recreation.gov")).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: "Tell me when it's back" })).toBeInTheDocument();
   });
@@ -591,7 +591,7 @@ describe('the calendar popover', () => {
     expect(screen.getByRole('button', { name: '11' })).not.toBeDisabled();
   });
 
-  // The ceiling is the provider's real horizon — 180 days on rec.gov, 183 on
+  // The ceiling is the provider's real horizon — 180 days on Recreation.gov, 183 on
   // ReserveCalifornia — not a flat year, and the picker picks a *week start*: the
   // last one that fits is seven days back from the horizon. Offering the horizon
   // itself sends the user to a request the backend refuses with
@@ -1163,11 +1163,9 @@ describe('holding a site straight from the grid', () => {
 
     await armFirstCell();
 
-    // The default fixture names no booking system, so the escape hatch reads
-    // neutrally too — it must not default to rec.gov for a provider it does
-    // not actually know.
+    // Named after the host of the template this row would actually open.
     const popover = await screen.findByRole('group', { name: 'Booking actions' });
-    expect(within(popover).getByRole('button', { name: 'Book on the booking site' })).toBeInTheDocument();
+    expect(within(popover).getByRole('button', { name: 'Book on Recreation.gov' })).toBeInTheDocument();
     expect(within(popover).getByRole('button', { name: /Add to cart/ })).toBeInTheDocument();
   });
 
@@ -1177,19 +1175,36 @@ describe('holding a site straight from the grid', () => {
     await mount();
     await armFirstCell();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Book on the booking site' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Book on Recreation.gov' }));
 
     expect(window.open).toHaveBeenCalled();
   });
 
-  test('the escape-hatch row names the campground’s own booking system', async () => {
+  test('the escape-hatch row names whoever takes the booking at the link it opens', async () => {
+    // An aliased campground: Campflare serves availability, but the campsite's
+    // template is rec.gov's, and this row opens that template. Labelling it from
+    // `booking_system` sent the user to a page the button had misnamed.
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
     await mount({ booking_system: 'Campflare' });
     await armFirstCell();
 
     const popover = await screen.findByRole('group', { name: 'Booking actions' });
-    expect(within(popover).getByRole('button', { name: 'Book on Campflare' })).toBeInTheDocument();
+    const host = new URL(BOOKING_TEMPLATE).hostname.replace(/^www\./, '');
+    const book = within(popover).getByRole('button', { name: /^Book on / });
+    expect(book.textContent?.toLowerCase()).toBe(`book on ${host}`);
+    expect(within(popover).queryByRole('button', { name: 'Book on Campflare' })).toBeNull();
+  });
+
+  test('the escape-hatch row follows a non-recgov template', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.campsites = () => json(catalogBody([catalogRow(1)], { 1: 'https://camping.bcparks.ca/site/1' }));
+    await mount({ booking_system: 'Campflare' });
+    await armFirstCell();
+
+    const popover = await screen.findByRole('group', { name: 'Booking actions' });
+    expect(within(popover).getByRole('button', { name: 'Book on BC Parks' })).toBeInTheDocument();
   });
 
   test('a hold in flight locks the cell and says so at the bottom of the panel', async () => {
@@ -1221,8 +1236,8 @@ describe('holding a site straight from the grid', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
 
     // The POI names no booking system; the hold's own provider does.
-    expect(await screen.findByText('Site held in your rec.gov cart')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Open rec\.gov cart/ })).toHaveAttribute(
+    expect(await screen.findByText('Site held in your Recreation.gov cart')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open Recreation\.gov cart/ })).toHaveAttribute(
       'href',
       'https://www.recreation.gov/cart',
     );
@@ -1233,7 +1248,7 @@ describe('holding a site straight from the grid', () => {
 
   test('the hold toast names the booking system this campground is served by', async () => {
     // The cart is whichever provider holds the site, and the drawer already
-    // knows which one that is — the copy must not say rec.gov on a hold that
+    // knows which one that is — the copy must not say Recreation.gov on a hold that
     // landed somewhere else.
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
@@ -1249,11 +1264,11 @@ describe('holding a site straight from the grid', () => {
       'href',
       'https://campflare.example/cart',
     );
-    expect(screen.queryByText(/rec\.gov/)).toBeNull();
+    expect(screen.queryByText(/Recreation\.gov/)).toBeNull();
   });
 
   test('the hold toast names the provider that held it, not the one serving the POI', async () => {
-    // An aliased campground: Campflare serves availability, rec.gov holds the
+    // An aliased campground: Campflare serves availability, Recreation.gov holds the
     // cart. Only the wire knows which, so the toast follows it.
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
@@ -1263,8 +1278,8 @@ describe('holding a site straight from the grid', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
 
-    expect(await screen.findByText('Site held in your rec.gov cart')).toBeInTheDocument();
-    expect(screen.getByText(/Check out on rec\.gov within 15 minutes/)).toBeInTheDocument();
+    expect(await screen.findByText('Site held in your Recreation.gov cart')).toBeInTheDocument();
+    expect(screen.getByText(/Check out on Recreation\.gov within 15 minutes/)).toBeInTheDocument();
     expect(screen.queryByText(/Campflare cart/)).toBeNull();
   });
 
@@ -1284,7 +1299,7 @@ describe('holding a site straight from the grid', () => {
     await armFirstCell();
 
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
-    await screen.findByText('Site held in your rec.gov cart');
+    await screen.findByText('Site held in your Recreation.gov cart');
 
     expect(sentBody).toContain('"campsite_id":1');
     expect(sentBody).not.toContain('"campsite_id":"1"');
@@ -1332,7 +1347,7 @@ describe('holding a site straight from the grid', () => {
     await userEvent.click(armed);
 
     // A keyboard user lands on the choice, not on a button whose meaning changed.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Book on the booking site' })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Book on Recreation.gov' })).toHaveFocus());
 
     await userEvent.keyboard('{Escape}');
 
@@ -1372,7 +1387,7 @@ describe('holding a site straight from the grid', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
 
     expect(
-      await screen.findByText('Your rec.gov session expired — test login in Settings.'),
+      await screen.findByText('Your Recreation.gov session expired — test login in Settings.'),
     ).toBeInTheDocument();
     expect(screen.queryByText(/recgov_spa_logged_out/)).toBeNull();
   });

@@ -77,7 +77,7 @@ describe('AccountPanel', () => {
       />,
     );
 
-    expect(screen.queryByRole('button', { name: 'Remove rec.gov credentials' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove Recreation.gov credentials' })).not.toBeInTheDocument();
   });
 
   test('the danger zone appears once one is', async () => {

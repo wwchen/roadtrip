@@ -20,33 +20,29 @@
 // of fragments and get the word order wrong.
 
 /**
- * What we call recreation.gov to users.
- *
- * The product said "Recreation.gov" in error banners and credential labels and
- * "rec.gov" in the booking rows, which is one product with two names for the same
- * vendor. It is the short form everywhere now.
+ * What we call recreation.gov to users — the one name, matching the vendor's own
+ * branding and the `booking_system` the backend serves. Two names for one vendor
+ * used to collide on a single screen.
  */
-export const VENDOR = 'rec.gov';
+export const VENDOR = 'Recreation.gov';
 
 /**
- * What every one of `bookingCopy`'s provider-naming functions falls back to
- * when the POI carries no `booking_system` — one neutral name so a reader
- * meets the same "no vendor known" voice everywhere, not a different filler
- * word per sentence.
+ * The neutral name for a booking site we cannot name. `heldTitle` and
+ * `openCart` read better with the vendor simply dropped ("your cart"), so they
+ * do that instead; every sentence that needs a noun there uses this one.
  */
 const UNNAMED_BOOKING_SITE = 'the booking site';
 
 export const bookingCopy = {
-  /** The popover's escape hatch to the provider's own page. */
+  /** The popover's escape hatch, named after whoever takes the booking at that link. */
   openProvider: (bookingSystem?: string) => `Book on ${bookingSystem ?? UNNAMED_BOOKING_SITE}`,
   addToCart: 'Add to cart',
   /** The armed cell's label, before the second tap. */
   book: 'Book',
   held: 'Cart',
   holdRunning: 'Holding site… usually under a minute; can take a few',
-  // The three lines of the hold toast. A hold lands in whichever provider serves
-  // the campground, so each takes that provider's name (the POI's
-  // `booking_system`) rather than naming one vendor for all of them.
+  // The three lines of the hold toast. Each takes the name of the provider that
+  // actually held the site, rather than naming one vendor for all of them.
   heldTitle: (bookingSystem?: string) => `Site held in your ${bookingSystem ? `${bookingSystem} ` : ''}cart`,
   openCart: (bookingSystem?: string) => `Open ${bookingSystem ?? 'your'} cart ↗`,
   checkOutSoon: (bookingSystem?: string) =>

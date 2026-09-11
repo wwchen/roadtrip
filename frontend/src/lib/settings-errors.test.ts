@@ -15,15 +15,15 @@ describe('settingsErrorMessage', () => {
     expect(settingsErrorMessage('email_send_failed')).toBe("Couldn't send the test email.");
   });
 
-  test('maps the rec.gov booking codes', () => {
+  test('maps the Recreation.gov booking codes', () => {
     expect(settingsErrorMessage('login_failed')).toBe(
-      'rec.gov rejected these credentials.',
+      'Recreation.gov rejected these credentials.',
     );
     expect(settingsErrorMessage('mfa_invalid')).toBe(
       'That code was rejected. Start the login again for a new one.',
     );
     expect(settingsErrorMessage('captcha_required')).toBe(
-      'rec.gov showed a challenge we cannot solve. Try again in a moment.',
+      'Recreation.gov showed a challenge we cannot solve. Try again in a moment.',
     );
     expect(settingsErrorMessage('companion_unavailable')).toBe(
       "The booking service isn't reachable right now.",
@@ -32,7 +32,7 @@ describe('settingsErrorMessage', () => {
 
   test('the transient companion codes read as "try again", not as failures', () => {
     expect(settingsErrorMessage('profile_busy')).toBe(
-      'Another operation is using your rec.gov session — try again shortly.',
+      'Another operation is using your Recreation.gov session — try again shortly.',
     );
     expect(settingsErrorMessage('browser_cap_reached')).toBe(
       'The booking service is at capacity — try again shortly.',
@@ -64,7 +64,7 @@ describe('settingsErrorMessage', () => {
     // The grid's add-to-cart preflights session health, then the session dies
     // before the click. These three arrive where `recgov_session_expired`
     // would have, so they must not read differently from it.
-    const expected = 'Your rec.gov session expired — test login in Settings.';
+    const expected = 'Your Recreation.gov session expired — test login in Settings.';
 
     expect(settingsErrorMessage('recgov_session_expired')).toBe(expected);
     expect(settingsErrorMessage('recgov_spa_logged_out')).toBe(expected);
@@ -73,11 +73,11 @@ describe('settingsErrorMessage', () => {
 
   test('a refused automated sign-in points at the credentials, not at the session', () => {
     // Distinct from the two above: here we *did* sign in again with the saved
-    // credentials and rec.gov refused, so a changed password is on the table.
+    // credentials and Recreation.gov refused, so a changed password is on the table.
     const message = settingsErrorMessage('recgov_login_failed');
 
     expect(message).toBe(
-      'rec.gov would not sign you back in — check your credentials in Settings.',
+      'Recreation.gov would not sign you back in — check your credentials in Settings.',
     );
     expect(message).not.toBe(settingsErrorMessage('recgov_spa_logged_out'));
   });
@@ -87,7 +87,7 @@ describe('settingsErrorMessage', () => {
     const message = settingsErrorMessage('recgov_cart_unreachable');
 
     expect(message).toBe(
-      "You're signed in, but rec.gov's cart could not be read — try again shortly.",
+      "You're signed in, but Recreation.gov's cart could not be read — try again shortly.",
     );
     expect(message).not.toMatch(/test login/i);
   });
@@ -108,7 +108,7 @@ describe('settingsErrorMessage', () => {
 
   test('the three add-to-cart misses read differently from each other', () => {
     // They all used to be "cart_not_added — someone else likely took it",
-    // which is wrong advice for two of them: if rec.gov never offered the
+    // which is wrong advice for two of them: if Recreation.gov never offered the
     // dates or the button, retrying cannot help.
     const dates = settingsErrorMessage('recgov_dates_not_offered');
     const button = settingsErrorMessage('recgov_no_reserve_button');
@@ -122,9 +122,9 @@ describe('settingsErrorMessage', () => {
     expect(dates).not.toMatch(/try again/i);
   });
 
-  test('the generic add-to-cart codes name the campground’s own provider, not rec.gov', () => {
+  test('the generic add-to-cart codes name the campground’s own provider, not Recreation.gov', () => {
     // `BookingActionService` returns these for any provider's cart, so they
-    // must not hardcode rec.gov — Campflare's failure should say Campflare.
+    // must not hardcode Recreation.gov — Campflare's failure should say Campflare.
     expect(settingsErrorMessage('cart_not_added', 'Campflare')).toBe(
       'Campflare would not add it — someone else likely took it. Try again.',
     );
@@ -140,8 +140,8 @@ describe('settingsErrorMessage', () => {
     expect(settingsErrorMessage('credentials_required')).toBe(
       'Add your booking credentials in Settings first.',
     );
-    expect(settingsErrorMessage('cart_not_added')).not.toMatch(/rec\.gov/i);
-    expect(settingsErrorMessage('credentials_required')).not.toMatch(/rec\.gov/i);
+    expect(settingsErrorMessage('cart_not_added')).not.toMatch(/Recreation\.gov/i);
+    expect(settingsErrorMessage('credentials_required')).not.toMatch(/Recreation\.gov/i);
   });
 
   test('falls back for a missing code', () => {
