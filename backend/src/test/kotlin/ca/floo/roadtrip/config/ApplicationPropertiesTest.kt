@@ -1,11 +1,7 @@
 package ca.floo.roadtrip.config
 
+import ca.floo.roadtrip.fixtures.configResourceClassLoader
 import org.junit.jupiter.api.Test
-import java.io.ByteArrayInputStream
-import java.io.InputStream
-import java.net.URL
-import java.net.URLConnection
-import java.net.URLStreamHandler
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
@@ -17,7 +13,7 @@ class ApplicationPropertiesTest {
                 ApplicationProperties.load(
                     env = emptyMap(),
                     classLoader =
-                        resourceClassLoader(
+                        configResourceClassLoader(
                             "application.yaml" to
                                 """
                                 shared: base-yaml
@@ -46,7 +42,7 @@ class ApplicationPropertiesTest {
                 ApplicationProperties.load(
                     env = emptyMap(),
                     classLoader =
-                        resourceClassLoader(
+                        configResourceClassLoader(
                             "application.yaml" to
                                 """
                                 direct: ${'$'}{SECRET_VALUE}
@@ -78,36 +74,13 @@ class ApplicationPropertiesTest {
                 ApplicationProperties.load(
                     env = mapOf("ROADTRIP_PROFILE" to "typo"),
                     classLoader =
-                        resourceClassLoader(
+                        configResourceClassLoader(
                             "application.yaml" to "roadtrip:\n  static-dir: .",
                         ),
                 )
             }
 
         assertEquals("application config resource 'application-typo.yaml' not found", err.message)
-    }
-
-    private fun resourceClassLoader(vararg resources: Pair<String, String>): ClassLoader {
-        val byName = resources.toMap()
-        return object : ClassLoader(null) {
-            override fun getResource(name: String): URL? =
-                byName[name]?.let { content ->
-                    URL(
-                        null,
-                        "memory:$name",
-                        object : URLStreamHandler() {
-                            override fun openConnection(url: URL): URLConnection =
-                                object : URLConnection(url) {
-                                    override fun connect() = Unit
-
-                                    override fun getInputStream(): InputStream = ByteArrayInputStream(content.toByteArray())
-                                }
-                        },
-                    )
-                }
-
-            override fun getResourceAsStream(name: String) = byName[name]?.byteInputStream()
-        }
     }
 
     private fun <T> withSystemProperties(

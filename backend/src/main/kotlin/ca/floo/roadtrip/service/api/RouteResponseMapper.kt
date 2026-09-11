@@ -8,25 +8,13 @@ import ca.floo.roadtrip.model.api.RouteLegDto
 import ca.floo.roadtrip.model.api.RouteLineGeometryDto
 import ca.floo.roadtrip.model.api.RoutePropertiesDto
 import ca.floo.roadtrip.model.routing.RoutePlan
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
-
-// Only for embedding each feature as a JsonElement inside the collection DTO;
-// HTTP serialization belongs to the route layer. Same two settings as the API
-// encoder, so the bytes are identical either way.
-@OptIn(ExperimentalSerializationApi::class)
-private val routeFeatureJson =
-    Json {
-        encodeDefaults = true
-        explicitNulls = false
-    }
 
 internal class RouteResponseMapper {
     fun featureCollection(plan: RoutePlan): RouteFeatureCollectionDto {
         val features =
             mutableListOf(
-                routeFeatureJson.encodeToJsonElement(
+                embeddedApiJson.encodeToJsonElement(
                     RouteFeatureDto(
                         geometry = RouteLineGeometryDto(coordinates = plan.directions.coordinates),
                         properties =
@@ -49,7 +37,7 @@ internal class RouteResponseMapper {
         val corridorGeometry = plan.corridorGeoJson
         if (radiusMiles != null && corridorGeometry != null) {
             features +=
-                routeFeatureJson.encodeToJsonElement(
+                embeddedApiJson.encodeToJsonElement(
                     CorridorFeatureDto(
                         geometry = corridorGeometry,
                         properties = CorridorPropertiesDto(radiusMiles = radiusMiles),

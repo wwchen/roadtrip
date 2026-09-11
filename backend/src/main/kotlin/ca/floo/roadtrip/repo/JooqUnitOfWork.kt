@@ -3,7 +3,8 @@ package ca.floo.roadtrip.repo
 import org.jooq.DSLContext
 
 /**
- * The only `transactionResult` call site in the backend.
+ * The only transaction that spans repos. A repo may still open one over
+ * statements it owns end to end; none of those crosses a repo boundary.
  *
  * [autocommit] is the non-transactional bundle, bound to the pool's own
  * autocommit context. The import is non-transactional by decision (RFC 0004),

@@ -16,16 +16,10 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.route.api.pois.mapProviderError
-import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
@@ -49,7 +43,7 @@ class AspiraObservationsTest {
     private val tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA)
 
     @Test
-    fun `an aspira WAF block renders through the shared availability error dto`() =
+    fun `an aspira WAF block classifies as an upstream block`() =
         runBlocking {
             val client =
                 fakeAspiraClient(
@@ -65,13 +59,10 @@ class AspiraObservationsTest {
                         endDate = LocalDate.parse("2026-07-02"),
                     )
                 }.exceptionOrNull()
+            // How the route renders this is CampsiteErrorLoggingTest's business.
             require(classified is AvailabilityProviderError.UpstreamBlocked) { "expected UpstreamBlocked, got $classified" }
-
-            val json = Json.parseToJsonElement(encodeApiJson(mapProviderError(classified).second)).jsonObject
-
-            assertEquals("error", json["state"]!!.jsonPrimitive.content)
-            assertEquals("upstream_blocked", json["error"]!!.jsonPrimitive.content)
-            assertEquals(503, json["upstream_status"]!!.jsonPrimitive.int)
+            assertEquals("upstream_blocked", classified.code)
+            assertEquals(503, (classified.cause as AspiraException).httpStatus)
         }
 
     @Test

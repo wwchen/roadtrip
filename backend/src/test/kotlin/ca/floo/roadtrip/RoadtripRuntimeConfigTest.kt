@@ -8,6 +8,7 @@ import ca.floo.roadtrip.config.ConfigSection
 import ca.floo.roadtrip.config.ReadPathProviderConfig
 import ca.floo.roadtrip.di.notificationTriggerKinds
 import ca.floo.roadtrip.di.validateReadPathDataProviders
+import ca.floo.roadtrip.fixtures.configResourceClassLoader
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
@@ -125,6 +126,62 @@ class RoadtripRuntimeConfigTest {
         assertEquals(
             setOf("google-oauth2", "windowslive"),
             authConfig(mapOf("roadtrip.auth.allowed-connections" to "google-oauth2,windowslive"))!!.allowedConnections,
+        )
+    }
+
+    @Test
+    fun `the shipped auth yaml states the allowed connection list`() {
+        assertEquals(setOf("google-oauth2"), shippedAppConfig().auth!!.allowedConnections)
+    }
+
+    @Test
+    fun `a two-value yaml list reaches the config as both connections`() {
+        // The shipped list has one entry, which equals the code default — so
+        // only a longer list proves the yaml path is what is read.
+        val properties =
+            ApplicationProperties.load(
+                env = emptyMap(),
+                classLoader =
+                    configResourceClassLoader(
+                        "application.yaml" to
+                            """
+                            roadtrip:
+                              auth:
+                                provider: oidc
+                                providers:
+                                  oidc:
+                                    issuer: https://test.example
+                                    client-id: test-client
+                                    client-secret: test-secret
+                                allowed-connections:
+                                  - google-oauth2
+                                  - windowslive
+                            """.trimIndent(),
+                        "application-local.yaml" to "{}",
+                    ),
+            )
+
+        assertEquals(
+            setOf("google-oauth2", "windowslive"),
+            AuthConfig.fromConfig(ConfigSection(properties).section("roadtrip").section("auth"))!!.allowedConnections,
+        )
+    }
+
+    /**
+     * The shipped config with the active vendor's credentials filled in, which
+     * the environment supplies in production. Without them auth is disabled and
+     * nothing under `roadtrip.auth` is read at all.
+     */
+    private fun shippedAppConfig(): AppConfig {
+        val properties = ApplicationProperties.load()
+        val provider = properties.getValue("roadtrip.auth.provider")
+        return AppConfig.fromProperties(
+            properties +
+                mapOf(
+                    "roadtrip.auth.providers.$provider.issuer" to "https://test.example",
+                    "roadtrip.auth.providers.$provider.client-id" to "test-client",
+                    "roadtrip.auth.providers.$provider.client-secret" to "test-secret",
+                ),
         )
     }
 

@@ -8,17 +8,20 @@ import kotlin.test.assertEquals
 private const val MAIN_SOURCE_ROOT = "backend/src/main/kotlin"
 private const val KOTLIN_EXTENSION = ".kt"
 
-private const val JOOQ_IMPORT = "import org.jooq"
-private const val KTOR_IMPORT = "import io.ktor"
-private const val REPO_IMPORT = "import ca.floo.roadtrip.repo"
+// Package prefixes, not import lines: a fully-qualified reference carries no
+// import, and that spelling is in use here (RouteModule writes
+// org.slf4j.LoggerFactory inline), so matching imports alone leaves the drift
+// these rules exist to catch a supported way past them.
+private const val JOOQ_PACKAGE = "org.jooq"
+private const val KTOR_PACKAGE = "io.ktor"
+private const val REPO_PACKAGE = "ca.floo.roadtrip.repo"
 
-/** Persistence owns jOOQ; the two infrastructure DI modules are allowed to name it to wire it. */
+/** Persistence owns jOOQ; the infrastructure DI module is allowed to name it to wire it. */
 private val jooqAllowed =
     listOf(
         "ca/floo/roadtrip/repo/",
         "ca/floo/roadtrip/db/",
         "ca/floo/roadtrip/di/InfraModule.kt",
-        "ca/floo/roadtrip/di/RepoModule.kt",
     )
 
 /** Builds an OIDC redirect URL with URLBuilder; it serves no HTTP. */
@@ -49,11 +52,11 @@ class LayeringGuardTest {
     }
 
     @Test
-    fun `only repo, db and the infrastructure DI modules name jOOQ`() =
+    fun `only repo, db and the infrastructure DI module name jOOQ`() =
         assertEquals(
             emptyList(),
             sources
-                .filter { (path, text) -> text.contains(JOOQ_IMPORT) && jooqAllowed.none { path.startsWith(it) } }
+                .filter { (path, text) -> text.contains(JOOQ_PACKAGE) && jooqAllowed.none { path.startsWith(it) } }
                 .map { it.first },
             "jOOQ belongs to persistence. Take a repo or a UnitOfWork instead of a DSLContext, " +
                 "and translate org.jooq.exception.DataAccessException inside the repo.",
@@ -65,7 +68,7 @@ class LayeringGuardTest {
             emptyList(),
             sources
                 .filter { (path, text) ->
-                    path.startsWith(SERVICE_PREFIX) && text.contains(KTOR_IMPORT) && path != KTOR_ALLOWED_UNDER_SERVICE
+                    path.startsWith(SERVICE_PREFIX) && text.contains(KTOR_PACKAGE) && path != KTOR_ALLOWED_UNDER_SERVICE
                 }.map { it.first },
             "services do not construct HTTP responses. Return a typed outcome and let the route map it to a status.",
         )
@@ -74,7 +77,7 @@ class LayeringGuardTest {
     fun `routes never reach into a repo`() =
         assertEquals(
             emptyList(),
-            sources.filter { (path, text) -> path.startsWith(ROUTE_PREFIX) && text.contains(REPO_IMPORT) }.map { it.first },
+            sources.filter { (path, text) -> path.startsWith(ROUTE_PREFIX) && text.contains(REPO_PACKAGE) }.map { it.first },
             "routes are the HTTP shell. Put the read behind a service or controller.",
         )
 }

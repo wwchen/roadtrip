@@ -218,7 +218,6 @@ private fun availabilityDashboardController(
  * Assembles the campsite read-slice controller. Mirrors [availabilityWatchController]:
  * composition stays here, so the route file remains a pure HTTP shell.
  */
-@Suppress("LongParameterList")
 private fun campsiteAvailabilityController(
     poiRepo: PoiRepo,
     campsitesRepo: CampsiteRepo,

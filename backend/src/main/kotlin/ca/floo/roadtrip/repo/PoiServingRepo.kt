@@ -5,7 +5,9 @@ import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
 import ca.floo.roadtrip.model.domain.poi.PoiResult
 import ca.floo.roadtrip.model.domain.poi.PoiRow
 import ca.floo.roadtrip.model.domain.poi.PoiSearchHit
+import ca.floo.roadtrip.support.TOPOLOGY_FAULT_EMPTY_RESULT
 import ca.floo.roadtrip.support.causeChain
+import ca.floo.roadtrip.support.isTopologyFault
 import org.jooq.DSLContext
 import org.jooq.exception.DataAccessException
 import org.slf4j.LoggerFactory
@@ -14,12 +16,7 @@ private const val SAMPLE_GRID_DIM: Int = 10
 
 private const val MIN_PER_CATEGORY_ALLOCATION: Int = 50
 
-private const val TOPOLOGY_FAULT = "TopologyException"
-
 private val poiServingLog = LoggerFactory.getLogger("PoiServingRepo")
-
-/** A GEOS self-intersection in one corridor polygon is a bad shape, not an outage. */
-internal fun isTopologyFault(e: DataAccessException): Boolean = causeChain(e).contains(TOPOLOGY_FAULT)
 
 private class CampgroundProviderFilter(
     enabledDataProviders: Set<String>,
@@ -133,7 +130,7 @@ internal class PoiServingRepo(
             }
         } catch (e: DataAccessException) {
             if (!isTopologyFault(e)) throw e
-            poiServingLog.warn("on-route GEOS topology fault, returning empty: {}", causeChain(e))
+            poiServingLog.warn(TOPOLOGY_FAULT_EMPTY_RESULT, causeChain(e))
             emptyList()
         }
     }

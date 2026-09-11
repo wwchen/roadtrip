@@ -432,7 +432,7 @@ val serviceModule =
             )
         }
         single { RouteCorridorService(get<RouteCorridorRepo>()) }
-        single { RoutePlanService(routeCache = get(), corridorService = get<RouteCorridorService>()) }
+        single { RoutePlanService(routeCache = get<RouteCache>(), corridorService = get<RouteCorridorService>()) }
         single { RouteResponseMapper() }
         single { GeocodeService(get<MapboxGeocoder>()) }
         single {

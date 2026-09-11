@@ -5,10 +5,10 @@ import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import ca.floo.roadtrip.service.routing.lineStringGeoJson
 import ca.floo.roadtrip.support.RoutingException
+import ca.floo.roadtrip.support.TOPOLOGY_FAULT_EMPTY_RESULT
 import ca.floo.roadtrip.support.causeChain
+import ca.floo.roadtrip.support.isTopologyFault
 import org.slf4j.LoggerFactory
-
-private const val TOPOLOGY_FAULT = "TopologyException"
 
 private val poisOnRouteLog = LoggerFactory.getLogger("PoisOnRouteService")
 
@@ -49,9 +49,8 @@ internal class PoisOnRouteService(
 
     /** A GEOS self-intersection on one corridor is a bad shape, not an outage: serve zero POIs. */
     private fun emptyOnTopologyFault(e: RoutingException): List<PoiRow> {
-        val chain = causeChain(e)
-        if (!chain.contains(TOPOLOGY_FAULT)) throw e
-        poisOnRouteLog.warn("on-route GEOS topology fault, returning empty: {}", chain)
+        if (!isTopologyFault(e)) throw e
+        poisOnRouteLog.warn(TOPOLOGY_FAULT_EMPTY_RESULT, causeChain(e))
         return emptyList()
     }
 }

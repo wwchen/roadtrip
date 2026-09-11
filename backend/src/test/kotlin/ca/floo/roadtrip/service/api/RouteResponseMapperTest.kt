@@ -7,8 +7,10 @@ import ca.floo.roadtrip.route.common.encodeApiJson
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** The corridor polygon as PostGIS hands it over: already-encoded GeoJSON text. */
 private const val CORRIDOR_POLYGON_JSON =
@@ -75,9 +77,21 @@ class RouteResponseMapperTest {
                 .single()
                 .jsonObject["geometry"]!!
                 .jsonObject["type"]!!
-                .toString()
-                .trim('"'),
+                .jsonPrimitive.content,
         )
+    }
+
+    @Test
+    fun `a route whose directions carry no legs emits an empty legs array`() {
+        val plan =
+            RoutePlan(
+                directions = directions.copy(legs = emptyList()),
+                waypoints = waypoints,
+                corridorRadiusMiles = null,
+                corridorGeoJson = null,
+            )
+
+        assertTrue(encodeApiJson(mapper.featureCollection(plan)).contains(""""legs":[]"""))
     }
 
     @Test
