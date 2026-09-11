@@ -22,11 +22,10 @@ internal class BookingIdentityResolver(
     fun forCampground(
         campground: Campground,
         servingProvider: AvailabilityProvider?,
-        declaredPrimary: BookingProviderRef? = campground.bookingRef(),
     ): BookingProviderRef? =
         campground.bookingIdentities().firstOrNull { tenants.sells(it.provider) }
             ?: servingProvider?.claimedRef(campground)
-            ?: declaredPrimary
+            ?: campground.bookingRef()
 
     /**
      * The campsite row's identity. The site names its own vendors; the tenant
@@ -40,4 +39,19 @@ internal class BookingIdentityResolver(
             .firstOrNull { tenants.sells(it.provider) }
             ?.let { resolved.campground.bookingRefFor(it.provider) }
             ?: forCampground(resolved.campground, resolved.provider)
+
+    /**
+     * The booking site a campsite row names. [resolved] is null when no
+     * *enabled* availability provider claims the campground; the row still
+     * books somewhere, so it falls back to the campground's own identity
+     * rather than going silent in that environment.
+     */
+    fun bookingSiteName(
+        resolved: ResolvedAvailabilityTarget?,
+        campground: Campground,
+    ): String? =
+        when (resolved) {
+            null -> forCampground(campground, servingProvider = null)
+            else -> forCampsite(resolved)
+        }?.let(tenants::displayName)
 }

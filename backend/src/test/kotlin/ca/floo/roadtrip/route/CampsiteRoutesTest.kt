@@ -12,6 +12,7 @@ import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.metadata.registry.TenantRegistry
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -197,6 +198,28 @@ class CampsiteRoutesTest : SharedDbTest() {
         return fixture.poiId
     }
 
+    /** A Campflare row no other vendor sells: the site a person books on is Campflare's own. */
+    private fun seedCampflareOnlyPoiWithCampsite(): Long {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "white-wolf-campground-567",
+                name = "White Wolf",
+                lon = -119.65,
+                lat = 37.87,
+                source = "campflare",
+                bookingProvider = "campflare",
+                bookingProviderRef = "white-wolf-campground-567",
+            )
+        ctx.seedCampsite(
+            campgroundId = fixture.catalogId,
+            vendor = "campflare",
+            vendorId = "campflare-site-11",
+            bookingProvider = "campflare",
+            bookingProviderRef = "campflare-site-11",
+        )
+        return fixture.poiId
+    }
+
     /** One vendor, one tenant, no alias: the plain case the aliased one is read against. */
     private fun seedBcParksPoiWithCampsite(): Long {
         val fixture =
@@ -261,6 +284,46 @@ class CampsiteRoutesTest : SharedDbTest() {
         }
 
     /**
+     * No enabled availability provider claims the campground, so the row has no
+     * resolved target at all. The registry still knows who sells it, so the row
+     * must read the same here as where rec.gov is wired up.
+     */
+    @Test
+    fun `campsite rows keep their booking site when no availability provider is enabled`() =
+        testApplication {
+            application { routeTestApplication { campsiteRoutesUnderTest(providers = emptyList()) } }
+            val aliasedPoiId = seedAliasedCampflarePoiWithCampsite()
+
+            val body = client.get("/api/pois/$aliasedPoiId/campsites").bodyAsText()
+            val row =
+                Json
+                    .parseToJsonElement(body)
+                    .jsonObject["campsites"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals("Recreation.gov", row["booking_system"]?.jsonPrimitive?.content)
+        }
+
+    /** The campsite branch of the same rule: no vendor sells it but the one serving it. */
+    @Test
+    fun `a Campflare-only row names Campflare`() =
+        testApplication {
+            application { routeTestApplication { campsiteRoutesUnderTest(providers = tenantProviders()) } }
+            val poiId = seedCampflareOnlyPoiWithCampsite()
+
+            val body = client.get("/api/pois/$poiId/campsites").bodyAsText()
+            val row =
+                Json
+                    .parseToJsonElement(body)
+                    .jsonObject["campsites"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals("Campflare", row["booking_system"]?.jsonPrimitive?.content)
+        }
+
+    /**
      * The reservation template comes from the *serving* availability provider
      * (CampsiteCatalogService → targets.resolve(campsite).provider), while
      * booking_system comes from the identity resolver. On an aliased Campflare
@@ -285,7 +348,7 @@ class CampsiteRoutesTest : SharedDbTest() {
                     .content
             // The template still carries its window placeholders, which are not
             // legal URI characters; the host is everything before the query.
-            val host = URI(template.substringBefore('?')).host.lowercase().removePrefix("www.")
+            val host = TenantRegistry.normalizeHost(URI(template.substringBefore('?')).host)
             assertEquals("recreation.gov", host)
             assertEquals("Recreation.gov", row["booking_system"]?.jsonPrimitive?.content)
             assertEquals(

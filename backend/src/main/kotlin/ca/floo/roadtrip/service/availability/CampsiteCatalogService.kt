@@ -2,9 +2,10 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.api.CampsiteDto
 import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteKind
-import ca.floo.roadtrip.model.metadata.registry.TenantRegistry
+import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.ref.RefResolver
 import ca.floo.roadtrip.service.ref.RefValue
@@ -13,16 +14,19 @@ import ca.floo.roadtrip.service.ref.resolve
 internal class CampsiteCatalogService(
     private val refResolver: RefResolver,
     private val campsitesRepo: CampsiteRepo,
+    private val campgroundRepo: CampgroundRepo,
     private val targets: AvailabilityTargetResolver,
     private val identities: BookingIdentityResolver,
-    private val tenants: TenantRegistry,
 ) {
     fun campsitesForPoi(
         poiId: Long,
         siteTypes: List<CampsiteKind>,
     ): PoiCampsitesResponseSchema {
-        val campgrounds = refResolver.resolve<RefValue.CampgroundId>(RefValue.PoiId(poiId))
-        if (campgrounds.isEmpty()) throw AvailabilityServiceError.NotFound
+        val campgroundIds = refResolver.resolve<RefValue.CampgroundId>(RefValue.PoiId(poiId))
+        if (campgroundIds.isEmpty()) throw AvailabilityServiceError.NotFound
+        // Loaded once per request: a row whose provider is disabled still names
+        // the booking site its own campground books through.
+        val campgroundsById = campgroundIds.mapNotNull { campgroundRepo.findById(it.id) }.associateBy { it.id }
         val rows =
             campsitesRepo
                 .findByPoi(poiId)
@@ -33,7 +37,10 @@ internal class CampsiteCatalogService(
             type = CAMPSITE_RESPONSE_TYPE,
             campsites =
                 rows.map { (campsite, resolved) ->
-                    CampsiteDto.from(campsite, bookingSystem = bookingSystem(resolved))
+                    CampsiteDto.from(
+                        campsite,
+                        bookingSystem = bookingSystem(campsite, resolved, campgroundsById),
+                    )
                 },
             reservationUrlTemplates =
                 rows
@@ -43,8 +50,14 @@ internal class CampsiteCatalogService(
         )
     }
 
-    private fun bookingSystem(resolved: ResolvedAvailabilityTarget?): String? =
-        resolved?.let { identities.forCampsite(it) }?.let(tenants::displayName)
+    private fun bookingSystem(
+        campsite: Campsite,
+        resolved: ResolvedAvailabilityTarget?,
+        campgroundsById: Map<Long, Campground>,
+    ): String? {
+        val campground = resolved?.campground ?: campgroundsById[campsite.campgroundId] ?: return null
+        return identities.bookingSiteName(resolved, campground)
+    }
 
     private fun reservationUrlTemplate(
         campsite: Campsite,

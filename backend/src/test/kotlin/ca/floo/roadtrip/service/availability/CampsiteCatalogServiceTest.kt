@@ -72,7 +72,14 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
-        val service = CampsiteCatalogService(refResolver, campsitesRepo, targets, identities, tenants)
+        val service =
+            CampsiteCatalogService(
+                refResolver = refResolver,
+                campsitesRepo = campsitesRepo,
+                campgroundRepo = CampgroundRepo(ctx),
+                targets = targets,
+                identities = identities,
+            )
 
         val response = service.campsitesForPoi(poiId, siteTypes = emptyList())
 
@@ -145,7 +152,14 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
-        val service = CampsiteCatalogService(refResolver, campsitesRepo, targets, identities, tenants)
+        val service =
+            CampsiteCatalogService(
+                refResolver = refResolver,
+                campsitesRepo = campsitesRepo,
+                campgroundRepo = CampgroundRepo(ctx),
+                targets = targets,
+                identities = identities,
+            )
 
         val response = service.campsitesForPoi(poi.poiId, siteTypes = emptyList())
 

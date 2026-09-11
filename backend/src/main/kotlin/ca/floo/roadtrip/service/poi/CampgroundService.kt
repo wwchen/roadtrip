@@ -45,7 +45,7 @@ internal class CampgroundService(
             )
         val servingProvider = bookingHorizons.servingProvider(campground)
         val availabilityProvider = servingProvider?.id?.id ?: campground.bookingProvider
-        val bookingRef = identities.forCampground(campground, servingProvider, detail.bookingRef)
+        val bookingRef = identities.forCampground(campground, servingProvider)
         val computedCtas =
             cta.computeCtas(
                 bookingRef = bookingRef,
