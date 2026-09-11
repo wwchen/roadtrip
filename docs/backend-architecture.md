@@ -195,6 +195,18 @@ anything thrown rolls the whole block back.
 - Services never take a `DSLContext`. If a service needs one repo and no
   atomicity, inject that repo; if it needs several writes to land together,
   inject `UnitOfWork`.
+- `run` is not reentrant: a nested `run` throws. jOOQ would give it a second
+  pooled connection and an independent transaction rather than a savepoint —
+  invisible to the outer block's uncommitted rows, and able to deadlock on
+  them. A service already inside a block takes repo handles from that block's
+  `Repos`, never a `UnitOfWork` of its own.
+- `run` is blocking, and its block cannot suspend by construction (the block is
+  a plain `(Repos) -> T`, so nothing can await inside a transaction). Call it
+  from an IO dispatcher.
+- A checked exception thrown by the block reaches the caller as itself.
+  `JooqUnitOfWork` undoes jOOQ's `DataAccessException("Rollback caused")`
+  wrapper, which would otherwise hand `org.jooq` to a service that took the
+  port precisely so it never names one.
 - A repo opens its own transaction only for statements it owns end to end — for
   example the legacy mirror in `UserBookingCredentialsRepo`,
   `UserSettingsRepo.saveNotifications`, the catalog batch upserts, and the
@@ -287,6 +299,12 @@ repo handles, never a connection context, and production binds them to
 `ImportPhaseCounts`, a `@Serializable` model; `IngestRunRepo.completePhase`
 encodes it into the `ingest_runs.counts` JSONB column, so no jOOQ type is an
 interchange value between two service methods.
+
+Building the `IngestController` single sweeps the ghost rows a mid-run restart
+left behind: parent `ingest_runs` rows still `started` whose owning coroutine is
+gone are marked aborted. How old a row must be to count as a ghost is
+`roadtrip.ingest.stale-run-after` (default `30m`) — it has to clear the longest
+phase a given catalog runs, so it moves with the catalog and the machine.
 
 Each vendor ETL writes its own per-vendor campground/campsite rows keyed on
 `data_provider`; nothing merges across vendors at write time or after import.
