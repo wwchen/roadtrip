@@ -11,7 +11,7 @@ reservation-vendor wire shapes (availability, booking refs, rate limits) see
 [docs/reservation-providers.md](docs/reservation-providers.md) and the
 per-vendor docs under `docs/reservation-providers/`.
 
-That file's fourth section, `booking_providers`, declares each booking vendor
+`poi-registry.yaml`'s fourth section, `booking_providers`, declares each booking vendor
 and its tenants. An ETL row's `args.tenant` (Aspira) / `args.contract`
 (ReserveAmerica) must name a tenant of that vendor, and its `args.host` must
 match that tenant's host; both are checked at boot. The BC Parks row carries

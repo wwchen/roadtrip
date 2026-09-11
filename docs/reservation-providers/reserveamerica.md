@@ -1,7 +1,7 @@
 # ReserveAmerica / Active Network
 
-Wire details for the ReserveAmerica (Active Network) tenants: `alberta-provincial`
-(Alberta provincial parks) and `new-york-state-parks` (New York state parks).
+Wire details for the ReserveAmerica (Active Network) tenants: `ABPP`
+(Alberta Parks) and `NY` (New York State Parks).
 This doc owns the vendor wire shapes; `../reservation-providers.md` owns the
 architecture contract.
 

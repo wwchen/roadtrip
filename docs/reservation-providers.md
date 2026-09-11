@@ -528,11 +528,12 @@ rolled back past the alias-aware resolver reads only `booking_provider` /
 `booking_provider_ref`, so those campgrounds stop matching the rec.gov pollers
 entirely.
 
-**The rec.gov CTA on aliased pins needs the companion URL.** The drawer resolves
-an aliased pin's booking vendor through `BookingAdapterRegistry`, and
-`RecGovBookingAdapter` is registered only when `companion-base-url` is set, so a
-profile shipped without it drops the Reserve on Recreation.gov button from every
-aliased row.
+**The aliased-pin CTA no longer needs the companion URL.** As of phase 4b the
+drawer resolves an aliased pin's booking identity through `BookingIdentityResolver`
+and the registry's `sells`, not through `BookingAdapterRegistry`, so a profile
+shipped without `companion-base-url` still renders Reserve on Recreation.gov on
+every aliased row. The companion is still required for the `atc` action itself:
+without it `RecGovBookingAdapter` is not registered, and a hold is refused.
 
 ### Rolling back past V59
 
