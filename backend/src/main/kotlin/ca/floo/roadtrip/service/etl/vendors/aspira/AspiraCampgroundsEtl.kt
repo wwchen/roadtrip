@@ -6,11 +6,10 @@ import ca.floo.roadtrip.model.domain.CampgroundManagement
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
+import ca.floo.roadtrip.model.metadata.registry.GeometryPolicy
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -38,70 +37,67 @@ import java.time.Instant
 //        centroid now only backstops campground leaves, never emits a
 //        park-level pin.
 //
-// One ETL class. Inputs are declared in YAML; this class dispatches on
-// the slug shape (recognized via the envelope contents) at parse time.
+// One ETL class. Each row's `geometry:` block declares which of its inputs
+// carry coordinates, in which preference order, and how names are matched;
+// this class reads only that declaration.
 //
 // Match strategy: aggressive name normalization (lowercase, drop park /
 // campground / national-park-of-canada / etc. suffixes), then exact
-// match against the union name → coords index; fallback to ≥0.5
-// Jaccard token overlap; final fallback to the leaf's `parent_name`.
+// match against the union name → coords index; fallback to a Jaccard token
+// overlap at `match.fuzzy_threshold`; final fallback, when
+// `match.parent_fallback` is set, to the leaf's `parent_name`.
 // Leaves that can't be matched are dropped — the booking ID alone
 // doesn't earn a pin on the map.
 class AspiraCampgroundsEtl(
     override val etlSlug: String,
-    private val dataProviderValue: DataProvider,
     private val aspiraTenant: String,
-    /**
-     * Two-letter state a US tenant books, from the registry's `geometry.sources[].state`.
-     * The uscampgrounds.info geometry file is nationwide and campground names
-     * repeat across states, so without this a leaf can match another state's
-     * row. Null for the non-US tenants, which want the whole file.
-     */
-    private val stateFilter: String? = null,
+    private val geometry: GeometryPolicy,
 ) : CampgroundEtl<AspiraJoinDto> {
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
 
-    /**
-     * The geometry inputs, paired with the source that reads each one — every
-     * declared input that is not maps, inventory or dictionaries.
-     */
-    internal fun geometrySourcesFor(inputs: InputBundle): List<Pair<String, GeometrySource>> {
-        val slugs = inputs.dataSourceSlugs()
-        val mapsSlug = slugs.first { it.contains("maps") }
-        val inventorySlug = slugs.firstOrNull { it.contains("inventory") }
-        val dictionarySlug = slugs.firstOrNull { it.contains("dictionaries") }
-        return slugs
-            .filter { it != mapsSlug && it != inventorySlug && it != dictionarySlug }
-            .map { slug -> slug to detectGeometrySource(slug, inputs.envelopes(slug)) }
-    }
+    /** The declared geometry inputs, paired with the parser each format names, in preference order. */
+    internal fun geometrySourcesFor(inputs: InputBundle): List<Pair<String, GeometrySource>> =
+        geometry.sources.map { spec -> spec.input to GeometrySources.forSpec(spec, inputs.envelopes(spec.input)) }
 
     override fun parse(inputs: InputBundle): Sequence<ParseResult<AspiraJoinDto>> =
         sequence {
-            val mapsSlug = inputs.dataSourceSlugs().first { it.contains("maps") }
-            val inventorySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("inventory") }
-            val dictionarySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("dictionaries") }
+            val slugs = inputs.dataSourceSlugs()
+            val mapsSlug = slugs.firstOrNull { it.contains(MAPS_INPUT_MARKER) }
+            val inventorySlug = slugs.firstOrNull { it.contains(INVENTORY_INPUT_MARKER) }
+            val dictionarySlug = slugs.firstOrNull { it.contains(DICTIONARIES_INPUT_MARKER) }
 
-            val mapsArray = inputs.envelope(mapsSlug).payload.jsonArray
-            val leaves = AspiraLeavesWalk.walk(mapsArray)
+            val errs = mutableListOf<String>()
+            for (spec in geometry.sources) {
+                when {
+                    spec.input !in slugs -> errs += "declared geometry source '${spec.input}' is not among this run's inputs"
+                    inputs.envelopes(spec.input).isEmpty() -> errs += "declared geometry source '${spec.input}' has no envelopes"
+                }
+            }
+            val accounted = geometry.sources.map { it.input }.toSet() + setOfNotNull(mapsSlug, inventorySlug, dictionarySlug)
+            for (slug in slugs - accounted) {
+                errs += "input '$slug' is neither a declared geometry source nor the maps, inventory or dictionaries feed"
+            }
+            if (mapsSlug == null) errs += "no /api/maps input declared"
 
-            val geomEntries = geometrySourcesFor(inputs)
+            if (errs.isNotEmpty()) {
+                yield(ParseResult.Bad(null, errs))
+                return@sequence
+            }
 
+            val leaves = AspiraLeavesWalk.walk(inputs.envelope(checkNotNull(mapsSlug)).payload.jsonArray)
             val dto =
                 AspiraJoinDto(
                     leaves = leaves,
-                    geomSources = geomEntries,
+                    geomSources = geometrySourcesFor(inputs),
                     inventoryEnvelopes = inventorySlug?.let { inputs.envelopes(it) } ?: emptyList(),
                     dictionaryPayload = dictionarySlug?.let { inputs.envelope(it).payload as? JsonObject },
                     fetchedAt = Instant.now(),
                 )
-            val errs = mutableListOf<String>()
-            if (dto.leaves.isEmpty()) errs += "no leaves from /api/maps"
-            if (dto.geomSources.isEmpty()) errs += "no geometry sources declared"
-            if (errs.isEmpty()) {
-                yield(ParseResult.Ok(dto))
+            if (dto.leaves.isEmpty()) {
+                yield(ParseResult.Bad(null, listOf("no leaves from /api/maps")))
             } else {
-                yield(ParseResult.Bad(null, errs))
+                yield(ParseResult.Ok(dto))
             }
         }
 
@@ -203,25 +199,14 @@ class AspiraCampgroundsEtl(
             put("match_kind", matchKind.label)
         }
 
-    private fun detectGeometrySource(
-        slug: String,
-        envelopes: List<Envelope>,
-    ): GeometrySource =
-        when {
-            slug.contains("uscampgrounds") -> UsCampgroundsCsvSource(envelopes, stateFilter)
-            slug.contains("bcparks") -> BcParksStrapiSource(envelopes)
-            slug.contains("places") -> ArcGisCentroidSource(envelopes)
-            slug.contains("accommodation") -> GeoJsonFeaturesSource(envelopes, APCA_ACCOMMODATION_NAME_PROPERTY)
-            else -> GeoJsonFeaturesSource(envelopes)
-        }
-
     companion object {
         private const val ASPIRA_TRANSACTION_LOCATION_ID_KEY = "transactionLocationId"
         private const val ASPIRA_MAP_ID_KEY = "mapId"
         private const val ASPIRA_RESOURCE_LOCATION_ID_KEY = "resourceLocationId"
 
-        /** Parks Canada's Accommodation layer names features here, not in `name`. */
-        private const val APCA_ACCOMMODATION_NAME_PROPERTY = "Name_e"
+        private const val MAPS_INPUT_MARKER = "maps"
+        private const val INVENTORY_INPUT_MARKER = "inventory"
+        private const val DICTIONARIES_INPUT_MARKER = "dictionaries"
     }
 }
 

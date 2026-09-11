@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
+import ca.floo.roadtrip.model.metadata.registry.GeometryPolicy
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -31,17 +32,15 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 
-/** The registry names the slug per row; this stands in where no row does. */
-private const val DEFAULT_ETL_SLUG = "aspira-bc-campgrounds"
-
 /**
  * Merge ETL for BC Parks campgrounds: joins Aspira booking data with BC Parks
  * Strapi metadata to produce campgrounds enriched with Strapi description,
  * photos, contact, and URL. Campsites are handled separately by AspiraCampsitesEtl.
  */
 class BcParksCampgroundsEtl(
+    override val etlSlug: String,
     private val aspiraTenant: String,
-    override val etlSlug: String = DEFAULT_ETL_SLUG,
+    private val geometry: GeometryPolicy,
 ) : CampgroundEtl<BcParksCampgroundsDto> {
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
@@ -49,10 +48,10 @@ class BcParksCampgroundsEtl(
     override fun parse(inputs: InputBundle): Sequence<ParseResult<BcParksCampgroundsDto>> =
         sequence {
             val slugs = inputs.dataSourceSlugs()
-            val mapsSlug = slugs.first { it.contains("maps") }
-            val strapiSlug = slugs.first { it.contains("bcparks") || it.contains("strapi") }
-            val inventorySlug = slugs.first { it.contains("inventory") }
-            val dictionarySlug = slugs.firstOrNull { it.contains("dictionaries") }
+            val mapsSlug = slugs.first { it.contains(MAPS_INPUT_MARKER) }
+            val strapiSlug = geometry.sources.single().input
+            val inventorySlug = slugs.first { it.contains(INVENTORY_INPUT_MARKER) }
+            val dictionarySlug = slugs.firstOrNull { it.contains(DICTIONARIES_INPUT_MARKER) }
 
             val mapsArray = inputs.envelope(mapsSlug).payload.jsonArray
             val leaves = AspiraLeavesWalk.walk(mapsArray)
@@ -66,10 +65,8 @@ class BcParksCampgroundsEtl(
                 BcParksCampgroundsDto(
                     leaves = leaves,
                     strapiRows = strapiRows,
-                    strapiEnvelopes = strapiEnvelopes,
                     inventoryEnvelopes = inventoryEnvelopes,
                     dictionaryPayload = dictionaryPayload,
-                    mapsArray = mapsArray,
                 )
             val errs = mutableListOf<String>()
             if (dto.leaves.isEmpty()) errs += "no Aspira leaves from /api/maps"
@@ -193,5 +190,9 @@ class BcParksCampgroundsEtl(
     private companion object {
         const val REGION = "BC"
         const val COUNTRY = "CA"
+
+        const val MAPS_INPUT_MARKER = "maps"
+        const val INVENTORY_INPUT_MARKER = "inventory"
+        const val DICTIONARIES_INPUT_MARKER = "dictionaries"
     }
 }

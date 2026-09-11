@@ -27,15 +27,31 @@ class ProductionTerminalEtlRegistryTest {
     }
 
     @Test
-    fun `the shipped bc parks terminal etl builds from the registry's tenant arg`() {
+    fun `the shipped bc parks terminal etl builds from the registry's tenant arg and geometry policy`() {
         val registry = PoiRegistry.loadResource("poi-registry.yaml")
         val entry =
             registry.poiData
                 .flatMap { it.etls }
                 .single { it.slug == "aspira-bc-campgrounds" }
         assertEquals("bc", entry.args["tenant"])
+        assertEquals("bcparks-strapi", checkNotNull(entry.geometry).sources.single().input)
 
         val definition = poiAdapters["BcParksCampgroundsEtl"]?.create?.invoke(entry)
         assertNotNull(definition)
+    }
+
+    @Test
+    fun `both shipped aspira campground terminals build from their geometry policies`() {
+        val registry = PoiRegistry.loadResource("poi-registry.yaml")
+        val entries =
+            registry.poiData
+                .flatMap { it.etls }
+                .filter { it.adapter == "AspiraCampgroundsEtl" }
+        assertEquals(listOf("aspira-wa-campgrounds", "aspira-pc-campgrounds"), entries.map { it.slug })
+
+        for (entry in entries) {
+            assertNotNull(entry.geometry)
+            assertNotNull(poiAdapters["AspiraCampgroundsEtl"]?.create?.invoke(entry), entry.slug)
+        }
     }
 }

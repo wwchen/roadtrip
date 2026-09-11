@@ -20,7 +20,18 @@ import kotlin.test.assertNull
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BcParksCampgroundsEtlTest {
     private lateinit var ctx: TransformCtx
-    private val etl = BcParksCampgroundsEtl(aspiraTenant = "bc")
+    private val etl =
+        BcParksCampgroundsEtl(
+            etlSlug = "aspira-bc-campgrounds",
+            aspiraTenant = "bc",
+            geometry =
+                PoiRegistry
+                    .loadResource("poi-registry.yaml")
+                    .poiData
+                    .flatMap { it.etls }
+                    .single { it.slug == "aspira-bc-campgrounds" }
+                    .geometry!!,
+        )
 
     @BeforeAll
     fun setUp() {

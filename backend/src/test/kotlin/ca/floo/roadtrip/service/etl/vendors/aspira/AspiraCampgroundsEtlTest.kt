@@ -1,9 +1,14 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.registry.GeometryFormat
+import ca.floo.roadtrip.model.metadata.registry.GeometryPolicy
+import ca.floo.roadtrip.model.metadata.registry.GeometrySourceSpec
+import ca.floo.roadtrip.model.metadata.registry.MatchPolicy
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.records
 import kotlinx.serialization.json.Json
@@ -35,6 +40,14 @@ class AspiraCampgroundsEtlTest {
     // Real terminal slug so args (host), subcategory (federal) and the
     // constant agency (Parks Canada) resolve from the production YAML.
     private val slug = "aspira-pc-campgrounds"
+
+    // The PC row's shape, one source: the fixtures feed a GeoJSON envelope under
+    // the slug `test-geom`, and the parent fallback is what PC declares today.
+    private val geometryPolicy =
+        GeometryPolicy(
+            sources = listOf(GeometrySourceSpec(input = "test-geom", format = GeometryFormat.GEOJSON_POINTS)),
+            match = MatchPolicy(parentFallback = true),
+        )
 
     // Category 100 is bookable (showResourceCapacityOnline=true, e.g. Campsite);
     // 200 is non-bookable (false, e.g. Parking). The flag is Aspira's own — the
@@ -141,7 +154,7 @@ class AspiraCampgroundsEtlTest {
 
     private fun campgrounds(dto: AspiraJoinDto): List<CampgroundUpsertCandidate> =
         records(
-            AspiraCampgroundsEtl(slug, DataProvider.ASPIRA, "pc")
+            AspiraCampgroundsEtl(etlSlug = slug, aspiraTenant = "pc", geometry = geometryPolicy)
                 .transform(dto, ctx),
         )
 
@@ -185,6 +198,84 @@ class AspiraCampgroundsEtlTest {
             resourceLocationId = resLoc,
             parentName = null,
         )
+
+    /**
+     * The negative-selection hole: every input that was not maps, inventory or
+     * dictionaries used to become a geometry source, so a typo'd slug quietly
+     * indexed nothing. Now it fails the parse.
+     */
+    @Test
+    fun `an input that is neither declared geometry nor a known feed fails parse`() {
+        val etl =
+            AspiraCampgroundsEtl(
+                etlSlug = slug,
+                aspiraTenant = "pc",
+                geometry = GeometryPolicy(sources = listOf(GeometrySourceSpec("test-geom", GeometryFormat.GEOJSON_POINTS))),
+            )
+        val inputs =
+            InputBundle(
+                linkedMapOf(
+                    "aspira-maps-pc" to listOf(envelopeOf("[]")),
+                    "test-geom" to listOf(geomEnvelope()),
+                    "apca-plaecs" to listOf(geomEnvelope()),
+                ),
+            )
+
+        val bad = etl.parse(inputs).single() as ParseResult.Bad
+        assertTrue(
+            bad.errors.any {
+                it == "input 'apca-plaecs' is neither a declared geometry source nor the maps, inventory or dictionaries feed"
+            },
+            bad.errors.toString(),
+        )
+    }
+
+    @Test
+    fun `a declared geometry source with no envelopes fails parse`() {
+        val etl =
+            AspiraCampgroundsEtl(
+                etlSlug = slug,
+                aspiraTenant = "pc",
+                geometry = GeometryPolicy(sources = listOf(GeometrySourceSpec("test-geom", GeometryFormat.GEOJSON_POINTS))),
+            )
+        val inputs =
+            InputBundle(
+                linkedMapOf(
+                    "aspira-maps-pc" to listOf(envelopeOf("[]")),
+                    "test-geom" to emptyList<Envelope>(),
+                ),
+            )
+
+        val bad = etl.parse(inputs).single() as ParseResult.Bad
+        assertTrue(bad.errors.any { it == "declared geometry source 'test-geom' has no envelopes" }, bad.errors.toString())
+    }
+
+    @Test
+    fun `parse builds one source per declared geometry input, in declared order`() {
+        val etl =
+            AspiraCampgroundsEtl(
+                etlSlug = slug,
+                aspiraTenant = "pc",
+                geometry =
+                    GeometryPolicy(
+                        sources =
+                            listOf(
+                                GeometrySourceSpec("test-geom", GeometryFormat.GEOJSON_POINTS),
+                                GeometrySourceSpec("test-centroids", GeometryFormat.ARCGIS_CENTROIDS),
+                            ),
+                    ),
+            )
+        val inputs =
+            InputBundle(
+                linkedMapOf(
+                    "aspira-maps-pc" to listOf(envelopeOf("[]")),
+                    "test-centroids" to listOf(envelopeOf("""{"features":[]}""")),
+                    "test-geom" to listOf(geomEnvelope()),
+                ),
+            )
+
+        assertEquals(listOf("test-geom", "test-centroids"), etl.geometrySourcesFor(inputs).map { it.first })
+    }
 
     @Test
     fun `drops park-container leaves even when their name matches geometry`() {

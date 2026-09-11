@@ -1,9 +1,11 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
+import ca.floo.roadtrip.model.metadata.registry.GeometryFormat
+import ca.floo.roadtrip.model.metadata.registry.GeometryPolicy
+import ca.floo.roadtrip.model.metadata.registry.GeometrySourceSpec
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampgroundsEtl
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraJoinDto
@@ -344,24 +346,30 @@ class EtlExtrasDtoTest {
         // it is the field that exercises absent-field serialization here.
         val campground =
             records(
-                AspiraCampgroundsEtl("aspira-wa-campgrounds", DataProvider.ASPIRA, "wa")
-                    .transform(
-                        AspiraJoinDto(
-                            leaves =
-                                listOf(
-                                    AspiraLeaf(
-                                        name = "Lakeside Campground",
-                                        transactionLocationId = 11,
-                                        mapId = 22,
-                                        resourceLocationId = 33,
-                                        parentName = null,
-                                    ),
-                                ),
-                            geomSources = listOf("fixture" to GeoJsonFeaturesSource(listOf(geoJsonEnvelope()))),
-                            fetchedAt = fetchedAt,
+                AspiraCampgroundsEtl(
+                    etlSlug = "aspira-wa-campgrounds",
+                    aspiraTenant = "wa",
+                    geometry =
+                        GeometryPolicy(
+                            sources = listOf(GeometrySourceSpec(input = "fixture", format = GeometryFormat.GEOJSON_POINTS)),
                         ),
-                        transformCtx(),
+                ).transform(
+                    AspiraJoinDto(
+                        leaves =
+                            listOf(
+                                AspiraLeaf(
+                                    name = "Lakeside Campground",
+                                    transactionLocationId = 11,
+                                    mapId = 22,
+                                    resourceLocationId = 33,
+                                    parentName = null,
+                                ),
+                            ),
+                        geomSources = listOf("fixture" to GeoJsonFeaturesSource(listOf(geoJsonEnvelope()))),
+                        fetchedAt = fetchedAt,
                     ),
+                    transformCtx(),
+                ),
             ).single()
 
         assertNull(campground.parentName)

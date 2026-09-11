@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.productionTerminalEtlDefinitions
 import kotlinx.serialization.json.Json
@@ -79,16 +80,25 @@ class UsCampgroundsCsvSourceTest {
     }
 
     /**
-     * The half that actually broke: the WA state filter sat in the registry and
+     * The half that actually broke: `state_filter: WA` sat in the registry and
      * nothing read it. Driving the real YAML through the real registry is what
-     * catches that — a test against the source alone passes either way.
+     * catches that — a test against the source alone passes either way. The
+     * filter now lives at `geometry.sources[0].state`.
      */
     @Test
-    fun `the WA terminal reads geometry sources state from the registry`() {
+    fun `the WA terminal reads the geometry source state from the registry`() {
         val definition =
             productionTerminalEtlDefinitions["aspira-wa-campgrounds"]
                 ?: error("aspira-wa-campgrounds is not a registered terminal")
         val etl = definition.etl as AspiraCampgroundsEtl
+
+        val entry =
+            PoiRegistry
+                .loadResource("poi-registry.yaml")
+                .poiData
+                .flatMap { it.etls }
+                .single { it.slug == "aspira-wa-campgrounds" }
+        assertEquals("WA", checkNotNull(entry.geometry).sources.single().state)
 
         val inputs =
             InputBundle(
