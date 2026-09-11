@@ -8,6 +8,9 @@ import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+/** A machine identifier as this codebase spells one: `cart_not_added`, `recgov_session_expired`. */
+private val codeShaped = Regex("""\b[a-z0-9]+(?:_[a-z0-9]+)+\b""")
+
 class EmailContentAtcResultRendererTest {
     private fun notice(
         watchId: Long = 7L,
@@ -152,19 +155,21 @@ class EmailContentAtcResultRendererTest {
     }
 
     @Test
-    fun `the adapter's stand-in sentence reaches the inbox with no code in it`() {
-        // What a null-detail `cart_not_added` failure now carries: the adapter's
-        // category sentence, code-free — the code travels in the notice's
-        // `error` field, which this email never prints.
+    fun `a cart_not_added failure with no detail renders a sentence, never a code`() {
+        // The code travels in the notice's `error` field, which this email never
+        // prints: with nothing to explain the failure, the copy still reads as
+        // prose rather than falling back to the identifier.
         val content =
             EmailContentAtcResultRenderer.render(
-                notice(error = "cart_not_added", detail = "the hold could not be made this time"),
+                notice(error = "cart_not_added", detail = null),
                 magicLinkUrl = null,
             )
 
-        assertTrue(content.text.contains("the hold could not be made this time"), content.text)
         assertFalse(content.text.contains("cart_not_added"), content.text)
         assertFalse(content.html.contains("cart_not_added"), content.html)
+        assertFalse(codeShaped.containsMatchIn(content.text), content.text)
+        assertFalse(codeShaped.containsMatchIn(content.html), content.html)
+        assertTrue(content.text.contains("could not hold it"), content.text)
     }
 
     @Test

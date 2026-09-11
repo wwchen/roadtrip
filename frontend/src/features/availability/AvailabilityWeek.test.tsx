@@ -1423,6 +1423,26 @@ describe('holding a site straight from the grid', () => {
     expect(await screen.findByText(/ReserveAmerica would not add it/)).toBeInTheDocument();
   });
 
+  test('a refusal from a vendor we have no name for reads as a humanised one', async () => {
+    // No row in the vendor table for this slug, and the capability block names
+    // someone else. The copy humanises the refuser rather than blaming rec.gov.
+    stubs.availability = () =>
+      json(
+        availabilityBody(
+          [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
+          { trigger_kinds: ['slack_notify', 'atc'], add_to_cart: { state: 'ready', provider: 'recgov', provider_display: 'Recreation.gov' } },
+        ),
+      );
+    stubs.addToCart = () => json({ error: 'cart_not_added', provider: 'some_vendor' }, 409);
+    await mount({ booking_system: 'Campflare' });
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(await screen.findByText(/Some Vendor would not add it/)).toBeInTheDocument();
+    expect(screen.queryByText(/Recreation\.gov would not add it/)).toBeNull();
+  });
+
   test('the hold toast prefers the served name over a humanised guess', async () => {
     // The vendor table and the POI's own `booking_system` agree on
     // "ReserveAmerica"; the humanised "Reserveamerica" never reaches the toast.

@@ -57,6 +57,10 @@ class FlywayConcurrentIndexConfigTest {
             script.contains("val flywaySessionLockKey = \"$lockKey\""),
             "$BUILD_SCRIPT must name $lockKey once, for both Flyway sites to share",
         )
+        // `substringAfter` returns the whole script when the anchor is gone, so a
+        // renamed site would pass against the rest of the file. Anchors first.
+        assertTrue(script.contains(JOOQ_TASK), "$BUILD_SCRIPT must still configure $JOOQ_TASK")
+        assertTrue(script.contains(FLYWAY_BLOCK), "$BUILD_SCRIPT must still declare a flyway { } block")
         assertTrue(
             script.substringAfter(JOOQ_TASK).substringBefore(FLYWAY_BLOCK).contains(JOOQ_LOCK_SITE),
             "generateJooq's Flyway must pass the session lock via $JOOQ_LOCK_SITE",

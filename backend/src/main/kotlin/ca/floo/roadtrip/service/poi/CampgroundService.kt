@@ -130,8 +130,8 @@ internal class CampgroundService(
      *
      * Booking follows the booking registry, not whoever answers for
      * availability: rec.gov sells the aliased Campflare rows whether or not its
-     * availability adapter is enabled, and its availability adapter is enabled
-     * nowhere. `availability_provider` still reports the serving provider.
+     * availability adapter is enabled. `availability_provider` still reports
+     * the serving provider.
      */
     private fun bookingRef(
         campground: Campground,

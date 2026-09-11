@@ -2,7 +2,6 @@ package ca.floo.roadtrip.fixtures
 
 import java.io.File
 
-private const val REPO_ROOT_MARKER = "secrets/registry.yaml"
 private const val SQL_FENCE_OPEN = "```sql"
 private const val FENCE = "```"
 private val markdownHeading = Regex("^#{1,6} ")
@@ -12,13 +11,6 @@ internal val bookingPortRunbook: File by lazy { repoFile("docs/reservation-provi
 internal const val ROLLBACK_HEADING = "### Rolling back past V59"
 internal const val ROLL_FORWARD_HEADING = "### Rolling forward again"
 internal const val ROLL_FORWARD_CREDENTIALS_HEADING = "### Rolling forward rec.gov credentials"
-
-/** The repo root, found by walking up from the test's working directory. */
-internal val repoRoot: File =
-    generateSequence(File(".").absoluteFile) { it.parentFile }
-        .first { File(it, REPO_ROOT_MARKER).isFile }
-
-internal fun repoFile(path: String): File = File(repoRoot, path).also { check(it.isFile) { "missing repo file $path" } }
 
 /**
  * The statements a runbook section tells an operator to run: every fenced `sql`
@@ -54,3 +46,11 @@ internal fun runbookSqlStatements(
         .map { it.trim() }
         .filter { it.isNotEmpty() }
 }
+
+/**
+ * SQL text reduced to its tokens, so a doc block and a migration can be compared
+ * for "verbatim" without indentation or line breaks counting as a difference.
+ */
+internal fun String.collapseWhitespace(): String = trim().replace(whitespaceRun, " ")
+
+private val whitespaceRun = Regex("""\s+""")

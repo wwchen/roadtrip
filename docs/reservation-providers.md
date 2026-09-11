@@ -510,6 +510,12 @@ rolled back past the alias-aware resolver reads only `booking_provider` /
 `booking_provider_ref`, so those campgrounds stop matching the rec.gov pollers
 entirely.
 
+**The rec.gov CTA on aliased pins needs the companion URL.** The drawer resolves
+an aliased pin's booking vendor through `BookingAdapterRegistry`, and
+`RecGovBookingAdapter` is registered only when `companion-base-url` is set, so a
+profile shipped without it drops the Reserve on Recreation.gov button from every
+aliased row.
+
 ### Rolling back past V59
 
 Restore the pre-V59 shape before starting an old jar:

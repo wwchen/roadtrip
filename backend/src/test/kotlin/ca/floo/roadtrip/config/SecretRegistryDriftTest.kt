@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.config
 
+import ca.floo.roadtrip.fixtures.repoRoot
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,10 +18,6 @@ import kotlin.test.assertTrue
  * fails here instead of being discovered in production.
  */
 class SecretRegistryDriftTest {
-    private val repoRoot =
-        generateSequence(File(".").absoluteFile) { it.parentFile }
-            .first { File(it, "secrets/registry.yaml").isFile }
-
     private val resourcesDir = File(repoRoot, "backend/src/main/resources")
 
     /**

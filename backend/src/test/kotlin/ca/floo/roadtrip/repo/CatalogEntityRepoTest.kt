@@ -3,6 +3,7 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.fixtures.ROLLBACK_HEADING
 import ca.floo.roadtrip.fixtures.ROLL_FORWARD_HEADING
 import ca.floo.roadtrip.fixtures.bookingPortRunbook
+import ca.floo.roadtrip.fixtures.collapseWhitespace
 import ca.floo.roadtrip.fixtures.runbookSqlStatements
 import ca.floo.roadtrip.model.domain.Address
 import ca.floo.roadtrip.model.domain.AmenityKey
@@ -35,6 +36,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class CatalogEntityRepoTest : SharedDbTest() {
     @BeforeEach
@@ -1596,14 +1598,23 @@ class CatalogEntityRepoTest : SharedDbTest() {
     /**
      * Roll-forward guard: V59 is versioned, so Flyway will not re-run it after
      * the rollback above. The doc's "Rolling forward again" statements are the
-     * hand-run replacement, and they have to land the same shape V59 did.
+     * hand-run replacement, and they have to land the same shape V59 did — the
+     * doc calls them V59's own `UPDATE`s "verbatim", so that word is asserted
+     * too, not just the shape they leave behind.
      */
     @Test
     fun `the roll-forward runbook's SQL restores the post-V59 shape`() {
         seedAliasedBookingRows()
         runbookSqlStatements(bookingPortRunbook, ROLLBACK_HEADING).forEach(ctx::execute)
+        val migration = migrationStatements("V59__booking_aliases.sql").joinToString(";").collapseWhitespace()
 
-        runbookSqlStatements(bookingPortRunbook, ROLL_FORWARD_HEADING).forEach(ctx::execute)
+        runbookSqlStatements(bookingPortRunbook, ROLL_FORWARD_HEADING).forEach { statement ->
+            assertTrue(
+                migration.contains(statement.collapseWhitespace()),
+                "the runbook's roll-forward SQL is not V59 verbatim: $statement",
+            )
+            ctx.execute(statement)
+        }
 
         assertBookingIdentity(campgroundProvider = "campflare", campgroundRef = "upper-pines-campground-447")
         assertCampsiteBookingIdentity(provider = "campflare", ref = "lower-pines-site-100")

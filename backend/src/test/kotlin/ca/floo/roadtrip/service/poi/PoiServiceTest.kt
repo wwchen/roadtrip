@@ -193,8 +193,8 @@ class PoiServiceTest : SharedDbTest() {
 
     @Test
     fun `detail booking ref and CTA follow the booking adapter that sells an aliased campground`() {
-        // Production's shape: rec.gov's availability adapter ships disabled, so
-        // Campflare serves the aliased row while rec.gov still sells it.
+        // Campflare serves the aliased row while rec.gov sells it: booking
+        // follows the booking registry, not whoever answers for availability.
         val fixture = seedAliasedCampflarePoi()
         ctx.execute(
             "UPDATE campgrounds SET reservation_url = ? WHERE id = ?",
@@ -285,7 +285,14 @@ class PoiServiceTest : SharedDbTest() {
             )
         val campflare = FakeAvailabilityProvider(id = BookingProvider.CAMPFLARE)
 
-        val detail = poiService(listOf(campflare)).poiDetail(fixture.poiId)!!.campgroundDetail()
+        // Production's registry, not an empty one: the rec.gov adapter is
+        // registered and simply does not claim this row.
+        val detail =
+            poiService(
+                availabilityProviders = listOf(campflare),
+                bookingAdapters = listOf(FakeBookingAdapter(id = BookingProvider.RECGOV)),
+            ).poiDetail(fixture.poiId)!!
+                .campgroundDetail()
 
         assertEquals(BookingRefDto(BookingProvider.CAMPFLARE.id, "cranberry-lake-wsp"), detail.bookingRef)
         assertEquals(BookingProvider.CAMPFLARE.id, detail.availabilityProvider)

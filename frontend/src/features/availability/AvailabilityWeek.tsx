@@ -229,11 +229,11 @@ function AvailabilityWeekView({
           toast({
             status: 'warning',
             title: 'Could not hold the site',
-            children: settingsErrorMessage(code, refusingProviderName(provider, bookingSystem, cartProvider)),
+            children: settingsErrorMessage(code, refusingProviderName(provider, bookingSystem)),
           });
         });
     },
-    [actions, bookingSystem, cartAction, cartProvider, toast],
+    [actions, bookingSystem, cartAction, toast],
   );
 
   const openBooking = useCallback(
@@ -723,20 +723,15 @@ function holdProviderName(provider: string | undefined, bookingSystem: string | 
 /**
  * Who refused, for the failure copy. The envelope's id first, resolved through
  * the vendor table and kept as the served `booking_system` only when the two
- * name the same vendor. An id the table has no name for is humanised; the
- * capability block's display stands in only when it names that same vendor,
- * never a different one. Undefined reads neutral.
+ * name the same vendor. An id the table has no name for is humanised — never
+ * the capability block's vendor, which may be a different one. Undefined reads
+ * neutral.
  */
-function refusingProviderName(
-  provider: string | undefined,
-  bookingSystem: string | undefined,
-  capabilityProvider: string | undefined,
-) {
+function refusingProviderName(provider: string | undefined, bookingSystem: string | undefined) {
   if (!provider) return undefined;
   const known = knownProviderLabel(provider);
   if (known) return sameVendor(bookingSystem, known) ? bookingSystem : known;
-  const humanised = providerLabel(provider);
-  return sameVendor(capabilityProvider, humanised) ? capabilityProvider : humanised;
+  return providerLabel(provider);
 }
 
 /** Whether the served name and a mapped one are the same vendor, spelled alike. */
