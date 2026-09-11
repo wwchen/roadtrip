@@ -45,7 +45,6 @@ export const bookingCopy = {
   addToCart: 'Add to cart',
   /** The armed cell's label, before the second tap. */
   book: 'Book',
-  held: 'Cart',
   holdRunning: 'Holding site… usually under a minute; can take a few',
   // The three lines of the hold toast. Each takes the name of the provider that
   // actually held the site, rather than naming one vendor for all of them.

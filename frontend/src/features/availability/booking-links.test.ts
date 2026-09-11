@@ -119,6 +119,11 @@ describe('naming who takes the booking', () => {
       ['https://camping.bcparks.ca/x', 'BC Parks'],
       ['https://discovercamping.ca/x', 'BC Parks'],
       ['https://washington.goingtocamp.com/x', 'Washington State Parks'],
+      ['https://campflare.com/x', 'Campflare'],
+      ['https://shop.albertaparks.ca/x', 'Alberta Parks'],
+      ['https://newyorkstateparks.reserveamerica.com/x', 'New York State Parks'],
+      ['https://www.reservecalifornia.com/x', 'ReserveCalifornia'],
+      ['https://reservecalifornia.com/x', 'ReserveCalifornia'],
     ];
     for (const [url, expected] of cases) {
       expect(agencyLabel(site(7), { 7: url })).toBe(expected);
@@ -134,13 +139,26 @@ describe('naming who takes the booking', () => {
     expect(agencyLabel(site(7), { 7: 'https://www.camp-oregon.gov/x' })).toBe('Camp Oregon');
   });
 
-  test('a host we have no entry for still outranks the row"s vendor slug', () => {
-    // The link opens ReserveAmerica; the row is a Campflare catalog row. Naming
-    // the row would label the button after a site it does not open.
+  test('a named host outranks the row"s vendor slug', () => {
+    // The link opens a ReserveAmerica-family site; the row is a Campflare
+    // catalog row. Naming the row would label the button after a site it does
+    // not open.
     const row = site(7, { booking_provider: 'campflare', data_provider: 'campflare' });
+    const url = 'https://newyorkstateparks.reserveamerica.com/x';
 
-    expect(agencyLabel(row, { 7: 'https://www.reserveamerica.com/x' })).toBe('Reserveamerica');
-    expect(agencyLabel(row, { 7: 'https://www.reserveamerica.com/x' })).not.toBe('Campflare');
+    expect(agencyLabel(row, { 7: url })).toBe('New York State Parks');
+    expect(agencyLabel(row, { 7: url })).not.toBe('Campflare');
+  });
+
+  test('a vendor we know beats a word guessed off an unmapped host', () => {
+    // `shop.albertaparks.ca` used to read as "Shop"; a host we have no row for
+    // is a worse name than the vendor the row declares.
+    const row = site(7, { booking_provider: 'reserveamerica', data_provider: 'campflare' });
+
+    expect(agencyLabel(row, { 7: 'https://shop.example.ca/x' })).toBe('ReserveAmerica');
+    expect(agencyLabel(site(7, { booking_provider: 'reservecalifornia' }), {})).toBe(
+      'ReserveCalifornia',
+    );
   });
 
   test('humanises an unknown vendor slug', () => {

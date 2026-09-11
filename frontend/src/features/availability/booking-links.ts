@@ -25,13 +25,20 @@ const AGENCY_BY_HOST = new Map<string, string>([
   ['camping.bcparks.ca', 'BC Parks'],
   ['discovercamping.ca', 'BC Parks'],
   ['washington.goingtocamp.com', 'Washington State Parks'],
+  ['campflare.com', 'Campflare'],
+  ['shop.albertaparks.ca', 'Alberta Parks'],
+  ['newyorkstateparks.reserveamerica.com', 'New York State Parks'],
+  ['reservecalifornia.com', 'ReserveCalifornia'],
+  ['www.reservecalifornia.com', 'ReserveCalifornia'],
 ]);
 
-/** Vendor slug → display name, for rows whose template we cannot parse. */
+/** Vendor slug → display name, matching the backend's per-vendor display objects. */
 const AGENCY_BY_VENDOR = new Map<string, string>([
   ['recgov', VENDOR],
   ['campflare', 'Campflare'],
   ['aspira', 'Aspira'],
+  ['reserveamerica', 'ReserveAmerica'],
+  ['reservecalifornia', 'ReserveCalifornia'],
 ]);
 
 /** `campsiteId → template`, as `/api/pois/{id}/campsites` returns it. */
@@ -116,9 +123,10 @@ export function knownProviderLabel(providerId: string | null | undefined): strin
 }
 
 /**
- * Who takes the booking at the link this row opens. The host always wins — even
- * one we have no entry for, since a name read off the URL is still the site the
- * button opens, where an aliased row's vendor slug names a different one.
+ * Who takes the booking at the link this row opens. A named host wins — an
+ * aliased row's vendor slug names a different site than the button opens — but
+ * a vendor we do have a name for beats a word guessed off an unmapped host,
+ * which is how `shop.albertaparks.ca` stops reading as "Shop".
  */
 export function agencyLabel(
   row: Partial<Campsite> | null | undefined,
@@ -128,8 +136,8 @@ export function agencyLabel(
   const vendor = String(row?.booking_provider || row?.data_provider || '').toLowerCase();
   return (
     AGENCY_BY_HOST.get(host) ||
-    labelFromHost(host) ||
     AGENCY_BY_VENDOR.get(vendor) ||
+    labelFromHost(host) ||
     humanizeAgency(vendor)
   );
 }

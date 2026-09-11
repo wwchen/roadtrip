@@ -1404,12 +1404,14 @@ describe('holding a site straight from the grid', () => {
     ).toBeInTheDocument();
   });
 
-  test('a refusal names the capability block\'s provider when the id is one we have no name for', async () => {
+  test('a refusal names its own vendor, never the capability block\'s other one', async () => {
+    // The envelope says ReserveAmerica refused; the capability block still
+    // advertises rec.gov. Naming the capability would blame the wrong vendor.
     stubs.availability = () =>
       json(
         availabilityBody(
           [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
-          { trigger_kinds: ['slack_notify', 'atc'], add_to_cart: { state: 'ready', provider: 'reserveamerica', provider_display: 'ReserveAmerica' } },
+          { trigger_kinds: ['slack_notify', 'atc'], add_to_cart: { state: 'ready', provider: 'recgov', provider_display: 'Recreation.gov' } },
         ),
       );
     stubs.addToCart = () => json({ error: 'cart_not_added', provider: 'reserveamerica' }, 409);
@@ -1422,8 +1424,8 @@ describe('holding a site straight from the grid', () => {
   });
 
   test('the hold toast prefers the served name over a humanised guess', async () => {
-    // `reserveamerica` is not in the vendor table. The POI's own `booking_system`
-    // is a real name; "Reserveamerica" is only a guess at one.
+    // The vendor table and the POI's own `booking_system` agree on
+    // "ReserveAmerica"; the humanised "Reserveamerica" never reaches the toast.
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
     stubs.addToCart = () =>

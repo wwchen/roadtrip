@@ -721,9 +721,11 @@ function holdProviderName(provider: string | undefined, bookingSystem: string | 
 }
 
 /**
- * Who refused, for the failure copy. The envelope's id first, named through the
- * served `booking_system` when they agree and the vendor table otherwise; the
- * capability block's display is the last resort. Undefined reads neutral.
+ * Who refused, for the failure copy. The envelope's id first, resolved through
+ * the vendor table and kept as the served `booking_system` only when the two
+ * name the same vendor. An id the table has no name for is humanised; the
+ * capability block's display stands in only when it names that same vendor,
+ * never a different one. Undefined reads neutral.
  */
 function refusingProviderName(
   provider: string | undefined,
@@ -732,8 +734,9 @@ function refusingProviderName(
 ) {
   if (!provider) return undefined;
   const known = knownProviderLabel(provider);
-  if (!known) return capabilityProvider;
-  return sameVendor(bookingSystem, known) ? bookingSystem : known;
+  if (known) return sameVendor(bookingSystem, known) ? bookingSystem : known;
+  const humanised = providerLabel(provider);
+  return sameVendor(capabilityProvider, humanised) ? capabilityProvider : humanised;
 }
 
 /** Whether the served name and a mapped one are the same vendor, spelled alike. */

@@ -73,7 +73,7 @@ const meta = {
         component:
           'What the grid shows when a capability is present but this caller cannot ' +
           'use it. The control keeps its shape and the action becomes the one step ' +
-          'that unlocks it: a sign-in, or rec.gov credentials in Settings. Hiding ' +
+          'that unlocks it: a sign-in, or Recreation.gov credentials in Settings. Hiding ' +
           'the control instead is what made both features look absent rather than ' +
           'one step away.',
       },
@@ -99,7 +99,7 @@ export const CartSignedOut: Story = {
   render: () => bookPopover({ state: 'signed-out', onSignIn: () => {} }),
 };
 
-/** Signed in with no rec.gov login: the row opens Settings on Booking. */
+/** Signed in with no Recreation.gov login: the row opens Settings on Booking. */
 export const CartWithoutCredentials: Story = {
   render: () => bookPopover({ state: 'no-credentials', onOpenSettings: () => {} }),
 };
