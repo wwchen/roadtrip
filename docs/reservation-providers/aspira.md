@@ -1,18 +1,21 @@
 # Aspira NextGen API
 
-Aspira NextGen (camis.com) is the booking platform behind:
-
-| Tenant | Host | `AvailabilityProviderId` today | `pois.source` |
-|---|---|---|---|
-| Parks Canada | `reservation.pc.gc.ca` | `ASPIRA` | `aspira-pc-pins` |
-| BC Provincial Parks | `camping.bcparks.ca` | `ASPIRA` | `aspira-bc-pins` |
-| Washington State Parks | `washington.goingtocamp.com` | `ASPIRA` | `aspira-wa-pins` |
+Aspira NextGen (camis.com) is the booking platform behind several park systems.
+Tenants are `booking_providers.aspira.tenants` in
+`backend/src/main/resources/poi-registry.yaml` — `pc` / Parks Canada, `bc` /
+BC Parks, `wa` / Washington State Parks. Adding one is a row there plus the
+`poi_data` / `campsite_data` rows whose `args.tenant` names it; there is no
+Kotlin tenant table any more. The booking
+horizon stays `AspiraAvailabilityProvider.capabilities.bookingHorizonDays` —
+the registry does not restate what the adapter declares. The reserve deeplink
+is dated from the POI's own `PoiDateContext.earliestDate`, not a fixed Eastern
+anchor.
 
 All tenants share the same SPA build and (so far as we've observed)
 identical `/api/*` shapes; only the data, host, and tenant-specific
 sentinel ID ranges differ. **Three tenants, one API surface.** The
-provider id is vendor-shaped (`ASPIRA`); `pois.source` and `AspiraTenants`
-select the concrete host/tenant.
+provider id is vendor-shaped (`ASPIRA`); the tenant code selects the
+concrete host.
 
 ## Wire shape overview
 

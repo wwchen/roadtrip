@@ -97,6 +97,11 @@ Wire the adapter through the availability-provider registry/factory.
 Checklist:
 
 - Add the provider identity value if this is a new provider family.
+- Add a `booking_providers` row in
+  `backend/src/main/resources/poi-registry.yaml`: `id` (the `BookingProvider`
+  member), `display_name`, `sells`, and one `tenants` entry per host. This is
+  where the vendor's and each tenant's display name lives; a multi-tenant
+  adapter takes its `List<BookingTenant>` from `TenantRegistry.tenantsOf`.
 - Add client lifecycle wiring to the provider client set.
 - Add registry construction for the provider.
 - Validate any per-tenant or per-source registry configuration at boot.
@@ -116,10 +121,10 @@ all vendors, not one file per vendor.
 Checklist:
 
 - Add a booking URL helper under `service/availability/provider/`.
-- Add a booking display helper under the same vendor package if labels vary by
-  provider or tenant.
-- Add a vendor-specific CTA provider to `CampgroundCta`'s `providers` list if
-  campground-level drawer buttons should link to the booking site.
+- For labels, nothing: `CampgroundCta` labels from `TenantRegistry.ctaLabel`,
+  so the `booking_providers` row is the whole of it. Add a
+  `CampgroundCtaProvider` to `CampgroundCta`'s `providers` list only if the
+  vendor needs a constructed deeplink.
 - Add or update CTA tests for precedence, labels, missing URL inputs, and dated
   links.
 
@@ -161,7 +166,8 @@ Checklist:
   see [secrets.md](secrets.md)). There is no `.env` workflow; the pre-commit
   hook refuses commits touching a plaintext `.env`.
 - Add per-source or per-tenant values to the YAML registry when they are part
-  of data identity.
+  of data identity. Tenant hosts and display names belong in
+  `booking_providers`, not in a Kotlin table.
 - Use named constants only for stable protocol defaults.
 - Add rate-limit defaults and tests if the provider will be polled.
 

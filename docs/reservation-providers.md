@@ -53,8 +53,8 @@ service/availability/provider/
 ├── AspiraAvailabilityProvider.kt
 ├── ReserveAmericaAvailabilityProvider.kt
 ├── ReserveCaliforniaAvailabilityProvider.kt
-└── (per-vendor booking-URL / booking-display helpers beside each adapter,
-    e.g. AspiraBookingUrl.kt, RecGovBookingDisplay.kt)
+└── (per-vendor booking-URL helpers beside each adapter, e.g.
+    AspiraBookingUrl.kt; display names come from TenantRegistry, not from here)
 ```
 
 ## One ref encoding
@@ -63,8 +63,9 @@ service/availability/provider/
 `BookingProviderRef.serialize()` form) is the row's *primary* booking identity.
 The availability API emits it as `scope_ref`. The POI detail's
 `booking_ref: {provider, ref}` — and with it `booking_system`, the CTAs, and
-`availability_supported` — is instead the *serving* provider's ref, which is
-the primary only when no other provider claims the row. Nothing on the serving
+`availability_supported` — is instead the identity `BookingIdentityResolver`
+picks (see "Booking provider seam"), which falls back to the *serving*
+provider's ref and then to the primary. Nothing on the serving
 path reads `source_payload`; a key an ETL writes there is provenance, not
 behaviour.
 
@@ -309,21 +310,38 @@ another vendor site.
 | whose cart a hold lands in | `AddToCartResult.Completed.cartUrl`; `RecGovBookingAdapter` owns `RECGOV_CART_URL` |
 | whether this caller has one | `canFulfil(user)` — rec.gov asks `BookingCredentialsConfigured(RECGOV, user)` |
 | what its refusal codes mean | `failureCategories`; the `recgov_*` codes live in `RecGovBookingCodes` |
-| what a person calls it | `displayName` (`"Recreation.gov"`) |
+
+**Vendor names are registry data, not adapter code.** `booking_providers` in
+`backend/src/main/resources/poi-registry.yaml` declares each vendor's display
+name, whether it `sells`, and its tenants (`code`, `host`, `display_name`).
+`TenantRegistry` projects that section and answers `displayName(ref)`,
+`ctaLabel(ref)` (`"Reserve on <name>"` when the vendor sells, `"View on
+<name>"` when it does not), `linkLabel(host)`, and `tenantsOf(provider)`.
+`BookingAdapter` has no `displayName`: `AtcTriggerActionHandler`,
+`WatchCapabilityService`, `BookingActionService`, and `CampgroundCta` all ask
+the registry, keyed by the target's `parentRef`, so a tenant is named the same
+everywhere. `booking_system` reads the tenant (`BC Parks`), not the platform
+(`Aspira NextGen`); a ref whose tenant the registry does not know reads the
+vendor name.
+
+**Which identity a row books through** is `BookingIdentityResolver`: the first
+of (primary, aliases in order) whose vendor `sells`, else the serving
+availability provider's claim, else the declared primary. It does not consult
+`BookingAdapterRegistry`, so a pin renders identically in a process without
+the ATC companion.
 
 **Copy names the provider that acted.** An ATC outcome travels as
-`AtcResultNotice`, carrying the holding adapter's `displayName` and its
-`cartUrl`; the email body and the Slack card read those instead of a vendor
-literal. The Slack openings footer names the booking site the alert's Reserve
-links lead to — `WatchOpening.bookingSystem`, resolved by the dispatcher through
-the same `CampgroundCta` registry that fills the POI's `booking_system` — and
-falls back to "the booking site" when one alert spans two vendors. The web
-grid's hold toast reads the *holding* provider: `holdProviderName` takes the
-add-to-cart response's `provider` id, keeps the POI's served `booking_system`
-when the two name the same vendor, and prefers that served name over a
-humanised guess when the id is one the vendor table has no entry for. The
-failure toast does the same with the error envelope's `provider`, falling back
-to `add_to_cart.provider_display` and then to neutral copy.
+`AtcResultNotice`, carrying the registry's name for the target's `parentRef`
+as `bookingSystem` and the holding adapter's `cartUrl`; the email body and the
+Slack card read those instead of a vendor literal. The Slack openings footer
+names the booking site the alert's Reserve links lead to —
+`WatchOpening.bookingSystem`, resolved by the dispatcher through the same
+`CampgroundCta` that fills the POI's `booking_system` — and falls back to
+"the booking site" when one alert spans two vendors. The web
+grid's hold toast reads the *holding* provider straight off the wire — the
+add-to-cart response's `provider_display`, and the error envelope's on the
+failure path — falling back to neutral copy when it is absent. The frontend
+derives no vendor name of its own.
 
 **Credentials are keyed by provider.** `user_booking_credentials(user_id,
 provider, username, secret_cipher)` holds one account per user per vendor, read
@@ -600,7 +618,7 @@ jar rather than after it.
 |---|---|---|---|
 | RecGov (rec.gov) | ✓ | ✓ | Availability and generic watch polling. |
 | Campflare | ✓ | ✓ | Availability uses v2 bulk campground availability for Campflare-owned US catalog rows. `CampflareAvailabilityProvider` sets `supportsInternalPolling = true`; the internal poller can watch it today. A hosted-alert `AlertProvider` (see "Alert seam" above) is a separate, not-yet-built seam for vendor-pushed openings instead of internal polling. |
-| Aspira NextGen (BC Parks, Washington, Pennsylvania) | ✓ | ✓ | `AspiraAvailabilityProvider` sets `supportsInternalPolling = true`. |
+| Aspira NextGen (BC Parks, Washington, Parks Canada) | ✓ | ✓ | `AspiraAvailabilityProvider` sets `supportsInternalPolling = true`. |
 | ReserveAmerica / Active Network (Alberta Parks, New York State Parks) | ✓ | ✗ | Availability reads the live campsite-calendar matrix; sites are cataloged from that same calendar roster (see `reserveamerica.md`). `supportsInternalPolling = false` until upstream cadence/load limits are validated. |
 | ReserveCalifornia / Tyler | ✓ | ✗ | Availability reads standard facility grids. Catalog import uses the public Search All Parks `search/place` flow. `supportsInternalPolling = false`. |
 
@@ -783,17 +801,25 @@ poller has produced.
 
 1. Add rows to `DataProvider` and/or `BookingProvider` if this is a new
    catalog source or availability platform.
-2. Add `DataProviderRef` and `BookingProviderRef` variants if the identifier
+2. Add a `booking_providers` row: `id` (the `BookingProvider` member), a
+   `display_name`, `sells`, and one `tenants` entry per host. The boot
+   validator requires exactly one row per member, unique tenant codes per
+   vendor, unique hosts across the section, and that every `poi_data` /
+   `campsite_data` ETL row carrying `args.tenant` (Aspira) or `args.contract`
+   (ReserveAmerica) names a real tenant whose host matches `args.host`.
+3. Add `DataProviderRef` and `BookingProviderRef` variants if the identifier
    shapes are not already covered.
-3. Create `service/availability/provider/<Vendor>AvailabilityProvider.kt`
-   implementing `AvailabilityProvider`. Capabilities default conservatively
-   (`supportsInternalPolling = false`); flip them on as features land.
-4. Ensure the terminal ETL emits the right `dataProviderRef` and optional
+4. Add the adapter in `service/availability/provider/`, taking
+   `List<BookingTenant>` from `TenantRegistry.tenantsOf` when it is
+   multi-tenant. No `*BookingDisplay` object, no per-vendor label constant.
+   Capabilities default conservatively (`supportsInternalPolling = false`);
+   flip them on as features land.
+5. Ensure the terminal ETL emits the right `dataProviderRef` and optional
    `bookingProviderRef`, and that registry wiring maps configured sources to
    the adapter.
-5. Update the matrix table above.
+6. Update the matrix table above.
 
-Steps 1–5 should be the entire provider-registration diff. If you find
+Steps 1–6 should be the entire provider-registration diff. If you find
 yourself editing route files, `AvailabilityServiceImpl`, or the watch poller
 core only to branch on a new vendor, the abstraction is leaking — fix that
 before merging.
@@ -803,17 +829,18 @@ before merging.
 Each adapter's upstream API is documented separately under
 `docs/reservation-providers/`:
 
-- [aspira.md](reservation-providers/aspira.md) — Aspira NextGen
-  (`reservation.pc.gc.ca`, `camping.bcparks.ca`,
-  `washington.goingtocamp.com`).
+Each vendor's hosts are its `booking_providers` tenants in
+`backend/src/main/resources/poi-registry.yaml`, not a list here.
+
+- [aspira.md](reservation-providers/aspira.md) — Aspira NextGen.
 - [campflare.md](reservation-providers/campflare.md) — Campflare v2 bulk
   campground availability.
 - [reservecalifornia.md](reservation-providers/reservecalifornia.md) —
   ReserveCalifornia / Tyler Technologies.
 - [reserveamerica.md](reservation-providers/reserveamerica.md) — ReserveAmerica /
-  Active Network (`shop.albertaparks.ca`, `newyorkstateparks.reserveamerica.com`).
-- [recgov.md](reservation-providers/recgov.md) — Recreation.gov
-  (`www.recreation.gov` monthly availability API, RIDB catalog).
+  Active Network.
+- [recgov.md](reservation-providers/recgov.md) — Recreation.gov (monthly
+  availability API, RIDB catalog).
 
 When adding a new vendor, follow the
 [probe-vendor-api skill](../.claude/skills/probe-vendor-api/SKILL.md)

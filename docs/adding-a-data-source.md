@@ -223,6 +223,10 @@ of the constructor. Classes instantiated once per tenant
 take the slug from `entry.slug`; an unknown `adapter:` string fails boot with
 `Unknown poi_data adapter: …`.
 
+If the source is a tenant of a booking vendor, its `args.tenant` /
+`args.contract` must name a `booking_providers` tenant and its `args.host` must
+match that tenant's host — the boot validator rejects the registry otherwise.
+
 **Verify** the registry compiles and the backend boots clean:
 
 ```bash

@@ -35,6 +35,11 @@ ones. Each entry names the source of truth in code.
   (`data_provider = bcparks-strapi`) but booked through Aspira
   (`booking_provider = aspira`). Each has a `_ref` column carrying the
   provider-native id.
+- **Tenant** — one host a booking vendor runs, with its own `code` (as stored
+  in `booking_provider_ref` and named in ETL `args`) and the name a person
+  books under. Declared in `booking_providers` in `poi-registry.yaml`. Parks
+  Canada, BC Parks, and Washington State Parks are three tenants of one vendor,
+  Aspira NextGen.
 
 ## Ingestion (registry vocabulary)
 
