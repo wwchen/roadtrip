@@ -50,8 +50,9 @@ move that path behind a service/controller instead of expanding it.
 
 Repos own SQL. If code needs SQL, jOOQ, table names, JSONB casts, materialized
 view refreshes, link-table writes, or persistence mapping, put it behind a repo
-method. Services and ETLs ask for capability through methods; they do not pass
-`DSLContext` around to make their own queries.
+method. Services and ETLs ask for capability through methods; they never hold or
+pass a `DSLContext`. A service that needs several writes to land together takes
+a `UnitOfWork` (see Transactions); one that does not takes the repos it uses.
 
 Entity repos own the full persistence surface for their entity. A
 `CampgroundRepo` owns campground-table reads, queries, writes, and link-table
@@ -175,6 +176,40 @@ implementation gets a matching `*Impl.kt` file. Helper classes belong beside
 the service only when they are part of that use case, not because the caller
 happens to live there.
 
+## Transactions
+
+One type opens a transaction that spans repos: `JooqUnitOfWork`, in `repo/`.
+Everything above `repo/` asks it for one.
+
+```kotlin
+interface UnitOfWork {
+    fun <T> run(block: (Repos) -> T): T
+}
+```
+
+A service that must write atomically takes a `UnitOfWork` and calls `run`. The
+block receives a `Repos` — one connection context's repo handles, built lazily
+— and every repo it touches is on that transaction. The block returning commits;
+anything thrown rolls the whole block back.
+
+- Services never take a `DSLContext`. If a service needs one repo and no
+  atomicity, inject that repo; if it needs several writes to land together,
+  inject `UnitOfWork`.
+- A repo opens its own transaction only for statements it owns end to end —
+  the legacy mirror in `UserBookingCredentialsRepo`,
+  `UserSettingsRepo.saveNotifications`, the catalog batch upserts. It never
+  opens one on a service's behalf; that is what `UnitOfWork` is for.
+- `JooqUnitOfWork.autocommit` is the non-transactional handle bundle, for
+  callers that batch without a transaction. The import is non-transactional by
+  decision (`rfcs/0004-ingestion-controller.md`), so `repoModule` binds the
+  `Repos` its terminal sinks receive to `autocommit` by name: the choice is
+  visible at the wiring site rather than implied by which constructor was used.
+- No type outside `repo/`, `db/`, `di/InfraModule.kt`, and `di/RepoModule.kt`
+  names `org.jooq` — exceptions included. A repo that can fail on a PostGIS
+  fault translates `org.jooq.exception.DataAccessException` into a domain type
+  (`CorridorUnavailableException`) or handles it, so no caller ever catches
+  jOOQ's. `LayeringGuardTest` fails the build on any other `org.jooq` import.
+
 ## Application Wiring
 
 The Ktor entrypoint should stay thin:
@@ -184,6 +219,11 @@ The Ktor entrypoint should stay thin:
 3. Start runtime services and schedulers.
 4. Register routes and static mounts.
 5. Subscribe shutdown cleanup.
+
+`repoModule` registers every repo as a singleton, plus `JooqUnitOfWork` and its
+two projections: `UnitOfWork` for callers that transact and `Repos` for callers
+that batch on the autocommit context. Route wiring resolves repos from there; it
+does not construct them, and it holds no `DSLContext`.
 
 Construction-heavy wiring belongs in application composition helpers, not in
 route files and not in business services.
@@ -236,6 +276,13 @@ admin route
 
 The ETL framework owns orchestration and run lifecycle. Vendor ETLs parse,
 validate, and transform their upstream inputs. Persistence stays in repos.
+
+A terminal ETL's sink factory is `(Repos) -> TerminalSink`: the binding is handed
+repo handles, never a connection context, and production binds them to
+`JooqUnitOfWork.autocommit`. A phase's counts cross back as
+`ImportPhaseCounts`, a `@Serializable` model; `IngestRunRepo.completePhase`
+encodes it into the `ingest_runs.counts` JSONB column, so no jOOQ type is an
+interchange value between two service methods.
 
 Each vendor ETL writes its own per-vendor campground/campsite rows keyed on
 `data_provider`; nothing merges across vendors at write time or after import.

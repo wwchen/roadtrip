@@ -602,10 +602,12 @@ ON CONFLICT (user_id, provider) DO UPDATE SET
 **Credentials survive a rollback.** V60 moved rec.gov accounts into
 `user_booking_credentials`, and V53's `user_settings.recgov_username` /
 `recgov_password_cipher` are still written: `UserBookingCredentialsRepo`
-mirrors every save, rename and clear into them in the same transaction, so a
+mirrors every save, rename and clear into them inside its own transaction, so a
 jar that predates V60 finds the current account rather than a stale one. Those
 columns are dead weight only after the drop-columns migration; until then do
-not stop writing them.
+not stop writing them. That atomicity is the repo's own: `UserSettingsService`
+still writes its three tables without a transaction, and making that save
+atomic is a separate change.
 
 **The Grafana rename is a hard cut.** ATC telemetry is now
 `roadtrip.booking.atc{provider}` for every vendor. Dashboards querying the old
