@@ -5,11 +5,21 @@ import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
 import ca.floo.roadtrip.model.domain.poi.PoiResult
 import ca.floo.roadtrip.model.domain.poi.PoiRow
 import ca.floo.roadtrip.model.domain.poi.PoiSearchHit
+import ca.floo.roadtrip.support.causeChain
 import org.jooq.DSLContext
+import org.jooq.exception.DataAccessException
+import org.slf4j.LoggerFactory
 
 private const val SAMPLE_GRID_DIM: Int = 10
 
 private const val MIN_PER_CATEGORY_ALLOCATION: Int = 50
+
+private const val TOPOLOGY_FAULT = "TopologyException"
+
+private val poiServingLog = LoggerFactory.getLogger("PoiServingRepo")
+
+/** A GEOS self-intersection in one corridor polygon is a bad shape, not an outage. */
+internal fun isTopologyFault(e: DataAccessException): Boolean = causeChain(e).contains(TOPOLOGY_FAULT)
 
 private class CampgroundProviderFilter(
     enabledDataProviders: Set<String>,
@@ -110,15 +120,21 @@ internal class PoiServingRepo(
         args.add(polygonGeoJson)
         args.addAll(providerFilter.params)
         args.addAll(categories)
-        return ctx.fetch(sql, *args.toTypedArray()).map { r ->
-            PoiRow(
-                id = (r.get("id") as Number).toLong(),
-                category = r.get("category") as String,
-                subcategory = r.get("subcategory") as String?,
-                agency = r.get("agency") as String?,
-                lng = (r.get("lng") as Number).toDouble(),
-                lat = (r.get("lat") as Number).toDouble(),
-            )
+        return try {
+            ctx.fetch(sql, *args.toTypedArray()).map { r ->
+                PoiRow(
+                    id = (r.get("id") as Number).toLong(),
+                    category = r.get("category") as String,
+                    subcategory = r.get("subcategory") as String?,
+                    agency = r.get("agency") as String?,
+                    lng = (r.get("lng") as Number).toDouble(),
+                    lat = (r.get("lat") as Number).toDouble(),
+                )
+            }
+        } catch (e: DataAccessException) {
+            if (!isTopologyFault(e)) throw e
+            poiServingLog.warn("on-route GEOS topology fault, returning empty: {}", causeChain(e))
+            emptyList()
         }
     }
 

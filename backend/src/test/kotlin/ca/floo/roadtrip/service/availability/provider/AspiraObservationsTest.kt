@@ -10,11 +10,13 @@ import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.statuses
 import ca.floo.roadtrip.model.api.AvailabilityResponseDto
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
+import ca.floo.roadtrip.route.api.pois.mapProviderError
 import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.support.AspiraException
@@ -47,15 +49,30 @@ class AspiraObservationsTest {
     private val tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA)
 
     @Test
-    fun `aspira upstream mapper uses availability error dto renderer`() {
-        val (status, error) = mapAspiraUpstreamError(AspiraException("WAF challenge", httpStatus = 503))
-        val json = Json.parseToJsonElement(encodeApiJson(error)).jsonObject
+    fun `an aspira WAF block renders through the shared availability error dto`() =
+        runBlocking {
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, _, _, _ -> throw AspiraException("WAF challenge", httpStatus = 503) },
+                )
+            val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
 
-        assertEquals(503, status.value)
-        assertEquals("error", json["state"]!!.jsonPrimitive.content)
-        assertEquals("upstream_blocked", json["error"]!!.jsonPrimitive.content)
-        assertEquals(503, json["upstream_status"]!!.jsonPrimitive.int)
-    }
+            val classified =
+                runCatching {
+                    provider.availability(
+                        campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
+                        startDate = LocalDate.parse("2026-07-01"),
+                        endDate = LocalDate.parse("2026-07-02"),
+                    )
+                }.exceptionOrNull()
+            require(classified is AvailabilityProviderError.UpstreamBlocked) { "expected UpstreamBlocked, got $classified" }
+
+            val json = Json.parseToJsonElement(encodeApiJson(mapProviderError(classified).second)).jsonObject
+
+            assertEquals("error", json["state"]!!.jsonPrimitive.content)
+            assertEquals("upstream_blocked", json["error"]!!.jsonPrimitive.content)
+            assertEquals(503, json["upstream_status"]!!.jsonPrimitive.int)
+        }
 
     @Test
     fun `aspira campground availability stays unkeyed without catalog campsite ids`() =

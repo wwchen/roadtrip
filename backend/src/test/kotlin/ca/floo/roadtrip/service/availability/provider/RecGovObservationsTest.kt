@@ -10,6 +10,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
+import ca.floo.roadtrip.route.api.pois.mapProviderError
 import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.support.RecGovException
@@ -308,9 +309,7 @@ class RecGovObservationsTest {
                 classify(client, days = 1)
             }.exceptionOrNull()
         require(ex is AvailabilityProviderError.RateLimited) { "expected RateLimited, got $ex" }
-        val (status, error) = mapRecgovUpstreamError(ex)
-        assertEquals(503, status.value)
-        assertEquals("rate_limited", error.error)
+        assertEquals("rate_limited", mapProviderError(ex).second.error)
     }
 
     @Test
@@ -324,14 +323,14 @@ class RecGovObservationsTest {
             }
         val ex = runCatching { classify(client, days = 1) }.exceptionOrNull()
         require(ex is AvailabilityProviderError.RateLimited) { "expected RateLimited, got $ex" }
-        assertEquals("rate_limited", mapRecgovUpstreamError(ex).second.error)
+        assertEquals("rate_limited", mapProviderError(ex).second.error)
     }
 
     @Test
     fun `5xx maps to upstream_5xx`() {
-        val ex = IllegalStateException("connection reset")
-        val (_, error) = mapRecgovUpstreamError(ex)
-        assertEquals("upstream_5xx", error.error)
+        val classified = upstreamAvailabilityError(cause = IllegalStateException("connection reset"), httpStatus = null)
+
+        assertEquals("upstream_5xx", mapProviderError(classified).second.error)
     }
 
     @Test

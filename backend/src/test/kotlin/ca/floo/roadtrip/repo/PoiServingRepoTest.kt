@@ -1,8 +1,12 @@
 package ca.floo.roadtrip.repo
 
+import org.jooq.exception.DataAccessException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class PoiServingRepoTest : SharedDbTest() {
     @BeforeEach
@@ -63,6 +67,23 @@ class PoiServingRepoTest : SharedDbTest() {
         val rows = repo().fetchPoisWithinPolygon(WORLD, listOf("campground"))
 
         assertEquals(setOf(a, b), rows.map { it.id }.toSet())
+    }
+
+    @Test
+    fun `a GEOS topology fault reads as a bad corridor shape, not an outage`() {
+        val fault = DataAccessException("SQL [...]", IllegalStateException("TopologyException: side location conflict"))
+
+        assertTrue(isTopologyFault(fault))
+    }
+
+    @Test
+    fun `any other data-access failure is not a topology fault`() {
+        assertFalse(isTopologyFault(DataAccessException("connection reset by peer")))
+    }
+
+    @Test
+    fun `a polygon PostGIS cannot parse still fails loudly rather than serving zero POIs`() {
+        assertFailsWith<DataAccessException> { repo().fetchPoisWithinPolygon("not-geojson", listOf("campground")) }
     }
 
     private fun repo(enabledDataProviders: Set<String> = setOf("recgov", "campflare")) =
