@@ -195,20 +195,24 @@ anything thrown rolls the whole block back.
 - Services never take a `DSLContext`. If a service needs one repo and no
   atomicity, inject that repo; if it needs several writes to land together,
   inject `UnitOfWork`.
-- A repo opens its own transaction only for statements it owns end to end —
-  the legacy mirror in `UserBookingCredentialsRepo`,
-  `UserSettingsRepo.saveNotifications`, the catalog batch upserts. It never
-  opens one on a service's behalf; that is what `UnitOfWork` is for.
+- A repo opens its own transaction only for statements it owns end to end — for
+  example the legacy mirror in `UserBookingCredentialsRepo`,
+  `UserSettingsRepo.saveNotifications`, the catalog batch upserts, and the
+  availability poller/target statements that must land as one. It never opens
+  one on a service's behalf; that is what `UnitOfWork` is for.
 - `JooqUnitOfWork.autocommit` is the non-transactional handle bundle, for
   callers that batch without a transaction. The import is non-transactional by
   decision (`rfcs/0004-ingestion-controller.md`), so `repoModule` binds the
-  `Repos` its terminal sinks receive to `autocommit` by name: the choice is
-  visible at the wiring site rather than implied by which constructor was used.
-- No type outside `repo/`, `db/`, `di/InfraModule.kt`, and `di/RepoModule.kt`
-  names `org.jooq` — exceptions included. A repo that can fail on a PostGIS
-  fault translates `org.jooq.exception.DataAccessException` into a domain type
+  `Repos` singleton its terminal sinks receive to `JooqUnitOfWork.autocommit`:
+  the choice is visible at the wiring site rather than implied by which
+  constructor was used.
+- No type outside `repo/`, `db/`, and `di/InfraModule.kt` names `org.jooq` —
+  exceptions included. A repo that can fail on a PostGIS fault translates
+  `org.jooq.exception.DataAccessException` into a domain type
   (`CorridorUnavailableException`) or handles it, so no caller ever catches
-  jOOQ's. `LayeringGuardTest` fails the build on any other `org.jooq` import.
+  jOOQ's. The GEOS topology-fault predicate both sides share
+  (`isTopologyFault`) therefore lives in `support/`, typed as `Throwable`.
+  `LayeringGuardTest` fails the build on any other `org.jooq` reference.
 
 ## Application Wiring
 
