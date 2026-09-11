@@ -13,6 +13,7 @@ import kotlin.test.assertNull
 private const val ETL_SLUG = "geometry-sources-test"
 private const val SLUG = "geom"
 private const val PARK = "Two Jack Lakeside"
+private const val DECOY_PARK = "Lake Louise"
 private const val LON = -115.49
 private const val LAT = 51.22
 
@@ -113,6 +114,29 @@ class GeometrySourcesTest {
 
         assertIs<GeoJsonFeaturesSource>(source)
         assertEquals(point(), index(source)[normalize(PARK)], "the declared property must be the key that is read")
+    }
+
+    @Test
+    fun `a declared name_property replaces the default keys rather than joining them`() {
+        // The one feature carries both, so an appended or prepended nameProperty
+        // would still leave `name` live and index the wrong string.
+        val envelopes = listOf(geoJsonEnvelope("""{ "name": "$DECOY_PARK", "Name_e": "$PARK" }"""))
+        val source = forSpec(GeometryFormat.GEOJSON_POINTS, envelopes, nameProperty = "Name_e")
+
+        val byName = index(source)
+        assertEquals(point(), byName[normalize(PARK)], "the declared property wins outright")
+        assertNull(byName[normalize(DECOY_PARK)], "a default key must not outrank the declared one")
+        assertEquals(1, byName.size)
+
+        // The other half of "replaces": with a property declared, a feature the
+        // defaults alone would have named is not named at all.
+        val defaultKeyOnly =
+            forSpec(
+                GeometryFormat.GEOJSON_POINTS,
+                listOf(geoJsonEnvelope("""{ "name": "$DECOY_PARK" }""")),
+                nameProperty = "Name_e",
+            )
+        assertEquals(emptyMap<String, GeometryPoint>(), index(defaultKeyOnly), "the defaults must not stay live")
     }
 
     @Test
