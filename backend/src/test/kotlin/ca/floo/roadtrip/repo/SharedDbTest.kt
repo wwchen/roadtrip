@@ -22,6 +22,18 @@ abstract class SharedDbTest {
     protected val ds: HikariDataSource by lazy { SharedTestDb.createDatabase() }
     protected val ctx: DSLContext by lazy { DSL.using(ds, SQLDialect.POSTGRES) }
 
+    /** jOOQ executes one statement per call, so the script is split on its statement terminators. */
+    protected fun migrationStatements(name: String): List<String> =
+        checkNotNull(javaClass.classLoader.getResourceAsStream("db/migration/$name")) { "missing migration $name" }
+            .bufferedReader()
+            .use { it.readText() }
+            .lines()
+            .filterNot { it.trimStart().startsWith("--") }
+            .joinToString("\n")
+            .split(";")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
     @AfterAll
     fun closeSharedDb() {
         ds.close()

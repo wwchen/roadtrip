@@ -15,8 +15,6 @@ open class UserSettingsRepo(
         val slackChannel: String?,
         val slackTokenCipher: ByteArray?,
         val slackTokenHint: String?,
-        val recgovUsername: String? = null,
-        val recgovPasswordCipher: ByteArray? = null,
     )
 
     open fun find(userId: UserId): Settings? =
@@ -26,8 +24,6 @@ open class UserSettingsRepo(
                 USER_SETTINGS.SLACK_CHANNEL,
                 USER_SETTINGS.SLACK_TOKEN_CIPHER,
                 USER_SETTINGS.SLACK_TOKEN_HINT,
-                USER_SETTINGS.RECGOV_USERNAME,
-                USER_SETTINGS.RECGOV_PASSWORD_CIPHER,
             ).from(USER_SETTINGS)
             .where(USER_SETTINGS.USER_ID.eq(userId.value))
             .fetchOne()
@@ -37,8 +33,6 @@ open class UserSettingsRepo(
                     it[USER_SETTINGS.SLACK_CHANNEL],
                     it[USER_SETTINGS.SLACK_TOKEN_CIPHER],
                     it[USER_SETTINGS.SLACK_TOKEN_HINT],
-                    it[USER_SETTINGS.RECGOV_USERNAME],
-                    it[USER_SETTINGS.RECGOV_PASSWORD_CIPHER],
                 )
             }
 
@@ -122,64 +116,6 @@ open class UserSettingsRepo(
                     .execute()
             }
         }
-    }
-
-    /**
-     * Upserts the rec.gov username and — when [passwordCipher] is non-null — the
-     * sealed password, in one statement.
-     *
-     * A null [passwordCipher] means "leave the stored password untouched", the
-     * write-only `SecretField` contract the Slack token already follows. Unlike
-     * that token there is no hint column: see V53 for why a human password's
-     * last 4 characters are credential material, not a display aid.
-     */
-    open fun saveRecgovCredentials(
-        userId: UserId,
-        username: String,
-        passwordCipher: ByteArray?,
-    ) {
-        val now = OffsetDateTime.now()
-        val insert =
-            ctx
-                .insertInto(USER_SETTINGS)
-                .set(USER_SETTINGS.USER_ID, userId.value)
-                .set(USER_SETTINGS.RECGOV_USERNAME, username)
-                .set(USER_SETTINGS.RECGOV_PASSWORD_CIPHER, passwordCipher)
-                .set(USER_SETTINGS.UPDATED_AT, now)
-                .onConflict(USER_SETTINGS.USER_ID)
-                .doUpdate()
-                .set(USER_SETTINGS.RECGOV_USERNAME, username)
-                .set(USER_SETTINGS.UPDATED_AT, now)
-        if (passwordCipher != null) {
-            insert.set(USER_SETTINGS.RECGOV_PASSWORD_CIPHER, passwordCipher)
-        }
-        insert.execute()
-    }
-
-    /**
-     * Every user with rec.gov credentials stored, for the keepalive sweep.
-     *
-     * Both columns, because "configured" has always meant both: a username with
-     * no sealed password cannot log in, so keeping its profile warm would keep
-     * a browser alive for an account that can never be used.
-     */
-    open fun userIdsWithRecgovCredentials(): List<Long> =
-        ctx
-            .select(USER_SETTINGS.USER_ID)
-            .from(USER_SETTINGS)
-            .where(USER_SETTINGS.RECGOV_USERNAME.isNotNull)
-            .and(USER_SETTINGS.RECGOV_PASSWORD_CIPHER.isNotNull)
-            .fetch(USER_SETTINGS.USER_ID)
-            .filterNotNull()
-
-    open fun clearRecgov(userId: UserId) {
-        ctx
-            .update(USER_SETTINGS)
-            .setNull(USER_SETTINGS.RECGOV_USERNAME)
-            .setNull(USER_SETTINGS.RECGOV_PASSWORD_CIPHER)
-            .set(USER_SETTINGS.UPDATED_AT, OffsetDateTime.now())
-            .where(USER_SETTINGS.USER_ID.eq(userId.value))
-            .execute()
     }
 
     open fun clearSlack(userId: UserId) {

@@ -12,6 +12,9 @@ import ca.floo.roadtrip.model.domain.auth.Role
 import ca.floo.roadtrip.model.domain.auth.User
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.auth.UserStatus
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.repo.BookingCredentials
+import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
@@ -53,6 +56,16 @@ private class FakeUserRepo : UserRepo(ctx = detachedCtx) {
         users[id.value] = updated
         return updated
     }
+}
+
+/** Fake in-memory implementation of [UserBookingCredentialsRepo]. */
+private class FakeBookingCredentialsRepo : UserBookingCredentialsRepo(ctx = detachedCtx) {
+    var stored: BookingCredentials? = null
+
+    override fun find(
+        user: UserId,
+        provider: BookingProvider,
+    ): BookingCredentials? = stored.takeIf { provider == BookingProvider.RECGOV }
 }
 
 /** Fake in-memory implementation of [UserSettingsRepo]. */
@@ -171,6 +184,7 @@ private fun testUser(
 private fun makeService(
     userRepo: FakeUserRepo,
     settingsRepo: FakeUserSettingsRepo,
+    bookingCredentialsRepo: FakeBookingCredentialsRepo = FakeBookingCredentialsRepo(),
     cipher: SecretCipher? = SecretCipher(testKey),
     slackClient: FakeSlackClient = FakeSlackClient(),
     providerLabel: String? = "Auth0",
@@ -180,6 +194,7 @@ private fun makeService(
     UserSettingsService(
         userRepo = userRepo,
         settingsRepo = settingsRepo,
+        bookingCredentialsRepo = bookingCredentialsRepo,
         cipher = cipher,
         slackClient = slackClient,
         providerLabel = providerLabel,

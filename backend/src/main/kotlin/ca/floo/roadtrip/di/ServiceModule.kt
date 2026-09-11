@@ -20,6 +20,7 @@ import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
+import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
@@ -126,6 +127,7 @@ val serviceModule =
             UserSettingsService(
                 userRepo = get<UserRepo>(),
                 settingsRepo = get<UserSettingsRepo>(),
+                bookingCredentialsRepo = get<UserBookingCredentialsRepo>(),
                 cipher = cipher,
                 slackClient = slackClient,
                 providerLabel = providerLabel,
@@ -152,7 +154,7 @@ val serviceModule =
             val config: AppConfig = get()
             val cipher: SecretCipher? = config.secrets?.let { SecretCipher(it.encryptionKey) }
             RecGovCredentialService(
-                settingsRepo = get<UserSettingsRepo>(),
+                credentialsRepo = get<UserBookingCredentialsRepo>(),
                 watchRepo = get<AvailabilityWatchRepo>(),
                 cipher = cipher,
                 companion = get<CompanionChannel>().session,
@@ -379,13 +381,14 @@ val serviceModule =
             // keep warm, so the job is simply not started rather than sweeping
             // against nothing. Koin cannot hold a null single, hence the wrapper.
             val config: AppConfig = get()
+            val bookingCredentialsRepo = get<UserBookingCredentialsRepo>()
             RecGovKeepalive(
                 get<CompanionChannel>().session?.let {
                     RecGovKeepaliveJob(
                         watchRepo = get<AvailabilityWatchRepo>(),
                         companion = it,
                         profiles = get<RecGovCredentialService>(),
-                        credentials = get<UserSettingsRepo>()::userIdsWithRecgovCredentials,
+                        credentials = { bookingCredentialsRepo.userIdsWithCredentials(BookingProvider.RECGOV) },
                         recentFires = get<RecentAtcFires>(),
                         metrics = get<RoadtripMetrics>(),
                         interval = config.booking.recgovAtc.keepaliveInterval,

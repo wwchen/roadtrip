@@ -1682,18 +1682,6 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 """.trimIndent(),
             ).map { row -> row.intoArray().joinToString("|") { it.toString() } }
 
-    /** jOOQ executes one statement per call, so the script is split on its statement terminators. */
-    private fun migrationStatements(name: String): List<String> =
-        checkNotNull(javaClass.classLoader.getResourceAsStream("db/migration/$name")) { "missing migration $name" }
-            .bufferedReader()
-            .use { it.readText() }
-            .lines()
-            .filterNot { it.trimStart().startsWith("--") }
-            .joinToString("\n")
-            .split(";")
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-
     private fun tableCount(table: String): Int =
         ctx
             .fetchOne("SELECT COUNT(*) AS n FROM $table")!!

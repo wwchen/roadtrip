@@ -3,18 +3,6 @@ package ca.floo.roadtrip.service.settings
 import ca.floo.roadtrip.model.domain.auth.UserId
 
 /**
- * Whether a user has rec.gov credentials stored.
- *
- * *Configured*, never *proven working*: wrong credentials surface at test time
- * in Settings or at fire time in the failure notification, matching the Slack
- * precedent. Capability gating reads this so `atc` is offered only to users who
- * could plausibly fulfil it.
- */
-fun interface RecGovCredentialsConfigured {
-    fun isConfigured(userId: UserId): Boolean
-}
-
-/**
  * The owner's rec.gov browser session, as the ATC fire path needs it.
  *
  * The booking adapter must answer two questions before it drives a cart hold:

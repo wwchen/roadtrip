@@ -9,9 +9,9 @@ import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.RecGovBookingDisplay
+import ca.floo.roadtrip.service.settings.BookingCredentialsConfigured
 import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionSessionHealth
-import ca.floo.roadtrip.service.settings.RecGovCredentialsConfigured
 import ca.floo.roadtrip.service.settings.RecGovProfileSessionPort
 import ca.floo.roadtrip.service.settings.RecGovSessionCodes
 import ca.floo.roadtrip.support.runCatchingCancellable
@@ -80,7 +80,7 @@ internal class RecGovBookingAdapter(
      */
     private val recentFires: RecentAtcFires? = null,
     /** Whose cart a hold could land in. Null where no custodian is wired. */
-    private val credentials: RecGovCredentialsConfigured? = null,
+    private val credentials: BookingCredentialsConfigured? = null,
 ) : BookingAdapter {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -129,7 +129,7 @@ internal class RecGovBookingAdapter(
             ).forEach { put(it, BookingFailureCategory.RETRY_LATER) }
         }
 
-    override fun canFulfil(user: UserId): Boolean = credentials?.isConfigured(user) == true
+    override fun canFulfil(user: UserId): Boolean = credentials?.isConfigured(id, user) == true
 
     override fun targetFor(
         parentRef: BookingProviderRef,

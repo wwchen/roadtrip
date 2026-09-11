@@ -295,6 +295,7 @@ jooq {
                                 "schedules",
                                 "settings",
                                 "tesla_superchargers",
+                                "user_booking_credentials",
                                 "user_identity",
                                 "user_role",
                                 "user_session",

@@ -215,7 +215,7 @@ class RecGovKeepaliveJobTest {
         watchRepo = repo,
         companion = companion,
         profiles = FakeProfiles(neverLoggedIn),
-        credentials = { credentialed },
+        credentials = { credentialed.map(::UserId) },
         recentFires = recentFires,
         metrics = metrics,
         interval = sweepInterval,

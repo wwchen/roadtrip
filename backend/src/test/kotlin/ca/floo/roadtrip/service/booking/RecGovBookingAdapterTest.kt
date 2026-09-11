@@ -8,9 +8,9 @@ import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.service.settings.BookingCredentialsConfigured
 import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionSessionHealth
-import ca.floo.roadtrip.service.settings.RecGovCredentialsConfigured
 import ca.floo.roadtrip.service.settings.RecGovProfileSessionPort
 import ca.floo.roadtrip.service.settings.RecGovSessionCodes
 import kotlinx.coroutines.runBlocking
@@ -353,8 +353,8 @@ class RecGovBookingAdapterTest {
     fun `only a caller with rec_gov credentials stored can be fulfilled`() {
         val owner = UserId(TEST_OWNER_USER_ID)
 
-        assertTrue(provider(credentials = { it == owner }).canFulfil(owner))
-        assertFalse(provider(credentials = { false }).canFulfil(owner))
+        assertTrue(provider(credentials = { _, user -> user == owner }).canFulfil(owner))
+        assertFalse(provider(credentials = { _, _ -> false }).canFulfil(owner))
     }
 
     @Test
@@ -372,7 +372,7 @@ class RecGovBookingAdapterTest {
     private fun provider(
         executor: RecordingAtcExecutor = RecordingAtcExecutor(completedOutcome()),
         session: FakeProfileSession = FakeProfileSession(),
-        credentials: RecGovCredentialsConfigured = RecGovCredentialsConfigured { true },
+        credentials: BookingCredentialsConfigured = BookingCredentialsConfigured { _, _ -> true },
     ): RecGovBookingAdapter = RecGovBookingAdapter(executor, session, credentials = credentials)
 
     /** [RecGovProfileSessionPort] double: an active session unless told otherwise. */

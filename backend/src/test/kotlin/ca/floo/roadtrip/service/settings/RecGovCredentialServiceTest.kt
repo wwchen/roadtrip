@@ -4,8 +4,10 @@ import ca.floo.roadtrip.model.api.RecgovLoginStatus
 import ca.floo.roadtrip.model.api.RecgovSessionState
 import ca.floo.roadtrip.model.api.UpdateRecgovRequest
 import ca.floo.roadtrip.model.domain.auth.UserId
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.repo.BookingCredentials
+import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.security.SecretCipher
 import kotlinx.coroutines.CompletableDeferred
@@ -50,27 +52,27 @@ private const val PROFILE_ID = "7"
  */
 private const val GATED_TEST_TIMEOUT_MS = 5_000L
 
-private class FakeSettingsRepo : UserSettingsRepo(ctx = detachedCtx) {
-    var settings: Settings? = null
+private class FakeCredentialsRepo : UserBookingCredentialsRepo(ctx = detachedCtx) {
+    var stored: BookingCredentials? = null
 
-    override fun find(userId: UserId): Settings? = settings
+    override fun find(
+        user: UserId,
+        provider: BookingProvider,
+    ): BookingCredentials? = stored.takeIf { provider == BookingProvider.RECGOV }
 
-    override fun saveRecgovCredentials(
-        userId: UserId,
+    override fun save(
+        user: UserId,
+        provider: BookingProvider,
         username: String,
-        passwordCipher: ByteArray?,
+        secretCipher: ByteArray,
     ) {
-        val current = settings ?: Settings(null, null, null, null)
-        settings =
-            current.copy(
-                recgovUsername = username,
-                recgovPasswordCipher = passwordCipher ?: current.recgovPasswordCipher,
-            )
+        stored = BookingCredentials(username, secretCipher)
     }
 
-    override fun clearRecgov(userId: UserId) {
-        settings = settings?.copy(recgovUsername = null, recgovPasswordCipher = null)
-    }
+    override fun clear(
+        user: UserId,
+        provider: BookingProvider,
+    ): Boolean = (stored != null).also { stored = null }
 }
 
 private class FakeWatchRepo(
@@ -160,30 +162,22 @@ class RecGovCredentialServiceTest {
     private val cipher = SecretCipher(testKey)
 
     private fun service(
-        repo: FakeSettingsRepo = FakeSettingsRepo(),
+        repo: FakeCredentialsRepo = FakeCredentialsRepo(),
         companion: CompanionSessionPort? = FakeCompanion(),
         withCipher: SecretCipher? = cipher,
         activeAtcWatches: Int = 0,
         clock: Clock = Clock.systemUTC(),
     ) = RecGovCredentialService(
-        settingsRepo = repo,
+        credentialsRepo = repo,
         watchRepo = FakeWatchRepo(activeAtcWatches),
         cipher = withCipher,
         companion = companion,
         clock = clock,
     )
 
-    private fun configuredRepo(password: String = "hunter2-secret"): FakeSettingsRepo =
-        FakeSettingsRepo().also {
-            it.settings =
-                UserSettingsRepo.Settings(
-                    notificationEmail = null,
-                    slackChannel = null,
-                    slackTokenCipher = null,
-                    slackTokenHint = null,
-                    recgovUsername = "ada@example.com",
-                    recgovPasswordCipher = cipher.seal(password),
-                )
+    private fun configuredRepo(password: String = "hunter2-secret"): FakeCredentialsRepo =
+        FakeCredentialsRepo().also {
+            it.stored = BookingCredentials(username = "ada@example.com", secretCipher = cipher.seal(password))
         }
 
     // ── storage ──────────────────────────────────────────────────────────────
@@ -191,13 +185,13 @@ class RecGovCredentialServiceTest {
     @Test
     fun `saving seals the password and keeps only a last-4 hint`() =
         runBlocking {
-            val repo = FakeSettingsRepo()
+            val repo = FakeCredentialsRepo()
 
             val dto = service(repo).save(testUserId, UpdateRecgovRequest("ada@example.com", "hunter2-secret"))
 
             assertTrue(dto.recgovConfigured)
             assertEquals("ada@example.com", dto.recgovUsername)
-            assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
+            assertEquals("hunter2-secret", cipher.open(repo.stored!!.secretCipher))
         }
 
     @Test
@@ -208,18 +202,18 @@ class RecGovCredentialServiceTest {
             val dto = service(repo).save(testUserId, UpdateRecgovRequest("grace@example.com", null))
 
             assertEquals("grace@example.com", dto.recgovUsername)
-            assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
+            assertEquals("hunter2-secret", cipher.open(repo.stored!!.secretCipher))
         }
 
     @Test
     fun `a blank username is rejected before anything is written`() =
         runBlocking {
-            val repo = FakeSettingsRepo()
+            val repo = FakeCredentialsRepo()
 
             assertFailsWith<SettingsError.InvalidField> {
                 service(repo).save(testUserId, UpdateRecgovRequest("  ", "hunter2"))
             }
-            assertNull(repo.settings)
+            assertNull(repo.stored)
         }
 
     @Test
@@ -289,14 +283,14 @@ class RecGovCredentialServiceTest {
                 service(repo, companion).save(testUserId, UpdateRecgovRequest("grace@example.com", "a-different-secret"))
             }
 
-            assertEquals("ada@example.com", repo.settings!!.recgovUsername, "the row must be untouched")
-            assertEquals("hunter2-secret", cipher.open(repo.settings!!.recgovPasswordCipher!!))
+            assertEquals("ada@example.com", repo.stored!!.username, "the row must be untouched")
+            assertEquals("hunter2-secret", cipher.open(repo.stored!!.secretCipher))
         }
 
     // ── removal ──────────────────────────────────────────────────────────────
 
     @Test
-    fun `removal clears the columns and reports the stranded active atc watches`() =
+    fun `removal clears the stored account and reports the stranded active atc watches`() =
         runBlocking {
             val repo = configuredRepo()
             val companion = FakeCompanion()
@@ -307,8 +301,7 @@ class RecGovCredentialServiceTest {
             assertEquals(3, dto.strandedAtcWatches)
             assertTrue(dto.companionSignedOut)
             assertEquals(listOf(PROFILE_ID), companion.logoutCalls)
-            assertNull(repo.settings!!.recgovUsername)
-            assertNull(repo.settings!!.recgovPasswordCipher)
+            assertNull(repo.stored, "the stored account is gone, not blanked")
         }
 
     @Test
@@ -340,7 +333,7 @@ class RecGovCredentialServiceTest {
                 service(repo, companion).remove(testUserId)
             }
 
-            assertEquals("ada@example.com", repo.settings!!.recgovUsername, "credentials must survive a failed wipe")
+            assertEquals("ada@example.com", repo.stored!!.username, "credentials must survive a failed wipe")
         }
 
     @Test
@@ -357,7 +350,7 @@ class RecGovCredentialServiceTest {
 
             assertTrue(dto.removed)
             assertFalse(dto.companionSignedOut)
-            assertNull(repo.settings!!.recgovPasswordCipher)
+            assertNull(repo.stored)
         }
 
     @Test
@@ -369,7 +362,7 @@ class RecGovCredentialServiceTest {
 
             assertTrue(dto.removed)
             assertFalse(dto.companionSignedOut)
-            assertNull(repo.settings!!.recgovUsername)
+            assertNull(repo.stored)
         }
 
     // ── login ────────────────────────────────────────────────────────────────
@@ -391,7 +384,7 @@ class RecGovCredentialServiceTest {
             val companion = FakeCompanion()
 
             assertFailsWith<SettingsError.RecgovNotConfigured> {
-                service(FakeSettingsRepo(), companion).login(testUserId)
+                service(FakeCredentialsRepo(), companion).login(testUserId)
             }
             assertTrue(companion.loginCalls.isEmpty())
         }
@@ -666,7 +659,7 @@ class RecGovCredentialServiceTest {
         runBlocking {
             val companion = FakeCompanion(healthResult = CompanionSessionHealth.Active)
 
-            val dto = service(FakeSettingsRepo(), companion).status(testUserId)
+            val dto = service(FakeCredentialsRepo(), companion).status(testUserId)
 
             assertFalse(dto.configured)
             assertNull(dto.username)
@@ -861,7 +854,7 @@ class RecGovCredentialServiceTest {
     @Test
     fun `re-login without stored credentials is a refusal, not an exception`() =
         runBlocking {
-            val result = service(FakeSettingsRepo()).reLogin(testUserId)
+            val result = service(FakeCredentialsRepo()).reLogin(testUserId)
 
             assertEquals(RecGovSessionCodes.NOT_CONFIGURED, (result as CompanionActionResult.Failed).code)
         }

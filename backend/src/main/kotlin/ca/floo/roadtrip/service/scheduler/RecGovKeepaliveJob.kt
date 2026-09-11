@@ -23,7 +23,7 @@ import java.time.Duration
 
 /** Every user with rec.gov credentials stored. */
 internal fun interface RecGovCredentialedUsers {
-    fun userIdsWithRecgovCredentials(): List<Long>
+    fun credentialedUserIds(): List<UserId>
 }
 
 /**
@@ -194,8 +194,8 @@ internal class RecGovKeepaliveJob(
             watchRepo
                 .distinctOwnersByTriggerKind(WatchStatus.ACTIVE, AvailabilityTriggerKinds.ATC)
                 .map(::UserId)
-        val armedIds = armed.map { it.value }.toSet()
-        val credentialed = credentials.userIdsWithRecgovCredentials().filterNot { it in armedIds }.map(::UserId)
+        val armedIds = armed.toSet()
+        val credentialed = credentials.credentialedUserIds().filterNot { it in armedIds }
 
         val ordered = armed + credentialed.filter { hasSessionWorthKeeping(it) }
         if (ordered.size > maxProfiles) {

@@ -306,9 +306,19 @@ another vendor site.
 | the adapter answers | how |
 | --- | --- |
 | whose cart a hold lands in | `AddToCartResult.Completed.cartUrl`; `RecGovBookingAdapter` owns `RECGOV_CART_URL` |
-| whether this caller has one | `canFulfil(user)` — rec.gov reads `RecGovCredentialsConfigured` |
+| whether this caller has one | `canFulfil(user)` — rec.gov asks `BookingCredentialsConfigured(RECGOV, user)` |
 | what its refusal codes mean | `failureCategories`; the `recgov_*` codes live in `RecGovBookingCodes` |
 | what a person calls it | `displayName` (`"Recreation.gov"`) |
+
+**Credentials are keyed by provider.** `user_booking_credentials(user_id,
+provider, username, secret_cipher)` holds one account per user per vendor, read
+and written through `UserBookingCredentialsRepo`; the username stays in the
+clear and the secret is sealed with `SecretCipher`, exactly as V53 argued for
+rec.gov's two columns. `RecGovCredentialService` is rec.gov's custodian and
+answers `isConfigured(RECGOV, user)` only for its own provider — a second
+vendor brings its own custodian rather than widening this one. The
+`/api/settings/recgov` routes and their DTOs are unchanged: they are rec.gov's
+own settings surface, not the storage shape.
 
 So `BookingActionService` names no vendor: it resolves the target, asks the
 claiming adapter `canFulfil`, and returns what the adapter returns.
