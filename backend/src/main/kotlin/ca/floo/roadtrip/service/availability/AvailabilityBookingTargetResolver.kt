@@ -44,7 +44,9 @@ internal class AvailabilityBookingTargetResolver(
     /**
      * The target implied by the rows' own booking identities, primary first. The
      * cart needs the site id on the booking vendor, so each campsite identity is
-     * paired with the campground's ref on that same provider.
+     * paired with the campground's ref on that same provider. A registered
+     * booking adapter treats the identity's ref as the literal vendor site id;
+     * aliases are handed over under that same contract.
      */
     private fun declaredTarget(
         action: BookingAction,

@@ -53,13 +53,21 @@ fun Campground.bookingRef(): BookingProviderRef? {
 }
 
 /**
+ * Every booking identity this row names: its primary booking ref first, then
+ * each [BookingAlias] in stored order. One row can be sold by several vendors —
+ * a Campflare row rec.gov also sells names both.
+ */
+fun Campground.bookingIdentities(): List<BookingProviderRef> =
+    buildList {
+        bookingRef()?.let(::add)
+        bookingAliases.forEach { alias ->
+            BookingProviderRef.parse(alias.provider, alias.ref)?.let(::add)
+        }
+    }
+
+/**
  * This campground's identity *on [provider]*: its primary booking ref when
  * that ref is this provider's, else the matching [BookingAlias] parsed as this
  * provider's ref. Null when the row names the provider nowhere.
  */
-fun Campground.bookingRefFor(provider: BookingProvider): BookingProviderRef? {
-    val primary = bookingRef()
-    if (primary?.provider == provider) return primary
-    val alias = bookingAliases.firstOrNull { it.provider == provider } ?: return null
-    return BookingProviderRef.parse(provider, alias.ref)
-}
+fun Campground.bookingRefFor(provider: BookingProvider): BookingProviderRef? = bookingIdentities().firstOrNull { it.provider == provider }

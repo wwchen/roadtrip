@@ -407,6 +407,7 @@ val serviceModule =
                     campgroundRepo = get<CampgroundRepo>(),
                     dateResolver = get<AvailabilityDateResolver>(),
                     bookingHorizons = get<BookingHorizonResolver>(),
+                    bookingAdapters = get<BookingAdapterRegistry>(),
                 ),
                 TeslaSuperchargerService(get<TeslaSuperchargerRepo>()),
                 PlanetFitnessLocationService(get<PlanetFitnessLocationRepo>()),

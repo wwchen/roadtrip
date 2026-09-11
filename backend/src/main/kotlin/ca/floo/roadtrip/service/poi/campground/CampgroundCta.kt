@@ -171,11 +171,12 @@ private class AspiraCampgroundCtaProvider(
 }
 
 /**
- * Only a row no other provider claims reaches this branch: the detail resolves
- * the serving provider's ref first, so an aliased Campflare row sold on
- * rec.gov arrives as a rec.gov ref and never gets here. Its reserve CTA is the
- * public Campflare page, appended by [CampgroundCta.computeCtas] for every
- * Campflare ref rather than as a `reserveCta` — Campflare sells nothing itself.
+ * Reached by a row whose booking identity really is Campflare's: the detail
+ * resolves a registered booking vendor first, so an aliased Campflare row sold
+ * on rec.gov arrives as a rec.gov ref instead. A row the drawer does hand over
+ * as Campflare gets the public Campflare page, appended by
+ * [CampgroundCta.computeCtas] for every Campflare ref rather than as a
+ * `reserveCta` — Campflare sells nothing itself.
  */
 private object CampflareCampgroundCtaProvider : CampgroundCtaProvider {
     override fun bookingSystem(

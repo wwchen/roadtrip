@@ -15,6 +15,7 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
 import ca.floo.roadtrip.route.api.route.routeRoutes
+import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiService
@@ -67,6 +68,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                             ca.floo.roadtrip.service.availability
                                 .AvailabilityDateResolver(PoiRepo(ctx)),
                         bookingHorizons = testBookingHorizons(ctx),
+                        bookingAdapters = BookingAdapterRegistry(emptyList()),
                     ),
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),

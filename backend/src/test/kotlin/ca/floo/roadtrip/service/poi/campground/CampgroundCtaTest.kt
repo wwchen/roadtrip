@@ -290,9 +290,11 @@ class CampgroundCtaTest {
     }
 
     @Test
-    fun `an aliased campflare row served by rec_gov keeps the rec_gov CTA and label`() {
-        // The serving provider resolves the pin to its rec.gov alias before the
-        // CTA sees it, so the drawer reads exactly as a rec.gov-primary pin.
+    fun `an aliased campflare row sold by rec_gov keeps the rec_gov CTA and label`() {
+        // The detail resolves the pin to its rec.gov alias — the vendor with a
+        // registered booking adapter — before the CTA sees it, so the drawer
+        // reads exactly as a rec.gov-primary pin even while Campflare serves
+        // its availability.
         val ref = BookingProviderRef.RecGov(facilityId = "234784")
 
         val out = cta.computeCtas(bookingRef = ref, reserveUrl = null, infoUrl = "https://www.recreation.gov/camping/campgrounds/234784")
