@@ -37,11 +37,6 @@ private const val STATE_PARAM = "state"
 private const val PROVIDER_ERROR_PARAM = "error"
 private const val DEFAULT_RETURN_TO = "/"
 
-/** Allowlist of connection slugs that may be forwarded to the provider.
- *  Unknown values are silently dropped — the browser falls through to the
- *  provider's own login page rather than getting an error. */
-private val allowedConnections = setOf("google-oauth2")
-
 private val log = LoggerFactory.getLogger("ca.floo.roadtrip.route.auth")
 
 /**
@@ -61,7 +56,7 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
         get("/login") {
             val auth = wiring ?: return@get call.respondAuthDisabled()
 
-            val connection = call.queryParam(CONNECTION_PARAM)?.takeIf { it in allowedConnections }
+            val connection = call.queryParam(CONNECTION_PARAM)?.takeIf { it in auth.allowedConnections }
 
             // A provider that is unreachable or misconfigured must not 500 into
             // the user's face; it is an operator problem, not a client error.
@@ -286,4 +281,7 @@ internal class AuthRouteWiring(
     /** True when the active provider uses the embedded login card (Auth0);
      *  false routes the frontend to the full-page hosted flow. */
     val isEmbeddedLogin: Boolean,
+    /** Connection slugs /auth/login may forward. Unknown values are silently
+     *  dropped — the browser falls through to the provider's own login page. */
+    val allowedConnections: Set<String>,
 )

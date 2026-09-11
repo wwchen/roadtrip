@@ -157,7 +157,7 @@ internal fun Application.registerKoinRoutes() {
                 cacheConfig = config.cache,
                 identities = bookingIdentities,
             )
-        campsiteRoutes(campsiteController)
+        campsiteRoutes(campsiteController, config.availability.campsite)
         bulkAvailabilityRoutes(
             BulkAvailabilityController(campsiteController, config.availability.bulk),
             config.availability.bulk,
@@ -359,5 +359,6 @@ private fun authRouteWiring(
         redirectUri = callbackRedirectUri,
         providerLabel = dialectRegistry.displayNameFor(authConfig.provider),
         isEmbeddedLogin = dialectRegistry.supportsEmbeddedLoginFor(authConfig.provider),
+        allowedConnections = authConfig.allowedConnections,
     )
 }

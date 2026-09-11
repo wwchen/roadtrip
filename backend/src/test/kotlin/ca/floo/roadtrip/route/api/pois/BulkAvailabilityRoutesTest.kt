@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.route.api.pois
 
 import ca.floo.roadtrip.config.BulkAvailabilityConfig
+import ca.floo.roadtrip.config.CampsiteAvailabilityConfig
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
@@ -379,7 +380,7 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
         testApplication {
             application {
                 routeTestApplication {
-                    campsiteRoutes(campsiteAvailabilityController())
+                    campsiteRoutes(campsiteAvailabilityController(), CampsiteAvailabilityConfig.default)
                     bulkAvailabilityRoutes(
                         BulkAvailabilityController(
                             sliceLookup = FakePoiAvailabilitySliceLookup(),

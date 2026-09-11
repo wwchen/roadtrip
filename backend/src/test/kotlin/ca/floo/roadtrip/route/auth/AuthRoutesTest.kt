@@ -132,6 +132,7 @@ private fun authOnWiring(): AuthRouteWiring {
         redirectUri = "https://test.example/auth/callback",
         providerLabel = null,
         isEmbeddedLogin = true,
+        allowedConnections = setOf("google-oauth2"),
     )
 }
 

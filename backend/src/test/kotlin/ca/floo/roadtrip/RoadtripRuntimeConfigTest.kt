@@ -1,5 +1,10 @@
 package ca.floo.roadtrip
 
+import ca.floo.roadtrip.config.AppConfig
+import ca.floo.roadtrip.config.ApplicationProperties
+import ca.floo.roadtrip.config.AuthConfig
+import ca.floo.roadtrip.config.AvailabilityConfig
+import ca.floo.roadtrip.config.ConfigSection
 import ca.floo.roadtrip.config.ReadPathProviderConfig
 import ca.floo.roadtrip.di.notificationTriggerKinds
 import ca.floo.roadtrip.di.validateReadPathDataProviders
@@ -75,6 +80,75 @@ class RoadtripRuntimeConfigTest {
             notificationTriggerKinds(emailConfigured = false),
         )
     }
+
+    @Test
+    fun `the campsite IP rate limit defaults to the literal it replaced`() {
+        assertEquals(30, availabilityConfig(emptyMap()).campsite.ipRateLimitPerMinute)
+    }
+
+    @Test
+    fun `the campsite IP rate limit is tunable`() {
+        assertEquals(
+            7,
+            availabilityConfig(mapOf("roadtrip.availability.campsite.ip-rate-limit-per-minute" to "7"))
+                .campsite.ipRateLimitPerMinute,
+        )
+    }
+
+    @Test
+    fun `a campsite IP rate limit below one is refused at boot`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                availabilityConfig(mapOf("roadtrip.availability.campsite.ip-rate-limit-per-minute" to "0"))
+            }
+
+        assertEquals("campsite ip-rate-limit-per-minute must be >= 1 (got 0)", err.message)
+    }
+
+    @Test
+    fun `the shipped availability yaml states the campsite limit beside the bulk one`() {
+        assertEquals(
+            30,
+            AppConfig
+                .fromProperties(ApplicationProperties.load())
+                .availability.campsite.ipRateLimitPerMinute,
+        )
+    }
+
+    @Test
+    fun `allowed auth connections default to the literal they replaced`() {
+        assertEquals(setOf("google-oauth2"), authConfig(emptyMap())!!.allowedConnections)
+    }
+
+    @Test
+    fun `allowed auth connections are configurable per environment`() {
+        assertEquals(
+            setOf("google-oauth2", "windowslive"),
+            authConfig(mapOf("roadtrip.auth.allowed-connections" to "google-oauth2,windowslive"))!!.allowedConnections,
+        )
+    }
+
+    private fun availabilityConfig(overrides: Map<String, String>): AvailabilityConfig =
+        AvailabilityConfig.fromConfig(
+            ConfigSection(
+                mapOf(
+                    "roadtrip.availability.force-pull-cooldown" to "60s",
+                    "roadtrip.availability.provider-cooldown" to "5m",
+                ) + overrides,
+            ).section("roadtrip").section("availability"),
+        )
+
+    private fun authConfig(overrides: Map<String, String>): AuthConfig? =
+        AuthConfig.fromConfig(
+            ConfigSection(
+                mapOf(
+                    "roadtrip.auth.provider" to "oidc",
+                    "roadtrip.auth.providers.oidc.issuer" to "https://test.example",
+                    "roadtrip.auth.providers.oidc.client-id" to "test-client",
+                    "roadtrip.auth.providers.oidc.client-secret" to "test-secret",
+                ) + overrides,
+            ).section("roadtrip").section("auth"),
+        )
 
     private fun registryWith(vararg sources: String): PoiRegistry =
         PoiRegistry(

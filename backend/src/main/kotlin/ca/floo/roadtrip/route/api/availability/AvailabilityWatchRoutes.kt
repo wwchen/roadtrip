@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.api.MAGIC_LINK_TOKEN_PARAM
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.BAD_REQUEST_ERROR
+import ca.floo.roadtrip.route.common.ListPaging
 import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.boundedIntQuery
@@ -31,14 +32,6 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 
-private const val DEFAULT_LIST_LIMIT = 100
-private const val MIN_LIST_LIMIT = 1
-private const val MAX_LIST_LIMIT = 500
-private const val DEFAULT_LIST_OFFSET = 0
-private const val MIN_LIST_OFFSET = 0
-
-private val listLimitRange = MIN_LIST_LIMIT..MAX_LIST_LIMIT
-
 private suspend fun ApplicationCall.requireUser(): Principal.User? {
     val p = principal() as? Principal.User
     if (p == null) respondApiError("unauthenticated", HttpStatusCode.Unauthorized)
@@ -61,8 +54,8 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                     }
                 val poiId = call.optionalLongQuery("poi_id")
                 val campsiteId = call.optionalLongQuery("campsite_id")
-                val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
-                val offset = call.intQueryAtLeast("offset", DEFAULT_LIST_OFFSET, MIN_LIST_OFFSET)
+                val limit = call.boundedIntQuery("limit", ListPaging.DEFAULT_LIMIT, ListPaging.limitRange)
+                val offset = call.intQueryAtLeast("offset", ListPaging.DEFAULT_OFFSET, ListPaging.MIN_OFFSET)
                 call.respondEncodedJson(
                     watches.list(user, status, poiId, campsiteId, limit, offset),
                 )

@@ -30,6 +30,11 @@ roadtrip:
       fan-out-concurrency: 3
       tolerance: 2h
       ip-rate-limit-per-minute: 10
+    campsite:
+      # Per-IP ceiling on the single-POI availability read. Higher than bulk's
+      # because one call is one POI, not a fan-out — but still an anonymous
+      # endpoint that reaches upstream vendors, so an operator can turn it down.
+      ip-rate-limit-per-minute: 30
   booking:
     # How stale the last availability observation may be and still let a direct
     # add-to-cart through its freshness gate. Follows the poller cadence.
@@ -92,6 +97,11 @@ roadtrip:
     # Bare hostname for auth0-js `domain` in the embedded flow (no scheme).
     # Defaults to issuer host when unset. Set to the custom domain in production.
     embedded-domain: "${ROADTRIP_AUTH_EMBEDDED_DOMAIN:}"
+    # Connection slugs /auth/login may forward to the provider. Unknown values
+    # are dropped rather than rejected, so the browser falls through to the
+    # provider's own login page. Varies by vendor, like the claims dialect.
+    allowed-connections:
+      - google-oauth2
   mapbox:
     token: "${MAPBOX_TOKEN:}"
   campflare:

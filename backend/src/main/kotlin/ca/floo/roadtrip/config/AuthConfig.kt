@@ -13,6 +13,7 @@ private const val COOKIE_SECURE_KEY = "cookie-secure"
 private const val REALM_KEY = "realm"
 private const val EMBEDDED_DOMAIN_KEY = "embedded-domain"
 private const val ROLE_EMAILS_KEY = "role-emails"
+private const val ALLOWED_CONNECTIONS_KEY = "allowed-connections"
 private const val DEFAULT_PROVIDER = "oidc"
 private const val COOKIE_SECURE_DEFAULT = "true"
 
@@ -22,6 +23,10 @@ private const val COOKIE_SECURE_DEFAULT = "true"
 private const val DEFAULT_REALM = "Username-Password-Authentication"
 
 private val defaultSessionTtl: Duration = Duration.ofDays(30)
+
+/** The connection slugs `/auth/login` may forward. Environment-dependent: the
+ *  claims dialect already varies by vendor, and so do their connection names. */
+private val defaultAllowedConnections = setOf("google-oauth2")
 
 /**
  * OIDC identity-provider settings.
@@ -66,6 +71,11 @@ data class AuthConfig(
      * without control of the address's verified IdP account.
      */
     val roleGrants: Map<Role, Set<String>>,
+    /**
+     * Connection slugs `/auth/login` may forward to the provider. Unknown values
+     * are dropped, so the browser falls through to the provider's own login page.
+     */
+    val allowedConnections: Set<String> = defaultAllowedConnections,
 ) {
     companion object {
         fun fromConfig(config: ConfigSection): AuthConfig? {
@@ -99,6 +109,7 @@ data class AuthConfig(
                 realm = config.valueOrDefault(REALM_KEY, DEFAULT_REALM),
                 embeddedDomain = config.valueOrDefault(EMBEDDED_DOMAIN_KEY, defaultEmbeddedDomain),
                 roleGrants = roleGrants,
+                allowedConnections = config.csvSet(ALLOWED_CONNECTIONS_KEY).ifEmpty { defaultAllowedConnections },
             )
         }
 
