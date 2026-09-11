@@ -292,41 +292,6 @@ class PoiRegistry(
         return out
     }
 
-    /**
-     * ReserveAmerica terminal ETL sources with their Active Network tenant
-     * config. Unlike Aspira, these tenants are fully config-driven because the
-     * contract code, host, and booking horizon are all declared on the
-     * terminal ETL row.
-     */
-    fun reserveAmericaSources(): List<ReserveAmericaSourceConfig> =
-        poiData
-            .mapNotNull { row -> row.etls.lastOrNull() }
-            .filter { it.adapter == "ReserveAmericaCampgroundsEtl" }
-            .filter { row ->
-                val provider = row.args["provider"]?.trim()?.lowercase() ?: BookingProvider.RESERVEAMERICA.id
-                BookingProvider.fromIdOrNull(provider) == BookingProvider.RESERVEAMERICA
-            }.map { terminal ->
-                val contract =
-                    terminal.args["contract"]
-                        ?: error("ReserveAmerica source '${terminal.slug}' is missing args.contract")
-                val host =
-                    terminal.args["host"]
-                        ?: error("ReserveAmerica source '${terminal.slug}' is missing args.host")
-                val horizon =
-                    terminal.args["booking_horizon_days"]
-                        ?.toIntOrNull()
-                        ?: error("ReserveAmerica source '${terminal.slug}' has invalid args.booking_horizon_days")
-                require(horizon > 0) {
-                    "ReserveAmerica source '${terminal.slug}' args.booking_horizon_days must be positive"
-                }
-                ReserveAmericaSourceConfig(
-                    source = terminal.slug,
-                    host = host,
-                    contractCode = contract,
-                    bookingHorizonDays = horizon,
-                )
-            }
-
     companion object {
         private val yaml =
             Yaml(

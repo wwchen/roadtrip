@@ -410,6 +410,22 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
+    fun `two tenants of one vendor sharing a code fails`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS.replace("      - code: wa\n", "      - code: bc\n") +
+                        "\n" +
+                        """
+                        data_sources: []
+                        poi_data: []
+                        """.trimIndent(),
+                )
+            }
+        assertTrue(err.message!!.contains("booking_providers 'aspira' has duplicate tenant code 'bc'"), err.message)
+    }
+
+    @Test
     fun `an etl args tenant naming no tenant fails`() {
         val err =
             assertFailsWith<IllegalArgumentException> {

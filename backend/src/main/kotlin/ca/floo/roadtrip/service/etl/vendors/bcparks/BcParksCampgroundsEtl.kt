@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory
  */
 class BcParksCampgroundsEtl(
     override val etlSlug: String = "aspira-bc-campgrounds",
+    private val aspiraTenant: String,
 ) : CampgroundEtl<BcParksCampgroundsDto> {
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
@@ -167,7 +168,7 @@ class BcParksCampgroundsEtl(
     ): String =
         BookingProviderRef
             .Aspira(
-                tenant = ASPIRA_TENANT,
+                tenant = aspiraTenant,
                 transactionLocationId = leaf.transactionLocationId,
                 mapId = bookingCtaRef.mapId,
                 resourceLocationId = bookingCtaRef.resourceLocationId,
@@ -250,7 +251,6 @@ class BcParksCampgroundsEtl(
     }
 
     private companion object {
-        const val ASPIRA_TENANT = "bc"
         const val REGION = "BC"
         const val COUNTRY = "CA"
     }

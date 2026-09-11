@@ -61,10 +61,8 @@ import org.slf4j.LoggerFactory
  * the matching Aspira campground ETL slug and `parentVendorRefId` is derived
  * from the parent campground provider-ref IDs.
  *
- * Vendor strings: `aspira_wa` / `aspira_bc` / `aspira_pc` — provider
- * vendors disallow colons, so the per-tenant suffix uses
- * underscore. Three slug instances of this class, one per tenant. The
- * vendor literal is bound by constructor arg.
+ * Three slug instances of this class, one per tenant; the tenant code the
+ * refs carry is bound by constructor arg from the ETL row's `args.tenant`.
  */
 class AspiraCampsitesEtl(
     override val etlSlug: String,

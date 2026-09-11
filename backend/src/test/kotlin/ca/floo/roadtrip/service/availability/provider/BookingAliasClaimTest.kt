@@ -8,6 +8,7 @@ import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.domain.Campground
@@ -29,7 +30,7 @@ private const val CAMPFLARE_CAMPGROUND_ID = "upper-pines-campground-447"
 private const val RECGOV_FACILITY_ID = "232447"
 private const val CAMPFLARE_SITE_ID = "upper-pines-site-100"
 private const val RECGOV_SITE_ID = "330257"
-private const val ASPIRA_TENANT = "PC"
+private const val ASPIRA_TENANT = "pc"
 private const val ASPIRA_HOST = "reservation.pc.gc.ca"
 private const val ASPIRA_MAP_ID = "456"
 private const val ASPIRA_REF = "$ASPIRA_TENANT:111:$ASPIRA_MAP_ID:789"
@@ -222,7 +223,7 @@ class BookingAliasClaimTest {
 
     private fun aspiraProvider(): AspiraAvailabilityProvider =
         AspiraAvailabilityProvider(
-            tenants = mapOf(ASPIRA_TENANT to AspiraTenant(host = ASPIRA_HOST, vendorCode = "aspira_pc", bookingHorizonDays = 365)),
+            tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
             availabilityClient =
                 object : AspiraAvailabilityClient {
                     override suspend fun fetch(
@@ -248,15 +249,7 @@ class BookingAliasClaimTest {
 
     private fun reserveAmericaProvider(): ReserveAmericaAvailabilityProvider =
         ReserveAmericaAvailabilityProvider(
-            tenants =
-                mapOf(
-                    RESERVEAMERICA_CONTRACT to
-                        ReserveAmericaTenant(
-                            host = RESERVEAMERICA_HOST,
-                            contractCode = RESERVEAMERICA_CONTRACT,
-                            bookingHorizonDays = 270,
-                        ),
-                ),
+            tenants = shippedTenantRegistry().tenantsOf(BookingProvider.RESERVEAMERICA),
             availabilityClient =
                 ReserveAmericaAvailabilityClient { host, contractCode, parkId, startDate, endDate ->
                     assertEquals(RESERVEAMERICA_HOST, host)

@@ -7,6 +7,7 @@ import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.config.ReadPathProviderConfig
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.metadata.registry.TenantRegistry
 import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -49,7 +50,6 @@ import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AspiraAvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AspiraTenants
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.CampflareAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.RecGovAvailabilityProvider
@@ -179,12 +179,12 @@ val serviceModule =
                     enabled = config.isProviderEnabled(BookingProvider.RESERVECALIFORNIA),
                 ),
                 AspiraAvailabilityProvider(
-                    tenants = AspiraTenants.all().associateBy { it.vendorCode.removePrefix("aspira_") },
+                    tenants = get<TenantRegistry>().tenantsOf(BookingProvider.ASPIRA),
                     availabilityClient = get(),
                     enabled = config.isProviderEnabled(BookingProvider.ASPIRA),
                 ),
                 ReserveAmericaAvailabilityProvider(
-                    tenants = ReserveAmericaAvailabilityProvider.tenants,
+                    tenants = get<TenantRegistry>().tenantsOf(BookingProvider.RESERVEAMERICA),
                     availabilityClient = get(),
                     enabled = config.isProviderEnabled(BookingProvider.RESERVEAMERICA),
                 ),

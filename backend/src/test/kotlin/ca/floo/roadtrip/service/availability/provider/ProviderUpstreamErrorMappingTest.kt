@@ -5,8 +5,10 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
 import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.support.AspiraException
 import ca.floo.roadtrip.support.CampflareException
@@ -88,7 +90,7 @@ class ProviderUpstreamErrorMappingTest {
     ) = runBlocking {
         val adapter =
             AspiraAvailabilityProvider(
-                tenants = mapOf("pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365)),
+                tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
                 availabilityClient =
                     object : AspiraAvailabilityClient {
                         override suspend fun fetch(
@@ -147,15 +149,7 @@ class ProviderUpstreamErrorMappingTest {
     ) = runBlocking {
         val adapter =
             ReserveAmericaAvailabilityProvider(
-                tenants =
-                    mapOf(
-                        "NY" to
-                            ReserveAmericaTenant(
-                                host = "newyorkstateparks.reserveamerica.com",
-                                contractCode = "NY",
-                                bookingHorizonDays = 270,
-                            ),
-                    ),
+                tenants = shippedTenantRegistry().tenantsOf(BookingProvider.RESERVEAMERICA),
                 availabilityClient = { _, _, _, _, _ ->
                     throw ReserveAmericaException("reserveamerica HTTP $httpStatus", httpStatus = httpStatus)
                 },

@@ -12,6 +12,7 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingTenant
 import ca.floo.roadtrip.support.ReserveAmericaException
 import java.time.Instant
 import java.time.LocalDate
@@ -21,10 +22,13 @@ private const val RESERVEAMERICA_BOOKING_HORIZON_DAYS = 270
 private const val RESERVEAMERICA_MAX_POLL_WINDOW_DAYS = 30
 
 class ReserveAmericaAvailabilityProvider(
-    private val tenants: Map<String, ReserveAmericaTenant>,
+    tenants: List<BookingTenant>,
     private val availabilityClient: ReserveAmericaAvailabilityClient,
     private val enabled: Boolean,
 ) : AvailabilityProvider {
+    private val tenantsByCode: Map<String, BookingTenant> =
+        tenants.mapNotNull { tenant -> tenant.code?.let { it to tenant } }.toMap()
+
     override val id: BookingProvider = BookingProvider.RESERVEAMERICA
 
     override val capabilities: AvailabilityProviderCapabilities =
@@ -38,7 +42,7 @@ class ReserveAmericaAvailabilityProvider(
 
     override fun supportsCampground(campground: Campground): Boolean {
         val ref = claimedRef(campground) ?: return false
-        return isEnabled() && ref is BookingProviderRef.ReserveAmerica && ref.contractCode in tenants
+        return isEnabled() && ref is BookingProviderRef.ReserveAmerica && ref.contractCode in tenantsByCode
     }
 
     override suspend fun availability(
@@ -102,8 +106,8 @@ class ReserveAmericaAvailabilityProvider(
         )
     }
 
-    private fun tenantForRef(ref: BookingProviderRef.ReserveAmerica): ReserveAmericaTenant =
-        ref.contractCode?.let { tenants[it] }
+    private fun tenantForRef(ref: BookingProviderRef.ReserveAmerica): BookingTenant =
+        ref.contractCode?.let { tenantsByCode[it] }
             ?: throw AvailabilityProviderError.Misconfigured(
                 providerId = id.name.lowercase(),
                 reason = "contract '${ref.contractCode}' is not configured",
@@ -111,7 +115,7 @@ class ReserveAmericaAvailabilityProvider(
             )
 
     private suspend fun fetch(
-        tenant: ReserveAmericaTenant,
+        tenant: BookingTenant,
         parkId: String,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -168,25 +172,11 @@ class ReserveAmericaAvailabilityProvider(
             // tell apart from an outage, so everything but 429 is retryable-5xx.
             vendorError = { e: ReserveAmericaException -> upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus) },
         ) { block() }
-
-    companion object {
-        val tenants: Map<String, ReserveAmericaTenant> =
-            mapOf(
-                "ABPP" to
-                    ReserveAmericaTenant(
-                        host = "shop.albertaparks.ca",
-                        contractCode = "ABPP",
-                        bookingHorizonDays = RESERVEAMERICA_BOOKING_HORIZON_DAYS,
-                    ),
-                "NY" to
-                    ReserveAmericaTenant(
-                        host = "newyorkstateparks.reserveamerica.com",
-                        contractCode = "NY",
-                        bookingHorizonDays = RESERVEAMERICA_BOOKING_HORIZON_DAYS,
-                    ),
-            )
-    }
 }
+
+/** Registry rows for ReserveAmerica always carry a contract code — the map is keyed by it. */
+private val BookingTenant.contractCode: String
+    get() = requireNotNull(code) { "reserveamerica tenant '$host' has no contract code" }
 
 private fun Campsite.reserveAmericaVendorId(): String =
     bookingProviderRef

@@ -9,6 +9,7 @@ import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.model.domain.Campground
@@ -25,14 +26,14 @@ import kotlin.test.assertNull
 class AvailabilityProviderRegistryTest {
     private val aspiraProvider =
         AspiraAvailabilityProvider(
-            tenants = AspiraTenants.all().associateBy { it.vendorCode.removePrefix("aspira_") },
+            tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
             availabilityClient = stubAspiraClient(),
             enabled = true,
         )
 
     private val reserveAmericaProvider =
         ReserveAmericaAvailabilityProvider(
-            tenants = ReserveAmericaAvailabilityProvider.tenants,
+            tenants = shippedTenantRegistry().tenantsOf(BookingProvider.RESERVEAMERICA),
             availabilityClient = stubReserveAmericaClient(),
             enabled = true,
         )

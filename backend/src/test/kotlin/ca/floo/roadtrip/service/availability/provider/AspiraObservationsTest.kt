@@ -6,12 +6,14 @@ import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.fixtures.availableIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.statuses
 import ca.floo.roadtrip.model.api.AvailabilityResponseDto
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
@@ -26,8 +28,8 @@ import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
-private const val BC_PARKS_HOST = "camping.bcparks.ca"
 private const val BC_PARKS_TEST_MAP_ID = -2147483460L
 private const val BC_PARKS_TEST_CAMPSITE_ID = 415777L
 private const val BC_PARKS_TEST_RESOURCE_ID = "-2147477118"
@@ -41,16 +43,8 @@ private const val ALICE_LAKE_WALK_IN_SITE = "-2147483572"
 private const val ALICE_LAKE_LOOP_A_CAMPSITE_ID = 422900L
 private const val ALICE_LAKE_WALK_IN_CAMPSITE_ID = 422830L
 
-private const val PC_HOST = "reservation.pc.gc.ca"
-private const val WA_HOST = "washington.goingtocamp.com"
-
 class AspiraObservationsTest {
-    private val tenants =
-        mapOf(
-            "pc" to AspiraTenant(host = PC_HOST, vendorCode = "aspira_pc", bookingHorizonDays = 365),
-            "wa" to AspiraTenant(host = WA_HOST, vendorCode = "aspira_wa", bookingHorizonDays = 365),
-            "bc" to AspiraTenant(host = BC_PARKS_HOST, vendorCode = "aspira_bc", bookingHorizonDays = 365),
-        )
+    private val tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA)
 
     @Test
     fun `aspira upstream mapper uses availability error dto renderer`() {
@@ -94,6 +88,33 @@ class AspiraObservationsTest {
 
             assertEquals(AvailabilityStatus.UNKNOWN, dto.availability.single().status)
             assertEquals(emptyList(), dto.availability.single().availableIds)
+        }
+
+    @Test
+    fun `campground-level availability prefers per-resource rows`() =
+        runBlocking {
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, mapId, _, _ ->
+                        AspiraAvailability(
+                            mapId = mapId,
+                            byResource = mapOf(ALICE_LAKE_WALK_IN_SITE to listOf(0, 0)),
+                            byMapLink = emptyMap(),
+                            parkRollup = listOf(2, 2),
+                        )
+                    },
+                )
+
+            val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
+            val batch =
+                provider.availability(
+                    campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-03"),
+                )
+
+            assertEquals(2, batch.observations.size)
+            assertTrue(batch.observations.all { it.status == AvailabilityStatus.AVAILABLE })
         }
 
     @Test

@@ -342,6 +342,7 @@ poi_data:
         adapter: BcParksCampgroundsEtl
         inputs: [aspira-maps-bc, bcparks-strapi, aspira-inventory-bc, aspira-dictionaries-bc]
         args:
+          tenant: bc
           host: camping.bcparks.ca
 
   - name: Parks Canada
@@ -368,7 +369,6 @@ poi_data:
         args:
           contract: ABPP
           host: shop.albertaparks.ca
-          booking_horizon_days: "270"
           provider: reserveamerica
 
   - name: New York State Parks
@@ -382,7 +382,6 @@ poi_data:
         args:
           contract: NY
           host: newyorkstateparks.reserveamerica.com
-          booking_horizon_days: "270"
           region: NY
           country: US
           provider: reserveamerica
