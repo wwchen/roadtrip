@@ -5,6 +5,7 @@ import ca.floo.roadtrip.client.slack.SlackBlockDto
 import ca.floo.roadtrip.client.slack.SlackBlocks
 import ca.floo.roadtrip.client.slack.SlackClient
 import ca.floo.roadtrip.config.SlackConfig
+import ca.floo.roadtrip.service.notification.common.AtcResultNotice
 import ca.floo.roadtrip.service.notification.common.NotificationService
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
@@ -71,32 +72,28 @@ class SlackNotificationService(
     }
 
     override suspend fun sendAtcResult(
-        watchId: Long,
-        vendor: String,
-        status: String,
-        request: JsonObject,
-        response: JsonObject?,
-        error: String?,
-        detail: String?,
+        notice: AtcResultNotice,
         target: NotificationTarget,
     ): Boolean {
         val slackTarget = target as? NotificationTarget.Slack ?: return false
-        val text = "ATC $status for watch #$watchId ($vendor)"
+        val status = notice.status
+        val response = notice.response
+        val text = "ATC $status for watch #${notice.watchId} (${notice.vendor})"
         val blocks =
             mutableListOf(
                 SlackBlocks.header("ATC $status"),
                 SlackBlocks.fields(
                     listOf(
-                        "*Watch*\n#$watchId",
+                        "*Watch*\n#${notice.watchId}",
                         "*Status*\n$status",
-                        "*Vendor*\n$vendor",
+                        "*Vendor*\n${notice.bookingSystem ?: notice.vendor}",
                     ),
                 ),
             )
         // A preflight failure carries its reason here and has no companion
         // response to dig it out of; without this the card said only "failed".
-        atcReason(error, detail)?.let { blocks += SlackBlocks.section("*Reason*\n$it") }
-        blocks += jsonReportBlocks("Request body", request)
+        atcReason(notice.error, notice.detail)?.let { blocks += SlackBlocks.section("*Reason*\n$it") }
+        blocks += jsonReportBlocks("Request body", notice.request)
         if (response != null) {
             blocks += atcDiagnosticBlocks(response)
             blocks += jsonReportBlocks("Companion response", response)

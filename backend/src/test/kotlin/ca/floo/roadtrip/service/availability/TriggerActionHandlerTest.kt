@@ -33,6 +33,7 @@ import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
 import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
+import ca.floo.roadtrip.service.notification.common.AtcResultNotice
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
@@ -406,9 +407,13 @@ class TriggerActionHandlerTest {
 
             assertTrue(delivered)
             val result = notifications.atcResults.single()
-            assertEquals(42L, result.watchId)
-            assertEquals("recgov", result.vendor)
-            assertEquals("completed", result.status)
+            assertEquals(42L, result.notice.watchId)
+            assertEquals("recgov", result.notice.vendor)
+            assertEquals("completed", result.notice.status)
+            // The copy layer names the vendor and links the cart from these two;
+            // both come from the adapter that made the hold, not from a literal.
+            assertEquals(FAKE_PROVIDER_DISPLAY_NAME, result.notice.bookingSystem)
+            assertEquals(FAKE_CART_URL, result.notice.cartUrl)
             assertEquals(
                 listOf(
                     NotificationTarget.Slack("#custom", "xoxb-owner-token"),
@@ -560,7 +565,12 @@ class TriggerActionHandlerTest {
                 )
 
             assertFalse(delivered)
-            assertEquals("failed", notifications.atcResults.single().status)
+            assertEquals(
+                "failed",
+                notifications.atcResults
+                    .single()
+                    .notice.status,
+            )
         }
 
     @Test
@@ -605,8 +615,8 @@ class TriggerActionHandlerTest {
 
             assertFalse(delivered)
             val result = notifications.atcResults.single()
-            assertEquals("failed", result.status)
-            val auth = result.response!!["recgov_auth"]!!.jsonObject
+            assertEquals("failed", result.notice.status)
+            val auth = result.notice.response!!["recgov_auth"]!!.jsonObject
             assertEquals("recgov_not_authenticated", auth["error"]!!.jsonPrimitive.content)
         }
 
@@ -633,12 +643,12 @@ class TriggerActionHandlerTest {
             assertFalse(delivered)
             assertTrue(bookingProvider.requests.isEmpty())
             val result = notifications.atcResults.single()
-            assertEquals("failed", result.status)
-            assertEquals(BookingActionCodes.UNSUPPORTED_TARGET, result.error)
-            assertEquals(JsonObject(emptyMap()), result.request, "no companion call was made, so there is no payload")
-            assertEquals(null, result.response)
+            assertEquals("failed", result.notice.status)
+            assertEquals(BookingActionCodes.UNSUPPORTED_TARGET, result.notice.error)
+            assertEquals(JsonObject(emptyMap()), result.notice.request, "no companion call was made, so there is no payload")
+            assertEquals(null, result.notice.response)
             assertTrue(result.targets.isNotEmpty(), "an ATC-only watch has no other handler to speak for it")
-            assertTrue(result.detail!!.isNotBlank(), "the reason is what the owner reads first")
+            assertTrue(result.notice.detail!!.isNotBlank(), "the reason is what the owner reads first")
         }
 
     @Test
@@ -666,11 +676,11 @@ class TriggerActionHandlerTest {
 
             assertFalse(delivered)
             val result = notifications.atcResults.single()
-            assertEquals("failed", result.status)
-            assertEquals(BookingActionCodes.UNSUPPORTED_TARGET, result.error)
-            assertEquals("recgov", result.vendor)
-            assertEquals(JsonObject(emptyMap()), result.request)
-            assertTrue(result.detail!!.isNotBlank())
+            assertEquals("failed", result.notice.status)
+            assertEquals(BookingActionCodes.UNSUPPORTED_TARGET, result.notice.error)
+            assertEquals("recgov", result.notice.vendor)
+            assertEquals(JsonObject(emptyMap()), result.notice.request)
+            assertTrue(result.notice.detail!!.isNotBlank())
         }
 
     @Test
@@ -698,11 +708,11 @@ class TriggerActionHandlerTest {
             assertFalse(delivered)
             assertEquals(listOf(AtcOutcome.EXCEPTION), metrics.fires.map { it.outcome })
             val result = notifications.atcResults.single()
-            assertEquals("failed", result.status)
-            assertEquals(BookingActionCodes.ATC_EXCEPTION, result.error)
+            assertEquals("failed", result.notice.status)
+            assertEquals(BookingActionCodes.ATC_EXCEPTION, result.notice.error)
             // The throwable's own message stays in the log: it is internal
             // wording the owner cannot act on.
-            assertTrue(result.detail!!.isNotBlank())
+            assertTrue(result.notice.detail!!.isNotBlank())
         }
 
     /** One counted fire, with every attribute the dashboard slices by. */
@@ -877,13 +887,7 @@ class TriggerActionHandlerTest {
         private val result: Boolean,
     ) : NotificationSender {
         data class AtcResult(
-            val watchId: Long,
-            val vendor: String,
-            val status: String,
-            val request: JsonObject,
-            val response: JsonObject?,
-            val error: String?,
-            val detail: String?,
+            val notice: AtcResultNotice,
             val targets: List<NotificationTarget>,
         )
 
@@ -914,16 +918,10 @@ class TriggerActionHandlerTest {
         ): Boolean = result
 
         override suspend fun sendAtcResult(
-            watchId: Long,
-            vendor: String,
-            status: String,
-            request: JsonObject,
-            response: JsonObject?,
-            error: String?,
-            detail: String?,
+            notice: AtcResultNotice,
             targets: List<NotificationTarget>,
         ): Boolean {
-            atcResults += AtcResult(watchId, vendor, status, request, response, error, detail, targets)
+            atcResults += AtcResult(notice, targets)
             return result
         }
     }

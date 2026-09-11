@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.notification.common
 
-import kotlinx.serialization.json.JsonObject
 import java.time.LocalDate
 
 /**
@@ -23,16 +22,9 @@ interface NotificationSender {
         appRootUrl: String? = null,
     ): Boolean
 
-    /** See [NotificationService.sendAtcResult] for why [error]/[detail] are
-     *  first-class arguments rather than fields of [response]. */
+    /** See [AtcResultNotice] for what one outcome carries and why. */
     suspend fun sendAtcResult(
-        watchId: Long,
-        vendor: String,
-        status: String,
-        request: JsonObject,
-        response: JsonObject?,
-        error: String? = null,
-        detail: String? = null,
+        notice: AtcResultNotice,
         targets: List<NotificationTarget>,
     ): Boolean = false
 }

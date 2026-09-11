@@ -310,6 +310,15 @@ another vendor site.
 | what its refusal codes mean | `failureCategories`; the `recgov_*` codes live in `RecGovBookingCodes` |
 | what a person calls it | `displayName` (`"Recreation.gov"`) |
 
+**Copy names the provider that acted.** An ATC outcome travels as
+`AtcResultNotice`, carrying the holding adapter's `displayName` and its
+`cartUrl`; the email body and the Slack card read those instead of a vendor
+literal. The Slack openings footer names the booking site the alert's Reserve
+links lead to — `WatchOpening.bookingSystem`, resolved by the dispatcher through
+the same `CampgroundCta` registry that fills the POI's `booking_system` — and
+falls back to "the booking site" when one alert spans two vendors. The web
+grid's hold toast reads the POI's `booking_system` for the same reason.
+
 **Credentials are keyed by provider.** `user_booking_credentials(user_id,
 provider, username, secret_cipher)` holds one account per user per vendor, read
 and written through `UserBookingCredentialsRepo`; the username stays in the

@@ -92,6 +92,10 @@ function AvailabilityWeekView({
   feature: PoiFeature;
 }) {
   const poiName = (feature.properties?.name as string | undefined) || 'this campground';
+  // Whose cart a hold lands in: the backend-computed booking system for this
+  // campground, the same string the drawer shows under "Booking via". Absent
+  // when no provider claims the POI, and the cart copy stays neutral there.
+  const bookingSystem = (feature.properties?.booking_system as string | undefined) || undefined;
 
   // The first date this provider will quote. Everything paginates forward from here,
   // and "Earliest" returns to it — which is not the same as "today" for a campground
@@ -206,12 +210,12 @@ function AvailabilityWeekView({
           actions.cartActionChanged({ type: 'held', cell, cartUrl: answer.cart_url });
           toast({
             status: 'success',
-            title: bookingCopy.heldTitle,
+            title: bookingCopy.heldTitle(bookingSystem),
             children: (
               <>
-                {bookingCopy.checkOutSoon}{' '}
+                {bookingCopy.checkOutSoon(bookingSystem)}{' '}
                 <a href={answer.cart_url} target="_blank" rel="noreferrer noopener">
-                  {bookingCopy.openCart}
+                  {bookingCopy.openCart(bookingSystem)}
                 </a>
               </>
             ),
@@ -227,7 +231,7 @@ function AvailabilityWeekView({
           });
         });
     },
-    [actions, cartAction, toast],
+    [actions, bookingSystem, cartAction, toast],
   );
 
   const openBooking = useCallback(

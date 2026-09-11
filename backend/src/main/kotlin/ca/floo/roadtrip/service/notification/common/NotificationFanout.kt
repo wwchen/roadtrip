@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.notification.common
 
-import kotlinx.serialization.json.JsonObject
 import java.io.Closeable
 import java.time.LocalDate
 
@@ -38,26 +37,11 @@ class NotificationFanout(
     }
 
     override suspend fun sendAtcResult(
-        watchId: Long,
-        vendor: String,
-        status: String,
-        request: JsonObject,
-        response: JsonObject?,
-        error: String?,
-        detail: String?,
+        notice: AtcResultNotice,
         targets: List<NotificationTarget>,
     ): Boolean =
         sendToTargets(targets) { service, target ->
-            service.sendAtcResult(
-                watchId = watchId,
-                vendor = vendor,
-                status = status,
-                request = request,
-                response = response,
-                error = error,
-                detail = detail,
-                target = target,
-            )
+            service.sendAtcResult(notice, target)
         }
 
     override fun close() {

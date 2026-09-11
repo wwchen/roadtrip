@@ -23,4 +23,7 @@ data class WatchOpening(
     val campground: String?,
     val bookingUrl: String?,
     val vendor: String? = null,
+    /** What a person calls the site [bookingUrl] leads to, resolved by the
+     *  dispatcher. Null when no provider claims the campground. */
+    val bookingSystem: String? = null,
 )

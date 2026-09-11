@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.notification.email
 
+import ca.floo.roadtrip.service.notification.common.AtcResultNotice
+import ca.floo.roadtrip.service.notification.common.NeutralBookingCopy
 import kotlinx.html.a
 import kotlinx.html.br
 import kotlinx.html.div
@@ -31,31 +33,47 @@ private const val FIELD_DETAIL = "detail"
  * exactly the ones a generic message would hide.
  */
 internal object EmailContentAtcResultRenderer {
-    private const val COMPLETED_BODY =
-        "A matching site is held in your recreation.gov cart. Holds expire, so finish the booking on " +
-            "recreation.gov soon. Roadtrip stops at the cart — it never pays."
     private const val FAILED_BODY_PREFIX = "Roadtrip found a matching site but could not hold it:"
+    private const val CART_LINK_LABEL = "Open your cart"
 
     fun render(
-        watchId: Long,
-        vendor: String,
-        status: String,
-        response: JsonObject?,
-        error: String? = null,
-        detail: String? = null,
+        notice: AtcResultNotice,
         magicLinkUrl: String?,
         appRootUrl: String? = null,
     ): EmailContent {
-        val completed = status == ATC_STATUS_COMPLETED
+        val completed = notice.status == ATC_STATUS_COMPLETED
         val header = if (completed) "Site held in your cart" else "Could not hold the site"
-        val body = if (completed) COMPLETED_BODY else failureBody(response, error, detail)
-        val links = watchControlLinks(appRootUrl, watchId, magicLinkUrl)
+        val body =
+            if (completed) {
+                completedBody(notice.bookingSystem)
+            } else {
+                failureBody(notice.response, notice.error, notice.detail)
+            }
+        val links =
+            buildList {
+                if (completed) notice.cartUrl?.let { add(EmailLink(cartLinkLabel(notice.bookingSystem), it)) }
+                addAll(watchControlLinks(appRootUrl, notice.watchId, magicLinkUrl))
+            }
         return EmailContent(
-            subject = "Roadtrip watch #$watchId: $header",
-            text = renderText(watchId, vendor, header, body, links),
-            html = renderHtml(watchId, vendor, header, body, links),
+            subject = "Roadtrip watch #${notice.watchId}: $header",
+            text = renderText(notice.watchId, notice.vendor, header, body, links),
+            html = renderHtml(notice.watchId, notice.vendor, header, body, links),
         )
     }
+
+    /**
+     * The hold's own vendor, named twice: whose cart the site is in, and where
+     * the booking has to be finished. Both come from the adapter that made the
+     * hold, so this path names no vendor of its own.
+     */
+    private fun completedBody(bookingSystem: String?): String {
+        val whoseCart = bookingSystem?.let { " $it" }.orEmpty()
+        val finishOn = bookingSystem ?: NeutralBookingCopy.BOOKING_SITE
+        return "A matching site is held in your$whoseCart cart. Holds expire, so finish the booking on " +
+            "$finishOn soon. Roadtrip stops at the cart — it never pays."
+    }
+
+    private fun cartLinkLabel(bookingSystem: String?): String = bookingSystem?.let { "Open your $it cart" } ?: CART_LINK_LABEL
 
     private fun renderText(
         watchId: Long,

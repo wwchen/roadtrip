@@ -5,6 +5,7 @@ import ca.floo.roadtrip.client.slack.SlackBlocks
 import ca.floo.roadtrip.client.slack.SlackButtonSpec
 import ca.floo.roadtrip.client.slack.SlackConfirmSpec
 import ca.floo.roadtrip.model.api.watchModifyUrl
+import ca.floo.roadtrip.service.notification.common.NeutralBookingCopy
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import java.time.LocalDate
 
@@ -36,6 +37,8 @@ object SlackContentAvailabilityRenderer {
     private const val RESERVE_LABEL_MAX = 75
 
     private const val RESERVE_PREFIX = "🎟️ Reserve "
+
+    private const val CONTEXT_PREFIX = "Checked just now  ·  Reserve links go straight to "
 
     /**
      * Renders the openings alert for a watch window. Returns the fallback text
@@ -145,7 +148,7 @@ object SlackContentAvailabilityRenderer {
                 ),
                 SlackBlocks.section(truncate("$siteLines$more", SECTION_TEXT_MAX)),
                 SlackBlocks.actions(buttons),
-                SlackBlocks.context("Checked just now  ·  Reserve links straight to Recreation.gov"),
+                SlackBlocks.context("$CONTEXT_PREFIX${bookingSystemLabel(rows)}"),
             )
 
         val attachment = SlackAttachmentDto(color = SlackWatchCard.COLOR_AVAIL, blocks = blocks)
@@ -154,6 +157,17 @@ object SlackContentAvailabilityRenderer {
         val fallback = "🏕️ $count $plural just opened$where ($startDate → $endDate)"
         return fallback to listOf(attachment)
     }
+
+    /**
+     * The one booking site every Reserve link in this card leads to. An alert
+     * spanning two vendors — or one whose campground no provider claims — names
+     * neither: the footer is a promise about every link above it.
+     */
+    private fun bookingSystemLabel(rows: List<WatchOpening>): String =
+        rows
+            .mapNotNull { it.bookingSystem }
+            .distinct()
+            .singleOrNull() ?: NeutralBookingCopy.BOOKING_SITE
 
     private fun sitesOpenedHeadline(count: Int): String = if (count == 1) "1 site just opened" else "$count sites just opened"
 

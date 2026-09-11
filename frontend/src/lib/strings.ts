@@ -28,6 +28,12 @@
  */
 export const VENDOR = 'rec.gov';
 
+/**
+ * What the cart copy calls a booking site the POI does not name — the hold
+ * still happened, and "your cart" is true of every vendor.
+ */
+const UNNAMED_BOOKING_SITE = 'the booking site';
+
 export const bookingCopy = {
   /** The popover's escape hatch to the provider's own page. */
   openProvider: `Book on ${VENDOR}`,
@@ -36,9 +42,13 @@ export const bookingCopy = {
   book: 'Book',
   held: 'Cart',
   holdRunning: 'Holding site… usually under a minute; can take a few',
-  heldTitle: `Site held in your ${VENDOR} cart`,
-  openCart: `Open ${VENDOR} cart ↗`,
-  checkOutSoon: `Check out on ${VENDOR} within 15 minutes.`,
+  // The three lines of the hold toast. A hold lands in whichever provider serves
+  // the campground, so each takes that provider's name (the POI's
+  // `booking_system`) rather than naming one vendor for all of them.
+  heldTitle: (bookingSystem?: string) => `Site held in your ${bookingSystem ? `${bookingSystem} ` : ''}cart`,
+  openCart: (bookingSystem?: string) => `Open ${bookingSystem ?? 'your'} cart ↗`,
+  checkOutSoon: (bookingSystem?: string) =>
+    `Check out on ${bookingSystem ?? UNNAMED_BOOKING_SITE} within 15 minutes.`,
   holdBusyTitle: 'One hold at a time',
   holdBusyBody: 'A hold is already running — wait for it to finish before holding another site.',
 } as const;

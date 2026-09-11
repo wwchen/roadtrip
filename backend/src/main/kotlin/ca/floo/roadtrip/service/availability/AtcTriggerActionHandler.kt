@@ -9,6 +9,7 @@ import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.booking.BookingActionCodes
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
+import ca.floo.roadtrip.service.notification.common.AtcResultNotice
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.support.runCatchingCancellable
@@ -79,6 +80,10 @@ internal class AtcTriggerActionHandler(
 
         val next = pending.first()
         val nextTarget = next.request.target
+        // What the delivered report calls this vendor. The adapter that would
+        // hold the site is the only layer that knows, and it knows on every
+        // exit below — including the ones where the hold never happened.
+        val bookingSystem = bookings.adapterFor(nextTarget)?.displayName
         val startedAt = System.nanoTime()
         val result =
             runCatchingCancellable { bookings.addToCart(next.request) }
@@ -107,6 +112,8 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_COMPLETED,
                     request = result.request,
                     response = result.response,
+                    bookingSystem = bookingSystem,
+                    cartUrl = result.cartUrl,
                 )
                 metrics.atcFired(result.providerId, AtcOutcome.HELD, durationMs = elapsedMsSince(startedAt))
                 true
@@ -127,6 +134,7 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_FAILED,
                     request = result.request,
                     response = result.response,
+                    bookingSystem = bookingSystem,
                     // The reason travels as its own argument: a preflight
                     // failure has no companion response to carry it, and those
                     // are the failures the owner can actually act on.
@@ -149,6 +157,7 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_FAILED,
                     request = noCompanionRequest,
                     response = null,
+                    bookingSystem = bookingSystem,
                     error = BookingActionCodes.UNSUPPORTED_TARGET,
                     detail = UNSUPPORTED_DETAIL,
                 )
@@ -164,6 +173,7 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_FAILED,
                     request = noCompanionRequest,
                     response = null,
+                    bookingSystem = bookingSystem,
                     error = BookingActionCodes.ATC_EXCEPTION,
                     detail = ATC_EXCEPTION_DETAIL,
                 )
@@ -194,19 +204,25 @@ internal class AtcTriggerActionHandler(
         status: String,
         request: JsonObject,
         response: JsonObject?,
+        bookingSystem: String? = null,
+        cartUrl: String? = null,
         error: String? = null,
         detail: String? = null,
     ) {
         val targets = atcTargets(watch)
         val delivered =
             notifications.sendAtcResult(
-                watchId = watch.id,
-                vendor = vendor,
-                status = status,
-                request = request,
-                response = response,
-                error = error,
-                detail = detail,
+                AtcResultNotice(
+                    watchId = watch.id,
+                    vendor = vendor,
+                    status = status,
+                    request = request,
+                    response = response,
+                    bookingSystem = bookingSystem,
+                    cartUrl = cartUrl,
+                    error = error,
+                    detail = detail,
+                ),
                 targets = targets,
             )
         // The fanout is all-or-nothing per target, so this covers both "nobody

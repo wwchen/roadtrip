@@ -1207,14 +1207,36 @@ describe('holding a site straight from the grid', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
 
-    expect(await screen.findByText('Site held in your rec.gov cart')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Open rec\.gov cart/ })).toHaveAttribute(
+    // The POI names no booking system, so the copy names none either.
+    expect(await screen.findByText('Site held in your cart')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open your cart/ })).toHaveAttribute(
       'href',
       'https://www.recreation.gov/cart',
     );
     expect(screen.getByLabelText(new RegExp(`^Site 1 ${WEEK[0]}:.*held in your cart`))).toBeInTheDocument();
     // The chip is transient: it belongs to the pending state only.
     expect(screen.queryByText(/Holding site…/)).toBeNull();
+  });
+
+  test('the hold toast names the booking system this campground is served by', async () => {
+    // The cart is whichever provider holds the site, and the drawer already
+    // knows which one that is — the copy must not say rec.gov on a hold that
+    // landed somewhere else.
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () => json({ status: 'completed', cart_url: 'https://campflare.example/cart' });
+    await mount({ booking_system: 'Campflare' });
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(await screen.findByText('Site held in your Campflare cart')).toBeInTheDocument();
+    expect(screen.getByText(/Check out on Campflare within 15 minutes/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open Campflare cart/ })).toHaveAttribute(
+      'href',
+      'https://campflare.example/cart',
+    );
+    expect(screen.queryByText(/rec\.gov/)).toBeNull();
   });
 
   test('the request carries campsite_id as a NUMBER, matching the backend DTO', async () => {
@@ -1233,7 +1255,7 @@ describe('holding a site straight from the grid', () => {
     await armFirstCell();
 
     await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
-    await screen.findByText('Site held in your rec.gov cart');
+    await screen.findByText('Site held in your cart');
 
     expect(sentBody).toContain('"campsite_id":1');
     expect(sentBody).not.toContain('"campsite_id":"1"');
