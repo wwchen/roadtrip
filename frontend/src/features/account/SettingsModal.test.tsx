@@ -301,10 +301,10 @@ describe('the Booking tab', () => {
     await screen.findByLabelText('Display name');
 
     await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
-    expect(await screen.findByLabelText('rec.gov email')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Recreation.gov email')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 
-    await userEvent.type(screen.getByLabelText('rec.gov email'), 'ada@example.test');
+    await userEvent.type(screen.getByLabelText('Recreation.gov email'), 'ada@example.test');
 
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
   });
@@ -313,7 +313,7 @@ describe('the Booking tab', () => {
     renderSettingsModal();
     await screen.findByLabelText('Display name');
     await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
-    await userEvent.type(await screen.findByLabelText('rec.gov email'), 'ada@example.test');
+    await userEvent.type(await screen.findByLabelText('Recreation.gov email'), 'ada@example.test');
 
     await userEvent.click(screen.getByRole('button', { name: 'Notifications' }));
 
@@ -326,7 +326,7 @@ describe('the Booking tab', () => {
     await screen.findByLabelText('Display name');
 
     await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
-    await userEvent.type(await screen.findByLabelText('rec.gov email'), '.uk');
+    await userEvent.type(await screen.findByLabelText('Recreation.gov email'), '.uk');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(putTo(RECGOV_URL)).toBeTruthy());
@@ -341,8 +341,8 @@ describe('the Booking tab', () => {
     await screen.findByLabelText('Display name');
 
     await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
-    await userEvent.type(await screen.findByLabelText('rec.gov email'), 'ada@example.test');
-    await userEvent.type(screen.getByLabelText('rec.gov password'), 'hunter2-secret');
+    await userEvent.type(await screen.findByLabelText('Recreation.gov email'), 'ada@example.test');
+    await userEvent.type(screen.getByLabelText('Recreation.gov password'), 'hunter2-secret');
 
     const stored = () => json(settingsBody({}, CONFIGURED_BOOKING));
     onPut = stored;
@@ -351,7 +351,7 @@ describe('the Booking tab', () => {
 
     // The field stays, emptied, with fixed-length dots as its PLACEHOLDER — so
     // nothing real is in the DOM and the length is not the stored one either.
-    const password = await screen.findByLabelText('rec.gov password');
+    const password = await screen.findByLabelText('Recreation.gov password');
     await waitFor(() => expect(password).toHaveValue(''));
     expect(password).toHaveAttribute('placeholder', '\u2022'.repeat(10));
   });
@@ -371,14 +371,14 @@ describe('the Booking tab', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Booking' }));
 
-    expect(await screen.findByLabelText('rec.gov email')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Recreation.gov email')).toBeInTheDocument();
     expect(
       await screen.findByText('Booking service unavailable \u2014 status unknown'),
     ).toBeInTheDocument();
   });
 });
 
-describe('rec.gov MFA challenge', () => {
+describe('Recreation.gov MFA challenge', () => {
   test('Cancel then Test login returns to the code step instead of locking the user out', async () => {
     // The lockout this guards: the panel finds its way back to a live challenge
     // through the status row's `mfa_pending`. When the login did not refetch
@@ -421,12 +421,12 @@ describe('rec.gov MFA challenge', () => {
 
     expect(await screen.findByLabelText('Verification code')).toBeInTheDocument();
     expect(
-      screen.queryByText(/Another operation is using your rec.gov session/i),
+      screen.queryByText(/Another operation is using your Recreation.gov session/i),
     ).not.toBeInTheDocument();
   });
 });
 
-describe('remove rec.gov credentials', () => {
+describe('remove Recreation.gov credentials', () => {
   test('a refused removal tells the operator the booking service needs attention', async () => {
     // This copy IS the admin signal: removal now blocks rather than half-applying,
     // so a stuck companion must be legible from the UI, not only from the logs.
@@ -439,7 +439,7 @@ describe('remove rec.gov credentials', () => {
 
     onPut = () => json({ error: 'recgov_profile_wipe_failed' }, 502);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Recreation.gov credentials' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm removal' }));
 
     expect(await screen.findByText(/the booking service needs attention/i)).toBeInTheDocument();
@@ -465,7 +465,7 @@ describe('remove rec.gov credentials', () => {
       });
     getSettings = () => json(settingsBody());
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Recreation.gov credentials' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm removal' }));
 
     expect(await screen.findByText(/no saved browser session to erase/i)).toBeInTheDocument();
@@ -489,18 +489,18 @@ describe('remove rec.gov credentials', () => {
       });
     getSettings = () => json(settingsBody());
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove rec.gov credentials' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Recreation.gov credentials' }));
     await userEvent.click(screen.getByRole('button', { name: 'Confirm removal' }));
 
     expect(
       await screen.findByText(
-        'rec.gov credentials and saved browser session removed. 2 active add-to-cart ' +
+        'Recreation.gov credentials and saved browser session removed. 2 active add-to-cart ' +
           'watches will fail until you add them again.',
       ),
     ).toBeInTheDocument();
     await waitFor(() =>
       expect(
-        screen.queryByRole('button', { name: 'Remove rec.gov credentials' }),
+        screen.queryByRole('button', { name: 'Remove Recreation.gov credentials' }),
       ).not.toBeInTheDocument(),
     );
   });

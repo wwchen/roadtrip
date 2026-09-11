@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.booking
 
+import ca.floo.roadtrip.fixtures.FAKE_CART_URL
+import ca.floo.roadtrip.fixtures.FakeBookingAdapter
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
@@ -22,7 +24,7 @@ private const val TEST_VENDOR_ID = "site-7"
 class BookingAdapterRegistryTest {
     @Test
     fun `can delegates target support to the routed provider`() {
-        val provider = FakeBookingProvider(canAddToCart = true)
+        val provider = FakeBookingAdapter()
         val registry = BookingAdapterRegistry(listOf(provider))
 
         assertTrue(registry.can(BookingAction.ADD_TO_CART, target()))
@@ -30,7 +32,7 @@ class BookingAdapterRegistryTest {
 
     @Test
     fun `can returns false when provider is absent or declines target`() {
-        val decliningRegistry = BookingAdapterRegistry(listOf(FakeBookingProvider(canAddToCart = false)))
+        val decliningRegistry = BookingAdapterRegistry(listOf(FakeBookingAdapter(supportsAddToCart = false)))
         val emptyRegistry = BookingAdapterRegistry(emptyList())
 
         assertFalse(decliningRegistry.can(BookingAction.ADD_TO_CART, target()))
@@ -39,7 +41,7 @@ class BookingAdapterRegistryTest {
 
     @Test
     fun `target for asks providers to translate provider refs`() {
-        val registry = BookingAdapterRegistry(listOf(FakeBookingProvider(canAddToCart = true)))
+        val registry = BookingAdapterRegistry(listOf(FakeBookingAdapter()))
 
         val target = registry.targetFor(BookingAction.ADD_TO_CART, BookingProviderRef.RecGov("100"), TEST_CAMPSITE_ID, TEST_VENDOR_ID)
 
@@ -52,19 +54,19 @@ class BookingAdapterRegistryTest {
     @Test
     fun `add to cart returns unsupported when provider declines target`() =
         runBlocking {
-            val provider = FakeBookingProvider(canAddToCart = false)
+            val provider = FakeBookingAdapter(supportsAddToCart = false)
             val registry = BookingAdapterRegistry(listOf(provider))
 
             val result = registry.addToCart(request())
 
             assertEquals(AddToCartResult.Unsupported, result)
-            assertEquals(0, provider.addToCartCalls)
+            assertEquals(0, provider.requests.size)
         }
 
     @Test
     fun `add to cart delegates to provider when target is supported`() =
         runBlocking {
-            val provider = FakeBookingProvider(canAddToCart = true)
+            val provider = FakeBookingAdapter()
             val registry = BookingAdapterRegistry(listOf(provider))
 
             val result = registry.addToCart(request())
@@ -72,54 +74,19 @@ class BookingAdapterRegistryTest {
             assertEquals(
                 AddToCartResult.Completed(
                     providerId = BookingProvider.RECGOV,
+                    cartUrl = FAKE_CART_URL,
                     request = JsonObject(emptyMap()),
                     response = JsonObject(emptyMap()),
                 ),
                 result,
             )
-            assertEquals(1, provider.addToCartCalls)
+            assertEquals(1, provider.requests.size)
         }
 
     @Test
     fun `duplicate provider ids are rejected`() {
         assertFailsWith<IllegalArgumentException> {
-            BookingAdapterRegistry(listOf(FakeBookingProvider(canAddToCart = true), FakeBookingProvider(canAddToCart = true)))
-        }
-    }
-
-    private class FakeBookingProvider(
-        private val canAddToCart: Boolean,
-    ) : BookingAdapter {
-        var addToCartCalls = 0
-
-        override val id: BookingProvider = BookingProvider.RECGOV
-
-        override fun targetFor(
-            parentRef: BookingProviderRef,
-            campsiteId: Long,
-            vendorSiteId: String,
-        ): BookingTarget? {
-            if (parentRef !is BookingProviderRef.RecGov) return null
-            return BookingTarget(
-                providerId = id,
-                parentRef = parentRef,
-                campsiteId = campsiteId,
-                vendorSiteId = vendorSiteId,
-            )
-        }
-
-        override fun can(
-            action: BookingAction,
-            target: BookingTarget,
-        ): Boolean = action == BookingAction.ADD_TO_CART && canAddToCart
-
-        override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
-            addToCartCalls += 1
-            return AddToCartResult.Completed(
-                providerId = BookingProvider.RECGOV,
-                request = JsonObject(emptyMap()),
-                response = JsonObject(emptyMap()),
-            )
+            BookingAdapterRegistry(listOf(FakeBookingAdapter(), FakeBookingAdapter()))
         }
     }
 

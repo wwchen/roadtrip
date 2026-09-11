@@ -13,6 +13,7 @@ import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.route.api.health.healthRoutes
 import ca.floo.roadtrip.route.api.pois.poiRoutes
 import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
+import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
@@ -155,6 +156,7 @@ class OpenApiSmokeTest {
                             ca.floo.roadtrip.service.availability
                                 .AvailabilityDateResolver(PoiRepo(ctx)),
                         bookingHorizons = testBookingHorizons(ctx),
+                        bookingAdapters = BookingAdapterRegistry(emptyList()),
                     ),
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),

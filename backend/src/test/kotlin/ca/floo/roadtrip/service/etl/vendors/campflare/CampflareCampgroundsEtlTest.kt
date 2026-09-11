@@ -13,6 +13,7 @@ import ca.floo.roadtrip.model.domain.CampgroundSchedule
 import ca.floo.roadtrip.model.domain.Carrier
 import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.CatalogPhoto
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
@@ -65,8 +66,65 @@ class CampflareCampgroundsEtlTest {
         assertEquals(" Upper Pines ", sourceName)
         assertEquals("Campflare source", campflareLink.title)
         assertEquals("https://campflare.com/campground/upper-pines-campground-447", campflareLink.url)
-        assertEquals(BookingProvider.RECGOV, row.bookingProvider)
-        assertEquals("232447", row.bookingProviderRef)
+        assertEquals(BookingProvider.CAMPFLARE, row.bookingProvider)
+        assertEquals("upper-pines-campground-447", row.bookingProviderRef)
+        assertEquals(listOf(BookingAlias(BookingProvider.RECGOV, "232447")), row.bookingAliases)
+    }
+
+    @Test
+    fun `falls back to the reservation_url facility id when connections carry none`() {
+        val etl = CampflareCampgroundsEtl()
+        val rows =
+            terminalRecords(
+                etl,
+                bundle(
+                    "campflare-campgrounds",
+                    """
+                    [
+                      {
+                        "id":"white-wolf-campground-567",
+                        "name":"White Wolf",
+                        "location":{"latitude":1,"longitude":2},
+                        "reservation_url":"https://www.recreation.gov/camping/campgrounds/10083567"
+                      }
+                    ]
+                    """.trimIndent(),
+                ),
+                transformCtx(),
+            )
+
+        val row = rows.single()
+        assertEquals(BookingProvider.CAMPFLARE, row.bookingProvider)
+        assertEquals("white-wolf-campground-567", row.bookingProviderRef)
+        assertEquals(listOf(BookingAlias(BookingProvider.RECGOV, "10083567")), row.bookingAliases)
+    }
+
+    @Test
+    fun `a campground rec_gov never sells carries no alias`() {
+        val etl = CampflareCampgroundsEtl()
+        val rows =
+            terminalRecords(
+                etl,
+                bundle(
+                    "campflare-campgrounds",
+                    """
+                    [
+                      {
+                        "id":"cranberry-lake-wsp",
+                        "name":"Cranberry Lake",
+                        "location":{"latitude":1,"longitude":2},
+                        "reservation_url":"https://washington.goingtocamp.com/"
+                      }
+                    ]
+                    """.trimIndent(),
+                ),
+                transformCtx(),
+            )
+
+        val row = rows.single()
+        assertEquals(BookingProvider.CAMPFLARE, row.bookingProvider)
+        assertEquals("cranberry-lake-wsp", row.bookingProviderRef)
+        assertEquals(emptyList(), row.bookingAliases)
     }
 
     @Test

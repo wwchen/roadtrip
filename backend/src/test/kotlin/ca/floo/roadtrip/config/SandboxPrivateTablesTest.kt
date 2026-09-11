@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.config
 
+import ca.floo.roadtrip.fixtures.repoRoot
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -35,10 +36,6 @@ import kotlin.test.assertTrue
  * build rather than a silent snapshot leak.
  */
 class SandboxPrivateTablesTest {
-    private val repoRoot =
-        generateSequence(File(".").absoluteFile) { it.parentFile }
-            .first { File(it, "secrets/registry.yaml").isFile }
-
     // ── addColumnRegex used by unit tests below (matches derivePiiTables' local val) ──
     private val addColumnRegex =
         Regex("""(?i)ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s+(.+)""")

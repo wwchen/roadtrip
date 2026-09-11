@@ -5,11 +5,17 @@ import { CellBookPopover, type CellCart } from './CellBookPopover';
 
 const anchors: HTMLElement[] = [];
 
-function renderPopover(cart: CellCart, onOpenBooking = vi.fn()) {
+function renderPopover(cart: CellCart, onOpenBooking = vi.fn(), bookingAgency?: string) {
   const anchor = document.body.appendChild(document.createElement('button'));
   anchors.push(anchor);
   render(
-    <CellBookPopover anchor={anchor} onOpenBooking={onOpenBooking} cart={cart} onClose={vi.fn()} />,
+    <CellBookPopover
+      anchor={anchor}
+      onOpenBooking={onOpenBooking}
+      cart={cart}
+      onClose={vi.fn()}
+      bookingAgency={bookingAgency}
+    />,
   );
   return { onOpenBooking };
 }
@@ -21,15 +27,22 @@ afterEach(() => {
 });
 
 describe('the cell booking popover', () => {
-  test('always offers the provider’s own booking page', async () => {
-    const { onOpenBooking } = renderPopover({
-      state: 'signed-out',
-      onSignIn: vi.fn(),
-    });
+  test('always offers the booking page, named for whoever takes the booking there', async () => {
+    const { onOpenBooking } = renderPopover(
+      { state: 'signed-out', onSignIn: vi.fn() },
+      undefined,
+      'Campflare',
+    );
 
-    await userEvent.click(screen.getByRole('button', { name: 'Book on rec.gov' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Book on Campflare' }));
 
     expect(onOpenBooking).toHaveBeenCalledOnce();
+  });
+
+  test('names no vendor of its own when the booking link names none', () => {
+    renderPopover({ state: 'signed-out', onSignIn: vi.fn() });
+
+    expect(screen.getByRole('button', { name: 'Book on the booking site' })).toBeInTheDocument();
   });
 
   test('holds the site when the caller may drive the cart', async () => {
@@ -51,14 +64,20 @@ describe('the cell booking popover', () => {
     expect(onSignIn).toHaveBeenCalledOnce();
   });
 
-  test('sends a user without rec.gov credentials to Settings', async () => {
+  test("sends a user without the holding provider's credentials to Settings", async () => {
     const onOpenSettings = vi.fn();
-    renderPopover({ state: 'no-credentials', onOpenSettings });
+    renderPopover({ state: 'no-credentials', onOpenSettings, providerDisplay: 'Campflare' });
 
-    expect(screen.getByText('Add rec.gov login in Settings')).toBeInTheDocument();
+    expect(screen.getByText('Add Campflare login in Settings')).toBeInTheDocument();
     await userEvent.click(cartRow());
 
     expect(onOpenSettings).toHaveBeenCalledOnce();
+  });
+
+  test('names no provider when the backend named none', () => {
+    renderPopover({ state: 'no-credentials', onOpenSettings: vi.fn() });
+
+    expect(screen.getByText('Add your booking login in Settings')).toBeInTheDocument();
   });
 
   test('locks the cart row while a hold is already running', () => {

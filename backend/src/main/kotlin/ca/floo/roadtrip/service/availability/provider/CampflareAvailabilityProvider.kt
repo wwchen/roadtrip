@@ -12,7 +12,6 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.support.CampflareException
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -32,14 +31,6 @@ class CampflareAvailabilityProvider(
         )
 
     override fun isEnabled(): Boolean = enabled && configured
-
-    override fun supportsCampground(campground: Campground): Boolean =
-        isEnabled() && campground.dataProviderRef is DataProviderRef.Campflare
-
-    override fun parentRefFor(campground: Campground): BookingProviderRef? {
-        val cfRef = campground.dataProviderRef as? DataProviderRef.Campflare ?: return null
-        return BookingProviderRef.Campflare(campgroundId = cfRef.id)
-    }
 
     override fun reservationUrlTemplate(
         campsite: Campsite,
@@ -96,7 +87,7 @@ class CampflareAvailabilityProvider(
             campsites.flatMap { campsite ->
                 observationsForReservable(
                     campsiteId = campsite.id,
-                    byDate = byCampsiteId[campsite.campflareVendorId()]?.availability.orEmpty(),
+                    byDate = byCampsiteId[vendorSiteIdFor(campsite)]?.availability.orEmpty(),
                     dates = days,
                     data = data,
                 )
@@ -153,8 +144,8 @@ class CampflareAvailabilityProvider(
         )
 
     private fun campflareIdOrThrow(campground: Campground): String =
-        (campground.dataProviderRef as? DataProviderRef.Campflare)?.id
-            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.dataProviderRef::class.simpleName ?: "unknown")
+        (claimedRef(campground) as? BookingProviderRef.Campflare)?.campgroundId
+            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
         mapUpstreamErrors(
@@ -172,11 +163,6 @@ class CampflareAvailabilityProvider(
         private const val CAMPFLARE_MAX_POLL_WINDOW_DAYS = 60
     }
 }
-
-private fun Campsite.campflareVendorId(): String =
-    bookingProviderRef
-        ?.takeIf { bookingProvider == BookingProvider.CAMPFLARE.id }
-        ?: dataProviderRef.serialize()
 
 private fun dates(
     startDate: LocalDate,

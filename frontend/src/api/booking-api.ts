@@ -1,9 +1,8 @@
 // Direct add-to-cart, from the availability grid.
 //
-// A deliberately slow call: a real browser drives recreation.gov behind it, so
-// tens of seconds is a normal success, not a hang. No timeout is set here — the
-// backend already budgets the companion, and aborting locally would leave a
-// hold that may well have succeeded with nothing watching it.
+// A deliberately slow call: a real browser drives the vendor behind it, so tens
+// of seconds is a normal success. No local timeout — aborting would leave a hold
+// that may well have succeeded with nothing watching it.
 
 import { jsonPostOk, type RequestOptions } from './http';
 
@@ -21,15 +20,28 @@ export interface AddToCartResponse {
   status: 'completed';
   /** Where the held site is. Shown to the user; they finish checkout there. */
   cart_url: string;
+  /** The provider id whose cart it is — not always the one serving availability. */
+  provider: string;
+}
+
+/** Mirrors the add-to-cart route's ApiErrorSchema, as `HttpError` carries it. */
+export interface AddToCartFailure {
+  /** The backend's own reason, which `settings-errors.ts` maps to copy. */
+  code?: string;
+  /** The adapter that refused. Absent when a gate ran before one was chosen. */
+  provider?: string;
+}
+
+/** Reads a rejected `addToCart` without every caller casting `unknown`. */
+export function addToCartFailure(err: unknown): AddToCartFailure {
+  const carried = err as AddToCartFailure | null | undefined;
+  return { code: carried?.code, provider: carried?.provider };
 }
 
 /**
- * Holds one campsite-night range in the caller's own rec.gov cart.
- *
- * Throws `HttpError` with `code` set to the backend's own reason —
- * `credentials_required`, `not_available`, `profile_busy`,
- * `recgov_session_expired`, `companion_unavailable`, … — which is what the UI
- * maps to copy.
+ * Holds one campsite-night range in the caller's own cart at the booking vendor.
+ * Throws `HttpError` with `code` set to the backend's own reason, which is what
+ * `settings-errors.ts` maps to copy.
  */
 export function addToCart(
   fields: AddToCartFields,

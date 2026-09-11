@@ -5,7 +5,8 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
-import ca.floo.roadtrip.model.domain.bookingRef
+import ca.floo.roadtrip.model.domain.bookingRefFor
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import java.time.LocalDate
@@ -38,10 +39,16 @@ interface AvailabilityProvider {
     /** Whether this provider is configured for this process. */
     fun isEnabled(): Boolean
 
-    fun supportsCampground(campground: Campground): Boolean {
-        val ref = campground.bookingRef() ?: return false
-        return isEnabled() && id == ref.provider
-    }
+    /**
+     * This provider's identity for [campground]: its primary booking ref when
+     * that ref is this provider's, else the matching [BookingAlias] parsed as
+     * this provider's ref. Null when the campground names this provider
+     * nowhere. One rule for every provider — a Campflare row that rec.gov also
+     * sells is claimed by both, through the primary and the alias respectively.
+     */
+    fun claimedRef(campground: Campground): BookingProviderRef? = campground.bookingRefFor(id)
+
+    fun supportsCampground(campground: Campground): Boolean = isEnabled() && claimedRef(campground) != null
 
     /**
      * Derives the provider-specific [BookingProviderRef] from [campground],
@@ -49,7 +56,7 @@ interface AvailabilityProvider {
      * Returns null when this provider cannot derive a ref (should not happen
      * if [supportsCampground] returned true).
      */
-    fun parentRefFor(campground: Campground): BookingProviderRef? = campground.bookingRef()
+    fun parentRefFor(campground: Campground): BookingProviderRef? = claimedRef(campground)
 
     /**
      * Per-day availability for the half-open window `[startDate, endDate)`.
@@ -76,9 +83,11 @@ interface AvailabilityProvider {
         endDate: LocalDate,
     ): AvailabilityObservationBatch = availability(campground, startDate, endDate)
 
+    /** The campsite's id on this vendor: its primary, else this provider's alias, else the catalog ref. */
     fun vendorSiteIdFor(campsite: Campsite): String =
         campsite.bookingProviderRef
             ?.takeIf { campsite.bookingProvider == id.id }
+            ?: campsite.bookingAliases.firstOrNull { it.provider == id }?.ref
             ?: campsite.dataProviderRef.serialize()
 
     /**

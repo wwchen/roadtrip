@@ -122,7 +122,13 @@ export function WatchEditor({
           <ToggleRow
             name="atc"
             title={watchCopy.addToCart}
-            help={atcHelp(canAtc, capabilities.addToCart, onSignIn, onOpenSettings)}
+            help={atcHelp(
+              canAtc,
+              capabilities.addToCart,
+              capabilities.addToCartProviderDisplay,
+              onSignIn,
+              onOpenSettings,
+            )}
             checked={state.addToCart}
             // A watch that already has ATC set stays switchable so it can be
             // turned OFF even where the provider no longer supports it. The
@@ -176,7 +182,7 @@ export function WatchEditor({
 /**
  * The three things "Add to cart" can mean, in the order they are ruled out.
  *
- * The credentials and sign-in copy exist because per-user rec.gov profiles made
+ * The credentials and sign-in copy exist because per-user provider accounts made
  * "this scope has a cart" and "you can use it" separate facts; collapsing them
  * back into one message would tell a signed-in user their campground is
  * unbookable when what they actually need is two minutes in Settings.
@@ -184,19 +190,21 @@ export function WatchEditor({
 function atcHelp(
   canAtc: boolean,
   addToCart: AddToCartState,
+  providerDisplay?: string,
   onSignIn?: () => void,
   onOpenSettings?: () => void,
 ): ReactNode {
   if (canAtc) return watchCopy.addToCartHelp;
   if (addToCart === 'unsupported') return watchCopy.addToCartUnavailable;
   if (addToCart === 'no_credentials') {
+    const link = gateCopy.editorNoCredentialsLink(providerDisplay);
     return onOpenSettings ? (
       <>
-        <LinkButton onClick={onOpenSettings}>{gateCopy.editorNoCredentialsLink}</LinkButton>
+        <LinkButton onClick={onOpenSettings}>{link}</LinkButton>
         {gateCopy.editorNoCredentialsSuffix}
       </>
     ) : (
-      `${gateCopy.editorNoCredentialsLink}${gateCopy.editorNoCredentialsSuffix}`
+      `${link}${gateCopy.editorNoCredentialsSuffix}`
     );
   }
   return onSignIn ? (

@@ -7,7 +7,11 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 private const val UNSUPPORTED_TRIGGER_ERROR = "unsupported_trigger"
 private const val ATC_EMPTY_SCOPE_DETAIL = "atc requires at least one campsite in scope"
 private const val WATCH_TRIGGER_EMPTY_SCOPE_DETAIL = "watch trigger requires at least one campsite in scope"
-private const val ATC_NO_CREDENTIALS_DETAIL = "atc requires rec.gov credentials in Settings"
+
+/** Named only where the scope resolves to no adapter, which the gate above rules out. */
+private const val UNNAMED_BOOKING_PROVIDER = "booking provider"
+
+private fun atcNoCredentialsDetail(provider: String) = "atc requires $provider credentials in Settings"
 
 internal fun interface WatchCapabilityValidator {
     fun validate(watch: AvailabilityWatchRepo.Watch)
@@ -83,12 +87,17 @@ internal class WatchTriggerCapabilityValidator(
             )
         }
 
-        // Same gate the capability block applies, enforced at write time and
-        // uniformly: a hold has to land in *somebody's* rec.gov account.
-        if (!watchCapabilityService.canFulfilAddToCart(owner)) {
+        // The capability block's gate at write time: a hold needs an account with
+        // the provider that would make it, so the refusal names that provider.
+        // Resolved once, then shared with the name lookup below.
+        val scope = watchCapabilityService.resolve(campsites)
+        if (!watchCapabilityService.canFulfilAddToCart(owner, scope)) {
             throw AvailabilityWatchValidationException(
                 error = UNSUPPORTED_TRIGGER_ERROR,
-                message = ATC_NO_CREDENTIALS_DETAIL,
+                message =
+                    atcNoCredentialsDetail(
+                        watchCapabilityService.addToCartProviderName(owner, scope) ?: UNNAMED_BOOKING_PROVIDER,
+                    ),
             )
         }
     }

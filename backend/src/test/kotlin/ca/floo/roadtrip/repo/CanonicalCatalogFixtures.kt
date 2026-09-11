@@ -7,6 +7,36 @@ import org.jooq.DSLContext
 
 private val defaultTestDataProvider = DataProvider.RECGOV.id
 
+const val EMPTY_BOOKING_ALIASES = "[]"
+
+/** Everything V61 builds, in the order the catalogs return them sorted. */
+val bookingAliasIndexes =
+    listOf(
+        "campgrounds_booking_aliases_gin",
+        "campgrounds_booking_provider_ref_idx",
+        "campsites_booking_aliases_gin",
+        "campsites_booking_provider_ref_idx",
+    )
+
+/**
+ * The V61 indexes Postgres will actually plan with. A CONCURRENTLY build that
+ * fails leaves the index in `pg_class` but `indisvalid = false`, so a test that
+ * only asked whether the name exists would pass on a half-built index.
+ */
+fun validBookingAliasIndexNames(ctx: DSLContext): List<String> =
+    ctx
+        .fetch(
+            """
+            SELECT c.relname AS indexname
+            FROM pg_index i
+            JOIN pg_class c ON c.oid = i.indexrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public' AND i.indisvalid AND c.relname = ANY(?)
+            ORDER BY c.relname
+            """.trimIndent(),
+            bookingAliasIndexes.toTypedArray(),
+        ).map { it.get("indexname", String::class.java) }
+
 @Suppress("UnusedReceiverParameter")
 fun DSLContext.refreshCanonicalCatalogViews() {
     // No-op: materialized views removed in V44.
@@ -53,6 +83,7 @@ fun DSLContext.seedCatalogPoi(
     geomGeoJson: String = """{"type":"Point","coordinates":[$lon,$lat]}""",
     bookingProvider: String? = null,
     bookingProviderRef: String? = null,
+    bookingAliasesJson: String = EMPTY_BOOKING_ALIASES,
     refresh: Boolean = true,
 ): CatalogPoiFixture {
     val canonicalType = canonicalPoiType(poiType)
@@ -88,6 +119,7 @@ fun DSLContext.seedCatalogPoi(
                         sourcePayloadJson = propertiesJson,
                         bookingProvider = bookingProvider,
                         bookingProviderRef = bookingProviderRef,
+                        bookingAliasesJson = bookingAliasesJson,
                         refresh = false,
                     )
                 execute("INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)", poiId, campgroundId)
@@ -166,15 +198,16 @@ fun DSLContext.seedCampground(
     sourcePayloadJson: String = "{}",
     bookingProvider: String? = null,
     bookingProviderRef: String? = null,
+    bookingAliasesJson: String = EMPTY_BOOKING_ALIASES,
     refresh: Boolean = true,
 ): Long =
     fetchOne(
         """
         INSERT INTO campgrounds (
-          name, kind, data_provider, data_provider_ref, booking_provider, booking_provider_ref,
+          name, kind, data_provider, data_provider_ref, booking_provider, booking_provider_ref, booking_aliases,
           location, management, source_payload
         ) VALUES (
-          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?::jsonb,
           jsonb_strip_nulls(jsonb_build_object('region', ?::text, 'country', ?::text)),
           jsonb_strip_nulls(jsonb_build_object('agency', ?::text)),
           ?::jsonb
@@ -187,6 +220,7 @@ fun DSLContext.seedCampground(
         sourceId,
         bookingProvider,
         bookingProviderRef,
+        bookingAliasesJson,
         region,
         country,
         agency,
@@ -206,15 +240,16 @@ fun DSLContext.seedCampsite(
     sourcePayloadJson: String = "{}",
     bookingProvider: String? = null,
     bookingProviderRef: String? = null,
+    bookingAliasesJson: String = EMPTY_BOOKING_ALIASES,
     refresh: Boolean = true,
 ): Long =
     fetchOne(
         """
         INSERT INTO campsites (
           campground_id, name, kind, data_provider, data_provider_ref,
-          booking_provider, booking_provider_ref, loop_name, reservation_url, source_payload
+          booking_provider, booking_provider_ref, booking_aliases, loop_name, reservation_url, source_payload
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb
+          ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?::jsonb
         )
         RETURNING id
         """.trimIndent(),
@@ -225,6 +260,7 @@ fun DSLContext.seedCampsite(
         vendorId,
         bookingProvider,
         bookingProviderRef,
+        bookingAliasesJson,
         loopName,
         reservationUrl,
         providerRefJson ?: sourcePayloadJson,

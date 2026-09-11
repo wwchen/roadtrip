@@ -86,6 +86,11 @@ Model names must tell callers what kind of shape they are holding:
   type; the entity repo is the only place that encodes or decodes it. Vendor
   ETLs map upstream keys into the type, so the read path never carries
   per-vendor key fallbacks. `campsites.equipment`, `photos`, and `attributes` follow the same rule through `CatalogColumnJson`; `CampsiteRepo` is their only codec, and the API serves `CampsiteDto`, never the row.
+  `campgrounds.booking_aliases` / `campsites.booking_aliases`
+  (`BookingAlias(provider, ref)` — another vendor's identity for the same
+  inventory, V59) are the same pattern again: `CampgroundRepo` / `CampsiteRepo`
+  are the only codec, and `RefLinkRepo`'s ref lookups match the JSONB column
+  alongside the row's own `booking_provider`/`booking_provider_ref` primary.
 - **Vocabulary enums carry their own labels.** The campground bags
   (`amenities`, `cell_service`, `metadata`, `price`,
   `default_campsite_schedule`, `alerts`) and `campsites.kind` follow the same
@@ -261,6 +266,16 @@ When adding a new availability provider, add an adapter in
 `service/availability/provider/` and wire it through the provider list. No
 route should branch on that vendor.
 
+The booking seam under `service/booking/` follows the same shape one layer
+over: `BookingAdapter` is the port, and each vendor's adapter (e.g.
+`RecGovBookingAdapter`) owns everything specific to it — its cart URL, its
+`canFulfil` credential check, its failure codes, and its display name —
+behind `BookingAdapterRegistry`. `BookingActionService` and
+`WatchCapabilityService` ask the registry for the claiming adapter and return
+what it says; they never hold a vendor constant, a vendor credential port, or
+a vendor code table themselves. Adding a second booking vendor is a new
+adapter file and a registry entry, not a sweep through those services.
+
 When adding an ETL source, add transform code under
 `service/etl/vendors/<vendor>/` and pure DTOs under `models/` when they are
 large, shared, or reused by tests.
@@ -305,3 +320,41 @@ and the revert flipped the mismatch onto it. The boot error names both values
 docker compose exec -T postgres psql -U roadtrip -d roadtrip \
   -c "UPDATE flyway_schema_history SET checksum = <resolved> WHERE version = '<n>';"
 ```
+
+### Non-transactional migrations (`CONCURRENTLY`)
+
+Postgres refuses `CREATE INDEX CONCURRENTLY` inside a transaction, so a
+migration that builds one has to run outside Flyway's. Two settings make that
+work, and neither fails loudly when it is dropped — the migration simply blocks
+forever, so both are asserted by `FlywayConcurrentIndexConfigTest`.
+
+**The `.sql.conf` sidecar.** A file named exactly after its migration plus
+`.conf` (`V61__booking_alias_indexes.sql.conf`) holding:
+
+```
+executeInTransaction=false
+```
+
+Flyway does **not** checksum the sidecar, so a stale one produces no mismatch
+and no warning — treat it as part of the migration and never edit it once the
+migration is applied.
+
+**The session lock.** Flyway's default PostgreSQL lock is *transactional*,
+which leaves its own connection idle-in-transaction for the whole run;
+`CREATE INDEX CONCURRENTLY` then waits on that virtualxid forever. The fix is
+`flyway.postgresql.transactional.lock=false`, set at three sites that must stay
+in step: `Db.kt`'s `flywaySessionLock` (the boot path), the `generateJooq`
+Flyway in `backend/build.gradle.kts`, and that file's `flyway { }` block, whose
+`pluginConfiguration` keys the Gradle plugin prefixes with `flyway.` itself.
+
+**Recovery when V61 fails part-way.** A failed concurrent build leaves an
+`INVALID` index behind, which the migration's `IF NOT EXISTS` rerun will *not*
+rebuild. Drop it by hand before retrying:
+
+```sh
+psql -c "SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;"
+psql -c "DROP INDEX CONCURRENTLY <name>;"   # once per name listed
+./gradlew :backend:flywayRepair              # clear the failed history row
+```
+
+Then restart the backend so the boot migration reapplies V61.

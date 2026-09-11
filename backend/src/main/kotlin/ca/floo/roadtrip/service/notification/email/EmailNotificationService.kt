@@ -4,11 +4,11 @@ import ca.floo.roadtrip.client.resend.EmailDeliveryClient
 import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
 import ca.floo.roadtrip.client.resend.ResendEmailClient
 import ca.floo.roadtrip.config.EmailConfig
+import ca.floo.roadtrip.service.notification.common.AtcResultNotice
 import ca.floo.roadtrip.service.notification.common.NotificationService
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
-import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
@@ -64,27 +64,12 @@ class EmailNotificationService(
      * the owner's profile id and nothing the recipient can act on.
      */
     override suspend fun sendAtcResult(
-        watchId: Long,
-        vendor: String,
-        status: String,
-        request: JsonObject,
-        response: JsonObject?,
-        error: String?,
-        detail: String?,
+        notice: AtcResultNotice,
         target: NotificationTarget,
     ): Boolean {
         val emailTarget = target as? NotificationTarget.Email ?: return false
-        val content =
-            EmailContentAtcResultRenderer.render(
-                watchId = watchId,
-                vendor = vendor,
-                status = status,
-                response = response,
-                error = error,
-                detail = detail,
-                magicLinkUrl = emailTarget.magicLinkUrl,
-            )
-        return sendContent(content, emailTarget.recipients, failureContext = "watch #$watchId ATC result")
+        val content = EmailContentAtcResultRenderer.render(notice, magicLinkUrl = emailTarget.magicLinkUrl)
+        return sendContent(content, emailTarget.recipients, failureContext = "watch #${notice.watchId} ATC result")
     }
 
     suspend fun sendTestEmail(

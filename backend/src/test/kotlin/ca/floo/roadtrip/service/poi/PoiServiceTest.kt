@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.poi
 
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
+import ca.floo.roadtrip.fixtures.FakeBookingAdapter
 import ca.floo.roadtrip.fixtures.testBookingHorizons
 import ca.floo.roadtrip.model.api.BookingRefDto
 import ca.floo.roadtrip.model.api.poi.CarrierSignalDto
@@ -23,6 +24,8 @@ import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.booking.BookingAdapter
+import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -186,6 +189,115 @@ class PoiServiceTest : SharedDbTest() {
 
         val row = campgroundDetailRow(fixture.poiId)
         assertEquals(BookingProviderRef.Campflare(campgroundId = "upper-pines-campground-447"), row.bookingRef)
+    }
+
+    @Test
+    fun `detail booking ref and CTA follow the booking adapter that sells an aliased campground`() {
+        // Campflare serves the aliased row while rec.gov sells it: booking
+        // follows the booking registry, not whoever answers for availability.
+        val fixture = seedAliasedCampflarePoi()
+        ctx.execute(
+            "UPDATE campgrounds SET reservation_url = ? WHERE id = ?",
+            "https://www.recreation.gov/camping/campgrounds/234784",
+            fixture.catalogId,
+        )
+        val campflare = FakeAvailabilityProvider(id = BookingProvider.CAMPFLARE)
+
+        val detail =
+            poiService(
+                availabilityProviders = listOf(campflare),
+                bookingAdapters = listOf(FakeBookingAdapter(id = BookingProvider.RECGOV)),
+            ).poiDetail(fixture.poiId)!!
+                .campgroundDetail()
+
+        // The row's primary is Campflare, but rec.gov books it through the alias.
+        assertEquals(BookingRefDto(BookingProvider.RECGOV.id, "234784"), detail.bookingRef)
+        assertEquals(true, detail.availabilitySupported)
+        assertEquals("Recreation.gov", detail.bookingSystem)
+        assertEquals("Reserve on Recreation.gov", detail.cta?.first()?.label)
+        // Availability still comes from whoever serves it.
+        assertEquals(BookingProvider.CAMPFLARE.id, detail.availabilityProvider)
+        // The row itself still declares Campflare — the booking vendor is
+        // resolved above the repo, not stamped into the column.
+        assertEquals(
+            BookingProviderRef.Campflare(campgroundId = "icicle-group-campground-8149"),
+            campgroundDetailRow(fixture.poiId).bookingRef,
+        )
+    }
+
+    @Test
+    fun `an aliased campground with no adapter for the alias falls back to the serving provider`() {
+        val fixture = seedAliasedCampflarePoi()
+        val campflare = FakeAvailabilityProvider(id = BookingProvider.CAMPFLARE)
+
+        val detail = poiService(availabilityProviders = listOf(campflare)).poiDetail(fixture.poiId)!!.campgroundDetail()
+
+        assertEquals(BookingRefDto(BookingProvider.CAMPFLARE.id, "icicle-group-campground-8149"), detail.bookingRef)
+        assertEquals(BookingProvider.CAMPFLARE.id, detail.availabilityProvider)
+        assertEquals("Campflare", detail.bookingSystem)
+    }
+
+    @Test
+    fun `a rec_gov primary campground books through rec_gov`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "232869-recgov",
+                name = "Kalaloch Campground",
+                lon = -124.37,
+                lat = 47.61,
+                source = "recgov",
+                providerRefJson = """{"recgov_id":"232869"}""",
+                bookingProvider = BookingProvider.RECGOV.id,
+                bookingProviderRef = "232869",
+            )
+        ctx.execute(
+            "UPDATE campgrounds SET reservation_url = ? WHERE id = ?",
+            "https://www.recreation.gov/camping/campgrounds/232869",
+            fixture.catalogId,
+        )
+        val recgov = FakeAvailabilityProvider(id = BookingProvider.RECGOV)
+
+        val detail =
+            poiService(
+                availabilityProviders = listOf(recgov),
+                bookingAdapters = listOf(FakeBookingAdapter(id = BookingProvider.RECGOV)),
+            ).poiDetail(fixture.poiId)!!
+                .campgroundDetail()
+
+        assertEquals(BookingRefDto(BookingProvider.RECGOV.id, "232869"), detail.bookingRef)
+        assertEquals(BookingProvider.RECGOV.id, detail.availabilityProvider)
+        assertEquals("Recreation.gov", detail.bookingSystem)
+        assertEquals("Reserve on Recreation.gov", detail.cta?.single()?.label)
+    }
+
+    @Test
+    fun `a campflare campground no other provider claims books through Campflare`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "cranberry-lake-wsp",
+                name = "Cranberry Lake",
+                lon = -122.64,
+                lat = 48.39,
+                source = "campflare",
+                providerRefJson = """{"campflare_id":"cranberry-lake-wsp"}""",
+                bookingProvider = BookingProvider.CAMPFLARE.id,
+                bookingProviderRef = "cranberry-lake-wsp",
+            )
+        val campflare = FakeAvailabilityProvider(id = BookingProvider.CAMPFLARE)
+
+        // Production's registry, not an empty one: the rec.gov adapter is
+        // registered and simply does not claim this row.
+        val detail =
+            poiService(
+                availabilityProviders = listOf(campflare),
+                bookingAdapters = listOf(FakeBookingAdapter(id = BookingProvider.RECGOV)),
+            ).poiDetail(fixture.poiId)!!
+                .campgroundDetail()
+
+        assertEquals(BookingRefDto(BookingProvider.CAMPFLARE.id, "cranberry-lake-wsp"), detail.bookingRef)
+        assertEquals(BookingProvider.CAMPFLARE.id, detail.availabilityProvider)
+        assertEquals("Campflare", detail.bookingSystem)
+        assertEquals("View on Campflare", detail.cta?.single()?.label)
     }
 
     @Test
@@ -700,7 +812,10 @@ class PoiServiceTest : SharedDbTest() {
                 bookingProviderRef = "pc:-2147483647:-2147483026:-2147483640",
             ).poiId
 
-    private fun poiService(availabilityProviders: List<AvailabilityProvider> = emptyList()): PoiService =
+    private fun poiService(
+        availabilityProviders: List<AvailabilityProvider> = emptyList(),
+        bookingAdapters: List<BookingAdapter> = emptyList(),
+    ): PoiService =
         PoiService(
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf(SOURCE, "campflare", "recgov")),
             detailServices =
@@ -711,10 +826,25 @@ class PoiServiceTest : SharedDbTest() {
                             ca.floo.roadtrip.service.availability
                                 .AvailabilityDateResolver(PoiRepo(ctx)),
                         bookingHorizons = testBookingHorizons(ctx, availabilityProviders),
+                        bookingAdapters = BookingAdapterRegistry(bookingAdapters),
                     ),
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
                 ),
+        )
+
+    /** POI 8149's shape: a Campflare row rec.gov also sells, under facility 234784. */
+    private fun seedAliasedCampflarePoi() =
+        ctx.seedCatalogPoi(
+            sourceId = "icicle-group-campground-8149",
+            name = "Icicle Group Campground",
+            lon = -120.78,
+            lat = 47.55,
+            source = "campflare",
+            providerRefJson = """{"campflare_id":"icicle-group-campground-8149"}""",
+            bookingProvider = BookingProvider.CAMPFLARE.id,
+            bookingProviderRef = "icicle-group-campground-8149",
+            bookingAliasesJson = """[{"provider":"${BookingProvider.RECGOV.id}","ref":"234784"}]""",
         )
 
     private fun campgroundDetailRow(poiId: Long): CampgroundPoiDetail = CampgroundRepo(ctx).findPoiDetailByPoi(poiId)!!

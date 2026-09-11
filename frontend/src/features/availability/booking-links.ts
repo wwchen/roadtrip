@@ -25,13 +25,20 @@ const AGENCY_BY_HOST = new Map<string, string>([
   ['camping.bcparks.ca', 'BC Parks'],
   ['discovercamping.ca', 'BC Parks'],
   ['washington.goingtocamp.com', 'Washington State Parks'],
+  ['campflare.com', 'Campflare'],
+  ['shop.albertaparks.ca', 'Alberta Parks'],
+  ['newyorkstateparks.reserveamerica.com', 'New York State Parks'],
+  ['reservecalifornia.com', 'ReserveCalifornia'],
+  ['www.reservecalifornia.com', 'ReserveCalifornia'],
 ]);
 
-/** Vendor slug → display name, for rows whose template we cannot parse. */
+/** Vendor slug → display name, matching the backend's per-vendor display objects. */
 const AGENCY_BY_VENDOR = new Map<string, string>([
   ['recgov', VENDOR],
   ['campflare', 'Campflare'],
   ['aspira', 'Aspira'],
+  ['reserveamerica', 'ReserveAmerica'],
+  ['reservecalifornia', 'ReserveCalifornia'],
 ]);
 
 /** `campsiteId → template`, as `/api/pois/{id}/campsites` returns it. */
@@ -88,7 +95,7 @@ export function hasReservationUrlTemplate(
   return !!reservationUrlTemplate(row, reservationUrlTemplates);
 }
 
-/** "Book on rec.gov", or plain "Book" when the provider is unrecognised. */
+/** "Book on <whoever the link opens>", or plain "Book" when nothing names them. */
 export function bookingLabel(
   row: Partial<Campsite> | null | undefined,
   reservationUrlTemplates: ReservationUrlTemplates,
@@ -98,20 +105,41 @@ export function bookingLabel(
 }
 
 /**
- * Who takes the booking, by preference: the template's host, then the row's
- * vendor slug, then a guess humanised from whichever we have.
+ * A vendor slug as a person reads it. The add-to-cart wire answers with the id
+ * of the provider that actually held the site, which on an aliased campground
+ * is not the one serving availability.
+ */
+export function providerLabel(providerId: string | null | undefined): string {
+  const vendor = String(providerId || '').toLowerCase();
+  return vendor ? knownProviderLabel(vendor) || humanizeAgency(vendor) : '';
+}
+
+/**
+ * The same lookup without the humanised guess: `''` means we have no name for
+ * this vendor, which lets a caller prefer a real one it holds elsewhere.
+ */
+export function knownProviderLabel(providerId: string | null | undefined): string {
+  return AGENCY_BY_VENDOR.get(String(providerId || '').toLowerCase()) || '';
+}
+
+/**
+ * Who takes the booking at the link this row opens. A named host wins — an
+ * aliased row's vendor slug names a different site than the button opens — but
+ * a vendor we do have a name for beats a word guessed off an unmapped host,
+ * which is how `shop.albertaparks.ca` stops reading as "Shop".
  */
 export function agencyLabel(
   row: Partial<Campsite> | null | undefined,
   reservationUrlTemplates: ReservationUrlTemplates,
 ): string {
-  const template = reservationUrlTemplate(row, reservationUrlTemplates);
-  const host = hostFromUrl(template);
-  const known = AGENCY_BY_HOST.get(host);
-  if (known) return known;
-
+  const host = hostFromUrl(reservationUrlTemplate(row, reservationUrlTemplates));
   const vendor = String(row?.booking_provider || row?.data_provider || '').toLowerCase();
-  return AGENCY_BY_VENDOR.get(vendor) || labelFromHost(host) || humanizeAgency(vendor);
+  return (
+    AGENCY_BY_HOST.get(host) ||
+    AGENCY_BY_VENDOR.get(vendor) ||
+    labelFromHost(host) ||
+    humanizeAgency(vendor)
+  );
 }
 
 function reservationUrlTemplate(

@@ -8,6 +8,7 @@ import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.service.settings.BookingCredentialsConfigured
 import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionSessionHealth
 import ca.floo.roadtrip.service.settings.RecGovProfileSessionPort
@@ -167,7 +168,7 @@ class RecGovBookingAdapterTest {
             assertEquals(RecGovSessionCodes.MFA_REQUIRED, failed.error)
             val detail = assertNotNull(failed.detail)
             assertTrue(detail.contains("Settings"), detail)
-            assertTrue(detail.contains(RecGovSessionCodes.MFA_REQUIRED), "the code stays, for support: $detail")
+            assertFalse(detail.contains(RecGovSessionCodes.MFA_REQUIRED), "the code travels in `error`, not in the sentence: $detail")
         }
 
     @Test
@@ -326,6 +327,47 @@ class RecGovBookingAdapterTest {
         }
 
     @Test
+    fun `a hold carries rec_gov's own cart, because nothing above this knows it`() =
+        runBlocking {
+            val completed = provider().addToCart(request(recgovTarget())) as AddToCartResult.Completed
+
+            assertEquals("https://www.recreation.gov/cart", completed.cartUrl)
+            assertEquals(RECGOV_CART_URL, completed.cartUrl)
+            assertEquals("Recreation.gov", provider().displayName)
+        }
+
+    @Test
+    fun `rec_gov's own refusal codes are classified by this adapter and nobody else`() =
+        runBlocking {
+            // The vendor-prefixed codes live here now: the neutral code table
+            // carries none of them, so a second vendor's codes cannot collide.
+            // Only the category crosses the port, so that is what is asserted.
+            val refusals =
+                mapOf(
+                    RecGovBookingCodes.CONFIRMATION_DISABLED to BookingFailureCategory.RETRY_LATER,
+                    RecGovBookingCodes.DATES_NOT_OFFERED to BookingFailureCategory.RETRY_LATER,
+                    RecGovBookingCodes.NO_RESERVE_BUTTON to BookingFailureCategory.RETRY_LATER,
+                    "a_code_nobody_classified" to BookingFailureCategory.UPSTREAM,
+                )
+            for ((code, category) in refusals) {
+                val executor = RecordingAtcExecutor(RecGovAtcOutcome.Failed(error = code, detail = null))
+
+                val failed = provider(executor).addToCart(request(recgovTarget())) as AddToCartResult.Failed
+
+                assertEquals(code, failed.error)
+                assertEquals(category, failed.category, "$code")
+            }
+        }
+
+    @Test
+    fun `only a caller with rec_gov credentials stored can be fulfilled`() {
+        val owner = UserId(TEST_OWNER_USER_ID)
+
+        assertTrue(provider(credentials = { _, user -> user == owner }).canFulfil(owner))
+        assertFalse(provider(credentials = { _, _ -> false }).canFulfil(owner))
+    }
+
+    @Test
     fun `add to cart returns unsupported without calling companion for unsupported target`() =
         runBlocking {
             val executor = RecordingAtcExecutor(completedOutcome())
@@ -340,7 +382,8 @@ class RecGovBookingAdapterTest {
     private fun provider(
         executor: RecordingAtcExecutor = RecordingAtcExecutor(completedOutcome()),
         session: FakeProfileSession = FakeProfileSession(),
-    ): RecGovBookingAdapter = RecGovBookingAdapter(executor, session)
+        credentials: BookingCredentialsConfigured = BookingCredentialsConfigured { _, _ -> true },
+    ): RecGovBookingAdapter = RecGovBookingAdapter(executor, session, credentials = credentials)
 
     /** [RecGovProfileSessionPort] double: an active session unless told otherwise. */
     private class FakeProfileSession(

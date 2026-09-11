@@ -27,6 +27,7 @@ user_identity
 user_session
 user_role
 user_settings
+user_booking_credentials
 
 # ── Legacy key/value store ────────────────────────────────────────────────────
 # Unclassified generic key/value table from V2 migrations; included

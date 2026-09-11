@@ -16,6 +16,7 @@ import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.RefLinkRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
+import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.ref.DbRefResolver
@@ -42,5 +43,6 @@ val repoModule =
         single { AdminIngestReadRepo(get()) }
         single { UserRepo(get()) }
         single { UserSettingsRepo(get()) }
+        single { UserBookingCredentialsRepo(get()) }
         single { DatabaseHealthRepo(get()) }
     }

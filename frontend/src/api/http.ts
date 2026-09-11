@@ -17,6 +17,8 @@ export class HttpError extends Error {
   readonly status: number;
   /** Set by the *Ok helpers when the response body carries `{ error: "<code>" }`. */
   code?: string;
+  /** The booking adapter that refused, when the envelope named one. */
+  provider?: string;
   /** Raw response text, attached by some clients (e.g. watches create/update). */
   body?: string;
 
@@ -46,6 +48,7 @@ async function attachErrorCode(err: HttpError, response: Response): Promise<Http
   try {
     const body = await response.json();
     if (body && typeof body.error === 'string') err.code = body.error;
+    if (body && typeof body.provider === 'string') err.provider = body.provider;
   } catch {
     // Non-JSON or empty body — leave err.code undefined.
   }

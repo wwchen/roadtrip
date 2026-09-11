@@ -9,6 +9,7 @@ import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.booking.BookingActionCodes
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
+import ca.floo.roadtrip.service.notification.common.AtcResultNotice
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.support.runCatchingCancellable
@@ -27,18 +28,9 @@ internal class AtcTriggerActionHandler(
     override val kinds: Set<String> = setOf(KIND)
 
     /**
-     * Who hears about this ATC.
-     *
-     * ATC carries the `atc` kind rather than `slack_notify`/`email_notify`, so
-     * it resolves both targets directly instead of through the kind-gated
-     * [WatchNotificationTargetResolver.resolve] — a user who opted into holding
-     * a site has, by that act, asked to be told whether it worked.
-     *
-     * **Email is the one that usually lands.** The Slack target is fail-closed
-     * on the owner having BOTH a personal token and a channel, so for most
-     * owners it is null and the result would otherwise be announced to nobody.
-     * Email resolves the same way watch openings do: the owner's
-     * `notification_email`, falling back to their login email.
+     * Who hears about this ATC: both targets directly, not through the kind-gated
+     * [WatchNotificationTargetResolver.resolve], since `atc` is its own kind.
+     * Slack is fail-closed on a token and a channel, so email usually carries it.
      */
     private fun atcTargets(watch: AvailabilityWatchRepo.Watch): List<NotificationTarget> =
         listOfNotNull(
@@ -56,18 +48,19 @@ internal class AtcTriggerActionHandler(
             }
         if (pending.isEmpty()) {
             log.warn("ATC trigger unsupported for watch_id={} openings={}", watch.id, openings.size)
+            val opening = openings.firstOrNull()
+            // No booking provider was reached: the report falls back to the
+            // vendor the owner saw the opening under, the metric to none.
             reportResult(
                 watch = watch,
-                // No booking provider was reached, so the vendor the owner saw
-                // the opening under is the only honest thing to name.
-                vendor = openings.firstOrNull()?.watchOpening?.vendor ?: VENDOR_UNKNOWN,
+                vendor = opening?.watchOpening?.vendor,
                 status = ATC_RESULT_FAILED,
                 request = noCompanionRequest,
                 response = null,
                 error = BookingActionCodes.UNSUPPORTED_TARGET,
                 detail = NO_TARGET_DETAIL,
             )
-            metrics.recgovAtcFired(AtcOutcome.NO_TARGET)
+            metrics.atcFired(null, AtcOutcome.NO_TARGET)
             return false
         }
         if (pending.size > 1) {
@@ -76,6 +69,10 @@ internal class AtcTriggerActionHandler(
 
         val next = pending.first()
         val nextTarget = next.request.target
+        // What the delivered report calls this vendor. The adapter that would
+        // hold the site is the only layer that knows, and it knows on every
+        // exit below — including the ones where the hold never happened.
+        val bookingSystem = bookings.adapterFor(nextTarget)?.displayName
         val startedAt = System.nanoTime()
         val result =
             runCatchingCancellable { bookings.addToCart(next.request) }
@@ -104,8 +101,10 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_COMPLETED,
                     request = result.request,
                     response = result.response,
+                    bookingSystem = bookingSystem,
+                    cartUrl = result.cartUrl,
                 )
-                metrics.recgovAtcFired(AtcOutcome.HELD, durationMs = elapsedMsSince(startedAt))
+                metrics.atcFired(result.providerId, AtcOutcome.HELD, durationMs = elapsedMsSince(startedAt))
                 true
             }
             is AddToCartResult.Failed -> {
@@ -124,13 +123,14 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_FAILED,
                     request = result.request,
                     response = result.response,
+                    bookingSystem = bookingSystem,
                     // The reason travels as its own argument: a preflight
                     // failure has no companion response to carry it, and those
                     // are the failures the owner can actually act on.
                     error = result.error,
                     detail = result.detail,
                 )
-                metrics.recgovAtcFired(AtcOutcome.FAILED, result.error, elapsedMsSince(startedAt))
+                metrics.atcFired(result.providerId, AtcOutcome.FAILED, result.error, elapsedMsSince(startedAt))
                 false
             }
             AddToCartResult.Unsupported -> {
@@ -146,10 +146,11 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_FAILED,
                     request = noCompanionRequest,
                     response = null,
+                    bookingSystem = bookingSystem,
                     error = BookingActionCodes.UNSUPPORTED_TARGET,
                     detail = UNSUPPORTED_DETAIL,
                 )
-                metrics.recgovAtcFired(AtcOutcome.UNSUPPORTED, durationMs = elapsedMsSince(startedAt))
+                metrics.atcFired(nextTarget.providerId, AtcOutcome.UNSUPPORTED, durationMs = elapsedMsSince(startedAt))
                 false
             }
             null -> {
@@ -161,10 +162,11 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_FAILED,
                     request = noCompanionRequest,
                     response = null,
+                    bookingSystem = bookingSystem,
                     error = BookingActionCodes.ATC_EXCEPTION,
                     detail = ATC_EXCEPTION_DETAIL,
                 )
-                metrics.recgovAtcFired(AtcOutcome.EXCEPTION, durationMs = elapsedMsSince(startedAt))
+                metrics.atcFired(nextTarget.providerId, AtcOutcome.EXCEPTION, durationMs = elapsedMsSince(startedAt))
                 false
             }
         }
@@ -173,37 +175,36 @@ internal class AtcTriggerActionHandler(
     private fun elapsedMsSince(startedAtNanos: Long): Int = ((System.nanoTime() - startedAtNanos) / NANOS_PER_MILLI).toInt()
 
     /**
-     * Sends the outcome and says so when nobody heard it.
-     *
-     * The delivery result was previously discarded, which made "the hold
-     * happened but the owner was never told" indistinguishable from a clean
-     * run in the logs — the exact failure this whole path exists to prevent.
-     *
-     * [request] is the payload sent to the booking provider and [response] what
-     * came back. An exit that never got that far passes [noCompanionRequest]
-     * and a null response rather than a plausible-looking payload that was
-     * never sent; the reason travels in [error]/[detail], which is what both
-     * renderers read first.
+     * Sends the outcome and logs when nobody heard it — "held but never told"
+     * used to look like a clean run. [request]/[response] are the booking
+     * provider's; an exit that never reached it passes [noCompanionRequest] and
+     * a null response, with the reason in [error]/[detail].
      */
     private suspend fun reportResult(
         watch: AvailabilityWatchRepo.Watch,
-        vendor: String,
+        vendor: String?,
         status: String,
         request: JsonObject,
         response: JsonObject?,
+        bookingSystem: String? = null,
+        cartUrl: String? = null,
         error: String? = null,
         detail: String? = null,
     ) {
         val targets = atcTargets(watch)
         val delivered =
             notifications.sendAtcResult(
-                watchId = watch.id,
-                vendor = vendor,
-                status = status,
-                request = request,
-                response = response,
-                error = error,
-                detail = detail,
+                AtcResultNotice(
+                    watchId = watch.id,
+                    vendor = vendor,
+                    status = status,
+                    request = request,
+                    response = response,
+                    bookingSystem = bookingSystem,
+                    cartUrl = cartUrl,
+                    error = error,
+                    detail = detail,
+                ),
                 targets = targets,
             )
         // The fanout is all-or-nothing per target, so this covers both "nobody
@@ -262,9 +263,6 @@ internal class AtcTriggerActionHandler(
 
         /** Nothing was sent, so there is no payload to show. */
         private val noCompanionRequest = JsonObject(emptyMap())
-
-        /** No provider was reached and the opening named no vendor either. */
-        private const val VENDOR_UNKNOWN = "unknown"
 
         private const val NO_TARGET_DETAIL =
             "no bookable site could be resolved for this opening — the campground's booking details " +

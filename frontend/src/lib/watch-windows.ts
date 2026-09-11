@@ -17,6 +17,8 @@ export interface WatchCapabilities {
   triggerKinds: ReadonlySet<string>;
   /** The backend's reason the cart is or is not reachable for this reader. */
   addToCart: AddToCartState;
+  /** The adapter that state is about, as a person reads it. Absent when unsupported. */
+  addToCartProviderDisplay?: string;
 }
 
 export const NO_WATCH_CAPABILITIES: WatchCapabilities = {
@@ -60,6 +62,8 @@ export function normalizeWatchCapabilities(
         ? asSets.triggerKinds
         : new Set(Array.isArray(asWire?.trigger_kinds) ? asWire.trigger_kinds : []),
     addToCart: coerceAddToCartState(asSets?.addToCart ?? asWire?.add_to_cart?.state),
+    addToCartProviderDisplay:
+      asSets?.addToCartProviderDisplay ?? asWire?.add_to_cart?.provider_display ?? undefined,
   };
 }
 

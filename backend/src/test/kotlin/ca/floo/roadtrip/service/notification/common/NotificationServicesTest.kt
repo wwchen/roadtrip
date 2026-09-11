@@ -284,16 +284,18 @@ class NotificationServicesTest {
 
             val ok =
                 service(client).sendAtcResult(
-                    watchId = 14L,
-                    vendor = "recgov",
-                    status = "failed",
-                    request =
-                        buildJsonObject {
-                            put("start_date", "2026-07-19")
-                            put("end_date", "2026-07-20")
-                            put("campsite_id", "10174587")
-                        },
-                    response = response,
+                    AtcResultNotice(
+                        watchId = 14L,
+                        vendor = "recgov",
+                        status = "failed",
+                        request =
+                            buildJsonObject {
+                                put("start_date", "2026-07-19")
+                                put("end_date", "2026-07-20")
+                                put("campsite_id", "10174587")
+                            },
+                        response = response,
+                    ),
                     target = NotificationTarget.Slack("#camping"),
                 )
 

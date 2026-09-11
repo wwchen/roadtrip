@@ -39,7 +39,7 @@ import {
   type MatrixFilters,
   type MatrixSort,
 } from './matrix-rows';
-import { hasReservationUrlTemplate, type ReservationUrlTemplates } from './booking-links';
+import { agencyLabel, hasReservationUrlTemplate, type ReservationUrlTemplates } from './booking-links';
 import { dayOfMonthLabel, dowLabel } from './week-labels';
 import { clampSiteColumnWidth, saveSiteColumnWidth } from './site-column';
 import { CellBookPopover } from './CellBookPopover';
@@ -83,6 +83,8 @@ export interface SiteMatrixProps {
     watchGate: WatchGate;
     /** The backend's reason the cart is or is not reachable for this reader. */
     cart: AddToCartState;
+    /** Whose cart that is, for the gated row's copy. */
+    cartProviderDisplay?: string;
     cartAction: CartAction | null;
   };
   events: {
@@ -207,6 +209,7 @@ export function SiteMatrix(props: SiteMatrixProps) {
                 onArmBook={events.bookingArmed}
                 onOpenBooking={events.bookingOpened}
                 cart={view.cart}
+                cartProviderDisplay={view.cartProviderDisplay}
                 cartAction={view.cartAction}
                 onAddToCart={events.cartRequested}
                 onSignIn={events.signInRequested}
@@ -561,6 +564,7 @@ function MatrixRow({
   onArmBook,
   onOpenBooking,
   cart,
+  cartProviderDisplay,
   cartAction,
   onAddToCart,
   onSignIn,
@@ -604,6 +608,7 @@ function MatrixRow({
             onArmBook={onArmBook}
             onOpenBooking={onOpenBooking}
             cart={cart}
+            cartProviderDisplay={cartProviderDisplay}
             cartAction={cartAction}
             onAddToCart={onAddToCart}
             onSignIn={onSignIn}
@@ -643,6 +648,8 @@ interface MatrixCellProps {
   onArmBook: (armed: ArmedBook | null) => void;
   onOpenBooking: (campsiteId: string, date: string) => void;
   cart: AddToCartState;
+  /** Whose cart that is, for the gated row's copy. */
+  cartProviderDisplay?: string;
   cartAction: CartAction | null;
   onAddToCart: (campsiteId: string, date: string) => void;
   /** Offered from a gated cart row. */
@@ -662,6 +669,7 @@ function MatrixCell({
   onArmBook,
   onOpenBooking,
   cart,
+  cartProviderDisplay,
   cartAction,
   onAddToCart,
   onSignIn,
@@ -791,9 +799,12 @@ function MatrixCell({
                 }
               : cart === 'signed_out'
                 ? { state: 'signed-out', onSignIn }
-                : { state: 'no-credentials', onOpenSettings }
+                : { state: 'no-credentials', onOpenSettings, providerDisplay: cartProviderDisplay }
           }
           onClose={() => onArmBook(null)}
+          // Labelled from what the row actually opens: an aliased campground's
+          // template can be rec.gov's even when Campflare serves it.
+          bookingAgency={agencyLabel(row, reservationUrlTemplates) || undefined}
         />
       ) : null}
     </td>

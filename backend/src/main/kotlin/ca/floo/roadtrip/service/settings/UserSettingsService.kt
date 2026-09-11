@@ -11,6 +11,8 @@ import ca.floo.roadtrip.model.api.UpdateProfileRequest
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.User
 import ca.floo.roadtrip.model.domain.auth.UserId
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
@@ -113,6 +115,8 @@ interface UserSettingsPort {
 class UserSettingsService(
     private val userRepo: UserRepo,
     private val settingsRepo: UserSettingsRepo,
+    /** Booking accounts live in their own provider-keyed table, not in settings. */
+    private val bookingCredentialsRepo: UserBookingCredentialsRepo,
     private val cipher: SecretCipher?,
     // Always available and independent of the global Slack config — the per-user
     // methods carry their own token (see [ServiceModule]).
@@ -285,7 +289,7 @@ class UserSettingsService(
                     slackConfigured = settings?.slackTokenCipher != null,
                     slackTokenHint = settings?.slackTokenHint,
                 ),
-            booking = bookingSettingsDto(settings, cipher),
+            booking = bookingSettingsDto(bookingCredentialsRepo.find(principal.userId, BookingProvider.RECGOV), cipher),
         )
     }
 }

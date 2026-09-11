@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.domain
 
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -43,9 +44,30 @@ data class Campground(
     val dataProviderRef: DataProviderRef,
     val bookingProvider: String?,
     val bookingProviderRef: String?,
+    val bookingAliases: List<BookingAlias> = emptyList(),
 )
 
 fun Campground.bookingRef(): BookingProviderRef? {
     val provider = bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
     return bookingProviderRef?.let { BookingProviderRef.parse(provider, it) }
 }
+
+/**
+ * Every booking identity this row names: its primary booking ref first, then
+ * each [BookingAlias] in stored order. One row can be sold by several vendors —
+ * a Campflare row rec.gov also sells names both.
+ */
+fun Campground.bookingIdentities(): List<BookingProviderRef> =
+    buildList {
+        bookingRef()?.let(::add)
+        bookingAliases.forEach { alias ->
+            BookingProviderRef.parse(alias.provider, alias.ref)?.let(::add)
+        }
+    }
+
+/**
+ * This campground's identity *on [provider]*: its primary booking ref when
+ * that ref is this provider's, else the matching [BookingAlias] parsed as this
+ * provider's ref. Null when the row names the provider nowhere.
+ */
+fun Campground.bookingRefFor(provider: BookingProvider): BookingProviderRef? = bookingIdentities().firstOrNull { it.provider == provider }

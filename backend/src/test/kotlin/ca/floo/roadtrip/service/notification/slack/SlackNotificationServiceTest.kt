@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.notification.slack
 
 import ca.floo.roadtrip.client.slack.SlackClient
+import ca.floo.roadtrip.service.notification.common.AtcResultNotice
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import io.ktor.client.HttpClient
@@ -59,13 +60,15 @@ class SlackNotificationServiceTest {
 
             val sent =
                 service.sendAtcResult(
-                    watchId = 42,
-                    vendor = "recgov",
-                    status = "failed",
-                    request = buildJsonObject { put("campsite_id", "102524") },
-                    response = null,
-                    error = "recgov_session_expired",
-                    detail = "session expired — re-login in Settings",
+                    AtcResultNotice(
+                        watchId = 42,
+                        vendor = "recgov",
+                        status = "failed",
+                        request = buildJsonObject { put("campsite_id", "102524") },
+                        response = null,
+                        error = "recgov_session_expired",
+                        detail = "session expired — re-login in Settings",
+                    ),
                     target = NotificationTarget.Slack(channel = "#owner-channel", token = "xoxb-owner"),
                 )
 
@@ -83,11 +86,13 @@ class SlackNotificationServiceTest {
             val service = SlackNotificationService(config = null, slackClient = client)
 
             service.sendAtcResult(
-                watchId = 42,
-                vendor = "recgov",
-                status = "completed",
-                request = buildJsonObject { put("campsite_id", "102524") },
-                response = buildJsonObject { put("cart_added", true) },
+                AtcResultNotice(
+                    watchId = 42,
+                    vendor = "recgov",
+                    status = "completed",
+                    request = buildJsonObject { put("campsite_id", "102524") },
+                    response = buildJsonObject { put("cart_added", true) },
+                ),
                 target = NotificationTarget.Slack(channel = "#owner-channel", token = "xoxb-owner"),
             )
 

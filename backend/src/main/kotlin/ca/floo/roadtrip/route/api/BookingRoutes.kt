@@ -37,8 +37,8 @@ private const val ERROR_BAD_DATE = "bad_date_window"
  *
  * The HTTP shell over [BookingActionPort]: parse, call, map the sealed
  * outcome onto a status. It is a **synchronous** request that can legitimately
- * take tens of seconds — a real browser drives recreation.gov behind it — and
- * the caller is watching a spinner, which is why nothing is notified here.
+ * take tens of seconds — a real browser drives the booking provider behind it —
+ * and the caller is watching a spinner, which is why nothing is notified here.
  *
  * Each gate gets a distinct status so the frontend can say what actually
  * blocked the hold: 422 the scope cannot be booked at all, 403 the caller has
@@ -69,9 +69,9 @@ internal fun Route.bookingRoutes(service: BookingActionPort) {
             call.respondOutcome(outcome)
         }.describeApi(
             tag = TAG_BOOKING,
-            summary = "Hold one campsite in the caller's rec.gov cart",
+            summary = "Hold one campsite in the caller's cart at the campground's booking provider",
             description =
-                "Drives a real browser, so it can take tens of seconds. Requires rec.gov " +
+                "Drives a real browser, so it can take tens of seconds. Requires that provider's " +
                     "credentials saved in Settings; the hold lands in the caller's own cart and " +
                     "stops there — it never checks out.",
         ).access(RouteAccess.User)
@@ -81,13 +81,25 @@ internal fun Route.bookingRoutes(service: BookingActionPort) {
 private suspend fun ApplicationCall.respondOutcome(outcome: AddToCartOutcome) =
     when (outcome) {
         is AddToCartOutcome.Held ->
-            respondEncodedJson(AddToCartResponseDto(status = BookingActionStatus.COMPLETED, cartUrl = outcome.cartUrl))
-        is AddToCartOutcome.Refused -> respondApiError(outcome.code, refusalStatus(outcome.code))
+            respondEncodedJson(
+                AddToCartResponseDto(
+                    status = BookingActionStatus.COMPLETED,
+                    cartUrl = outcome.cartUrl,
+                    provider = outcome.provider.id,
+                ),
+            )
+        is AddToCartOutcome.Refused ->
+            respondApiError(
+                error = outcome.code,
+                status = refusalStatus(outcome.code),
+                provider = outcome.provider?.id,
+            )
         is AddToCartOutcome.Failed ->
             respondApiError(
                 error = outcome.code,
                 status = outcome.category.status(),
                 detail = outcome.detail,
+                provider = outcome.provider.id,
             )
     }
 

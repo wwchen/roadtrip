@@ -8,6 +8,7 @@
 // live here: it goes through `lib/upstream-html.ts`, which is the only sanctioned
 // `dangerouslySetInnerHTML` path.
 
+import { VENDOR } from '@/lib/strings';
 import type { AlertDto, CampgroundDetail, PriceDto } from '@/api/poi-api';
 
 /** POI properties after `flattenHydratedPoi`, which is deliberately open. */
@@ -276,7 +277,7 @@ function toCta(cta: Record<string, unknown>, index: number): Cta | null {
 /** Name the destination, so "Reserve" is not a mystery link. */
 function reserveLabel(url: string): string {
   const host = urlHost(url);
-  if (host.endsWith('recreation.gov')) return 'View on recreation.gov';
+  if (host.endsWith('recreation.gov')) return `View on ${VENDOR}`;
   if (host.endsWith('reserveamerica.com')) return 'View on ReserveAmerica';
   if (host.endsWith('reservecalifornia.com')) return 'View on ReserveCalifornia';
   if (host.endsWith('parks.canada.ca') || host.endsWith('pc.gc.ca')) return 'View on Parks Canada';

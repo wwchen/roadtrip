@@ -9,6 +9,7 @@ import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
+import ca.floo.roadtrip.service.poi.campground.CampgroundCta
 import java.time.LocalDate
 
 /**
@@ -60,6 +61,7 @@ internal class WatchAlertDispatcher(
     private val grafanaRootUrl: String?,
     private val appRootUrl: String?,
     private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
+    private val campgroundCta: CampgroundCta = CampgroundCta.default,
 ) {
     suspend fun dispatch(
         liveWatches: List<AvailabilityWatchRepo.Watch>,
@@ -210,6 +212,13 @@ internal class WatchAlertDispatcher(
             // covered was filtered to campsites in this map, so the key exists.
             val r = campsitesById.getValue(t.campsiteId)
             val target = targets.resolve(r)
+            // Booking link, if the campsite's provider exposes one — the URL
+            // scheme is the adapter's, never this dispatcher's. The parent
+            // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
+            val bookingUrl =
+                target?.let { tgt ->
+                    tgt.parentRef?.let { ref -> tgt.provider.reservationUrl(r, ref, t.targetDate) }
+                }
             TriggerOpening(
                 campsite = r,
                 date = t.targetDate,
@@ -222,13 +231,16 @@ internal class WatchAlertDispatcher(
                         date = t.targetDate,
                         campgroundId = target?.parentPoiId,
                         campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { poiRepo.fetchPoiName(it) } },
-                        // Booking link, if the campsite's provider exposes one — the URL
-                        // scheme is the adapter's, never this dispatcher's. The parent
-                        // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
-                        bookingUrl =
-                            target?.let { tgt ->
-                                tgt.parentRef?.let { ref -> tgt.provider.reservationUrl(r, ref, t.targetDate) }
-                            },
+                        bookingUrl = bookingUrl,
+                        // The same registry that names the booking site on the
+                        // campground page, so an alert and the drawer call the
+                        // vendor the same thing.
+                        bookingSystem =
+                            campgroundCta.bookingSystem(
+                                bookingRef = target?.parentRef,
+                                reserveUrl = bookingUrl,
+                                infoUrl = null,
+                            ),
                         vendor =
                             target
                                 ?.provider

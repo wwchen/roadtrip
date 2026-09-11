@@ -39,8 +39,17 @@ describe('the fact list', () => {
       { label: 'Type', value: 'STANDARD NONELECTRIC' },
       { label: 'Capacity', value: '2-6 people' },
       { label: 'Equipment', value: 'Tent, RV, Trailer, Van' },
-      { label: 'Provider', value: 'recgov' },
+      { label: 'Provider', value: 'Recreation.gov' },
       { label: 'Provider ID', value: '100' },
+    ]);
+  });
+
+  test('the provider fact reads as a name, never as a slug', () => {
+    expect(detailFacts({ data_provider: 'reserveamerica' })).toEqual([
+      { label: 'Provider', value: 'ReserveAmerica' },
+    ]);
+    expect(detailFacts({ data_provider: 'some_vendor' })).toEqual([
+      { label: 'Provider', value: 'Some Vendor' },
     ]);
   });
 

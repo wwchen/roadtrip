@@ -297,7 +297,7 @@ export function BookingPanel({
               the part a user cannot guess from "remove credentials" — and the
               part they cannot undo without logging in again from scratch. */}
           <p className="rt-account-danger-note">
-            Removes your rec.gov username and password, and erases the saved browser
+            Removes your {VENDOR} username and password, and erases the saved browser
             session on the booking service. You will have to sign in again to use add-to-cart,
             and any active add-to-cart watches will fail until you do.
           </p>

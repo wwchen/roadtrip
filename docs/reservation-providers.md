@@ -60,10 +60,21 @@ service/availability/provider/
 ## One ref encoding
 
 `booking_provider` + `booking_provider_ref` (the colon-delimited
-`BookingProviderRef.serialize()` form) is the only booking identity. The POI
-detail API emits it as `booking_ref: {provider, ref}` and the availability
-API as `scope_ref`. Nothing on the serving path reads `source_payload`; a key
-an ETL writes there is provenance, not behaviour.
+`BookingProviderRef.serialize()` form) is the row's *primary* booking identity.
+The availability API emits it as `scope_ref`. The POI detail's
+`booking_ref: {provider, ref}` — and with it `booking_system`, the CTAs, and
+`availability_supported` — is instead the *serving* provider's ref, which is
+the primary only when no other provider claims the row. Nothing on the serving
+path reads `source_payload`; a key an ETL writes there is provenance, not
+behaviour.
+
+The same inventory can be sold by more than one vendor, so `campgrounds` and
+`campsites` also carry `booking_aliases`: a JSONB array of
+`BookingAlias(provider, ref)` holding the other vendors' identities for the
+same row (V59). A Campflare campground that rec.gov also lists is
+Campflare-primary with one rec.gov alias; no ETL writes another vendor's
+identity as its primary. `RefLinkRepo`'s ref lookups match the primary or any
+alias, and return the primary first.
 
 `models/availability/AvailabilityProviderCapabilities.kt` and
 `models/availability/AvailabilityProviderError.kt` are shared provider-contract
@@ -79,10 +90,14 @@ Every vendor adapter class implements `AvailabilityProvider`: the shared
 normalized availability contract plus identity, capabilities, ref handling, and
 booking-link metadata. There is no separate registry class — dispatch is
 `providers.firstOrNull { it.supportsCampground(campground) }`, which asks each
-adapter about the concrete catalog row (enabled, and the row's typed booking
-ref is one this adapter serves) rather than about a bare provider id. Aspira
-overrides it to also require a tenant it is configured for, which a
-`BookingProvider`-keyed lookup could not express.
+adapter about the concrete catalog row rather than about a bare provider id.
+One rule for every adapter: enabled, and `claimedRef(campground)` is non-null —
+the primary ref when it is this provider's, else the matching alias parsed as
+this provider's `BookingProviderRef`. `parentRefFor` and `vendorSiteIdFor`
+resolve the same way, so an aliased row keeps the `parent_ref` key its live
+poller already stores. Aspira overrides `supportsCampground` to also require a
+tenant it is configured for, which a `BookingProvider`-keyed lookup could not
+express.
 Boot wiring assembles that list as one Koin singleton
 (`single<List<AvailabilityProvider>>(named("availabilityProviders"))` in
 `ServiceModule.kt`), injecting each vendor's HTTP client individually. Raw
@@ -198,10 +213,11 @@ walks show up in the Grafana call-trace panels without extra plumbing.
 **Cooldown duration:** `roadtrip.availability.provider-cooldown` (default
 `5m`). In-process only; expires lazily on the next `isCooling` check.
 
-**Preference wiring:** `GET /api/pois/{id}` reads its `availability_provider`
-field straight from the campground row's own `booking_provider` column
-(`CampgroundService`) — there is no separate candidate-ordering lookup for
-this field.
+**Preference wiring:** `GET /api/pois/{id}`'s `availability_provider` field
+follows the serving provider (`BookingHorizonResolver.servingProvider`,
+read by `CampgroundService`) — the same first-claim lookup that resolves
+`booking_ref` and the CTAs — falling back to the row's own declared
+`booking_provider` column only when no registered provider claims it.
 
 ## Alert seam
 
@@ -285,6 +301,49 @@ decides target-level support. This keeps add-to-cart support out of
 system can differ. For example, Campflare may provide availability for inventory
 whose booking action still happens on rec.gov, Aspira, ReserveAmerica, or
 another vendor site.
+
+**The adapter owns its vendor**, not just its targets:
+
+| the adapter answers | how |
+| --- | --- |
+| whose cart a hold lands in | `AddToCartResult.Completed.cartUrl`; `RecGovBookingAdapter` owns `RECGOV_CART_URL` |
+| whether this caller has one | `canFulfil(user)` — rec.gov asks `BookingCredentialsConfigured(RECGOV, user)` |
+| what its refusal codes mean | `failureCategories`; the `recgov_*` codes live in `RecGovBookingCodes` |
+| what a person calls it | `displayName` (`"Recreation.gov"`) |
+
+**Copy names the provider that acted.** An ATC outcome travels as
+`AtcResultNotice`, carrying the holding adapter's `displayName` and its
+`cartUrl`; the email body and the Slack card read those instead of a vendor
+literal. The Slack openings footer names the booking site the alert's Reserve
+links lead to — `WatchOpening.bookingSystem`, resolved by the dispatcher through
+the same `CampgroundCta` registry that fills the POI's `booking_system` — and
+falls back to "the booking site" when one alert spans two vendors. The web
+grid's hold toast reads the *holding* provider: `holdProviderName` takes the
+add-to-cart response's `provider` id, keeps the POI's served `booking_system`
+when the two name the same vendor, and prefers that served name over a
+humanised guess when the id is one the vendor table has no entry for. The
+failure toast does the same with the error envelope's `provider`, falling back
+to `add_to_cart.provider_display` and then to neutral copy.
+
+**Credentials are keyed by provider.** `user_booking_credentials(user_id,
+provider, username, secret_cipher)` holds one account per user per vendor, read
+and written through `UserBookingCredentialsRepo`; the username stays in the
+clear and the secret is sealed with `SecretCipher`, exactly as V53 argued for
+rec.gov's two columns. `RecGovCredentialService` is rec.gov's custodian and
+answers `isConfigured(RECGOV, user)` only for its own provider — a second
+vendor brings its own custodian rather than widening this one. The
+`/api/settings/recgov` routes and their DTOs are unchanged: they are rec.gov's
+own settings surface, not the storage shape.
+
+So `BookingActionService` names no vendor: it resolves the target, asks the
+claiming adapter `canFulfil`, and returns what the adapter returns.
+`WatchCapabilityService.canFulfilAddToCart(requester, campsites)` asks the
+adapter the scope resolves to, so the `atc` gate and the validator's
+"atc requires &lt;provider&gt; credentials in Settings" follow the provider that
+would actually hold the site. ATC telemetry is one instrument for every vendor
+— `roadtrip.booking.atc` and `roadtrip.booking.atc.duration`, labelled
+`provider` — and `grafana/dashboards/recgov-atc.json` filters it to
+`provider="recgov"`. The keepalive metric stays rec.gov's, because the sweep is.
 
 Booking targets compose two identities:
 
@@ -435,6 +494,105 @@ vendor that tells us a site is free need not be the vendor that holds it.
 Today that seam reaches exactly one action, `ADD_TO_CART` on rec.gov. Payment
 and checkout remain out of scope at every layer — the action stops at a cart
 hold.
+
+## Deploying and rolling back the booking port
+
+**V59 locks both catalog tables while the old jar serves.** Its two `UPDATE`s
+hold `ACCESS EXCLUSIVE` on `campgrounds` and `campsites` for the whole run — 17s
+on the local copy — and the jar still serving reads through that lock. Deploy it
+in a window where a POI or availability read stalling for that long is
+acceptable, and expect the same on any hand-run roll-forward below.
+
+**V59 blinds a jar that predates it.** V59 canonicalizes the Campflare rows
+that were stamped with rec.gov as their *primary* booking identity: the row
+becomes Campflare primary and rec.gov's ref moves into `booking_aliases`. A jar
+rolled back past the alias-aware resolver reads only `booking_provider` /
+`booking_provider_ref`, so those campgrounds stop matching the rec.gov pollers
+entirely.
+
+**The rec.gov CTA on aliased pins needs the companion URL.** The drawer resolves
+an aliased pin's booking vendor through `BookingAdapterRegistry`, and
+`RecGovBookingAdapter` is registered only when `companion-base-url` is set, so a
+profile shipped without it drops the Reserve on Recreation.gov button from every
+aliased row.
+
+### Rolling back past V59
+
+Restore the pre-V59 shape before starting an old jar:
+
+```sql
+UPDATE campgrounds SET
+  booking_provider = 'recgov',
+  booking_provider_ref = (SELECT a->>'ref' FROM jsonb_array_elements(booking_aliases) a
+                          WHERE a->>'provider' = 'recgov' LIMIT 1)
+WHERE data_provider = 'campflare' AND booking_provider = 'campflare'
+  AND booking_aliases @> '[{"provider":"recgov"}]'::jsonb;
+
+UPDATE campsites SET
+  booking_provider = 'recgov',
+  booking_provider_ref = (SELECT a->>'ref' FROM jsonb_array_elements(booking_aliases) a
+                          WHERE a->>'provider' = 'recgov' LIMIT 1)
+WHERE data_provider = 'campflare' AND booking_provider = 'campflare'
+  AND booking_aliases @> '[{"provider":"recgov"}]'::jsonb;
+```
+
+### Rolling forward again
+
+V59 and V60 are versioned migrations: Flyway has their history rows already and
+will not re-run them, so the rows the rollback restored stay restored and the
+new jar would find nobody claiming them. Run these by hand *before* starting the
+new jar — V59's own two `UPDATE`s, verbatim, so a rerun of the migration and a
+hand run leave the same shape:
+
+```sql
+UPDATE campgrounds
+SET booking_aliases = jsonb_build_array(jsonb_build_object('provider', 'recgov', 'ref', booking_provider_ref)),
+    booking_provider = 'campflare',
+    booking_provider_ref = data_provider_ref
+WHERE data_provider = 'campflare'
+  AND booking_provider = 'recgov'
+  AND booking_provider_ref IS NOT NULL;
+
+UPDATE campsites
+SET booking_aliases = jsonb_build_array(jsonb_build_object('provider', 'recgov', 'ref', booking_provider_ref)),
+    booking_provider = 'campflare',
+    booking_provider_ref = data_provider_ref
+WHERE data_provider = 'campflare'
+  AND booking_provider = 'recgov'
+  AND booking_provider_ref IS NOT NULL;
+```
+
+### Rolling forward rec.gov credentials
+
+Credentials come forward with an upsert rather than V60's `DO NOTHING`: a
+password changed under the old jar lives only in the V53 columns, and
+`DO NOTHING` would leave the stale `user_booking_credentials` row winning.
+
+```sql
+INSERT INTO user_booking_credentials (user_id, provider, username, secret_cipher)
+SELECT user_id, 'recgov', recgov_username, recgov_password_cipher
+FROM user_settings
+WHERE recgov_username IS NOT NULL
+  AND recgov_password_cipher IS NOT NULL
+ON CONFLICT (user_id, provider) DO UPDATE SET
+  username = EXCLUDED.username,
+  secret_cipher = EXCLUDED.secret_cipher,
+  updated_at = now();
+```
+
+**Credentials survive a rollback.** V60 moved rec.gov accounts into
+`user_booking_credentials`, and V53's `user_settings.recgov_username` /
+`recgov_password_cipher` are still written: `UserBookingCredentialsRepo`
+mirrors every save, rename and clear into them in the same transaction, so a
+jar that predates V60 finds the current account rather than a stale one. Those
+columns are dead weight only after the drop-columns migration; until then do
+not stop writing them.
+
+**The Grafana rename is a hard cut.** ATC telemetry is now
+`roadtrip.booking.atc{provider}` for every vendor. Dashboards querying the old
+metric name show no data the moment the new jar starts — there is no dual
+emission and no bridging period, so redeploy `grafana/dashboards/` with the
+jar rather than after it.
 
 ## Today's adapter matrix
 

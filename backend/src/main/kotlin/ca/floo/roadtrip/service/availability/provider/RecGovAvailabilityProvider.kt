@@ -11,7 +11,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
-import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityErrorDto
@@ -66,7 +65,7 @@ class RecGovAvailabilityProvider(
             return availability(campground, startDate, endDate)
         }
         val recgovId = recgovIdOrThrow(campground)
-        val campsiteIdByVendorId = campsites.associate { it.recgovSiteId() to it.id }
+        val campsiteIdByVendorId = campsites.associate { vendorSiteIdFor(it) to it.id }
         return runWithErrorMapping {
             fetchCatalogAvailability(recgovId, campsiteIdByVendorId, startDate, endDate)
         }
@@ -75,7 +74,7 @@ class RecGovAvailabilityProvider(
     override fun reservationUrlTemplate(
         campsite: Campsite,
         parentRef: BookingProviderRef,
-    ): String = RecGovBookingUrl.template(campsite.recgovSiteId())
+    ): String = RecGovBookingUrl.template(vendorSiteIdFor(campsite))
 
     private suspend fun fetchAvailability(
         recgovId: String,
@@ -136,7 +135,7 @@ class RecGovAvailabilityProvider(
         }
 
     private fun recgovIdOrThrow(campground: Campground): String =
-        (campground.bookingRef() as? BookingProviderRef.RecGov)?.facilityId
+        (claimedRef(campground) as? BookingProviderRef.RecGov)?.facilityId
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
@@ -172,11 +171,6 @@ internal fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, Availabi
             HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_5xx")
     }
 }
-
-private fun Campsite.recgovSiteId(): String =
-    bookingProviderRef
-        ?.takeIf { bookingProvider == BookingProvider.RECGOV.id }
-        ?: dataProviderRef.serialize()
 
 private fun mergeCampsites(maps: List<Map<String, RecGovCampsite>>): Map<String, Map<String, String>> {
     val out = mutableMapOf<String, MutableMap<String, String>>()

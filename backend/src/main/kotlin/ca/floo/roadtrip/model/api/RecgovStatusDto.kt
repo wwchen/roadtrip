@@ -108,6 +108,7 @@ data class RecgovVerifyResponseDto(
  */
 @Serializable
 data class RecgovRemovedDto(
+    /** False when there was no stored account to delete; the wipe still ran. */
     val removed: Boolean,
     @SerialName("stranded_atc_watches") val strandedAtcWatches: Int,
     /** False when the companion could not be reached; the local delete still happened. */

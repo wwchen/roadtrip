@@ -6,7 +6,8 @@ import ca.floo.roadtrip.model.api.AvailabilityWatchCapabilitiesDto
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.auth.UserId
-import ca.floo.roadtrip.service.settings.RecGovCredentialsConfigured
+import ca.floo.roadtrip.service.booking.BookingAdapter
+import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 
 internal data class WatchCapabilitySupport(
     val scopedCount: Int,
@@ -28,19 +29,9 @@ internal class ResolvedWatchScope(
 )
 
 /**
- * What a proposed watch over this scope could actually do.
- *
- * Two different questions, deliberately kept apart. Whether the inventory has a
- * cart at all is a property of the *scope*, and stays internal here. Trigger
- * kinds are a property of the scope **and the person asking**: `atc` needs the
- * scope to support `ADD_TO_CART` and the requester to have rec.gov credentials
- * stored, because a hold lands in their account. An anonymous or magic-link
- * reader simply does not see `atc` — absence, never an error — and
- * `add_to_cart.state` is what tells the editor whether that absence means "this
- * campground cannot be held" or "add your credentials in Settings".
- *
- * Gating is on *configured*, not *proven working*: wrong credentials surface at
- * test time in Settings or at fire time in the failure notification.
+ * What a proposed watch over this scope could actually do: a cart is a property
+ * of the scope, `atc` of the scope and the asker both. `add_to_cart` says which
+ * of the two is missing, and names the adapter that would hold the site.
  */
 internal class WatchCapabilityService(
     private val availabilityTargets: AvailabilityTargetResolver,
@@ -50,8 +41,8 @@ internal class WatchCapabilityService(
             AvailabilityTriggerKinds.SLACK_NOTIFY,
             AvailabilityTriggerKinds.EMAIL_NOTIFY,
         ),
-    /** Null where no credential custodian is wired: `atc` is then never offered. */
-    private val recgovCredentials: RecGovCredentialsConfigured? = null,
+    /** Empty where no booking adapter is wired: `atc` is then never offered. */
+    private val bookings: BookingAdapterRegistry = BookingAdapterRegistry(emptyList()),
 ) {
     fun internalPollingSupportFor(campsites: List<Campsite>): WatchCapabilitySupport = internalPollingSupportFor(resolve(campsites))
 
@@ -97,17 +88,70 @@ internal class WatchCapabilityService(
         if (!internalPollingSupportFor(scope).supported) return emptyList()
         return buildList {
             addAll(notificationTriggerKinds)
-            if (BookingAction.ADD_TO_CART in bookingActions && canFulfilAddToCart(requester)) {
+            if (BookingAction.ADD_TO_CART in bookingActions && canFulfilAddToCart(requester, scope)) {
                 add(AvailabilityTriggerKinds.ATC)
             }
         }
     }
 
     /** Whether *this* requester could actually be the account a hold lands in. */
-    fun canFulfilAddToCart(requester: UserId?): Boolean {
+    fun canFulfilAddToCart(
+        requester: UserId?,
+        campsites: List<Campsite>,
+    ): Boolean = canFulfilAddToCart(requester, resolve(campsites))
+
+    /** Resolved-scope overload so a caller answering more than one capability
+     *  question about the same scope (write-time validation, `capabilitiesFor`)
+     *  resolves it once and shares the result rather than each question
+     *  re-walking the campsite list. */
+    internal fun canFulfilAddToCart(
+        requester: UserId?,
+        scope: ResolvedWatchScope,
+    ): Boolean {
         val user = requester ?: return false
-        return recgovCredentials?.isConfigured(user) == true
+        val adapters = addToCartAdapters(scope)
+        // Every provider in scope, not just the first: a hold on any campsite in
+        // it lands in that provider's account, so one missing credential is a
+        // scope this requester cannot fulfil.
+        return adapters.isNotEmpty() && adapters.all { it.canFulfil(user) }
     }
+
+    /** Whose cart this scope's holds would land in, as a person reads it: the
+     *  first adapter [owner] would actually need to add credentials for, not
+     *  simply the first adapter in scope — naming an adapter [owner] can
+     *  already fulfil would send them to Settings for a provider that was
+     *  never the problem. */
+    fun addToCartProviderName(
+        owner: UserId,
+        campsites: List<Campsite>,
+    ): String? = addToCartProviderName(owner, resolve(campsites))
+
+    /** Resolved-scope overload; see [canFulfilAddToCart]'s. */
+    internal fun addToCartProviderName(
+        owner: UserId,
+        scope: ResolvedWatchScope,
+    ): String? = addToCartAdapter(owner, scope)?.displayName
+
+    /**
+     * The adapter a hold on this scope is about: the first one [requester] would
+     * have to add credentials for, else simply the first in scope. It is what
+     * [addToCartState] consults, so the state and the name always agree.
+     */
+    private fun addToCartAdapter(
+        requester: UserId?,
+        scope: ResolvedWatchScope,
+    ): BookingAdapter? {
+        val adapters = addToCartAdapters(scope)
+        val user = requester ?: return adapters.firstOrNull()
+        return adapters.firstOrNull { !it.canFulfil(user) } ?: adapters.firstOrNull()
+    }
+
+    /** The adapters that would hold this scope's sites, each named once. */
+    private fun addToCartAdapters(scope: ResolvedWatchScope): List<BookingAdapter> =
+        scope.targets
+            .mapNotNull { resolved -> resolved?.let { bookingTargets.targetFor(BookingAction.ADD_TO_CART, it) } }
+            .mapNotNull(bookings::adapterFor)
+            .distinctBy { it.id }
 
     /**
      * The same question `atc`'s absence answers, but stated: the client renders
@@ -128,7 +172,7 @@ internal class WatchCapabilityService(
             !internalPollingSupportFor(scope).supported -> AddToCartState.UNSUPPORTED
             BookingAction.ADD_TO_CART !in bookingActions -> AddToCartState.UNSUPPORTED
             requester == null -> AddToCartState.SIGNED_OUT
-            !canFulfilAddToCart(requester) -> AddToCartState.NO_CREDENTIALS
+            !canFulfilAddToCart(requester, scope) -> AddToCartState.NO_CREDENTIALS
             else -> AddToCartState.READY
         }
 
@@ -140,11 +184,22 @@ internal class WatchCapabilityService(
         // below share it rather than each walking the scope for themselves.
         val scope = resolve(campsites)
         val bookingActions = supportedBookingActions(scope)
+        val state = addToCartState(scope, bookingActions, requester)
+        // Nobody to name when no adapter claims the scope; anywhere else the
+        // gate copy needs the adapter this state was decided against.
+        val adapter = if (state == AddToCartState.UNSUPPORTED) null else addToCartAdapter(requester, scope)
         return AvailabilityWatchCapabilitiesDto(
             triggerKinds = supportedTriggerKinds(scope, bookingActions, requester),
-            addToCart = AddToCartCapabilityDto(addToCartState(scope, bookingActions, requester)),
+            addToCart =
+                AddToCartCapabilityDto(
+                    state = state,
+                    provider = adapter?.id?.id,
+                    providerDisplay = adapter?.displayName,
+                ),
         )
     }
 
-    private fun resolve(campsites: List<Campsite>): ResolvedWatchScope = ResolvedWatchScope(campsites.map(availabilityTargets::resolve))
+    /** Internal, not private: write-time validation resolves a scope once and
+     *  shares it across the capability questions it needs answered. */
+    internal fun resolve(campsites: List<Campsite>): ResolvedWatchScope = ResolvedWatchScope(campsites.map(availabilityTargets::resolve))
 }

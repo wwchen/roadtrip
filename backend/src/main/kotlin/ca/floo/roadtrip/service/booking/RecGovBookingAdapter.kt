@@ -8,6 +8,8 @@ import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.service.availability.provider.RecGovBookingDisplay
+import ca.floo.roadtrip.service.settings.BookingCredentialsConfigured
 import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionSessionHealth
 import ca.floo.roadtrip.service.settings.RecGovProfileSessionPort
@@ -20,6 +22,21 @@ import org.slf4j.LoggerFactory
 
 private const val ERROR_COMPANION_EXCEPTION = "companion_exception"
 
+/** Where a site this adapter held actually is. Rec.gov's cart, and nobody else's. */
+internal const val RECGOV_CART_URL = "https://www.recreation.gov/cart"
+
+/** Rec.gov's own refusals: its codes, so they live with the adapter that reads them. */
+internal object RecGovBookingCodes {
+    /** Rec.gov offered the site but not a bookable confirmation control. */
+    const val CONFIRMATION_DISABLED = "recgov_confirmation_disabled"
+
+    /** Rec.gov's calendar refused the requested arrival date outright. */
+    const val DATES_NOT_OFFERED = "recgov_dates_not_offered"
+
+    /** Rec.gov showed the site but offered no Reserve/Add-to-Cart control. */
+    const val NO_RESERVE_BUTTON = "recgov_no_reserve_button"
+}
+
 /** The profile could not be signed in unattended; only the user can fix it. */
 internal const val RECGOV_SESSION_EXPIRED_ERROR = RecGovSessionCodes.SESSION_EXPIRED
 internal const val RECGOV_SESSION_EXPIRED_DETAIL = "session expired — re-login in Settings"
@@ -30,65 +47,15 @@ internal const val COMPANION_ERROR_DETAIL = "the booking service hit an internal
 private const val FIELD_PROFILE_ID = "profile_id"
 
 /**
- * Every companion code this adapter can surface, and who has to act on it.
- *
- * This table is the whole reason the layers above can stay vendor-agnostic: the
- * route used to keep two sets of these codes itself, and the recovery path used
- * to erase them all into `recgov_session_expired` — which told a user who had
- * just removed their credentials, or whose companion was down, to "re-login in
- * Settings". Anything absent here is [BookingFailureCategory.UPSTREAM], which is
- * the safe default: an unfamiliar failure is ours until someone classifies it.
+ * A sentence for a refusal the companion did not explain, so the owner does not
+ * read a bare code like `mfa_required`. One per category, not per code: what the
+ * owner can do about it is a category-level fact, and the code itself travels in
+ * [AddToCartResult.Failed.error] for anyone who needs it.
  */
-private val failureCategories: Map<String, BookingFailureCategory> =
-    buildMap {
-        // The caller signs in, saves credentials, or completes a challenge.
-        listOf(
-            RecGovSessionCodes.SESSION_EXPIRED,
-            RecGovSessionCodes.SESSION_LAPSED,
-            RecGovSessionCodes.SPA_LOGGED_OUT,
-            RecGovSessionCodes.REFRESH_FAILED,
-            RecGovSessionCodes.COMPANION_LOGIN_FAILED,
-            RecGovSessionCodes.LOGIN_FAILED,
-            RecGovSessionCodes.NOT_AUTHENTICATED,
-            RecGovSessionCodes.NOT_CONFIGURED,
-            RecGovSessionCodes.MFA_REQUIRED,
-        ).forEach { put(it, BookingFailureCategory.CALLER_ACTION) }
-
-        // Nothing is broken: something else holds the profile, the pool is full,
-        // rec.gov is throttling us, or the site went in the seconds it took to
-        // drive the browser.
-        listOf(
-            RecGovSessionCodes.PROFILE_BUSY,
-            RecGovSessionCodes.BROWSER_CAP_REACHED,
-            RecGovSessionCodes.LOGIN_BACKOFF,
-            RecGovSessionCodes.CAPTCHA_REQUIRED,
-            BookingActionCodes.CART_NOT_ADDED,
-            BookingActionCodes.CONFIRMATION_DISABLED,
-            BookingActionCodes.DATES_NOT_OFFERED,
-            BookingActionCodes.NO_RESERVE_BUTTON,
-        ).forEach { put(it, BookingFailureCategory.RETRY_LATER) }
-    }
-
-private fun categoryOf(code: String): BookingFailureCategory = failureCategories[code] ?: BookingFailureCategory.UPSTREAM
-
-/**
- * A sentence for a refusal the companion did not explain.
- *
- * The owner's email renders `detail ?: error`, so a companion answer with no
- * `detail` used to reach them as the bare word `mfa_required`. One line per
- * category rather than one per code: the copy has to stay true for every member
- * of its category, and what the owner can actually do about it is a
- * category-level fact. The code rides along because it is the one thing that
- * makes a support report actionable — the same bargain `settings-errors.ts`
- * strikes for an unmapped code.
- */
-private fun undetailed(
-    code: String,
-    category: BookingFailureCategory,
-): String =
+private fun undetailed(category: BookingFailureCategory): String =
     when (category) {
-        BookingFailureCategory.CALLER_ACTION -> "$code — this needs your attention in Settings"
-        BookingFailureCategory.RETRY_LATER -> "$code — the hold could not be made this time"
+        BookingFailureCategory.CALLER_ACTION -> "this needs your attention in Settings"
+        BookingFailureCategory.RETRY_LATER -> "the hold could not be made this time"
         BookingFailureCategory.UPSTREAM -> COMPANION_ERROR_DETAIL
     }
 
@@ -104,10 +71,51 @@ internal class RecGovBookingAdapter(
      * stay off a profile the fire path is using. Null where there is no sweep.
      */
     private val recentFires: RecentAtcFires? = null,
+    /** Whose cart a hold could land in. Null where no custodian is wired. */
+    private val credentials: BookingCredentialsConfigured? = null,
 ) : BookingAdapter {
     private val log = LoggerFactory.getLogger(javaClass)
 
     override val id: BookingProvider = BookingProvider.RECGOV
+
+    override val displayName: String = RecGovBookingDisplay.BOOKING_SYSTEM_LABEL
+
+    /**
+     * Every companion code this adapter can surface, and who has to act on it.
+     * Private: only the category it yields crosses the port, so nothing above
+     * learns a vendor's codes. Absent means [BookingFailureCategory.UPSTREAM].
+     */
+    private val failureCategories: Map<String, BookingFailureCategory> =
+        buildMap {
+            // The caller signs in, saves credentials, or completes a challenge.
+            listOf(
+                RecGovSessionCodes.SESSION_EXPIRED,
+                RecGovSessionCodes.SESSION_LAPSED,
+                RecGovSessionCodes.SPA_LOGGED_OUT,
+                RecGovSessionCodes.REFRESH_FAILED,
+                RecGovSessionCodes.COMPANION_LOGIN_FAILED,
+                RecGovSessionCodes.LOGIN_FAILED,
+                RecGovSessionCodes.NOT_AUTHENTICATED,
+                RecGovSessionCodes.NOT_CONFIGURED,
+                RecGovSessionCodes.MFA_REQUIRED,
+            ).forEach { put(it, BookingFailureCategory.CALLER_ACTION) }
+
+            // Nothing is broken: something else holds the profile, the pool is
+            // full, rec.gov is throttling us, or the site went in the seconds it
+            // took to drive the browser.
+            listOf(
+                RecGovSessionCodes.PROFILE_BUSY,
+                RecGovSessionCodes.BROWSER_CAP_REACHED,
+                RecGovSessionCodes.LOGIN_BACKOFF,
+                RecGovSessionCodes.CAPTCHA_REQUIRED,
+                BookingActionCodes.CART_NOT_ADDED,
+                RecGovBookingCodes.CONFIRMATION_DISABLED,
+                RecGovBookingCodes.DATES_NOT_OFFERED,
+                RecGovBookingCodes.NO_RESERVE_BUTTON,
+            ).forEach { put(it, BookingFailureCategory.RETRY_LATER) }
+        }
+
+    override fun canFulfil(user: UserId): Boolean = credentials?.isConfigured(id, user) == true
 
     override fun targetFor(
         parentRef: BookingProviderRef,
@@ -241,6 +249,8 @@ internal class RecGovBookingAdapter(
      * category and the fallback sentence are decided together, so neither can be
      * forgotten at a call site.
      */
+    private fun categoryOf(code: String): BookingFailureCategory = failureCategories[code] ?: BookingFailureCategory.UPSTREAM
+
     private fun failed(
         code: String,
         detail: String?,
@@ -251,7 +261,7 @@ internal class RecGovBookingAdapter(
         return AddToCartResult.Failed(
             providerId = id,
             error = code,
-            detail = detail ?: undetailed(code, category),
+            detail = detail ?: undetailed(category),
             category = category,
             request = payload,
             response = response,
@@ -274,6 +284,7 @@ internal class RecGovBookingAdapter(
             is RecGovAtcOutcome.Completed ->
                 AddToCartResult.Completed(
                     providerId = id,
+                    cartUrl = RECGOV_CART_URL,
                     request = payload,
                     response = outcome.response,
                 )

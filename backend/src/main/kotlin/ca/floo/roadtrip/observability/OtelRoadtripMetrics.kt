@@ -18,8 +18,8 @@ private const val METRIC_POLL_SKIPPED = "roadtrip.availability.poll.skipped"
 private const val METRIC_WATCH_TRIGGER = "roadtrip.watch.trigger"
 private const val METRIC_INGEST_RUN = "roadtrip.ingest.run"
 private const val METRIC_RECGOV_KEEPALIVE = "roadtrip.recgov.keepalive"
-private const val METRIC_RECGOV_ATC = "roadtrip.recgov.atc"
-private const val METRIC_RECGOV_ATC_DURATION = "roadtrip.recgov.atc.duration"
+private const val METRIC_BOOKING_ATC = "roadtrip.booking.atc"
+private const val METRIC_BOOKING_ATC_DURATION = "roadtrip.booking.atc.duration"
 
 private const val UNIT_MILLISECONDS = "ms"
 private const val UNIT_CALLS = "{call}"
@@ -31,6 +31,9 @@ private const val UNIT_FIRES = "{fire}"
 
 /** Attribute value when a terminal outcome carries no error code. */
 private const val ERROR_NONE = "none"
+
+/** Attribute value when a fire never reached a booking provider. */
+private const val PROVIDER_NONE = "none"
 
 // Attribute keys are allocated once; building them per-call would allocate on
 // every fetch.
@@ -121,16 +124,16 @@ internal class OtelRoadtripMetrics(
             .setUnit(UNIT_PROFILES)
             .build()
 
-    private val recgovAtcFires =
+    private val atcFires =
         meter
-            .counterBuilder(METRIC_RECGOV_ATC)
-            .setDescription("ATC fires reaching a terminal outcome, by outcome and error code")
+            .counterBuilder(METRIC_BOOKING_ATC)
+            .setDescription("ATC fires reaching a terminal outcome, by provider, outcome and error code")
             .setUnit(UNIT_FIRES)
             .build()
 
-    private val recgovAtcDuration =
+    private val atcDuration =
         meter
-            .histogramBuilder(METRIC_RECGOV_ATC_DURATION)
+            .histogramBuilder(METRIC_BOOKING_ATC_DURATION)
             .ofLongs()
             .setDescription("End-to-end ATC fire latency, preflight through cart run")
             .setUnit(UNIT_MILLISECONDS)
@@ -183,14 +186,23 @@ internal class OtelRoadtripMetrics(
         recgovKeepalives.add(1, Attributes.of(attrOutcome, outcome.label))
     }
 
-    override fun recgovAtcFired(
+    override fun atcFired(
+        provider: BookingProvider?,
         outcome: AtcOutcome,
         error: String?,
         durationMs: Int?,
     ) {
-        val attributes = Attributes.of(attrOutcome, outcome.label, attrError, error ?: ERROR_NONE)
-        recgovAtcFires.add(1, attributes)
-        durationMs?.let { recgovAtcDuration.record(it.toLong(), attributes) }
+        val attributes =
+            Attributes.of(
+                attrProvider,
+                provider?.id ?: PROVIDER_NONE,
+                attrOutcome,
+                outcome.label,
+                attrError,
+                error ?: ERROR_NONE,
+            )
+        atcFires.add(1, attributes)
+        durationMs?.let { atcDuration.record(it.toLong(), attributes) }
     }
 
     override fun ingestRunFinished(

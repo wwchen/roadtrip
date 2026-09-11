@@ -20,25 +20,38 @@
 // of fragments and get the word order wrong.
 
 /**
- * What we call recreation.gov to users.
- *
- * The product said "Recreation.gov" in error banners and credential labels and
- * "rec.gov" in the booking rows, which is one product with two names for the same
- * vendor. It is the short form everywhere now.
+ * What we call recreation.gov to users — the one name, matching the vendor's own
+ * branding and the `booking_system` the backend serves. Two names for one vendor
+ * used to collide on a single screen.
  */
-export const VENDOR = 'rec.gov';
+export const VENDOR = 'Recreation.gov';
+
+/**
+ * The neutral name for a booking site we cannot name. `heldTitle` and
+ * `openCart` read better with the vendor simply dropped ("your cart"), so they
+ * do that instead; every sentence that needs a noun there uses this one.
+ */
+const UNNAMED_BOOKING_SITE = 'the booking site';
+
+/** The possessive form, for the gate sentences that ask for a login. */
+const UNNAMED_BOOKING_ACCOUNT = 'your booking';
+
+/** The bare noun, for the one sentence that already supplies its own "your". */
+const UNNAMED_BOOKING_LABEL = 'booking';
 
 export const bookingCopy = {
-  /** The popover's escape hatch to the provider's own page. */
-  openProvider: `Book on ${VENDOR}`,
+  /** The popover's escape hatch, named after whoever takes the booking at that link. */
+  openProvider: (bookingSystem?: string) => `Book on ${bookingSystem ?? UNNAMED_BOOKING_SITE}`,
   addToCart: 'Add to cart',
   /** The armed cell's label, before the second tap. */
   book: 'Book',
-  held: 'Cart',
   holdRunning: 'Holding site… usually under a minute; can take a few',
-  heldTitle: `Site held in your ${VENDOR} cart`,
-  openCart: `Open ${VENDOR} cart ↗`,
-  checkOutSoon: `Check out on ${VENDOR} within 15 minutes.`,
+  // The three lines of the hold toast. Each takes the name of the provider that
+  // actually held the site, rather than naming one vendor for all of them.
+  heldTitle: (bookingSystem?: string) => `Site held in your ${bookingSystem ? `${bookingSystem} ` : ''}cart`,
+  openCart: (bookingSystem?: string) => `Open ${bookingSystem ?? 'your'} cart ↗`,
+  checkOutSoon: (bookingSystem?: string) =>
+    `Check out on ${bookingSystem ?? UNNAMED_BOOKING_SITE} within 15 minutes.`,
   holdBusyTitle: 'One hold at a time',
   holdBusyBody: 'A hold is already running — wait for it to finish before holding another site.',
 } as const;
@@ -51,13 +64,15 @@ export const bookingCopy = {
  */
 export const gateCopy = {
   cartSignedOut: 'Sign in to hold sites from here',
-  cartNoCredentials: `Add ${VENDOR} login in Settings`,
+  /** Named after the adapter the backend says would hold it, never the POI's. */
+  cartNoCredentials: (providerDisplay?: string) =>
+    `Add ${providerDisplay ?? UNNAMED_BOOKING_ACCOUNT} login in Settings`,
   watchSignedOut: 'Sign in to get an alert when a site opens up that night.',
   /** The word inside the day panel's sentence, and the sentence around it. */
   signIn: 'Sign in',
   daySignedOutSuffix: ' to set availability alerts.',
   /** The add-to-cart row's help, as a link plus the prose that follows it. */
-  editorNoCredentialsLink: `Add your ${VENDOR} login`,
+  editorNoCredentialsLink: (providerDisplay?: string) => `Add your ${providerDisplay ?? UNNAMED_BOOKING_LABEL} login`,
   editorNoCredentialsSuffix: ' in Settings to hold sites.',
   editorSignedOutSuffix: ' to enable add-to-cart.',
 } as const;

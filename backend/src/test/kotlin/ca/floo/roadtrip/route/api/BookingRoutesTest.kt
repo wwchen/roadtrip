@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.route.api
 
-import ca.floo.roadtrip.model.api.RECGOV_CART_URL
 import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.UserId
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.route.auth.SESSION_COOKIE
 import ca.floo.roadtrip.route.auth.roadtripAuthorization
 import ca.floo.roadtrip.service.booking.AddToCartOutcome
@@ -29,9 +29,13 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 private const val ADD_TO_CART = "/api/booking/add-to-cart"
 private const val USER_TOKEN = "user-token"
+
+/** Whatever the provider's cart is; the route passes it through untouched. */
+private const val HELD_CART_URL = "https://cart.example.test/hold"
 private val testUser = UserId(7L)
 
 private const val VALID_BODY = """{"campsite_id":42,"start_date":"2026-07-04","end_date":"2026-07-06"}"""
@@ -50,7 +54,7 @@ private fun HttpRequestBuilder.asUser() = header(HttpHeaders.Cookie, "$SESSION_C
 
 /** Answers a fixed outcome and records what the route asked for. */
 private class StubBookingActions(
-    private val outcome: AddToCartOutcome = AddToCartOutcome.Held(RECGOV_CART_URL),
+    private val outcome: AddToCartOutcome = AddToCartOutcome.Held(HELD_CART_URL, BookingProvider.RECGOV),
 ) : BookingActionPort {
     var calls = 0
     var lastCaller: UserId? = null
@@ -104,7 +108,11 @@ class BookingRoutesTest {
             assertEquals(HttpStatusCode.OK, resp.status)
             val json = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("completed", json["status"]!!.jsonPrimitive.content)
-            assertEquals(RECGOV_CART_URL, json["cart_url"]!!.jsonPrimitive.content)
+            // Verbatim from the outcome: the route knows no vendor's cart either.
+            assertEquals(HELD_CART_URL, json["cart_url"]!!.jsonPrimitive.content)
+            // Who actually holds it — an aliased campground is served by one
+            // vendor and booked through another, so the POI cannot say.
+            assertEquals(BookingProvider.RECGOV.id, json["provider"]!!.jsonPrimitive.content)
             // The caller is taken from the session, never from the body.
             assertEquals(testUser, service.lastCaller)
             assertEquals(42L, service.lastCampsiteId)
@@ -159,7 +167,11 @@ class BookingRoutesTest {
             )
         for ((category, status) in expected) {
             testApplication {
-                mount(StubBookingActions(AddToCartOutcome.Failed("provider_said_no", "why", category)))
+                mount(
+                    StubBookingActions(
+                        AddToCartOutcome.Failed("provider_said_no", "why", category, BookingProvider.RECGOV),
+                    ),
+                )
 
                 val resp =
                     client.post(ADD_TO_CART) {
@@ -172,6 +184,75 @@ class BookingRoutesTest {
             }
         }
     }
+
+    @Test
+    fun `a refusal names the adapter that refused, so the copy can too`() =
+        testApplication {
+            mount(
+                StubBookingActions(
+                    AddToCartOutcome.Refused(BookingActionCodes.CREDENTIALS_REQUIRED, BookingProvider.RECGOV),
+                ),
+            )
+
+            val resp =
+                client.post(ADD_TO_CART) {
+                    asUser()
+                    contentType(ContentType.Application.Json)
+                    setBody(VALID_BODY)
+                }
+
+            val json = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(BookingActionCodes.CREDENTIALS_REQUIRED, json["error"]!!.jsonPrimitive.content)
+            assertEquals(BookingProvider.RECGOV.id, json["provider"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `an adapter failure names the adapter, and a gate reached before one names nobody`() =
+        testApplication {
+            mount(
+                StubBookingActions(
+                    AddToCartOutcome.Failed(
+                        BookingActionCodes.CART_NOT_ADDED,
+                        detail = null,
+                        category = BookingFailureCategory.RETRY_LATER,
+                        provider = BookingProvider.RECGOV,
+                    ),
+                ),
+            )
+
+            val failed =
+                client.post(ADD_TO_CART) {
+                    asUser()
+                    contentType(ContentType.Application.Json)
+                    setBody(VALID_BODY)
+                }
+
+            assertEquals(
+                BookingProvider.RECGOV.id,
+                Json
+                    .parseToJsonElement(failed.bodyAsText())
+                    .jsonObject["provider"]!!
+                    .jsonPrimitive.content,
+            )
+        }
+
+    @Test
+    fun `a refusal with no adapter behind it carries no provider at all`() =
+        testApplication {
+            mount(StubBookingActions(AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET)))
+
+            val resp =
+                client.post(ADD_TO_CART) {
+                    asUser()
+                    contentType(ContentType.Application.Json)
+                    setBody(VALID_BODY)
+                }
+
+            assertNull(
+                Json.parseToJsonElement(resp.bodyAsText()).jsonObject["provider"],
+                "no adapter was consulted, so naming one would be a guess",
+            )
+        }
 
     @Test
     fun `a quoted campsite_id still decodes to the same Long`() =
@@ -205,6 +286,7 @@ class BookingRoutesTest {
                         RecGovSessionCodes.COMPANION_UNAVAILABLE,
                         "refused",
                         BookingFailureCategory.UPSTREAM,
+                        BookingProvider.RECGOV,
                     ),
                 ),
             )

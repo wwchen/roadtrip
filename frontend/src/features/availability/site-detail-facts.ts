@@ -1,4 +1,5 @@
 // Facts a camper cares about, read from the typed catalog row.
+import { providerLabel } from './booking-links';
 import type { Campsite } from '@/api/campsite-api';
 
 /** Feature chips past this are noise in a row that is already dense. */
@@ -33,7 +34,7 @@ export function detailFacts(site: Partial<Campsite>): SiteFact[] {
     'Equipment',
     (site.equipment ?? []).filter(isNotBlank).slice(0, MAX_EQUIPMENT_ITEMS).join(', '),
   );
-  add('Provider', site.data_provider);
+  add('Provider', providerLabel(site.data_provider));
   add('Provider ID', site.data_provider_ref);
   return facts;
 }

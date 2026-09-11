@@ -20,6 +20,7 @@ import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
+import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
@@ -126,6 +127,7 @@ val serviceModule =
             UserSettingsService(
                 userRepo = get<UserRepo>(),
                 settingsRepo = get<UserSettingsRepo>(),
+                bookingCredentialsRepo = get<UserBookingCredentialsRepo>(),
                 cipher = cipher,
                 slackClient = slackClient,
                 providerLabel = providerLabel,
@@ -152,7 +154,7 @@ val serviceModule =
             val config: AppConfig = get()
             val cipher: SecretCipher? = config.secrets?.let { SecretCipher(it.encryptionKey) }
             RecGovCredentialService(
-                settingsRepo = get<UserSettingsRepo>(),
+                credentialsRepo = get<UserBookingCredentialsRepo>(),
                 watchRepo = get<AvailabilityWatchRepo>(),
                 cipher = cipher,
                 companion = get<CompanionChannel>().session,
@@ -226,9 +228,15 @@ val serviceModule =
             listOfNotNull(
                 get<CompanionChannel>().atc?.let { executor ->
                     // The credential service is the fire path's session authority:
-                    // it answers per-profile health and owns the one unattended
-                    // re-login, because it is where the sealed password lives.
-                    RecGovBookingAdapter(executor, get<RecGovCredentialService>(), get<RecentAtcFires>())
+                    // it answers per-profile health, owns the one unattended
+                    // re-login, and knows whose cart a hold could land in,
+                    // because it is where the sealed password lives.
+                    RecGovBookingAdapter(
+                        companionAtc = executor,
+                        session = get<RecGovCredentialService>(),
+                        recentFires = get<RecentAtcFires>(),
+                        credentials = get<RecGovCredentialService>(),
+                    )
                 },
             )
         }
@@ -241,7 +249,6 @@ val serviceModule =
                 campsites = get<CampsiteRepo>()::findById,
                 availabilityTargets = get<DbAvailabilityTargetResolver>(),
                 bookingTargets = get<AvailabilityBookingTargetResolver>(),
-                credentials = get<RecGovCredentialService>(),
                 availability = { campsiteId, nights ->
                     get<AvailabilityRepo>()
                         .freshlyUnavailableDates(campsiteId, nights, get<AppConfig>().booking.freshnessMaxAge)
@@ -256,9 +263,9 @@ val serviceModule =
                 availabilityTargets = get<DbAvailabilityTargetResolver>(),
                 bookingTargets = get<AvailabilityBookingTargetResolver>(),
                 notificationTriggerKinds = notificationTriggerKinds(emailConfigured = config.email != null),
-                // `atc` is offered only to a user whose rec.gov credentials are
-                // stored; the credential service is the one place that knows.
-                recgovCredentials = get<RecGovCredentialService>(),
+                // `atc` is offered only to a user the claiming adapter can hold
+                // for; the adapter is the one place that knows its credentials.
+                bookings = get<BookingAdapterRegistry>(),
             )
         }
         single {
@@ -374,13 +381,14 @@ val serviceModule =
             // keep warm, so the job is simply not started rather than sweeping
             // against nothing. Koin cannot hold a null single, hence the wrapper.
             val config: AppConfig = get()
+            val bookingCredentialsRepo = get<UserBookingCredentialsRepo>()
             RecGovKeepalive(
                 get<CompanionChannel>().session?.let {
                     RecGovKeepaliveJob(
                         watchRepo = get<AvailabilityWatchRepo>(),
                         companion = it,
                         profiles = get<RecGovCredentialService>(),
-                        credentials = get<UserSettingsRepo>()::userIdsWithRecgovCredentials,
+                        credentials = { bookingCredentialsRepo.userIdsWithCredentials(BookingProvider.RECGOV) },
                         recentFires = get<RecentAtcFires>(),
                         metrics = get<RoadtripMetrics>(),
                         interval = config.booking.recgovAtc.keepaliveInterval,
@@ -399,6 +407,7 @@ val serviceModule =
                     campgroundRepo = get<CampgroundRepo>(),
                     dateResolver = get<AvailabilityDateResolver>(),
                     bookingHorizons = get<BookingHorizonResolver>(),
+                    bookingAdapters = get<BookingAdapterRegistry>(),
                 ),
                 TeslaSuperchargerService(get<TeslaSuperchargerRepo>()),
                 PlanetFitnessLocationService(get<PlanetFitnessLocationRepo>()),

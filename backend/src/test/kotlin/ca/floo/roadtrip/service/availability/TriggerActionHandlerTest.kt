@@ -3,6 +3,8 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.client.resend.EmailDeliveryClient
 import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
 import ca.floo.roadtrip.config.EmailConfig
+import ca.floo.roadtrip.fixtures.FAKE_CART_URL
+import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campsiteFixture
@@ -31,6 +33,7 @@ import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
 import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
+import ca.floo.roadtrip.service.notification.common.AtcResultNotice
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
@@ -365,6 +368,7 @@ class TriggerActionHandlerTest {
                     resultFactory = { request: AddToCartRequest ->
                         AddToCartResult.Completed(
                             providerId = BookingProvider.RECGOV,
+                            cartUrl = FAKE_CART_URL,
                             request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                             response =
                                 buildJsonObject {
@@ -403,9 +407,13 @@ class TriggerActionHandlerTest {
 
             assertTrue(delivered)
             val result = notifications.atcResults.single()
-            assertEquals(42L, result.watchId)
-            assertEquals("recgov", result.vendor)
-            assertEquals("completed", result.status)
+            assertEquals(42L, result.notice.watchId)
+            assertEquals("recgov", result.notice.vendor)
+            assertEquals("completed", result.notice.status)
+            // The copy layer names the vendor and links the cart from these two;
+            // both come from the adapter that made the hold, not from a literal.
+            assertEquals(FAKE_PROVIDER_DISPLAY_NAME, result.notice.bookingSystem)
+            assertEquals(FAKE_CART_URL, result.notice.cartUrl)
             assertEquals(
                 listOf(
                     NotificationTarget.Slack("#custom", "xoxb-owner-token"),
@@ -476,14 +484,9 @@ class TriggerActionHandlerTest {
     @Test
     fun `a blocked preflight tells the owner what actually blocked it, in the delivered email`() =
         runBlocking {
-            // End to end through the real adapter, the real fanout and the real
-            // email renderer. The renderer's own tests hand-build a response
-            // object; this one proves the producer and the renderer agree, which
-            // is exactly where the recovery message was being dropped.
-            //
-            // The reason has to be the companion's own: this owner was asked for
-            // a verification code, and the mail used to tell them their session
-            // had expired and to re-login — which would only ask for the code again.
+            // End to end through the real adapter, fanout and renderer: proves
+            // producer and renderer agree on the companion's own reason. This
+            // owner was asked for a code; the mail used to say "session expired".
             val emailClient = RecordingEmailClient()
             val adapter =
                 RecGovBookingAdapter(
@@ -557,7 +560,12 @@ class TriggerActionHandlerTest {
                 )
 
             assertFalse(delivered)
-            assertEquals("failed", notifications.atcResults.single().status)
+            assertEquals(
+                "failed",
+                notifications.atcResults
+                    .single()
+                    .notice.status,
+            )
         }
 
     @Test
@@ -602,8 +610,8 @@ class TriggerActionHandlerTest {
 
             assertFalse(delivered)
             val result = notifications.atcResults.single()
-            assertEquals("failed", result.status)
-            val auth = result.response!!["recgov_auth"]!!.jsonObject
+            assertEquals("failed", result.notice.status)
+            val auth = result.notice.response!!["recgov_auth"]!!.jsonObject
             assertEquals("recgov_not_authenticated", auth["error"]!!.jsonPrimitive.content)
         }
 
@@ -630,12 +638,12 @@ class TriggerActionHandlerTest {
             assertFalse(delivered)
             assertTrue(bookingProvider.requests.isEmpty())
             val result = notifications.atcResults.single()
-            assertEquals("failed", result.status)
-            assertEquals(BookingActionCodes.UNSUPPORTED_TARGET, result.error)
-            assertEquals(JsonObject(emptyMap()), result.request, "no companion call was made, so there is no payload")
-            assertEquals(null, result.response)
+            assertEquals("failed", result.notice.status)
+            assertEquals(BookingActionCodes.UNSUPPORTED_TARGET, result.notice.error)
+            assertEquals(JsonObject(emptyMap()), result.notice.request, "no companion call was made, so there is no payload")
+            assertEquals(null, result.notice.response)
             assertTrue(result.targets.isNotEmpty(), "an ATC-only watch has no other handler to speak for it")
-            assertTrue(result.detail!!.isNotBlank(), "the reason is what the owner reads first")
+            assertTrue(result.notice.detail!!.isNotBlank(), "the reason is what the owner reads first")
         }
 
     @Test
@@ -663,11 +671,11 @@ class TriggerActionHandlerTest {
 
             assertFalse(delivered)
             val result = notifications.atcResults.single()
-            assertEquals("failed", result.status)
-            assertEquals(BookingActionCodes.UNSUPPORTED_TARGET, result.error)
-            assertEquals("recgov", result.vendor)
-            assertEquals(JsonObject(emptyMap()), result.request)
-            assertTrue(result.detail!!.isNotBlank())
+            assertEquals("failed", result.notice.status)
+            assertEquals(BookingActionCodes.UNSUPPORTED_TARGET, result.notice.error)
+            assertEquals("recgov", result.notice.vendor)
+            assertEquals(JsonObject(emptyMap()), result.notice.request)
+            assertTrue(result.notice.detail!!.isNotBlank())
         }
 
     @Test
@@ -693,25 +701,34 @@ class TriggerActionHandlerTest {
                 )
 
             assertFalse(delivered)
-            assertEquals(listOf(AtcOutcome.EXCEPTION), metrics.fires.map { it.first })
+            assertEquals(listOf(AtcOutcome.EXCEPTION), metrics.fires.map { it.outcome })
             val result = notifications.atcResults.single()
-            assertEquals("failed", result.status)
-            assertEquals(BookingActionCodes.ATC_EXCEPTION, result.error)
+            assertEquals("failed", result.notice.status)
+            assertEquals(BookingActionCodes.ATC_EXCEPTION, result.notice.error)
             // The throwable's own message stays in the log: it is internal
             // wording the owner cannot act on.
-            assertTrue(result.detail!!.isNotBlank())
+            assertTrue(result.notice.detail!!.isNotBlank())
         }
+
+    /** One counted fire, with every attribute the dashboard slices by. */
+    private data class RecordedFire(
+        val provider: BookingProvider?,
+        val outcome: AtcOutcome,
+        val error: String?,
+        val durationMs: Int?,
+    )
 
     /** Records what the handler counted, so every exit's outcome is assertable. */
     private class RecordingMetrics : RoadtripMetrics by RoadtripMetrics.NoOp {
-        val fires = mutableListOf<Triple<AtcOutcome, String?, Int?>>()
+        val fires = mutableListOf<RecordedFire>()
 
-        override fun recgovAtcFired(
+        override fun atcFired(
+            provider: BookingProvider?,
             outcome: AtcOutcome,
             error: String?,
             durationMs: Int?,
         ) {
-            fires += Triple(outcome, error, durationMs)
+            fires += RecordedFire(provider, outcome, error, durationMs)
         }
     }
 
@@ -737,7 +754,11 @@ class TriggerActionHandlerTest {
                 openings = listOf(triggerOpening(parentRef = BookingProviderRef.Campflare("campflare-1"))),
             )
 
-            assertEquals(listOf(AtcOutcome.NO_TARGET), metrics.fires.map { it.first })
+            assertEquals(listOf(AtcOutcome.NO_TARGET), metrics.fires.map { it.outcome })
+            // No booking provider was reached, so the metric names none: the
+            // opening's Campflare is an availability provider, and a dashboard
+            // filtered on a real booking provider must not see this fire.
+            assertEquals(listOf(null), metrics.fires.map { it.provider })
         }
 
     @Test
@@ -761,12 +782,15 @@ class TriggerActionHandlerTest {
             )
 
             val fire = metrics.fires.single()
-            assertEquals(AtcOutcome.HELD, fire.first)
+            assertEquals(AtcOutcome.HELD, fire.outcome)
+            // One metric for every vendor; which one held is a label, so a
+            // per-vendor panel is a filter rather than a second instrument.
+            assertEquals(BookingProvider.RECGOV, fire.provider)
             // assertNotNull returns the unwrapped value, so asserting last would
             // make this method's return type Int — and JUnit silently skips a
             // non-void @Test. Keep a Unit-returning assertion last.
             assertTrue(
-                fire.third != null,
+                fire.durationMs != null,
                 "a fire without a duration cannot answer 'are holds still fast enough'",
             )
         }
@@ -857,13 +881,7 @@ class TriggerActionHandlerTest {
         private val result: Boolean,
     ) : NotificationSender {
         data class AtcResult(
-            val watchId: Long,
-            val vendor: String,
-            val status: String,
-            val request: JsonObject,
-            val response: JsonObject?,
-            val error: String?,
-            val detail: String?,
+            val notice: AtcResultNotice,
             val targets: List<NotificationTarget>,
         )
 
@@ -894,16 +912,10 @@ class TriggerActionHandlerTest {
         ): Boolean = result
 
         override suspend fun sendAtcResult(
-            watchId: Long,
-            vendor: String,
-            status: String,
-            request: JsonObject,
-            response: JsonObject?,
-            error: String?,
-            detail: String?,
+            notice: AtcResultNotice,
             targets: List<NotificationTarget>,
         ): Boolean {
-            atcResults += AtcResult(watchId, vendor, status, request, response, error, detail, targets)
+            atcResults += AtcResult(notice, targets)
             return result
         }
     }
@@ -938,6 +950,10 @@ class TriggerActionHandlerTest {
 
         override val id: BookingProvider = BookingProvider.RECGOV
 
+        override val displayName: String = FAKE_PROVIDER_DISPLAY_NAME
+
+        override fun canFulfil(user: UserId): Boolean = true
+
         override fun targetFor(
             parentRef: BookingProviderRef,
             campsiteId: Long,
@@ -966,6 +982,7 @@ class TriggerActionHandlerTest {
             resultFactory?.let { return it(request) }
             return AddToCartResult.Completed(
                 providerId = BookingProvider.RECGOV,
+                cartUrl = FAKE_CART_URL,
                 request = buildJsonObject { put("owner_user_id", request.ownerUserId) },
                 response =
                     buildJsonObject {

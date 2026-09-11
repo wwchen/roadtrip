@@ -51,6 +51,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "alerts",
                 "amenities",
                 "big_rig_friendly",
+                "booking_aliases",
                 "booking_provider",
                 "booking_provider_ref",
                 "cell_service",
@@ -95,6 +96,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
             listOf(
                 "ada_accessible",
                 "attributes",
+                "booking_aliases",
                 "booking_provider",
                 "booking_provider_ref",
                 "campground_id",
@@ -268,6 +270,36 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "campsites.campsites_provider_uidx",
             ),
             indexes,
+        )
+    }
+
+    /**
+     * Also the proof that Flyway applies V61: this schema was migrated by
+     * [SharedTestDb] through the real `migrate(ds)` boot path, and V61's
+     * CONCURRENTLY build only gets there via its non-transactional script config.
+     * Validity, not mere existence — a failed concurrent build leaves the name
+     * behind on an index no planner will use.
+     */
+    @Test
+    fun `booking alias bags are array-checked and GIN indexed on both catalog tables`() {
+        val indexes = validBookingAliasIndexNames(ctx)
+
+        val checks =
+            ctx
+                .fetch(
+                    """
+                    SELECT conname
+                    FROM pg_constraint
+                    WHERE conname IN ('campgrounds_booking_aliases_check', 'campsites_booking_aliases_check')
+                      AND convalidated
+                    ORDER BY conname
+                    """.trimIndent(),
+                ).map { it.get("conname", String::class.java) }
+
+        assertEquals(bookingAliasIndexes, indexes)
+        assertEquals(
+            listOf("campgrounds_booking_aliases_check", "campsites_booking_aliases_check"),
+            checks,
         )
     }
 

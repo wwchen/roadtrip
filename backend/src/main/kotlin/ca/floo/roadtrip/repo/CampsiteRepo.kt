@@ -119,7 +119,7 @@ class CampsiteRepo(
         for (chunk in deduped.chunked(BULK_CHUNK_SIZE)) {
             val placeholders =
                 chunk.joinToString(", ") {
-                    "(?, ?, ?, ?, " +
+                    "(?, ?, ?, ?, ?::jsonb, " +
                         "?, ?, ?, ?, ?, ?, ?, " +
                         "?::jsonb, ?, ?::jsonb, ?::jsonb, " +
                         "?, ?, ?, " +
@@ -132,7 +132,7 @@ class CampsiteRepo(
             val sql =
                 """
                 INSERT INTO campsites (
-                  data_provider, data_provider_ref, booking_provider, booking_provider_ref,
+                  data_provider, data_provider_ref, booking_provider, booking_provider_ref, booking_aliases,
                   campground_id, name, kind, loop_name, latitude, longitude, reservation_url,
                   equipment, kind_listed, schedule, price,
                   firepit, picnic_table, ada_accessible,
@@ -147,6 +147,7 @@ class CampsiteRepo(
                 DO UPDATE SET
                   booking_provider = EXCLUDED.booking_provider,
                   booking_provider_ref = EXCLUDED.booking_provider_ref,
+                  booking_aliases = EXCLUDED.booking_aliases,
                   campground_id = EXCLUDED.campground_id,
                   name = EXCLUDED.name,
                   kind = EXCLUDED.kind,
@@ -185,6 +186,7 @@ class CampsiteRepo(
                 params += record.dataProviderRef.serialize()
                 params += record.bookingProvider?.id
                 params += record.bookingProviderRef
+                params += CatalogColumnJson.encodeArray(record.bookingAliases)
                 params += row.campgroundId
                 params += record.name
                 params += record.kind.wire
@@ -340,6 +342,7 @@ class CampsiteRepo(
             dataProviderRefValue = dataProviderRefStr,
             bookingProvider = record.get("booking_provider", String::class.java),
             bookingProviderRef = record.get("booking_provider_ref", String::class.java),
+            bookingAliases = decodeBookingAliases(record.get("booking_aliases_text", String::class.java)),
         )
     }
 
@@ -396,7 +399,8 @@ class CampsiteRepo(
               c.data_provider,
               c.data_provider_ref,
               c.booking_provider,
-              c.booking_provider_ref
+              c.booking_provider_ref,
+              c.booking_aliases::text AS booking_aliases_text
             FROM campsites c
             """.trimIndent()
     }

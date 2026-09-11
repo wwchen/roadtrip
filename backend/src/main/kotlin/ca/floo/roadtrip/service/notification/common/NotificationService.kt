@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.notification.common
 
-import kotlinx.serialization.json.JsonObject
 import java.time.LocalDate
 
 /**
@@ -37,22 +36,12 @@ interface NotificationService {
     ): Boolean = false
 
     /**
-     * Reports a backend-owned one-shot ATC result.
-     *
-     * [error] and [detail] carry the failure reason **as its own arguments**,
-     * not buried in [response]. A preflight that never reached the companion —
-     * a dead session, an unreachable companion — has no companion response at
-     * all, and those are precisely the failures the owner can act on. Renderers
-     * must prefer them over anything they can dig out of [response].
+     * Reports a backend-owned one-shot ATC result. See [AtcResultNotice] for why
+     * the failure reason and the holding vendor are fields of the notice rather
+     * than something a renderer digs out of the companion response.
      */
     suspend fun sendAtcResult(
-        watchId: Long,
-        vendor: String,
-        status: String,
-        request: JsonObject,
-        response: JsonObject?,
-        error: String? = null,
-        detail: String? = null,
+        notice: AtcResultNotice,
         target: NotificationTarget,
     ): Boolean = false
 }

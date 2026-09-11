@@ -9,6 +9,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -23,6 +24,7 @@ class SlackContentAvailabilityRendererTest {
         campgroundId: Long? = 1L,
         campground: String? = "Kirk Creek",
         bookingUrl: String? = "https://example.test/book/100",
+        bookingSystem: String? = null,
     ) = WatchOpening(
         label = label,
         loop = null,
@@ -31,7 +33,13 @@ class SlackContentAvailabilityRendererTest {
         campgroundId = campgroundId,
         campground = campground,
         bookingUrl = bookingUrl,
+        bookingSystem = bookingSystem,
     )
+
+    private fun contextText(blocks: List<SlackBlockDto>): String =
+        blocks.single { it.type == "context" }.elements!!.jsonArray.joinToString("\n") {
+            it.jsonObject["text"]!!.jsonPrimitive.content
+        }
 
     private fun attach(rendered: Pair<String, List<SlackAttachmentDto>>): SlackAttachmentDto {
         assertEquals(1, rendered.second.size)
@@ -133,6 +141,49 @@ class SlackContentAvailabilityRendererTest {
                 .map { it.jsonObject }
                 .single { it["action_id"]?.jsonPrimitive?.content == SlackWatchCard.ACTION_OPEN_WATCHES }
         assertEquals("https://app.test/watches?action=modify&id=9", modify["url"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `the footer names the booking site the Reserve links actually go to`() {
+        val rendered =
+            SlackContentAvailabilityRenderer.openings(
+                watchId,
+                start,
+                end,
+                listOf(opening(bookingSystem = "Campflare")),
+                appRoot,
+            )
+
+        val context = contextText(blocks(rendered))
+        assertTrue(context.contains("Reserve links go straight to Campflare"), context)
+        assertFalse(context.lowercase().contains("recreation.gov"), context)
+    }
+
+    @Test
+    fun `an alert spanning two booking sites names neither`() {
+        // One footer cannot honestly name two vendors, and naming the first
+        // campground's would be wrong for half the links in the card.
+        val rendered =
+            SlackContentAvailabilityRenderer.openings(
+                watchId,
+                start,
+                end,
+                listOf(
+                    opening(label = "A1", campgroundId = 1L, bookingSystem = "Recreation.gov"),
+                    opening(label = "B1", campgroundId = 2L, bookingSystem = "Campflare"),
+                ),
+                appRoot,
+            )
+
+        val context = contextText(blocks(rendered))
+        assertTrue(context.contains("Reserve links go straight to the booking site"), context)
+    }
+
+    @Test
+    fun `an opening whose booking site is unknown falls back to neutral wording`() {
+        val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, listOf(opening()), appRoot)
+
+        assertTrue(contextText(blocks(rendered)).contains("the booking site"))
     }
 
     @Test

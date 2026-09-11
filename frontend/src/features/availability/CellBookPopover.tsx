@@ -2,7 +2,7 @@
 //
 // The popover opens wherever the campground has a cart at all. What changes with
 // the caller is the second row: it holds the site, or it names the one step that
-// would let it — a sign-in, or rec.gov credentials in Settings. Hiding the row
+// would let it — a sign-in, or that provider's credentials in Settings. Hiding the row
 // instead is what made the feature look absent rather than one step away.
 //
 // Positioning is the `WatchPopover` idiom: fixed against the anchor's rect and
@@ -31,7 +31,7 @@ const POPOVER_ANCHOR_GAP_PX = 6;
 export type CellCart =
   | { state: 'ready'; onAddToCart: () => void; /** One hold at a time. */ busy: boolean }
   | { state: 'signed-out'; onSignIn: () => void }
-  | { state: 'no-credentials'; onOpenSettings: () => void };
+  | { state: 'no-credentials'; onOpenSettings: () => void; providerDisplay?: string };
 
 export interface CellBookPopoverProps {
   anchor: HTMLElement;
@@ -39,9 +39,17 @@ export interface CellBookPopoverProps {
   onOpenBooking: () => void;
   cart: CellCart;
   onClose: () => void;
+  /** Who takes the booking at the URL [onOpenBooking] opens — not the POI's serving provider. */
+  bookingAgency?: string;
 }
 
-export function CellBookPopover({ anchor, onOpenBooking, cart, onClose }: CellBookPopoverProps) {
+export function CellBookPopover({
+  anchor,
+  onOpenBooking,
+  cart,
+  onClose,
+  bookingAgency,
+}: CellBookPopoverProps) {
   const width = cart.state === 'ready' ? POPOVER_WIDTH_PX : POPOVER_WIDTH_WITH_HINT_PX;
   const hostRef = useRef<HTMLDivElement>(null);
   const firstRowRef = useRef<HTMLButtonElement>(null);
@@ -120,7 +128,7 @@ export function CellBookPopover({ anchor, onOpenBooking, cart, onClose }: CellBo
         }}
       >
         <Icon name="external" className="cg-cell-book-pop-icon" aria-hidden="true" />
-        <span>{bookingCopy.openProvider}</span>
+        <span>{bookingCopy.openProvider(bookingAgency)}</span>
       </button>
       <button
         type="button"
@@ -141,7 +149,9 @@ export function CellBookPopover({ anchor, onOpenBooking, cart, onClose }: CellBo
             <span className="cg-cell-book-pop-hint">{gateCopy.cartSignedOut}</span>
           ) : null}
           {cart.state === 'no-credentials' ? (
-            <span className="cg-cell-book-pop-hint">{gateCopy.cartNoCredentials}</span>
+            <span className="cg-cell-book-pop-hint">
+              {gateCopy.cartNoCredentials(cart.providerDisplay)}
+            </span>
           ) : null}
         </span>
       </button>

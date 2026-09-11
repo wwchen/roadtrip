@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.coroutines.runBlocking
@@ -11,6 +12,8 @@ import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ReserveAmericaAvailabilityProviderTest {
     @Test
@@ -78,4 +81,48 @@ class ReserveAmericaAvailabilityProviderTest {
             )
             assertEquals(setOf(253488L), batch.observations.map { it.campsiteId }.toSet())
         }
+
+    @Test
+    fun `reserveamerica claims a campground through its alias when the primary belongs to another provider`() {
+        val adapter =
+            ReserveAmericaAvailabilityProvider(
+                tenants =
+                    mapOf(
+                        "NY" to
+                            ReserveAmericaTenant(
+                                host = "newyorkstateparks.reserveamerica.com",
+                                contractCode = "NY",
+                                bookingHorizonDays = 270,
+                            ),
+                    ),
+                availabilityClient = ReserveAmericaAvailabilityClient { _, _, _, _, _ -> error("not stubbed") },
+                enabled = true,
+            )
+        val aliased =
+            testCampground(
+                bookingProvider = "campflare",
+                bookingProviderRef = "some-campflare-id",
+                bookingAliases = listOf(BookingAlias(provider = BookingProvider.RESERVEAMERICA, ref = "NY:489")),
+            )
+
+        assertTrue(adapter.supportsCampground(aliased))
+    }
+
+    @Test
+    fun `an alias for an unconfigured contract is not supported`() {
+        val adapter =
+            ReserveAmericaAvailabilityProvider(
+                tenants = emptyMap(),
+                availabilityClient = ReserveAmericaAvailabilityClient { _, _, _, _, _ -> error("not stubbed") },
+                enabled = true,
+            )
+        val aliased =
+            testCampground(
+                bookingProvider = "campflare",
+                bookingProviderRef = "some-campflare-id",
+                bookingAliases = listOf(BookingAlias(provider = BookingProvider.RESERVEAMERICA, ref = "NY:489")),
+            )
+
+        assertFalse(adapter.supportsCampground(aliased))
+    }
 }

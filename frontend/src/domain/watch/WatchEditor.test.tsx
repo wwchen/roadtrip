@@ -83,11 +83,14 @@ describe('what the form offers', () => {
     expect(screen.getByText(/in Settings to hold sites/)).toBeInTheDocument();
   });
 
-  test('the Settings hint is the control that opens Settings', async () => {
+  test('the Settings hint names the provider the backend says would hold it', async () => {
     const onOpenSettings = vi.fn();
-    open({ capabilities: caps(['slack_notify'], 'no_credentials'), onOpenSettings });
+    open({
+      capabilities: { ...caps(['slack_notify'], 'no_credentials'), addToCartProviderDisplay: 'Campflare' },
+      onOpenSettings,
+    });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Add your rec.gov login' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add your Campflare login' }));
 
     expect(onOpenSettings).toHaveBeenCalledOnce();
   });

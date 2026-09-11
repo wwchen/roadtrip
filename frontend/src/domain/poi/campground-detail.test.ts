@@ -205,7 +205,7 @@ describe('campgroundCtas', () => {
 
   test('falls back to the reserve url, naming the vendor', () => {
     expect(ctas({ reserve_url: 'https://www.recreation.gov/camping/campgrounds/1' })[0]).toMatchObject(
-      { label: 'View on recreation.gov' },
+      { label: 'View on Recreation.gov' },
     );
     expect(ctas({ reservation_url: 'https://reservecalifornia.com/x' })[0]).toMatchObject({
       label: 'View on ReserveCalifornia',

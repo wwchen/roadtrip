@@ -87,7 +87,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'The Booking section of account settings: recreation.gov credentials ' +
+          'The Booking section of account settings: Recreation.gov credentials ' +
           'plus the session they open. The credential half is a savable slice ' +
           'the modal Save writes; the session half is actions reporting into ' +
           'one shared status slot. Test login uses the SAVED credentials, so it ' +
@@ -113,7 +113,7 @@ export const Unconfigured: Story = {
 /** The steady state: credentials saved and the browser profile signed in. */
 export const ConfiguredAndActive: Story = { render: () => <Demo /> };
 
-/** Signed out at recreation.gov's end — the row points at Test login. */
+/** Signed out at Recreation.gov's end — the row points at Test login. */
 export const SessionExpired: Story = {
   render: () => <Demo status={{ ...activeStatus, session: 'expired' }} />,
 };

@@ -10,8 +10,10 @@ import ca.floo.roadtrip.model.api.RecgovVerifyResponseDto
 import ca.floo.roadtrip.model.api.UpdateRecgovRequest
 import ca.floo.roadtrip.model.api.redact
 import ca.floo.roadtrip.model.domain.auth.UserId
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.repo.BookingCredentials
+import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.security.SecretCipher
@@ -40,20 +42,22 @@ private val challengeEndingCodes =
     )
 
 /**
- * Projects stored settings into the wire shape the settings document carries.
+ * Projects the stored rec.gov account into the wire shape the settings document
+ * carries. The document is rec.gov's own settings surface, so it names one
+ * provider even though storage no longer does.
  *
  * Credentials read back as unconfigured when there is no [cipher]: the sealed
  * password cannot be opened without the key, so offering to log in with it would
  * be a lie.
  */
 internal fun bookingSettingsDto(
-    settings: UserSettingsRepo.Settings?,
+    credentials: BookingCredentials?,
     cipher: SecretCipher?,
 ): BookingSettingsDto {
-    val configured = cipher != null && settings?.recgovUsername != null && settings.recgovPasswordCipher != null
+    val configured = cipher != null && credentials != null
     return BookingSettingsDto(
         recgovConfigured = configured,
-        recgovUsername = settings?.recgovUsername.takeIf { configured },
+        recgovUsername = credentials?.username.takeIf { configured },
     )
 }
 
@@ -87,6 +91,10 @@ interface RecGovCredentialPort {
 @Suppress("TopLevelPropertyNaming")
 private val FALLBACK_MFA_CHALLENGE_TTL: Duration = Duration.ofMinutes(5)
 
+/** The one provider whose accounts this custodian holds. */
+@Suppress("TopLevelPropertyNaming")
+private val PROVIDER: BookingProvider = BookingProvider.RECGOV
+
 /**
  * Per-user rec.gov credentials: storage, and the interactive companion flows
  * Settings drives.
@@ -102,13 +110,13 @@ private val FALLBACK_MFA_CHALLENGE_TTL: Duration = Duration.ofMinutes(5)
  * session simply reports as unavailable.
  */
 class RecGovCredentialService(
-    private val settingsRepo: UserSettingsRepo,
+    private val credentialsRepo: UserBookingCredentialsRepo,
     private val watchRepo: AvailabilityWatchRepo,
     private val cipher: SecretCipher?,
     private val companion: CompanionSessionPort?,
     private val clock: Clock = Clock.systemUTC(),
 ) : RecGovCredentialPort,
-    RecGovCredentialsConfigured,
+    BookingCredentialsConfigured,
     RecGovProfileSessionPort {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -159,19 +167,10 @@ class RecGovCredentialService(
             ?: clock.instant().plus(FALLBACK_MFA_CHALLENGE_TTL)
 
     /**
-     * Stores credentials, **evicting the browser session when the account
-     * changes.**
-     *
-     * A swap to a different username invalidates the old session's legitimacy
-     * exactly as a removal does. The profile is keyed by user, not by account,
-     * so without this the previous account's cookie jar survives; [login] is
-     * refresh-first and revives it, and the hold lands on the account the user
-     * has already replaced while the UI reads the new username from the row.
-     *
-     * The wipe runs *before* the write and a failed wipe **refuses the save**
-     * ([SettingsError.RecgovProfileWipeFailed]). Storing the new username over a
-     * session we could not clear is the bad state itself; the old credentials
-     * keep working meanwhile, so a refusal costs the user only a retry.
+     * Stores credentials, evicting the browser session when the account changes:
+     * the profile is keyed by user, not account, so the replaced account's
+     * cookie jar would otherwise survive and [login] would revive it. A failed
+     * wipe refuses the save rather than writing over a session still on disk.
      */
     override suspend fun save(
         userId: UserId,
@@ -180,24 +179,28 @@ class RecGovCredentialService(
         val username = req.username?.trim()
         if (username.isNullOrBlank()) throw SettingsError.InvalidField("username must not be blank")
 
-        val stored = settingsRepo.find(userId)
+        val stored = storedCredentials(userId)
         val password = req.password?.takeIf { it.isNotBlank() }
-        if (password == null && stored?.recgovPasswordCipher == null) {
+        if (password == null && stored == null) {
             throw SettingsError.InvalidField("password is required the first time credentials are saved")
         }
 
         // Validate before persisting so a rejected save leaves the row untouched.
         val sealed = password?.let { (cipher ?: throw encryptionUnavailable()).seal(it) }
 
-        val previous = stored?.recgovUsername
+        val previous = stored?.username
         if (previous != null && previous != username) wipeProfileOrRefuse(userId)
 
-        settingsRepo.saveRecgovCredentials(
-            userId = userId,
-            username = username,
-            passwordCipher = sealed,
-        )
-        return bookingSettingsDto(settingsRepo.find(userId), cipher)
+        if (sealed != null) {
+            credentialsRepo.save(user = userId, provider = PROVIDER, username = username, secretCipher = sealed)
+        } else {
+            // Rename in place. Writing back the cipher read above would
+            // resurrect a credential removed while the wipe was in flight; a
+            // false answer means it was, and the response reads back
+            // unconfigured rather than re-creating the row.
+            credentialsRepo.updateUsername(userId, PROVIDER, username)
+        }
+        return bookingSettingsDto(storedCredentials(userId), cipher)
     }
 
     /**
@@ -254,9 +257,10 @@ class RecGovCredentialService(
         val signedOut = companion?.logout(profileId(userId)) == CompanionActionResult.Ok
         val destroyed = wipeProfileOrRefuse(userId)
 
-        settingsRepo.clearRecgov(userId)
+        val removed = credentialsRepo.clear(userId, PROVIDER)
+
         return RecgovRemovedDto(
-            removed = true,
+            removed = removed,
             strandedAtcWatches = stranded,
             companionSignedOut = signedOut,
             profileDestroyed = destroyed,
@@ -338,7 +342,7 @@ class RecGovCredentialService(
     }
 
     override suspend fun status(userId: UserId): RecgovStatusDto {
-        val stored = bookingSettingsDto(settingsRepo.find(userId), cipher)
+        val stored = bookingSettingsDto(storedCredentials(userId), cipher)
         if (!stored.recgovConfigured) {
             return RecgovStatusDto(
                 configured = false,
@@ -371,7 +375,14 @@ class RecGovCredentialService(
 
     // ── ports the watch surfaces and the ATC fire path depend on ─────────────
 
-    override fun isConfigured(userId: UserId): Boolean = bookingSettingsDto(settingsRepo.find(userId), cipher).recgovConfigured
+    /**
+     * Rec.gov's answer only. Another provider's custodian answers for its own
+     * accounts; this one would be guessing.
+     */
+    override fun isConfigured(
+        provider: BookingProvider,
+        user: UserId,
+    ): Boolean = provider == PROVIDER && bookingSettingsDto(storedCredentials(user), cipher).recgovConfigured
 
     override suspend fun health(userId: UserId): CompanionSessionHealth =
         companion?.health(profileId(userId)) ?: CompanionSessionHealth.Unavailable(null)
@@ -449,12 +460,12 @@ class RecGovCredentialService(
         override fun toString(): String = "Credentials(username=$username, password=${redact(password)})"
     }
 
+    private fun storedCredentials(userId: UserId): BookingCredentials? = credentialsRepo.find(userId, PROVIDER)
+
     private fun requireCredentials(userId: UserId): Credentials {
         val c = cipher ?: throw encryptionUnavailable()
-        val stored = settingsRepo.find(userId)
-        val username = stored?.recgovUsername ?: throw SettingsError.RecgovNotConfigured()
-        val sealed = stored.recgovPasswordCipher ?: throw SettingsError.RecgovNotConfigured()
-        return Credentials(username, c.open(sealed))
+        val stored = storedCredentials(userId) ?: throw SettingsError.RecgovNotConfigured()
+        return Credentials(stored.username, c.open(stored.secretCipher))
     }
 
     /** Remembers or forgets the open challenge, then shapes the wire answer. */

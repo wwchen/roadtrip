@@ -37,7 +37,12 @@ request time.
 
 **Campflare export** — the broad commercial catalog. Bulk campground and
 campsite exports behind an API key; the campsite export depends on the
-campground export for its id list. Availability wire details:
+campground export for its id list. A Campflare row is always written
+Campflare-primary (`booking_provider = campflare`); when the export also
+carries a rec.gov booking ref (`connections.ridb_facility_id`, or a
+`/campgrounds/<id>` or `/campsites/<id>` URL), the ETL adds it as a rec.gov
+`booking_aliases` entry rather than overwriting the primary, so the same row
+can still be served or booked through rec.gov. Availability wire details:
 [docs/reservation-providers/campflare.md](docs/reservation-providers/campflare.md).
 
 **RIDB (federal)** — `https://ridb.recreation.gov/api/v1/facilities/...`, free

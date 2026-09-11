@@ -215,7 +215,7 @@ class RecGovKeepaliveJobTest {
         watchRepo = repo,
         companion = companion,
         profiles = FakeProfiles(neverLoggedIn),
-        credentials = { credentialed },
+        credentials = { credentialed.map(::UserId) },
         recentFires = recentFires,
         metrics = metrics,
         interval = sweepInterval,
@@ -315,7 +315,8 @@ class RecGovKeepaliveJobTest {
             keepalives += outcome
         }
 
-        override fun recgovAtcFired(
+        override fun atcFired(
+            provider: BookingProvider?,
             outcome: AtcOutcome,
             error: String?,
             durationMs: Int?,
