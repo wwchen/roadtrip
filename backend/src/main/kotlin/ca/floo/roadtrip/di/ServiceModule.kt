@@ -25,6 +25,7 @@ import ca.floo.roadtrip.repo.UnitOfWork
 import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.service.api.RouteResponseMapper
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
 import ca.floo.roadtrip.service.auth.MagicLinkTokenService
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
@@ -79,6 +80,7 @@ import ca.floo.roadtrip.service.poi.defaultPoiTypes
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
+import ca.floo.roadtrip.service.routing.RoutePlanService
 import ca.floo.roadtrip.service.scheduler.PollerBackfill
 import ca.floo.roadtrip.service.scheduler.RecGovKeepalive
 import ca.floo.roadtrip.service.scheduler.RecGovKeepaliveJob
@@ -428,6 +430,8 @@ val serviceModule =
             )
         }
         single { RouteCorridorService(get<RouteCorridorRepo>()) }
+        single { RoutePlanService(routeCache = get(), corridorService = get<RouteCorridorService>()) }
+        single { RouteResponseMapper() }
         single {
             PoiService(
                 poiRepo = get<PoiServingRepo>(),

@@ -35,6 +35,7 @@ import ca.floo.roadtrip.route.auth.authRoutes
 import ca.floo.roadtrip.route.auth.roadtripAuthorization
 import ca.floo.roadtrip.route.common.undeclaredAccessRoutes
 import ca.floo.roadtrip.route.static.staticSiteRoutes
+import ca.floo.roadtrip.service.api.RouteResponseMapper
 import ca.floo.roadtrip.service.auth.AuthController
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
 import ca.floo.roadtrip.service.auth.IdTokenVerifier
@@ -68,8 +69,7 @@ import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.ref.RefResolver
-import ca.floo.roadtrip.service.routing.RouteCache
-import ca.floo.roadtrip.service.routing.RouteCorridorService
+import ca.floo.roadtrip.service.routing.RoutePlanService
 import ca.floo.roadtrip.service.settings.RecGovCredentialService
 import ca.floo.roadtrip.service.settings.UserSettingsService
 import io.ktor.server.application.Application
@@ -105,8 +105,8 @@ internal fun Application.registerKoinRoutes() {
     val failoverFetcher: FailoverAvailabilityFetcher by inject()
     val poiService: PoiReader by inject()
     val poisOnRouteService: PoisOnRouteService by inject()
-    val routeCache: RouteCache by inject()
-    val routeCorridorService: RouteCorridorService by inject()
+    val routePlanService: RoutePlanService by inject()
+    val routeResponseMapper: RouteResponseMapper by inject()
     val mapboxGeocoder: ca.floo.roadtrip.client.mapbox.MapboxGeocoder by inject()
     val ingestController: IngestController by inject()
     val userSettings: UserSettingsService by inject()
@@ -174,7 +174,7 @@ internal fun Application.registerKoinRoutes() {
             ),
         )
         poisOnRouteRoutes(poisOnRouteService, config.route)
-        routeRoutes(routeCache, routeCorridorService, config.route)
+        routeRoutes(routePlanService, routeResponseMapper, config.route)
         geocodeRoutes(mapboxGeocoder)
         buildInfoRoutes(config.buildInfo)
         healthRoutes(readiness)

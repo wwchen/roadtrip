@@ -13,12 +13,14 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
 import ca.floo.roadtrip.route.api.route.routeRoutes
+import ca.floo.roadtrip.service.api.RouteResponseMapper
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiService
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.poi.TeslaSuperchargerService
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
+import ca.floo.roadtrip.service.routing.RoutePlanService
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -76,7 +78,11 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     }
 
     private fun Route.testRouteRoutes(routeCache: RouteCache) {
-        routeRoutes(routeCache, routeCorridorService(), routeConfig = routeConfig)
+        routeRoutes(
+            RoutePlanService(routeCache, routeCorridorService()),
+            RouteResponseMapper(),
+            routeConfig = routeConfig,
+        )
     }
 
     @BeforeEach

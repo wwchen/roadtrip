@@ -1,33 +1,21 @@
 package ca.floo.roadtrip.route.api.route
 
 import ca.floo.roadtrip.config.RouteConfig
-import ca.floo.roadtrip.model.api.CorridorFeatureDto
-import ca.floo.roadtrip.model.api.CorridorPropertiesDto
 import ca.floo.roadtrip.model.api.RouteErrorDto
-import ca.floo.roadtrip.model.api.RouteFeatureCollectionDto
-import ca.floo.roadtrip.model.api.RouteFeatureDto
-import ca.floo.roadtrip.model.api.RouteLegDto
-import ca.floo.roadtrip.model.api.RouteLineGeometryDto
-import ca.floo.roadtrip.model.api.RoutePropertiesDto
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
-import ca.floo.roadtrip.model.routing.RouteResponse
 import ca.floo.roadtrip.route.common.OptionalQuery
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.optionalDoubleQuery
 import ca.floo.roadtrip.route.common.respondEncodedJson
-import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.route.common.trimmedQuery
-import ca.floo.roadtrip.service.routing.RouteCache
-import ca.floo.roadtrip.service.routing.RouteCorridorService
-import ca.floo.roadtrip.service.routing.lineStringGeoJson
-import ca.floo.roadtrip.support.RoutingException
+import ca.floo.roadtrip.service.api.RouteResponseMapper
+import ca.floo.roadtrip.service.routing.RoutePlanResult
+import ca.floo.roadtrip.service.routing.RoutePlanService
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.encodeToJsonElement
 
 /**
  * GET /api/route?coords=lng,lat;lng,lat;...
@@ -41,13 +29,13 @@ import kotlinx.serialization.json.encodeToJsonElement
  *   503 when roadtrip.mapbox.token is unset or upstream fails
  */
 internal fun Route.routeRoutes(
-    routeCache: RouteCache,
-    routeCorridorService: RouteCorridorService,
+    routePlanService: RoutePlanService,
+    routeResponseMapper: RouteResponseMapper,
     routeConfig: RouteConfig,
 ) {
     route("/api") {
         get("/route") {
-            if (!routeCache.configured) {
+            if (!routePlanService.configured) {
                 call.respondRouteError(
                     error = "routing_unavailable",
                     detail = "roadtrip.mapbox.token not set",
@@ -130,101 +118,31 @@ internal fun Route.routeRoutes(
                         radius
                     }
                 }
-            // Mapbox rejects identical adjacent waypoints with code:"InvalidInput".
-            // Catch it before the round-trip.
-            for (i in 1 until coords.size) {
-                if (coords[i] == coords[i - 1]) {
+
+            when (val result = routePlanService.plan(coords, corridorRadiusMiles)) {
+                is RoutePlanResult.DuplicateWaypoints ->
                     call.respondRouteError(
                         error = "duplicate_adjacent",
-                        detail = "points $i and ${i - 1} are identical",
+                        detail = "points ${result.index} and ${result.index - 1} are identical",
                         status = HttpStatusCode.BadRequest,
                     )
-                    return@get
-                }
-            }
-
-            val response =
-                try {
-                    routeCache.directions(coords)
-                } catch (e: RoutingException) {
+                is RoutePlanResult.DirectionsUnavailable ->
                     call.respondRouteError(
                         error = "routing_unavailable",
-                        detail = e.message ?: "",
+                        detail = result.detail,
                         status = HttpStatusCode.ServiceUnavailable,
                     )
-                    return@get
-                }
-
-            val routeLineGeoJson = lineStringGeoJson(response.coordinates)
-            val corridorPolygonGeoJson =
-                corridorRadiusMiles?.let { radiusMiles ->
-                    try {
-                        routeCorridorService.bufferedPolygonGeoJson(
-                            routeLineGeoJson,
-                            radiusMiles,
-                        )
-                    } catch (e: RoutingException) {
-                        call.respondRouteError(
-                            error = "corridor_unavailable",
-                            detail = e.message ?: "",
-                            status = HttpStatusCode.ServiceUnavailable,
-                        )
-                        return@get
-                    }
-                }
-
-            call.respondEncodedJson(
-                routeResponseFeatureCollection(
-                    response = response,
-                    waypoints = coords,
-                    corridorRadiusMiles = corridorRadiusMiles,
-                    corridorPolygonGeoJson = corridorPolygonGeoJson,
-                ),
-            )
+                is RoutePlanResult.CorridorUnavailable ->
+                    call.respondRouteError(
+                        error = "corridor_unavailable",
+                        detail = result.detail,
+                        status = HttpStatusCode.ServiceUnavailable,
+                    )
+                is RoutePlanResult.Planned ->
+                    call.respondEncodedJson(routeResponseMapper.featureCollection(result.plan))
+            }
         }.access(RouteAccess.Anonymous)
     }
-}
-
-internal fun routeResponseFeatureCollection(
-    response: RouteResponse,
-    waypoints: List<Pair<Double, Double>>,
-    corridorRadiusMiles: Double? = null,
-    corridorPolygonGeoJson: String? = null,
-): RouteFeatureCollectionDto {
-    val features =
-        mutableListOf(
-            roadtripApiJson.encodeToJsonElement(
-                RouteFeatureDto(
-                    geometry = RouteLineGeometryDto(coordinates = response.coordinates),
-                    properties =
-                        RoutePropertiesDto(
-                            distanceMeters = response.distanceMeters,
-                            durationSeconds = response.durationSeconds,
-                            legs =
-                                response.legs.map { leg ->
-                                    RouteLegDto(
-                                        distanceMeters = leg.distanceMeters,
-                                        durationSeconds = leg.durationSeconds,
-                                    )
-                                },
-                            waypoints = waypoints.map { (lng, lat) -> listOf(lng, lat) },
-                        ),
-                ),
-            ),
-        )
-    if (corridorRadiusMiles != null && corridorPolygonGeoJson != null) {
-        features +=
-            roadtripApiJson.encodeToJsonElement(
-                CorridorFeatureDto(
-                    geometry = Json.parseToJsonElement(corridorPolygonGeoJson),
-                    properties =
-                        CorridorPropertiesDto(
-                            radiusMiles = corridorRadiusMiles,
-                        ),
-                ),
-            )
-    }
-    return RouteFeatureCollectionDto(features = features)
 }
 
 private suspend fun ApplicationCall.respondRouteError(
