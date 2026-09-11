@@ -12,6 +12,7 @@ import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.RefLinkRepo
+import ca.floo.roadtrip.repo.UnitOfWork
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSessionRepo
 import ca.floo.roadtrip.route.api.admin.adminIngestRoutes
@@ -86,6 +87,7 @@ import java.time.Duration
 
 internal fun Application.registerKoinRoutes() {
     val ctx: DSLContext by inject()
+    val unitOfWork: UnitOfWork by inject()
     val config: AppConfig by inject()
     val watchService: AvailabilityWatchService by inject()
     val watchCapabilities: WatchCapabilityService by inject()
@@ -111,7 +113,7 @@ internal fun Application.registerKoinRoutes() {
     // Resolve the session into a Principal once per request, ambient for every
     // route including anonymous ones. Null wiring (auth not configured) resolves
     // every request to Anonymous — the same state the routes already tolerate.
-    val authWiring = authRouteWiring(ctx, config)
+    val authWiring = authRouteWiring(ctx, unitOfWork, config)
     install(roadtripAuthorization) {
         resolvePrincipal = { token ->
             when {
@@ -276,6 +278,7 @@ private val authWiringLog = org.slf4j.LoggerFactory.getLogger("ca.floo.roadtrip.
  */
 private fun authRouteWiring(
     ctx: DSLContext,
+    unitOfWork: UnitOfWork,
     config: AppConfig,
 ): AuthRouteWiring? {
     val authConfig = config.auth ?: return null
@@ -317,7 +320,7 @@ private fun authRouteWiring(
                         providers = listOf(identityProvider),
                         activeId = IdentityProviderId(OidcIdentityProvider.ID),
                     ),
-                userProvisioningService = UserProvisioningService(ctx, authConfig.roleGrants),
+                userProvisioningService = UserProvisioningService(unitOfWork, authConfig.roleGrants),
                 sessionService = sessionService,
                 userRepo = userRepo,
             ),

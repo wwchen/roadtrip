@@ -10,6 +10,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.JooqUnitOfWork
 import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -107,7 +108,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                     ),
                 ),
             )
-        return AvailabilityWatchService(ctx, providers, capabilityValidator, lifecycleNotifications)
+        return AvailabilityWatchService(JooqUnitOfWork(ctx), providers, capabilityValidator, lifecycleNotifications)
     }
 
     private fun bookingValidatedService(
@@ -139,7 +140,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 ),
             )
         return AvailabilityWatchService(
-            ctx = ctx,
+            unitOfWork = JooqUnitOfWork(ctx),
             alertProviders = providers,
             capabilityValidator =
                 WatchTriggerCapabilityValidator(
@@ -698,6 +699,19 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         assertEquals(null, AvailabilityWatchRepo(ctx).findById(watch.id))
         assertEquals(listOf(watch.id), lifecycle.deleted.map { it.id })
     }
+
+    @Test
+    fun `a refusal after the watch row is written leaves neither the watch nor its links`() {
+        val poiId = seedPoi("232447")
+        val refusing = service(capabilityValidator = WatchCapabilityValidator { error("refused after the write") })
+
+        assertFailsWith<IllegalStateException> { refusing.createForTest(poiInput(poiId)) }
+
+        assertEquals(0, countOf("availability_watch"))
+        assertEquals(0, countOf("availability_watch_poller"))
+    }
+
+    private fun countOf(table: String): Int = ctx.fetchOne("SELECT count(*) AS n FROM $table")!!.get("n", Int::class.java)
 
     private enum class AlertEvent { ACTIVATED, DEACTIVATED }
 

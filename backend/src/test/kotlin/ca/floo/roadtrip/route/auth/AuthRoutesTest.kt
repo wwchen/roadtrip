@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.domain.auth.Role
 import ca.floo.roadtrip.model.domain.auth.User
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.auth.UserStatus
+import ca.floo.roadtrip.repo.JooqUnitOfWork
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSessionRepo
 import ca.floo.roadtrip.service.auth.AuthController
@@ -115,7 +116,7 @@ private fun authOnWiring(): AuthRouteWiring {
                         ),
                     activeId = IdentityProviderId(OidcIdentityProvider.ID),
                 ),
-            userProvisioningService = UserProvisioningService(detachedCtx),
+            userProvisioningService = UserProvisioningService(JooqUnitOfWork(detachedCtx)),
             sessionService = sessionService,
             userRepo = stubUserRepo,
         )

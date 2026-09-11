@@ -21,6 +21,7 @@ import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
+import ca.floo.roadtrip.repo.UnitOfWork
 import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
@@ -88,7 +89,6 @@ import ca.floo.roadtrip.service.security.SecretCipher
 import ca.floo.roadtrip.service.settings.RecGovCredentialService
 import ca.floo.roadtrip.service.settings.UserSettingsService
 import kotlinx.coroutines.CoroutineScope
-import org.jooq.DSLContext
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import javax.sql.DataSource
@@ -334,7 +334,7 @@ val serviceModule =
         }
         single {
             AvailabilityWatchService(
-                ctx = get<DSLContext>(),
+                unitOfWork = get<UnitOfWork>(),
                 alertProviders = get<AlertProviderRegistry>(),
                 capabilityValidator = get<WatchTriggerCapabilityValidator>(),
                 lifecycleNotifications =
@@ -406,7 +406,12 @@ val serviceModule =
             )
         }
         single(createdAtStart = true) {
-            PollerBackfill(get<DSLContext>(), get<AvailabilityPollerMembership>()).also { it.run() }
+            PollerBackfill(
+                watchRepo = get<AvailabilityWatchRepo>(),
+                pollerRepo = get<AvailabilityPollerRepo>(),
+                unitOfWork = get<UnitOfWork>(),
+                membership = get<AvailabilityPollerMembership>(),
+            ).also { it.run() }
         }
 
         single(named("poiDetailServices")) {

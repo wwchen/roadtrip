@@ -3,10 +3,10 @@ package ca.floo.roadtrip.service.auth
 import ca.floo.roadtrip.model.domain.auth.IdentityClaims
 import ca.floo.roadtrip.model.domain.auth.Role
 import ca.floo.roadtrip.model.domain.auth.UserId
+import ca.floo.roadtrip.repo.UnitOfWork
 import ca.floo.roadtrip.repo.UserIdentityRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.support.AuthException
-import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 
 /**
@@ -37,7 +37,7 @@ import org.slf4j.LoggerFactory
  * confusion the attack relies on.
  */
 class UserProvisioningService(
-    private val ctx: DSLContext,
+    private val unitOfWork: UnitOfWork,
     private val roleGrants: Map<Role, Set<String>> = emptyMap(),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -53,10 +53,9 @@ class UserProvisioningService(
         provider: String,
         claims: IdentityClaims,
     ): UserId =
-        ctx.transactionResult { config ->
-            val txn = config.dsl()
-            val userRepo = UserRepo(txn)
-            val userIdentityRepo = UserIdentityRepo(txn)
+        unitOfWork.run { repos ->
+            val userRepo = repos.users
+            val userIdentityRepo = repos.userIdentities
 
             // The common path: this identity has signed in before.
             val returning = userIdentityRepo.findByProviderSubject(provider, claims.subject)
