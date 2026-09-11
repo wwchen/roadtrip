@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.di
 
+import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.repo.AdminIngestReadRepo
 import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
@@ -11,13 +12,21 @@ import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.DatabaseHealthRepo
+import ca.floo.roadtrip.repo.ImportRunRepo
+import ca.floo.roadtrip.repo.IngestRunRepo
+import ca.floo.roadtrip.repo.JooqUnitOfWork
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiRepo
+import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RefLinkRepo
+import ca.floo.roadtrip.repo.Repos
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
+import ca.floo.roadtrip.repo.UnitOfWork
 import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
+import ca.floo.roadtrip.repo.UserIdentityRepo
 import ca.floo.roadtrip.repo.UserRepo
+import ca.floo.roadtrip.repo.UserSessionRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.ref.DbRefResolver
 import ca.floo.roadtrip.service.ref.RefResolver
@@ -42,7 +51,21 @@ val repoModule =
         single { RouteCorridorRepo(get()) }
         single { AdminIngestReadRepo(get()) }
         single { UserRepo(get()) }
+        single { UserIdentityRepo(get()) }
+        single { UserSessionRepo(get()) }
         single { UserSettingsRepo(get()) }
         single { UserBookingCredentialsRepo(get()) }
         single { DatabaseHealthRepo(get()) }
+        single { ImportRunRepo(get()) }
+        single { IngestRunRepo(get()) }
+        single {
+            PoiServingRepo(
+                ctx = get(),
+                enabledDataProviders = get<AppConfig>().readPathProviders.enabledDataProviders,
+            )
+        }
+
+        single { JooqUnitOfWork(get()) }
+        single<UnitOfWork> { get<JooqUnitOfWork>() }
+        single<Repos> { get<JooqUnitOfWork>().autocommit }
     }

@@ -12,11 +12,6 @@ internal fun ApplicationCall.queryParam(name: String): String? = request.queryPa
 
 internal fun ApplicationCall.trimmedQuery(name: String): String = queryParam(name)?.trim().orEmpty()
 
-internal fun ApplicationCall.matchingQuery(
-    name: String,
-    regex: Regex,
-): String? = queryParam(name)?.takeIf { regex.matches(it) }
-
 internal fun ApplicationCall.optionalLongQuery(name: String): Long? = queryParam(name)?.toLongOrNull()
 
 internal fun ApplicationCall.optionalBooleanQuery(name: String): OptionalQuery<Boolean> =

@@ -12,6 +12,9 @@ import ca.floo.roadtrip.model.metadata.ingest.Target
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.repo.AdminIngestReadRepo
+import ca.floo.roadtrip.repo.ImportRunRepo
+import ca.floo.roadtrip.repo.IngestRunRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.support.TargetBusyException
 import ca.floo.roadtrip.support.TargetNotFoundException
@@ -23,8 +26,6 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.io.File
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
@@ -196,47 +197,6 @@ class IngestControllerTest : SharedDbTest() {
             }
         }
 
-    @Test
-    fun `boot recovery marks stale started rows as aborted`() {
-        val past = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1)
-        val staleId =
-            ctx
-                .insertInto(INGEST_RUNS)
-                .set(INGEST_RUNS.TARGET, "t")
-                .set(INGEST_RUNS.PHASE, "import")
-                .set(INGEST_RUNS.PHASE_KIND, "target")
-                .set(INGEST_RUNS.STATUS, "started")
-                .set(INGEST_RUNS.STARTED_AT, past)
-                .set(INGEST_RUNS.TRIGGERED_BY, "admin-api")
-                .returningResult(INGEST_RUNS.ID)
-                .fetchOne()!!
-                .value1()!!
-        val recent = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1)
-        val recentId =
-            ctx
-                .insertInto(INGEST_RUNS)
-                .set(INGEST_RUNS.TARGET, "t")
-                .set(INGEST_RUNS.PHASE, "import")
-                .set(INGEST_RUNS.PHASE_KIND, "target")
-                .set(INGEST_RUNS.STATUS, "started")
-                .set(INGEST_RUNS.STARTED_AT, recent)
-                .set(INGEST_RUNS.TRIGGERED_BY, "admin-api")
-                .returningResult(INGEST_RUNS.ID)
-                .fetchOne()!!
-                .value1()!!
-
-        val swept = sweepStaleIngestRuns(ctx)
-        assertEquals(1, swept)
-
-        val staleAfter = ctx.selectFrom(INGEST_RUNS).where(INGEST_RUNS.ID.eq(staleId)).fetchOne()!!
-        assertEquals("aborted", staleAfter.status)
-        assertNotNull(staleAfter.completedAt)
-        assertTrue(staleAfter.notes!!.contains("boot recovery"))
-
-        val recentAfter = ctx.selectFrom(INGEST_RUNS).where(INGEST_RUNS.ID.eq(recentId)).fetchOne()!!
-        assertEquals("started", recentAfter.status, "rows younger than the cutoff must be untouched")
-    }
-
     private fun controllerWith(
         targets: Map<String, Target>,
         registry: PoiRegistry = PoiRegistry(emptyList(), emptyList()),
@@ -244,10 +204,11 @@ class IngestControllerTest : SharedDbTest() {
         etlRegistry: Map<String, TerminalEtlBinding<*, *>> = emptyMap(),
     ): IngestController =
         IngestController(
-            ctx = ctx,
+            ingestRunRepo = IngestRunRepo(ctx),
+            adminReadRepo = AdminIngestReadRepo(ctx),
             etl =
                 EtlOrchestrator(
-                    ctx = ctx,
+                    importRunRepo = ImportRunRepo(ctx),
                     rawDir = dataDir,
                     poiRegistry = registry,
                     staticDir = dataDir,

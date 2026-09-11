@@ -1,29 +1,19 @@
 package ca.floo.roadtrip.route.api.geocode
 
-import ca.floo.roadtrip.client.mapbox.MapboxGeocoder
-import ca.floo.roadtrip.model.api.GeocodeResponseDto
-import ca.floo.roadtrip.model.api.GeocodeResultDto
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
-import ca.floo.roadtrip.model.routing.GeocodeResult
 import ca.floo.roadtrip.route.common.access
-import ca.floo.roadtrip.route.common.boundedIntQuery
-import ca.floo.roadtrip.route.common.matchingQuery
 import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.trimmedQuery
-import ca.floo.roadtrip.support.GeocodeException
+import ca.floo.roadtrip.service.geocode.GeocodeOutcome
+import ca.floo.roadtrip.service.geocode.GeocodeService
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 
-private val lngLatRegex = Regex("""^-?\d{1,3}(\.\d{1,8})?,-?\d{1,3}(\.\d{1,8})?$""")
-private const val DEFAULT_GEOCODE_LIMIT = 5
-private const val MIN_GEOCODE_LIMIT = 1
-private const val MAX_GEOCODE_LIMIT = 10
-
-private val geocodeLimitRange = MIN_GEOCODE_LIMIT..MAX_GEOCODE_LIMIT
+private const val AUTOCOMPLETE_OFF = "0"
 
 /**
  * GET /api/geocode?q=<text>[&autocomplete=0][&proximity=lng,lat][&limit=N]
@@ -39,52 +29,28 @@ private val geocodeLimitRange = MIN_GEOCODE_LIMIT..MAX_GEOCODE_LIMIT
  * park with a footprint. It is what lets the client frame a searched-for REGION
  * as an area instead of flying to an arbitrary point inside it.
  */
-fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
+internal fun Route.geocodeRoutes(geocodeService: GeocodeService) {
     route("/api") {
         get("/geocode") {
-            if (!geocoder.configured) {
-                call.respondApiError(
-                    "geocoding_unavailable",
-                    HttpStatusCode.ServiceUnavailable,
-                    detail = "roadtrip.mapbox.token not set",
+            val outcome =
+                geocodeService.geocode(
+                    query = call.trimmedQuery("q"),
+                    autocomplete = call.queryParam("autocomplete") != AUTOCOMPLETE_OFF,
+                    proximity = call.queryParam("proximity"),
+                    limit = call.queryParam("limit")?.toIntOrNull(),
                 )
-                return@get
+
+            when (outcome) {
+                GeocodeOutcome.NotConfigured ->
+                    call.respondApiError(
+                        "geocoding_unavailable",
+                        HttpStatusCode.ServiceUnavailable,
+                        detail = "roadtrip.mapbox.token not set",
+                    )
+                GeocodeOutcome.BadQuery -> call.respondApiError("bad_query", HttpStatusCode.BadRequest)
+                GeocodeOutcome.Unavailable -> call.respondApiError("geocoding_unavailable", HttpStatusCode.ServiceUnavailable)
+                is GeocodeOutcome.Found -> call.respondEncodedJson(outcome.response)
             }
-
-            val q = call.trimmedQuery("q")
-            if (q.isBlank() || q.length > 200) {
-                call.respondApiError("bad_query", HttpStatusCode.BadRequest)
-                return@get
-            }
-
-            val autocomplete = call.queryParam("autocomplete") != "0"
-            val limit = call.boundedIntQuery("limit", DEFAULT_GEOCODE_LIMIT, geocodeLimitRange)
-            val proximity = call.matchingQuery("proximity", lngLatRegex)
-
-            val results =
-                try {
-                    geocoder.forward(q, autocomplete = autocomplete, proximity = proximity, limit = limit)
-                } catch (e: GeocodeException) {
-                    call.respondApiError("geocoding_unavailable", HttpStatusCode.ServiceUnavailable)
-                    return@get
-                }
-
-            call.respondEncodedJson(geocodeResponseDto(results))
         }.access(RouteAccess.Anonymous)
     }
 }
-
-internal fun geocodeResponseDto(results: List<GeocodeResult>): GeocodeResponseDto =
-    GeocodeResponseDto(
-        results =
-            results.map { result ->
-                GeocodeResultDto(
-                    id = result.id,
-                    placeName = result.placeName,
-                    placeType = result.placeType,
-                    lng = result.lng,
-                    lat = result.lat,
-                    bbox = result.bbox?.let { listOf(it.west, it.south, it.east, it.north) },
-                )
-            },
-    )

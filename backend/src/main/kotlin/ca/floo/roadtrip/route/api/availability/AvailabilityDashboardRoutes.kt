@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.route.api.availability
 
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
+import ca.floo.roadtrip.route.common.ListPaging
 import ca.floo.roadtrip.route.common.OptionalQuery
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.boundedIntQuery
@@ -25,16 +26,10 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 
-private const val DEFAULT_LIST_LIMIT = 100
-private const val MIN_LIST_LIMIT = 1
-private const val MAX_LIST_LIMIT = 500
-private const val DEFAULT_LIST_OFFSET = 0
-private const val MIN_LIST_OFFSET = 0
 private const val SNAPSHOT_DEFAULT_LIMIT = 200
 private const val SNAPSHOT_MAX_LIMIT = 1000
 
-private val listLimitRange = MIN_LIST_LIMIT..MAX_LIST_LIMIT
-private val snapshotLimitRange = MIN_LIST_LIMIT..SNAPSHOT_MAX_LIMIT
+private val snapshotLimitRange = ListPaging.MIN_LIMIT..SNAPSHOT_MAX_LIMIT
 
 internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardController) {
     route("/api") {
@@ -52,8 +47,8 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                                 )
                             is OptionalQuery.Parsed -> activeQuery.value
                         }
-                    val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
-                    val offset = call.intQueryAtLeast("offset", DEFAULT_LIST_OFFSET, MIN_LIST_OFFSET)
+                    val limit = call.boundedIntQuery("limit", ListPaging.DEFAULT_LIMIT, ListPaging.limitRange)
+                    val offset = call.intQueryAtLeast("offset", ListPaging.DEFAULT_OFFSET, ListPaging.MIN_OFFSET)
                     call.respondEncodedJson(
                         dashboard.listPollers(active = active, limit = limit, offset = offset),
                     )
@@ -72,7 +67,7 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                         val id =
                             call.longPath("id")
                                 ?: return@get call.respondApiError("invalid_id", HttpStatusCode.BadRequest)
-                        val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
+                        val limit = call.boundedIntQuery("limit", ListPaging.DEFAULT_LIMIT, ListPaging.limitRange)
                         call.respondEncodedJson(dashboard.listRunsForPoller(id, limit = limit))
                     }.describeApi("availability", "Runs for one poller, newest first")
                         .access(RouteAccess.Anonymous)
@@ -98,7 +93,7 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                     val status = call.queryParam("status")
                     val pollerId = call.optionalLongQuery("poller_id")
                     val since = call.optionalOffsetDateTimeQuery("since")
-                    val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
+                    val limit = call.boundedIntQuery("limit", ListPaging.DEFAULT_LIMIT, ListPaging.limitRange)
                     call.respondEncodedJson(dashboard.listRuns(status = status, pollerId = pollerId, since = since, limit = limit))
                 }.describeApi("availability", "Recent runs across all pollers")
                     .access(RouteAccess.Anonymous)

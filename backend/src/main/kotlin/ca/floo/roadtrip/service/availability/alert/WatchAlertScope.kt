@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.service.availability.alert
 
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
-import org.jooq.DSLContext
 
 /**
  * The watch-write transaction as an alert provider sees it: repo handles already
@@ -13,8 +12,6 @@ internal interface WatchAlertScope {
     val pollerRepo: AvailabilityPollerRepo
 }
 
-internal class TransactionalWatchAlertScope(
-    txn: DSLContext,
-) : WatchAlertScope {
-    override val pollerRepo: AvailabilityPollerRepo by lazy { AvailabilityPollerRepo(txn) }
-}
+internal class RepoWatchAlertScope(
+    override val pollerRepo: AvailabilityPollerRepo,
+) : WatchAlertScope

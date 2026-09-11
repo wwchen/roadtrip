@@ -25,10 +25,12 @@ import ca.floo.roadtrip.model.metadata.registry.TenantRegistry
 import ca.floo.roadtrip.observability.OtelRoadtripMetrics
 import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.ApiCacheRepo
+import ca.floo.roadtrip.repo.IngestRunRepo
+import ca.floo.roadtrip.repo.Repos
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
-import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
+import ca.floo.roadtrip.service.etl.framework.productionEtlRegistry
 import ca.floo.roadtrip.service.routing.RouteCache
 import io.ktor.server.config.ApplicationConfig
 import kotlinx.coroutines.CoroutineScope
@@ -37,7 +39,9 @@ import kotlinx.coroutines.SupervisorJob
 import org.jooq.DSLContext
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
+import org.slf4j.LoggerFactory
 import java.io.File
+import java.time.Duration
 import javax.sql.DataSource
 
 private const val STATIC_DIR_KEY = "static-dir"
@@ -47,6 +51,8 @@ private const val POI_REGISTRY_PATH_KEY = "path"
 private const val MAPBOX_TOKEN_KEY = "token"
 private const val DEFAULT_POI_REGISTRY_RESOURCE = "poi-registry.yaml"
 private const val RAW_DATA_DIR = "data/raw"
+
+private val bootRecoveryLog = LoggerFactory.getLogger("ca.floo.roadtrip.di.BootRecovery")
 
 fun infraModule(baseConfig: ApplicationConfig) =
     module {
@@ -123,17 +129,18 @@ fun infraModule(baseConfig: ApplicationConfig) =
         }
 
         single {
-            val ctx: DSLContext = get()
-            sweepStaleIngestRuns(ctx)
             val staticDir: File = get(named("staticDir"))
+            sweepStaleIngestRunsAtBoot(get<IngestRunRepo>(), get<AppConfig>().ingest.staleRunAfter)
             IngestController(
-                ctx = ctx,
+                ingestRunRepo = get(),
+                adminReadRepo = get(),
                 etl =
                     EtlOrchestrator(
-                        ctx = ctx,
+                        importRunRepo = get(),
                         rawDir = staticDir.resolveConfiguredPath(RAW_DATA_DIR),
                         poiRegistry = get(),
                         staticDir = staticDir,
+                        etlRegistry = productionEtlRegistry(get<Repos>()),
                     ),
                 importTargets = importTargetsFromRegistry(get()),
                 metrics = get<RoadtripMetrics>(),
@@ -146,4 +153,14 @@ fun infraModule(baseConfig: ApplicationConfig) =
 private fun File.resolveConfiguredPath(path: String): File {
     val configured = File(path)
     return if (configured.isAbsolute) configured else File(this, path)
+}
+
+/** Sweeps the ghost rows a mid-run restart left behind. Touches only ingest_runs;
+ *  a partially upserted phase is mark-and-sweep's problem (RFC 0004 edge case #2). */
+private fun sweepStaleIngestRunsAtBoot(
+    ingestRunRepo: IngestRunRepo,
+    staleAfter: Duration,
+) {
+    val swept = ingestRunRepo.abortStaleStartedRows(staleAfter)
+    if (swept > 0) bootRecoveryLog.info("boot recovery: marked {} ingest_runs rows as aborted", swept)
 }

@@ -11,6 +11,9 @@ import ca.floo.roadtrip.model.metadata.ingest.Target
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.repo.AdminIngestReadRepo
+import ca.floo.roadtrip.repo.ImportRunRepo
+import ca.floo.roadtrip.repo.IngestRunRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.route.api.admin.adminIngestRoutes
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
@@ -212,14 +215,16 @@ class AdminIngestRoutesTest : SharedDbTest() {
         targets: Map<String, Target>,
         etl: EtlOrchestrator =
             EtlOrchestrator(
-                ctx = ctx,
+                importRunRepo = ImportRunRepo(ctx),
                 rawDir = File("/tmp"),
                 poiRegistry = PoiRegistry(emptyList(), emptyList()),
                 staticDir = File("/tmp"),
+                etlRegistry = emptyMap(),
             ),
     ): IngestController =
         IngestController(
-            ctx = ctx,
+            ingestRunRepo = IngestRunRepo(ctx),
+            adminReadRepo = AdminIngestReadRepo(ctx),
             etl = etl,
             importTargets = targets,
             ioDispatcher = Dispatchers.IO,
@@ -235,7 +240,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
             mapOf(BUSY_TARGET to Target(BUSY_TARGET, listOf(Phase.Import("import:$BUSY_TARGET", BUSY_TARGET)))),
             etl =
                 EtlOrchestrator(
-                    ctx = ctx,
+                    importRunRepo = ImportRunRepo(ctx),
                     rawDir = File("/tmp"),
                     poiRegistry =
                         PoiRegistry(

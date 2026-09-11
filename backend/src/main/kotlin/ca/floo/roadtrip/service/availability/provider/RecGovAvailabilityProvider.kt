@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
-import ca.floo.roadtrip.model.api.AvailabilityErrorDto
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
@@ -13,9 +12,7 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.support.RecGovException
-import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -158,18 +155,6 @@ class RecGovAvailabilityProvider(
                 }
             },
         ) { block() }
-}
-
-internal fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, AvailabilityErrorDto> {
-    val msg = e.message.orEmpty()
-    return when {
-        e is AvailabilityProviderError.RateLimited || msg == "rate_limited" ->
-            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("rate_limited")
-        msg.contains("429") ->
-            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("rate_limited")
-        else ->
-            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_5xx")
-    }
 }
 
 private fun mergeCampsites(maps: List<Map<String, RecGovCampsite>>): Map<String, Map<String, String>> {

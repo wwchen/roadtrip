@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
+import ca.floo.roadtrip.config.CampsiteAvailabilityConfig
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
@@ -151,11 +152,12 @@ class CampsiteRoutesTest : SharedDbTest() {
     private fun Route.campsiteRoutesUnderTest(
         providers: List<AvailabilityProvider> = listOf(ServingRecgovProvider()),
         rateLimit: IpRateLimiter? = null,
+        config: CampsiteAvailabilityConfig = CampsiteAvailabilityConfig.default,
     ) {
         if (rateLimit != null) {
-            campsiteRoutes(controller(providers), rateLimit)
+            campsiteRoutes(controller(providers), config, rateLimit)
         } else {
-            campsiteRoutes(controller(providers))
+            campsiteRoutes(controller(providers), config)
         }
     }
 
@@ -703,6 +705,24 @@ class CampsiteRoutesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.ServiceUnavailable, second.status)
             val body = Json.parseToJsonElement(second.bodyAsText()).jsonObject
             assertEquals("ip_throttled", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `the default limiter reads its ceiling from config`() =
+        testApplication {
+            application {
+                routeTestApplication {
+                    campsiteRoutesUnderTest(config = CampsiteAvailabilityConfig(ipRateLimitPerMinute = 1))
+                }
+            }
+            val (poiId, _) = seedRecgovPoiWithCampsite()
+
+            assertEquals(HttpStatusCode.OK, client.get("/api/pois/$poiId/campsites/availability").status)
+            assertEquals(
+                HttpStatusCode.ServiceUnavailable,
+                client.get("/api/pois/$poiId/campsites/availability").status,
+                "a config of 1/min must throttle the second call, not the thirty-first",
+            )
         }
 }
 

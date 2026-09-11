@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.auth
 
 import ca.floo.roadtrip.model.domain.auth.IdentityClaims
 import ca.floo.roadtrip.model.domain.auth.Role
+import ca.floo.roadtrip.repo.JooqUnitOfWork
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.UserIdentityRepo
 import ca.floo.roadtrip.repo.UserRepo
@@ -21,7 +22,7 @@ class UserProvisioningServiceTest : SharedDbTest() {
     private val userRepo by lazy { UserRepo(ctx) }
     private val userIdentityRepo by lazy { UserIdentityRepo(ctx) }
 
-    private fun provisioningWith(roleGrants: Map<Role, Set<String>>) = UserProvisioningService(ctx, roleGrants)
+    private fun provisioningWith(roleGrants: Map<Role, Set<String>>) = UserProvisioningService(JooqUnitOfWork(ctx), roleGrants)
 
     @BeforeEach
     fun cleanup() {

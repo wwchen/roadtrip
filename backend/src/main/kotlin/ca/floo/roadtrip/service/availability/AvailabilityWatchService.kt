@@ -4,11 +4,10 @@ import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
+import ca.floo.roadtrip.repo.UnitOfWork
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
-import ca.floo.roadtrip.service.availability.alert.TransactionalWatchAlertScope
+import ca.floo.roadtrip.service.availability.alert.RepoWatchAlertScope
 import kotlinx.serialization.json.JsonObject
-import org.jooq.DSLContext
-import org.jooq.impl.DSL
 import java.time.LocalDate
 
 /**
@@ -30,7 +29,7 @@ import java.time.LocalDate
  * API.
  */
 internal class AvailabilityWatchService(
-    private val ctx: DSLContext,
+    private val unitOfWork: UnitOfWork,
     private val alertProviders: AlertProviderRegistry,
     private val capabilityValidator: WatchCapabilityValidator,
     private val lifecycleNotifications: WatchLifecycleNotifications,
@@ -47,7 +46,7 @@ internal class AvailabilityWatchService(
         stopWhenTriggered: Boolean,
     ): Watch {
         val watch =
-            ctx.transactionResult { config ->
+            unitOfWork.run { repos ->
                 val input =
                     AvailabilityWatchRepo.CreateInput(
                         ownerUserId = ownerUserId.value,
@@ -61,10 +60,9 @@ internal class AvailabilityWatchService(
                         stopWhenTriggered = stopWhenTriggered,
                     )
                 WatchTriggerConfig.validateCreate(input)
-                val txn = DSL.using(config)
-                val created = AvailabilityWatchRepo(txn).create(input)
+                val created = repos.watches.create(input)
                 capabilityValidator.validate(created)
-                alertProviders.forWatch(created).onWatchActivated(TransactionalWatchAlertScope(txn), created)
+                alertProviders.forWatch(created).onWatchActivated(RepoWatchAlertScope(repos.pollers), created)
                 created
             }
         lifecycleNotifications.afterCreate(watch)
@@ -84,7 +82,7 @@ internal class AvailabilityWatchService(
         status: WatchStatus? = null,
     ): Watch? {
         val update =
-            ctx.transactionResult { config ->
+            unitOfWork.run { repos ->
                 val input =
                     AvailabilityWatchRepo.UpdateInput(
                         targets = targets,
@@ -99,17 +97,16 @@ internal class AvailabilityWatchService(
                     )
                 WatchTriggerConfig.validateUpdate(input)
                 val triggerIntentTouched = input.triggerKinds != null || input.triggerConfig != null
-                val txn = DSL.using(config)
-                val repo = AvailabilityWatchRepo(txn)
-                val before = repo.findById(id) ?: return@transactionResult null
-                val updated = repo.update(id, input) ?: return@transactionResult null
+                val repo = repos.watches
+                val before = repo.findById(id) ?: return@run null
+                val updated = repo.update(id, input) ?: return@run null
                 if (triggerIntentTouched) WatchTriggerConfig.validateSnapshot(updated)
                 capabilityValidator.validate(updated)
                 // ACTIVE -> the alert provider (re)subscribes / re-syncs poller links;
                 // any non-ACTIVE status is a deactivate as far as opening-detection
                 // is concerned -- the watch holds no live subscription.
                 val provider = alertProviders.forWatch(updated)
-                val scope = TransactionalWatchAlertScope(txn)
+                val scope = RepoWatchAlertScope(repos.pollers)
                 if (updated.status == WatchStatus.ACTIVE) {
                     provider.onWatchActivated(scope, updated)
                 } else {
@@ -125,16 +122,15 @@ internal class AvailabilityWatchService(
 
     fun deleteReturningSnapshot(id: Long): Watch? {
         val snapshot =
-            ctx.transactionResult { config ->
-                val txn = DSL.using(config)
-                val repo = AvailabilityWatchRepo(txn)
+            unitOfWork.run { repos ->
+                val repo = repos.watches
                 // Snapshot pre-delete so the alert provider's deactivate hook has a
                 // Watch to work with -- the row itself is about to disappear (FK
                 // cascade will drop its availability_watch_poller links).
-                val existing = repo.findById(id) ?: return@transactionResult null
+                val existing = repo.findById(id) ?: return@run null
                 val deleted = repo.delete(id)
                 if (deleted) {
-                    alertProviders.forWatch(existing).onWatchDeactivated(TransactionalWatchAlertScope(txn), existing)
+                    alertProviders.forWatch(existing).onWatchDeactivated(RepoWatchAlertScope(repos.pollers), existing)
                     existing
                 } else {
                     null

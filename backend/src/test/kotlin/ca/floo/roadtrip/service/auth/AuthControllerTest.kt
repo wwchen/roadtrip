@@ -4,6 +4,7 @@ import ca.floo.roadtrip.config.AuthConfig
 import ca.floo.roadtrip.model.domain.auth.AuthorizationRequest
 import ca.floo.roadtrip.model.domain.auth.IdentityClaims
 import ca.floo.roadtrip.model.domain.auth.Principal
+import ca.floo.roadtrip.repo.JooqUnitOfWork
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSessionRepo
@@ -102,7 +103,7 @@ class AuthControllerTest : SharedDbTest() {
                     providers = listOf(identityProvider),
                     activeId = IdentityProviderId(OidcIdentityProvider.ID),
                 ),
-            userProvisioningService = UserProvisioningService(ctx),
+            userProvisioningService = UserProvisioningService(JooqUnitOfWork(ctx)),
             sessionService =
                 SessionService(
                     userRepo = userRepo,

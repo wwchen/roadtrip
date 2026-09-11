@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.repo.MAX_CATALOG_UPSERT_BATCH_SIZE
-import org.jooq.DSLContext
+import ca.floo.roadtrip.repo.Repos
 
 @Suppress("DataClassContainsFunctions")
 data class TerminalEtlBinding<DTO, OUT>(
@@ -46,9 +46,9 @@ class BatchAccumulator<OUT>(
 @Suppress("DataClassContainsFunctions")
 internal data class TerminalEtlDefinition<DTO, OUT>(
     val etl: SourceEtl<DTO, OUT>,
-    private val sinkFactory: (DSLContext) -> TerminalSink<OUT>,
+    private val sinkFactory: (Repos) -> TerminalSink<OUT>,
 ) {
-    fun bind(ctx: DSLContext): TerminalEtlBinding<DTO, OUT> = TerminalEtlBinding(etl, sinkFactory(ctx))
+    fun bind(repos: Repos): TerminalEtlBinding<DTO, OUT> = TerminalEtlBinding(etl, sinkFactory(repos))
 }
 
 internal fun <OUT> terminalSink(

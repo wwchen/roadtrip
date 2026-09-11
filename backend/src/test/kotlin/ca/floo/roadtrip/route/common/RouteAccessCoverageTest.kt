@@ -8,6 +8,7 @@ import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
 import ca.floo.roadtrip.route.api.health.healthRoutes
 import ca.floo.roadtrip.route.auth.authRoutes
 import ca.floo.roadtrip.route.static.staticSiteRoutes
+import ca.floo.roadtrip.service.geocode.GeocodeService
 import ca.floo.roadtrip.service.health.ReadinessService
 import io.ktor.client.request.get
 import io.ktor.server.application.call
@@ -41,7 +42,7 @@ class RouteAccessCoverageTest {
                 // Swagger UI (framework-generated, exempt) + our labelled openapi.json.
                 apiDocsRoutes()
                 healthRoutes { ReadinessService.Report(databaseReachable = true) }
-                geocodeRoutes(MapboxGeocoder(token = null))
+                geocodeRoutes(GeocodeService(MapboxGeocoder(token = null)))
                 authRoutes(wiring = null)
                 // Static file mounts register serving leaves beneath each root.
                 // Two roots: the legacy tree and the React build (frontend/dist).

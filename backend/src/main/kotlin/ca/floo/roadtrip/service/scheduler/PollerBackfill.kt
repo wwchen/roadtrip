@@ -2,10 +2,9 @@ package ca.floo.roadtrip.service.scheduler
 
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.repo.UnitOfWork
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.WatchStatus
-import org.jooq.DSLContext
-import org.jooq.impl.DSL
 import org.slf4j.LoggerFactory
 import java.time.OffsetDateTime
 
@@ -24,14 +23,14 @@ private const val BACKFILL_BATCH_LIMIT = 500
  * so polling resumes without waiting for an edit.
  */
 internal class PollerBackfill(
-    private val ctx: DSLContext,
+    private val watchRepo: AvailabilityWatchRepo,
+    private val pollerRepo: AvailabilityPollerRepo,
+    private val unitOfWork: UnitOfWork,
     private val membership: AvailabilityPollerMembership,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     fun run() {
-        val watchRepo = AvailabilityWatchRepo(ctx)
-        val pollerRepo = AvailabilityPollerRepo(ctx)
         val active = watchRepo.list(status = WatchStatus.ACTIVE, limit = BACKFILL_BATCH_LIMIT)
         if (active.size == BACKFILL_BATCH_LIMIT) {
             // We hit the cap: any active watches beyond this page get no poller
@@ -42,9 +41,8 @@ internal class PollerBackfill(
         var filled = 0
         for (w in active) {
             if (pollerRepo.pollerIdsForWatch(w.id).isNotEmpty()) continue
-            ctx.transaction { config ->
-                val txn = DSL.using(config)
-                membership.sync(w, AvailabilityPollerRepo(txn), tighterCadencePull = OffsetDateTime.now())
+            unitOfWork.run { repos ->
+                membership.sync(w, repos.pollers, tighterCadencePull = OffsetDateTime.now())
             }
             filled++
         }

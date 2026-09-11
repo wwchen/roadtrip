@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.framework
 
+import ca.floo.roadtrip.model.domain.etl.ImportPhaseCounts
 import ca.floo.roadtrip.model.domain.ingest.IngestRunDetailRow
 import ca.floo.roadtrip.model.domain.ingest.IngestRunListItemRow
 import ca.floo.roadtrip.model.domain.ingest.TargetIngestStatusRow
@@ -17,25 +18,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import org.jooq.DSLContext
-import org.jooq.JSONB
 import org.slf4j.LoggerFactory
 
 // Terminal status reported to metrics when the run threw instead of resolving to
 // a RunOutcome status.
 private const val INGEST_STATUS_ERROR = "error"
-
-@OptIn(ExperimentalSerializationApi::class)
-private val ingestControllerJson =
-    Json {
-        encodeDefaults = true
-        explicitNulls = false
-    }
 
 // Per-target locked, structured-record orchestrator. RFC 0004 / issue #44.
 //
@@ -52,15 +39,14 @@ private val ingestControllerJson =
 // startRun is suspending and returns when the entire run finishes (sync POST
 // is the default). Callers that want fire-and-forget wrap in scope.async.
 class IngestController(
-    private val ctx: DSLContext,
+    private val ingestRunRepo: IngestRunRepo,
+    private val adminReadRepo: AdminIngestReadRepo,
     val etl: EtlOrchestrator,
     private val importTargets: Map<String, Target>,
     private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val ingestRunRepo = IngestRunRepo(ctx)
-    private val adminReadRepo = AdminIngestReadRepo(ctx)
 
     private val locks: Map<String, Mutex> = importTargets.keys.associateWith { Mutex() }
 
@@ -215,35 +201,27 @@ class IngestController(
     // Each branch writes a section-specific counts DTO so dashboards can
     // render whichever fields are populated; the legacy `seen`/`swept`/
     // `import_run_id` fields stay non-null only on the POI_DATA branch.
-    private suspend fun runImport(phase: Phase.Import): JSONB =
+    private suspend fun runImport(phase: Phase.Import): ImportPhaseCounts =
         withContext(ioDispatcher) {
             when (phase.section) {
                 Phase.Import.Section.POI_DATA -> {
                     val stats = etl.runPoiData(phase.name)
-                    JSONB.valueOf(
-                        ingestControllerJson.encodeToString(
-                            ImportPhaseCountsDto(
-                                importRunId = stats.upsertResult.runId,
-                                seen = stats.upsertResult.seenCount,
-                                swept = stats.upsertResult.sweptCount,
-                                terminalEtl = stats.terminalEtlSlug,
-                            ),
-                        ),
+                    ImportPhaseCounts(
+                        importRunId = stats.upsertResult.runId,
+                        seen = stats.upsertResult.seenCount,
+                        swept = stats.upsertResult.sweptCount,
+                        terminalEtl = stats.terminalEtlSlug,
                     )
                 }
                 Phase.Import.Section.CAMPSITE_DATA -> {
                     val stats = etl.runCampsiteData(phase.name)
-                    JSONB.valueOf(
-                        ingestControllerJson.encodeToString(
-                            ImportPhaseCountsDto(
-                                importRunId = stats.runId,
-                                seen = stats.parsed,
-                                swept = stats.swept,
-                                terminalEtl = stats.terminalEtlSlug,
-                                upsertedCampsites = stats.upserted,
-                                skippedCampsites = stats.skipped,
-                            ),
-                        ),
+                    ImportPhaseCounts(
+                        importRunId = stats.runId,
+                        seen = stats.parsed,
+                        swept = stats.swept,
+                        terminalEtl = stats.terminalEtlSlug,
+                        upsertedCampsites = stats.upserted,
+                        skippedCampsites = stats.skipped,
                     )
                 }
             }
@@ -255,19 +233,3 @@ class IngestController(
         private const val FAILURE_NOTES_MAX_CHARS = 300
     }
 }
-
-/**
- * Counts written into `ingest_runs.counts` (JSONB) for one import phase.
- * Section-specific fields are nullable; readers ignore the ones they
- * don't care about. Existing dashboards keyed off `seen`/`swept`/
- * `import_run_id` keep working.
- */
-@Serializable
-private data class ImportPhaseCountsDto(
-    @SerialName("import_run_id") val importRunId: Long,
-    val seen: Int,
-    val swept: Int,
-    @SerialName("terminal_etl") val terminalEtl: String,
-    @SerialName("upserted_campsites") val upsertedCampsites: Int? = null,
-    @SerialName("skipped_campsites") val skippedCampsites: Int? = null,
-)

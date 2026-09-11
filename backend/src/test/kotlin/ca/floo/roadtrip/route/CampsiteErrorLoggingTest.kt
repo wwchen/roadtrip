@@ -3,6 +3,7 @@ package ca.floo.roadtrip.route
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.route.api.pois.mapProviderError
 import ca.floo.roadtrip.route.api.pois.upstreamHttpStatus
+import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.service.availability.provider.upstreamAvailabilityError
 import ca.floo.roadtrip.support.AspiraException
 import ca.floo.roadtrip.support.CampflareException
@@ -10,6 +11,10 @@ import ca.floo.roadtrip.support.ReserveAmericaException
 import ca.floo.roadtrip.support.ReserveCaliforniaException
 import ca.floo.roadtrip.support.causeChain
 import io.ktor.http.HttpStatusCode
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.net.ConnectException
 import java.nio.channels.ClosedChannelException
 import kotlin.test.Test
@@ -116,6 +121,35 @@ class CampsiteErrorLoggingTest {
 
         assertEquals("upstream_5xx", dto.error)
         assertEquals(502, dto.upstreamStatus)
+    }
+
+    @Test
+    fun `a WAF block renders through the shared availability error dto`() {
+        // Moved here from AspiraObservationsTest: the provider test owns the
+        // classification, this owns how the route renders it.
+        val e = AvailabilityProviderError.UpstreamBlocked(AspiraException("WAF challenge", httpStatus = 503))
+
+        val json = Json.parseToJsonElement(encodeApiJson(mapProviderError(e).second)).jsonObject
+
+        assertEquals("error", json["state"]!!.jsonPrimitive.content)
+        assertEquals("upstream_blocked", json["error"]!!.jsonPrimitive.content)
+        assertEquals(503, json["upstream_status"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun `a rate limit renders as rate_limited`() {
+        // Moved here from RecGovObservationsTest for the same reason.
+        assertEquals("rate_limited", mapProviderError(AvailabilityProviderError.RateLimited()).second.error)
+    }
+
+    @Test
+    fun `an upstream failure with no status still renders as upstream_5xx`() {
+        val classified = upstreamAvailabilityError(cause = IllegalStateException("connection reset"), httpStatus = null)
+
+        val (_, dto) = mapProviderError(classified)
+
+        assertEquals("upstream_5xx", dto.error)
+        assertEquals(null, dto.upstreamStatus)
     }
 
     @Test

@@ -308,9 +308,7 @@ class RecGovObservationsTest {
                 classify(client, days = 1)
             }.exceptionOrNull()
         require(ex is AvailabilityProviderError.RateLimited) { "expected RateLimited, got $ex" }
-        val (status, error) = mapRecgovUpstreamError(ex)
-        assertEquals(503, status.value)
-        assertEquals("rate_limited", error.error)
+        assertEquals("rate_limited", ex.code)
     }
 
     @Test
@@ -324,14 +322,14 @@ class RecGovObservationsTest {
             }
         val ex = runCatching { classify(client, days = 1) }.exceptionOrNull()
         require(ex is AvailabilityProviderError.RateLimited) { "expected RateLimited, got $ex" }
-        assertEquals("rate_limited", mapRecgovUpstreamError(ex).second.error)
+        assertEquals("rate_limited", ex.code)
     }
 
     @Test
     fun `5xx maps to upstream_5xx`() {
-        val ex = IllegalStateException("connection reset")
-        val (_, error) = mapRecgovUpstreamError(ex)
-        assertEquals("upstream_5xx", error.error)
+        val classified = upstreamAvailabilityError(cause = IllegalStateException("connection reset"), httpStatus = null)
+
+        assertEquals("upstream_5xx", classified.code)
     }
 
     @Test

@@ -12,25 +12,24 @@ import kotlin.test.assertEquals
 
 class RouteQueryParamsTest {
     @Test
-    fun `string helpers trim match split and dedupe query values`() =
+    fun `string helpers trim split and dedupe query values`() =
         testApplication {
             application {
                 routing {
                     get("/strings/{id}") {
                         val path = call.pathParam("id")
                         val q = call.trimmedQuery("q")
-                        val match = call.matchingQuery("match", Regex("""\d+""")) ?: "none"
                         val values = call.splitQueryValues("categories").joinToString("|")
                         val dedupedValues = call.queryValues("categories").joinToString("|")
 
-                        call.respondText("$path:$q:$match:$values:$dedupedValues")
+                        call.respondText("$path:$q:$values:$dedupedValues")
                     }
                 }
             }
 
-            val response = client.get("/strings/abc?q=%20hello%20&match=123&categories=a,b&categories=b,c")
+            val response = client.get("/strings/abc?q=%20hello%20&categories=a,b&categories=b,c")
 
-            assertEquals("abc:hello:123:a|b|b|c:a|b|c", response.bodyAsText())
+            assertEquals("abc:hello:a|b|b|c:a|b|c", response.bodyAsText())
         }
 
     @Test

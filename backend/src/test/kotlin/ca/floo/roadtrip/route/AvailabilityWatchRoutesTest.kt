@@ -11,6 +11,7 @@ import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.JooqUnitOfWork
 import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.UserRepo
@@ -154,7 +155,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityWatchService(
-            ctx = ctx,
+            unitOfWork = JooqUnitOfWork(ctx),
             alertProviders = alertProviders(campsitesRepo, targets),
             capabilityValidator = WatchCapabilityValidator { },
             lifecycleNotifications = ignoredLifecycleNotifications(),
@@ -179,7 +180,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityWatchService(
-            ctx = ctx,
+            unitOfWork = JooqUnitOfWork(ctx),
             alertProviders = alertProviders(campsitesRepo, targets),
             capabilityValidator = WatchCapabilityValidator { },
             lifecycleNotifications = ignoredLifecycleNotifications(),
@@ -217,7 +218,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             )
         val scopeResolver = WatchScopeResolver(campsitesRepo)
         return AvailabilityWatchService(
-            ctx = ctx,
+            unitOfWork = JooqUnitOfWork(ctx),
             alertProviders = alertProviders(campsitesRepo, targets),
             capabilityValidator =
                 WatchTriggerCapabilityValidator(

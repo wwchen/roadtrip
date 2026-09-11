@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route.api.pois
 
+import ca.floo.roadtrip.config.CampsiteAvailabilityConfig
 import ca.floo.roadtrip.model.api.AvailabilityErrorDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
@@ -34,13 +35,12 @@ import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger("CampsiteRoutes")
 
-private const val IP_RATE_LIMIT_PER_MINUTE = 30
-
 private fun ApplicationCall.siteTypeQuery(): SiteTypeQuery = parseSiteTypes(queryValues("site_type", "siteType"))
 
 internal fun Route.campsiteRoutes(
     controller: CampsiteAvailabilityController,
-    rateLimit: IpRateLimiter = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE),
+    config: CampsiteAvailabilityConfig,
+    rateLimit: IpRateLimiter = IpRateLimiter(perMinute = config.ipRateLimitPerMinute),
 ) {
     route("/api") {
         route("/pois") {

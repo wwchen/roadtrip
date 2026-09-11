@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.client.companion.CompanionSessionClient
+import ca.floo.roadtrip.client.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.client.slack.SlackClient
 import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.AppConfig
@@ -21,9 +22,11 @@ import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
+import ca.floo.roadtrip.repo.UnitOfWork
 import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.service.api.RouteResponseMapper
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
 import ca.floo.roadtrip.service.auth.MagicLinkTokenService
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
@@ -61,6 +64,7 @@ import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
 import ca.floo.roadtrip.service.booking.RecentAtcFires
 import ca.floo.roadtrip.service.etl.framework.dataProviderForAdapter
+import ca.floo.roadtrip.service.geocode.GeocodeService
 import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.health.ReadinessServiceImpl
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
@@ -78,6 +82,7 @@ import ca.floo.roadtrip.service.poi.defaultPoiTypes
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
+import ca.floo.roadtrip.service.routing.RoutePlanService
 import ca.floo.roadtrip.service.scheduler.PollerBackfill
 import ca.floo.roadtrip.service.scheduler.RecGovKeepalive
 import ca.floo.roadtrip.service.scheduler.RecGovKeepaliveJob
@@ -88,7 +93,6 @@ import ca.floo.roadtrip.service.security.SecretCipher
 import ca.floo.roadtrip.service.settings.RecGovCredentialService
 import ca.floo.roadtrip.service.settings.UserSettingsService
 import kotlinx.coroutines.CoroutineScope
-import org.jooq.DSLContext
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import javax.sql.DataSource
@@ -334,7 +338,7 @@ val serviceModule =
         }
         single {
             AvailabilityWatchService(
-                ctx = get<DSLContext>(),
+                unitOfWork = get<UnitOfWork>(),
                 alertProviders = get<AlertProviderRegistry>(),
                 capabilityValidator = get<WatchTriggerCapabilityValidator>(),
                 lifecycleNotifications =
@@ -406,7 +410,12 @@ val serviceModule =
             )
         }
         single(createdAtStart = true) {
-            PollerBackfill(get<DSLContext>(), get<AvailabilityPollerMembership>()).also { it.run() }
+            PollerBackfill(
+                watchRepo = get<AvailabilityWatchRepo>(),
+                pollerRepo = get<AvailabilityPollerRepo>(),
+                unitOfWork = get<UnitOfWork>(),
+                membership = get<AvailabilityPollerMembership>(),
+            ).also { it.run() }
         }
 
         single(named("poiDetailServices")) {
@@ -423,13 +432,9 @@ val serviceModule =
             )
         }
         single { RouteCorridorService(get<RouteCorridorRepo>()) }
-        single {
-            val config: AppConfig = get()
-            PoiServingRepo(
-                ctx = get<DSLContext>(),
-                enabledDataProviders = config.readPathProviders.enabledDataProviders,
-            )
-        }
+        single { RoutePlanService(routeCache = get<RouteCache>(), corridorService = get<RouteCorridorService>()) }
+        single { RouteResponseMapper() }
+        single { GeocodeService(get<MapboxGeocoder>()) }
         single {
             PoiService(
                 poiRepo = get<PoiServingRepo>(),

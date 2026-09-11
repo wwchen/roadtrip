@@ -3,8 +3,10 @@ package ca.floo.roadtrip.service.scheduler
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.JooqUnitOfWork
 import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
@@ -107,7 +109,13 @@ class PollerBackfillTest : SharedDbTest() {
         // Orphaned: no links yet (V28 dropped the old job; nothing linked it).
         assertTrue(pollerRepo.pollerIdsForWatch(watchId).isEmpty())
 
-        val backfill = PollerBackfill(ctx, membership())
+        val backfill =
+            PollerBackfill(
+                watchRepo = AvailabilityWatchRepo(ctx),
+                pollerRepo = AvailabilityPollerRepo(ctx),
+                unitOfWork = JooqUnitOfWork(ctx),
+                membership = membership(),
+            )
         backfill.run()
 
         // Linked to exactly one active poller.

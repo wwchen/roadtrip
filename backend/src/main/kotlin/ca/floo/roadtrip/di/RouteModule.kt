@@ -11,7 +11,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
-import ca.floo.roadtrip.repo.RefLinkRepo
+import ca.floo.roadtrip.repo.UnitOfWork
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSessionRepo
 import ca.floo.roadtrip.route.api.admin.adminIngestRoutes
@@ -35,6 +35,7 @@ import ca.floo.roadtrip.route.auth.authRoutes
 import ca.floo.roadtrip.route.auth.roadtripAuthorization
 import ca.floo.roadtrip.route.common.undeclaredAccessRoutes
 import ca.floo.roadtrip.route.static.staticSiteRoutes
+import ca.floo.roadtrip.service.api.RouteResponseMapper
 import ca.floo.roadtrip.service.auth.AuthController
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
 import ca.floo.roadtrip.service.auth.IdTokenVerifier
@@ -64,12 +65,12 @@ import ca.floo.roadtrip.service.availability.configuredSnapshotFreshnessTtl
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingActionService
 import ca.floo.roadtrip.service.etl.framework.IngestController
+import ca.floo.roadtrip.service.geocode.GeocodeService
 import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
-import ca.floo.roadtrip.service.ref.DbRefResolver
-import ca.floo.roadtrip.service.routing.RouteCache
-import ca.floo.roadtrip.service.routing.RouteCorridorService
+import ca.floo.roadtrip.service.ref.RefResolver
+import ca.floo.roadtrip.service.routing.RoutePlanService
 import ca.floo.roadtrip.service.settings.RecGovCredentialService
 import ca.floo.roadtrip.service.settings.UserSettingsService
 import io.ktor.server.application.Application
@@ -77,7 +78,6 @@ import io.ktor.server.application.install
 import io.ktor.server.routing.routing
 import io.ktor.server.routing.routingRoot
 import kotlinx.coroutines.CoroutineScope
-import org.jooq.DSLContext
 import org.koin.core.qualifier.named
 import org.koin.ktor.ext.getKoin
 import org.koin.ktor.ext.inject
@@ -85,7 +85,17 @@ import java.io.File
 import java.time.Duration
 
 internal fun Application.registerKoinRoutes() {
-    val ctx: DSLContext by inject()
+    val unitOfWork: UnitOfWork by inject()
+    val poiRepo: PoiRepo by inject()
+    val campsiteRepo: CampsiteRepo by inject()
+    val campgroundRepo: CampgroundRepo by inject()
+    val availabilityRepo: AvailabilityRepo by inject()
+    val availabilityRunRepo: AvailabilityRunRepo by inject()
+    val pollerRepo: AvailabilityPollerRepo by inject()
+    val watchRepo: AvailabilityWatchRepo by inject()
+    val userRepo: UserRepo by inject()
+    val userSessionRepo: UserSessionRepo by inject()
+    val refResolver: RefResolver by inject()
     val config: AppConfig by inject()
     val watchService: AvailabilityWatchService by inject()
     val watchCapabilities: WatchCapabilityService by inject()
@@ -96,9 +106,9 @@ internal fun Application.registerKoinRoutes() {
     val failoverFetcher: FailoverAvailabilityFetcher by inject()
     val poiService: PoiReader by inject()
     val poisOnRouteService: PoisOnRouteService by inject()
-    val routeCache: RouteCache by inject()
-    val routeCorridorService: RouteCorridorService by inject()
-    val mapboxGeocoder: ca.floo.roadtrip.client.mapbox.MapboxGeocoder by inject()
+    val routePlanService: RoutePlanService by inject()
+    val routeResponseMapper: RouteResponseMapper by inject()
+    val geocodeService: GeocodeService by inject()
     val ingestController: IngestController by inject()
     val userSettings: UserSettingsService by inject()
     val recgovCredentials: RecGovCredentialService by inject()
@@ -111,7 +121,7 @@ internal fun Application.registerKoinRoutes() {
     // Resolve the session into a Principal once per request, ambient for every
     // route including anonymous ones. Null wiring (auth not configured) resolves
     // every request to Anonymous — the same state the routes already tolerate.
-    val authWiring = authRouteWiring(ctx, config)
+    val authWiring = authRouteWiring(unitOfWork, userRepo, userSessionRepo, config)
     install(roadtripAuthorization) {
         resolvePrincipal = { token ->
             when {
@@ -128,10 +138,17 @@ internal fun Application.registerKoinRoutes() {
         recgovSettingsRoutes(recgovCredentials)
         bookingRoutes(bookingActions)
         poiRoutes(poiService)
-        availabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
+        availabilityWatchRoutes(
+            availabilityWatchController(campsiteRepo, watchRepo, userRepo, watchService, watchCapabilities),
+        )
         val campsiteController =
             campsiteAvailabilityController(
-                ctx = ctx,
+                poiRepo = poiRepo,
+                campsitesRepo = campsiteRepo,
+                campgroundRepo = campgroundRepo,
+                availabilityRepo = availabilityRepo,
+                pollerRepo = pollerRepo,
+                refResolver = refResolver,
                 availabilityProviders = availabilityProviders,
                 dateResolver = dateResolver,
                 bookingHorizons = bookingHorizons,
@@ -140,7 +157,7 @@ internal fun Application.registerKoinRoutes() {
                 cacheConfig = config.cache,
                 identities = bookingIdentities,
             )
-        campsiteRoutes(campsiteController)
+        campsiteRoutes(campsiteController, config.availability.campsite)
         bulkAvailabilityRoutes(
             BulkAvailabilityController(campsiteController, config.availability.bulk),
             config.availability.bulk,
@@ -149,11 +166,17 @@ internal fun Application.registerKoinRoutes() {
             slackInteractivityRoute(wiring.verifier, wiring.handler, schedulerScope)
         }
         availabilityDashboardRoutes(
-            availabilityDashboardController(ctx, config.availability.forcePullCooldown),
+            availabilityDashboardController(
+                pollerRepo = pollerRepo,
+                runRepo = availabilityRunRepo,
+                availabilityRepo = availabilityRepo,
+                campsiteRepo = campsiteRepo,
+                forcePullCooldown = config.availability.forcePullCooldown,
+            ),
         )
         poisOnRouteRoutes(poisOnRouteService, config.route)
-        routeRoutes(routeCache, routeCorridorService, config.route)
-        geocodeRoutes(mapboxGeocoder)
+        routeRoutes(routePlanService, routeResponseMapper, config.route)
+        geocodeRoutes(geocodeService)
         buildInfoRoutes(config.buildInfo)
         healthRoutes(readiness)
         adminIngestRoutes(ingestController)
@@ -177,24 +200,31 @@ internal fun Application.registerKoinRoutes() {
 }
 
 private fun availabilityDashboardController(
-    ctx: DSLContext,
+    pollerRepo: AvailabilityPollerRepo,
+    runRepo: AvailabilityRunRepo,
+    availabilityRepo: AvailabilityRepo,
+    campsiteRepo: CampsiteRepo,
     forcePullCooldown: Duration,
 ): AvailabilityDashboardController =
     AvailabilityDashboardController(
-        pollerRepo = AvailabilityPollerRepo(ctx),
-        runRepo = AvailabilityRunRepo(ctx),
-        availabilityRepo = AvailabilityRepo(ctx),
-        campsiteRepo = CampsiteRepo(ctx),
+        pollerRepo = pollerRepo,
+        runRepo = runRepo,
+        availabilityRepo = availabilityRepo,
+        campsiteRepo = campsiteRepo,
         forcePullCooldown = forcePullCooldown,
     )
 
 /**
  * Assembles the campsite read-slice controller. Mirrors [availabilityWatchController]:
- * the DSLContext stays here in composition code, so the route file remains a
- * pure HTTP shell.
+ * composition stays here, so the route file remains a pure HTTP shell.
  */
 private fun campsiteAvailabilityController(
-    ctx: DSLContext,
+    poiRepo: PoiRepo,
+    campsitesRepo: CampsiteRepo,
+    campgroundRepo: CampgroundRepo,
+    availabilityRepo: AvailabilityRepo,
+    pollerRepo: AvailabilityPollerRepo,
+    refResolver: RefResolver,
     availabilityProviders: List<AvailabilityProvider>,
     dateResolver: AvailabilityDateResolver,
     bookingHorizons: BookingHorizonResolver,
@@ -203,23 +233,21 @@ private fun campsiteAvailabilityController(
     cacheConfig: ApiCacheConfig,
     identities: BookingIdentityResolver,
 ): CampsiteAvailabilityController {
-    val campsitesRepo = CampsiteRepo(ctx)
-    val campgroundRepo = CampgroundRepo(ctx)
     val targets =
         DbAvailabilityTargetResolver(
-            poiRepo = PoiRepo(ctx),
+            poiRepo = poiRepo,
             campsitesRepo = campsitesRepo,
             campgroundRepo = campgroundRepo,
             availabilityProviders = availabilityProviders,
             dateResolver = dateResolver,
-            pollerRepo = AvailabilityPollerRepo(ctx),
+            pollerRepo = pollerRepo,
         )
     return CampsiteAvailabilityController(
         campgroundRepo = campgroundRepo,
         campsitesRepo = campsitesRepo,
         catalogService =
             CampsiteCatalogService(
-                refResolver = DbRefResolver(RefLinkRepo(ctx)),
+                refResolver = refResolver,
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = campgroundRepo,
                 targets = targets,
@@ -231,7 +259,7 @@ private fun campsiteAvailabilityController(
                 dateResolver = dateResolver,
                 failoverFetcher = failoverFetcher,
                 bookingHorizons = bookingHorizons,
-                availabilityRepo = AvailabilityRepo(ctx),
+                availabilityRepo = availabilityRepo,
                 snapshotFreshnessTtl = configuredSnapshotFreshnessTtl(cacheConfig),
             ),
         dateResolver = dateResolver,
@@ -240,14 +268,13 @@ private fun campsiteAvailabilityController(
 }
 
 private fun availabilityWatchController(
-    ctx: DSLContext,
+    campsitesRepo: CampsiteRepo,
+    watchRepo: AvailabilityWatchRepo,
+    userRepo: UserRepo,
     watchService: AvailabilityWatchService,
     watchCapabilities: WatchCapabilityService,
-): AvailabilityWatchController {
-    val campsitesRepo = CampsiteRepo(ctx)
-    val watchRepo = AvailabilityWatchRepo(ctx)
-    val userRepo = UserRepo(ctx)
-    return AvailabilityWatchController(
+): AvailabilityWatchController =
+    AvailabilityWatchController(
         watchRepo = watchRepo,
         watchService = watchService,
         watchMapper =
@@ -258,7 +285,6 @@ private fun availabilityWatchController(
             ),
         accessResolver = WatchAccessResolver(watchRepo = watchRepo, userRepo = userRepo),
     )
-}
 
 private val authWiringLog = org.slf4j.LoggerFactory.getLogger("ca.floo.roadtrip.di.AuthWiring")
 
@@ -275,7 +301,9 @@ private val authWiringLog = org.slf4j.LoggerFactory.getLogger("ca.floo.roadtrip.
  * Without it there is no callback URL to register, so auth stays off.
  */
 private fun authRouteWiring(
-    ctx: DSLContext,
+    unitOfWork: UnitOfWork,
+    userRepo: UserRepo,
+    userSessionRepo: UserSessionRepo,
     config: AppConfig,
 ): AuthRouteWiring? {
     val authConfig = config.auth ?: return null
@@ -298,11 +326,10 @@ private fun authRouteWiring(
             idTokenVerifier = IdTokenVerifier(clientId = authConfig.clientId),
             claimsDialect = dialectRegistry.forProvider(authConfig.provider),
         )
-    val userRepo = UserRepo(ctx)
     val sessionService =
         SessionService(
             userRepo = userRepo,
-            userSessionRepo = UserSessionRepo(ctx),
+            userSessionRepo = userSessionRepo,
             sessionTtl = authConfig.sessionTtl,
         )
 
@@ -317,7 +344,7 @@ private fun authRouteWiring(
                         providers = listOf(identityProvider),
                         activeId = IdentityProviderId(OidcIdentityProvider.ID),
                     ),
-                userProvisioningService = UserProvisioningService(ctx, authConfig.roleGrants),
+                userProvisioningService = UserProvisioningService(unitOfWork, authConfig.roleGrants),
                 sessionService = sessionService,
                 userRepo = userRepo,
             ),
@@ -331,5 +358,6 @@ private fun authRouteWiring(
         redirectUri = callbackRedirectUri,
         providerLabel = dialectRegistry.displayNameFor(authConfig.provider),
         isEmbeddedLogin = dialectRegistry.supportsEmbeddedLoginFor(authConfig.provider),
+        allowedConnections = authConfig.allowedConnections,
     )
 }

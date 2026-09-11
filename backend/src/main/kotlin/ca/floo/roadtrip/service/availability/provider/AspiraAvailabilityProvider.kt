@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.aspira.AspiraAvailability
 import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
-import ca.floo.roadtrip.model.api.AvailabilityErrorDto
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
@@ -16,9 +15,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.BookingTenant
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
-import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.support.AspiraException
-import io.ktor.http.HttpStatusCode
 import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.time.LocalDate
@@ -306,21 +303,6 @@ class AspiraAvailabilityProvider(
                 )
             },
         ) { block() }
-}
-
-internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, AvailabilityErrorDto> {
-    val status = e.httpStatus
-    return when {
-        status == HTTP_TOO_MANY_REQUESTS ->
-            HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("rate_limited", upstreamStatus = status)
-        status == HTTP_SERVICE_UNAVAILABLE || (e.message?.contains(WAF_MESSAGE_MARKER) == true) ->
-            HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("upstream_blocked", upstreamStatus = status)
-        else ->
-            HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("upstream_5xx", upstreamStatus = status)
-    }
 }
 
 /** Same-tenant only: the same map id names a different park on another host. */
