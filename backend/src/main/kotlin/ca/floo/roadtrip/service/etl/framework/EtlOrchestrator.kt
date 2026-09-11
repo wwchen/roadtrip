@@ -7,7 +7,6 @@ import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ImportRunRepo
-import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 import java.io.File
 
@@ -27,21 +26,17 @@ import java.io.File
 // Registry validation rejects intermediate ETL chains, so one import job is
 // one terminal ETL run over one snapshot of raw input.
 open class EtlOrchestrator(
-    private val ctx: DSLContext,
+    private val importRunRepo: ImportRunRepo,
     private val rawDir: File,
     private val poiRegistry: PoiRegistry,
     /**
      * Base directory for registry paths such as data_source output_dir_prefix.
      */
     private val staticDir: File,
-    /**
-     * Terminal ETL binding map keyed by YAML slug. Defaults to the
-     * production registry; overridable for tests.
-     */
-    private val etlRegistry: Map<String, TerminalEtlBinding<*, *>> = productionEtlRegistry(ctx),
+    /** Terminal ETL binding map keyed by YAML slug. */
+    private val etlRegistry: Map<String, TerminalEtlBinding<*, *>>,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val importRunRepo = ImportRunRepo(ctx)
     private val rawCaptureStore = RawCaptureStore(rawDir = rawDir, staticDir = staticDir)
 
     /**

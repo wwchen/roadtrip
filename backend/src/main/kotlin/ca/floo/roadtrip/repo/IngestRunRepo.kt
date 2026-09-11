@@ -1,13 +1,26 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
+import ca.floo.roadtrip.model.domain.etl.ImportPhaseCounts
 import ca.floo.roadtrip.model.metadata.ingest.Phase
 import ca.floo.roadtrip.model.metadata.ingest.RunKind
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
 import org.jooq.JSONB
 import java.time.Duration
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+
+// encodeDefaults + explicitNulls=false: a POI_DATA phase omits the campsite
+// counts entirely rather than writing nulls readers have to skip.
+@OptIn(ExperimentalSerializationApi::class)
+private val ingestCountsJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
 
 class IngestRunRepo(
     private val ctx: DSLContext,
@@ -49,13 +62,13 @@ class IngestRunRepo(
 
     fun completePhase(
         phaseId: Long,
-        counts: JSONB,
+        counts: ImportPhaseCounts,
     ) {
         ctx
             .update(INGEST_RUNS)
             .set(INGEST_RUNS.STATUS, "completed")
             .set(INGEST_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-            .set(INGEST_RUNS.COUNTS, counts)
+            .set(INGEST_RUNS.COUNTS, JSONB.valueOf(ingestCountsJson.encodeToString(counts)))
             .where(INGEST_RUNS.ID.eq(phaseId))
             .execute()
     }

@@ -6,6 +6,8 @@ import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.Fetcher
 import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.repo.ImportRunRepo
+import ca.floo.roadtrip.repo.JooqUnitOfWork
 import ca.floo.roadtrip.repo.MAX_CATALOG_UPSERT_BATCH_SIZE
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
@@ -62,10 +64,11 @@ class EtlOrchestratorCampflareTest : SharedDbTest() {
 
         val orchestrator =
             EtlOrchestrator(
-                ctx = ctx,
+                importRunRepo = ImportRunRepo(ctx),
                 rawDir = rawDir,
                 poiRegistry = registry(),
                 staticDir = staticDir,
+                etlRegistry = productionEtlRegistry(JooqUnitOfWork(ctx).autocommit),
             )
 
         val campgrounds = orchestrator.runPoiData("Campflare Campgrounds")
@@ -105,10 +108,11 @@ class EtlOrchestratorCampflareTest : SharedDbTest() {
 
         val orchestrator =
             EtlOrchestrator(
-                ctx = ctx,
+                importRunRepo = ImportRunRepo(ctx),
                 rawDir = rawDir,
                 poiRegistry = registry(),
                 staticDir = staticDir,
+                etlRegistry = productionEtlRegistry(JooqUnitOfWork(ctx).autocommit),
             )
 
         val campgrounds = orchestrator.runPoiData("Campflare Campgrounds")
@@ -139,10 +143,11 @@ class EtlOrchestratorCampflareTest : SharedDbTest() {
 
         val orchestrator =
             EtlOrchestrator(
-                ctx = ctx,
+                importRunRepo = ImportRunRepo(ctx),
                 rawDir = rawDir,
                 poiRegistry = registry(),
                 staticDir = staticDir,
+                etlRegistry = productionEtlRegistry(JooqUnitOfWork(ctx).autocommit),
             )
 
         val campgrounds = orchestrator.runPoiData("Campflare Campgrounds")
