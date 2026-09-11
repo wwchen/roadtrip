@@ -77,10 +77,6 @@ internal class RecGovBookingAdapter(
 
     override val id: BookingProvider = BookingProvider.RECGOV
 
-    // TODO(Task 5): `BookingAdapter.displayName` goes away; both consumers read
-    // the name from TenantRegistry instead of an adapter-owned literal.
-    override val displayName: String = "Recreation.gov"
-
     /**
      * Every companion code this adapter can surface, and who has to act on it.
      * Private: only the category it yields crosses the port, so nothing above

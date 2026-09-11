@@ -86,6 +86,7 @@ private suspend fun ApplicationCall.respondOutcome(outcome: AddToCartOutcome) =
                     status = BookingActionStatus.COMPLETED,
                     cartUrl = outcome.cartUrl,
                     provider = outcome.provider.id,
+                    providerDisplay = outcome.providerDisplay,
                 ),
             )
         is AddToCartOutcome.Refused ->
@@ -93,6 +94,7 @@ private suspend fun ApplicationCall.respondOutcome(outcome: AddToCartOutcome) =
                 error = outcome.code,
                 status = refusalStatus(outcome.code),
                 provider = outcome.provider?.id,
+                providerDisplay = outcome.providerDisplay,
             )
         is AddToCartOutcome.Failed ->
             respondApiError(
@@ -100,6 +102,7 @@ private suspend fun ApplicationCall.respondOutcome(outcome: AddToCartOutcome) =
                 status = outcome.category.status(),
                 detail = outcome.detail,
                 provider = outcome.provider.id,
+                providerDisplay = outcome.providerDisplay,
             )
     }
 

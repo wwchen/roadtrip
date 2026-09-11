@@ -13,9 +13,6 @@ import kotlinx.serialization.json.JsonObject
 /** The cart a fake hold lands in. No real vendor's, which is the point. */
 internal const val FAKE_CART_URL = "https://cart.example.test/hold"
 
-/** What a fake vendor is called where copy has to name one. */
-internal const val FAKE_PROVIDER_DISPLAY_NAME = "Test Bookings"
-
 /**
  * Configurable [BookingAdapter] stand-in for booking-seam tests.
  *
@@ -27,7 +24,6 @@ internal const val FAKE_PROVIDER_DISPLAY_NAME = "Test Bookings"
  */
 internal class FakeBookingAdapter(
     override val id: BookingProvider = BookingProvider.RECGOV,
-    override val displayName: String = FAKE_PROVIDER_DISPLAY_NAME,
     private val cartUrl: String = FAKE_CART_URL,
     private val supportsAddToCart: Boolean = true,
     private val credentialed: (UserId) -> Boolean = { true },

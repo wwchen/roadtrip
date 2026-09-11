@@ -4,10 +4,10 @@ import ca.floo.roadtrip.client.resend.EmailDeliveryClient
 import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
 import ca.floo.roadtrip.config.EmailConfig
 import ca.floo.roadtrip.fixtures.FAKE_CART_URL
-import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
@@ -67,6 +67,12 @@ import kotlin.test.assertTrue
 
 /** What the companion says when rec.gov stops an unattended login for a code. */
 private const val MFA_BLOCKED_DETAIL = "rec.gov asked for a verification code"
+
+/** What the shipped registry calls the rec.gov ref these openings resolve to. */
+private const val RECGOV_DISPLAY_NAME = "Recreation.gov"
+
+/** Loaded once: every handler below reads the booking site's name off it. */
+private val tenantRegistry = shippedTenantRegistry()
 
 class TriggerActionHandlerTest {
     private val testCipher = SecretCipher(ByteArray(32) { it.toByte() })
@@ -340,6 +346,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    tenants = tenantRegistry,
                     targetResolver = resolver(),
                     notifications = CapturingNotifications(result = true),
                 )
@@ -384,6 +391,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    tenants = tenantRegistry,
                     targetResolver =
                         resolver(
                             UserSettingsRepo.Settings(
@@ -410,9 +418,9 @@ class TriggerActionHandlerTest {
             assertEquals(42L, result.notice.watchId)
             assertEquals("recgov", result.notice.vendor)
             assertEquals("completed", result.notice.status)
-            // The copy layer names the vendor and links the cart from these two;
-            // both come from the adapter that made the hold, not from a literal.
-            assertEquals(FAKE_PROVIDER_DISPLAY_NAME, result.notice.bookingSystem)
+            // The copy layer names the booking site and links the cart from
+            // these two: the name off the registry, the cart off the adapter.
+            assertEquals(RECGOV_DISPLAY_NAME, result.notice.bookingSystem)
             assertEquals(FAKE_CART_URL, result.notice.cartUrl)
             assertEquals(
                 listOf(
@@ -434,6 +442,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    tenants = tenantRegistry,
                     targetResolver = resolver(),
                     notifications = notifications,
                 )
@@ -458,6 +467,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    tenants = tenantRegistry,
                     targetResolver =
                         resolver(
                             UserSettingsRepo.Settings(
@@ -506,6 +516,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    tenants = tenantRegistry,
                     targetResolver = resolver(),
                     notifications = NotificationFanout(listOf(emailService(emailClient))),
                 )
@@ -549,6 +560,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    tenants = tenantRegistry,
                     targetResolver = resolver(),
                     notifications = notifications,
                 )
@@ -598,6 +610,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    tenants = tenantRegistry,
                     targetResolver = resolver(),
                     notifications = notifications,
                 )
@@ -625,6 +638,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    tenants = tenantRegistry,
                     targetResolver = resolver(),
                     notifications = notifications,
                 )
@@ -659,6 +673,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = atFireTime,
                     bookingTargets = AvailabilityBookingTargetResolver(resolvable),
+                    tenants = tenantRegistry,
                     targetResolver = resolver(),
                     notifications = notifications,
                 )
@@ -689,6 +704,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    tenants = tenantRegistry,
                     targetResolver = resolver(),
                     notifications = notifications,
                     metrics = metrics,
@@ -744,6 +760,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    tenants = tenantRegistry,
                     targetResolver = resolver(),
                     notifications = CapturingNotifications(result = true),
                     metrics = metrics,
@@ -771,6 +788,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    tenants = tenantRegistry,
                     targetResolver = resolver(),
                     notifications = CapturingNotifications(result = true),
                     metrics = metrics,
@@ -949,8 +967,6 @@ class TriggerActionHandlerTest {
         val requests = mutableListOf<AddToCartRequest>()
 
         override val id: BookingProvider = BookingProvider.RECGOV
-
-        override val displayName: String = FAKE_PROVIDER_DISPLAY_NAME
 
         override fun canFulfil(user: UserId): Boolean = true
 

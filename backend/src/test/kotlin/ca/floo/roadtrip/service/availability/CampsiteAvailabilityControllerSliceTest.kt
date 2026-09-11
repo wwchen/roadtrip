@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
@@ -250,6 +251,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                     WatchCapabilityService(
                         availabilityTargets = targets,
                         bookingTargets = AvailabilityBookingTargetResolver(BookingAdapterRegistry(emptyList())),
+                        tenants = shippedTenantRegistry(),
                     ),
             )
         val earliest = dateResolver.contextForPoi(TEST_POI_ID).earliestDate

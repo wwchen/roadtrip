@@ -143,6 +143,7 @@ class CampsiteRoutesTest : SharedDbTest() {
                 WatchCapabilityService(
                     availabilityTargets = targets,
                     bookingTargets = AvailabilityBookingTargetResolver(BookingAdapterRegistry(emptyList())),
+                    tenants = shippedTenantRegistry(),
                 ),
         )
     }

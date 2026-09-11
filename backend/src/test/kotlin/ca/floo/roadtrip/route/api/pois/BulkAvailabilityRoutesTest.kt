@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route.api.pois
 
 import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
@@ -430,6 +431,7 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
                 WatchCapabilityService(
                     availabilityTargets = targets,
                     bookingTargets = AvailabilityBookingTargetResolver(BookingAdapterRegistry(emptyList())),
+                    tenants = shippedTenantRegistry(),
                 ),
         )
     }

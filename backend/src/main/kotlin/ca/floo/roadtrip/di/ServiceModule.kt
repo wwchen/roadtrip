@@ -258,6 +258,7 @@ val serviceModule =
                         .freshlyUnavailableDates(campsiteId, nights, get<AppConfig>().booking.freshnessMaxAge)
                 },
                 bookings = get<BookingAdapterRegistry>(),
+                tenants = get<TenantRegistry>(),
             )
         }
 
@@ -270,6 +271,7 @@ val serviceModule =
                 // `atc` is offered only to a user the claiming adapter can hold
                 // for; the adapter is the one place that knows its credentials.
                 bookings = get<BookingAdapterRegistry>(),
+                tenants = get<TenantRegistry>(),
             )
         }
         single {
@@ -299,6 +301,7 @@ val serviceModule =
                     bookingTargets = get<AvailabilityBookingTargetResolver>(),
                     notifications = get<NotificationFanout>(),
                     targetResolver = get<WatchNotificationTargetResolver>(),
+                    tenants = get<TenantRegistry>(),
                     metrics = get<RoadtripMetrics>(),
                 ),
             )

@@ -150,6 +150,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                             bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
                             notificationTriggerKinds = notificationTriggerKinds,
                             bookings = bookingProviders,
+                            tenants = shippedTenantRegistry(),
                         ),
                 ),
             lifecycleNotifications = ignoredLifecycleNotifications(),

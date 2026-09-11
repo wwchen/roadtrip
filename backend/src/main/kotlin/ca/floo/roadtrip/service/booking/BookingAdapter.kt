@@ -11,7 +11,7 @@ import ca.floo.roadtrip.support.Dispatchable
 
 /**
  * One booking vendor, and everything vendor-specific about holding a site with
- * it: its cart, its credentials, its codes, and the name a person reads.
+ * it: its cart, its credentials, and its codes.
  *
  * The layers above route to an adapter and repeat what it says. They do not
  * know which vendor answered, so adding a second one is a registration rather
@@ -19,9 +19,6 @@ import ca.floo.roadtrip.support.Dispatchable
  */
 internal interface BookingAdapter : Dispatchable<BookingProvider> {
     val id: BookingProvider
-
-    /** This vendor as a person reads it, for copy that has to name it. */
-    val displayName: String
 
     override fun canHandle(key: BookingProvider): Boolean = key == id
 

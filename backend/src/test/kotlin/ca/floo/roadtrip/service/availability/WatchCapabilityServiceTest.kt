@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_YEAR_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.FakeBookingAdapter
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.api.AddToCartState
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.BookingAction
@@ -33,7 +33,11 @@ private val uncredentialedUser = UserId(12L)
 
 /** Holds an account with the second vendor, and none with the first. */
 private val otherProviderUser = UserId(13L)
-private const val OTHER_PROVIDER_DISPLAY_NAME = "Other Bookings"
+
+/** The shipped names of the two providers these fakes claim. The service reads
+ *  them off the registry by ref, so a fake cannot invent its own any more. */
+private const val RECGOV_DISPLAY_NAME = "Recreation.gov"
+private const val CAMPFLARE_DISPLAY_NAME = "Campflare"
 
 class WatchCapabilityServiceTest {
     @Test
@@ -148,7 +152,6 @@ class WatchCapabilityServiceTest {
                 ),
                 FakeBookingAdapter(
                     id = BookingProvider.CAMPFLARE,
-                    displayName = OTHER_PROVIDER_DISPLAY_NAME,
                     credentialed = { it == otherProviderUser },
                 ),
             )
@@ -157,7 +160,7 @@ class WatchCapabilityServiceTest {
         val recgov = service(campsites = listOf(recgovSite), adapters = adapters)
         assertEquals(AddToCartState.READY, recgov.addToCartState(listOf(recgovSite), credentialedUser))
         assertEquals(AddToCartState.NO_CREDENTIALS, recgov.addToCartState(listOf(recgovSite), otherProviderUser))
-        assertEquals(FAKE_PROVIDER_DISPLAY_NAME, recgov.addToCartProviderName(otherProviderUser, listOf(recgovSite)))
+        assertEquals(RECGOV_DISPLAY_NAME, recgov.addToCartProviderName(otherProviderUser, listOf(recgovSite)))
 
         val otherSite = campsite(2L, "site-2", provider = BookingProvider.CAMPFLARE)
         val other =
@@ -168,7 +171,7 @@ class WatchCapabilityServiceTest {
             )
         assertEquals(AddToCartState.READY, other.addToCartState(listOf(otherSite), otherProviderUser))
         assertEquals(AddToCartState.NO_CREDENTIALS, other.addToCartState(listOf(otherSite), credentialedUser))
-        assertEquals(OTHER_PROVIDER_DISPLAY_NAME, other.addToCartProviderName(credentialedUser, listOf(otherSite)))
+        assertEquals(CAMPFLARE_DISPLAY_NAME, other.addToCartProviderName(credentialedUser, listOf(otherSite)))
     }
 
     @Test
@@ -180,12 +183,10 @@ class WatchCapabilityServiceTest {
             listOf(
                 FakeBookingAdapter(
                     id = BookingProvider.RECGOV,
-                    displayName = FAKE_PROVIDER_DISPLAY_NAME,
                     credentialed = { true },
                 ),
                 FakeBookingAdapter(
                     id = BookingProvider.CAMPFLARE,
-                    displayName = OTHER_PROVIDER_DISPLAY_NAME,
                     credentialed = { it == otherProviderUser },
                 ),
             )
@@ -197,11 +198,12 @@ class WatchCapabilityServiceTest {
                 availabilityTargets = TwoProviderTargetResolver(listOf(recgovSite, campflareSite)),
                 bookingTargets = AvailabilityBookingTargetResolver(registry),
                 bookings = registry,
+                tenants = shippedTenantRegistry(),
             )
 
         assertFalse(service.canFulfilAddToCart(credentialedUser, listOf(recgovSite, campflareSite)))
         assertEquals(
-            OTHER_PROVIDER_DISPLAY_NAME,
+            CAMPFLARE_DISPLAY_NAME,
             service.addToCartProviderName(credentialedUser, listOf(recgovSite, campflareSite)),
         )
     }
@@ -265,11 +267,11 @@ class WatchCapabilityServiceTest {
 
         val ready = service.capabilitiesFor(listOf(campsite), credentialedUser).addToCart
         assertEquals(BookingProvider.RECGOV.id, ready.provider)
-        assertEquals(FAKE_PROVIDER_DISPLAY_NAME, ready.providerDisplay)
+        assertEquals(RECGOV_DISPLAY_NAME, ready.providerDisplay)
 
         val gated = service.capabilitiesFor(listOf(campsite), uncredentialedUser).addToCart
         assertEquals(BookingProvider.RECGOV.id, gated.provider, "the gate's own sentence has to name it")
-        assertEquals(FAKE_PROVIDER_DISPLAY_NAME, gated.providerDisplay)
+        assertEquals(RECGOV_DISPLAY_NAME, gated.providerDisplay)
 
         val cartless = campsite(2L, "")
         val unsupported = service(campsites = listOf(cartless)).capabilitiesFor(listOf(cartless), credentialedUser).addToCart
@@ -286,7 +288,6 @@ class WatchCapabilityServiceTest {
                 FakeBookingAdapter(id = BookingProvider.RECGOV, credentialed = { true }),
                 FakeBookingAdapter(
                     id = BookingProvider.CAMPFLARE,
-                    displayName = OTHER_PROVIDER_DISPLAY_NAME,
                     credentialed = { it == otherProviderUser },
                 ),
             )
@@ -298,13 +299,14 @@ class WatchCapabilityServiceTest {
                 availabilityTargets = TwoProviderTargetResolver(listOf(recgovSite, campflareSite)),
                 bookingTargets = AvailabilityBookingTargetResolver(registry),
                 bookings = registry,
+                tenants = shippedTenantRegistry(),
             )
 
         val block = service.capabilitiesFor(listOf(recgovSite, campflareSite), credentialedUser).addToCart
 
         assertEquals(AddToCartState.NO_CREDENTIALS, block.state)
         assertEquals(BookingProvider.CAMPFLARE.id, block.provider)
-        assertEquals(OTHER_PROVIDER_DISPLAY_NAME, block.providerDisplay)
+        assertEquals(CAMPFLARE_DISPLAY_NAME, block.providerDisplay)
     }
 
     @Test
@@ -343,6 +345,7 @@ class WatchCapabilityServiceTest {
             bookingTargets = AvailabilityBookingTargetResolver(registry),
             notificationTriggerKinds = notificationTriggerKinds,
             bookings = registry,
+            tenants = shippedTenantRegistry(),
         )
     }
 

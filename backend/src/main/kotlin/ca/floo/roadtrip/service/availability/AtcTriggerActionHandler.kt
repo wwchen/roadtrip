@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.metadata.registry.TenantRegistry
 import ca.floo.roadtrip.observability.AtcOutcome
 import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
@@ -21,6 +22,7 @@ internal class AtcTriggerActionHandler(
     private val bookingTargets: AvailabilityBookingTargetResolver,
     private val notifications: NotificationSender,
     private val targetResolver: WatchNotificationTargetResolver,
+    private val tenants: TenantRegistry,
     private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
 ) : TriggerActionHandler {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -69,10 +71,9 @@ internal class AtcTriggerActionHandler(
 
         val next = pending.first()
         val nextTarget = next.request.target
-        // What the delivered report calls this vendor. The adapter that would
-        // hold the site is the only layer that knows, and it knows on every
-        // exit below — including the ones where the hold never happened.
-        val bookingSystem = bookings.adapterFor(nextTarget)?.displayName
+        // What the delivered report calls this booking site. The ref names the
+        // tenant, so the report reads the same name the drawer and the alert do.
+        val bookingSystem = tenants.displayName(nextTarget.parentRef)
         val startedAt = System.nanoTime()
         val result =
             runCatchingCancellable { bookings.addToCart(next.request) }
