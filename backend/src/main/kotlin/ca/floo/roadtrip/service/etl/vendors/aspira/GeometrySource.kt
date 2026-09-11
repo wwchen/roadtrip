@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
 /**
- * Each geometry input knows how to extract (name → lat/lon) tuples from
- * its envelope shape and seed them into a shared index.
+ * A geometry feed, read as a flat stream of named points. Normalization and
+ * first-writer-wins merging belong to [GeometryIndex]; a source only parses.
  */
 sealed interface GeometrySource {
-    fun indexInto(byName: MutableMap<String, Pair<Double, Double>>)
+    fun points(): Sequence<NamedPoint>
 }

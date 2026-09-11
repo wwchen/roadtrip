@@ -134,7 +134,7 @@ class AspiraCampgroundsEtlTest {
             leaves = leaves.toList(),
             geomSources =
                 listOf(
-                    "test-geom" to GeoJsonFeaturesSource(listOf(geomEnvelope()), "test-geom"),
+                    "test-geom" to GeoJsonFeaturesSource(listOf(geomEnvelope())),
                 ),
             fetchedAt = Instant.parse("2026-07-05T00:00:00Z"),
         )
@@ -156,7 +156,7 @@ class AspiraCampgroundsEtlTest {
             leaves = listOf(leaf),
             geomSources =
                 listOf(
-                    "test-geom" to GeoJsonFeaturesSource(listOf(geomEnvelope()), "test-geom"),
+                    "test-geom" to GeoJsonFeaturesSource(listOf(geomEnvelope())),
                 ),
             inventoryEnvelopes = listOf(envelopeOf(inventoryPayloadJson)),
             dictionaryPayload = Json.parseToJsonElement(dictionaryPayloadJson).jsonObject,
@@ -375,7 +375,7 @@ class AspiraCampgroundsEtlTest {
         val dto =
             AspiraJoinDto(
                 leaves = listOf(nameMatchingLeaf(555L)),
-                geomSources = listOf("test-geom" to GeoJsonFeaturesSource(listOf(geomEnvelope()), "test-geom")),
+                geomSources = listOf("test-geom" to GeoJsonFeaturesSource(listOf(geomEnvelope()))),
                 inventoryEnvelopes = listOf(envelopeOf(inventory)),
                 dictionaryPayload = null,
                 fetchedAt = Instant.parse("2026-07-05T00:00:00Z"),

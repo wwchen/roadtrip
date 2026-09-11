@@ -8,6 +8,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
+import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
@@ -124,7 +125,11 @@ class AspiraCampgroundsEtl(
         val bookableMapIds =
             AspiraBookingCtaRefs.bookableMapIdsByResourceLocationId(dto.inventoryEnvelopes, dto.dictionaryPayload)
 
-        val matcher = AspiraLeafMatcher(indexGeometry(dto.geomSources), nonBookableResLocs)
+        val matcher =
+            AspiraLeafMatcher(
+                GeometryIndex.build(dto.geomSources, log, etlSlug),
+                nonBookableResLocs,
+            )
         val (matches, tally) = matcher.matchBookable(dto.leaves)
         val campgrounds = matches.map { campgroundCandidate(it, host, subcategory, agency, bookableMapIds) }
 
@@ -144,37 +149,15 @@ class AspiraCampgroundsEtl(
         return campgrounds.asSequence().map { TransformResult.Ok(it) }
     }
 
-    /**
-     * One merged name index: normalized name → first (lat, lon). Geometry
-     * entries are walked in declared order, so the YAML's `inputs:` order
-     * doubles as a preference order — earlier sources (campground-level)
-     * win over later sources (park-polygon centroids) when both carry the
-     * same normalized name.
-     */
-    private fun indexGeometry(geomSources: List<Pair<String, GeometrySource>>): Map<String, Pair<Double, Double>> {
-        val byName = LinkedHashMap<String, Pair<Double, Double>>()
-        for ((slug, geomSource) in geomSources) {
-            val before = byName.size
-            geomSource.indexInto(byName)
-            log.info(
-                "$etlSlug: geometry input slug={} contributed {} new keys (total={})",
-                slug,
-                byName.size - before,
-                byName.size,
-            )
-        }
-        return byName
-    }
-
     private fun campgroundCandidate(
-        match: AspiraLeafMatch<Pair<Double, Double>>,
+        match: AspiraLeafMatch<GeometryPoint>,
         host: String,
         subcategory: String?,
         agency: String,
         bookableMapIds: Map<Long, Set<Long>>,
     ): CampgroundUpsertCandidate {
         val leaf = match.leaf
-        val (lat, lon) = match.value
+        val point = match.value
         val dataRef = DataProviderRef.Aspira(transactionLocationId = leaf.transactionLocationId, mapId = leaf.mapId)
         val bookingCtaRef = AspiraBookingCtaRefs.forLeaf(leaf, bookableMapIds)
         return CampgroundUpsertCandidate(
@@ -183,10 +166,10 @@ class AspiraCampgroundsEtl(
             bookingProviderRef = bookingCtaRef?.let { campgroundBookingProviderRef(leaf, it) },
             name = leaf.name,
             parentName = leaf.parentName,
-            latitude = lat,
-            longitude = lon,
+            latitude = point.latitude,
+            longitude = point.longitude,
             kind = subcategory,
-            location = CampgroundLocation(latitude = lat, longitude = lon),
+            location = CampgroundLocation(latitude = point.latitude, longitude = point.longitude),
             reservationUrl = "https://$host/",
             links = listOf(CampgroundLink("https://$host/")),
             management = CampgroundManagement(agency),
@@ -222,23 +205,23 @@ class AspiraCampgroundsEtl(
 
     private fun detectGeometrySource(
         slug: String,
-        envelopes: List<ca.floo.roadtrip.model.metadata.Envelope>,
-    ): GeometrySource {
-        // We have a few characteristic shapes; sniff by slug first (cheap)
-        // and fall back to payload inspection if the slug is unknown.
-        return when {
+        envelopes: List<Envelope>,
+    ): GeometrySource =
+        when {
             slug.contains("uscampgrounds") -> UsCampgroundsCsvSource(envelopes, stateFilter)
             slug.contains("bcparks") -> BcParksStrapiSource(envelopes)
-            slug.contains("places") -> ApcaPlacesCentroidSource(envelopes)
-            slug.contains("accommodation") -> ApcaAccommodationSource(envelopes)
-            else -> GeoJsonFeaturesSource(envelopes, slug)
+            slug.contains("places") -> ArcGisCentroidSource(envelopes)
+            slug.contains("accommodation") -> GeoJsonFeaturesSource(envelopes, APCA_ACCOMMODATION_NAME_PROPERTY)
+            else -> GeoJsonFeaturesSource(envelopes)
         }
-    }
 
     companion object {
         private const val ASPIRA_TRANSACTION_LOCATION_ID_KEY = "transactionLocationId"
         private const val ASPIRA_MAP_ID_KEY = "mapId"
         private const val ASPIRA_RESOURCE_LOCATION_ID_KEY = "resourceLocationId"
+
+        /** Parks Canada's Accommodation layer names features here, not in `name`. */
+        private const val APCA_ACCOMMODATION_NAME_PROPERTY = "Name_e"
     }
 }
 

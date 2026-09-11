@@ -357,7 +357,7 @@ class EtlExtrasDtoTest {
                                         parentName = null,
                                     ),
                                 ),
-                            geomSources = listOf("fixture" to GeoJsonFeaturesSource(listOf(geoJsonEnvelope()), "fixture")),
+                            geomSources = listOf("fixture" to GeoJsonFeaturesSource(listOf(geoJsonEnvelope()))),
                             fetchedAt = fetchedAt,
                         ),
                         transformCtx(),

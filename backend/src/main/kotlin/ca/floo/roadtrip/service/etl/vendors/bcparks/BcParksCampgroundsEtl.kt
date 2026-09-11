@@ -9,7 +9,6 @@ import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
@@ -23,14 +22,12 @@ import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeafMatch
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeafMatchKind
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeafMatcher
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeavesWalk
+import ca.floo.roadtrip.service.etl.vendors.aspira.BcParksStrapiRow
+import ca.floo.roadtrip.service.etl.vendors.aspira.BcParksStrapiSource
 import ca.floo.roadtrip.service.etl.vendors.aspira.normalize
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 
@@ -63,7 +60,7 @@ class BcParksCampgroundsEtl(
             val inventoryEnvelopes = inputs.envelopes(inventorySlug)
             val dictionaryPayload = dictionarySlug?.let { inputs.envelope(it).payload as? JsonObject }
 
-            val strapiRows = parseStrapiRows(strapiEnvelopes)
+            val strapiRows = BcParksStrapiSource(strapiEnvelopes).rows()
 
             val dto =
                 BcParksCampgroundsDto(
@@ -192,66 +189,6 @@ class BcParksCampgroundsEtl(
             strapiRow.orcs?.let { put("strapi_orcs", it) }
             strapiRow.url?.let { put("strapi_url", it) }
         }
-
-    // ---- Strapi parsing -------------------------------------------------------
-
-    private fun parseStrapiRows(envelopes: List<Envelope>): List<BcParksStrapiRow> {
-        val rows = mutableListOf<BcParksStrapiRow>()
-        for (env in envelopes) {
-            val data = env.payload.jsonObject["data"]?.jsonArray ?: continue
-            for (row in data) {
-                val o = row.jsonObject
-                val name = o["protectedAreaName"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: continue
-                val lat = o["latitude"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: continue
-                val lon = o["longitude"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: continue
-                val orcs = o["orcs"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
-                val url = o["url"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-                val description =
-                    o["description"]
-                        ?.jsonPrimitive
-                        ?.contentOrNull
-                        ?.trim()
-                        ?.takeIf { it.isNotBlank() }
-                val phone =
-                    o["parkContact"]
-                        ?.jsonPrimitive
-                        ?.contentOrNull
-                        ?.trim()
-                        ?.takeIf { it.isNotBlank() }
-                val photoUrl = extractPhotoUrl(o["parkPhotos"] as? JsonArray)
-                rows +=
-                    BcParksStrapiRow(
-                        name = name,
-                        lat = lat,
-                        lon = lon,
-                        orcs = orcs,
-                        url = url,
-                        description = description,
-                        phone = phone,
-                        photoUrl = photoUrl,
-                    )
-            }
-        }
-        return rows
-    }
-
-    private fun extractPhotoUrl(photos: JsonArray?): String? {
-        if (photos == null) return null
-        val candidates =
-            photos.mapNotNull { raw ->
-                val p = raw as? JsonObject ?: return@mapNotNull null
-                val url = p["imageUrl"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                val isActive = p["isActive"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: true
-                val isFeatured = p["isFeatured"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
-                val sortOrder = p["sortOrder"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: Int.MAX_VALUE
-                if (!isActive) return@mapNotNull null
-                Triple(url, isFeatured, sortOrder)
-            }
-        return candidates
-            .sortedWith(compareByDescending<Triple<String, Boolean, Int>> { it.second }.thenBy { it.third })
-            .firstOrNull()
-            ?.first
-    }
 
     private companion object {
         const val REGION = "BC"
