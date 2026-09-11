@@ -125,8 +125,9 @@ class AspiraCampgroundsEtl(
 
         val matcher =
             AspiraLeafMatcher(
-                GeometryIndex.build(dto.geomSources, log, etlSlug),
-                nonBookableResLocs,
+                byName = GeometryIndex.build(dto.geomSources, log, etlSlug),
+                nonBookableResourceLocationIds = nonBookableResLocs,
+                policy = geometry.match,
             )
         val (matches, tally) = matcher.matchBookable(dto.leaves)
         val campgrounds = matches.map { campgroundCandidate(it, host, subcategory, agency, bookableMapIds) }

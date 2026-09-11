@@ -26,6 +26,8 @@ import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeafMatcher
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeavesWalk
 import ca.floo.roadtrip.service.etl.vendors.aspira.BcParksStrapiRow
 import ca.floo.roadtrip.service.etl.vendors.aspira.BcParksStrapiSource
+import ca.floo.roadtrip.service.etl.vendors.aspira.GeometryIndex
+import ca.floo.roadtrip.service.etl.vendors.aspira.GeometryPoint
 import ca.floo.roadtrip.service.etl.vendors.aspira.normalize
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -54,18 +56,18 @@ class BcParksCampgroundsEtl(
             val inventorySlug = roleSlugs.first { it.contains(AspiraInputRoles.INVENTORY) }
             val dictionarySlug = roleSlugs.firstOrNull { it.contains(AspiraInputRoles.DICTIONARIES) }
 
-            val mapsArray = inputs.envelope(mapsSlug).payload.jsonArray
-            val leaves = AspiraLeavesWalk.walk(mapsArray)
-            val strapiEnvelopes = inputs.envelopes(strapiSlug)
+            val leaves = AspiraLeavesWalk.walk(inputs.envelope(mapsSlug).payload.jsonArray)
             val inventoryEnvelopes = inputs.envelopes(inventorySlug)
             val dictionaryPayload = dictionarySlug?.let { inputs.envelope(it).payload as? JsonObject }
 
-            val strapiRows = BcParksStrapiSource(strapiEnvelopes).rows()
+            val strapiSource = BcParksStrapiSource(inputs.envelopes(strapiSlug))
+            val strapiRows = strapiSource.rows()
 
             val dto =
                 BcParksCampgroundsDto(
                     leaves = leaves,
                     strapiRows = strapiRows,
+                    geomSources = listOf(strapiSlug to strapiSource),
                     inventoryEnvelopes = inventoryEnvelopes,
                     dictionaryPayload = dictionaryPayload,
                 )
@@ -96,9 +98,20 @@ class BcParksCampgroundsEtl(
         val bookableMapIds =
             AspiraBookingCtaRefs.bookableMapIdsByResourceLocationId(dto.inventoryEnvelopes, dto.dictionaryPayload)
 
-        val matcher = AspiraLeafMatcher(indexStrapiRows(dto.strapiRows), nonBookableResLocs)
+        val strapiByName = indexStrapiRows(dto.strapiRows)
+        val matcher =
+            AspiraLeafMatcher(
+                byName = GeometryIndex.build(dto.geomSources, log, etlSlug),
+                nonBookableResourceLocationIds = nonBookableResLocs,
+                policy = geometry.match,
+            )
         val (matches, tally) = matcher.matchBookable(dto.leaves)
-        val campgrounds = matches.map { campgroundCandidate(it, host, subcategory, agency, bookableMapIds) }
+        val campgrounds =
+            matches.mapNotNull { match ->
+                strapiByName[match.matchedName]?.let { row ->
+                    campgroundCandidate(match, row, host, subcategory, agency, bookableMapIds)
+                }
+            }
 
         log.info(
             "$etlSlug: {} leaves → {} campgrounds " +
@@ -126,14 +139,14 @@ class BcParksCampgroundsEtl(
     }
 
     private fun campgroundCandidate(
-        match: AspiraLeafMatch<BcParksStrapiRow>,
+        match: AspiraLeafMatch<GeometryPoint>,
+        strapiRow: BcParksStrapiRow,
         host: String,
         subcategory: String?,
         agency: String,
         bookableMapIds: Map<Long, Set<Long>>,
     ): CampgroundUpsertCandidate {
         val leaf = match.leaf
-        val strapiRow = match.value
         val bookingUrl = "https://$host/"
         val dataRef = DataProviderRef.BcParks(transactionLocationId = leaf.transactionLocationId, mapId = leaf.mapId)
         val bookingCtaRef = AspiraBookingCtaRefs.forLeaf(leaf, bookableMapIds)
