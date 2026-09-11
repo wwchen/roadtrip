@@ -33,11 +33,13 @@ internal class ResolvedWatchScope(
 /**
  * What a proposed watch over this scope could actually do: a cart is a property
  * of the scope, `atc` of the scope and the asker both. `add_to_cart` says which
- * of the two is missing, and names the adapter that would hold the site.
+ * of the two is missing, and names the tenant off the target's ref — the site a
+ * person would sign in to, not the adapter that talks to it.
  */
 internal class WatchCapabilityService(
     private val availabilityTargets: AvailabilityTargetResolver,
     private val bookingTargets: AvailabilityBookingTargetResolver,
+    private val tenants: TenantRegistry,
     private val notificationTriggerKinds: List<String> =
         listOf(
             AvailabilityTriggerKinds.SLACK_NOTIFY,
@@ -45,7 +47,6 @@ internal class WatchCapabilityService(
         ),
     /** Empty where no booking adapter is wired: `atc` is then never offered. */
     private val bookings: BookingAdapterRegistry = BookingAdapterRegistry(emptyList()),
-    private val tenants: TenantRegistry,
 ) {
     fun internalPollingSupportFor(campsites: List<Campsite>): WatchCapabilitySupport = internalPollingSupportFor(resolve(campsites))
 

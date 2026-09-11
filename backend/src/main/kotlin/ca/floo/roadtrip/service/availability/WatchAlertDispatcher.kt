@@ -60,8 +60,8 @@ internal class WatchAlertDispatcher(
     private val triggerActions: TriggerActionRegistry,
     private val grafanaRootUrl: String?,
     private val appRootUrl: String?,
-    private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
     private val campgroundCta: CampgroundCta,
+    private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
 ) {
     suspend fun dispatch(
         liveWatches: List<AvailabilityWatchRepo.Watch>,

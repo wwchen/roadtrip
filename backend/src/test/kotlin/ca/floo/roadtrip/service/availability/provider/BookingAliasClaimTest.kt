@@ -12,6 +12,8 @@ import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.bookingIdentities
+import ca.floo.roadtrip.model.domain.bookingRefFor
 import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
@@ -82,6 +84,23 @@ class BookingAliasClaimTest {
         assertFalse(recgovProvider(enabled = true).supportsCampground(unaliased))
         assertNull(recgovProvider(enabled = true).parentRefFor(unaliased))
         assertTrue(campflareProvider(enabled = true).supportsCampground(unaliased))
+    }
+
+    /**
+     * A blank ref names nothing. It used to parse into `RecGov(facilityId = "")`,
+     * which won the selling identity, served `booking_system = Recreation.gov`
+     * and rebuilt a reserve CTA pointing at no facility at all.
+     */
+    @Test
+    fun `a blank alias ref is not a booking identity`() {
+        val blank = campground(bookingAliases = listOf(BookingAlias(provider = BookingProvider.RECGOV, ref = "  ")))
+
+        assertEquals(
+            listOf(BookingProviderRef.Campflare(campgroundId = CAMPFLARE_CAMPGROUND_ID)),
+            blank.bookingIdentities(),
+        )
+        assertNull(blank.bookingRefFor(BookingProvider.RECGOV))
+        assertFalse(recgovProvider(enabled = true).supportsCampground(blank))
     }
 
     @Test

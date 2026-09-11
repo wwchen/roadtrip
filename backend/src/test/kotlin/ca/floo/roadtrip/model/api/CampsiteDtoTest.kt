@@ -74,5 +74,5 @@ class CampsiteDtoTest {
         assertEquals("BC Parks", named["booking_system"]?.jsonPrimitive?.content)
     }
 
-    private fun encoded(): JsonObject = roadtripApiJson.encodeToJsonElement(CampsiteDto.from(row)).jsonObject
+    private fun encoded(): JsonObject = roadtripApiJson.encodeToJsonElement(CampsiteDto.from(row, bookingSystem = null)).jsonObject
 }

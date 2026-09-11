@@ -37,6 +37,17 @@ private val TENANT_SCOPED_ADAPTER_PROVIDERS =
         "ReserveAmericaSitesEtl" to BookingProvider.RESERVEAMERICA,
     )
 
+/**
+ * Adapters whose `transform` reads `args.host` and fails the run without it.
+ * Boot is where that should be caught, not the first row-insert.
+ */
+@Suppress("TopLevelPropertyNaming")
+private val HOST_REQUIRED_ADAPTERS =
+    setOf(
+        "AspiraCampgroundsEtl",
+        "BcParksCampgroundsEtl",
+    )
+
 // In-memory representation of the configured POI registry.
 //
 // Four sections:
@@ -211,10 +222,14 @@ class PoiRegistry(
 
     /**
      * The `booking_providers` section: one row per [BookingProvider] member,
-     * tenant codes unique per vendor, hosts unique across the section, and
-     * every ETL row that names a tenant naming a real one at the right vendor.
+     * every name and host a real string, at least one tenant per vendor, tenant
+     * codes unique per vendor, hosts unique across the section, and every ETL
+     * row that names a tenant naming a real one at the right vendor.
      */
     private fun validateBookingProviders(errs: MutableList<String>) {
+        // Only this method's own errors may skip the cross-check below: an
+        // unrelated typo elsewhere in the file must not cost a second boot.
+        val before = errs.size
         val byProvider = bookingProviders.groupBy { it.id }
         for (provider in BookingProvider.entries) {
             val rows = byProvider[provider].orEmpty()
@@ -223,16 +238,33 @@ class PoiRegistry(
         }
         val hosts = mutableSetOf<String>()
         for (entry in bookingProviders) {
+            val vendor = entry.id.id
+            if (entry.displayName.isBlank()) errs += "booking_providers '$vendor' has a blank display_name"
+            // A vendor with no tenant can be named by no host, so the CTA guard
+            // and every info-link label silently stop matching it.
+            if (entry.tenants.isEmpty()) errs += "booking_providers '$vendor' declares no tenants"
             val codes = mutableSetOf<String?>()
             for (tenant in entry.tenants) {
                 if (!codes.add(tenant.code)) {
-                    errs += "booking_providers '${entry.id.id}' has duplicate tenant code '${tenant.code}'"
+                    errs += "booking_providers '$vendor' has duplicate tenant code '${tenant.code}'"
+                }
+                // Absent is how a single-tenant vendor says "no code"; blank is
+                // a distinct key that nothing stores and nothing looks up.
+                if (tenant.code != null && tenant.code.isBlank()) {
+                    errs += "booking_providers '$vendor' has a blank tenant code (omit `code` instead)"
+                }
+                if (tenant.displayName != null && tenant.displayName.isBlank()) {
+                    errs += "booking_providers '$vendor' tenant '${tenant.code}' has a blank display_name"
+                }
+                if (tenant.host.isBlank()) {
+                    errs += "booking_providers '$vendor' tenant '${tenant.code}' has a blank host"
+                    continue
                 }
                 val host = TenantRegistry.normalizeHost(tenant.host)
                 if (!hosts.add(host)) errs += "duplicate booking_providers host '$host'"
             }
         }
-        if (errs.isNotEmpty()) return
+        if (errs.size > before) return
         val registry = TenantRegistry.from(bookingProviders)
         validateEtlTenantArgs(POI_DATA_SECTION, poiData.map { EtlRowRef(it.name, it.etls) }, registry, errs)
         validateEtlTenantArgs(CAMPSITE_DATA_SECTION, campsiteData.map { EtlRowRef(it.name, it.etls) }, registry, errs)
@@ -246,10 +278,16 @@ class PoiRegistry(
     ) {
         for (row in rows) {
             for (etl in row.etls) {
-                val requiredArgKey = TENANT_SCOPED_ADAPTER_PROVIDERS[etl.adapter]?.let { TENANT_ARG_KEYS.getValue(it) }
-                if (requiredArgKey != null && requiredArgKey !in etl.args) {
-                    errs += "$label '${row.name}' etl '${etl.slug}' adapter '${etl.adapter}' " +
-                        "is missing required arg '$requiredArgKey'"
+                val requiredArgKeys =
+                    buildList {
+                        TENANT_SCOPED_ADAPTER_PROVIDERS[etl.adapter]?.let { add(TENANT_ARG_KEYS.getValue(it)) }
+                        if (etl.adapter in HOST_REQUIRED_ADAPTERS) add(ARG_HOST)
+                    }
+                for (key in requiredArgKeys) {
+                    if (key !in etl.args) {
+                        errs += "$label '${row.name}' etl '${etl.slug}' adapter '${etl.adapter}' " +
+                            "is missing required arg '$key'"
+                    }
                 }
                 for ((provider, argKey) in TENANT_ARG_KEYS) {
                     val code = etl.args[argKey] ?: continue

@@ -35,6 +35,7 @@ import kotlinx.serialization.json.jsonPrimitive
 // would shake out as a validation drop, not silent corruption.
 class ReserveAmericaCampgroundsEtl(
     override val etlSlug: String = "reserveamerica-ab-campgrounds",
+    private val contractCode: String,
 ) : CampgroundEtl<ReserveAmericaDto> {
     override val multiPart: Boolean = true
 
@@ -64,7 +65,7 @@ class ReserveAmericaCampgroundsEtl(
     ): Sequence<TransformResult<CampgroundUpsertCandidate>> =
         sequence {
             val bucket = ctx.subcategoryFor(etlSlug)
-            val settings = ReserveAmericaSettings.from(ctx, etlSlug)
+            val settings = ReserveAmericaSettings.from(ctx, etlSlug, contractCode)
             for (park in dto.parks) {
                 val name = displayName(park.name, settings.titleSuffix)
                 val vendorRefId = "${settings.sourceIdPrefix}-${park.parkId}"
@@ -216,10 +217,11 @@ private data class ReserveAmericaSettings(
         fun from(
             ctx: TransformCtx,
             etlSlug: String,
+            contract: String,
         ): ReserveAmericaSettings {
             val region = ctx.argFor(etlSlug, "region") ?: "AB"
             return ReserveAmericaSettings(
-                contract = ctx.argFor(etlSlug, "contract") ?: "ABPP",
+                contract = contract,
                 region = region,
                 country = ctx.argFor(etlSlug, "country") ?: "CA",
                 agency = ctx.requiredConstantAgency(etlSlug),

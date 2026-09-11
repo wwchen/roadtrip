@@ -38,7 +38,7 @@ class EtlExtrasDtoTest {
     fun `reserve america extras serialize through dto with sparse optional fields`() {
         val campground =
             records(
-                ReserveAmericaCampgroundsEtl()
+                ReserveAmericaCampgroundsEtl(contractCode = "ABPP")
                     .transform(
                         ReserveAmericaDto(
                             parks =

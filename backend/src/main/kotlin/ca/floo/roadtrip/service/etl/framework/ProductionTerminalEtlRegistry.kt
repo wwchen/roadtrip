@@ -68,7 +68,9 @@ internal val poiAdapters: Map<String, PoiAdapterSpec> =
                 campgroundSink(BcParksCampgroundsEtl(etlSlug = entry.slug, aspiraTenant = entry.args.require("tenant")))
             },
         "ReserveAmericaCampgroundsEtl" to
-            PoiAdapterSpec(DataProvider.RESERVEAMERICA) { campgroundSink(ReserveAmericaCampgroundsEtl(it.slug)) },
+            PoiAdapterSpec(DataProvider.RESERVEAMERICA) { entry ->
+                campgroundSink(ReserveAmericaCampgroundsEtl(entry.slug, contractCode = entry.args.require("contract")))
+            },
         "ReserveCaliforniaCampgroundsEtl" to
             PoiAdapterSpec(DataProvider.RESERVECALIFORNIA) { campgroundSink(ReserveCaliforniaCampgroundsEtl(it.slug)) },
         "PlanetFitnessEtl" to PoiAdapterSpec(DataProvider.PLANET_FITNESS_LOCATION) { planetFitnessSink(PlanetFitnessEtl()) },

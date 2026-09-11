@@ -49,19 +49,20 @@ data class Campground(
 
 fun Campground.bookingRef(): BookingProviderRef? {
     val provider = bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
-    return bookingProviderRef?.let { BookingProviderRef.parse(provider, it) }
+    return bookingProviderRef?.takeIf { it.isNotBlank() }?.let { BookingProviderRef.parse(provider, it) }
 }
 
 /**
  * Every booking identity this row names: its primary booking ref first, then
  * each [BookingAlias] in stored order. One row can be sold by several vendors —
- * a Campflare row rec.gov also sells names both.
+ * a Campflare row rec.gov also sells names both. A blank ref names nothing, so
+ * it is dropped rather than parsed into an id-less identity.
  */
 fun Campground.bookingIdentities(): List<BookingProviderRef> =
     buildList {
         bookingRef()?.let(::add)
         bookingAliases.forEach { alias ->
-            BookingProviderRef.parse(alias.provider, alias.ref)?.let(::add)
+            if (alias.ref.isNotBlank()) BookingProviderRef.parse(alias.provider, alias.ref)?.let(::add)
         }
     }
 

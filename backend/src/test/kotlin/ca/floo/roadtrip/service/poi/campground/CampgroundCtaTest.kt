@@ -19,6 +19,11 @@ class CampgroundCtaTest {
     private val pacificContext =
         PoiDateContext(timeZone = ZoneId.of("America/Vancouver"), earliestDate = LocalDate.parse("2026-06-17"))
 
+    // The same POI after 18:00 local: AvailabilityDateResolver's cutoff has
+    // rolled the earliest bookable arrival to the 18th.
+    private val pastCutoffContext =
+        PoiDateContext(timeZone = ZoneId.of("America/Vancouver"), earliestDate = LocalDate.parse("2026-06-18"))
+
     @Test
     fun `bookingSystem names the tenant, not the vendor`() {
         assertEquals("Parks Canada", cta.bookingSystem(parksCanadaRef))
@@ -45,6 +50,7 @@ class CampgroundCtaTest {
                     reserveUrl = "https://www.recreation.gov/camping/campgrounds/232450",
                     infoUrl = null,
                     dateContext = pacificContext,
+                    identities = emptyList(),
                 ).single()
         assertEquals("https://www.recreation.gov/camping/campgrounds/232450", out.url)
         assertEquals("Reserve on Recreation.gov", out.label)
@@ -60,9 +66,34 @@ class CampgroundCtaTest {
                     reserveUrl = "https://campflare.com/campgrounds/232450",
                     infoUrl = null,
                     dateContext = pacificContext,
+                    identities = emptyList(),
                 ).first()
         assertEquals("https://www.recreation.gov/camping/campgrounds/232450", out.url)
         assertEquals("Reserve on Recreation.gov", out.label)
+    }
+
+    /**
+     * A rec.gov identity whose stored URL runs on a concessionaire's own host:
+     * rebuilding the reserve link is right, but that host is where the site is
+     * actually sold, so it follows as an info link rather than disappearing.
+     */
+    @Test
+    fun `recgov keeps a rejected stored URL as a secondary info link`() {
+        val out =
+            cta.computeCtas(
+                bookingRef = BookingProviderRef.RecGov(facilityId = "232450"),
+                reserveUrl = "https://www.reservedenali.com/lodging",
+                infoUrl = null,
+                dateContext = pacificContext,
+                identities = emptyList(),
+            )
+        assertEquals(2, out.size)
+        assertEquals("https://www.recreation.gov/camping/campgrounds/232450", out[0].url)
+        assertEquals("Reserve on Recreation.gov", out[0].label)
+        assertEquals("reserve", out[0].kind)
+        assertEquals("https://www.reservedenali.com/lodging", out[1].url)
+        assertEquals("Visit reservedenali.com", out[1].label)
+        assertEquals("info", out[1].kind)
     }
 
     @Test
@@ -74,6 +105,7 @@ class CampgroundCtaTest {
                     reserveUrl = null,
                     infoUrl = "https://www.recreation.gov/camping/campgrounds/232450",
                     dateContext = pacificContext,
+                    identities = emptyList(),
                 ).single()
         assertEquals("Reserve on Recreation.gov", out.label)
         assertEquals("reserve", out.kind)
@@ -88,6 +120,7 @@ class CampgroundCtaTest {
                     reserveUrl = null,
                     infoUrl = null,
                     dateContext = pacificContext,
+                    identities = emptyList(),
                 ).single()
         assertTrue(out.url.startsWith("https://camping.bcparks.ca/create-booking/results?"), out.url)
         assertTrue(out.url.contains("startDate=2026-06-17"), out.url)
@@ -99,6 +132,26 @@ class CampgroundCtaTest {
         assertEquals("reserve", out.kind)
     }
 
+    /**
+     * `earliestDate` is the earliest *bookable* arrival, so after the evening
+     * cutoff it is tomorrow. The deeplink proposes that date rather than a
+     * night the picker beside it will not offer.
+     */
+    @Test
+    fun `the aspira deeplink proposes the earliest bookable arrival, not today`() {
+        val out =
+            cta
+                .computeCtas(
+                    bookingRef = bcParksRef,
+                    reserveUrl = null,
+                    infoUrl = null,
+                    dateContext = pastCutoffContext,
+                    identities = emptyList(),
+                ).single()
+        assertTrue(out.url.contains("startDate=2026-06-18"), out.url)
+        assertTrue(out.url.contains("endDate=2026-06-19"), out.url)
+    }
+
     @Test
     fun `an aspira tenant the registry does not name gets no reserve CTA`() {
         val out =
@@ -107,6 +160,7 @@ class CampgroundCtaTest {
                 reserveUrl = "https://reservation.pc.gc.ca/",
                 infoUrl = null,
                 dateContext = pacificContext,
+                identities = emptyList(),
             )
         assertTrue(out.isEmpty(), out.toString())
     }
@@ -120,6 +174,7 @@ class CampgroundCtaTest {
                     reserveUrl = null,
                     infoUrl = null,
                     dateContext = pacificContext,
+                    identities = emptyList(),
                 ).single()
         assertEquals("https://campflare.com/campground/9", out.url)
         assertEquals("View on Campflare", out.label)
@@ -134,6 +189,7 @@ class CampgroundCtaTest {
                 reserveUrl = null,
                 infoUrl = "https://parks.wa.gov/find-parks/state-parks/deception-pass-state-park",
                 dateContext = pacificContext,
+                identities = emptyList(),
             )
         assertEquals(2, out.size)
         assertEquals("https://parks.wa.gov/find-parks/state-parks/deception-pass-state-park", out[0].url)
@@ -152,6 +208,7 @@ class CampgroundCtaTest {
                 reserveUrl = "https://www.recreation.gov/camping/campgrounds/10083567",
                 infoUrl = "https://www.nps.gov/yose/planyourvisit/wwcamp.htm",
                 dateContext = pacificContext,
+                identities = emptyList(),
             )
         assertEquals(2, out.size)
         assertEquals("https://www.nps.gov/yose/planyourvisit/wwcamp.htm", out[0].url)
@@ -169,6 +226,7 @@ class CampgroundCtaTest {
                 reserveUrl = null,
                 infoUrl = "https://campflare.com/campground/cranberry-lake-wsp",
                 dateContext = pacificContext,
+                identities = emptyList(),
             )
         assertEquals(1, out.size)
         assertEquals("https://campflare.com/campground/cranberry-lake-wsp", out.single().url)
@@ -202,6 +260,7 @@ class CampgroundCtaTest {
                     reserveUrl = null,
                     infoUrl = null,
                     dateContext = pacificContext,
+                    identities = emptyList(),
                 ).single()
         assertEquals("https://reservecalifornia.com/park/660", out.url)
         assertEquals("Reserve on ReserveCalifornia", out.label)
@@ -216,6 +275,7 @@ class CampgroundCtaTest {
                     reserveUrl = null,
                     infoUrl = "https://www.fs.usda.gov/recarea/1",
                     dateContext = pacificContext,
+                    identities = emptyList(),
                 ).single()
         assertEquals("Park info on fs.usda.gov", out.label)
         assertEquals("info", out.kind)
@@ -230,6 +290,7 @@ class CampgroundCtaTest {
                     reserveUrl = null,
                     infoUrl = "https://www.recreation.gov/camping/campgrounds/232450",
                     dateContext = pacificContext,
+                    identities = emptyList(),
                 ).single()
         assertEquals("View on Recreation.gov", out.label)
         assertEquals("info", out.kind)
@@ -237,13 +298,27 @@ class CampgroundCtaTest {
 
     @Test
     fun `no booking ref and no info_url yields no CTAs`() {
-        val out = cta.computeCtas(bookingRef = null, reserveUrl = null, infoUrl = null, dateContext = pacificContext)
+        val out =
+            cta.computeCtas(
+                bookingRef = null,
+                reserveUrl = null,
+                infoUrl = null,
+                dateContext = pacificContext,
+                identities = emptyList(),
+            )
         assertTrue(out.isEmpty(), out.toString())
     }
 
     @Test
     fun `a blank info_url yields no CTAs`() {
-        val out = cta.computeCtas(bookingRef = null, reserveUrl = null, infoUrl = "  ", dateContext = pacificContext)
+        val out =
+            cta.computeCtas(
+                bookingRef = null,
+                reserveUrl = null,
+                infoUrl = "  ",
+                dateContext = pacificContext,
+                identities = emptyList(),
+            )
         assertTrue(out.isEmpty(), out.toString())
     }
 
@@ -256,6 +331,7 @@ class CampgroundCtaTest {
                     reserveUrl = "  ",
                     infoUrl = "https://www.nps.gov/yose/index.htm",
                     dateContext = pacificContext,
+                    identities = emptyList(),
                 ).single()
         assertEquals("https://www.nps.gov/yose/index.htm", out.url)
         assertEquals("Park info on nps.gov", out.label)
@@ -270,6 +346,7 @@ class CampgroundCtaTest {
                     reserveUrl = "https://reservation.pc.gc.ca/",
                     infoUrl = "https://parks.canada.ca/banff",
                     dateContext = pacificContext,
+                    identities = emptyList(),
                 ).single()
         assertEquals("https://parks.canada.ca/banff", out.url)
         assertEquals("Park info on parks.canada.ca", out.label)

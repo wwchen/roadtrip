@@ -46,7 +46,7 @@ data class CampsiteDto(
     companion object {
         fun from(
             row: Campsite,
-            bookingSystem: String? = null,
+            bookingSystem: String?,
         ): CampsiteDto =
             CampsiteDto(
                 id = row.id,

@@ -24,9 +24,11 @@ internal class CampsiteCatalogService(
     ): PoiCampsitesResponseSchema {
         val campgroundIds = refResolver.resolve<RefValue.CampgroundId>(RefValue.PoiId(poiId))
         if (campgroundIds.isEmpty()) throw AvailabilityServiceError.NotFound
-        // Loaded once per request: a row whose provider is disabled still names
-        // the booking site its own campground books through.
-        val campgroundsById = campgroundIds.mapNotNull { campgroundRepo.findById(it.id) }.associateBy { it.id }
+        // Only read where a row has no resolved target: a row whose provider is
+        // disabled still names the booking site its own campground books
+        // through, but on the common path every row resolves and this map is a
+        // query and a multi-kB parse nothing would look at.
+        val campgroundsById by lazy { campgroundIds.mapNotNull { campgroundRepo.findById(it.id) }.associateBy { it.id } }
         val rows =
             campsitesRepo
                 .findByPoi(poiId)
@@ -39,7 +41,7 @@ internal class CampsiteCatalogService(
                 rows.map { (campsite, resolved) ->
                     CampsiteDto.from(
                         campsite,
-                        bookingSystem = bookingSystem(campsite, resolved, campgroundsById),
+                        bookingSystem = bookingSystem(campsite, resolved) { campgroundsById },
                     )
                 },
             reservationUrlTemplates =
@@ -53,9 +55,9 @@ internal class CampsiteCatalogService(
     private fun bookingSystem(
         campsite: Campsite,
         resolved: ResolvedAvailabilityTarget?,
-        campgroundsById: Map<Long, Campground>,
+        campgroundsById: () -> Map<Long, Campground>,
     ): String? {
-        val campground = resolved?.campground ?: campgroundsById[campsite.campgroundId] ?: return null
+        val campground = resolved?.campground ?: campgroundsById()[campsite.campgroundId] ?: return null
         return identities.bookingSiteName(resolved, campground)
     }
 

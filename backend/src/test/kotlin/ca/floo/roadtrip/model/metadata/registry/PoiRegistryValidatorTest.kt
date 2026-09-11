@@ -7,6 +7,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
+/** YAML for an explicitly empty string — a present key with no name in it. */
+private const val BLANK_DISPLAY_NAME = "display_name: \"\""
+private const val BLANK_HOST = "host: \"\""
+private const val BLANK_CODE = "- code: \"\""
+
 /** The shipped booking_providers section. Every fixture needs it: validate()
  *  requires one row per BookingProvider member. */
 @Suppress("TopLevelPropertyNaming")
@@ -492,6 +497,170 @@ class PoiRegistryValidatorTest {
             err.message!!.contains(
                 "poi_data 'BC Provincial Parks' etl 'aspira-bc-campgrounds' adapter 'AspiraCampgroundsEtl' " +
                     "is missing required arg 'tenant'",
+            ),
+            err.message,
+        )
+    }
+
+    /**
+     * The tenant cross-check used to be skipped whenever *any* earlier loop had
+     * already found something, so an operator fixed the slug, redeployed, and
+     * only then learned about the tenant typo. One boot, both errors.
+     */
+    @Test
+    fun `an unrelated registry error does not hide the tenant cross-check`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS +
+                        "\n" +
+                        """
+                        data_sources:
+                          - slug: aspira-maps-zz
+                            name: Aspira ZZ maps
+                            fetcher:
+                              executor: python3
+                              filename: scripts/fetch_aspira.py
+                              output_dir_prefix: data/raw/aspira-maps-zz
+                          - slug: aspira-maps-zz
+                            name: Aspira ZZ maps again
+                            fetcher:
+                              executor: python3
+                              filename: scripts/fetch_aspira.py
+                              output_dir_prefix: data/raw/aspira-maps-zz-2
+                        poi_data:
+                          - name: Zed Parks
+                            category: campground
+                            agency: Zed Parks
+                            etls:
+                              - slug: aspira-zz-campgrounds
+                                adapter: AspiraCampgroundsEtl
+                                inputs: [aspira-maps-zz]
+                                args:
+                                  tenant: zz
+                                  host: zz.goingtocamp.com
+                        """.trimIndent(),
+                )
+            }
+
+        assertTrue(err.message!!.contains("duplicate data_source slug='aspira-maps-zz'"), err.message)
+        assertTrue(err.message!!.contains("args.tenant='zz' is not a tenant of 'aspira'"), err.message)
+    }
+
+    @Test
+    fun `a booking vendor with no tenants fails`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS.replace("    tenants:\n      - host: www.recreation.gov\n", "") +
+                        "\n" +
+                        """
+                        data_sources: []
+                        poi_data: []
+                        """.trimIndent(),
+                )
+            }
+        assertTrue(err.message!!.contains("booking_providers 'recgov' declares no tenants"), err.message)
+    }
+
+    @Test
+    fun `a blank vendor display_name fails`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS.replace("display_name: Campflare", BLANK_DISPLAY_NAME) +
+                        "\n" +
+                        """
+                        data_sources: []
+                        poi_data: []
+                        """.trimIndent(),
+                )
+            }
+        assertTrue(err.message!!.contains("booking_providers 'campflare' has a blank display_name"), err.message)
+    }
+
+    @Test
+    fun `a blank tenant display_name fails`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS.replace("display_name: BC Parks", BLANK_DISPLAY_NAME) +
+                        "\n" +
+                        """
+                        data_sources: []
+                        poi_data: []
+                        """.trimIndent(),
+                )
+            }
+        assertTrue(err.message!!.contains("booking_providers 'aspira' tenant 'bc' has a blank display_name"), err.message)
+    }
+
+    @Test
+    fun `a blank tenant host fails`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS.replace("host: campflare.com", BLANK_HOST) +
+                        "\n" +
+                        """
+                        data_sources: []
+                        poi_data: []
+                        """.trimIndent(),
+                )
+            }
+        assertTrue(err.message!!.contains("booking_providers 'campflare' tenant 'null' has a blank host"), err.message)
+    }
+
+    /** Absent is how a single-tenant vendor says "no code"; blank is a key nothing stores. */
+    @Test
+    fun `a blank tenant code fails`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS.replace("- code: bc", BLANK_CODE) +
+                        "\n" +
+                        """
+                        data_sources: []
+                        poi_data: []
+                        """.trimIndent(),
+                )
+            }
+        assertTrue(err.message!!.contains("booking_providers 'aspira' has a blank tenant code"), err.message)
+    }
+
+    /** `AspiraCampgroundsEtl.transform` errors without it, so boot is where it belongs. */
+    @Test
+    fun `an AspiraCampgroundsEtl row without args host fails`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS +
+                        "\n" +
+                        """
+                        data_sources:
+                          - slug: aspira-maps-bc
+                            name: Aspira BC maps
+                            fetcher:
+                              executor: python3
+                              filename: scripts/fetch_aspira.py
+                              output_dir_prefix: data/raw/aspira-maps-bc
+                        poi_data:
+                          - name: BC Provincial Parks
+                            category: campground
+                            agency: BC Parks
+                            etls:
+                              - slug: aspira-bc-campgrounds
+                                adapter: AspiraCampgroundsEtl
+                                inputs: [aspira-maps-bc]
+                                args:
+                                  tenant: bc
+                        """.trimIndent(),
+                )
+            }
+        assertTrue(
+            err.message!!.contains(
+                "poi_data 'BC Provincial Parks' etl 'aspira-bc-campgrounds' adapter 'AspiraCampgroundsEtl' " +
+                    "is missing required arg 'host'",
             ),
             err.message,
         )

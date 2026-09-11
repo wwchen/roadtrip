@@ -30,14 +30,20 @@ internal class BookingIdentityResolver(
     /**
      * The campsite row's identity. The site names its own vendors; the tenant
      * that names the site a person books on lives on the campground's ref for
-     * that same vendor, so the two are paired before falling back to the
-     * campground's own rule.
+     * that same vendor, so the two are paired where the campground names one.
+     * Where it does not, the site's own ref stands: a Campflare campground
+     * whose sites carry rec.gov links still books on rec.gov, and naming the
+     * campground instead would label the button after a site the link does not
+     * open.
      */
     fun forCampsite(resolved: ResolvedAvailabilityTarget): BookingProviderRef? =
         resolved.campsite
             .bookingIdentities()
             .firstOrNull { tenants.sells(it.provider) }
-            ?.let { resolved.campground.bookingRefFor(it.provider) }
+            ?.let { alias ->
+                resolved.campground.bookingRefFor(alias.provider)
+                    ?: BookingProviderRef.parse(alias.provider, alias.ref)
+            }
             ?: forCampground(resolved.campground, resolved.provider)
 
     /**

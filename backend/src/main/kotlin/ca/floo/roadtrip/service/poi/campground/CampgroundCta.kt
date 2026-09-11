@@ -26,7 +26,7 @@ internal class CampgroundCta(
 
     private val providers: List<CampgroundCtaProvider> =
         listOf(
-            RecGovCampgroundCtaProvider(tenants),
+            RecGovCampgroundCtaProvider(tenants, infoLinkLabels),
             AspiraCampgroundCtaProvider(tenants),
             ReserveCaliforniaCampgroundCtaProvider(tenants),
         )
@@ -43,16 +43,20 @@ internal class CampgroundCta(
         reserveUrl: String?,
         infoUrl: String?,
         dateContext: PoiDateContext,
-        identities: List<BookingProviderRef> = emptyList(),
+        identities: List<BookingProviderRef>,
     ): List<PoiCtaSchema> {
         val upstreamUrl = providerUrl(reserveUrl = reserveUrl, infoUrl = infoUrl)
-        val primaryCta =
-            providers.firstNotNullOfOrNull { it.reserveCta(bookingRef, upstreamUrl, dateContext) }
-                ?: infoUrl?.takeIf { it.isNotBlank() }?.let {
-                    PoiCtaSchema(url = it, label = infoLinkLabels.forUrl(it), kind = INFO_CTA_KIND)
-                }
+        val vendorCtas =
+            providers.firstNotNullOfOrNull {
+                it.ctasFor(bookingRef, upstreamUrl, dateContext).takeIf(List<PoiCtaSchema>::isNotEmpty)
+            }
+                ?: listOfNotNull(
+                    infoUrl?.takeIf { it.isNotBlank() }?.let {
+                        PoiCtaSchema(url = it, label = infoLinkLabels.forUrl(it), kind = INFO_CTA_KIND)
+                    },
+                )
         val campflare = campflareCta(listOfNotNull(bookingRef) + identities)
-        return listOfNotNull(primaryCta, campflare).distinctBy { it.url }
+        return (vendorCtas + listOfNotNull(campflare)).distinctBy { it.url }
     }
 
     /**
@@ -79,33 +83,45 @@ internal class CampgroundCta(
 }
 
 private interface CampgroundCtaProvider {
-    fun reserveCta(
+    /** Empty when this provider does not claim [providerRef]; the primary CTA first. */
+    fun ctasFor(
         providerRef: BookingProviderRef?,
         upstreamUrl: String?,
         dateContext: PoiDateContext,
-    ): PoiCtaSchema?
+    ): List<PoiCtaSchema>
 }
 
 /**
  * The stored URL is kept only when a rec.gov tenant runs its host; otherwise
  * the link is rebuilt from the facility id. An aliased Campflare row carries a
  * campflare.com `reservation_url`, and labelling that "Reserve on
- * Recreation.gov" sent people to the wrong site.
+ * Recreation.gov" sent people to the wrong site. The rejected URL is still the
+ * page the source published, so it follows as an info link rather than
+ * vanishing — a Yellowstone concessionaire's own booking page is the only one
+ * that works.
  */
 private class RecGovCampgroundCtaProvider(
     private val tenants: TenantRegistry,
+    private val infoLinkLabels: ExternalInfoLinkLabels,
 ) : CampgroundCtaProvider {
-    override fun reserveCta(
+    override fun ctasFor(
         providerRef: BookingProviderRef?,
         upstreamUrl: String?,
         dateContext: PoiDateContext,
-    ): PoiCtaSchema? {
-        val recGov = providerRef as? BookingProviderRef.RecGov ?: return null
-        val stored = upstreamUrl?.takeIf { it.isNotBlank() && isRecGovTenantHost(it) }
-        return reserveCta(
-            url = stored ?: RecGovBookingUrl.campground(recGov.facilityId),
-            label = tenants.ctaLabel(recGov),
-        )
+    ): List<PoiCtaSchema> {
+        val recGov = providerRef as? BookingProviderRef.RecGov ?: return emptyList()
+        val present = upstreamUrl?.takeIf { it.isNotBlank() }
+        val stored = present?.takeIf { isRecGovTenantHost(it) }
+        val reserve =
+            reserveCta(
+                url = stored ?: RecGovBookingUrl.campground(recGov.facilityId),
+                label = tenants.ctaLabel(recGov),
+            )
+        val foreign =
+            present
+                ?.takeIf { stored == null }
+                ?.let { PoiCtaSchema(url = it, label = infoLinkLabels.forUrl(it), kind = INFO_CTA_KIND) }
+        return listOfNotNull(reserve, foreign)
     }
 
     private fun isRecGovTenantHost(url: String): Boolean =
@@ -115,21 +131,25 @@ private class RecGovCampgroundCtaProvider(
 private class AspiraCampgroundCtaProvider(
     private val tenants: TenantRegistry,
 ) : CampgroundCtaProvider {
-    override fun reserveCta(
+    override fun ctasFor(
         providerRef: BookingProviderRef?,
         upstreamUrl: String?,
         dateContext: PoiDateContext,
-    ): PoiCtaSchema? {
-        val aspira = providerRef as? BookingProviderRef.Aspira ?: return null
+    ): List<PoiCtaSchema> {
+        val aspira = providerRef as? BookingProviderRef.Aspira ?: return emptyList()
         // The registry owns the host. A tenant it does not name gets no link
         // rather than a deeplink built on whatever host a row happened to store.
-        val host = tenants.tenant(BookingProvider.ASPIRA, aspira.tenant)?.host ?: return null
+        val host = tenants.tenant(BookingProvider.ASPIRA, aspira.tenant)?.host ?: return emptyList()
+        // The earliest *bookable* arrival, which rolls to tomorrow after the
+        // evening cutoff exactly as the picker's own window does.
         val arrival = dateContext.earliestDate
         val template =
             AspiraBookingUrl.template(host, aspira.transactionLocationId, aspira.mapId, aspira.resourceLocationId)
-        return reserveCta(
-            url = ReservationUrlTemplate.fill(template, arrival, arrival.plusDays(DEEPLINK_NIGHTS)),
-            label = tenants.ctaLabel(aspira),
+        return listOf(
+            reserveCta(
+                url = ReservationUrlTemplate.fill(template, arrival, arrival.plusDays(DEEPLINK_NIGHTS)),
+                label = tenants.ctaLabel(aspira),
+            ),
         )
     }
 }
@@ -137,15 +157,17 @@ private class AspiraCampgroundCtaProvider(
 private class ReserveCaliforniaCampgroundCtaProvider(
     private val tenants: TenantRegistry,
 ) : CampgroundCtaProvider {
-    override fun reserveCta(
+    override fun ctasFor(
         providerRef: BookingProviderRef?,
         upstreamUrl: String?,
         dateContext: PoiDateContext,
-    ): PoiCtaSchema? {
-        val reserveCalifornia = providerRef as? BookingProviderRef.ReserveCalifornia ?: return null
-        return reserveCta(
-            url = ReserveCaliforniaBookingUrl.park(reserveCalifornia.placeId),
-            label = tenants.ctaLabel(reserveCalifornia),
+    ): List<PoiCtaSchema> {
+        val reserveCalifornia = providerRef as? BookingProviderRef.ReserveCalifornia ?: return emptyList()
+        return listOf(
+            reserveCta(
+                url = ReserveCaliforniaBookingUrl.park(reserveCalifornia.placeId),
+                label = tenants.ctaLabel(reserveCalifornia),
+            ),
         )
     }
 }

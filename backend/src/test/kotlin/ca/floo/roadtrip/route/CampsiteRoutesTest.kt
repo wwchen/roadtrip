@@ -221,6 +221,34 @@ class CampsiteRoutesTest : SharedDbTest() {
         return fixture.poiId
     }
 
+    /**
+     * The shape `CampflareCampsitesEtl` produces when the campground row has no
+     * `ridb_facility_id` and no `/campgrounds/<id>` reservation URL: rec.gov
+     * sells the *sites* but the campground names no rec.gov ref at all.
+     */
+    private fun seedCampflareOnlyPoiWithRecGovSite(): Long {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "sunset-campground-912",
+                name = "Sunset",
+                lon = -119.58,
+                lat = 37.72,
+                source = "campflare",
+                bookingProvider = "campflare",
+                bookingProviderRef = "sunset-campground-912",
+            )
+        ctx.seedCampsite(
+            campgroundId = fixture.catalogId,
+            vendor = "campflare",
+            vendorId = "campflare-site-12",
+            reservationUrl = ALIASED_CAMPSITE_RESERVATION_URL,
+            bookingProvider = "campflare",
+            bookingProviderRef = "campflare-site-12",
+            bookingAliasesJson = """[{"provider":"recgov","ref":"10174516"}]""",
+        )
+        return fixture.poiId
+    }
+
     /** One vendor, one tenant, no alias: the plain case the aliased one is read against. */
     private fun seedBcParksPoiWithCampsite(): Long {
         val fixture =
@@ -323,6 +351,78 @@ class CampsiteRoutesTest : SharedDbTest() {
                     .jsonObject
             assertEquals("Campflare", row["booking_system"]?.jsonPrimitive?.content)
         }
+
+    /**
+     * The campground names no rec.gov ref, so pairing the site's selling
+     * identity with the campground's finds nothing — and the row used to fall
+     * back to Campflare while its link opened recreation.gov. The site's own
+     * ref stands instead, and the button names the site it opens.
+     */
+    @Test
+    fun `a Campflare row whose sites sell on rec_gov names rec_gov`() =
+        testApplication {
+            application { routeTestApplication { campsiteRoutesUnderTest(providers = tenantProviders()) } }
+            val poiId = seedCampflareOnlyPoiWithRecGovSite()
+
+            val body = Json.parseToJsonElement(client.get("/api/pois/$poiId/campsites").bodyAsText()).jsonObject
+            val row = body["campsites"]!!.jsonArray.single().jsonObject
+            val template =
+                body["reservation_url_templates"]!!
+                    .jsonObject
+                    .values
+                    .single()
+                    .jsonPrimitive
+                    .content
+            val host = TenantRegistry.normalizeHost(URI(template.substringBefore('?')).host)
+            assertEquals("recreation.gov", host)
+            assertEquals("Recreation.gov", row["booking_system"]?.jsonPrimitive?.content)
+        }
+
+    /**
+     * The invariant behind the case above, stated once for every row: a
+     * template is a link a person clicks to book, so the name beside it has to
+     * be a vendor the registry says sells. Walk the shipped registry rather
+     * than pinning a list here, so a new `sells: false` vendor is caught.
+     */
+    @Test
+    fun `every row with a reservation template names a vendor that sells`() =
+        testApplication {
+            application { routeTestApplication { campsiteRoutesUnderTest(providers = tenantProviders()) } }
+            val poiIds =
+                listOf(
+                    seedAliasedCampflarePoiWithCampsite(),
+                    seedCampflareOnlyPoiWithRecGovSite(),
+                    seedCampflareOnlyPoiWithCampsite(),
+                    seedBcParksPoiWithCampsite(),
+                )
+            val sellingNames = sellingDisplayNames()
+            var templated = 0
+
+            for (poiId in poiIds) {
+                val body = Json.parseToJsonElement(client.get("/api/pois/$poiId/campsites").bodyAsText()).jsonObject
+                val templates = body["reservation_url_templates"]!!.jsonObject
+                for (row in body["campsites"]!!.jsonArray.map { it.jsonObject }) {
+                    if (row["id"]!!.jsonPrimitive.content !in templates) continue
+                    templated++
+                    val name = row["booking_system"]?.jsonPrimitive?.content
+                    assertTrue(
+                        name in sellingNames,
+                        "row ${row["id"]} offers a booking template but names '$name', which sells nothing",
+                    )
+                }
+            }
+            assertTrue(templated > 0, "no row carried a template, so the invariant went untested")
+        }
+
+    /** Every name the shipped registry lets a person book on: vendors and their tenants. */
+    private fun sellingDisplayNames(): Set<String> {
+        val registry = shippedTenantRegistry()
+        return BookingProvider.entries
+            .filter(registry::sells)
+            .flatMap { provider ->
+                listOf(registry.displayName(provider)) + registry.tenantsOf(provider).map { it.displayName }
+            }.toSet()
+    }
 
     /**
      * The reservation template comes from the *serving* availability provider

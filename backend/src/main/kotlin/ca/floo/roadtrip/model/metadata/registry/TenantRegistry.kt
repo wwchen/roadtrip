@@ -78,6 +78,17 @@ class TenantRegistry private constructor(
                                 },
                         )
                 }
+            // associate is last-write-wins, so a caller building a registry in
+            // code would otherwise lose a duplicated vendor row in silence.
+            require(profiles.size == entries.size) {
+                val duplicates =
+                    entries
+                        .groupingBy { it.id }
+                        .eachCount()
+                        .filterValues { it > 1 }
+                        .keys
+                "booking_providers has duplicate rows for ${duplicates.joinToString { "'${it.id}'" }}"
+            }
             val missing = BookingProvider.entries.filter { it !in profiles }
             require(missing.isEmpty()) {
                 "booking_providers is missing a row for ${missing.joinToString { "'${it.id}'" }}"

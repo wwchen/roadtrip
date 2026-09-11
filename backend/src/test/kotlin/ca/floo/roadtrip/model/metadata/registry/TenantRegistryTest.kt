@@ -4,7 +4,9 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class TenantRegistryTest {
     private val registry = TenantRegistry.from(PoiRegistry.loadResource("poi-registry.yaml"))
@@ -83,6 +85,17 @@ class TenantRegistryTest {
     fun `sells is a registry fact`() {
         assertEquals(false, registry.sells(BookingProvider.CAMPFLARE))
         assertEquals(true, registry.sells(BookingProvider.RECGOV))
+    }
+
+    /**
+     * `from` builds a map keyed by vendor, so a duplicated row would otherwise
+     * be last-write-wins in silence for any caller that skips [PoiRegistry].
+     */
+    @Test
+    fun `from rejects a duplicated vendor row`() {
+        val entries = PoiRegistry.loadResource("poi-registry.yaml").bookingProviders
+        val err = assertFailsWith<IllegalArgumentException> { TenantRegistry.from(entries + entries.first()) }
+        assertTrue(err.message!!.contains("duplicate rows for '${entries.first().id.id}'"), err.message)
     }
 
     private fun aspiraRef(tenant: String?) =

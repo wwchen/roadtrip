@@ -130,18 +130,30 @@ class RecGovCampgroundsEtlTest {
                                   - id: recgov
                                     display_name: Recreation.gov
                                     sells: true
+                                    tenants:
+                                      - host: www.recreation.gov
                                   - id: campflare
                                     display_name: Campflare
                                     sells: false
+                                    tenants:
+                                      - host: campflare.com
                                   - id: aspira
                                     display_name: Aspira NextGen
                                     sells: true
+                                    tenants:
+                                      - code: bc
+                                        host: camping.bcparks.ca
                                   - id: reserveamerica
                                     display_name: ReserveAmerica
                                     sells: true
+                                    tenants:
+                                      - code: ABPP
+                                        host: shop.albertaparks.ca
                                   - id: reservecalifornia
                                     display_name: ReserveCalifornia
                                     sells: true
+                                    tenants:
+                                      - host: www.reservecalifornia.com
                                 """.trimIndent(),
                             )
                         },

@@ -28,7 +28,7 @@ class ReserveAmericaCampgroundsEtlTest {
 
     @Test
     fun `new york args stamp state campground metadata with reserveamerica provider ref`() {
-        val etl = ReserveAmericaCampgroundsEtl("reserveamerica-ny-campgrounds")
+        val etl = ReserveAmericaCampgroundsEtl("reserveamerica-ny-campgrounds", contractCode = "NY")
         val dto = parsedDto(etl, bundle("reserveamerica-ny", nyParkEnvelope()))
         assertEquals("ALGER ISLAND, NY", dto.parks.single().name)
 
@@ -82,7 +82,7 @@ class ReserveAmericaCampgroundsEtlTest {
                 fetchedAt = fetchedAt,
             )
         val campground =
-            records(ReserveAmericaCampgroundsEtl().transform(dto, transformCtx()))
+            records(ReserveAmericaCampgroundsEtl(contractCode = "ABPP").transform(dto, transformCtx()))
                 .single()
 
         assertEquals(DataProvider.RESERVEAMERICA, campground.dataProviderRef.provider)
