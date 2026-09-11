@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.model.domain.CatalogColumnJson
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonElement
 
 internal const val EMPTY_JSON_OBJECT: String = "{}"
@@ -24,5 +26,8 @@ internal fun requireCatalogBatchWithinLimit(
 }
 
 internal fun jsonObject(value: JsonElement?): String = value?.toString() ?: EMPTY_JSON_OBJECT
+
+/** A typed JSONB column that must be SQL NULL when absent, not the empty object. */
+internal inline fun <reified T : Any> nullableJsonObject(value: T?): String? = value?.let { CatalogColumnJson.json.encodeToString(it) }
 
 internal fun jsonArray(value: JsonElement?): String = value?.toString() ?: EMPTY_JSON_ARRAY

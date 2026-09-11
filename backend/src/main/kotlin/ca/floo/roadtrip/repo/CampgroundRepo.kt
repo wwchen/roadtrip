@@ -146,6 +146,7 @@ class CampgroundRepo(
             bookingProvider = record.get("booking_provider", String::class.java),
             bookingProviderRef = record.get("booking_provider_ref", String::class.java),
             bookingAliases = decodeBookingAliases(record.get("booking_aliases_text", String::class.java)),
+            geometryProvenance = decodeObjectColumn(record.get("geometry_provenance_text", String::class.java)),
         )
     }
 
@@ -184,6 +185,7 @@ class CampgroundRepo(
                         "?, ?, ?, ?, " +
                         "?, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, " +
                         "?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, " +
+                        "?::jsonb, " +
                         "now(), NULL)"
                 }
             val sql =
@@ -196,6 +198,7 @@ class CampgroundRepo(
                   max_rv_length, max_trailer_length, has_pull_through_sites, big_rig_friendly,
                   reservation_url, links, photos, alerts, price, cell_service,
                   management, contact, connections, metadata, source_payload,
+                  geometry_provenance,
                   updated_at, deleted_at
                 )
                 VALUES $placeholders
@@ -230,6 +233,7 @@ class CampgroundRepo(
                   connections = EXCLUDED.connections,
                   metadata = EXCLUDED.metadata,
                   source_payload = EXCLUDED.source_payload,
+                  geometry_provenance = EXCLUDED.geometry_provenance,
                   updated_at = now(),
                   deleted_at = NULL
                 RETURNING id, data_provider, data_provider_ref
@@ -267,6 +271,7 @@ class CampgroundRepo(
                 params += jsonObject(record.connections)
                 params += CatalogColumnJson.encodeObject(record.metadata)
                 params += jsonObject(record.sourcePayload)
+                params += nullableJsonObject(record.geometryProvenance)
             }
             val returned = ctx.fetch(sql, *params.toTypedArray())
             for (row in returned) {
@@ -372,6 +377,7 @@ class CampgroundRepo(
             cg.connections::text AS connections_text,
             cg.metadata::text AS metadata_text,
             cg.source_payload::text AS source_payload_text,
+            cg.geometry_provenance::text AS geometry_provenance_text,
             cg.created_at,
             cg.updated_at,
             cg.deleted_at,
