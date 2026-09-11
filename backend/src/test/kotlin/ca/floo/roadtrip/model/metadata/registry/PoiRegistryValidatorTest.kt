@@ -7,8 +7,55 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
+/** The shipped booking_providers section. Every fixture needs it: validate()
+ *  requires one row per BookingProvider member. */
+@Suppress("TopLevelPropertyNaming")
+private val BOOKING_PROVIDERS =
+    """
+    booking_providers:
+      - id: recgov
+        display_name: Recreation.gov
+        sells: true
+        tenants:
+          - host: www.recreation.gov
+      - id: campflare
+        display_name: Campflare
+        sells: false
+        tenants:
+          - host: campflare.com
+      - id: aspira
+        display_name: Aspira NextGen
+        sells: true
+        tenants:
+          - code: pc
+            host: reservation.pc.gc.ca
+            display_name: Parks Canada
+          - code: bc
+            host: camping.bcparks.ca
+            display_name: BC Parks
+          - code: wa
+            host: washington.goingtocamp.com
+            display_name: Washington State Parks
+      - id: reserveamerica
+        display_name: ReserveAmerica
+        sells: true
+        tenants:
+          - code: ABPP
+            host: shop.albertaparks.ca
+            display_name: Alberta Parks
+          - code: NY
+            host: newyorkstateparks.reserveamerica.com
+            display_name: New York State Parks
+      - id: reservecalifornia
+        display_name: ReserveCalifornia
+        sells: true
+        tenants:
+          - host: www.reservecalifornia.com
+    """.trimIndent()
+
 /**
- * Validator tests for the three-section registry shape (RFC 0008 PR 2).
+ * Validator tests for the three-section registry shape (RFC 0008 PR 2) plus
+ * the booking_providers section.
  * Asserts:
  *   - empty campsite_data sections load fine on existing single-poi_data YAML.
  *   - campsite_data rows enforce the same terminal ETL constraints as
@@ -16,6 +63,8 @@ import kotlin.test.assertTrue
  *   - etl slugs across poi_data and campsite_data share one
  *     namespace; collisions across sections fail validation.
  *   - data_source slugs colliding with etl slugs in either section fail.
+ *   - booking_providers covers every vendor, has unique hosts, and agrees
+ *     with the tenant args ETL rows declare.
  */
 class PoiRegistryValidatorTest {
     private val yaml = Yaml(configuration = YamlConfiguration(strictMode = false))
@@ -28,22 +77,23 @@ class PoiRegistryValidatorTest {
         // default to empty lists and pass the validator unchanged.
         val r =
             load(
-                """
-                data_sources:
-                  - slug: src-a
-                    name: Source A
-                    fetcher:
-                      executor: python3
-                      filename: scripts/x.py
-                      output_dir_prefix: data/raw/src-a
-                poi_data:
-                  - name: A
-                    category: campground
-                    etls:
-                      - slug: etl-a
-                        adapter: AdapterA
-                        inputs: [src-a]
-                """.trimIndent(),
+                BOOKING_PROVIDERS + "\n" +
+                    """
+                    data_sources:
+                      - slug: src-a
+                        name: Source A
+                        fetcher:
+                          executor: python3
+                          filename: scripts/x.py
+                          output_dir_prefix: data/raw/src-a
+                    poi_data:
+                      - name: A
+                        category: campground
+                        etls:
+                          - slug: etl-a
+                            adapter: AdapterA
+                            inputs: [src-a]
+                    """.trimIndent(),
             )
         assertEquals(emptyList(), r.campsiteData)
     }
@@ -52,37 +102,38 @@ class PoiRegistryValidatorTest {
     fun `poi_data agency accepts scalar constants and derived field mappings`() {
         val r =
             load(
-                """
-                data_sources:
-                  - slug: src-a
-                    name: Source A
-                    fetcher:
-                      executor: python3
-                      filename: scripts/x.py
-                      output_dir_prefix: data/raw/src-a
-                  - slug: src-b
-                    name: Source B
-                    fetcher:
-                      executor: python3
-                      filename: scripts/y.py
-                      output_dir_prefix: data/raw/src-b
-                poi_data:
-                  - name: Rec.gov Campgrounds
-                    category: campground
-                    agency:
-                      derived_from_field: ORGANIZATION[0].OrgName
-                    etls:
-                      - slug: recgov-campgrounds
-                        adapter: RecGovCampgroundsEtl
-                        inputs: [src-a]
-                  - name: Planet Fitness
-                    category: planet-fitness
-                    agency: Planet Fitness
-                    etls:
-                      - slug: planet-fitness
-                        adapter: PlanetFitnessEtl
-                        inputs: [src-b]
-                """.trimIndent(),
+                BOOKING_PROVIDERS + "\n" +
+                    """
+                    data_sources:
+                      - slug: src-a
+                        name: Source A
+                        fetcher:
+                          executor: python3
+                          filename: scripts/x.py
+                          output_dir_prefix: data/raw/src-a
+                      - slug: src-b
+                        name: Source B
+                        fetcher:
+                          executor: python3
+                          filename: scripts/y.py
+                          output_dir_prefix: data/raw/src-b
+                    poi_data:
+                      - name: Rec.gov Campgrounds
+                        category: campground
+                        agency:
+                          derived_from_field: ORGANIZATION[0].OrgName
+                        etls:
+                          - slug: recgov-campgrounds
+                            adapter: RecGovCampgroundsEtl
+                            inputs: [src-a]
+                      - name: Planet Fitness
+                        category: planet-fitness
+                        agency: Planet Fitness
+                        etls:
+                          - slug: planet-fitness
+                            adapter: PlanetFitnessEtl
+                            inputs: [src-b]
+                    """.trimIndent(),
             )
 
         assertEquals(AgencyConfig.DerivedFromField("ORGANIZATION[0].OrgName"), r.poiData[0].agency)
@@ -94,23 +145,24 @@ class PoiRegistryValidatorTest {
         val ex =
             assertFailsWith<IllegalArgumentException> {
                 load(
-                    """
-                    data_sources:
-                      - slug: src-a
-                        name: Source A
-                        fetcher:
-                          executor: python3
-                          filename: scripts/x.py
-                          output_dir_prefix: data/raw/src-a
-                    poi_data:
-                      - name: Blank Agency
-                        category: planet-fitness
-                        agency: ""
-                        etls:
-                          - slug: blank-agency
-                            adapter: PlanetFitnessEtl
-                            inputs: [src-a]
-                    """.trimIndent(),
+                    BOOKING_PROVIDERS + "\n" +
+                        """
+                        data_sources:
+                          - slug: src-a
+                            name: Source A
+                            fetcher:
+                              executor: python3
+                              filename: scripts/x.py
+                              output_dir_prefix: data/raw/src-a
+                        poi_data:
+                          - name: Blank Agency
+                            category: planet-fitness
+                            agency: ""
+                            etls:
+                              - slug: blank-agency
+                                adapter: PlanetFitnessEtl
+                                inputs: [src-a]
+                        """.trimIndent(),
                 )
             }
 
@@ -124,22 +176,23 @@ class PoiRegistryValidatorTest {
     fun `campsite_data row with valid terminal etl loads`() {
         val r =
             load(
-                """
-                data_sources:
-                  - slug: src-a
-                    name: Source A
-                    fetcher:
-                      executor: python3
-                      filename: scripts/x.py
-                      output_dir_prefix: data/raw/src-a
-                poi_data: []
-                campsite_data:
-                  - name: Rec.gov Campsites
-                    etls:
-                      - slug: recgov-campsites
-                        adapter: RecGovCampsitesEtl
-                        inputs: [src-a]
-                """.trimIndent(),
+                BOOKING_PROVIDERS + "\n" +
+                    """
+                    data_sources:
+                      - slug: src-a
+                        name: Source A
+                        fetcher:
+                          executor: python3
+                          filename: scripts/x.py
+                          output_dir_prefix: data/raw/src-a
+                    poi_data: []
+                    campsite_data:
+                      - name: Rec.gov Campsites
+                        etls:
+                          - slug: recgov-campsites
+                            adapter: RecGovCampsitesEtl
+                            inputs: [src-a]
+                    """.trimIndent(),
             )
         assertEquals(1, r.campsiteData.size)
         assertEquals("Rec.gov Campsites", r.campsiteData[0].name)
@@ -150,25 +203,26 @@ class PoiRegistryValidatorTest {
         val ex =
             assertFailsWith<IllegalArgumentException> {
                 load(
-                    """
-                    data_sources:
-                      - slug: src-a
-                        name: Source A
-                        fetcher:
-                          executor: python3
-                          filename: scripts/x.py
-                          output_dir_prefix: data/raw/src-a
-                    poi_data:
-                      - name: A
-                        category: campground
-                        etls:
-                          - slug: stage-one
-                            adapter: A
-                            inputs: [src-a]
-                          - slug: stage-two
-                            adapter: B
-                            inputs: [stage-one]
-                    """.trimIndent(),
+                    BOOKING_PROVIDERS + "\n" +
+                        """
+                        data_sources:
+                          - slug: src-a
+                            name: Source A
+                            fetcher:
+                              executor: python3
+                              filename: scripts/x.py
+                              output_dir_prefix: data/raw/src-a
+                        poi_data:
+                          - name: A
+                            category: campground
+                            etls:
+                              - slug: stage-one
+                                adapter: A
+                                inputs: [src-a]
+                              - slug: stage-two
+                                adapter: B
+                                inputs: [stage-one]
+                        """.trimIndent(),
                 )
             }
 
@@ -183,28 +237,29 @@ class PoiRegistryValidatorTest {
         val ex =
             assertFailsWith<IllegalArgumentException> {
                 load(
-                    """
-                    data_sources:
-                      - slug: src-a
-                        name: Source A
-                        fetcher:
-                          executor: python3
-                          filename: scripts/x.py
-                          output_dir_prefix: data/raw/src-a
-                    poi_data:
-                      - name: A
-                        category: campground
-                        etls:
-                          - slug: shared-slug
-                            adapter: AdapterA
-                            inputs: [src-a]
-                    campsite_data:
-                      - name: B
-                        etls:
-                          - slug: shared-slug
-                            adapter: AdapterB
-                            inputs: [src-a]
-                    """.trimIndent(),
+                    BOOKING_PROVIDERS + "\n" +
+                        """
+                        data_sources:
+                          - slug: src-a
+                            name: Source A
+                            fetcher:
+                              executor: python3
+                              filename: scripts/x.py
+                              output_dir_prefix: data/raw/src-a
+                        poi_data:
+                          - name: A
+                            category: campground
+                            etls:
+                              - slug: shared-slug
+                                adapter: AdapterA
+                                inputs: [src-a]
+                        campsite_data:
+                          - name: B
+                            etls:
+                              - slug: shared-slug
+                                adapter: AdapterB
+                                inputs: [src-a]
+                        """.trimIndent(),
                 )
             }
         assertTrue(
@@ -218,22 +273,23 @@ class PoiRegistryValidatorTest {
         val ex =
             assertFailsWith<IllegalArgumentException> {
                 load(
-                    """
-                    data_sources:
-                      - slug: my-thing
-                        name: Source
-                        fetcher:
-                          executor: python3
-                          filename: scripts/x.py
-                          output_dir_prefix: data/raw/my-thing
-                    poi_data: []
-                    campsite_data:
-                      - name: B
-                        etls:
+                    BOOKING_PROVIDERS + "\n" +
+                        """
+                        data_sources:
                           - slug: my-thing
-                            adapter: B
-                            inputs: [my-thing]
-                    """.trimIndent(),
+                            name: Source
+                            fetcher:
+                              executor: python3
+                              filename: scripts/x.py
+                              output_dir_prefix: data/raw/my-thing
+                        poi_data: []
+                        campsite_data:
+                          - name: B
+                            etls:
+                              - slug: my-thing
+                                adapter: B
+                                inputs: [my-thing]
+                        """.trimIndent(),
                 )
             }
         assertTrue(
@@ -247,27 +303,28 @@ class PoiRegistryValidatorTest {
         val ex =
             assertFailsWith<IllegalArgumentException> {
                 load(
-                    """
-                    data_sources:
-                      - slug: src-a
-                        name: Source A
-                        fetcher:
-                          executor: python3
-                          filename: scripts/x.py
-                          output_dir_prefix: data/raw/src-a
-                    poi_data: []
-                    campsite_data:
-                      - name: First
-                        etls:
-                          - slug: shared-intermediate
-                            adapter: A
-                            inputs: [src-a]
-                      - name: Second
-                        etls:
-                          - slug: terminal
-                            adapter: B
-                            inputs: [shared-intermediate]
-                    """.trimIndent(),
+                    BOOKING_PROVIDERS + "\n" +
+                        """
+                        data_sources:
+                          - slug: src-a
+                            name: Source A
+                            fetcher:
+                              executor: python3
+                              filename: scripts/x.py
+                              output_dir_prefix: data/raw/src-a
+                        poi_data: []
+                        campsite_data:
+                          - name: First
+                            etls:
+                              - slug: shared-intermediate
+                                adapter: A
+                                inputs: [src-a]
+                          - name: Second
+                            etls:
+                              - slug: terminal
+                                adapter: B
+                                inputs: [shared-intermediate]
+                        """.trimIndent(),
                 )
             }
         assertTrue(
@@ -281,28 +338,29 @@ class PoiRegistryValidatorTest {
         val ex =
             assertFailsWith<IllegalArgumentException> {
                 load(
-                    """
-                    data_sources:
-                      - slug: src-a
-                        name: Source A
-                        fetcher:
-                          executor: python3
-                          filename: scripts/x.py
-                          output_dir_prefix: data/raw/src-a
-                    poi_data:
-                      - name: PoiRow
-                        category: campground
-                        etls:
-                          - slug: poi-etl
-                            adapter: A
-                            inputs: [src-a]
-                    campsite_data:
-                      - name: CampsiteRow
-                        etls:
-                          - slug: rsv-etl
-                            adapter: B
-                            inputs: [poi-etl]
-                    """.trimIndent(),
+                    BOOKING_PROVIDERS + "\n" +
+                        """
+                        data_sources:
+                          - slug: src-a
+                            name: Source A
+                            fetcher:
+                              executor: python3
+                              filename: scripts/x.py
+                              output_dir_prefix: data/raw/src-a
+                        poi_data:
+                          - name: PoiRow
+                            category: campground
+                            etls:
+                              - slug: poi-etl
+                                adapter: A
+                                inputs: [src-a]
+                        campsite_data:
+                          - name: CampsiteRow
+                            etls:
+                              - slug: rsv-etl
+                                adapter: B
+                                inputs: [poi-etl]
+                        """.trimIndent(),
                 )
             }
         assertTrue(
@@ -317,42 +375,110 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
-    fun `reserveamerica provider tenants are read from terminal etl args`() {
-        val r =
-            load(
-                """
-                data_sources:
-                  - slug: reserveamerica-test
-                    name: ReserveAmerica test
-                    fetcher:
-                      executor: python3
-                      filename: scripts/x.py
-                      output_dir_prefix: data/raw/reserveamerica-test
-                poi_data:
-                  - name: Test ReserveAmerica Parks
-                    category: campground
-                    etls:
-                      - slug: test-reserveamerica-parks
-                        adapter: ReserveAmericaCampgroundsEtl
-                        inputs: [reserveamerica-test]
-                        args:
-                          contract: ZZ
-                          host: example.reserveamerica.test
-                          booking_horizon_days: "123"
-                          provider: reserveamerica
-                """.trimIndent(),
-            )
+    fun `a missing booking_providers row fails`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS.replace(
+                        "  - id: campflare\n    display_name: Campflare\n    sells: false\n    tenants:\n      - host: campflare.com\n",
+                        "",
+                    ) +
+                        "\n" +
+                        """
+                        data_sources: []
+                        poi_data: []
+                        """.trimIndent(),
+                )
+            }
+        assertTrue(err.message!!.contains("booking_providers is missing a row for 'campflare'"), err.message)
+    }
 
-        assertEquals(
-            listOf(
-                ReserveAmericaSourceConfig(
-                    source = "test-reserveamerica-parks",
-                    host = "example.reserveamerica.test",
-                    contractCode = "ZZ",
-                    bookingHorizonDays = 123,
-                ),
+    @Test
+    fun `a duplicate booking_providers host fails`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS.replace("host: camping.bcparks.ca", "host: www.recreation.gov") +
+                        "\n" +
+                        """
+                        data_sources: []
+                        poi_data: []
+                        """.trimIndent(),
+                )
+            }
+        assertTrue(err.message!!.contains("duplicate booking_providers host 'recreation.gov'"), err.message)
+    }
+
+    @Test
+    fun `an etl args tenant naming no tenant fails`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS +
+                        "\n" +
+                        """
+                        data_sources:
+                          - slug: aspira-maps-zz
+                            name: Aspira ZZ maps
+                            fetcher:
+                              executor: python3
+                              filename: scripts/fetch_aspira.py
+                              output_dir_prefix: data/raw/aspira-maps-zz
+                        poi_data:
+                          - name: Zed Parks
+                            category: campground
+                            agency: Zed Parks
+                            etls:
+                              - slug: aspira-zz-campgrounds
+                                adapter: AspiraCampgroundsEtl
+                                inputs: [aspira-maps-zz]
+                                args:
+                                  tenant: zz
+                                  host: zz.goingtocamp.com
+                        """.trimIndent(),
+                )
+            }
+        assertTrue(
+            err.message!!.contains("poi_data 'Zed Parks' etl 'aspira-zz-campgrounds' args.tenant='zz' is not a tenant of 'aspira'"),
+            err.message,
+        )
+    }
+
+    @Test
+    fun `an etl args host disagreeing with its tenant fails`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                PoiRegistry.loadString(
+                    BOOKING_PROVIDERS +
+                        "\n" +
+                        """
+                        data_sources:
+                          - slug: aspira-maps-bc
+                            name: Aspira BC maps
+                            fetcher:
+                              executor: python3
+                              filename: scripts/fetch_aspira.py
+                              output_dir_prefix: data/raw/aspira-maps-bc
+                        poi_data:
+                          - name: BC Provincial Parks
+                            category: campground
+                            agency: BC Parks
+                            etls:
+                              - slug: aspira-bc-campgrounds
+                                adapter: BcParksCampgroundsEtl
+                                inputs: [aspira-maps-bc]
+                                args:
+                                  tenant: bc
+                                  host: camping.example.test
+                        """.trimIndent(),
+                )
+            }
+        assertTrue(
+            err.message!!.contains(
+                "poi_data 'BC Provincial Parks' etl 'aspira-bc-campgrounds' args.host='camping.example.test' " +
+                    "does not match tenant 'bc' host 'camping.bcparks.ca'",
             ),
-            r.reserveAmericaSources(),
+            err.message,
         )
     }
 }

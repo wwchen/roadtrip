@@ -11,6 +11,17 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 
 private const val CAMPSITE_DATA_SECTION = "campsite_data"
+private const val POI_DATA_SECTION = "poi_data"
+
+/** ETL arg key → the vendor whose tenant it must name. */
+@Suppress("TopLevelPropertyNaming")
+private val TENANT_ARG_PROVIDERS =
+    mapOf(
+        "tenant" to BookingProvider.ASPIRA,
+        "contract" to BookingProvider.RESERVEAMERICA,
+    )
+
+private const val ARG_HOST = "host"
 
 // In-memory representation of the configured POI registry.
 //
@@ -53,6 +64,8 @@ class PoiRegistry(
     val poiData: List<PoiDataEntry>,
     @kotlinx.serialization.SerialName("campsite_data")
     val campsiteData: List<CampsiteDataEntry> = emptyList(),
+    @kotlinx.serialization.SerialName("booking_providers")
+    val bookingProviders: List<BookingProviderEntry> = emptyList(),
 ) {
     /**
      * Sanity-check the registry after deserialization. Catches typos /
@@ -91,8 +104,9 @@ class PoiRegistry(
                 errs += "poi_data '${row.name}' has invalid agency: ${e.message}"
             }
         }
+        validateBookingProviders(errs)
         validateEtlSection(
-            label = "poi_data",
+            label = POI_DATA_SECTION,
             rows = poiData.map { EtlRowRef(it.name, it.etls) },
             dsSlugs = dsSlugs,
             allEtlSlugs = etlSlugs,
@@ -172,6 +186,60 @@ class PoiRegistry(
                 for (input in e.inputs) {
                     if (input !in dsSlugs) {
                         errs += "$label '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is not a data_source"
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The `booking_providers` section: one row per [BookingProvider] member,
+     * tenant codes unique per vendor, hosts unique across the section, and
+     * every ETL row that names a tenant naming a real one at the right vendor.
+     */
+    private fun validateBookingProviders(errs: MutableList<String>) {
+        val byProvider = bookingProviders.groupBy { it.id }
+        for (provider in BookingProvider.entries) {
+            val rows = byProvider[provider].orEmpty()
+            if (rows.isEmpty()) errs += "booking_providers is missing a row for '${provider.id}'"
+            if (rows.size > 1) errs += "booking_providers has ${rows.size} rows for '${provider.id}'"
+        }
+        val hosts = mutableSetOf<String>()
+        for (entry in bookingProviders) {
+            val codes = mutableSetOf<String?>()
+            for (tenant in entry.tenants) {
+                if (!codes.add(tenant.code)) {
+                    errs += "booking_providers '${entry.id.id}' has duplicate tenant code '${tenant.code}'"
+                }
+                val host = TenantRegistry.normalizeHost(tenant.host)
+                if (!hosts.add(host)) errs += "duplicate booking_providers host '$host'"
+            }
+        }
+        if (errs.isNotEmpty()) return
+        val registry = TenantRegistry.from(bookingProviders)
+        validateEtlTenantArgs(POI_DATA_SECTION, poiData.map { EtlRowRef(it.name, it.etls) }, registry, errs)
+        validateEtlTenantArgs(CAMPSITE_DATA_SECTION, campsiteData.map { EtlRowRef(it.name, it.etls) }, registry, errs)
+    }
+
+    private fun validateEtlTenantArgs(
+        label: String,
+        rows: List<EtlRowRef>,
+        registry: TenantRegistry,
+        errs: MutableList<String>,
+    ) {
+        for (row in rows) {
+            for (etl in row.etls) {
+                for ((argKey, provider) in TENANT_ARG_PROVIDERS) {
+                    val code = etl.args[argKey] ?: continue
+                    val tenant = registry.tenant(provider, code)
+                    if (tenant == null) {
+                        errs += "$label '${row.name}' etl '${etl.slug}' args.$argKey='$code' is not a tenant of '${provider.id}'"
+                        continue
+                    }
+                    val declaredHost = etl.args[ARG_HOST] ?: continue
+                    if (TenantRegistry.normalizeHost(declaredHost) != TenantRegistry.normalizeHost(tenant.host)) {
+                        errs += "$label '${row.name}' etl '${etl.slug}' args.host='$declaredHost' " +
+                            "does not match tenant '$code' host '${tenant.host}'"
                     }
                 }
             }

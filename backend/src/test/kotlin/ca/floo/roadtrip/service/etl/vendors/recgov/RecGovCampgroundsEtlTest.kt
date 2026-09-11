@@ -126,6 +126,22 @@ class RecGovCampgroundsEtlTest {
                                       - slug: recgov-campgrounds
                                         adapter: RecGovCampgroundsEtl
                                         inputs: [recgov-campgrounds-raw]
+                                booking_providers:
+                                  - id: recgov
+                                    display_name: Recreation.gov
+                                    sells: true
+                                  - id: campflare
+                                    display_name: Campflare
+                                    sells: false
+                                  - id: aspira
+                                    display_name: Aspira NextGen
+                                    sells: true
+                                  - id: reserveamerica
+                                    display_name: ReserveAmerica
+                                    sells: true
+                                  - id: reservecalifornia
+                                    display_name: ReserveCalifornia
+                                    sells: true
                                 """.trimIndent(),
                             )
                         },

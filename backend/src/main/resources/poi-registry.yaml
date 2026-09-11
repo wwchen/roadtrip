@@ -13,10 +13,11 @@
 #    from admin import targets until the row is re-enabled.
 # 3. campsite_data — canonical campsite datasets linked to campgrounds by
 #    vendor refs.
+# 4. booking_providers — booking vendors and their tenants. See the section banner.
 #
-# Reservation provider info is NOT in this file. ETLs that need it construct
-# provider-ref JSON directly from upstream rows and per-tenant args such as
-# `host`. Runtime dispatch reads vendor_refs payload JSON.
+# Reservation *vendor* facts live in booking_providers. ETL rows still carry the
+# per-tenant `args` (`host`, `tenant`, `contract`) they build refs from; the
+# validator checks those against booking_providers at boot.
 
 # ============================================================================
 # data_sources — fetchers
@@ -490,3 +491,49 @@ campsite_data:
         inputs: [reserveamerica-campsites-ny]
         args:
           contract: NY
+
+# ============================================================================
+# booking_providers — one row per booking vendor: the name a person calls it,
+# whether they book on its own site, and the hosts it runs. Display copy and
+# CTA verbs come from here; adapters read tenants from here through
+# TenantRegistry. See docs/reservation-providers.md.
+# ============================================================================
+booking_providers:
+  - id: recgov
+    display_name: Recreation.gov
+    sells: true
+    tenants:
+      - host: www.recreation.gov
+  - id: campflare
+    display_name: Campflare
+    sells: false
+    tenants:
+      - host: campflare.com
+  - id: aspira
+    display_name: Aspira NextGen
+    sells: true
+    tenants:
+      - code: pc
+        host: reservation.pc.gc.ca
+        display_name: Parks Canada
+      - code: bc
+        host: camping.bcparks.ca
+        display_name: BC Parks
+      - code: wa
+        host: washington.goingtocamp.com
+        display_name: Washington State Parks
+  - id: reserveamerica
+    display_name: ReserveAmerica
+    sells: true
+    tenants:
+      - code: ABPP
+        host: shop.albertaparks.ca
+        display_name: Alberta Parks
+      - code: NY
+        host: newyorkstateparks.reserveamerica.com
+        display_name: New York State Parks
+  - id: reservecalifornia
+    display_name: ReserveCalifornia
+    sells: true
+    tenants:
+      - host: www.reservecalifornia.com
