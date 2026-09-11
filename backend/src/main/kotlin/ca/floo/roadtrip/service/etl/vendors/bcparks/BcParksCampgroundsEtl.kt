@@ -28,7 +28,6 @@ import ca.floo.roadtrip.service.etl.vendors.aspira.BcParksStrapiRow
 import ca.floo.roadtrip.service.etl.vendors.aspira.BcParksStrapiSource
 import ca.floo.roadtrip.service.etl.vendors.aspira.GeometryIndex
 import ca.floo.roadtrip.service.etl.vendors.aspira.GeometryPoint
-import ca.floo.roadtrip.service.etl.vendors.aspira.normalize
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -98,7 +97,7 @@ class BcParksCampgroundsEtl(
         val bookableMapIds =
             AspiraBookingCtaRefs.bookableMapIdsByResourceLocationId(dto.inventoryEnvelopes, dto.dictionaryPayload)
 
-        val strapiByName = indexStrapiRows(dto.strapiRows)
+        val strapiByName = GeometryIndex.byNormalizedName(dto.strapiRows) { it.name }
         val matcher =
             AspiraLeafMatcher(
                 byName = GeometryIndex.build(dto.geomSources, log, etlSlug),
@@ -106,16 +105,18 @@ class BcParksCampgroundsEtl(
                 policy = geometry.match,
             )
         val (matches, tally) = matcher.matchBookable(dto.leaves)
+        val (joined, unjoined) = matches.partition { it.matchedName in strapiByName }
+        for (match in unjoined) {
+            log.warn("$etlSlug: matched name '{}' has no Strapi row; dropping leaf '{}'", match.matchedName, match.leaf.name)
+        }
         val campgrounds =
-            matches.mapNotNull { match ->
-                strapiByName[match.matchedName]?.let { row ->
-                    campgroundCandidate(match, row, host, subcategory, agency, bookableMapIds)
-                }
+            joined.map { match ->
+                campgroundCandidate(match, strapiByName.getValue(match.matchedName), host, subcategory, agency, bookableMapIds)
             }
 
         log.info(
             "$etlSlug: {} leaves → {} campgrounds " +
-                "(exact={} fuzzy={} parent={} miss={} skippedContainer={} skippedNonBookable={})",
+                "(exact={} fuzzy={} parent={} miss={} skippedContainer={} skippedNonBookable={} noStrapiRow={})",
             dto.leaves.size,
             campgrounds.size,
             tally.exact,
@@ -124,18 +125,9 @@ class BcParksCampgroundsEtl(
             tally.miss,
             tally.skippedContainer,
             tally.skippedNonBookable,
+            unjoined.size,
         )
         return campgrounds.asSequence().map { TransformResult.Ok(it) }
-    }
-
-    /** Normalized Strapi park name → first row carrying it. */
-    private fun indexStrapiRows(rows: List<BcParksStrapiRow>): Map<String, BcParksStrapiRow> {
-        val byName = LinkedHashMap<String, BcParksStrapiRow>()
-        for (row in rows) {
-            val key = normalize(row.name)
-            if (key.isNotEmpty()) byName.putIfAbsent(key, row)
-        }
-        return byName
     }
 
     private fun campgroundCandidate(

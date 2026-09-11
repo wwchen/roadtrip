@@ -8,8 +8,12 @@ import ca.floo.roadtrip.model.metadata.ResponseMeta
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.records
 import ca.floo.roadtrip.service.etl.framework.terminalRecords
+import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeaf
+import ca.floo.roadtrip.service.etl.vendors.aspira.BcParksStrapiSource
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -73,12 +77,70 @@ class BcParksCampgroundsEtlTest {
     }
 
     @Test
+    fun `a leaf that only fuzzy-matches still carries its matched park's metadata`() {
+        val cg = terminalRecords(etl, bundleWithFuzzyLeaf(), ctx).single()
+
+        // "rathtrevor beach west" against "rathtrevor beach": the row is fetched
+        // by the name the ladder matched, not by the leaf's own.
+        assertEquals("Rathtrevor Beach Campground West", cg.name)
+        assertEquals(49.3167, cg.latitude)
+        assertEquals(-124.2833, cg.longitude)
+        assertEquals("<p>A beautiful sandy beach campground.</p>", cg.mediumDescription)
+        assertEquals("250-555-1234", cg.contact!!.phone)
+    }
+
+    /**
+     * The geometry index and the Strapi index are built from one `rows()` list
+     * through one keying rule, so a run cannot reach this state; a DTO can.
+     */
+    @Test
+    fun `a matched name with no Strapi row is dropped rather than emitted without metadata`() {
+        val bothParks = BcParksStrapiSource(listOf(strapiEnvelopeWithGoldstream()))
+        val dto =
+            BcParksCampgroundsDto(
+                leaves = listOf(leaf("Rathtrevor Beach", mapId = RATHTREVOR_MAP_ID), leaf("Goldstream", mapId = LOOP_MAP_ID)),
+                strapiRows = bothParks.rows(),
+                geomSources = listOf("bcparks-strapi" to bothParks),
+                inventoryEnvelopes = listOf(inventoryEnvelope()),
+                dictionaryPayload = dictionaryEnvelope().payload as JsonObject,
+            )
+
+        // Both leaves reach the geometry index …
+        assertEquals(listOf("Rathtrevor Beach", "Goldstream"), records(etl.transform(dto, ctx)).map { it.name })
+
+        // … so losing only the Strapi row is what drops the second one.
+        val rowsMissingGoldstream = dto.copy(strapiRows = BcParksStrapiSource(listOf(strapiEnvelope())).rows())
+        assertEquals(listOf("Rathtrevor Beach"), records(etl.transform(rowsMissingGoldstream, ctx)).map { it.name })
+    }
+
+    @Test
     fun `booking ref keeps the leaf map when sites span several loop maps`() {
         val cg = terminalRecords(etl, bundleAcrossLoops(), ctx).single()
 
         // -2147483548 is the leaf's own map; neither loop map covers the whole POI.
         assertEquals("bc:4189:-2147483548:9001", cg.bookingProviderRef)
     }
+
+    private fun leaf(
+        name: String,
+        mapId: Long,
+    ) = AspiraLeaf(
+        name = name,
+        transactionLocationId = TRANSACTION_LOCATION_ID,
+        mapId = mapId,
+        resourceLocationId = BOOKABLE_RESOURCE_LOCATION_ID,
+    )
+
+    private fun bundleWithFuzzyLeaf(): InputBundle =
+        InputBundle(
+            rawCaptures =
+                linkedMapOf(
+                    "aspira-maps-bc" to listOf(mapsEnvelopeWithFuzzyLeaf()),
+                    "bcparks-strapi" to listOf(strapiEnvelope()),
+                    "aspira-inventory-bc" to listOf(inventoryEnvelope()),
+                    "aspira-dictionaries-bc" to listOf(dictionaryEnvelope()),
+                ),
+        )
 
     private fun bundleAcrossLoops(): InputBundle =
         InputBundle(
@@ -175,6 +237,33 @@ class BcParksCampgroundsEtlTest {
                 ),
         )
 
+    /** One leaf whose normalized name ("rathtrevor beach west") only overlaps the Strapi park's. */
+    private fun mapsEnvelopeWithFuzzyLeaf(): Envelope =
+        Envelope(
+            fetcher = "fetch_aspira_maps",
+            fetcherVersion = "1",
+            fetchedAt = "2026-07-01T00:00:00Z",
+            request = RequestMeta(url = "https://camping.bcparks.ca/api/maps", method = "GET"),
+            response = ResponseMeta(status = 200),
+            payload =
+                Json.parseToJsonElement(
+                    """
+                    [
+                      {
+                        "mapId": -2147483548,
+                        "transactionLocationId": "4189",
+                        "resourceLocationId": "9001",
+                        "localizedValues": [
+                          {"cultureName": "en-CA", "title": "Rathtrevor Beach Campground West"}
+                        ],
+                        "mapLinks": [],
+                        "parentMap": null
+                      }
+                    ]
+                    """.trimIndent(),
+                ),
+        )
+
     private fun strapiEnvelope(): Envelope =
         Envelope(
             fetcher = "fetch_bcparks_strapi",
@@ -204,6 +293,37 @@ class BcParksCampgroundsEtlTest {
                               "sortOrder": "1"
                             }
                           ]
+                        }
+                      ]
+                    }
+                    """.trimIndent(),
+                ),
+        )
+
+    /** [strapiEnvelope] plus a second park, so a geometry index built from it out-keys the rows. */
+    private fun strapiEnvelopeWithGoldstream(): Envelope =
+        Envelope(
+            fetcher = "fetch_bcparks_strapi",
+            fetcherVersion = "1",
+            fetchedAt = "2026-07-01T00:00:00Z",
+            request = RequestMeta(url = "https://bcparks.example.test/api/protected-areas", method = "GET"),
+            response = ResponseMeta(status = 200),
+            payload =
+                Json.parseToJsonElement(
+                    """
+                    {
+                      "data": [
+                        {
+                          "orcs": 1234,
+                          "protectedAreaName": "Rathtrevor Beach Provincial Park",
+                          "latitude": "49.3167",
+                          "longitude": "-124.2833"
+                        },
+                        {
+                          "orcs": 5678,
+                          "protectedAreaName": "Goldstream Provincial Park",
+                          "latitude": "48.4756",
+                          "longitude": "-123.5533"
                         }
                       ]
                     }
@@ -301,4 +421,11 @@ class BcParksCampgroundsEtlTest {
                     """.trimIndent(),
                 ),
         )
+
+    private companion object {
+        const val TRANSACTION_LOCATION_ID = 4189L
+        const val BOOKABLE_RESOURCE_LOCATION_ID = 9001L
+        const val RATHTREVOR_MAP_ID = -2147483548L
+        const val LOOP_MAP_ID = -2147483547L
+    }
 }

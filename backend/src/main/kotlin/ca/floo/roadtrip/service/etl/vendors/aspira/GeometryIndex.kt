@@ -19,9 +19,7 @@ object GeometryIndex {
         val byName = LinkedHashMap<String, GeometryPoint>()
         for ((slug, source) in sources) {
             val before = byName.size
-            for (point in source.points()) {
-                val key = normalize(point.name)
-                if (key.isEmpty()) continue
+            for ((key, point) in byNormalizedName(source.points().asIterable()) { it.name }) {
                 byName.putIfAbsent(key, GeometryPoint(point.latitude, point.longitude, slug))
             }
             log.info(
@@ -31,6 +29,23 @@ object GeometryIndex {
                 byName.size - before,
                 byName.size,
             )
+        }
+        return byName
+    }
+
+    /**
+     * The one keying rule: [normalize]d name, blank names dropped, first writer
+     * wins. A metadata index joined against this one by matched name is built
+     * here too, so the two cannot drift apart.
+     */
+    fun <T> byNormalizedName(
+        rows: Iterable<T>,
+        name: (T) -> String,
+    ): Map<String, T> {
+        val byName = LinkedHashMap<String, T>()
+        for (row in rows) {
+            val key = normalize(name(row))
+            if (key.isNotEmpty()) byName.putIfAbsent(key, row)
         }
         return byName
     }

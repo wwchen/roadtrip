@@ -9,6 +9,13 @@ class AspiraLeafMatcherTest {
     private val banff = 51.18 to -115.57
     private val twoJack = 51.22 to -115.49
 
+    /** Two keys sharing one token, so a bare "lake" ties and "alpha lake extra" does not. */
+    private val twoLakes =
+        linkedMapOf(
+            "alpha lake" to (1.0 to 2.0),
+            "beta lake" to (3.0 to 4.0),
+        )
+
     private fun matcher(
         policy: MatchPolicy = MatchPolicy(parentFallback = true),
         byName: Map<String, Pair<Double, Double>> = mapOf("banff" to banff, "two jack lakeside" to twoJack),
@@ -69,16 +76,21 @@ class AspiraLeafMatcherTest {
      */
     @Test
     fun `a tie keeps the first entry in index order`() {
-        val byName =
-            linkedMapOf(
-                "alpha lake" to (1.0 to 2.0),
-                "beta lake" to (3.0 to 4.0),
-            )
-
-        val match = matcher(byName = byName).match(leaf("Lake"))
+        // {lake} of {alpha, lake} and of {beta, lake} — both exactly 0.5.
+        val match = matcher(byName = twoLakes).match(leaf("Lake"))
 
         assertEquals("alpha lake", match?.matchedName)
         assertEquals(1.0 to 2.0, match?.value)
+        assertEquals(TIED_SCORE, match?.score)
+    }
+
+    @Test
+    fun `the reported score is the overlap that won, not the threshold that admitted it`() {
+        // {alpha, lake} of {alpha, lake, extra} — above the default threshold.
+        val match = matcher(byName = twoLakes).match(leaf("Alpha Lake Extra"))
+
+        assertEquals("alpha lake", match?.matchedName)
+        assertEquals(2.0 / 3, match?.score)
     }
 
     @Test
@@ -131,5 +143,8 @@ class AspiraLeafMatcherTest {
 
         /** Above every overlap these fixtures produce, so the fuzzy pass must reject. */
         const val STRICT_THRESHOLD = 0.9
+
+        /** One shared token of two keys' two: what both [twoLakes] entries score against "lake". */
+        const val TIED_SCORE = 0.5
     }
 }
