@@ -92,8 +92,7 @@ function AvailabilityWeekView({
   feature: PoiFeature;
 }) {
   const poiName = (feature.properties?.name as string | undefined) || 'this campground';
-  // Who serves this campground, as the drawer's "Booking via" says. The hold's
-  // own provider outranks it; this is the fallback and the failure copy's name.
+  // Who serves this campground, as the drawer's "Booking via" says — a fallback only.
   const bookingSystem = (feature.properties?.booking_system as string | undefined) || undefined;
 
   // The first date this provider will quote. Everything paginates forward from here,

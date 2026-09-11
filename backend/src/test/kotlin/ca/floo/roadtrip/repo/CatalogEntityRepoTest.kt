@@ -32,15 +32,6 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-/** Everything V61 builds, in the order `pg_indexes` returns them sorted. */
-private val bookingAliasIndexes =
-    listOf(
-        "campgrounds_booking_aliases_gin",
-        "campgrounds_booking_provider_ref_idx",
-        "campsites_booking_aliases_gin",
-        "campsites_booking_provider_ref_idx",
-    )
-
 class CatalogEntityRepoTest : SharedDbTest() {
     @BeforeEach
     fun resetCatalog() {
@@ -1477,6 +1468,39 @@ class CatalogEntityRepoTest : SharedDbTest() {
     }
 
     /**
+     * The bag is only CHECKed to be an array, so anything can be inside one.
+     * A scalar, a null, and an entry with no usable `ref` are each dropped on
+     * their own rather than failing the read of an otherwise good row.
+     */
+    @Test
+    fun `booking alias entries that are not usable aliases are skipped, not fatal`() {
+        CampgroundRepo(ctx).upsertCampgrounds(
+            listOf(
+                CampgroundUpsertCandidate(
+                    dataProviderRef = DataProviderRef.Campflare(id = "cg-alias-junk"),
+                    name = "Junk Aliases",
+                    latitude = 1.0,
+                    longitude = 2.0,
+                    location = CampgroundLocation(1.0, 2.0),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+        ctx.execute(
+            """UPDATE campgrounds SET booking_aliases =
+                '[1, null, {"provider":"recgov"}, {"provider":"recgov","ref":null},
+                  {"provider":"recgov","ref":"  "}, {"provider":"recgov","ref":"7"}]'::jsonb
+                WHERE data_provider_ref = ?""",
+            "cg-alias-junk",
+        )
+
+        assertEquals(
+            listOf(BookingAlias(provider = BookingProvider.RECGOV, ref = "7")),
+            checkNotNull(CampgroundRepo(ctx).findById(campgroundId("cg-alias-junk"))).bookingAliases,
+        )
+    }
+
+    /**
      * V59's whole job: a Campflare row stamped with rec.gov as its *primary*
      * becomes Campflare primary carrying rec.gov as an alias. Rows that already
      * name their own vendor are left alone, and a rerun changes nothing.
@@ -1535,6 +1559,8 @@ class CatalogEntityRepoTest : SharedDbTest() {
      * V61 builds the alias indexes CONCURRENTLY, which Postgres refuses inside a
      * transaction — the sibling `.sql.conf` takes Flyway out of one, and this
      * replay runs the same statements on the pool's autocommit connection.
+     * A failed concurrent build leaves an INVALID index that `IF NOT EXISTS`
+     * will not rebuild, so existence alone is not the assertion: validity is.
      */
     @Test
     fun `the alias index migration builds every index concurrently and reruns clean`() {
@@ -1542,21 +1568,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
 
         repeat(2) { migrationStatements("V61__booking_alias_indexes.sql").forEach(ctx::execute) }
 
-        assertEquals(bookingAliasIndexes, bookingAliasIndexNames())
-    }
-
-    private fun bookingAliasIndexNames(): List<String> {
-        val placeholders = bookingAliasIndexes.joinToString(", ") { "?" }
-        return ctx
-            .fetch(
-                """
-                SELECT indexname
-                FROM pg_indexes
-                WHERE schemaname = 'public' AND indexname IN ($placeholders)
-                ORDER BY indexname
-                """.trimIndent(),
-                *bookingAliasIndexes.toTypedArray(),
-            ).map { it.get("indexname", String::class.java) }
+        assertEquals(bookingAliasIndexes, validBookingAliasIndexNames(ctx))
     }
 
     /** One bare campground carrying only its identity columns, for the alias migration to rewrite. */

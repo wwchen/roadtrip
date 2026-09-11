@@ -29,12 +29,9 @@ internal class ResolvedWatchScope(
 )
 
 /**
- * What a proposed watch over this scope could actually do.
- *
- * Whether the inventory has a cart is a property of the scope; `atc` is a
- * property of the scope **and the asker**, who needs credentials with the
- * provider that would hold it. `add_to_cart.state` tells the editor which of the
- * two is missing. Which provider that is, is the adapter's to answer.
+ * What a proposed watch over this scope could actually do: a cart is a property
+ * of the scope, `atc` of the scope and the asker both. `add_to_cart` says which
+ * of the two is missing, and names the adapter that would hold the site.
  */
 internal class WatchCapabilityService(
     private val availabilityTargets: AvailabilityTargetResolver,

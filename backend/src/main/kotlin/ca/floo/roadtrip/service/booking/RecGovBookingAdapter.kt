@@ -47,15 +47,9 @@ internal const val COMPANION_ERROR_DETAIL = "the booking service hit an internal
 private const val FIELD_PROFILE_ID = "profile_id"
 
 /**
- * A sentence for a refusal the companion did not explain.
- *
- * The owner's email renders `detail ?: error`, so a companion answer with no
- * `detail` used to reach them as the bare word `mfa_required`. One line per
- * category rather than one per code: the copy has to stay true for every member
- * of its category, and what the owner can actually do about it is a
- * category-level fact. The code rides along because it is the one thing that
- * makes a support report actionable — the same bargain `settings-errors.ts`
- * strikes for an unmapped code.
+ * A sentence for a refusal the companion did not explain, so the owner does not
+ * read a bare code like `mfa_required`. One per category, not per code: what the
+ * owner can do about it is a category-level fact.
  */
 private fun undetailed(
     code: String,

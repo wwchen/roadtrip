@@ -42,10 +42,9 @@ internal class AvailabilityBookingTargetResolver(
     }
 
     /**
-     * The target implied by the rows' own booking identities, primary first.
-     * The cart needs the site id *on the booking vendor* — a Campflare campsite
-     * uuid means nothing to rec.gov — so each campsite identity is paired with
-     * the campground's ref on that same provider.
+     * The target implied by the rows' own booking identities, primary first. The
+     * cart needs the site id on the booking vendor, so each campsite identity is
+     * paired with the campground's ref on that same provider.
      */
     private fun declaredTarget(
         action: BookingAction,

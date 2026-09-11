@@ -9,6 +9,34 @@ private val defaultTestDataProvider = DataProvider.RECGOV.id
 
 const val EMPTY_BOOKING_ALIASES = "[]"
 
+/** Everything V61 builds, in the order the catalogs return them sorted. */
+val bookingAliasIndexes =
+    listOf(
+        "campgrounds_booking_aliases_gin",
+        "campgrounds_booking_provider_ref_idx",
+        "campsites_booking_aliases_gin",
+        "campsites_booking_provider_ref_idx",
+    )
+
+/**
+ * The V61 indexes Postgres will actually plan with. A CONCURRENTLY build that
+ * fails leaves the index in `pg_class` but `indisvalid = false`, so a test that
+ * only asked whether the name exists would pass on a half-built index.
+ */
+fun validBookingAliasIndexNames(ctx: DSLContext): List<String> =
+    ctx
+        .fetch(
+            """
+            SELECT c.relname AS indexname
+            FROM pg_index i
+            JOIN pg_class c ON c.oid = i.indexrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public' AND i.indisvalid AND c.relname = ANY(?)
+            ORDER BY c.relname
+            """.trimIndent(),
+            bookingAliasIndexes.toTypedArray(),
+        ).map { it.get("indexname", String::class.java) }
+
 @Suppress("UnusedReceiverParameter")
 fun DSLContext.refreshCanonicalCatalogViews() {
     // No-op: materialized views removed in V44.

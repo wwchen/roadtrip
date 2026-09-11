@@ -28,18 +28,9 @@ internal class AtcTriggerActionHandler(
     override val kinds: Set<String> = setOf(KIND)
 
     /**
-     * Who hears about this ATC.
-     *
-     * ATC carries the `atc` kind rather than `slack_notify`/`email_notify`, so
-     * it resolves both targets directly instead of through the kind-gated
-     * [WatchNotificationTargetResolver.resolve] — a user who opted into holding
-     * a site has, by that act, asked to be told whether it worked.
-     *
-     * **Email is the one that usually lands.** The Slack target is fail-closed
-     * on the owner having BOTH a personal token and a channel, so for most
-     * owners it is null and the result would otherwise be announced to nobody.
-     * Email resolves the same way watch openings do: the owner's
-     * `notification_email`, falling back to their login email.
+     * Who hears about this ATC: both targets directly, not through the kind-gated
+     * [WatchNotificationTargetResolver.resolve], since `atc` is its own kind.
+     * Slack is fail-closed on a token and a channel, so email usually carries it.
      */
     private fun atcTargets(watch: AvailabilityWatchRepo.Watch): List<NotificationTarget> =
         listOfNotNull(

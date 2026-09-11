@@ -8,7 +8,6 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.BookingCredentials
 import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
-import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.security.SecretCipher
 import kotlinx.coroutines.CompletableDeferred
@@ -84,13 +83,6 @@ private class FakeCredentialsRepo : UserBookingCredentialsRepo(ctx = detachedCtx
         user: UserId,
         provider: BookingProvider,
     ): Boolean = (stored != null).also { stored = null }
-}
-
-/** Stands in for the V53 columns, so a test can see whether the legacy copy was wiped. */
-private class FakeLegacySettingsRepo : UserSettingsRepo(ctx = detachedCtx) {
-    var legacyRecgov: Boolean = true
-
-    override fun clearLegacyRecgovCredentials(userId: UserId): Boolean = legacyRecgov.also { legacyRecgov = false }
 }
 
 private class FakeWatchRepo(
@@ -189,10 +181,8 @@ class RecGovCredentialServiceTest {
         withCipher: SecretCipher? = cipher,
         activeAtcWatches: Int = 0,
         clock: Clock = Clock.systemUTC(),
-        settingsRepo: FakeLegacySettingsRepo = FakeLegacySettingsRepo(),
     ) = RecGovCredentialService(
         credentialsRepo = repo,
-        settingsRepo = settingsRepo,
         watchRepo = FakeWatchRepo(activeAtcWatches),
         cipher = withCipher,
         companion = companion,
@@ -216,26 +206,6 @@ class RecGovCredentialServiceTest {
             assertTrue(dto.recgovConfigured)
             assertEquals("ada@example.com", dto.recgovUsername)
             assertEquals("hunter2-secret", cipher.open(repo.stored!!.secretCipher))
-        }
-
-    @Test
-    fun `a password save wipes the legacy V53 columns, so the stale copy cannot come back`() =
-        runBlocking {
-            val settingsRepo = FakeLegacySettingsRepo()
-
-            service(settingsRepo = settingsRepo).save(testUserId, UpdateRecgovRequest("ada@example.com", "hunter2-secret"))
-
-            assertFalse(settingsRepo.legacyRecgov)
-        }
-
-    @Test
-    fun `a username-only save wipes the legacy V53 columns too`() =
-        runBlocking {
-            val settingsRepo = FakeLegacySettingsRepo()
-
-            service(configuredRepo(), settingsRepo = settingsRepo).save(testUserId, UpdateRecgovRequest("grace@example.com", null))
-
-            assertFalse(settingsRepo.legacyRecgov)
         }
 
     @Test
@@ -373,16 +343,6 @@ class RecGovCredentialServiceTest {
             assertTrue(dto.companionSignedOut)
             assertEquals(listOf(PROFILE_ID), companion.logoutCalls)
             assertNull(repo.stored, "the stored account is gone, not blanked")
-        }
-
-    @Test
-    fun `removal wipes the legacy V53 columns too, so a rollback cannot revive the account`() =
-        runBlocking {
-            val settingsRepo = FakeLegacySettingsRepo()
-
-            service(configuredRepo(), settingsRepo = settingsRepo).remove(testUserId)
-
-            assertFalse(settingsRepo.legacyRecgov, "the V53 copy must not outlive the live row")
         }
 
     @Test

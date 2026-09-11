@@ -34,7 +34,8 @@ fun dataSourceFor(cfg: DbConfig): HikariDataSource {
 // Flyway's default lock is a transactional advisory lock, which leaves its own
 // connection idle-in-transaction for the whole run — and CREATE INDEX
 // CONCURRENTLY (V61) then waits on that virtualxid forever. Session-level instead.
-private val flywaySessionLock = mapOf("flyway.postgresql.transactional.lock" to "false")
+// Set at three sites: here, generateJooq's Flyway, and the `flyway {}` block (both in backend/build.gradle.kts).
+internal val flywaySessionLock = mapOf("flyway.postgresql.transactional.lock" to "false")
 
 fun migrate(ds: DataSource) {
     // baselineOnMigrate handles the case where the DB was hand-bootstrapped

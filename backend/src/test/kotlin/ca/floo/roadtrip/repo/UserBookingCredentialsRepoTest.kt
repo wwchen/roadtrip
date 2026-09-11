@@ -124,6 +124,58 @@ class UserBookingCredentialsRepoTest : SharedDbTest() {
         assertEquals(1, storedRowCount(user))
     }
 
+    @Test fun `a save mirrors the account into the V53 columns`() {
+        val user = newUser()
+
+        repo.save(user, BookingProvider.RECGOV, username = "ada@example.com", secretCipher = byteArrayOf(4, 5))
+
+        assertEquals("ada@example.com", legacyUsername(user))
+        assertContentEquals(byteArrayOf(4, 5), legacyPasswordCipher(user))
+    }
+
+    @Test fun `clear nulls the mirrored V53 columns too`() {
+        val user = newUser()
+        repo.save(user, BookingProvider.RECGOV, "ada@example.com", byteArrayOf(4, 5))
+
+        repo.clear(user, BookingProvider.RECGOV)
+
+        assertNull(repo.find(user, BookingProvider.RECGOV))
+        assertNull(legacyUsername(user))
+        assertNull(legacyPasswordCipher(user))
+    }
+
+    @Test fun `updateUsername mirrors the rename into the V53 username`() {
+        val user = newUser()
+        repo.save(user, BookingProvider.RECGOV, "ada@example.com", byteArrayOf(4, 5))
+
+        repo.updateUsername(user, BookingProvider.RECGOV, "grace@example.com")
+
+        assertEquals("grace@example.com", legacyUsername(user))
+        assertContentEquals(byteArrayOf(4, 5), legacyPasswordCipher(user), "the mirrored secret is untouched")
+    }
+
+    @Test fun `another provider's account never reaches the rec_gov-only V53 columns`() {
+        val user = newUser()
+        repo.save(user, BookingProvider.RECGOV, "ada@example.com", byteArrayOf(4, 5))
+
+        repo.save(user, BookingProvider.CAMPFLARE, "grace@example.com", byteArrayOf(9))
+        repo.updateUsername(user, BookingProvider.CAMPFLARE, "hopper@example.com")
+        repo.clear(user, BookingProvider.CAMPFLARE)
+
+        assertEquals("ada@example.com", legacyUsername(user))
+        assertContentEquals(byteArrayOf(4, 5), legacyPasswordCipher(user))
+    }
+
+    private fun legacyUsername(user: UserId): String? =
+        ctx
+            .fetchOne("SELECT recgov_username FROM user_settings WHERE user_id = ?", user.value)
+            ?.get("recgov_username", String::class.java)
+
+    private fun legacyPasswordCipher(user: UserId): ByteArray? =
+        ctx
+            .fetchOne("SELECT recgov_password_cipher FROM user_settings WHERE user_id = ?", user.value)
+            ?.get("recgov_password_cipher", ByteArray::class.java)
+
     /** A row in the shape V53 left behind, which V60 is meant to carry forward. */
     private fun seedLegacyCredentials(
         username: String,

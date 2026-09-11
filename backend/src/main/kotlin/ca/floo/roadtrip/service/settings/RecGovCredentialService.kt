@@ -14,7 +14,6 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.BookingCredentials
 import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
-import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.security.SecretCipher
@@ -112,7 +111,6 @@ private val PROVIDER: BookingProvider = BookingProvider.RECGOV
  */
 class RecGovCredentialService(
     private val credentialsRepo: UserBookingCredentialsRepo,
-    private val settingsRepo: UserSettingsRepo,
     private val watchRepo: AvailabilityWatchRepo,
     private val cipher: SecretCipher?,
     private val companion: CompanionSessionPort?,
@@ -202,7 +200,6 @@ class RecGovCredentialService(
             // unconfigured rather than re-creating the row.
             credentialsRepo.updateUsername(userId, PROVIDER, username)
         }
-        clearLegacyCopy(userId)
         return bookingSettingsDto(storedCredentials(userId), cipher)
     }
 
@@ -261,7 +258,6 @@ class RecGovCredentialService(
         val destroyed = wipeProfileOrRefuse(userId)
 
         val removed = credentialsRepo.clear(userId, PROVIDER)
-        clearLegacyCopy(userId)
 
         return RecgovRemovedDto(
             removed = removed,
@@ -465,11 +461,6 @@ class RecGovCredentialService(
     }
 
     private fun storedCredentials(userId: UserId): BookingCredentials? = credentialsRepo.find(userId, PROVIDER)
-
-    /** V60 left V53's columns behind for a rollback; they stay dead until the drop-columns migration. */
-    private fun clearLegacyCopy(userId: UserId) {
-        settingsRepo.clearLegacyRecgovCredentials(userId)
-    }
 
     private fun requireCredentials(userId: UserId): Credentials {
         val c = cipher ?: throw encryptionUnavailable()

@@ -328,9 +328,9 @@ val jooqContainerKey = "jooqPgContainer"
 val migrationDir = layout.projectDirectory.dir("src/main/resources/db/migration")
 val migrationDirPath = migrationDir.asFile.absolutePath
 
-// Mirrors flywaySessionLock in Db.kt: a transactional lock leaves Flyway's own
-// connection idle-in-transaction, and V61's CREATE INDEX CONCURRENTLY then waits
-// on that virtualxid forever. Duplicated because build scripts cannot import it.
+// Mirrors flywaySessionLock in Db.kt (the third site is the `flyway {}` block below):
+// a transactional lock leaves Flyway's own connection idle-in-transaction, and V61's
+// CREATE INDEX CONCURRENTLY then waits on that virtualxid forever.
 val flywaySessionLockKey = "postgresql.transactional.lock"
 val flywaySessionLock = mapOf("flyway.$flywaySessionLockKey" to "false")
 
@@ -382,7 +382,8 @@ flyway {
     user = (project.findProperty("flyway.user") as String?) ?: "roadtrip"
     password = (project.findProperty("flyway.password") as String?) ?: "roadtrip"
     locations = arrayOf("filesystem:$migrationDirPath")
-    // The plugin prefixes every pluginConfiguration key with `flyway.` itself.
+    // Third of the three session-lock sites (Db.kt and generateJooq above are the
+    // others); the plugin prefixes every pluginConfiguration key with `flyway.` itself.
     pluginConfiguration = mapOf(flywaySessionLockKey to "false")
 }
 
