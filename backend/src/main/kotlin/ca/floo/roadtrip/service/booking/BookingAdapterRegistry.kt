@@ -4,7 +4,6 @@ import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 
 internal class BookingAdapterRegistry(
@@ -20,9 +19,6 @@ internal class BookingAdapterRegistry(
     }
 
     fun adapterFor(target: BookingTarget): BookingAdapter? = byId[target.providerId]
-
-    /** Whether this process can book with [provider] at all. */
-    fun handles(provider: BookingProvider): Boolean = byId.containsKey(provider)
 
     fun targetFor(
         action: BookingAction,

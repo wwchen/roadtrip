@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.api.CampsiteDto
 import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteKind
+import ca.floo.roadtrip.model.metadata.registry.TenantRegistry
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.ref.RefResolver
 import ca.floo.roadtrip.service.ref.RefValue
@@ -13,6 +14,8 @@ internal class CampsiteCatalogService(
     private val refResolver: RefResolver,
     private val campsitesRepo: CampsiteRepo,
     private val targets: AvailabilityTargetResolver,
+    private val identities: BookingIdentityResolver,
+    private val tenants: TenantRegistry,
 ) {
     fun campsitesForPoi(
         poiId: Long,
@@ -20,27 +23,35 @@ internal class CampsiteCatalogService(
     ): PoiCampsitesResponseSchema {
         val campgrounds = refResolver.resolve<RefValue.CampgroundId>(RefValue.PoiId(poiId))
         if (campgrounds.isEmpty()) throw AvailabilityServiceError.NotFound
-        val campsites =
+        val rows =
             campsitesRepo
                 .findByPoi(poiId)
                 .filterBySiteTypes(siteTypes)
+                .map { campsite -> campsite to targets.resolve(campsite) }
         return PoiCampsitesResponseSchema(
             poiId = poiId,
             type = CAMPSITE_RESPONSE_TYPE,
-            campsites = campsites.map(CampsiteDto::from),
+            campsites =
+                rows.map { (campsite, resolved) ->
+                    CampsiteDto.from(campsite, bookingSystem = bookingSystem(resolved))
+                },
             reservationUrlTemplates =
-                campsites
-                    .mapNotNull { campsite ->
-                        reservationUrlTemplate(campsite)?.let { campsite.id to it }
+                rows
+                    .mapNotNull { (campsite, resolved) ->
+                        reservationUrlTemplate(campsite, resolved)?.let { campsite.id to it }
                     }.toMap(),
         )
     }
 
-    private fun reservationUrlTemplate(campsite: Campsite): String? =
-        targets.resolve(campsite)?.let { resolved ->
-            resolved.parentRef?.let { ref ->
-                resolved.provider.reservationUrlTemplate(campsite, ref)
-            }
+    private fun bookingSystem(resolved: ResolvedAvailabilityTarget?): String? =
+        resolved?.let { identities.forCampsite(it) }?.let(tenants::displayName)
+
+    private fun reservationUrlTemplate(
+        campsite: Campsite,
+        resolved: ResolvedAvailabilityTarget?,
+    ): String? =
+        resolved?.parentRef?.let { ref ->
+            resolved.provider.reservationUrlTemplate(campsite, ref)
         }
 }
 

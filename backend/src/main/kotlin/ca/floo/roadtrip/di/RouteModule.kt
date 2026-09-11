@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.oidc.OidcClient
 import ca.floo.roadtrip.config.ApiCacheConfig
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.model.domain.auth.Principal
+import ca.floo.roadtrip.model.metadata.registry.TenantRegistry
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
@@ -51,6 +52,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
+import ca.floo.roadtrip.service.availability.BookingIdentityResolver
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
@@ -91,6 +93,8 @@ internal fun Application.registerKoinRoutes() {
     val availabilityProviders: List<AvailabilityProvider> by inject(named("availabilityProviders"))
     val dateResolver: AvailabilityDateResolver by inject()
     val bookingHorizons: BookingHorizonResolver by inject()
+    val bookingIdentities: BookingIdentityResolver by inject()
+    val tenants: TenantRegistry by inject()
     val failoverFetcher: FailoverAvailabilityFetcher by inject()
     val poiService: PoiReader by inject()
     val poisOnRouteService: PoisOnRouteService by inject()
@@ -136,6 +140,8 @@ internal fun Application.registerKoinRoutes() {
                 failoverFetcher = failoverFetcher,
                 watchCapabilities = watchCapabilities,
                 cacheConfig = config.cache,
+                identities = bookingIdentities,
+                tenants = tenants,
             )
         campsiteRoutes(campsiteController)
         bulkAvailabilityRoutes(
@@ -198,6 +204,8 @@ private fun campsiteAvailabilityController(
     failoverFetcher: FailoverAvailabilityFetcher,
     watchCapabilities: WatchCapabilityService,
     cacheConfig: ApiCacheConfig,
+    identities: BookingIdentityResolver,
+    tenants: TenantRegistry,
 ): CampsiteAvailabilityController {
     val campsitesRepo = CampsiteRepo(ctx)
     val campgroundRepo = CampgroundRepo(ctx)
@@ -213,7 +221,7 @@ private fun campsiteAvailabilityController(
     return CampsiteAvailabilityController(
         campgroundRepo = campgroundRepo,
         campsitesRepo = campsitesRepo,
-        catalogService = CampsiteCatalogService(DbRefResolver(RefLinkRepo(ctx)), campsitesRepo, targets),
+        catalogService = CampsiteCatalogService(DbRefResolver(RefLinkRepo(ctx)), campsitesRepo, targets, identities, tenants),
         availabilityService =
             CampsiteAvailabilityService(
                 availabilityProviders = availabilityProviders,

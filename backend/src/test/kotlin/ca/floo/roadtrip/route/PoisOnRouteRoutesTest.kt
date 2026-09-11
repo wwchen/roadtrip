@@ -2,11 +2,9 @@ package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.client.mapbox.MapboxDirections
 import ca.floo.roadtrip.config.RouteConfig
-import ca.floo.roadtrip.fixtures.testBookingHorizons
+import ca.floo.roadtrip.fixtures.testCampgroundService
 import ca.floo.roadtrip.model.routing.RouteResponse
-import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
-import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -15,8 +13,6 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
 import ca.floo.roadtrip.route.api.route.routeRoutes
-import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
-import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiService
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
@@ -62,14 +58,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf("recgov", "campflare")),
             detailServices =
                 listOf(
-                    CampgroundService(
-                        campgroundRepo = CampgroundRepo(ctx),
-                        dateResolver =
-                            ca.floo.roadtrip.service.availability
-                                .AvailabilityDateResolver(PoiRepo(ctx)),
-                        bookingHorizons = testBookingHorizons(ctx),
-                        bookingAdapters = BookingAdapterRegistry(emptyList()),
-                    ),
+                    testCampgroundService(ctx),
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
                 ),

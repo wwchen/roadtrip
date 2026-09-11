@@ -1,5 +1,9 @@
 package ca.floo.roadtrip.route
 
+import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
+import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
+import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
@@ -13,7 +17,6 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
-import ca.floo.roadtrip.repo.RefLinkRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -24,15 +27,14 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
-import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.CampflareAvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
-import ca.floo.roadtrip.service.ref.DbRefResolver
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
@@ -47,6 +49,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.net.URI
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -60,6 +63,13 @@ private const val DEFAULT_WINDOW_DAYS = 7
 
 // The serving fake's horizon.
 private const val TEST_BOOKING_HORIZON_DAYS = 180L
+
+// The aliased Campflare site's own reservation page: a rec.gov campsite, which
+// is what makes the template's host and the row's booking_system comparable.
+private const val ALIASED_CAMPSITE_RESERVATION_URL = "https://www.recreation.gov/camping/campsites/10174516"
+
+/** `tenant:transactionLocationId:mapId:resourceLocationId` on the BC Parks tenant. */
+private const val BC_PARKS_CAMPGROUND_REF = "bc:1:-2147483470:null"
 
 // Every nullable campsite column the recgov ETL leaves unwritten, in the wire
 // names `CampsiteDto` serves them under.
@@ -118,7 +128,7 @@ class CampsiteRoutesTest : SharedDbTest() {
         return CampsiteAvailabilityController(
             campgroundRepo = campgroundRepo,
             campsitesRepo = campsitesRepo,
-            catalogService = CampsiteCatalogService(DbRefResolver(RefLinkRepo(ctx)), campsitesRepo, targets),
+            catalogService = testCampsiteCatalogService(ctx, campsitesRepo, targets),
             availabilityService =
                 CampsiteAvailabilityService(
                     availabilityProviders = providers,
@@ -161,6 +171,128 @@ class CampsiteRoutesTest : SharedDbTest() {
         val campsiteId = ctx.seedCampsite(campgroundId = fixture.catalogId, vendorId = "route-cs-100")
         return fixture.poiId to campsiteId
     }
+
+    /** POI 8149's shape: a Campflare row rec.gov also sells, campground and site alike. */
+    private fun seedAliasedCampflarePoiWithCampsite(): Long {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "icicle-group-campground-8149",
+                name = "Icicle Group Campground",
+                lon = -120.78,
+                lat = 47.55,
+                source = "campflare",
+                bookingProvider = "campflare",
+                bookingProviderRef = "icicle-group-campground-8149",
+                bookingAliasesJson = """[{"provider":"recgov","ref":"234784"}]""",
+            )
+        ctx.seedCampsite(
+            campgroundId = fixture.catalogId,
+            vendor = "campflare",
+            vendorId = "campflare-site-10",
+            reservationUrl = ALIASED_CAMPSITE_RESERVATION_URL,
+            bookingProvider = "campflare",
+            bookingProviderRef = "campflare-site-10",
+            bookingAliasesJson = """[{"provider":"recgov","ref":"10174516"}]""",
+        )
+        return fixture.poiId
+    }
+
+    /** One vendor, one tenant, no alias: the plain case the aliased one is read against. */
+    private fun seedBcParksPoiWithCampsite(): Long {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "1:-2147483470",
+                name = "Alouette Lake",
+                lon = -122.48,
+                lat = 49.29,
+                source = "aspira",
+                bookingProvider = "aspira",
+                bookingProviderRef = BC_PARKS_CAMPGROUND_REF,
+            )
+        ctx.seedCampsite(
+            campgroundId = fixture.catalogId,
+            vendor = "aspira",
+            vendorId = "bc:9001",
+            bookingProvider = "aspira",
+            bookingProviderRef = "9001",
+        )
+        return fixture.poiId
+    }
+
+    /** Campflare serves the aliased row; the fake Aspira adapter serves the BC one. */
+    private fun tenantProviders(): List<AvailabilityProvider> =
+        listOf(
+            CampflareAvailabilityProvider(
+                CampflareAvailabilityClient { _, _, _ -> error("Campflare availability client should not be called") },
+                enabled = true,
+                configured = true,
+            ),
+            FakeAvailabilityProvider(BookingProvider.ASPIRA),
+        )
+
+    @Test
+    fun `campsite rows carry the booking site name, aliased and plain`() =
+        testApplication {
+            application { routeTestApplication { campsiteRoutesUnderTest(providers = tenantProviders()) } }
+            val aliasedPoiId = seedAliasedCampflarePoiWithCampsite()
+            val bcPoiId = seedBcParksPoiWithCampsite()
+
+            val body = client.get("/api/pois/$aliasedPoiId/campsites").bodyAsText()
+            val rows = Json.parseToJsonElement(body).jsonObject["campsites"]!!.jsonArray
+            assertEquals(
+                "Recreation.gov",
+                rows
+                    .single()
+                    .jsonObject["booking_system"]
+                    ?.jsonPrimitive
+                    ?.content,
+            )
+
+            val plain = Json.parseToJsonElement(client.get("/api/pois/$bcPoiId/campsites").bodyAsText()).jsonObject
+            assertEquals(
+                "BC Parks",
+                plain["campsites"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject["booking_system"]
+                    ?.jsonPrimitive
+                    ?.content,
+            )
+        }
+
+    /**
+     * The reservation template comes from the *serving* availability provider
+     * (CampsiteCatalogService → targets.resolve(campsite).provider), while
+     * booking_system comes from the identity resolver. On an aliased Campflare
+     * row served by Campflare those are different objects, so pin that they
+     * still name the same vendor: CampflareAvailabilityProvider builds its
+     * template with RecGovBookingUrl, and the row sells on rec.gov.
+     */
+    @Test
+    fun `an aliased Campflare row's template host and booking_system agree`() =
+        testApplication {
+            application { routeTestApplication { campsiteRoutesUnderTest(providers = tenantProviders()) } }
+            val aliasedPoiId = seedAliasedCampflarePoiWithCampsite()
+
+            val body = Json.parseToJsonElement(client.get("/api/pois/$aliasedPoiId/campsites").bodyAsText()).jsonObject
+            val row = body["campsites"]!!.jsonArray.single().jsonObject
+            val template =
+                body["reservation_url_templates"]!!
+                    .jsonObject
+                    .values
+                    .single()
+                    .jsonPrimitive
+                    .content
+            // The template still carries its window placeholders, which are not
+            // legal URI characters; the host is everything before the query.
+            val host = URI(template.substringBefore('?')).host.lowercase().removePrefix("www.")
+            assertEquals("recreation.gov", host)
+            assertEquals("Recreation.gov", row["booking_system"]?.jsonPrimitive?.content)
+            assertEquals(
+                "Recreation.gov",
+                shippedTenantRegistry().tenantByHost(host)?.displayName,
+            )
+        }
 
     @Test
     fun `GET campsites lists the campsites linked to the POI`() =
