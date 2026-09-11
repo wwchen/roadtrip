@@ -33,6 +33,32 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class CatalogEntityRepoTest : SharedDbTest() {
+    /**
+     * The rollback runbook's own SQL (`docs/reservation-providers.md`, "Deploying
+     * and rolling back the booking port"), verbatim; see the guard test below.
+     * Keep this byte-identical with that doc section if either changes.
+     */
+    private val rollbackCampgroundsSql =
+        """
+        UPDATE campgrounds SET
+          booking_provider = 'recgov',
+          booking_provider_ref = (SELECT a->>'ref' FROM jsonb_array_elements(booking_aliases) a
+                                  WHERE a->>'provider' = 'recgov' LIMIT 1)
+        WHERE data_provider = 'campflare' AND booking_provider = 'campflare'
+          AND booking_aliases @> '[{"provider":"recgov"}]'::jsonb
+        """.trimIndent()
+
+    /** The campsites half of [rollbackCampgroundsSql]; same doc section, same rule. */
+    private val rollbackCampsitesSql =
+        """
+        UPDATE campsites SET
+          booking_provider = 'recgov',
+          booking_provider_ref = (SELECT a->>'ref' FROM jsonb_array_elements(booking_aliases) a
+                                  WHERE a->>'provider' = 'recgov' LIMIT 1)
+        WHERE data_provider = 'campflare' AND booking_provider = 'campflare'
+          AND booking_aliases @> '[{"provider":"recgov"}]'::jsonb
+        """.trimIndent()
+
     @BeforeEach
     fun resetCatalog() {
         ctx.cleanCanonicalCatalogFixtures()
@@ -1569,6 +1595,43 @@ class CatalogEntityRepoTest : SharedDbTest() {
         repeat(2) { migrationStatements("V61__booking_alias_indexes.sql").forEach(ctx::execute) }
 
         assertEquals(bookingAliasIndexes, validBookingAliasIndexNames(ctx))
+    }
+
+    /**
+     * Rollback runbook guard: `docs/reservation-providers.md`'s "Deploying and
+     * rolling back the booking port" section restores the pre-V59 shape with a
+     * correlated subquery rather than a `jsonb_array_elements()` in the UPDATE's
+     * own FROM list — PostgreSQL rejects the latter because a set-returning
+     * function there cannot see the target table's columns. [rollbackCampgroundsSql]
+     * and [rollbackCampsitesSql] must stay byte-identical with that doc section;
+     * update both together if either changes.
+     */
+    @Test
+    fun `the rollback runbook's SQL runs on PostgreSQL and restores the pre-V59 shape`() {
+        seedBookingRow("campflare", "upper-pines-campground-447", "recgov", "232447")
+        val parentCampgroundId = ctx.seedCampground(source = "campflare", sourceId = "lower-pines-campground-448")
+        ctx.seedCampsite(
+            campgroundId = parentCampgroundId,
+            vendor = "campflare",
+            vendorId = "lower-pines-site-100",
+            bookingProvider = "recgov",
+            bookingProviderRef = "330257",
+        )
+
+        // Get to the post-V59 shape the runbook is written against.
+        migrationStatements("V59__booking_aliases.sql").forEach(ctx::execute)
+
+        // The runbook's own statements, verbatim.
+        ctx.execute(rollbackCampgroundsSql)
+        ctx.execute(rollbackCampsitesSql)
+
+        val campground = checkNotNull(CampgroundRepo(ctx).findById(campgroundId("upper-pines-campground-447")))
+        assertEquals("recgov", campground.bookingProvider)
+        assertEquals("232447", campground.bookingProviderRef)
+
+        val campsite = checkNotNull(CampsiteRepo(ctx).findById(campsiteId("lower-pines-site-100")))
+        assertEquals("recgov", campsite.bookingProvider)
+        assertEquals("330257", campsite.bookingProviderRef)
     }
 
     /** One bare campground carrying only its identity columns, for the alias migration to rewrite. */

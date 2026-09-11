@@ -505,13 +505,19 @@ rolled back past the alias-aware resolver reads only `booking_provider` /
 entirely. To restore the pre-V59 shape before starting an old jar:
 
 ```sql
-UPDATE campgrounds SET booking_provider = 'recgov', booking_provider_ref = a->>'ref'
-FROM jsonb_array_elements(booking_aliases) a
-WHERE data_provider = 'campflare' AND booking_provider = 'campflare' AND a->>'provider' = 'recgov';
+UPDATE campgrounds SET
+  booking_provider = 'recgov',
+  booking_provider_ref = (SELECT a->>'ref' FROM jsonb_array_elements(booking_aliases) a
+                          WHERE a->>'provider' = 'recgov' LIMIT 1)
+WHERE data_provider = 'campflare' AND booking_provider = 'campflare'
+  AND booking_aliases @> '[{"provider":"recgov"}]'::jsonb;
 
-UPDATE campsites SET booking_provider = 'recgov', booking_provider_ref = a->>'ref'
-FROM jsonb_array_elements(booking_aliases) a
-WHERE data_provider = 'campflare' AND booking_provider = 'campflare' AND a->>'provider' = 'recgov';
+UPDATE campsites SET
+  booking_provider = 'recgov',
+  booking_provider_ref = (SELECT a->>'ref' FROM jsonb_array_elements(booking_aliases) a
+                          WHERE a->>'provider' = 'recgov' LIMIT 1)
+WHERE data_provider = 'campflare' AND booking_provider = 'campflare'
+  AND booking_aliases @> '[{"provider":"recgov"}]'::jsonb;
 ```
 
 Rolling forward needs no undo of that: V59's own `WHERE` re-canonicalizes the

@@ -154,6 +154,24 @@ class UserBookingCredentialsRepoTest : SharedDbTest() {
         assertContentEquals(byteArrayOf(4, 5), legacyPasswordCipher(user), "the mirrored secret is untouched")
     }
 
+    @Test fun `updateUsername mirrors the rename even when no user_settings row exists yet`() {
+        val user = newUser()
+        // A row seeded directly, bypassing save(), so no user_settings mirror has
+        // ever been written for this user — the rename mirror must not depend on
+        // save() having created one first.
+        ctx.execute(
+            "INSERT INTO user_booking_credentials (user_id, provider, username, secret_cipher) VALUES (?, ?, ?, ?)",
+            user.value,
+            BookingProvider.RECGOV.id,
+            "ada@example.com",
+            byteArrayOf(4, 5),
+        )
+
+        assertTrue(repo.updateUsername(user, BookingProvider.RECGOV, "grace@example.com"))
+
+        assertEquals("grace@example.com", legacyUsername(user))
+    }
+
     @Test fun `another provider's account never reaches the rec_gov-only V53 columns`() {
         val user = newUser()
         repo.save(user, BookingProvider.RECGOV, "ada@example.com", byteArrayOf(4, 5))

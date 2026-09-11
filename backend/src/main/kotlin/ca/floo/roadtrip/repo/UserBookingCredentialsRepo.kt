@@ -165,7 +165,12 @@ open class UserBookingCredentialsRepo(
             .execute()
     }
 
-    /** The rename half of [mirrorLegacy]: the sealed secret did not change. */
+    /**
+     * The rename half of [mirrorLegacy]: the sealed secret did not change. Upserts
+     * like [mirrorLegacy] does, rather than a bare update, so a user with no
+     * `user_settings` row yet (never having saved through this repo) still gets
+     * the renamed username mirrored instead of the mirror silently no-oping.
+     */
     private fun DSLContext.mirrorLegacyUsername(
         user: UserId,
         provider: BookingProvider,
@@ -173,10 +178,14 @@ open class UserBookingCredentialsRepo(
         now: OffsetDateTime,
     ) {
         if (provider != legacyMirrorProvider) return
-        update(USER_SETTINGS)
+        insertInto(USER_SETTINGS)
+            .set(USER_SETTINGS.USER_ID, user.value)
             .set(USER_SETTINGS.RECGOV_USERNAME, username)
             .set(USER_SETTINGS.UPDATED_AT, now)
-            .where(USER_SETTINGS.USER_ID.eq(user.value))
+            .onConflict(USER_SETTINGS.USER_ID)
+            .doUpdate()
+            .set(USER_SETTINGS.RECGOV_USERNAME, username)
+            .set(USER_SETTINGS.UPDATED_AT, now)
             .execute()
     }
 

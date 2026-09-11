@@ -36,6 +36,9 @@ const UNNAMED_BOOKING_SITE = 'the booking site';
 /** The possessive form, for the gate sentences that ask for a login. */
 const UNNAMED_BOOKING_ACCOUNT = 'your booking';
 
+/** The bare noun, for the one sentence that already supplies its own "your". */
+const UNNAMED_BOOKING_LABEL = 'booking';
+
 export const bookingCopy = {
   /** The popover's escape hatch, named after whoever takes the booking at that link. */
   openProvider: (bookingSystem?: string) => `Book on ${bookingSystem ?? UNNAMED_BOOKING_SITE}`,
@@ -70,7 +73,7 @@ export const gateCopy = {
   signIn: 'Sign in',
   daySignedOutSuffix: ' to set availability alerts.',
   /** The add-to-cart row's help, as a link plus the prose that follows it. */
-  editorNoCredentialsLink: (providerDisplay?: string) => `Add your ${providerDisplay ?? 'booking'} login`,
+  editorNoCredentialsLink: (providerDisplay?: string) => `Add your ${providerDisplay ?? UNNAMED_BOOKING_LABEL} login`,
   editorNoCredentialsSuffix: ' in Settings to hold sites.',
   editorSignedOutSuffix: ' to enable add-to-cart.',
 } as const;
