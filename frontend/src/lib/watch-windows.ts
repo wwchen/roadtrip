@@ -62,8 +62,13 @@ export function normalizeWatchCapabilities(
         ? asSets.triggerKinds
         : new Set(Array.isArray(asWire?.trigger_kinds) ? asWire.trigger_kinds : []),
     addToCart: coerceAddToCartState(asSets?.addToCart ?? asWire?.add_to_cart?.state),
-    addToCartProviderDisplay:
-      asSets?.addToCartProviderDisplay ?? asWire?.add_to_cart?.provider_display ?? undefined,
+    // `|| undefined` and not `?? undefined`: a served name that is blank or
+    // whitespace must reach the gate copy as *absent*, or the two sentences that
+    // interpolate it render with a hole ("Add  login in Settings"). Every other
+    // consumer of a served name defends the same way.
+    addToCartProviderDisplay: (
+      asSets?.addToCartProviderDisplay ?? asWire?.add_to_cart?.provider_display
+    )?.trim() || undefined,
   };
 }
 

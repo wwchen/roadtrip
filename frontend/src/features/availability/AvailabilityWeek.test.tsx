@@ -1163,6 +1163,29 @@ describe('holding a site straight from the grid', () => {
     expect(window.open).toHaveBeenCalled();
   });
 
+  test('without a cart row the armed cell names the site it would open', async () => {
+    // The popover is what usually carries the name, and there is no popover
+    // here — so on every campground the cart does not cover, the cell itself
+    // has to say where "Book" goes.
+    await mount();
+
+    await armFirstCell();
+
+    const armed = cell('Site 1', WEEK[0]);
+    expect(armed).toHaveTextContent('Book on Recreation.gov');
+    expect(armed).toHaveAccessibleName(/; Book on Recreation\.gov, click to open booking page$/);
+  });
+
+  test('the armed cell reads neutral when the row names no booking site', async () => {
+    stubs.campsites = () =>
+      json(catalogBody([catalogRow(1, { booking_system: undefined })], { 1: BOOKING_TEMPLATE }));
+    await mount();
+
+    await armFirstCell();
+
+    expect(cell('Site 1', WEEK[0])).toHaveTextContent('Book on the booking site');
+  });
+
   test('with the capability an armed cell offers the two actions', async () => {
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));

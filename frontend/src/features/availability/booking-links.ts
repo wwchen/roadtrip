@@ -72,10 +72,14 @@ export function hasReservationUrlTemplate(
  * the drawer uses. The frontend no longer guesses one from a URL host or a
  * vendor slug, which is how `aspira` used to read "Aspira" here and
  * "Aspira NextGen" one screen over.
+ *
+ * The named branch is `bookingCopy.bookOn`, shared with the cell popover's
+ * escape hatch; only the unnamed fallback differs, because a 66px cell has no
+ * room for the popover's "the booking site".
  */
 export function bookingLabel(row: Partial<Campsite> | null | undefined): string {
   const site = String(row?.booking_system || '').trim();
-  return site ? `Book on ${site}` : bookingCopy.book;
+  return site ? bookingCopy.bookOn(site) : bookingCopy.book;
 }
 
 function reservationUrlTemplate(

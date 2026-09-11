@@ -22,8 +22,10 @@ export interface AddToCartResponse {
   cart_url: string;
   /** The provider id whose cart it is — not always the one serving availability. */
   provider: string;
-  /** The booking site as a person reads it — what the toasts name. */
-  provider_display: string;
+  /** The booking site as a person reads it — what the toasts name. Optional
+   *  because a rolling deploy runs this frontend against a backend that omits
+   *  the key, and nothing validates the response body. */
+  provider_display?: string;
 }
 
 /** Mirrors the add-to-cart route's ApiErrorSchema, as `HttpError` carries it. */
@@ -44,11 +46,13 @@ export interface AddToCartFailure {
  */
 export function addToCartFailure(err: unknown): AddToCartFailure {
   const carried = err as
-    | { code?: string; provider?: string; providerDisplay?: string; provider_display?: string }
+    | { code?: unknown; provider?: string; providerDisplay?: string; provider_display?: string }
     | null
     | undefined;
   return {
-    code: carried?.code,
+    // A `DOMException` carries a *numeric* legacy `code` (`AbortError` is 20),
+    // which `settings-errors.ts` would render as "Something went wrong (20)".
+    code: typeof carried?.code === 'string' ? carried.code : undefined,
     provider: carried?.provider,
     provider_display: carried?.providerDisplay ?? carried?.provider_display,
   };

@@ -63,14 +63,6 @@ export function safeUrl(url: unknown): string {
   return value && /^(https?:|mailto:|tel:|\/|#)/i.test(value) ? value : '';
 }
 
-export function urlHost(url: unknown): string {
-  try {
-    return new URL(String(url)).hostname.toLowerCase().replace(/^www\./, '');
-  } catch {
-    return '';
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Amenities and activities
 // ---------------------------------------------------------------------------
@@ -414,10 +406,11 @@ export function structuredDetails(p: Props): StructuredDetails {
     ['Data source', text(firstText(sourcesLabel(p.sources), p.source))],
     ['Source ID', text(firstText(p.source_id))],
     ['Availability provider', text(firstText(p.availability_provider, p.provider_source))],
-    [
-      'Booking site',
-      text(firstText(p.booking_site, urlHost(firstText(p.reserve_url, p.reservation_url)))),
-    ],
+    // Source metadata, not a name a person reads: the row one accordion up is
+    // "Booking via <BC Parks>". And it is only ever the served host — deriving
+    // one from a reserve URL would be the frontend guessing where the backend
+    // deliberately said nothing.
+    ['Booking host', text(firstText(p.booking_site))],
     ['Last updated', text(firstText(detail.last_verified))],
     ['Connections', connections(p.connections)],
   ]);

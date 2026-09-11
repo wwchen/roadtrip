@@ -21,6 +21,7 @@ import { LinkButton } from '@ui';
 import type { Campsite } from '@/api/campsite-api';
 import type { AddToCartState, AvailabilityDay } from '@/api/availability-api';
 import { availabilityStatusMeta } from '@/lib/availability-status';
+import { bookingCopy } from '@/lib/strings';
 import { SiteDetail } from './SiteDetail';
 import {
   DEFAULT_MATRIX_FILTERS,
@@ -763,6 +764,11 @@ function MatrixCell({
   // second row says, not whether there is a choice to make.
   const hasCartRow = cart !== 'unsupported';
   const openPopover = armed && hasCartRow;
+  // With no cart row there is no popover to name the site, so the cell itself
+  // has to — otherwise every campground the ATC companion does not cover shows
+  // a bare "Book" beside a `booking_system` the wire went to the trouble of
+  // serving. Same template the popover's escape hatch uses.
+  const bookHere = bookingCopy.openProvider(row.booking_system?.trim() || undefined);
 
   return (
     <td className={cellClass}>
@@ -774,7 +780,7 @@ function MatrixCell({
           armed
             ? hasCartRow
               ? `${aria}; choose how to book`
-              : `${aria}; Book, click to open booking page`
+              : `${aria}; ${bookHere}, click to open booking page`
             : `${aria}; click to book`
         }
         onClick={() => {
@@ -784,7 +790,7 @@ function MatrixCell({
           else if (!hasCartRow) onOpenBooking(id, day.date);
         }}
       >
-        {armed ? 'Book' : state.label}
+        {armed ? (hasCartRow ? bookingCopy.book : bookHere) : state.label}
       </button>
       {openPopover && cellAnchor ? (
         <CellBookPopover
