@@ -34,11 +34,16 @@ internal class CampgroundCta(
     /** The booking site this pin's reservations flow through, as a person reads it. */
     fun bookingSystem(bookingRef: BookingProviderRef?): String? = bookingRef?.let(tenants::displayName)
 
+    /**
+     * [identities] is every vendor the row itself names, so a pin aliased onto
+     * another vendor keeps the links its own identities earn.
+     */
     fun computeCtas(
         bookingRef: BookingProviderRef?,
         reserveUrl: String?,
         infoUrl: String?,
         dateContext: PoiDateContext,
+        identities: List<BookingProviderRef> = emptyList(),
     ): List<PoiCtaSchema> {
         val upstreamUrl = providerUrl(reserveUrl = reserveUrl, infoUrl = infoUrl)
         val primaryCta =
@@ -46,17 +51,17 @@ internal class CampgroundCta(
                 ?: infoUrl?.takeIf { it.isNotBlank() }?.let {
                     PoiCtaSchema(url = it, label = infoLinkLabels.forUrl(it), kind = INFO_CTA_KIND)
                 }
-        return listOfNotNull(primaryCta, campflareCta(bookingRef)).distinctBy { it.url }
+        val campflare = campflareCta(listOfNotNull(bookingRef) + identities)
+        return listOfNotNull(primaryCta, campflare).distinctBy { it.url }
     }
 
     /**
      * Campflare sells nothing itself, so its public page is appended for every
-     * Campflare ref rather than offered as a reserve CTA. A row the drawer
-     * hands over as Campflare arrives here; an aliased row sold on rec.gov
-     * arrives as a rec.gov ref instead.
+     * Campflare identity rather than offered as a reserve CTA. An aliased row
+     * books through the vendor that sells it and still gets this link second.
      */
-    private fun campflareCta(providerRef: BookingProviderRef?): PoiCtaSchema? {
-        val campflare = providerRef as? BookingProviderRef.Campflare ?: return null
+    private fun campflareCta(refs: List<BookingProviderRef>): PoiCtaSchema? {
+        val campflare = refs.firstNotNullOfOrNull { it as? BookingProviderRef.Campflare } ?: return null
         return PoiCtaSchema(
             url = CampflareUrls.campground(campflare.campgroundId),
             label = tenants.ctaLabel(campflare),
@@ -116,12 +121,9 @@ private class AspiraCampgroundCtaProvider(
         dateContext: PoiDateContext,
     ): PoiCtaSchema? {
         val aspira = providerRef as? BookingProviderRef.Aspira ?: return null
-        // The tenant's own host, so the link never depends on what a row
-        // happened to store; an unregistered tenant falls back to that URL.
-        val host =
-            tenants.tenant(BookingProvider.ASPIRA, aspira.tenant)?.host
-                ?: upstreamUrl?.let(UrlHosts::extract)
-                ?: return null
+        // The registry owns the host. A tenant it does not name gets no link
+        // rather than a deeplink built on whatever host a row happened to store.
+        val host = tenants.tenant(BookingProvider.ASPIRA, aspira.tenant)?.host ?: return null
         val arrival = dateContext.earliestDate
         val template =
             AspiraBookingUrl.template(host, aspira.transactionLocationId, aspira.mapId, aspira.resourceLocationId)

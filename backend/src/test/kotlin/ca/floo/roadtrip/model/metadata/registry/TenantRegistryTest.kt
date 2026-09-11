@@ -56,11 +56,13 @@ class TenantRegistryTest {
     }
 
     @Test
-    fun `linkLabel answers by host, ignoring www and case`() {
-        assertEquals("Reserve on Recreation.gov", registry.linkLabel("WWW.Recreation.gov"))
-        assertEquals("Reserve on Recreation.gov", registry.linkLabel("recreation.gov"))
+    fun `linkLabel answers by host with the viewing verb, ignoring www and case`() {
+        // It labels an info link, so the verb is the kind of link, not the
+        // vendor's `sells` flag — that stays with ctaLabel.
+        assertEquals("View on Recreation.gov", registry.linkLabel("WWW.Recreation.gov"))
+        assertEquals("View on Recreation.gov", registry.linkLabel("recreation.gov"))
         assertEquals("View on Campflare", registry.linkLabel("campflare.com"))
-        assertEquals("Reserve on Washington State Parks", registry.linkLabel("washington.goingtocamp.com"))
+        assertEquals("View on Washington State Parks", registry.linkLabel("washington.goingtocamp.com"))
         assertNull(registry.linkLabel("www.fs.usda.gov"))
         assertNull(registry.linkLabel("bcparks.ca"))
     }

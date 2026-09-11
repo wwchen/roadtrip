@@ -101,7 +101,8 @@ section and answers:
   tenant name when the ref names a known tenant, else the provider name
 - `sells(provider)`
 - `ctaLabel(ref)` = `"Reserve on <name>"` when the provider sells, else
-  `"View on <name>"`; `linkLabel(host)` the same by host, null for unknown hosts.
+  `"View on <name>"`; `linkLabel(host)` labels an info link, so it is always
+  `"View on <name>"`, null for unknown hosts.
 
 Validation at boot (`PoiRegistry.validate`): every `BookingProvider` member has
 exactly one row; tenant codes are unique within a vendor; hosts are unique across

@@ -211,7 +211,11 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals(BookingRefDto(BookingProvider.RECGOV.id, "234784"), detail.bookingRef)
         assertEquals(true, detail.availabilitySupported)
         assertEquals("Recreation.gov", detail.bookingSystem)
-        assertEquals("Reserve on Recreation.gov", detail.cta?.first()?.label)
+        // Aliasing picks who sells it; the row's own Campflare identity still
+        // earns its vendor link, second.
+        assertEquals(2, detail.cta?.size)
+        assertEquals("Reserve on Recreation.gov", detail.cta?.get(0)?.label)
+        assertEquals("View on Campflare", detail.cta?.get(1)?.label)
         // Availability still comes from whoever serves it.
         assertEquals(BookingProvider.CAMPFLARE.id, detail.availabilityProvider)
         // The row itself still declares Campflare — the booking vendor is
@@ -278,6 +282,7 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals(BookingRefDto(BookingProvider.CAMPFLARE.id, "cranberry-lake-wsp"), detail.bookingRef)
         assertEquals(BookingProvider.CAMPFLARE.id, detail.availabilityProvider)
         assertEquals("Campflare", detail.bookingSystem)
+        assertEquals(1, detail.cta?.size)
         assertEquals("View on Campflare", detail.cta?.single()?.label)
     }
 

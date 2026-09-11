@@ -47,8 +47,8 @@ class TenantRegistry private constructor(
 
     fun ctaLabel(ref: BookingProviderRef): String = label(sells(ref.provider), displayName(ref))
 
-    /** The same label by host; null for a host no vendor runs. */
-    fun linkLabel(host: String): String? = tenantByHost(host)?.let { label(sells(it.provider), it.displayName) }
+    /** A vendor's own page, by host: always the viewing verb. Null for a host no vendor runs. */
+    fun linkLabel(host: String): String? = tenantByHost(host)?.let { "$VIEW_VERB ${it.displayName}" }
 
     private fun label(
         sells: Boolean,

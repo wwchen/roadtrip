@@ -10,6 +10,7 @@ import ca.floo.roadtrip.model.api.poi.PriceDto
 import ca.floo.roadtrip.model.api.poi.RatingDto
 import ca.floo.roadtrip.model.api.poi.ScheduleDto
 import ca.floo.roadtrip.model.domain.CatalogColumnJson
+import ca.floo.roadtrip.model.domain.bookingIdentities
 import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -52,6 +53,7 @@ internal class CampgroundService(
                 reserveUrl = campground.reservationUrl,
                 infoUrl = infoUrl,
                 dateContext = dateContext,
+                identities = campground.bookingIdentities(),
             )
         val ctas = computedCtas.takeIf { it.isNotEmpty() }
         return PoiDetailPropertiesSchema(
