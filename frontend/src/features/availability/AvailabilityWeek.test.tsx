@@ -1200,6 +1200,19 @@ describe('holding a site straight from the grid', () => {
     expect(within(popover).queryByRole('button', { name: 'Book on Campflare' })).toBeNull();
   });
 
+  test('the escape-hatch row reads neutral when the row names no booking site', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    // `undefined` drops the key from the serialized body, so the row arrives
+    // with no `booking_system` at all — nothing for the button to name.
+    stubs.campsites = () => json(catalogBody([catalogRow(1, { booking_system: undefined })], { 1: BOOKING_TEMPLATE }));
+    await mount();
+    await armFirstCell();
+
+    const popover = await screen.findByRole('group', { name: 'Booking actions' });
+    expect(within(popover).getByRole('button', { name: 'Book on the booking site' })).toBeInTheDocument();
+  });
+
   test('the escape-hatch row follows a non-recgov row', async () => {
     stubs.availability = () =>
       json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));

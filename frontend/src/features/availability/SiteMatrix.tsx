@@ -804,7 +804,7 @@ function MatrixCell({
           onClose={() => onArmBook(null)}
           // Labelled from what the backend served on this row: an aliased
           // campground books through one site while another serves it.
-          bookingAgency={row.booking_system || undefined}
+          bookingAgency={row.booking_system?.trim() || undefined}
         />
       ) : null}
     </td>
