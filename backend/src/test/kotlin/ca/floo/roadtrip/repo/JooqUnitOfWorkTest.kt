@@ -2,15 +2,19 @@ package ca.floo.roadtrip.repo
 
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.io.IOException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 private const val TRANSACTIONAL_SOURCE = "uow-transactional"
 private const val ROLLED_BACK_SOURCE = "uow-rolled-back"
 private const val AUTOCOMMIT_SOURCE = "uow-autocommit"
+private const val NESTED_SOURCE = "uow-nested"
 private const val SEEN_COUNT = 7
+private const val NOT_REENTRANT = "UnitOfWork.run is not reentrant: take repo handles inside the block"
 
 /**
  * The one place a transaction is opened. A block that throws must leave no row
@@ -44,6 +48,49 @@ class JooqUnitOfWorkTest : SharedDbTest() {
     }
 
     @Test
+    fun `a checked exception reaches the caller as itself, and its write rolls back`() {
+        // jOOQ's own transactionResult would hand the caller
+        // DataAccessException("Rollback caused"), which a service that took the
+        // port precisely so it never names jOOQ cannot be asked to catch.
+        val failure =
+            assertFailsWith<IOException> {
+                unitOfWork.run { repos ->
+                    repos.importRuns.start(ROLLED_BACK_SOURCE)
+                    throw IOException("the use case failed after writing")
+                }
+            }
+
+        assertEquals("the use case failed after writing", failure.message)
+        assertNull(idOf(ROLLED_BACK_SOURCE), "a failed block must leave no import_runs row")
+    }
+
+    @Test
+    fun `a nested run is refused, and the outer block rolls back`() {
+        val failure =
+            assertFailsWith<IllegalStateException> {
+                unitOfWork.run { repos ->
+                    repos.importRuns.start(ROLLED_BACK_SOURCE)
+                    unitOfWork.run { nested -> nested.importRuns.start(NESTED_SOURCE) }
+                }
+            }
+
+        assertEquals(NOT_REENTRANT, failure.message)
+        assertNull(idOf(ROLLED_BACK_SOURCE), "the outer block must roll back")
+        assertNull(idOf(NESTED_SOURCE), "the nested block must never have run")
+    }
+
+    @Test
+    fun `a refused nested run leaves the depth guard clean for the next block`() {
+        assertFailsWith<IllegalStateException> {
+            unitOfWork.run { unitOfWork.run { repos -> repos.importRuns.start(NESTED_SOURCE) } }
+        }
+
+        val runId = unitOfWork.run { repos -> repos.importRuns.start(TRANSACTIONAL_SOURCE) }
+
+        assertEquals("started", statusOf(runId))
+    }
+
+    @Test
     fun `every repo handle in one block shares the transaction`() {
         assertFailsWith<IllegalStateException> {
             unitOfWork.run { repos ->
@@ -66,8 +113,8 @@ class JooqUnitOfWorkTest : SharedDbTest() {
 
     @Test
     fun `the autocommit bundle is one instance, and its handles are lazy singletons`() {
-        assertEquals(unitOfWork.autocommit, unitOfWork.autocommit)
-        assertEquals(unitOfWork.autocommit.importRuns, unitOfWork.autocommit.importRuns)
+        assertSame(unitOfWork.autocommit, unitOfWork.autocommit)
+        assertSame(unitOfWork.autocommit.importRuns, unitOfWork.autocommit.importRuns)
     }
 
     private fun statusOf(runId: Long): String? =

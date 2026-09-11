@@ -52,12 +52,6 @@ private const val MAPBOX_TOKEN_KEY = "token"
 private const val DEFAULT_POI_REGISTRY_RESOURCE = "poi-registry.yaml"
 private const val RAW_DATA_DIR = "data/raw"
 
-// A restart mid-run leaves parent ingest_runs rows 'started' forever — the
-// IngestController coroutine that owned them is gone. Well beyond the longest
-// expected phase (the rec.gov enricher tops out near 10 min today).
-@Suppress("TopLevelPropertyNaming")
-private val STALE_INGEST_RUN_AFTER: Duration = Duration.ofMinutes(30)
-
 private val bootRecoveryLog = LoggerFactory.getLogger("ca.floo.roadtrip.di.BootRecovery")
 
 fun infraModule(baseConfig: ApplicationConfig) =
@@ -136,7 +130,7 @@ fun infraModule(baseConfig: ApplicationConfig) =
 
         single {
             val staticDir: File = get(named("staticDir"))
-            sweepStaleIngestRunsAtBoot(get<IngestRunRepo>())
+            sweepStaleIngestRunsAtBoot(get<IngestRunRepo>(), get<AppConfig>().ingest.staleRunAfter)
             IngestController(
                 ingestRunRepo = get(),
                 adminReadRepo = get(),
@@ -163,7 +157,10 @@ private fun File.resolveConfiguredPath(path: String): File {
 
 /** Sweeps the ghost rows a mid-run restart left behind. Touches only ingest_runs;
  *  a partially upserted phase is mark-and-sweep's problem (RFC 0004 edge case #2). */
-private fun sweepStaleIngestRunsAtBoot(ingestRunRepo: IngestRunRepo) {
-    val swept = ingestRunRepo.abortStaleStartedRows(STALE_INGEST_RUN_AFTER)
+private fun sweepStaleIngestRunsAtBoot(
+    ingestRunRepo: IngestRunRepo,
+    staleAfter: Duration,
+) {
+    val swept = ingestRunRepo.abortStaleStartedRows(staleAfter)
     if (swept > 0) bootRecoveryLog.info("boot recovery: marked {} ingest_runs rows as aborted", swept)
 }

@@ -72,8 +72,10 @@ data class AuthConfig(
      */
     val roleGrants: Map<Role, Set<String>>,
     /**
-     * Connection slugs `/auth/login` may forward to the provider. Unknown values
-     * are dropped, so the browser falls through to the provider's own login page.
+     * Connection slugs `/auth/login` may forward to the provider, matched
+     * verbatim against the query param. Unknown values are dropped, so the
+     * browser falls through to the provider's own login page. An absent key
+     * takes the default; a present but empty one forwards nothing.
      */
     val allowedConnections: Set<String> = defaultAllowedConnections,
 ) {
@@ -109,9 +111,18 @@ data class AuthConfig(
                 realm = config.valueOrDefault(REALM_KEY, DEFAULT_REALM),
                 embeddedDomain = config.valueOrDefault(EMBEDDED_DOMAIN_KEY, defaultEmbeddedDomain),
                 roleGrants = roleGrants,
-                allowedConnections = config.csvSet(ALLOWED_CONNECTIONS_KEY).ifEmpty { defaultAllowedConnections },
+                allowedConnections = allowedConnections(config),
             )
         }
+
+        /** An absent key takes the default; a present but empty one is an
+         *  operator saying "forward nothing", which `ifEmpty` could not say. */
+        private fun allowedConnections(config: ConfigSection): Set<String> =
+            if (config.rawValue(ALLOWED_CONNECTIONS_KEY) == null) {
+                defaultAllowedConnections
+            } else {
+                config.csvSet(ALLOWED_CONNECTIONS_KEY)
+            }
 
         /**
          * Enumerates the immediate child keys of `role-emails` (each a [Role]

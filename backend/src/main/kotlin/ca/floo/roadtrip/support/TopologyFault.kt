@@ -4,7 +4,7 @@ package ca.floo.roadtrip.support
 private const val TOPOLOGY_FAULT = "TopologyException"
 
 /** One log line for both sites that serve empty on a topology fault. */
-const val TOPOLOGY_FAULT_EMPTY_RESULT = "on-route GEOS topology fault, returning empty: {}"
+const val TOPOLOGY_FAULT_EMPTY_RESULT = "GEOS topology fault in a polygon query, returning empty: {}"
 
 /**
  * A GEOS self-intersection in one corridor polygon is a bad shape, not an

@@ -5,6 +5,7 @@ import ca.floo.roadtrip.config.ApplicationProperties
 import ca.floo.roadtrip.config.AuthConfig
 import ca.floo.roadtrip.config.AvailabilityConfig
 import ca.floo.roadtrip.config.ConfigSection
+import ca.floo.roadtrip.config.IngestConfig
 import ca.floo.roadtrip.config.ReadPathProviderConfig
 import ca.floo.roadtrip.di.notificationTriggerKinds
 import ca.floo.roadtrip.di.validateReadPathDataProviders
@@ -13,6 +14,7 @@ import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -130,6 +132,41 @@ class RoadtripRuntimeConfigTest {
     }
 
     @Test
+    fun `an absent allowed-connections key keeps the default, an empty one forwards nothing`() {
+        assertEquals(
+            setOf("google-oauth2"),
+            authConfig(emptyMap())!!.allowedConnections,
+            "an absent key cannot mean anything but the default",
+        )
+        assertEquals(
+            emptySet<String>(),
+            authConfig(mapOf("roadtrip.auth.allowed-connections" to ""))!!.allowedConnections,
+            "a present but empty key is an operator saying 'forward nothing'",
+        )
+    }
+
+    @Test
+    fun `the stale ingest run threshold defaults to the literal it replaced`() {
+        assertEquals(Duration.ofMinutes(30), ingestConfig(emptyMap()).staleRunAfter)
+    }
+
+    @Test
+    fun `the stale ingest run threshold is tunable`() {
+        assertEquals(
+            Duration.ofHours(2),
+            ingestConfig(mapOf("roadtrip.ingest.stale-run-after" to "2h")).staleRunAfter,
+        )
+    }
+
+    @Test
+    fun `the shipped yaml states the stale ingest run threshold`() {
+        assertEquals(
+            Duration.ofMinutes(30),
+            AppConfig.fromProperties(ApplicationProperties.load()).ingest.staleRunAfter,
+        )
+    }
+
+    @Test
     fun `the shipped auth yaml states the allowed connection list`() {
         assertEquals(setOf("google-oauth2"), shippedAppConfig().auth!!.allowedConnections)
     }
@@ -194,6 +231,9 @@ class RoadtripRuntimeConfigTest {
                 ) + overrides,
             ).section("roadtrip").section("availability"),
         )
+
+    private fun ingestConfig(overrides: Map<String, String>): IngestConfig =
+        IngestConfig.fromConfig(ConfigSection(overrides).section("roadtrip").section("ingest"))
 
     private fun authConfig(overrides: Map<String, String>): AuthConfig? =
         AuthConfig.fromConfig(

@@ -100,8 +100,15 @@ roadtrip:
     # Connection slugs /auth/login may forward to the provider. Unknown values
     # are dropped rather than rejected, so the browser falls through to the
     # provider's own login page. Varies by vendor, like the claims dialect.
+    # Matched verbatim against ?connection=, so the case here is the case the
+    # provider knows. Removing the key restores the default; an empty list
+    # forwards nothing.
     allowed-connections:
       - google-oauth2
+  ingest:
+    # How long a parent ingest_runs row may sit 'started' before the boot sweep
+    # marks it aborted — a restart mid-run leaves the row with no owner.
+    stale-run-after: 30m
   mapbox:
     token: "${MAPBOX_TOKEN:}"
   campflare:
