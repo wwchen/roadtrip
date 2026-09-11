@@ -136,10 +136,9 @@ class WatchCapabilityServiceTest {
 
     @Test
     fun `credentials are asked of the adapter that would hold this scope, not of one vendor`() {
-        // Two vendors, one account each. The gate has to follow the scope: the
-        // rec.gov user is ready on a rec.gov campground and short a credential
-        // on a Campflare one, and the Campflare user is the mirror image. A
-        // single vendor-shaped gate answered the same for both scopes.
+        // Two vendors, one account each, mirror images of each other. A single
+        // vendor-shaped gate answered the same for both scopes; this one has to
+        // follow the scope.
         val adapters =
             listOf(
                 FakeBookingAdapter(

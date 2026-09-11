@@ -32,6 +32,15 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
+/** Everything V61 builds, in the order `pg_indexes` returns them sorted. */
+private val bookingAliasIndexes =
+    listOf(
+        "campgrounds_booking_aliases_gin",
+        "campgrounds_booking_provider_ref_idx",
+        "campsites_booking_aliases_gin",
+        "campsites_booking_provider_ref_idx",
+    )
+
 class CatalogEntityRepoTest : SharedDbTest() {
     @BeforeEach
     fun resetCatalog() {
@@ -1520,6 +1529,34 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals("campflare", untouched.bookingProvider)
         assertEquals("lone-campflare-site", untouched.bookingProviderRef)
         assertEquals(emptyList(), untouched.bookingAliases)
+    }
+
+    /**
+     * V61 builds the alias indexes CONCURRENTLY, which Postgres refuses inside a
+     * transaction — the sibling `.sql.conf` takes Flyway out of one, and this
+     * replay runs the same statements on the pool's autocommit connection.
+     */
+    @Test
+    fun `the alias index migration builds every index concurrently and reruns clean`() {
+        bookingAliasIndexes.forEach { ctx.execute("DROP INDEX IF EXISTS $it") }
+
+        repeat(2) { migrationStatements("V61__booking_alias_indexes.sql").forEach(ctx::execute) }
+
+        assertEquals(bookingAliasIndexes, bookingAliasIndexNames())
+    }
+
+    private fun bookingAliasIndexNames(): List<String> {
+        val placeholders = bookingAliasIndexes.joinToString(", ") { "?" }
+        return ctx
+            .fetch(
+                """
+                SELECT indexname
+                FROM pg_indexes
+                WHERE schemaname = 'public' AND indexname IN ($placeholders)
+                ORDER BY indexname
+                """.trimIndent(),
+                *bookingAliasIndexes.toTypedArray(),
+            ).map { it.get("indexname", String::class.java) }
     }
 
     /** One bare campground carrying only its identity columns, for the alias migration to rewrite. */

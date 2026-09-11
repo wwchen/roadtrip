@@ -9,20 +9,10 @@ ALTER TABLE campsites
 ALTER TABLE campgrounds DROP CONSTRAINT IF EXISTS campgrounds_booking_aliases_check;
 ALTER TABLE campsites DROP CONSTRAINT IF EXISTS campsites_booking_aliases_check;
 
--- NOT VALID first, so the validating scan runs without ACCESS EXCLUSIVE.
 ALTER TABLE campgrounds
-  ADD CONSTRAINT campgrounds_booking_aliases_check CHECK (jsonb_typeof(booking_aliases) = 'array') NOT VALID;
+  ADD CONSTRAINT campgrounds_booking_aliases_check CHECK (jsonb_typeof(booking_aliases) = 'array');
 ALTER TABLE campsites
-  ADD CONSTRAINT campsites_booking_aliases_check CHECK (jsonb_typeof(booking_aliases) = 'array') NOT VALID;
-ALTER TABLE campgrounds VALIDATE CONSTRAINT campgrounds_booking_aliases_check;
-ALTER TABLE campsites VALIDATE CONSTRAINT campsites_booking_aliases_check;
-
-CREATE INDEX IF NOT EXISTS campgrounds_booking_aliases_gin ON campgrounds USING GIN (booking_aliases);
-CREATE INDEX IF NOT EXISTS campsites_booking_aliases_gin ON campsites USING GIN (booking_aliases);
-
--- Lets the primary-or-alias OR in RefLinkRepo plan as a BitmapOr over both indexes.
-CREATE INDEX IF NOT EXISTS campgrounds_booking_provider_ref_idx ON campgrounds (booking_provider, booking_provider_ref);
-CREATE INDEX IF NOT EXISTS campsites_booking_provider_ref_idx ON campsites (booking_provider, booking_provider_ref);
+  ADD CONSTRAINT campsites_booking_aliases_check CHECK (jsonb_typeof(booking_aliases) = 'array');
 
 -- Campflare rows carrying rec.gov as their primary become Campflare primary with rec.gov as an alias;
 -- the WHERE already excludes a rewritten row, so a rerun changes nothing.

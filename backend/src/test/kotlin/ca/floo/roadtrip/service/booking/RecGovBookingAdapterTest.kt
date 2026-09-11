@@ -337,17 +337,27 @@ class RecGovBookingAdapterTest {
         }
 
     @Test
-    fun `rec_gov's own refusal codes are classified by this adapter and nobody else`() {
-        val categories = provider().failureCategories
+    fun `rec_gov's own refusal codes are classified by this adapter and nobody else`() =
+        runBlocking {
+            // The vendor-prefixed codes live here now: the neutral code table
+            // carries none of them, so a second vendor's codes cannot collide.
+            // Only the category crosses the port, so that is what is asserted.
+            val refusals =
+                mapOf(
+                    RecGovBookingCodes.CONFIRMATION_DISABLED to BookingFailureCategory.RETRY_LATER,
+                    RecGovBookingCodes.DATES_NOT_OFFERED to BookingFailureCategory.RETRY_LATER,
+                    RecGovBookingCodes.NO_RESERVE_BUTTON to BookingFailureCategory.RETRY_LATER,
+                    "a_code_nobody_classified" to BookingFailureCategory.UPSTREAM,
+                )
+            for ((code, category) in refusals) {
+                val executor = RecordingAtcExecutor(RecGovAtcOutcome.Failed(error = code, detail = null))
 
-        // The vendor-prefixed codes live here now: the neutral code table above
-        // carries none of them, so a second vendor's codes cannot collide.
-        assertEquals(BookingFailureCategory.RETRY_LATER, categories[RecGovBookingCodes.CONFIRMATION_DISABLED])
-        assertEquals(BookingFailureCategory.RETRY_LATER, categories[RecGovBookingCodes.DATES_NOT_OFFERED])
-        assertEquals(BookingFailureCategory.RETRY_LATER, categories[RecGovBookingCodes.NO_RESERVE_BUTTON])
-        assertEquals(BookingFailureCategory.CALLER_ACTION, categories[RecGovSessionCodes.MFA_REQUIRED])
-        assertNull(categories["a_code_nobody_classified"], "an unfamiliar code stays ours to explain")
-    }
+                val failed = provider(executor).addToCart(request(recgovTarget())) as AddToCartResult.Failed
+
+                assertEquals(code, failed.error)
+                assertEquals(category, failed.category, "$code")
+            }
+        }
 
     @Test
     fun `only a caller with rec_gov credentials stored can be fulfilled`() {

@@ -43,13 +43,9 @@ internal class AvailabilityBookingTargetResolver(
 
     /**
      * The target implied by the rows' own booking identities, primary first.
-     *
-     * The cart needs the site id *on the booking vendor*, which for an aliased
-     * row is not the availability catalog's id — a Campflare campsite uuid
-     * means nothing to rec.gov. Each of the campsite's identities is paired
-     * with the campground's ref on that same provider; a site that names no
-     * provider any adapter serves genuinely has no bookable identity, and null
-     * is the honest answer.
+     * The cart needs the site id *on the booking vendor* — a Campflare campsite
+     * uuid means nothing to rec.gov — so each campsite identity is paired with
+     * the campground's ref on that same provider.
      */
     private fun declaredTarget(
         action: BookingAction,

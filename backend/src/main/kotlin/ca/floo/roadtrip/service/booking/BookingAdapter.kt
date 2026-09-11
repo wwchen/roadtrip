@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.booking
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
-import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -23,16 +22,6 @@ internal interface BookingAdapter : Dispatchable<BookingProvider> {
 
     /** This vendor as a person reads it, for copy that has to name it. */
     val displayName: String
-
-    /**
-     * Every code this adapter can surface, and who has to act on it.
-     *
-     * Its own table, because only this adapter knows what its vendor's codes
-     * mean. Anything absent is [BookingFailureCategory.UPSTREAM] — an
-     * unfamiliar failure is ours until someone classifies it.
-     */
-    val failureCategories: Map<String, BookingFailureCategory>
-        get() = emptyMap()
 
     override fun canHandle(key: BookingProvider): Boolean = key == id
 

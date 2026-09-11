@@ -29,12 +29,9 @@ internal inline fun <reified T : Any> decodeListColumn(raw: String?): List<T> =
 internal inline fun <reified T : Any> decodeObjectColumn(raw: String?): T? = if (raw == null) null else CatalogColumnJson.decodeObject(raw)
 
 /**
- * Tolerant decode for the `booking_aliases` bag: [BookingAlias]'s generated
- * serializer would throw on a `provider` id this build's [BookingProvider]
- * enum does not know (a vendor added after this deploy, or by a newer
- * process writing the same row) and fail the whole entity read. Read the raw
- * JSON structurally instead and drop any entry whose provider id, or `ref`,
- * is unrecognized or missing, so a mixed old/new deploy keeps reading.
+ * Tolerant decode for `booking_aliases`: an entry whose provider id this build's
+ * [BookingProvider] does not know is dropped rather than failing the entity
+ * read, so a newer process writing the same row cannot break a mixed deploy.
  */
 internal fun decodeBookingAliases(raw: String?): List<BookingAlias> {
     if (raw == null) return emptyList()

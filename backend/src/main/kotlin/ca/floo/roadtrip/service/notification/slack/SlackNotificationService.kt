@@ -78,7 +78,7 @@ class SlackNotificationService(
         val slackTarget = target as? NotificationTarget.Slack ?: return false
         val status = notice.status
         val response = notice.response
-        val text = "ATC $status for watch #${notice.watchId} (${notice.vendor})"
+        val text = "ATC $status for watch #${notice.watchId} (${notice.providerLabel})"
         val blocks =
             mutableListOf(
                 SlackBlocks.header("ATC $status"),
@@ -86,7 +86,7 @@ class SlackNotificationService(
                     listOf(
                         "*Watch*\n#${notice.watchId}",
                         "*Status*\n$status",
-                        "*Vendor*\n${notice.bookingSystem ?: notice.vendor}",
+                        "*Vendor*\n${notice.providerLabel}",
                     ),
                 ),
             )

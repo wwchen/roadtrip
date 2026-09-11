@@ -5,7 +5,9 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class UserSettingsRepoTest : SharedDbTest() {
     private val userRepo by lazy { UserRepo(ctx) }
@@ -53,6 +55,27 @@ class UserSettingsRepoTest : SharedDbTest() {
         assertContentEquals(existingCipher, s.slackTokenCipher)
         assertEquals("3f9a", s.slackTokenHint)
     }
+
+    @Test fun `clearLegacyRecgovCredentials nulls both V53 columns and reports the wipe`() {
+        val u = newUser()
+        repo.upsertNotifications(u, notificationEmail = "a@x.com", slackChannel = "#c")
+        ctx.execute(
+            "UPDATE user_settings SET recgov_username = ?, recgov_password_cipher = ? WHERE user_id = ?",
+            "ada@example.com",
+            byteArrayOf(1, 2, 3),
+            u.value,
+        )
+
+        assertTrue(repo.clearLegacyRecgovCredentials(u))
+
+        val row = ctx.fetchOne("SELECT recgov_username, recgov_password_cipher FROM user_settings WHERE user_id = ?", u.value)!!
+        assertNull(row.get("recgov_username"))
+        assertNull(row.get("recgov_password_cipher"))
+        assertEquals("a@x.com", repo.find(u)!!.notificationEmail)
+    }
+
+    @Test fun `clearLegacyRecgovCredentials is false when the user has no settings row`() =
+        assertFalse(repo.clearLegacyRecgovCredentials(newUser()))
 
     @Test fun `clearSlack nulls token but keeps channel`() {
         val u = newUser()

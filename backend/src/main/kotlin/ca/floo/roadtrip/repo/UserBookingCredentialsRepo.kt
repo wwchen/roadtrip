@@ -84,10 +84,8 @@ open class UserBookingCredentialsRepo(
 
     /**
      * Renames the stored account in place, leaving the sealed secret untouched.
-     *
-     * False when there was no row to rename. That is what lets a caller editing
-     * only the username avoid re-writing a secret it read earlier: the row may
-     * have been removed in between, and an upsert would bring it back.
+     * False when there was no row: an upsert would resurrect one removed since
+     * the caller read it.
      */
     open fun updateUsername(
         user: UserId,

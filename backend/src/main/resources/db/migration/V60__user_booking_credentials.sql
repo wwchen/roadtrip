@@ -1,14 +1,6 @@
--- Per-user booking credentials, keyed by provider: one account per user per vendor.
---
--- This is V53's two rec.gov columns on user_settings widened to a table. The
--- storage contract is unchanged and still applies to every provider: the
--- username is an identifier kept in the clear for display and re-login, the
--- secret is sealed with SecretCipher (AES-256-GCM), and there is deliberately
--- no last-4 hint column — a human-chosen password's tail is credential
--- material, not a display aid (see V53 for the full argument).
---
--- The V53 columns stay for now so a rollback still finds them; a later cleanup
--- drops them once no jar reads them.
+-- Per-user booking credentials, keyed by provider: V53's two rec.gov columns on
+-- user_settings, widened to a table. Same storage contract (see V53); the V53
+-- columns stay until a later cleanup drops them, so a rollback still finds them.
 CREATE TABLE IF NOT EXISTS user_booking_credentials (
   user_id       BIGINT      NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
   provider      TEXT        NOT NULL,

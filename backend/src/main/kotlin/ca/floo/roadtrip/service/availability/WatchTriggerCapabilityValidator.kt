@@ -87,11 +87,9 @@ internal class WatchTriggerCapabilityValidator(
             )
         }
 
-        // Same gate the capability block applies, enforced at write time and
-        // uniformly: a hold has to land in *somebody's* account with the
-        // provider that would make it, so the refusal names that provider.
-        // Resolved once and shared with the name lookup below, rather than
-        // each re-resolving every campsite in scope.
+        // The capability block's gate at write time: a hold needs an account with
+        // the provider that would make it, so the refusal names that provider.
+        // Resolved once, then shared with the name lookup below.
         val scope = watchCapabilityService.resolve(campsites)
         if (!watchCapabilityService.canFulfilAddToCart(owner, scope)) {
             throw AvailabilityWatchValidationException(

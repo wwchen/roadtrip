@@ -14,6 +14,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.BookingCredentials
 import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
+import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.security.SecretCipher
@@ -111,6 +112,7 @@ private val PROVIDER: BookingProvider = BookingProvider.RECGOV
  */
 class RecGovCredentialService(
     private val credentialsRepo: UserBookingCredentialsRepo,
+    private val settingsRepo: UserSettingsRepo,
     private val watchRepo: AvailabilityWatchRepo,
     private val cipher: SecretCipher?,
     private val companion: CompanionSessionPort?,
@@ -167,19 +169,10 @@ class RecGovCredentialService(
             ?: clock.instant().plus(FALLBACK_MFA_CHALLENGE_TTL)
 
     /**
-     * Stores credentials, **evicting the browser session when the account
-     * changes.**
-     *
-     * A swap to a different username invalidates the old session's legitimacy
-     * exactly as a removal does. The profile is keyed by user, not by account,
-     * so without this the previous account's cookie jar survives; [login] is
-     * refresh-first and revives it, and the hold lands on the account the user
-     * has already replaced while the UI reads the new username from the row.
-     *
-     * The wipe runs *before* the write and a failed wipe **refuses the save**
-     * ([SettingsError.RecgovProfileWipeFailed]). Storing the new username over a
-     * session we could not clear is the bad state itself; the old credentials
-     * keep working meanwhile, so a refusal costs the user only a retry.
+     * Stores credentials, evicting the browser session when the account changes:
+     * the profile is keyed by user, not account, so the replaced account's
+     * cookie jar would otherwise survive and [login] would revive it. A failed
+     * wipe refuses the save rather than writing over a session still on disk.
      */
     override suspend fun save(
         userId: UserId,
@@ -209,6 +202,7 @@ class RecGovCredentialService(
             // unconfigured rather than re-creating the row.
             credentialsRepo.updateUsername(userId, PROVIDER, username)
         }
+        clearLegacyCopy(userId)
         return bookingSettingsDto(storedCredentials(userId), cipher)
     }
 
@@ -266,8 +260,11 @@ class RecGovCredentialService(
         val signedOut = companion?.logout(profileId(userId)) == CompanionActionResult.Ok
         val destroyed = wipeProfileOrRefuse(userId)
 
+        val removed = credentialsRepo.clear(userId, PROVIDER)
+        clearLegacyCopy(userId)
+
         return RecgovRemovedDto(
-            removed = credentialsRepo.clear(userId, PROVIDER),
+            removed = removed,
             strandedAtcWatches = stranded,
             companionSignedOut = signedOut,
             profileDestroyed = destroyed,
@@ -468,6 +465,11 @@ class RecGovCredentialService(
     }
 
     private fun storedCredentials(userId: UserId): BookingCredentials? = credentialsRepo.find(userId, PROVIDER)
+
+    /** V60 left V53's columns behind for a rollback; they stay dead until the drop-columns migration. */
+    private fun clearLegacyCopy(userId: UserId) {
+        settingsRepo.clearLegacyRecgovCredentials(userId)
+    }
 
     private fun requireCredentials(userId: UserId): Credentials {
         val c = cipher ?: throw encryptionUnavailable()

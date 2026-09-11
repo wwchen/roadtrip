@@ -273,6 +273,11 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
         )
     }
 
+    /**
+     * Also the proof that Flyway applies V61: this schema was migrated by
+     * [SharedTestDb] through the real `migrate(ds)` boot path, and V61's
+     * CONCURRENTLY build only gets there via its non-transactional script config.
+     */
     @Test
     fun `booking alias bags are array-checked and GIN indexed on both catalog tables`() {
         val indexes =

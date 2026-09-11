@@ -31,17 +31,10 @@ internal class ResolvedWatchScope(
 /**
  * What a proposed watch over this scope could actually do.
  *
- * Two different questions, deliberately kept apart. Whether the inventory has a
- * cart at all is a property of the *scope*, and stays internal here. Trigger
- * kinds are a property of the scope **and the person asking**: `atc` needs the
- * scope to support `ADD_TO_CART` and the requester to have credentials with the
- * provider that would hold it, because a hold lands in their account. An
- * anonymous or magic-link reader simply does not see `atc` — absence, never an
- * error — and `add_to_cart.state` is what tells the editor whether that absence
- * means "this campground cannot be held" or "add your credentials in Settings".
- *
- * Which provider that is, and what having credentials with it means, are the
- * adapter's to answer; this service only asks the one the scope resolves to.
+ * Whether the inventory has a cart is a property of the scope; `atc` is a
+ * property of the scope **and the asker**, who needs credentials with the
+ * provider that would hold it. `add_to_cart.state` tells the editor which of the
+ * two is missing. Which provider that is, is the adapter's to answer.
  */
 internal class WatchCapabilityService(
     private val availabilityTargets: AvailabilityTargetResolver,

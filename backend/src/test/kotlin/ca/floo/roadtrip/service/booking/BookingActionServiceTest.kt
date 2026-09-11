@@ -103,9 +103,8 @@ class BookingActionServiceTest {
     fun `a night never observed proceeds to the vendor`() =
         runBlocking {
             // The availability table is filled by the WATCH poller, so a site
-            // nobody watches has no rows at all. Refusing on that made the grid
-            // button unusable for exactly the browse-then-hold flow it exists
-            // for. No evidence is not evidence of absence.
+            // nobody watches has no rows at all — and no evidence is not
+            // evidence of absence. Refusing there broke browse-then-hold.
             val adapter = FakeBookingAdapter()
             val outcome =
                 service(adapter = adapter, freshlyUnavailableNights = emptySet())

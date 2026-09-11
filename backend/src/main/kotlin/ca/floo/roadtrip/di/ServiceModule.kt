@@ -155,6 +155,7 @@ val serviceModule =
             val cipher: SecretCipher? = config.secrets?.let { SecretCipher(it.encryptionKey) }
             RecGovCredentialService(
                 credentialsRepo = get<UserBookingCredentialsRepo>(),
+                settingsRepo = get<UserSettingsRepo>(),
                 watchRepo = get<AvailabilityWatchRepo>(),
                 cipher = cipher,
                 companion = get<CompanionChannel>().session,

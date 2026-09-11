@@ -484,14 +484,9 @@ class TriggerActionHandlerTest {
     @Test
     fun `a blocked preflight tells the owner what actually blocked it, in the delivered email`() =
         runBlocking {
-            // End to end through the real adapter, the real fanout and the real
-            // email renderer. The renderer's own tests hand-build a response
-            // object; this one proves the producer and the renderer agree, which
-            // is exactly where the recovery message was being dropped.
-            //
-            // The reason has to be the companion's own: this owner was asked for
-            // a verification code, and the mail used to tell them their session
-            // had expired and to re-login — which would only ask for the code again.
+            // End to end through the real adapter, fanout and renderer: proves
+            // producer and renderer agree on the companion's own reason. This
+            // owner was asked for a code; the mail used to say "session expired".
             val emailClient = RecordingEmailClient()
             val adapter =
                 RecGovBookingAdapter(
@@ -760,10 +755,9 @@ class TriggerActionHandlerTest {
             )
 
             assertEquals(listOf(AtcOutcome.NO_TARGET), metrics.fires.map { it.outcome })
-            // No booking provider was reached, so the metric names none — even
-            // though the opening was seen under Campflare, that availability
-            // provider never answered as a booking provider and dashboards
-            // filtering on a real provider must not see this fire silently.
+            // No booking provider was reached, so the metric names none: the
+            // opening's Campflare is an availability provider, and a dashboard
+            // filtered on a real booking provider must not see this fire.
             assertEquals(listOf(null), metrics.fires.map { it.provider })
         }
 

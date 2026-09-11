@@ -58,13 +58,11 @@ internal class AtcTriggerActionHandler(
         if (pending.isEmpty()) {
             log.warn("ATC trigger unsupported for watch_id={} openings={}", watch.id, openings.size)
             val opening = openings.firstOrNull()
-            // No booking provider was reached, so the vendor the owner saw the
-            // opening under is the only honest thing to name in the delivered
-            // report — but the metric names no booking provider, matching
-            // every other exit where the fire never reached one.
+            // No booking provider was reached: the report falls back to the
+            // vendor the owner saw the opening under, the metric to none.
             reportResult(
                 watch = watch,
-                vendor = opening?.watchOpening?.vendor ?: VENDOR_UNKNOWN,
+                vendor = opening?.watchOpening?.vendor,
                 status = ATC_RESULT_FAILED,
                 request = noCompanionRequest,
                 response = null,
@@ -186,21 +184,14 @@ internal class AtcTriggerActionHandler(
     private fun elapsedMsSince(startedAtNanos: Long): Int = ((System.nanoTime() - startedAtNanos) / NANOS_PER_MILLI).toInt()
 
     /**
-     * Sends the outcome and says so when nobody heard it.
-     *
-     * The delivery result was previously discarded, which made "the hold
-     * happened but the owner was never told" indistinguishable from a clean
-     * run in the logs — the exact failure this whole path exists to prevent.
-     *
-     * [request] is the payload sent to the booking provider and [response] what
-     * came back. An exit that never got that far passes [noCompanionRequest]
-     * and a null response rather than a plausible-looking payload that was
-     * never sent; the reason travels in [error]/[detail], which is what both
-     * renderers read first.
+     * Sends the outcome and logs when nobody heard it — "held but never told"
+     * used to look like a clean run. [request]/[response] are the booking
+     * provider's; an exit that never reached it passes [noCompanionRequest] and
+     * a null response, with the reason in [error]/[detail].
      */
     private suspend fun reportResult(
         watch: AvailabilityWatchRepo.Watch,
-        vendor: String,
+        vendor: String?,
         status: String,
         request: JsonObject,
         response: JsonObject?,
@@ -281,9 +272,6 @@ internal class AtcTriggerActionHandler(
 
         /** Nothing was sent, so there is no payload to show. */
         private val noCompanionRequest = JsonObject(emptyMap())
-
-        /** No provider was reached and the opening named no vendor either. */
-        private const val VENDOR_UNKNOWN = "unknown"
 
         private const val NO_TARGET_DETAIL =
             "no bookable site could be resolved for this opening — the campground's booking details " +

@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 class EmailContentAtcResultRendererTest {
     private fun notice(
         watchId: Long = 7L,
-        vendor: String = "recgov",
+        vendor: String? = "recgov",
         status: String = "failed",
         response: JsonObject? = null,
         bookingSystem: String? = null,
@@ -83,6 +83,19 @@ class EmailContentAtcResultRendererTest {
 
         assertTrue(content.text.contains("held in your cart"), content.text)
         assertFalse(content.text.lowercase().contains("recreation.gov"), content.text)
+    }
+
+    @Test
+    fun `a fire that reached no adapter and no opening says the booking site, never unknown`() {
+        val content =
+            EmailContentAtcResultRenderer.render(
+                notice(vendor = null, error = "unsupported_target"),
+                magicLinkUrl = null,
+            )
+
+        assertTrue(content.text.contains("Provider: the booking site"), content.text)
+        assertTrue(content.html.contains("the booking site"), content.html)
+        assertFalse(content.text.lowercase().contains("unknown"), content.text)
     }
 
     @Test

@@ -118,6 +118,16 @@ open class UserSettingsRepo(
         }
     }
 
+    /** V53's rec.gov pair, kept in step with `user_booking_credentials` until the drop-columns migration. */
+    open fun clearLegacyRecgovCredentials(userId: UserId): Boolean =
+        ctx
+            .update(USER_SETTINGS)
+            .setNull(USER_SETTINGS.RECGOV_USERNAME)
+            .setNull(USER_SETTINGS.RECGOV_PASSWORD_CIPHER)
+            .set(USER_SETTINGS.UPDATED_AT, OffsetDateTime.now())
+            .where(USER_SETTINGS.USER_ID.eq(userId.value))
+            .execute() > 0
+
     open fun clearSlack(userId: UserId) {
         ctx
             .update(USER_SETTINGS)

@@ -90,16 +90,10 @@ internal class RecGovBookingAdapter(
 
     /**
      * Every companion code this adapter can surface, and who has to act on it.
-     *
-     * This table is the whole reason the layers above can stay vendor-agnostic:
-     * the route used to keep two sets of these codes itself, and the recovery
-     * path used to erase them all into `recgov_session_expired` — which told a
-     * user who had just removed their credentials, or whose companion was down,
-     * to "re-login in Settings". Anything absent here is
-     * [BookingFailureCategory.UPSTREAM], which is the safe default: an
-     * unfamiliar failure is ours until someone classifies it.
+     * Private: only the category it yields crosses the port, so nothing above
+     * learns a vendor's codes. Absent means [BookingFailureCategory.UPSTREAM].
      */
-    override val failureCategories: Map<String, BookingFailureCategory> =
+    private val failureCategories: Map<String, BookingFailureCategory> =
         buildMap {
             // The caller signs in, saves credentials, or completes a challenge.
             listOf(

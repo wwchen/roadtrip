@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonObject
  */
 data class AtcResultNotice(
     val watchId: Long,
-    val vendor: String,
+    val vendor: String?,
     val status: String,
     val request: JsonObject,
     val response: JsonObject?,
@@ -17,4 +17,7 @@ data class AtcResultNotice(
     val cartUrl: String? = null,
     val error: String? = null,
     val detail: String? = null,
-)
+) {
+    /** What every renderer calls this hold's vendor: the adapter's name, the opening's, then neutral. */
+    val providerLabel: String get() = bookingSystem ?: vendor ?: NeutralBookingCopy.BOOKING_SITE
+}

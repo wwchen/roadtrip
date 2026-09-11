@@ -54,7 +54,7 @@ internal object EmailContentAtcResultRenderer {
                 if (completed) notice.cartUrl?.let { add(EmailLink(cartLinkLabel(notice.bookingSystem), it)) }
                 addAll(watchControlLinks(appRootUrl, notice.watchId, magicLinkUrl))
             }
-        val providerLabel = notice.bookingSystem ?: notice.vendor
+        val providerLabel = notice.providerLabel
         return EmailContent(
             subject = "Roadtrip watch #${notice.watchId}: $header",
             text = renderText(notice.watchId, providerLabel, header, body, links),
