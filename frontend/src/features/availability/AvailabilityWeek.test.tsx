@@ -1165,14 +1165,14 @@ describe('holding a site straight from the grid', () => {
 
   test('without a cart row the armed cell names the site it would open', async () => {
     // The popover is what usually carries the name, and there is no popover
-    // here — so on every campground the cart does not cover, the cell itself
-    // has to say where "Book" goes.
+    // here — so the cell's accessible name says where "Book" goes. The visible
+    // label stays the bare verb: the column is 66px wide.
     await mount();
 
     await armFirstCell();
 
     const armed = cell('Site 1', WEEK[0]);
-    expect(armed).toHaveTextContent('Book on Recreation.gov');
+    expect(armed).toHaveTextContent(/^Book$/);
     expect(armed).toHaveAccessibleName(/; Book on Recreation\.gov, click to open booking page$/);
   });
 
@@ -1183,7 +1183,9 @@ describe('holding a site straight from the grid', () => {
 
     await armFirstCell();
 
-    expect(cell('Site 1', WEEK[0])).toHaveTextContent('Book on the booking site');
+    const armed = cell('Site 1', WEEK[0]);
+    expect(armed).toHaveTextContent(/^Book$/);
+    expect(armed).toHaveAccessibleName(/; Book on the booking site, click to open booking page$/);
   });
 
   test('with the capability an armed cell offers the two actions', async () => {

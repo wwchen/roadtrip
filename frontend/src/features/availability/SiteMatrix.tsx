@@ -790,7 +790,7 @@ function MatrixCell({
           else if (!hasCartRow) onOpenBooking(id, day.date);
         }}
       >
-        {armed ? (hasCartRow ? bookingCopy.book : bookHere) : state.label}
+        {armed ? bookingCopy.book : state.label}
       </button>
       {openPopover && cellAnchor ? (
         <CellBookPopover
