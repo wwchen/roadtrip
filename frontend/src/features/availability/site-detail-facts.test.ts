@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, it, test } from 'vitest';
 import type { Campsite } from '@/api/campsite-api';
 import {
   capacityLabel,
@@ -30,6 +30,7 @@ const site: Partial<Campsite> = {
   photo_url: 'https://x/1.jpg',
   data_provider: 'recgov',
   data_provider_ref: '100',
+  booking_system: 'Recreation.gov',
 };
 
 describe('the fact list', () => {
@@ -39,18 +40,16 @@ describe('the fact list', () => {
       { label: 'Type', value: 'STANDARD NONELECTRIC' },
       { label: 'Capacity', value: '2-6 people' },
       { label: 'Equipment', value: 'Tent, RV, Trailer, Van' },
-      { label: 'Provider', value: 'Recreation.gov' },
+      { label: 'Booking site', value: 'Recreation.gov' },
       { label: 'Provider ID', value: '100' },
     ]);
   });
 
-  test('the provider fact reads as a name, never as a slug', () => {
-    expect(detailFacts({ data_provider: 'reserveamerica' })).toEqual([
-      { label: 'Provider', value: 'ReserveAmerica' },
-    ]);
-    expect(detailFacts({ data_provider: 'some_vendor' })).toEqual([
-      { label: 'Provider', value: 'Some Vendor' },
-    ]);
+  it('labels the booking site from what was served', () => {
+    const facts = detailFacts({ data_provider: 'aspira', data_provider_ref: 'bc:42', booking_system: 'BC Parks' });
+    expect(facts).toContainEqual({ label: 'Booking site', value: 'BC Parks' });
+    expect(facts).toContainEqual({ label: 'Provider ID', value: 'bc:42' });
+    expect(facts.find((f) => f.label === 'Provider')).toBeUndefined();
   });
 
   test('drops facts it has no value for', () => {

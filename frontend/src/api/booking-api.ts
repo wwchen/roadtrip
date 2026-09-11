@@ -22,6 +22,8 @@ export interface AddToCartResponse {
   cart_url: string;
   /** The provider id whose cart it is — not always the one serving availability. */
   provider: string;
+  /** The booking site as a person reads it — what the toasts name. */
+  provider_display: string;
 }
 
 /** Mirrors the add-to-cart route's ApiErrorSchema, as `HttpError` carries it. */
@@ -30,12 +32,26 @@ export interface AddToCartFailure {
   code?: string;
   /** The adapter that refused. Absent when a gate ran before one was chosen. */
   provider?: string;
+  /** That adapter's booking site, absent whenever `provider` is. */
+  provider_display?: string;
 }
 
-/** Reads a rejected `addToCart` without every caller casting `unknown`. */
+/**
+ * Reads a rejected `addToCart` without every caller casting `unknown`.
+ *
+ * `HttpError` carries the envelope's `provider_display` camel-cased; a raw
+ * rejection may still carry the wire spelling, so both are accepted.
+ */
 export function addToCartFailure(err: unknown): AddToCartFailure {
-  const carried = err as AddToCartFailure | null | undefined;
-  return { code: carried?.code, provider: carried?.provider };
+  const carried = err as
+    | { code?: string; provider?: string; providerDisplay?: string; provider_display?: string }
+    | null
+    | undefined;
+  return {
+    code: carried?.code,
+    provider: carried?.provider,
+    provider_display: carried?.providerDisplay ?? carried?.provider_display,
+  };
 }
 
 /**

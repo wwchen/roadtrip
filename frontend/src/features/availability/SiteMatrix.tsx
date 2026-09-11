@@ -39,7 +39,7 @@ import {
   type MatrixFilters,
   type MatrixSort,
 } from './matrix-rows';
-import { agencyLabel, hasReservationUrlTemplate, type ReservationUrlTemplates } from './booking-links';
+import { hasReservationUrlTemplate, type ReservationUrlTemplates } from './booking-links';
 import { dayOfMonthLabel, dowLabel } from './week-labels';
 import { clampSiteColumnWidth, saveSiteColumnWidth } from './site-column';
 import { CellBookPopover } from './CellBookPopover';
@@ -802,9 +802,9 @@ function MatrixCell({
                 : { state: 'no-credentials', onOpenSettings, providerDisplay: cartProviderDisplay }
           }
           onClose={() => onArmBook(null)}
-          // Labelled from what the row actually opens: an aliased campground's
-          // template can be rec.gov's even when Campflare serves it.
-          bookingAgency={agencyLabel(row, reservationUrlTemplates) || undefined}
+          // Labelled from what the backend served on this row: an aliased
+          // campground books through one site while another serves it.
+          bookingAgency={row.booking_system || undefined}
         />
       ) : null}
     </td>

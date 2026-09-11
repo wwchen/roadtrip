@@ -45,6 +45,8 @@ export const bookingCopy = {
   addToCart: 'Add to cart',
   /** The armed cell's label, before the second tap. */
   book: 'Book',
+  /** The drawer's fallback when a pin carries a bare reserve URL and no label. */
+  reserve: 'Reserve',
   holdRunning: 'Holding site… usually under a minute; can take a few',
   // The three lines of the hold toast. Each takes the name of the provider that
   // actually held the site, rather than naming one vendor for all of them.

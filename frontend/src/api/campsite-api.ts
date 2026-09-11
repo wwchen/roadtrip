@@ -40,6 +40,8 @@ export interface Campsite {
   data_provider: string;
   data_provider_ref: string;
   booking_provider?: string | null;
+  /** The booking site this row opens, as the backend names it. */
+  booking_system?: string | null;
 }
 
 /** Mirrors PoiCampsitesResponseSchema. */

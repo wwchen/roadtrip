@@ -203,12 +203,11 @@ describe('campgroundCtas', () => {
     expect(result.map((cta) => cta.label)).toEqual(['Search Google']);
   });
 
-  test('falls back to the reserve url, naming the vendor', () => {
-    expect(ctas({ reserve_url: 'https://www.recreation.gov/camping/campgrounds/1' })[0]).toMatchObject(
-      { label: 'View on Recreation.gov' },
-    );
+  test('labels a bare reserve_url neutrally; the backend labels the real ones', () => {
+    const [cta] = campgroundCtas({ reserve_url: 'https://www.recreation.gov/camping/campgrounds/1' });
+    expect(cta.label).toBe('Reserve');
     expect(ctas({ reservation_url: 'https://reservecalifornia.com/x' })[0]).toMatchObject({
-      label: 'View on ReserveCalifornia',
+      label: 'Reserve',
     });
     expect(ctas({ reserve_url: 'https://someplace.test/x' })[0]).toMatchObject({ label: 'Reserve' });
   });
