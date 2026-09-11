@@ -123,6 +123,35 @@ class EmailContentAtcResultRendererTest {
     }
 
     @Test
+    fun `a bare vendor slug is never rendered as a provider name`() {
+        // `vendor` is the opening's raw slug, structured data rather than copy.
+        // Only an adapter's own display name is fit to print.
+        val content =
+            EmailContentAtcResultRenderer.render(
+                notice(vendor = "recgov", bookingSystem = null, error = "cart_not_added"),
+                magicLinkUrl = null,
+            )
+
+        assertTrue(content.text.contains("Provider: the booking site"), content.text)
+        assertFalse(content.text.contains("recgov"), content.text)
+        assertFalse(content.html.contains("recgov"), content.html)
+    }
+
+    @Test
+    fun `a failure nobody explained reads as a sentence, never as a raw code`() {
+        val content =
+            EmailContentAtcResultRenderer.render(
+                notice(error = "cart_not_added", response = buildJsonObject { put("error", "recgov_no_reserve_button") }),
+                magicLinkUrl = null,
+            )
+
+        assertFalse(content.text.contains("cart_not_added"), content.text)
+        assertFalse(content.text.contains("recgov_no_reserve_button"), content.text)
+        assertFalse(content.html.contains("cart_not_added"), content.html)
+        assertTrue(content.text.contains("could not hold it"), content.text)
+    }
+
+    @Test
     fun `a failure carries the companion's reason so the owner knows what to do`() {
         val content =
             EmailContentAtcResultRenderer.render(

@@ -21,9 +21,10 @@ internal suspend fun ApplicationCall.respondApiError(
     error: String,
     status: HttpStatusCode,
     detail: String? = null,
+    provider: String? = null,
 ) {
     respondEncodedJson(
-        ApiErrorSchema(error = error, detail = detail),
+        ApiErrorSchema(error = error, detail = detail, provider = provider),
         status,
     )
 }

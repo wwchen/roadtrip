@@ -2,7 +2,7 @@
 //
 // The popover opens wherever the campground has a cart at all. What changes with
 // the caller is the second row: it holds the site, or it names the one step that
-// would let it — a sign-in, or rec.gov credentials in Settings. Hiding the row
+// would let it — a sign-in, or that provider's credentials in Settings. Hiding the row
 // instead is what made the feature look absent rather than one step away.
 //
 // Positioning is the `WatchPopover` idiom: fixed against the anchor's rect and
@@ -31,7 +31,7 @@ const POPOVER_ANCHOR_GAP_PX = 6;
 export type CellCart =
   | { state: 'ready'; onAddToCart: () => void; /** One hold at a time. */ busy: boolean }
   | { state: 'signed-out'; onSignIn: () => void }
-  | { state: 'no-credentials'; onOpenSettings: () => void };
+  | { state: 'no-credentials'; onOpenSettings: () => void; providerDisplay?: string };
 
 export interface CellBookPopoverProps {
   anchor: HTMLElement;
@@ -149,7 +149,9 @@ export function CellBookPopover({
             <span className="cg-cell-book-pop-hint">{gateCopy.cartSignedOut}</span>
           ) : null}
           {cart.state === 'no-credentials' ? (
-            <span className="cg-cell-book-pop-hint">{gateCopy.cartNoCredentials}</span>
+            <span className="cg-cell-book-pop-hint">
+              {gateCopy.cartNoCredentials(cart.providerDisplay)}
+            </span>
           ) : null}
         </span>
       </button>

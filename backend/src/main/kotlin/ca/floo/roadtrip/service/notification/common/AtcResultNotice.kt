@@ -18,6 +18,10 @@ data class AtcResultNotice(
     val error: String? = null,
     val detail: String? = null,
 ) {
-    /** What every renderer calls this hold's vendor: the adapter's name, the opening's, then neutral. */
-    val providerLabel: String get() = bookingSystem ?: vendor ?: NeutralBookingCopy.BOOKING_SITE
+    /**
+     * What every renderer calls this hold's vendor: the adapter's own display
+     * name, else neutral. [vendor] is a bare slug off the opening — structured
+     * data, never copy — so no reader is ever shown it.
+     */
+    val providerLabel: String get() = bookingSystem ?: NeutralBookingCopy.BOOKING_SITE
 }

@@ -24,6 +24,20 @@ export interface AddToCartResponse {
   provider: string;
 }
 
+/** Mirrors the add-to-cart route's ApiErrorSchema, as `HttpError` carries it. */
+export interface AddToCartFailure {
+  /** The backend's own reason, which `settings-errors.ts` maps to copy. */
+  code?: string;
+  /** The adapter that refused. Absent when a gate ran before one was chosen. */
+  provider?: string;
+}
+
+/** Reads a rejected `addToCart` without every caller casting `unknown`. */
+export function addToCartFailure(err: unknown): AddToCartFailure {
+  const carried = err as AddToCartFailure | null | undefined;
+  return { code: carried?.code, provider: carried?.provider };
+}
+
 /**
  * Holds one campsite-night range in the caller's own cart at the booking vendor.
  * Throws `HttpError` with `code` set to the backend's own reason, which is what

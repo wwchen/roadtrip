@@ -104,7 +104,15 @@ export function bookingLabel(
  */
 export function providerLabel(providerId: string | null | undefined): string {
   const vendor = String(providerId || '').toLowerCase();
-  return vendor ? AGENCY_BY_VENDOR.get(vendor) || humanizeAgency(vendor) : '';
+  return vendor ? knownProviderLabel(vendor) || humanizeAgency(vendor) : '';
+}
+
+/**
+ * The same lookup without the humanised guess: `''` means we have no name for
+ * this vendor, which lets a caller prefer a real one it holds elsewhere.
+ */
+export function knownProviderLabel(providerId: string | null | undefined): string {
+  return AGENCY_BY_VENDOR.get(String(providerId || '').toLowerCase()) || '';
 }
 
 /**

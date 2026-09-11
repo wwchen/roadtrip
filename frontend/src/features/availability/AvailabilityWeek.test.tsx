@@ -1373,6 +1373,101 @@ describe('holding a site straight from the grid', () => {
     expect(screen.queryByText(/Holding site…/)).toBeNull();
   });
 
+  test('a refusal names the provider that refused, not the one serving the POI', async () => {
+    // Campflare serves this campground; Recreation.gov was asked to hold the
+    // site and said no. Only the envelope knows which, so the copy follows it.
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () => json({ error: 'cart_not_added', provider: 'recgov' }, 409);
+    await mount({ booking_system: 'Campflare' });
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(
+      await screen.findByText(/Recreation\.gov would not add it/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Campflare would not add it/)).toBeNull();
+  });
+
+  test('a refusal with no provider behind it stays neutral', async () => {
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () => json({ error: 'cart_not_added' }, 409);
+    await mount({ booking_system: 'Campflare' });
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(
+      await screen.findByText('Could not add it to your cart — someone else likely took it. Try again.'),
+    ).toBeInTheDocument();
+  });
+
+  test('a refusal names the capability block\'s provider when the id is one we have no name for', async () => {
+    stubs.availability = () =>
+      json(
+        availabilityBody(
+          [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
+          { trigger_kinds: ['slack_notify', 'atc'], add_to_cart: { state: 'ready', provider: 'reserveamerica', provider_display: 'ReserveAmerica' } },
+        ),
+      );
+    stubs.addToCart = () => json({ error: 'cart_not_added', provider: 'reserveamerica' }, 409);
+    await mount({ booking_system: 'Campflare' });
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(await screen.findByText(/ReserveAmerica would not add it/)).toBeInTheDocument();
+  });
+
+  test('the hold toast prefers the served name over a humanised guess', async () => {
+    // `reserveamerica` is not in the vendor table. The POI's own `booking_system`
+    // is a real name; "Reserveamerica" is only a guess at one.
+    stubs.availability = () =>
+      json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])], ATC_CAPABILITIES));
+    stubs.addToCart = () =>
+      json({ status: 'completed', cart_url: 'https://ra.example/cart', provider: 'reserveamerica' });
+    await mount({ booking_system: 'ReserveAmerica' });
+    await armFirstCell();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Add to cart/ }));
+
+    expect(await screen.findByText('Site held in your ReserveAmerica cart')).toBeInTheDocument();
+    expect(screen.queryByText(/Reserveamerica/)).toBeNull();
+  });
+
+  test('the cart gate names the provider whose login is missing', async () => {
+    stubs.availability = () =>
+      json(
+        availabilityBody(
+          [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
+          {
+            trigger_kinds: ['slack_notify'],
+            add_to_cart: { state: 'no_credentials', provider: 'campflare', provider_display: 'Campflare' },
+          },
+        ),
+      );
+    await mount({ booking_system: 'Campflare' });
+    await armFirstCell();
+
+    expect(await screen.findByText('Add Campflare login in Settings')).toBeInTheDocument();
+  });
+
+  test('the cart gate stays neutral when no provider claims the scope', async () => {
+    stubs.availability = () =>
+      json(
+        availabilityBody(
+          [stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])],
+          { trigger_kinds: ['slack_notify'], add_to_cart: { state: 'no_credentials' } },
+        ),
+      );
+    await mount();
+    await armFirstCell();
+
+    expect(await screen.findByText('Add your booking login in Settings')).toBeInTheDocument();
+  });
+
   test('a session that dies mid-hold names the expiry, not the raw code', async () => {
     // 502 with the companion's own code passed through: the preflight found the
     // session healthy and it lapsed before the click. Note the wire shape —

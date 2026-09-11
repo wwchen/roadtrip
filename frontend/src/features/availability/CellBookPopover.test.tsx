@@ -64,14 +64,20 @@ describe('the cell booking popover', () => {
     expect(onSignIn).toHaveBeenCalledOnce();
   });
 
-  test('sends a user without Recreation.gov credentials to Settings', async () => {
+  test("sends a user without the holding provider's credentials to Settings", async () => {
     const onOpenSettings = vi.fn();
-    renderPopover({ state: 'no-credentials', onOpenSettings });
+    renderPopover({ state: 'no-credentials', onOpenSettings, providerDisplay: 'Campflare' });
 
-    expect(screen.getByText('Add Recreation.gov login in Settings')).toBeInTheDocument();
+    expect(screen.getByText('Add Campflare login in Settings')).toBeInTheDocument();
     await userEvent.click(cartRow());
 
     expect(onOpenSettings).toHaveBeenCalledOnce();
+  });
+
+  test('names no provider when the backend named none', () => {
+    renderPopover({ state: 'no-credentials', onOpenSettings: vi.fn() });
+
+    expect(screen.getByText('Add your booking login in Settings')).toBeInTheDocument();
   });
 
   test('locks the cart row while a hold is already running', () => {

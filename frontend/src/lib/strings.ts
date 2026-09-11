@@ -33,6 +33,9 @@ export const VENDOR = 'Recreation.gov';
  */
 const UNNAMED_BOOKING_SITE = 'the booking site';
 
+/** The possessive form, for the gate sentences that ask for a login. */
+const UNNAMED_BOOKING_ACCOUNT = 'your booking';
+
 export const bookingCopy = {
   /** The popover's escape hatch, named after whoever takes the booking at that link. */
   openProvider: (bookingSystem?: string) => `Book on ${bookingSystem ?? UNNAMED_BOOKING_SITE}`,
@@ -59,13 +62,15 @@ export const bookingCopy = {
  */
 export const gateCopy = {
   cartSignedOut: 'Sign in to hold sites from here',
-  cartNoCredentials: `Add ${VENDOR} login in Settings`,
+  /** Named after the adapter the backend says would hold it, never the POI's. */
+  cartNoCredentials: (providerDisplay?: string) =>
+    `Add ${providerDisplay ?? UNNAMED_BOOKING_ACCOUNT} login in Settings`,
   watchSignedOut: 'Sign in to get an alert when a site opens up that night.',
   /** The word inside the day panel's sentence, and the sentence around it. */
   signIn: 'Sign in',
   daySignedOutSuffix: ' to set availability alerts.',
   /** The add-to-cart row's help, as a link plus the prose that follows it. */
-  editorNoCredentialsLink: `Add your ${VENDOR} login`,
+  editorNoCredentialsLink: (providerDisplay?: string) => `Add your ${providerDisplay ?? 'booking'} login`,
   editorNoCredentialsSuffix: ' in Settings to hold sites.',
   editorSignedOutSuffix: ' to enable add-to-cart.',
 } as const;

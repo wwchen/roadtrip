@@ -24,6 +24,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val TEST_PARENT_POI_ID = 100L
@@ -252,6 +253,58 @@ class WatchCapabilityServiceTest {
         val cartlessCapabilities = service(campsites = listOf(cartless)).capabilitiesFor(listOf(cartless), credentialedUser)
         assertEquals(AddToCartState.UNSUPPORTED, cartlessCapabilities.addToCart.state)
         assertFalse(AvailabilityTriggerKinds.ATC in cartlessCapabilities.triggerKinds)
+    }
+
+    @Test
+    fun `the capability block names the adapter whose cart it is talking about`() {
+        // The copy above this has no other way to name the vendor: an aliased
+        // campground is served by one and booked through another, so the POI's
+        // `booking_system` is the wrong name for every gate sentence.
+        val campsite = campsite(1L, "site-1")
+        val service = service(campsites = listOf(campsite))
+
+        val ready = service.capabilitiesFor(listOf(campsite), credentialedUser).addToCart
+        assertEquals(BookingProvider.RECGOV.id, ready.provider)
+        assertEquals(FAKE_PROVIDER_DISPLAY_NAME, ready.providerDisplay)
+
+        val gated = service.capabilitiesFor(listOf(campsite), uncredentialedUser).addToCart
+        assertEquals(BookingProvider.RECGOV.id, gated.provider, "the gate's own sentence has to name it")
+        assertEquals(FAKE_PROVIDER_DISPLAY_NAME, gated.providerDisplay)
+
+        val cartless = campsite(2L, "")
+        val unsupported = service(campsites = listOf(cartless)).capabilitiesFor(listOf(cartless), credentialedUser).addToCart
+        assertNull(unsupported.provider, "no adapter claimed this scope, so there is nobody to name")
+        assertNull(unsupported.providerDisplay)
+    }
+
+    @Test
+    fun `the capability block names the adapter that is actually the blocker`() {
+        // Same walk `addToCartProviderName` does: past the adapter this owner can
+        // already fulfil, onto the one they cannot.
+        val adapters =
+            listOf(
+                FakeBookingAdapter(id = BookingProvider.RECGOV, credentialed = { true }),
+                FakeBookingAdapter(
+                    id = BookingProvider.CAMPFLARE,
+                    displayName = OTHER_PROVIDER_DISPLAY_NAME,
+                    credentialed = { it == otherProviderUser },
+                ),
+            )
+        val recgovSite = campsite(1L, "site-1")
+        val campflareSite = campsite(2L, "site-2", provider = BookingProvider.CAMPFLARE)
+        val registry = BookingAdapterRegistry(adapters)
+        val service =
+            WatchCapabilityService(
+                availabilityTargets = TwoProviderTargetResolver(listOf(recgovSite, campflareSite)),
+                bookingTargets = AvailabilityBookingTargetResolver(registry),
+                bookings = registry,
+            )
+
+        val block = service.capabilitiesFor(listOf(recgovSite, campflareSite), credentialedUser).addToCart
+
+        assertEquals(AddToCartState.NO_CREDENTIALS, block.state)
+        assertEquals(BookingProvider.CAMPFLARE.id, block.provider)
+        assertEquals(OTHER_PROVIDER_DISPLAY_NAME, block.providerDisplay)
     }
 
     @Test

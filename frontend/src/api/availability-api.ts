@@ -60,7 +60,12 @@ export interface SeasonBlock {
 /** Mirrors AvailabilityWatchCapabilitiesDto. */
 export interface WatchCapabilities {
   trigger_kinds: string[];
-  add_to_cart: { state: AddToCartState };
+  add_to_cart: {
+    state: AddToCartState;
+    /** Whose cart the state is about — not always the POI's serving provider. */
+    provider?: string | null;
+    provider_display?: string | null;
+  };
 }
 
 /** Mirrors PoiCampsitesAvailabilityResponseDto — the 200 body. */

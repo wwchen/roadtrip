@@ -205,7 +205,7 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals(BookingProvider.RECGOV.id, detail.availabilityProvider)
         assertEquals(true, detail.availabilitySupported)
         assertEquals("Recreation.gov", detail.bookingSystem)
-        assertEquals("Reserve on recreation.gov", detail.cta?.first()?.label)
+        assertEquals("Reserve on Recreation.gov", detail.cta?.first()?.label)
         // The row itself still declares Campflare — the serving provider is
         // resolved above the repo, not stamped into the column.
         assertEquals(

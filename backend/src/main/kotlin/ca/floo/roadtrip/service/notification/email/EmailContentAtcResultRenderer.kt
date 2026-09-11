@@ -18,7 +18,6 @@ import kotlinx.serialization.json.contentOrNull
 /** The success value `AtcTriggerActionHandler` reports; anything else failed. */
 internal const val ATC_STATUS_COMPLETED = "completed"
 
-private const val FIELD_ERROR = "error"
 private const val FIELD_DETAIL = "detail"
 
 /**
@@ -34,6 +33,9 @@ private const val FIELD_DETAIL = "detail"
  */
 internal object EmailContentAtcResultRenderer {
     private const val FAILED_BODY_PREFIX = "Roadtrip found a matching site but could not hold it:"
+
+    /** Tail for a failure neither we nor the companion put into words. */
+    private const val UNEXPLAINED_FAILURE_REASON = "no reason was reported"
     private const val CART_LINK_LABEL = "Open your cart"
 
     fun render(
@@ -47,7 +49,7 @@ internal object EmailContentAtcResultRenderer {
             if (completed) {
                 completedBody(notice.bookingSystem)
             } else {
-                failureBody(notice.response, notice.error, notice.detail)
+                failureBody(notice.response, notice.detail)
             }
         val links =
             buildList {
@@ -128,21 +130,15 @@ internal object EmailContentAtcResultRenderer {
         }
 
     /**
-     * The caller's own reason wins over anything in the companion response. A
-     * preflight failure — a dead session, an unreachable companion — produces no
-     * response at all, and those are exactly the failures the owner can fix.
+     * Sentences only, ours before the companion's: a code is not an explanation,
+     * and `cart_not_added` in an inbox tells the owner nothing. The code and the
+     * category travel in the notice's structured fields instead.
      */
     private fun failureBody(
         response: JsonObject?,
-        error: String?,
         detail: String?,
     ): String {
-        val reason =
-            detail
-                ?: error
-                ?: response?.textField(FIELD_DETAIL)
-                ?: response?.textField(FIELD_ERROR)
-                ?: "the booking service did not confirm a hold"
+        val reason = detail ?: response?.textField(FIELD_DETAIL) ?: UNEXPLAINED_FAILURE_REASON
         return "$FAILED_BODY_PREFIX $reason"
     }
 

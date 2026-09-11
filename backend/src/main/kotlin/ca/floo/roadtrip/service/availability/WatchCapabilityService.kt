@@ -130,9 +130,20 @@ internal class WatchCapabilityService(
     internal fun addToCartProviderName(
         owner: UserId,
         scope: ResolvedWatchScope,
-    ): String? {
+    ): String? = addToCartAdapter(owner, scope)?.displayName
+
+    /**
+     * The adapter a hold on this scope is about: the first one [requester] would
+     * have to add credentials for, else simply the first in scope. It is what
+     * [addToCartState] consults, so the state and the name always agree.
+     */
+    private fun addToCartAdapter(
+        requester: UserId?,
+        scope: ResolvedWatchScope,
+    ): BookingAdapter? {
         val adapters = addToCartAdapters(scope)
-        return (adapters.firstOrNull { !it.canFulfil(owner) } ?: adapters.firstOrNull())?.displayName
+        val user = requester ?: return adapters.firstOrNull()
+        return adapters.firstOrNull { !it.canFulfil(user) } ?: adapters.firstOrNull()
     }
 
     /** The adapters that would hold this scope's sites, each named once. */
@@ -173,9 +184,18 @@ internal class WatchCapabilityService(
         // below share it rather than each walking the scope for themselves.
         val scope = resolve(campsites)
         val bookingActions = supportedBookingActions(scope)
+        val state = addToCartState(scope, bookingActions, requester)
+        // Nobody to name when no adapter claims the scope; anywhere else the
+        // gate copy needs the adapter this state was decided against.
+        val adapter = if (state == AddToCartState.UNSUPPORTED) null else addToCartAdapter(requester, scope)
         return AvailabilityWatchCapabilitiesDto(
             triggerKinds = supportedTriggerKinds(scope, bookingActions, requester),
-            addToCart = AddToCartCapabilityDto(addToCartState(scope, bookingActions, requester)),
+            addToCart =
+                AddToCartCapabilityDto(
+                    state = state,
+                    provider = adapter?.id?.id,
+                    providerDisplay = adapter?.displayName,
+                ),
         )
     }
 

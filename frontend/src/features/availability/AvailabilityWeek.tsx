@@ -6,7 +6,7 @@ import { availableCount } from '@/lib/day-fields';
 import { addLocalDays, localToday, localYmd, parseLocalYmd, sameLocalDay } from '@/lib/local-date';
 import { copyShareUrl } from '@/lib/share-links';
 import { settingsErrorMessage } from '@/lib/settings-errors';
-import { addToCart } from '@/api/booking-api';
+import { addToCart, addToCartFailure } from '@/api/booking-api';
 import { isCartActionPending } from './cart-action';
 import { signIn } from '@/api/auth-api';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -18,7 +18,7 @@ import { SiteMatrix, SiteMatrixSkeleton, type WatchGate } from './SiteMatrix';
 import { WatchPopover } from './WatchPopover';
 import { WeekNav } from './WeekNav';
 import { GENERIC_AVAILABILITY_ERROR, classifyAvailabilityErrorCode } from './availability-errors';
-import { providerLabel, reservationUrlFromTemplate } from './booking-links';
+import { knownProviderLabel, providerLabel, reservationUrlFromTemplate } from './booking-links';
 import type { AvailabilityDay } from '@/api/availability-api';
 import { DEFAULT_SITE_COLUMN_WIDTH } from './site-column';
 import { useAvailabilityController } from './availability-controller';
@@ -187,6 +187,9 @@ function AvailabilityWeekView({
   // Why the cart is or is not reachable, decided backend-side: the grid names the
   // one missing step rather than subtracting one capability list from another.
   const cart = capabilities.addToCart;
+  // Whose cart that is, as the backend names it. The gate copy and the failure
+  // toast both need it, and neither may fall back to the POI's serving vendor.
+  const cartProvider = capabilities.addToCartProviderDisplay;
 
   const holdSite = useCallback(
     (campsiteId: string, date: string) => {
@@ -221,16 +224,16 @@ function AvailabilityWeekView({
           });
         })
         .catch((err: unknown) => {
-          const code = (err as { code?: string } | null)?.code;
+          const { code, provider } = addToCartFailure(err);
           actions.cartActionChanged({ type: 'failed', cell, code: code ?? '' });
           toast({
             status: 'warning',
             title: 'Could not hold the site',
-            children: settingsErrorMessage(code, bookingSystem),
+            children: settingsErrorMessage(code, refusingProviderName(provider, bookingSystem, cartProvider)),
           });
         });
     },
-    [actions, bookingSystem, cartAction, toast],
+    [actions, bookingSystem, cartAction, cartProvider, toast],
   );
 
   const openBooking = useCallback(
@@ -372,6 +375,7 @@ function AvailabilityWeekView({
               watchedDates: watchedDatesOf(watches.byWindow),
               watchGate,
               cart,
+              cartProviderDisplay: cartProvider,
               cartAction,
             }}
             events={{
@@ -707,13 +711,34 @@ function featureLatestDate(feature: PoiFeature): string | null {
 /**
  * Whose cart the hold landed in. The wire's provider id wins over the POI's
  * `booking_system` — an aliased campground is served by one vendor and booked
- * through another — but the served name is kept when the two agree, so the
- * toast reads the same as the rest of the page.
+ * through another — but the served name is kept when the two agree, and when the
+ * id is one the vendor table has no name for: a real name beats a humanised guess.
  */
 function holdProviderName(provider: string | undefined, bookingSystem: string | undefined) {
-  const held = providerLabel(provider);
-  if (!held) return bookingSystem;
-  return bookingSystem && bookingSystem.toLowerCase() === held.toLowerCase() ? bookingSystem : held;
+  const known = knownProviderLabel(provider);
+  if (!known) return bookingSystem || providerLabel(provider) || undefined;
+  return sameVendor(bookingSystem, known) ? bookingSystem : known;
+}
+
+/**
+ * Who refused, for the failure copy. The envelope's id first, named through the
+ * served `booking_system` when they agree and the vendor table otherwise; the
+ * capability block's display is the last resort. Undefined reads neutral.
+ */
+function refusingProviderName(
+  provider: string | undefined,
+  bookingSystem: string | undefined,
+  capabilityProvider: string | undefined,
+) {
+  if (!provider) return undefined;
+  const known = knownProviderLabel(provider);
+  if (!known) return capabilityProvider;
+  return sameVendor(bookingSystem, known) ? bookingSystem : known;
+}
+
+/** Whether the served name and a mapped one are the same vendor, spelled alike. */
+function sameVendor(bookingSystem: string | undefined, known: string): boolean {
+  return !!bookingSystem && bookingSystem.toLowerCase() === known.toLowerCase();
 }
 
 export { DEFAULT_SITE_COLUMN_WIDTH };

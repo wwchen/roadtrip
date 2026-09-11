@@ -26,7 +26,7 @@ class CampgroundCtaTest {
                     infoUrl = null,
                 ).singleOrNull()
         assertEquals("https://www.recreation.gov/camping/campgrounds/232450", out?.url)
-        assertEquals("Reserve on recreation.gov", out?.label)
+        assertEquals("Reserve on Recreation.gov", out?.label)
         assertEquals("reserve", out?.kind)
     }
 
@@ -218,7 +218,7 @@ class CampgroundCtaTest {
     @Test
     fun `recgov ref wins over info_url`() {
         // A reservable rec.gov campground also has its rec.gov page as info_url.
-        // We want the canonical "Reserve on recreation.gov" CTA, not the page link.
+        // We want the canonical "Reserve on Recreation.gov" CTA, not the page link.
         val out =
             cta
                 .computeCtas(
@@ -226,7 +226,7 @@ class CampgroundCtaTest {
                     reserveUrl = null,
                     infoUrl = "https://www.recreation.gov/camping/campgrounds/232450",
                 ).singleOrNull()
-        assertEquals("Reserve on recreation.gov", out?.label)
+        assertEquals("Reserve on Recreation.gov", out?.label)
         assertEquals("reserve", out?.kind)
     }
 
@@ -298,7 +298,7 @@ class CampgroundCtaTest {
         val out = cta.computeCtas(bookingRef = ref, reserveUrl = null, infoUrl = "https://www.recreation.gov/camping/campgrounds/234784")
 
         assertEquals(1, out.size)
-        assertEquals("Reserve on recreation.gov", out.single().label)
+        assertEquals("Reserve on Recreation.gov", out.single().label)
         assertEquals("reserve", out.single().kind)
         assertEquals(
             "Recreation.gov",

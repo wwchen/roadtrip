@@ -88,12 +88,18 @@ private suspend fun ApplicationCall.respondOutcome(outcome: AddToCartOutcome) =
                     provider = outcome.provider.id,
                 ),
             )
-        is AddToCartOutcome.Refused -> respondApiError(outcome.code, refusalStatus(outcome.code))
+        is AddToCartOutcome.Refused ->
+            respondApiError(
+                error = outcome.code,
+                status = refusalStatus(outcome.code),
+                provider = outcome.provider?.id,
+            )
         is AddToCartOutcome.Failed ->
             respondApiError(
                 error = outcome.code,
                 status = outcome.category.status(),
                 detail = outcome.detail,
+                provider = outcome.provider.id,
             )
     }
 

@@ -78,9 +78,14 @@ internal sealed interface AddToCartOutcome {
         val provider: BookingProvider,
     ) : AddToCartOutcome
 
-    /** A gate refused before the browser was ever driven. */
+    /**
+     * A gate refused before the browser was ever driven. [provider] is the
+     * adapter the gate consulted, and is null for the gates that run before one
+     * is chosen — naming a vendor there would be a guess.
+     */
     data class Refused(
         val code: String,
+        val provider: BookingProvider? = null,
     ) : AddToCartOutcome
 
     /**
@@ -94,6 +99,7 @@ internal sealed interface AddToCartOutcome {
         val code: String,
         val detail: String?,
         val category: BookingFailureCategory,
+        val provider: BookingProvider,
     ) : AddToCartOutcome
 }
 
@@ -154,13 +160,17 @@ internal class BookingActionService(
         // 2. Does this caller have somewhere to put it? The adapter answers for
         //    its own vendor — configured, not proven — and it is the same gate
         //    the `atc` trigger applies.
-        if (!adapter.canFulfil(caller)) return AddToCartOutcome.Refused(BookingActionCodes.CREDENTIALS_REQUIRED)
+        if (!adapter.canFulfil(caller)) {
+            return AddToCartOutcome.Refused(BookingActionCodes.CREDENTIALS_REQUIRED, adapter.id)
+        }
 
         // 3. Do we already KNOW this is taken? Only a recent observation
         //    saying "not bookable" stops us here. This is a cheap way to catch
         //    a stale tab, not an authority — so it may only veto on evidence,
         //    never on the absence of it.
-        if (knownTaken(campsiteId, startDate, endDate)) return AddToCartOutcome.Refused(BookingActionCodes.NOT_AVAILABLE)
+        if (knownTaken(campsiteId, startDate, endDate)) {
+            return AddToCartOutcome.Refused(BookingActionCodes.NOT_AVAILABLE, adapter.id)
+        }
 
         val request =
             AddToCartRequest(
@@ -195,11 +205,11 @@ internal class BookingActionService(
                     result.error,
                     result.detail,
                 )
-                AddToCartOutcome.Failed(result.error, result.detail, result.category)
+                AddToCartOutcome.Failed(result.error, result.detail, result.category, result.providerId)
             }
             // The adapter disowning a target it claimed means the two answers are
             // out of step; the caller hears the same "we cannot book this".
-            AddToCartResult.Unsupported -> AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET)
+            AddToCartResult.Unsupported -> AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET, adapter.id)
         }
     }
 

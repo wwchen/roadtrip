@@ -22,7 +22,14 @@ enum class AddToCartState {
     UNSUPPORTED,
 }
 
+/**
+ * [provider]/[providerDisplay] name the adapter this state is about — an aliased
+ * campground is served by one vendor and booked through another, so the POI's
+ * `booking_system` is the wrong name for the gate copy. Null when unsupported.
+ */
 @Serializable
 data class AddToCartCapabilityDto(
     val state: AddToCartState,
+    val provider: String? = null,
+    @SerialName("provider_display") val providerDisplay: String? = null,
 )

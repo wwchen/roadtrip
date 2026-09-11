@@ -82,7 +82,7 @@ class BookingActionServiceTest {
             val adapter = FakeBookingAdapter(credentialed = { false })
             val outcome = service(adapter = adapter).addToCart(caller, TEST_CAMPSITE_ID, arrival, checkout)
 
-            assertEquals(AddToCartOutcome.Refused(BookingActionCodes.CREDENTIALS_REQUIRED), outcome)
+            assertEquals(AddToCartOutcome.Refused(BookingActionCodes.CREDENTIALS_REQUIRED, BookingProvider.RECGOV), outcome)
             assertTrue(adapter.requests.isEmpty(), "no cart to hold it in, so no browser is driven")
         }
 
@@ -95,7 +95,7 @@ class BookingActionServiceTest {
                     .addToCart(caller, TEST_CAMPSITE_ID, arrival, checkout)
 
             // Positive, recent evidence the second night is booked.
-            assertEquals(AddToCartOutcome.Refused(BookingActionCodes.NOT_AVAILABLE), outcome)
+            assertEquals(AddToCartOutcome.Refused(BookingActionCodes.NOT_AVAILABLE, BookingProvider.RECGOV), outcome)
             assertTrue(adapter.requests.isEmpty())
         }
 
@@ -161,6 +161,7 @@ class BookingActionServiceTest {
                     ADAPTER_FAILURE_CODE,
                     ADAPTER_FAILURE_DETAIL,
                     BookingFailureCategory.RETRY_LATER,
+                    BookingProvider.RECGOV,
                 ),
                 outcome,
             )
