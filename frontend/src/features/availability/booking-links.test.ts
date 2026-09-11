@@ -134,6 +134,15 @@ describe('naming who takes the booking', () => {
     expect(agencyLabel(site(7), { 7: 'https://www.camp-oregon.gov/x' })).toBe('Camp Oregon');
   });
 
+  test('a host we have no entry for still outranks the row"s vendor slug', () => {
+    // The link opens ReserveAmerica; the row is a Campflare catalog row. Naming
+    // the row would label the button after a site it does not open.
+    const row = site(7, { booking_provider: 'campflare', data_provider: 'campflare' });
+
+    expect(agencyLabel(row, { 7: 'https://www.reserveamerica.com/x' })).toBe('Reserveamerica');
+    expect(agencyLabel(row, { 7: 'https://www.reserveamerica.com/x' })).not.toBe('Campflare');
+  });
+
   test('humanises an unknown vendor slug', () => {
     expect(agencyLabel(site(7, { data_provider: 'some_vendor' }), {})).toBe('Some Vendor');
   });

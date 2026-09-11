@@ -88,7 +88,7 @@ export function hasReservationUrlTemplate(
   return !!reservationUrlTemplate(row, reservationUrlTemplates);
 }
 
-/** "Book on rec.gov", or plain "Book" when the provider is unrecognised. */
+/** "Book on <whoever the link opens>", or plain "Book" when nothing names them. */
 export function bookingLabel(
   row: Partial<Campsite> | null | undefined,
   reservationUrlTemplates: ReservationUrlTemplates,
@@ -116,20 +116,22 @@ export function knownProviderLabel(providerId: string | null | undefined): strin
 }
 
 /**
- * Who takes the booking, by preference: the template's host, then the row's
- * vendor slug, then a guess humanised from whichever we have.
+ * Who takes the booking at the link this row opens. The host always wins — even
+ * one we have no entry for, since a name read off the URL is still the site the
+ * button opens, where an aliased row's vendor slug names a different one.
  */
 export function agencyLabel(
   row: Partial<Campsite> | null | undefined,
   reservationUrlTemplates: ReservationUrlTemplates,
 ): string {
-  const template = reservationUrlTemplate(row, reservationUrlTemplates);
-  const host = hostFromUrl(template);
-  const known = AGENCY_BY_HOST.get(host);
-  if (known) return known;
-
+  const host = hostFromUrl(reservationUrlTemplate(row, reservationUrlTemplates));
   const vendor = String(row?.booking_provider || row?.data_provider || '').toLowerCase();
-  return AGENCY_BY_VENDOR.get(vendor) || labelFromHost(host) || humanizeAgency(vendor);
+  return (
+    AGENCY_BY_HOST.get(host) ||
+    labelFromHost(host) ||
+    AGENCY_BY_VENDOR.get(vendor) ||
+    humanizeAgency(vendor)
+  );
 }
 
 function reservationUrlTemplate(

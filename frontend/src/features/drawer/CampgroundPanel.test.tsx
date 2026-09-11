@@ -144,7 +144,7 @@ describe('the campground page, at panel width', () => {
       schedule: { check_in: '14:00' },
       cell_coverage: [{ carrier: 'verizon', label: 'Verizon', average: 3.8, count: 41 }],
       rating: { average: 4.3, count: 1234 },
-      booking_system: 'recreation.gov',
+      booking_system: 'Recreation.gov',
     });
 
     // No accordion any more: the blocks below the rule are the page, and a camper
@@ -156,7 +156,7 @@ describe('the campground page, at panel width', () => {
     expect(details.getByText('2:00 PM')).toBeInTheDocument();
     expect(details.getByText('Verizon')).toBeInTheDocument();
     expect(details.getByText(/4\.3/)).toBeInTheDocument();
-    expect(details.getByText('recreation.gov')).toBeInTheDocument();
+    expect(details.getByText('Recreation.gov')).toBeInTheDocument();
   });
 
   test('renders amenities and activities as tags, and marks the absences', async () => {

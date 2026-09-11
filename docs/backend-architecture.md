@@ -320,3 +320,41 @@ and the revert flipped the mismatch onto it. The boot error names both values
 docker compose exec -T postgres psql -U roadtrip -d roadtrip \
   -c "UPDATE flyway_schema_history SET checksum = <resolved> WHERE version = '<n>';"
 ```
+
+### Non-transactional migrations (`CONCURRENTLY`)
+
+Postgres refuses `CREATE INDEX CONCURRENTLY` inside a transaction, so a
+migration that builds one has to run outside Flyway's. Two settings make that
+work, and neither fails loudly when it is dropped — the migration simply blocks
+forever, so both are asserted by `FlywayConcurrentIndexConfigTest`.
+
+**The `.sql.conf` sidecar.** A file named exactly after its migration plus
+`.conf` (`V61__booking_alias_indexes.sql.conf`) holding:
+
+```
+executeInTransaction=false
+```
+
+Flyway does **not** checksum the sidecar, so a stale one produces no mismatch
+and no warning — treat it as part of the migration and never edit it once the
+migration is applied.
+
+**The session lock.** Flyway's default PostgreSQL lock is *transactional*,
+which leaves its own connection idle-in-transaction for the whole run;
+`CREATE INDEX CONCURRENTLY` then waits on that virtualxid forever. The fix is
+`flyway.postgresql.transactional.lock=false`, set at three sites that must stay
+in step: `Db.kt`'s `flywaySessionLock` (the boot path), the `generateJooq`
+Flyway in `backend/build.gradle.kts`, and that file's `flyway { }` block, whose
+`pluginConfiguration` keys the Gradle plugin prefixes with `flyway.` itself.
+
+**Recovery when V61 fails part-way.** A failed concurrent build leaves an
+`INVALID` index behind, which the migration's `IF NOT EXISTS` rerun will *not*
+rebuild. Drop it by hand before retrying:
+
+```sh
+psql -c "SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;"
+psql -c "DROP INDEX CONCURRENTLY <name>;"   # once per name listed
+./gradlew :backend:flywayRepair              # clear the failed history row
+```
+
+Then restart the backend so the boot migration reapplies V61.

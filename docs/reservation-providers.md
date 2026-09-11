@@ -318,7 +318,12 @@ literal. The Slack openings footer names the booking site the alert's Reserve
 links lead to — `WatchOpening.bookingSystem`, resolved by the dispatcher through
 the same `CampgroundCta` registry that fills the POI's `booking_system` — and
 falls back to "the booking site" when one alert spans two vendors. The web
-grid's hold toast reads the POI's `booking_system` for the same reason.
+grid's hold toast reads the *holding* provider: `holdProviderName` takes the
+add-to-cart response's `provider` id, keeps the POI's served `booking_system`
+when the two name the same vendor, and prefers that served name over a
+humanised guess when the id is one the vendor table has no entry for. The
+failure toast does the same with the error envelope's `provider`, falling back
+to `add_to_cart.provider_display` and then to neutral copy.
 
 **Credentials are keyed by provider.** `user_booking_credentials(user_id,
 provider, username, secret_cipher)` holds one account per user per vendor, read
@@ -489,6 +494,42 @@ vendor that tells us a site is free need not be the vendor that holds it.
 Today that seam reaches exactly one action, `ADD_TO_CART` on rec.gov. Payment
 and checkout remain out of scope at every layer — the action stops at a cart
 hold.
+
+## Deploying and rolling back the booking port
+
+**V59 blinds a jar that predates it.** V59 canonicalizes the Campflare rows
+that were stamped with rec.gov as their *primary* booking identity: the row
+becomes Campflare primary and rec.gov's ref moves into `booking_aliases`. A jar
+rolled back past the alias-aware resolver reads only `booking_provider` /
+`booking_provider_ref`, so those campgrounds stop matching the rec.gov pollers
+entirely. To restore the pre-V59 shape before starting an old jar:
+
+```sql
+UPDATE campgrounds SET booking_provider = 'recgov', booking_provider_ref = a->>'ref'
+FROM jsonb_array_elements(booking_aliases) a
+WHERE data_provider = 'campflare' AND booking_provider = 'campflare' AND a->>'provider' = 'recgov';
+
+UPDATE campsites SET booking_provider = 'recgov', booking_provider_ref = a->>'ref'
+FROM jsonb_array_elements(booking_aliases) a
+WHERE data_provider = 'campflare' AND booking_provider = 'campflare' AND a->>'provider' = 'recgov';
+```
+
+Rolling forward needs no undo of that: V59's own `WHERE` re-canonicalizes the
+rows it just un-did, and leaves everything else alone.
+
+**Credentials survive a rollback.** V60 moved rec.gov accounts into
+`user_booking_credentials`, and V53's `user_settings.recgov_username` /
+`recgov_password_cipher` are still written: `UserBookingCredentialsRepo`
+mirrors every save, rename and clear into them in the same transaction, so a
+jar that predates V60 finds the current account rather than a stale one. Those
+columns are dead weight only after the drop-columns migration; until then do
+not stop writing them.
+
+**The Grafana rename is a hard cut.** ATC telemetry is now
+`roadtrip.booking.atc{provider}` for every vendor. Dashboards querying the old
+metric name show no data the moment the new jar starts — there is no dual
+emission and no bridging period, so redeploy `grafana/dashboards/` with the
+jar rather than after it.
 
 ## Today's adapter matrix
 
