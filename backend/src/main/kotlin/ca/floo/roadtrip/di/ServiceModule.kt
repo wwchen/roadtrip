@@ -424,13 +424,6 @@ val serviceModule =
         }
         single { RouteCorridorService(get<RouteCorridorRepo>()) }
         single {
-            val config: AppConfig = get()
-            PoiServingRepo(
-                ctx = get<DSLContext>(),
-                enabledDataProviders = config.readPathProviders.enabledDataProviders,
-            )
-        }
-        single {
             PoiService(
                 poiRepo = get<PoiServingRepo>(),
                 detailServices = get(named("poiDetailServices")),
