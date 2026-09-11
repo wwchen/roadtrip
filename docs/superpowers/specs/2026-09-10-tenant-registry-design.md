@@ -154,10 +154,11 @@ the `booking_horizon_days` args are deleted.
 `CampgroundService.bookingRef` becomes: the first of (primary, aliases in
 order) whose vendor `sells`, else the serving availability provider's claim,
 else the declared primary. No dependency on `BookingAdapterRegistry` or the
-companion channel; `ShippingProfileCompanionConfigTest` is retired (the CTA no
-longer needs the companion) and the rule moves into one
-`BookingIdentityResolver` in `service/availability` that the campground drawer
-and the campsite rows share.
+companion channel, and the rule moves into one `BookingIdentityResolver` in
+`service/availability` that the campground drawer and the campsite rows share.
+`ShippingProfileCompanionConfigTest` keeps its assertion but is re-aimed: the
+CTA no longer needs `companion-base-url`, while the `atc` action still does —
+without it `RecGovBookingAdapter` is never registered and every hold refuses.
 
 ### Dates come from the POI
 
@@ -167,6 +168,11 @@ deeplink is dated from `context.earliestDate` (the campground's own zone, which
 `America/New_York` anchor, the `Clock` on `CampgroundCta`, and the TODO are
 gone. `WatchAlertDispatcher`, which only needs `bookingSystem`, is unchanged in
 shape.
+
+`earliestDate` is the earliest *bookable* arrival, not today: it rolls to
+tomorrow after the 18:00 local cutoff, exactly as the availability picker's own
+window does. So after that hour the deeplink proposes tomorrow's arrival, which
+is the first night the picker beside it will offer.
 
 ### The wire carries names beside every slug
 
