@@ -1,13 +1,16 @@
 package ca.floo.roadtrip.repo
 
+import org.jooq.exception.DataAccessException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.IOException
+import java.sql.SQLException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 private const val TRANSACTIONAL_SOURCE = "uow-transactional"
 private const val ROLLED_BACK_SOURCE = "uow-rolled-back"
@@ -61,6 +64,22 @@ class JooqUnitOfWorkTest : SharedDbTest() {
             }
 
         assertEquals("the use case failed after writing", failure.message)
+        assertNull(idOf(ROLLED_BACK_SOURCE), "a failed block must leave no import_runs row")
+    }
+
+    @Test
+    fun `a jOOQ failure inside the block reaches the caller as jOOQ's own exception`() {
+        // The unwrap keys on the block's own throwable, so a statement that fails
+        // in the database keeps its DataAccessException and its SQLException cause.
+        val failure =
+            assertFailsWith<DataAccessException> {
+                unitOfWork.run { repos ->
+                    repos.importRuns.start(ROLLED_BACK_SOURCE)
+                    ctx.execute("SELECT 1 FROM uow_table_that_does_not_exist")
+                }
+            }
+
+        assertTrue(failure.cause is SQLException, "the driver's failure must stay the cause")
         assertNull(idOf(ROLLED_BACK_SOURCE), "a failed block must leave no import_runs row")
     }
 
