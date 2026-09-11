@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.FakeBookingAdapter
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -28,6 +29,7 @@ import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
+import ca.floo.roadtrip.service.poi.campground.CampgroundCta
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.JsonObject
@@ -200,6 +202,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                     ),
                 grafanaRootUrl = null,
                 appRootUrl = null,
+                campgroundCta = CampgroundCta(shippedTenantRegistry()),
             )
         return DispatchingWatchLifecycleNotifications(
             dispatcher = dispatcher,

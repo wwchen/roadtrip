@@ -12,7 +12,6 @@ import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.CatalogColumnJson
 import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
-import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
 import ca.floo.roadtrip.model.domain.poi.PoiGeometryUpdate
 import ca.floo.roadtrip.model.domain.provider.DataProvider
@@ -99,7 +98,6 @@ class CampgroundRepo(
             campground = campground,
             source = record.get("detail_source", String::class.java),
             sourceId = record.get("detail_source_id", String::class.java),
-            bookingRef = campground.bookingRef(),
             propertiesJson = record.get("properties_text", String::class.java),
             memberSources = memberSourcesOf(record.get("member_sources")),
         )

@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.slack.SlackAttachmentDto
 import ca.floo.roadtrip.client.slack.SlackBlockDto
 import ca.floo.roadtrip.config.AvailabilityPollerConfig
 import ca.floo.roadtrip.config.VendorRateLimitConfig
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
@@ -57,6 +58,7 @@ import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import ca.floo.roadtrip.service.notification.slack.SlackContentAvailabilityRenderer
 import ca.floo.roadtrip.service.notification.slack.SlackContentWatchStatusRenderer
+import ca.floo.roadtrip.service.poi.campground.CampgroundCta
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.security.SecretCipher
 import kotlinx.coroutines.runBlocking
@@ -425,6 +427,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, targetResolver(), APP_ROOT_URL))),
             grafanaRootUrl = GRAFANA_ROOT_URL,
             appRootUrl = APP_ROOT_URL,
+            campgroundCta = CampgroundCta(shippedTenantRegistry()),
         )
     }
 
@@ -449,6 +452,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 ),
             grafanaRootUrl = grafanaRootUrl,
             appRootUrl = appRootUrl,
+            campgroundCta = CampgroundCta(shippedTenantRegistry()),
         )
 
     private fun executorFor(

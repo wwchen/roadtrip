@@ -19,5 +19,5 @@ internal fun testCampgroundService(
         dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
         bookingHorizons = testBookingHorizons(ctx, availabilityProviders),
         identities = BookingIdentityResolver(shippedTenantRegistry()),
-        cta = CampgroundCta.default,
+        cta = CampgroundCta(shippedTenantRegistry()),
     )

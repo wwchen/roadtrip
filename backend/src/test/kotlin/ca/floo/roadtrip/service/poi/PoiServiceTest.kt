@@ -10,10 +10,12 @@ import ca.floo.roadtrip.model.api.poi.PriceDto
 import ca.floo.roadtrip.model.api.poi.RatingDto
 import ca.floo.roadtrip.model.api.poi.ScheduleDto
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
+import ca.floo.roadtrip.model.domain.bookingRef
 import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
@@ -50,7 +52,7 @@ class PoiServiceTest : SharedDbTest() {
         val ref = feature.campgroundDetail().bookingRef!!
         assertEquals("aspira", ref.provider)
         assertEquals("pc:-2147483647:-2147483026:-2147483640", ref.ref)
-        assertEquals(aspiraBookingRef, row.bookingRef)
+        assertEquals(aspiraBookingRef, row.campground.bookingRef())
     }
 
     @Test
@@ -82,7 +84,7 @@ class PoiServiceTest : SharedDbTest() {
 
         val row = campgroundDetailRow(poiId)
 
-        assertEquals(aspiraBookingRef, row.bookingRef)
+        assertEquals(aspiraBookingRef, row.campground.bookingRef())
     }
 
     @Test
@@ -184,7 +186,7 @@ class PoiServiceTest : SharedDbTest() {
             )
 
         val row = campgroundDetailRow(fixture.poiId)
-        assertEquals(BookingProviderRef.Campflare(campgroundId = "upper-pines-campground-447"), row.bookingRef)
+        assertEquals(BookingProviderRef.Campflare(campgroundId = "upper-pines-campground-447"), row.campground.bookingRef())
     }
 
     @Test
@@ -216,7 +218,7 @@ class PoiServiceTest : SharedDbTest() {
         // resolved above the repo, not stamped into the column.
         assertEquals(
             BookingProviderRef.Campflare(campgroundId = "icicle-group-campground-8149"),
-            campgroundDetailRow(fixture.poiId).bookingRef,
+            campgroundDetailRow(fixture.poiId).campground.bookingRef(),
         )
     }
 
@@ -277,6 +279,39 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals(BookingProvider.CAMPFLARE.id, detail.availabilityProvider)
         assertEquals("Campflare", detail.bookingSystem)
         assertEquals("View on Campflare", detail.cta?.single()?.label)
+    }
+
+    @Test
+    fun `booking_system names the aspira tenant`() {
+        // Two multi-tenant vendors: the drawer names the agency a person books
+        // with, not the platform behind it.
+        val bcParks =
+            ctx.seedCatalogPoi(
+                sourceId = "1:-2147483470",
+                name = "Alice Lake Campground",
+                lon = -123.12,
+                lat = 49.78,
+                source = SOURCE,
+                region = "BC",
+                country = "CA",
+                bookingProvider = BookingProvider.ASPIRA.id,
+                bookingProviderRef = "bc:1:-2147483470:-2147483400",
+            )
+        val newYork =
+            ctx.seedCatalogPoi(
+                sourceId = "117",
+                name = "Kenneth L. Wilson",
+                lon = -74.21,
+                lat = 42.02,
+                source = DataProvider.RESERVEAMERICA.id,
+                region = "NY",
+                country = "US",
+                bookingProvider = BookingProvider.RESERVEAMERICA.id,
+                bookingProviderRef = "NY:117",
+            )
+
+        assertEquals("BC Parks", poiService().poiDetail(bcParks.poiId)!!.campgroundDetail().bookingSystem)
+        assertEquals("New York State Parks", poiService().poiDetail(newYork.poiId)!!.campgroundDetail().bookingSystem)
     }
 
     @Test
@@ -793,7 +828,12 @@ class PoiServiceTest : SharedDbTest() {
 
     private fun poiService(availabilityProviders: List<AvailabilityProvider> = emptyList()): PoiService =
         PoiService(
-            poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf(SOURCE, "campflare", "recgov")),
+            poiRepo =
+                PoiServingRepo(
+                    ctx,
+                    enabledDataProviders =
+                        setOf(SOURCE, DataProvider.CAMPFLARE.id, DataProvider.RECGOV.id, DataProvider.RESERVEAMERICA.id),
+                ),
             detailServices =
                 listOf(
                     testCampgroundService(ctx, availabilityProviders),

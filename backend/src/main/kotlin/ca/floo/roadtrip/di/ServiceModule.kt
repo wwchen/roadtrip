@@ -204,6 +204,7 @@ val serviceModule =
             )
         }
         single { BookingIdentityResolver(get<TenantRegistry>()) }
+        single { CampgroundCta(get<TenantRegistry>()) }
         single { WatchScopeResolver(get<CampsiteRepo>()) }
         single {
             DbAvailabilityTargetResolver(
@@ -318,6 +319,7 @@ val serviceModule =
                 grafanaRootUrl = config.grafana?.rootUrl,
                 appRootUrl = config.webApp?.rootUrl,
                 metrics = get<RoadtripMetrics>(),
+                campgroundCta = get<CampgroundCta>(),
             )
         }
 
@@ -411,7 +413,7 @@ val serviceModule =
                     dateResolver = get<AvailabilityDateResolver>(),
                     bookingHorizons = get<BookingHorizonResolver>(),
                     identities = get<BookingIdentityResolver>(),
-                    cta = CampgroundCta.default,
+                    cta = get<CampgroundCta>(),
                 ),
                 TeslaSuperchargerService(get<TeslaSuperchargerRepo>()),
                 PlanetFitnessLocationService(get<PlanetFitnessLocationRepo>()),

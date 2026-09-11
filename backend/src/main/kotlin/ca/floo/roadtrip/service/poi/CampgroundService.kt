@@ -51,6 +51,7 @@ internal class CampgroundService(
                 bookingRef = bookingRef,
                 reserveUrl = campground.reservationUrl,
                 infoUrl = infoUrl,
+                dateContext = dateContext,
             )
         val ctas = computedCtas.takeIf { it.isNotEmpty() }
         return PoiDetailPropertiesSchema(
@@ -80,12 +81,7 @@ internal class CampgroundService(
                     bookingRef = bookingRef?.let(BookingRefDto::from),
                     availabilitySupported = (bookingRef != null).takeIf { it },
                     cta = ctas,
-                    bookingSystem =
-                        cta.bookingSystem(
-                            bookingRef = bookingRef,
-                            reserveUrl = campground.reservationUrl,
-                            infoUrl = infoUrl,
-                        ),
+                    bookingSystem = cta.bookingSystem(bookingRef),
                     // The source record, sent once — no longer also as `raw`.
                     upstream = raw,
                     status = campground.status,
