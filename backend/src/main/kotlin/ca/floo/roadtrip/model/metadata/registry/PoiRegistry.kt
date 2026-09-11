@@ -33,6 +33,9 @@ private const val BC_PARKS_CAMPGROUNDS_ADAPTER = "BcParksCampgroundsEtl"
 private const val MIN_FUZZY_THRESHOLD_EXCLUSIVE = 0.0
 private const val MAX_FUZZY_THRESHOLD_INCLUSIVE = 1.0
 
+private const val SOURCE_STATE_KEY = "state"
+private const val SOURCE_NAME_PROPERTY_KEY = "name_property"
+
 /** Tenant-scoped adapter name → the vendor whose tenant its args must name. */
 @Suppress("TopLevelPropertyNaming")
 private val TENANT_SCOPED_ADAPTER_PROVIDERS =
@@ -159,22 +162,24 @@ class PoiRegistry(
             }
         }
         validateBookingProviders(errs)
+        val poiRows = poiData.map { EtlRowRef(it.name, it.etls) }
+        val campsiteRows = campsiteData.map { EtlRowRef(it.name, it.etls) }
         validateEtlSection(
             label = POI_DATA_SECTION,
-            rows = poiData.map { EtlRowRef(it.name, it.etls) },
+            rows = poiRows,
             dsSlugs = dsSlugs,
             allEtlSlugs = etlSlugs,
             errs = errs,
         )
         validateEtlSection(
             label = CAMPSITE_DATA_SECTION,
-            rows = campsiteData.map { EtlRowRef(it.name, it.etls) },
+            rows = campsiteRows,
             dsSlugs = dsSlugs,
             allEtlSlugs = etlSlugs,
             errs = errs,
         )
-        validateAdapterPolicies(POI_DATA_SECTION, poiData.map { EtlRowRef(it.name, it.etls) }, errs)
-        validateAdapterPolicies(CAMPSITE_DATA_SECTION, campsiteData.map { EtlRowRef(it.name, it.etls) }, errs)
+        validateAdapterPolicies(POI_DATA_SECTION, poiRows, errs)
+        validateAdapterPolicies(CAMPSITE_DATA_SECTION, campsiteRows, errs)
 
         // Global cycle detection over data_sources.depends_on + every
         // etl.inputs across both etl-bearing sections. Edges run
@@ -366,7 +371,8 @@ class PoiRegistry(
                 }
                 validateGeometrySources(where, etl, geometry, errs)
                 val threshold = geometry.match.fuzzyThreshold
-                if (threshold <= MIN_FUZZY_THRESHOLD_EXCLUSIVE || threshold > MAX_FUZZY_THRESHOLD_INCLUSIVE) {
+                // Stated positively so NaN, which compares false to everything, falls into the error branch.
+                if (!(threshold > MIN_FUZZY_THRESHOLD_EXCLUSIVE && threshold <= MAX_FUZZY_THRESHOLD_INCLUSIVE)) {
                     errs += "$where match.fuzzy_threshold=$threshold is outside " +
                         "($MIN_FUZZY_THRESHOLD_EXCLUSIVE, $MAX_FUZZY_THRESHOLD_INCLUSIVE]"
                 }
@@ -388,14 +394,15 @@ class PoiRegistry(
             if (!seen.add(source.input)) {
                 errs += "$where declares geometry source input '${source.input}' twice"
             }
-            if (source.state != null && source.format != GeometryFormat.USCAMPGROUNDS_CSV) {
-                errs += "$where geometry source '${source.input}' declares 'state', " +
-                    "which only '${GeometryFormat.USCAMPGROUNDS_CSV.wire}' honours"
-            }
-            if (source.nameProperty != null && source.format != GeometryFormat.GEOJSON_POINTS) {
-                errs += "$where geometry source '${source.input}' declares 'name_property', " +
-                    "which only '${GeometryFormat.GEOJSON_POINTS.wire}' honours"
-            }
+            validateSourceFilter(where, source, SOURCE_STATE_KEY, source.state, GeometryFormat.USCAMPGROUNDS_CSV, errs)
+            validateSourceFilter(
+                where,
+                source,
+                SOURCE_NAME_PROPERTY_KEY,
+                source.nameProperty,
+                GeometryFormat.GEOJSON_POINTS,
+                errs,
+            )
         }
         if (etl.adapter == BC_PARKS_CAMPGROUNDS_ADAPTER) {
             val only = geometry.sources.singleOrNull()
@@ -403,6 +410,29 @@ class PoiRegistry(
                 errs += "$where adapter '$BC_PARKS_CAMPGROUNDS_ADAPTER' must declare exactly one geometry source " +
                     "with format '${GeometryFormat.BCPARKS_STRAPI.wire}'"
             }
+        }
+    }
+
+    /**
+     * One optional per-source filter: present only on the format that honours
+     * it, and never present-but-empty. A blank filter matches nothing, so it
+     * would empty the join instead of narrowing it.
+     */
+    private fun validateSourceFilter(
+        where: String,
+        source: GeometrySourceSpec,
+        key: String,
+        value: String?,
+        honouredBy: GeometryFormat,
+        errs: MutableList<String>,
+    ) {
+        if (value == null) return
+        if (source.format != honouredBy) {
+            errs += "$where geometry source '${source.input}' declares '$key', " +
+                "which only '${honouredBy.wire}' honours"
+        }
+        if (value.isBlank()) {
+            errs += "$where geometry source '${source.input}' declares a blank '$key'"
         }
     }
 

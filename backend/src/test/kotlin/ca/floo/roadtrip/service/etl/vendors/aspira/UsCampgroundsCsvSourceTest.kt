@@ -77,12 +77,12 @@ class UsCampgroundsCsvSourceTest {
     }
 
     /**
-     * The half that actually broke: `state_filter: WA` sat in the registry and
+     * The half that actually broke: the WA state filter sat in the registry and
      * nothing read it. Driving the real YAML through the real registry is what
      * catches that — a test against the source alone passes either way.
      */
     @Test
-    fun `the WA terminal reads state_filter from the registry`() {
+    fun `the WA terminal reads geometry sources state from the registry`() {
         val definition =
             productionTerminalEtlDefinitions["aspira-wa-campgrounds"]
                 ?: error("aspira-wa-campgrounds is not a registered terminal")

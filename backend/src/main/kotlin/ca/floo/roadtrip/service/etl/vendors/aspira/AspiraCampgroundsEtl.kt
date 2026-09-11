@@ -51,7 +51,7 @@ class AspiraCampgroundsEtl(
     private val dataProviderValue: DataProvider,
     private val aspiraTenant: String,
     /**
-     * Two-letter state a US tenant books, from the registry's `state_filter`.
+     * Two-letter state a US tenant books, from the registry's `geometry.sources[].state`.
      * The uscampgrounds.info geometry file is nationwide and campground names
      * repeat across states, so without this a leaf can match another state's
      * row. Null for the non-US tenants, which want the whole file.

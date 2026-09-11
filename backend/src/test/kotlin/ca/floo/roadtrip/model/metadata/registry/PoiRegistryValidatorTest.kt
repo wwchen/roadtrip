@@ -1,7 +1,5 @@
 package ca.floo.roadtrip.model.metadata.registry
 
-import com.charleskorn.kaml.Yaml
-import com.charleskorn.kaml.YamlConfiguration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -94,16 +92,12 @@ private val BOOKING_PROVIDERS =
  *     with the tenant args ETL rows declare.
  */
 class PoiRegistryValidatorTest {
-    private val yaml = Yaml(configuration = YamlConfiguration(strictMode = false))
-
-    private fun load(text: String): PoiRegistry = yaml.decodeFromString(PoiRegistry.serializer(), text).also { it.validate() }
-
     @Test
     fun `legacy single-poi_data YAML still loads`() {
         // No campsite_data or poi_reservable_joiner sections — should
         // default to empty lists and pass the validator unchanged.
         val r =
-            load(
+            PoiRegistry.loadString(
                 BOOKING_PROVIDERS + "\n" +
                     """
                     data_sources:
@@ -128,7 +122,7 @@ class PoiRegistryValidatorTest {
     @Test
     fun `poi_data agency accepts scalar constants and derived field mappings`() {
         val r =
-            load(
+            PoiRegistry.loadString(
                 BOOKING_PROVIDERS + "\n" +
                     """
                     data_sources:
@@ -171,7 +165,7 @@ class PoiRegistryValidatorTest {
     fun `poi_data agency rejects blank scalar constants`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
-                load(
+                PoiRegistry.loadString(
                     BOOKING_PROVIDERS + "\n" +
                         """
                         data_sources:
@@ -202,7 +196,7 @@ class PoiRegistryValidatorTest {
     @Test
     fun `campsite_data row with valid terminal etl loads`() {
         val r =
-            load(
+            PoiRegistry.loadString(
                 BOOKING_PROVIDERS + "\n" +
                     """
                     data_sources:
@@ -229,7 +223,7 @@ class PoiRegistryValidatorTest {
     fun `poi_data rows reject intermediate etl chains`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
-                load(
+                PoiRegistry.loadString(
                     BOOKING_PROVIDERS + "\n" +
                         """
                         data_sources:
@@ -263,7 +257,7 @@ class PoiRegistryValidatorTest {
     fun `etl slugs across poi_data and campsite_data share one namespace`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
-                load(
+                PoiRegistry.loadString(
                     BOOKING_PROVIDERS + "\n" +
                         """
                         data_sources:
@@ -299,7 +293,7 @@ class PoiRegistryValidatorTest {
     fun `data_source slug colliding with campsite_data etl slug fails`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
-                load(
+                PoiRegistry.loadString(
                     BOOKING_PROVIDERS + "\n" +
                         """
                         data_sources:
@@ -329,7 +323,7 @@ class PoiRegistryValidatorTest {
     fun `etl inputs cannot reference a different row etl`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
-                load(
+                PoiRegistry.loadString(
                     BOOKING_PROVIDERS + "\n" +
                         """
                         data_sources:
@@ -364,7 +358,7 @@ class PoiRegistryValidatorTest {
     fun `cross-section refs rejected (campsite_data inputs cannot reference poi_data etls)`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
-                load(
+                PoiRegistry.loadString(
                     BOOKING_PROVIDERS + "\n" +
                         """
                         data_sources:
@@ -798,12 +792,14 @@ class PoiRegistryValidatorTest {
 
     @Test
     fun `a geometry adapter declaring no geometry block fails`() {
-        assertTrue(
-            waError("").contains(
-                "poi_data 'Washington State Parks' etl 'aspira-wa-campgrounds' adapter 'AspiraCampgroundsEtl' " +
-                    "must declare 'geometry' with at least one source",
-            ),
-        )
+        val expected =
+            "poi_data 'Washington State Parks' etl 'aspira-wa-campgrounds' adapter 'AspiraCampgroundsEtl' " +
+                "must declare 'geometry' with at least one source"
+        assertTrue(waError("").contains(expected))
+
+        // The other half of the same rule: a block that declares an empty list.
+        val empty = waError("geometry:\n  sources: []")
+        assertTrue(empty.contains(expected), empty)
     }
 
     @Test
@@ -862,6 +858,37 @@ class PoiRegistryValidatorTest {
         )
     }
 
+    /** A blank filter matches nothing, so it would empty the join instead of narrowing it. */
+    @Test
+    fun `a blank state fails`() {
+        val message =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: uscampgrounds
+                      format: uscampgrounds_csv
+                      state: ""
+                """,
+            )
+        assertTrue(message.contains("geometry source 'uscampgrounds' declares a blank 'state'"), message)
+    }
+
+    @Test
+    fun `a blank name_property fails`() {
+        val message =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: uscampgrounds
+                      format: geojson_points
+                      name_property: ""
+                """,
+            )
+        assertTrue(message.contains("geometry source 'uscampgrounds' declares a blank 'name_property'"), message)
+    }
+
     @Test
     fun `name_property on a format that cannot honour it fails`() {
         val message =
@@ -909,6 +936,49 @@ class PoiRegistryValidatorTest {
                 """,
             )
         assertTrue(tooHigh.contains("match.fuzzy_threshold=1.5 is outside (0.0, 1.0]"), tooHigh)
+
+        // NaN compares false to every bound, so a naive range check lets it boot
+        // and then silently downgrades every fuzzy comparison to exact-only.
+        val notANumber =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: uscampgrounds
+                      format: uscampgrounds_csv
+                  match:
+                    fuzzy_threshold: .nan
+                """,
+            )
+        assertTrue(notANumber.contains("match.fuzzy_threshold=NaN is outside (0.0, 1.0]"), notANumber)
+    }
+
+    /** The inclusive bound itself: nothing else pins `>` against `>=`. */
+    @Test
+    fun `a fuzzy threshold of exactly one is accepted`() {
+        val registry =
+            PoiRegistry.loadString(
+                waRegistry(
+                    """
+                    geometry:
+                      sources:
+                        - input: uscampgrounds
+                          format: uscampgrounds_csv
+                      match:
+                        fuzzy_threshold: 1.0
+                    """,
+                ),
+            )
+
+        assertEquals(
+            MatchPolicy(fuzzyThreshold = 1.0),
+            registry.poiData
+                .single()
+                .etls
+                .single()
+                .geometry!!
+                .match,
+        )
     }
 
     /** `CampflareCampgroundsEtl` has no `ACCEPTED_ARG_KEYS` entry, so the WA args pass through it unjudged. */
@@ -929,7 +999,9 @@ class PoiRegistryValidatorTest {
 
     @Test
     fun `BcParksCampgroundsEtl must declare exactly one bcparks_strapi source`() {
-        val message =
+        val expected =
+            "adapter 'BcParksCampgroundsEtl' must declare exactly one geometry source with format 'bcparks_strapi'"
+        val wrongFormat =
             waError(
                 etlBody =
                     """
@@ -940,12 +1012,23 @@ class PoiRegistryValidatorTest {
                     """,
                 adapter = "BcParksCampgroundsEtl",
             )
-        assertTrue(
-            message.contains(
-                "adapter 'BcParksCampgroundsEtl' must declare exactly one geometry source with format 'bcparks_strapi'",
-            ),
-            message,
-        )
+        assertTrue(wrongFormat.contains(expected), wrongFormat)
+
+        // "Exactly one" is the other half: the right format, twice over, is still wrong.
+        val twoSources =
+            waError(
+                etlBody =
+                    """
+                    geometry:
+                      sources:
+                        - input: uscampgrounds
+                          format: bcparks_strapi
+                        - input: aspira-maps-wa
+                          format: bcparks_strapi
+                    """,
+                adapter = "BcParksCampgroundsEtl",
+            )
+        assertTrue(twoSources.contains(expected), twoSources)
     }
 
     /** The dead `parent_name_fallback` arg's whole failure class, now a boot error. */
