@@ -331,8 +331,10 @@ between an import and the row becoming visible to reads.
 
 `model/api/ApiContract.kt` declares every endpoint under `/api/**` and
 `/auth/password/**` as data: its method (an `ApiMethod`, because `model/` never
-names Ktor), its path as registered, its request DTO, its 2xx response DTO, and
-the error DTOs it can serialize. Two things read it.
+names Ktor), its path as registered, its request DTO, and — as an `ApiBody`
+apiece — the 2xx it answers with and every non-2xx body it can serialize, each
+with its status. The statuses are `HTTP_*` constants in `model/api/ApiStatus.kt`
+for the same reason `ApiMethod` exists. Four things read it.
 
 `registerKoinRoutes` compares it against the live routing tree at boot, in both
 directions, beside the RFC 0010 access guard. A mounted route with no row fails
@@ -340,10 +342,30 @@ the boot; a row with no route does too, unless the row is marked `conditional`
 (the Slack interactivity endpoint, which mounts only when a signing secret is
 configured). `/api/docs` is exempt: the Swagger UI subtree is framework-generated
 and `openapi.json` answers with a Ktor type. `ApiContractCoverageTest` exercises
-the comparator; the boot guard is what sees the real tree. The guard compares
-paths in both directions; the DTOs on each row are declared by hand, so a row
-pointing at the wrong body is not caught — feeding `components/schemas` from
-`ApiContract` (backlog on #743) is what would close that.
+the comparator; the boot guard is what sees the real tree.
+
+The DTO half of each row is held to the routes by `route/ContractBodyCheck.kt`, a
+test-side plugin `routeTestApplication` installs. On every JSON response whose
+matched route matches a row, it picks the class the row names for that status,
+strict-decodes the body into it, re-encodes with `roadtripApiJson`, and compares
+the two `JsonElement` trees. A row naming the wrong DTO, a DTO that drifted from
+what the route serves, and a status neither the row nor the route's access level
+declares are each rewritten to `599` carrying the drift as the message, which
+fails the test that produced them whatever it was asserting. The strict decoder
+is the one encoder with a single setting tightened —
+`Json(roadtripApiJson) { ignoreUnknownKeys = false }`; a route serving a field
+its DTO lacks is the drift being hunted. `Json*` fields compare as trees, so a
+`JsonNull` inside one round-trips honestly. A response on a path no row names is
+skipped, which is what covers `/test/**` and `/data/**`.
+
+`:backend:contractLedgerCheck` then holds the *suite* to the contract. The plugin
+appends every checked `(method, path, status)` to
+`backend/build/contract-ledger/exercised.tsv`, once per triple, and records a
+drift there too; the task fails on any recorded violation and on any row with a
+success body that no test produced. The ledger is `:backend:test`'s declared
+output, so an up-to-date or cached test run still has a current one to verify,
+and the task is a finalizer on `:backend:test` as well as being named outright in
+`make test` and in CI's `Run backend tests + coverage + contract checks` step.
 
 `:backend:generateApiTypes` walks `serializer(kclass).descriptor` from every row,
 transitively, and writes `frontend/src/api/generated/api-types.ts`;
@@ -378,11 +400,58 @@ type name; two classes that would generate the same name; and a class reached
 from both a request root and a response root whose two optionality rules
 disagree. Each is a build failure a human resolves, not a half-built variant.
 
-The loop when you add or change an endpoint:
+The loop when you add or change an endpoint. "Its statuses" means every status
+the handler can answer with a body, read off the handler — the body check fails
+the first test that produces one the row does not declare:
 
 ```
-add the route  ->  add the ApiContract row  ->  make api-types  ->  commit the diff
+add the route  ->  add the row with its statuses  ->  make api-types  ->  commit the diff
 ```
+
+### `/api/docs`
+
+`GET /api/docs/openapi.json` and the Swagger UI's own copy of the spec are built
+in two halves, both through `roadtripApiJson` so they are byte-identical.
+
+The **routing tree** contributes the paths — spelled by
+`RoutingNode.path(OpenApiRoutePathFormat)`, which is the same spelling
+`ApiContract` uses — plus the tag, the summary and the description each route
+declares with `describeApi(...)`. The included surface is `isContractedPath` from
+`route/common/RouteInventory.kt` plus `/test/**`: `/api/**` and
+`/auth/password/**`, minus the whole `/api/docs/` subtree.
+
+`apigen/OpenApiContractDocument.apply` contributes the rest. `components/schemas`
+comes from one walk of the whole contract — the same `walkContract` the
+TypeScript generator reads, cached per process — so a schema name and a generated
+`interface` name are one declaration rendered twice. Each row then fills its
+operation's `requestBody` (`application/json`, a `$ref`, `required = true`) and
+its `responses`: the success status, every declared error status, and an empty
+response where the status carries no body. Two classes at one status become a
+`oneOf`.
+
+`401` and `403` are **not** on the rows where the tree already knows them.
+`apiDocsRoutes` builds a lookup with `RoutingNode.declaredAccessByLeaf()` and
+passes it in as `accessOf` — `apigen` may name Ktor but never `route/` — and the
+builder turns each route's declared `RouteAccess` into responses through
+`RouteAccess.guardBodies()`: `401` for `User`, both for `HasRole`, and neither
+for `Anonymous`, `Signed` or `UserOrCapability`, none of which refuses anyone at
+that layer. Where a *handler* answers a 401 or a 403 on such a route, the row
+says so, and the two sets are merged by (status, schema) so nothing is published
+twice. `ContractBodyCheck` reads the same `guardBodies()`, so the document and
+the body check cannot disagree about which level refuses with what.
+
+Schemas are rendered from the whole contract regardless of what is mounted, so
+every `$ref` resolves even in a test that boots a slice of the tree. A row whose
+operation is not mounted is skipped: the boot guard is the authority on a
+non-`conditional` row with no route.
+
+`additionalProperties: false` on a generated object schema is exact for a
+response — the one encoder writes the declared elements and nothing else — and is
+the contract's *statement* for a request, where `ignoreUnknownKeys = true` means
+the decoder tolerates an extra key and promises nothing about it.
+`io.ktor.openapi.JsonSchema` carries no `propertyNames`, so an enum-keyed map
+publishes its value schema and not the union its keys are drawn from; the union
+is still a component, because the walk reaches it.
 
 ## Adding Code
 
