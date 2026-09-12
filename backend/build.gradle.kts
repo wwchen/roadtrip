@@ -476,6 +476,10 @@ tasks.test {
     // JVM — see src/test/resources/junit-platform.properties).
     maxHeapSize = "4g"
     systemProperty(contractLedgerProperty, contractLedgerFile.get().asFile.absolutePath)
+    // The ledger is this task's output: Gradle then stores and restores it with the
+    // task's cached outputs, so UP-TO-DATE and FROM-CACHE both imply it is present
+    // and current, and deleting it correctly forces a re-run.
+    outputs.file(contractLedgerFile)
     // One JVM, so one file; cleared here rather than by the plugin, which has no
     // notion of when a run begins.
     doFirst { delete(contractLedgerFile) }
@@ -489,17 +493,16 @@ tasks.register<JavaExec>("contractLedgerCheck") {
     classpath = sourceSets["test"].runtimeClasspath
     args(contractLedgerFile.get().asFile.absolutePath)
     mustRunAfter(tasks.test)
-    // A failed or skipped :backend:test leaves an incomplete ledger; the test
-    // failure is the message that matters, so do not add a second one.
+    // Finalizers run even when the finalized task fails; the test failure is the
+    // message that matters, so do not add a second one. An up-to-date :backend:test
+    // is not skipped here — its ledger is on disk and still gets verified.
     onlyIf {
         val testState = tasks.test.get().state
-        // TaskState.getFailure() is @Nullable in Gradle's javadoc but not in its
-        // signature, so Kotlin reads it as non-null; the typed local is what keeps
-        // `== null` a real comparison instead of a condition the compiler warns is dead.
+        // Typed local: Gradle's TaskState.getFailure() carries no nullability, so an
+        // untyped read makes `== null` look dead to the compiler.
         val testFailure: Throwable? = testState.failure
-        testState.didWork && testFailure == null
+        testFailure == null
     }
-    outputs.upToDateWhen { false }
 }
 
 tasks.named("check") { dependsOn("contractLedgerCheck") }

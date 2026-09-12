@@ -406,7 +406,7 @@ jobs:
       # checkApiTypes and contractLedgerCheck both run over the backend's own
       # classpath, so they need the same compile — and therefore the same Docker —
       # :backend:test already needs. They belong here, never in gradle-lint.
-      - name: Run backend tests + coverage + API contract check
+      - name: Run backend tests + coverage + contract checks
         run: ./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:checkApiTypes :backend:contractLedgerCheck
 
       - name: Upload coverage to Codecov

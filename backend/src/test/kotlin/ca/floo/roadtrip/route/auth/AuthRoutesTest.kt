@@ -42,6 +42,7 @@ import java.time.Duration
 import java.time.OffsetDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 private val detachedCtx = DSL.using(SQLDialect.POSTGRES)
 
@@ -257,8 +258,7 @@ class AuthRoutesTest {
                 body["redirect_uri"]!!.jsonPrimitive.content,
                 "the frontend must send auth0-js the same redirect_uri the backend exchanges with",
             )
-            assertEquals(
-                true,
+            assertTrue(
                 body["code_challenge"]!!.jsonPrimitive.content.isNotBlank(),
                 "the PKCE challenge is derived from the verifier the flow cookie carries",
             )

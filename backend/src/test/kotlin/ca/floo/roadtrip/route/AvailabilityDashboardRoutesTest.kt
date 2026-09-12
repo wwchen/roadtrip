@@ -30,6 +30,7 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import ca.floo.roadtrip.route.api.availability.availabilityDashboardRoutes as installAvailabilityDashboardRoutes
 
 class AvailabilityDashboardRoutesTest : SharedDbTest() {
@@ -270,11 +271,10 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
             val resp = client.get("/api/availability/changes?poi_id=${fixture.poiId}")
             assertEquals(HttpStatusCode.OK, resp.status)
             val changes = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["changes"]!!.jsonArray
-            assertEquals(
-                true,
-                changes.isNotEmpty(),
-                "two observations of one campsite-date produce at least one change row",
-            )
+            assertTrue(changes.isNotEmpty(), "two observations of one campsite-date produce at least one change row")
+            val change = changes.first().jsonObject
+            assertEquals(fixture.campsiteId, change["campsite_id"]!!.jsonPrimitive.long)
+            assertEquals("2026-07-04", change["target_date"]!!.jsonPrimitive.content)
         }
 
     @Test

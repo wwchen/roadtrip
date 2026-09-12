@@ -12,6 +12,14 @@ private const val PATH_FIELD = 2
 private const val STATUS_FIELD = 3
 
 /**
+ * Fields a line must have before it is read. The writer always emits five, so a
+ * shorter one is a half-written file — a JVM killed mid-append — and dropping it
+ * is what keeps this an exit code with a message rather than an
+ * `IndexOutOfBoundsException` for whoever is reading the output under pressure.
+ */
+private const val LEDGER_FIELD_COUNT = 4
+
+/**
  * Every contract row with a success body was produced by some route test.
  *
  * `ContractBodyCheck` holds each body a test produces to its row; this holds the
@@ -33,7 +41,12 @@ fun main(args: Array<String>) {
         )
         exitProcess(DRIFT_EXIT_CODE)
     }
-    val lines = ledger.readLines().filter { it.isNotBlank() }.map { it.split(LEDGER_FIELD_SEPARATOR) }
+    val lines =
+        ledger
+            .readLines()
+            .filter { it.isNotBlank() }
+            .map { it.split(LEDGER_FIELD_SEPARATOR) }
+            .filter { it.size >= LEDGER_FIELD_COUNT }
     val violations = lines.filter { it[KIND_FIELD] == LEDGER_VIOLATION }
     val exercised =
         lines
