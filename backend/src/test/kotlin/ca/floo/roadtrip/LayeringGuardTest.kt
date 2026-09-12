@@ -28,15 +28,24 @@ private val jooqAllowed =
 private const val KTOR_ALLOWED_UNDER_SERVICE = "ca/floo/roadtrip/service/auth/OidcIdentityProvider.kt"
 
 /**
- * A bare `handle` route builder, as opposed to `handler.handle(payload)` — the
- * lookbehind is what tells the two apart. Matched against code only: the prose
- * that explains this rule names the shape it forbids.
+ * A `handle` route builder. Two alternatives, because the two spellings need
+ * different exclusions: a trailing lambda is always the builder, receiver or not
+ * (`someRoute.handle {`), while `handle(` has to spare both `handler.handle(payload)`
+ * and a `fun handle(` declaration. Matched against code only: the prose that
+ * explains this rule names the shape it forbids.
  */
 @Suppress("TopLevelPropertyNaming")
-private val BARE_HANDLE = Regex("(?<![.\\w])handle\\s*[({]")
+private val BARE_HANDLE = Regex("handle\\s*\\{|(?<![.\\w])(?<!fun )handle\\s*\\(")
 
-/** The annotation the generator cannot see. Code only, for the same reason. */
-private const val ENCODE_DEFAULT = "@EncodeDefault"
+/**
+ * The annotation the generator cannot see. The bare name, not `@EncodeDefault`:
+ * a fully-qualified `@kotlinx.serialization.EncodeDefault` carries no `@` before
+ * the name, and an aliased import still names it on the import line. Code only,
+ * for the same reason as above.
+ */
+private const val ENCODE_DEFAULT = "EncodeDefault"
+
+private const val ROUTING_DSL_PACKAGE = "io.ktor.server.routing"
 
 @Suppress("TopLevelPropertyNaming")
 private val COMMENT = Regex("/\\*.*?\\*/|//[^\n]*", RegexOption.DOT_MATCHES_ALL)
@@ -44,6 +53,17 @@ private val COMMENT = Regex("/\\*.*?\\*/|//[^\n]*", RegexOption.DOT_MATCHES_ALL)
 private const val SERVICE_PREFIX = "ca/floo/roadtrip/service/"
 private const val ROUTE_PREFIX = "ca/floo/roadtrip/route/"
 private const val MODEL_PREFIX = "ca/floo/roadtrip/model/"
+
+/**
+ * The files outside `route/` that reach for the routing DSL, and so could mount a
+ * leaf. The bare-handle rule covers them; the same test asserts this list is
+ * still the whole set, so the rule's scope cannot quietly fall behind the tree.
+ */
+private val routingDslOutsideRoute =
+    listOf(
+        "ca/floo/roadtrip/RoadtripRouting.kt",
+        "ca/floo/roadtrip/di/RouteModule.kt",
+    )
 
 /**
  * Six seams that no compiler enforces. Each was a real drift: a service that
@@ -107,15 +127,30 @@ class LayeringGuardTest {
      * both boot guards — the RFC 0010 access one and the `ApiContract` one — pass
      * a route that declares neither. There are none today; this is what keeps it
      * that way, since the shape cannot be detected from the mounted tree.
+     *
+     * Scoped to everything that can mount one: `route/`, plus the two files that
+     * reach for the routing DSL from outside it. The second assertion is what
+     * keeps that list the whole set.
      */
     @Test
-    fun `routes answer a named verb, never a bare handle`() =
+    fun `routes answer a named verb, never a bare handle`() {
         assertEquals(
             emptyList(),
-            code.filter { (path, text) -> path.startsWith(ROUTE_PREFIX) && BARE_HANDLE.containsMatchIn(text) }.map { it.first },
+            code.filter { (path, text) -> mountsRoutes(path) && BARE_HANDLE.containsMatchIn(text) }.map { it.first },
             "a bare handle{} leaf answers every verb and is invisible to both boot guards. " +
                 "Mount it with get/post/put/patch/delete so it produces a method leaf.",
         )
+        assertEquals(
+            routingDslOutsideRoute,
+            sources
+                .filter { (path, text) -> !path.startsWith(ROUTE_PREFIX) && text.contains(ROUTING_DSL_PACKAGE) }
+                .map { it.first },
+            "a new file names the routing DSL from outside route/. Add it to routingDslOutsideRoute " +
+                "so the rule above covers it.",
+        )
+    }
+
+    private fun mountsRoutes(path: String): Boolean = path.startsWith(ROUTE_PREFIX) || path in routingDslOutsideRoute
 
     /**
      * The generated TypeScript's response rule is "optional iff nullable", and
@@ -124,6 +159,10 @@ class LayeringGuardTest {
      * be declared required and never arrive. It is not a `SerialInfo` annotation,
      * so it reaches neither `getElementAnnotations` nor `isElementOptional` and
      * the generator cannot refuse it by name. This is the layer that can.
+     *
+     * The ban is both modes, not just `NEVER`: `ALWAYS` is a no-op under
+     * `encodeDefaults = true`, so a DTO naming the annotation at all is either
+     * wrong or pointless, and one rule is cheaper to trust than two.
      */
     @Test
     fun `no DTO suppresses a default it still declares`() =
@@ -131,7 +170,8 @@ class LayeringGuardTest {
             emptyList(),
             code.filter { (path, text) -> path.startsWith(MODEL_PREFIX) && text.contains(ENCODE_DEFAULT) }.map { it.first },
             "EncodeDefault(NEVER) makes the encoder omit a field the generated TypeScript declares " +
-                "required, and no gate can see it. Make the field nullable instead.",
+                "required, and no gate can see it. Make the field nullable instead. EncodeDefault(ALWAYS) " +
+                "is banned with it: encodeDefaults = true already does that, so it only misleads.",
         )
 
     @Test
