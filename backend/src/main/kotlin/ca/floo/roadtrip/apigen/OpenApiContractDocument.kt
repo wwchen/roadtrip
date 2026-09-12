@@ -2,10 +2,8 @@ package ca.floo.roadtrip.apigen
 
 import ca.floo.roadtrip.model.api.ApiContract
 import ca.floo.roadtrip.model.api.ApiEndpoint
-import ca.floo.roadtrip.model.api.ApiErrorSchema
 import ca.floo.roadtrip.model.api.ApiMethod
-import ca.floo.roadtrip.model.api.HTTP_FORBIDDEN
-import ca.floo.roadtrip.model.api.HTTP_UNAUTHORIZED
+import ca.floo.roadtrip.model.api.guardBodies
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -55,13 +53,6 @@ private val operationSlots: Map<ApiMethod, OperationSlot> =
  * 403 the route's own [RouteAccess] implies, which no row restates.
  */
 internal object OpenApiContractDocument {
-    /**
-     * The claimed name of [ApiErrorSchema], the body every access-derived 401 and
-     * 403 carries. [tsName] is the same function the walk's name claim applies,
-     * and the "every reference resolves" cases are what prove the two agree.
-     */
-    private val apiErrorSchemaName = tsName(requireNotNull(ApiErrorSchema::class.qualifiedName))
-
     /**
      * One walk per process for the real contract. Every request for the document
      * would otherwise re-walk the whole descriptor graph.
@@ -141,25 +132,14 @@ internal object OpenApiContractDocument {
         )
 
     /**
-     * What the routing tree knows and a row must not restate. `RouteAccess.User`
-     * can only ever answer 401 — `check` returns `Forbidden` for a role alone —
-     * so it publishes one status, and `HasRole` publishes both. `Anonymous`,
-     * `Signed` and `UserOrCapability` refuse nobody at this layer, so they add
-     * nothing and whatever their handlers answer stays on the row — and so does an
-     * unmounted or unlabelled leaf, which reaches here as null.
-     *
-     * Every case is enumerated: a level added to the sealed [RouteAccess] must
-     * decide here whether it can refuse, rather than publishing no 401 by default.
+     * What the routing tree knows and a row must not restate, as schema names.
+     * [guardBodies] is the one enumeration of which level refuses with what — the
+     * body check behind every route test reads the same list — and an unmounted or
+     * unlabelled leaf reaches here as null and adds nothing.
      */
     private fun accessResponses(access: RouteAccess?): List<TsBody> =
-        when (access) {
-            RouteAccess.User -> listOf(TsBody(HTTP_UNAUTHORIZED, apiErrorSchemaName))
-            is RouteAccess.HasRole ->
-                listOf(
-                    TsBody(HTTP_UNAUTHORIZED, apiErrorSchemaName),
-                    TsBody(HTTP_FORBIDDEN, apiErrorSchemaName),
-                )
-            null, RouteAccess.Anonymous, RouteAccess.Signed, RouteAccess.UserOrCapability -> emptyList()
+        access?.guardBodies().orEmpty().map { body ->
+            TsBody(body.status, body.body?.let { tsName(requireNotNull(it.qualifiedName)) })
         }
 
     private fun responseFor(

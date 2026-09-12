@@ -7,7 +7,6 @@ import ca.floo.roadtrip.service.health.ReadinessService
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -28,7 +27,7 @@ class HealthRoutesTest {
     @Test
     fun `liveness stays up even when readiness reports the database down`() =
         testApplication {
-            application { routing { healthRoutes(readiness(databaseReachable = false)) } }
+            application { routeTestApplication { healthRoutes(readiness(databaseReachable = false)) } }
 
             val response = client.get("/api/health")
 
@@ -40,7 +39,7 @@ class HealthRoutesTest {
     @Test
     fun `readiness returns 200 ready when the database probe succeeds`() =
         testApplication {
-            application { routing { healthRoutes(readiness(databaseReachable = true)) } }
+            application { routeTestApplication { healthRoutes(readiness(databaseReachable = true)) } }
 
             val response = client.get("/api/health/ready")
 
@@ -53,7 +52,7 @@ class HealthRoutesTest {
     @Test
     fun `readiness returns 503 not_ready when the database probe fails`() =
         testApplication {
-            application { routing { healthRoutes(readiness(databaseReachable = false)) } }
+            application { routeTestApplication { healthRoutes(readiness(databaseReachable = false)) } }
 
             val response = client.get("/api/health/ready")
 

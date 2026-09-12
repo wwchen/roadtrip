@@ -28,7 +28,6 @@ import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -57,7 +56,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
     fun `POST fetch routes are not registered`() =
         testApplication {
             val controller = controllerWith(emptyMap())
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             assertEquals(HttpStatusCode.NotFound, client.post("/api/admin/data/fetch").status)
             assertEquals(HttpStatusCode.NotFound, client.post("/api/admin/data/fetch/t").status)
@@ -74,7 +73,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         "Aspira Resources → Aspira Pins" to Target("Aspira Resources → Aspira Pins", emptyList()),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             val resp = client.post("/api/admin/data/import")
 
@@ -96,7 +95,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         "t" to Target("t", emptyList()),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             val resp = client.post("/api/admin/data/import/t")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -113,7 +112,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         FAILING_TARGET to Target(FAILING_TARGET, listOf(Phase.Import(FAILING_PHASE, "absent-poi-data"))),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             val resp = client.post("/api/admin/data/import/$FAILING_TARGET")
 
@@ -129,7 +128,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
             val gate = CountDownLatch(1)
             val release = CountDownLatch(1)
             val controller = blockingController(gate, release)
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             coroutineScope {
                 val running = async(Dispatchers.IO) { controller.startRun(BUSY_TARGET, RunKind.IMPORT, "test") }
@@ -163,7 +162,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         "beta" to Target("beta", emptyList()),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             client.post("/api/admin/data/import/alpha")
             client.post("/api/admin/data/import/beta")
@@ -185,7 +184,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         "beta" to Target("beta", listOf(Phase.Import("k", "x"))),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             val resp = client.get("/api/admin/data/status")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -205,7 +204,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
     fun `POST catalog-match is not registered`() =
         testApplication {
             val controller = controllerWith(emptyMap())
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             val resp = client.post("/api/admin/etl/catalog-match")
             assertEquals(HttpStatusCode.NotFound, resp.status)

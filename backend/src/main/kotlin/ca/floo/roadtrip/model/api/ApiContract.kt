@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.api.poi.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.model.api.poi.PoiSearchResponseSchema
 import ca.floo.roadtrip.model.api.poi.PoisOnRouteResponseSchema
 import ca.floo.roadtrip.model.api.poi.PoisRequestSchema
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import kotlin.reflect.KClass
 
 /**
@@ -57,6 +58,30 @@ fun apiErrors(vararg statuses: Int): List<ApiBody> = statuses.map { ApiBody(it, 
  * class.
  */
 fun ApiEndpoint.bodyAt(status: Int): ApiBody? = (listOf(success) + errors).firstOrNull { it.status == status }
+
+/**
+ * What the access guard itself answers at this level, before any handler runs,
+ * and what a row must therefore not restate. [RouteAccess.User] can only ever
+ * refuse with 401 — `check` reaches `Forbidden` only where a role is required —
+ * and [RouteAccess.HasRole] with either. [RouteAccess.Anonymous],
+ * [RouteAccess.Signed] and [RouteAccess.UserOrCapability] refuse nobody at that
+ * layer, so whatever their handlers answer stays on the row.
+ *
+ * One enumeration, two readers: the OpenAPI document builder publishes these
+ * responses on every operation, and the body check behind every route test
+ * accepts them. A level added to the sealed type is a compile error here rather
+ * than a silently missing 401 in both.
+ */
+fun RouteAccess.guardBodies(): List<ApiBody> =
+    when (this) {
+        RouteAccess.User -> listOf(ApiBody(HTTP_UNAUTHORIZED, ApiErrorSchema::class))
+        is RouteAccess.HasRole ->
+            listOf(
+                ApiBody(HTTP_UNAUTHORIZED, ApiErrorSchema::class),
+                ApiBody(HTTP_FORBIDDEN, ApiErrorSchema::class),
+            )
+        RouteAccess.Anonymous, RouteAccess.Signed, RouteAccess.UserOrCapability -> emptyList()
+    }
 
 /**
  * Every endpoint the backend serves beneath the `/api/` and `/auth/password/`

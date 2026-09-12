@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.domain.auth.UserStatus
 import ca.floo.roadtrip.repo.JooqUnitOfWork
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSessionRepo
+import ca.floo.roadtrip.route.routeTestApplication
 import ca.floo.roadtrip.service.auth.AuthController
 import ca.floo.roadtrip.service.auth.IdentityProvider
 import ca.floo.roadtrip.service.auth.IdentityProviderId
@@ -24,7 +25,6 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.install
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
@@ -168,7 +168,7 @@ class AuthRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = null) }
+                routeTestApplication { authRoutes(wiring = null) }
             }
             val resp = client.get("/api/me")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -188,7 +188,7 @@ class AuthRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = authOnWiring()) }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
             }
             val resp =
                 client.get("/api/me") { header(HttpHeaders.Cookie, "$SESSION_COOKIE=$AUTH_ON_TOKEN") }
@@ -211,7 +211,7 @@ class AuthRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = authOnWiring()) }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
             }
             val resp = createClient { followRedirects = false }.get("/auth/login?connection=google-oauth2")
 
@@ -224,7 +224,7 @@ class AuthRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = authOnWiring()) }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
             }
             val resp = createClient { followRedirects = false }.get("/auth/login?connection=bogus")
 
@@ -237,7 +237,7 @@ class AuthRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = authOnWiring()) }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
             }
             val resp = client.get("/api/me")
             assertEquals(HttpStatusCode.OK, resp.status)

@@ -31,6 +31,11 @@ import kotlin.test.assertTrue
  * minute in the queue and the orchestrator's tight polling loop piles up behind
  * it. This drives a real pool whose only connection is held elsewhere and
  * asserts the endpoint answers 503 well inside [promptResponseBudget].
+ *
+ * Deliberately bare `routing`, not `routeTestApplication`: wrapping a timing
+ * measurement in `Compression` and `CachingHeaders` changes what it measures,
+ * and `HealthRoutesTest` already produces both of that row's bodies through the
+ * harness, so the contract body check loses no coverage here.
  */
 class ReadinessPoolExhaustionTest : SharedDbTest() {
     @Test

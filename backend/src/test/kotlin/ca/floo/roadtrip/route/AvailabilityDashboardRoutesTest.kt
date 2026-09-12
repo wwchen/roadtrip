@@ -15,7 +15,6 @@ import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
@@ -144,7 +143,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `GET pollers returns the seeded poller with attached-watch count`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             seedPoller()
             val resp = client.get("/api/availability/pollers")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -160,7 +159,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `GET pollers summary counts active and dormant`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             seedPoller()
             val resp = client.get("/api/availability/pollers/summary")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -172,7 +171,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `GET runs lists runs newest first`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             val pollerId = seedPoller()
             val runRepo = AvailabilityRunRepo(ctx)
             val now = OffsetDateTime.now(ZoneOffset.UTC)
@@ -191,7 +190,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `GET runs filters by poller_id`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             val pollerA = seedPoller("232447")
             val pollerB = seedPoller("232448")
             val runRepo = AvailabilityRunRepo(ctx)
@@ -206,7 +205,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `POST pollers id force returns 200 with new next_run_at when outside cooldown`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             val pollerId = seedPoller()
             val before = OffsetDateTime.now(ZoneOffset.UTC)
             val resp = client.post("/api/availability/pollers/$pollerId/force")
@@ -222,7 +221,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `POST pollers id force returns 429 with retry_after_sec when inside cooldown`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             val pollerId = seedPoller()
             val first = client.post("/api/availability/pollers/$pollerId/force")
             assertEquals(HttpStatusCode.OK, first.status)
@@ -236,7 +235,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `POST pollers id force returns 404 on unknown poller`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             val resp = client.post("/api/availability/pollers/999999/force")
             assertEquals(HttpStatusCode.NotFound, resp.status)
         }
@@ -244,7 +243,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `POST pollers id force returns 400 on invalid id`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             val resp = client.post("/api/availability/pollers/not-a-number/force")
             assertEquals(HttpStatusCode.BadRequest, resp.status)
         }
@@ -252,7 +251,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `GET changes requires exactly one filter`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             val resp = client.get("/api/availability/changes")
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
@@ -262,7 +261,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `GET pollers id runs returns 400 on invalid id`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             val resp = client.get("/api/availability/pollers/not-a-number/runs")
             assertEquals(HttpStatusCode.BadRequest, resp.status)
         }
@@ -270,7 +269,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `GET changes summary returns stats per date`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             val fixture = seedSummaryFixture()
             val now = OffsetDateTime.now(ZoneOffset.UTC)
             // reserved → available → available. The two availables bump the same
@@ -301,7 +300,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `GET changes summary requires poi id`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             val resp = client.get("/api/availability/changes/summary")
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
@@ -311,7 +310,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @Test
     fun `GET changes summary returns 404 on unknown poi id`() =
         testApplication {
-            application { routing { testAvailabilityDashboardRoutes() } }
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             val resp = client.get("/api/availability/changes/summary?poi_id=999999")
             assertEquals(HttpStatusCode.NotFound, resp.status)
         }
