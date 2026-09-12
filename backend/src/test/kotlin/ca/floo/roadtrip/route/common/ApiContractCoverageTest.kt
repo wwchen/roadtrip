@@ -8,6 +8,7 @@ import ca.floo.roadtrip.model.api.HTTP_FORBIDDEN
 import ca.floo.roadtrip.model.api.HTTP_NO_CONTENT
 import ca.floo.roadtrip.model.api.HTTP_OK
 import ca.floo.roadtrip.model.api.HTTP_UNAUTHORIZED
+import ca.floo.roadtrip.model.api.bodyAt
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.model.api.poi.PoiSearchResponseSchema
@@ -43,9 +44,13 @@ import kotlin.test.assertTrue
 /** The endpoint count the plan fixed for this phase; a row added or dropped is a deliberate change. */
 private const val CONTRACT_ROW_COUNT = 46
 
-/** The last status any HTTP response can carry, and the last 2xx. */
+/** The first and last status any HTTP response can carry, and the last 2xx. */
+private const val MIN_HTTP_STATUS = 200
 private const val MAX_HTTP_STATUS = 599
 private const val LAST_SUCCESS_STATUS = 299
+
+/** A status no row declares, so `bodyAt` has to answer null for it. */
+private const val UNDECLARED_STATUS = 418
 
 /**
  * The contract's *authoritative* check is the boot guard in `registerKoinRoutes`,
@@ -183,7 +188,7 @@ class ApiContractCoverageTest {
             emptyList(),
             ApiContract.endpoints
                 .flatMap { row -> (listOf(row.success) + row.errors).map { row.method.wireValue to it } }
-                .filterNot { (_, body) -> body.status in HTTP_OK..MAX_HTTP_STATUS }
+                .filterNot { (_, body) -> body.status in MIN_HTTP_STATUS..MAX_HTTP_STATUS }
                 .map { (method, body) -> "$method ${body.status}" },
         )
     }
@@ -214,6 +219,36 @@ class ApiContractCoverageTest {
                     "${keys.groupBy { it }.filterValues { it.size > 1 }.keys}",
             )
         }
+    }
+
+    /**
+     * What makes [bodyAt] total. The `(status, class)` case above still allows
+     * two *different* classes at one status, and the body check behind every
+     * route test asks for one class per status: an ambiguous row would be
+     * checked against whichever entry came first.
+     */
+    @Test
+    fun `no row declares two bodies at one status`() {
+        ApiContract.endpoints.forEach { row ->
+            val statuses = (listOf(row.success) + row.errors).map { it.status }
+            assertEquals(
+                emptyList(),
+                statuses
+                    .groupBy { it }
+                    .filterValues { it.size > 1 }
+                    .keys
+                    .toList(),
+                "${row.method.wireValue} ${row.path}: bodyAt() cannot answer an ambiguous status",
+            )
+        }
+    }
+
+    /** The ordering that matters: [bodyAt] reaches the success body for its own status. */
+    @Test
+    fun `bodyAt answers the success body and nothing for an undeclared status`() {
+        val row = ApiContract.endpoints.first()
+        assertEquals(row.success.body, row.bodyAt(row.success.status)?.body)
+        assertNull(row.bodyAt(UNDECLARED_STATUS))
     }
 
     @Test

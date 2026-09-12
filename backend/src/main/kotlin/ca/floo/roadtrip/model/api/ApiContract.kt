@@ -47,7 +47,7 @@ data class ApiEndpoint(
     val conditional: Boolean = false,
 )
 
-/** [ApiErrorSchema] at each of [statuses] — the shape 31 of the 46 rows need. */
+/** [ApiErrorSchema] at each of [statuses] — the shape most rows need. */
 fun apiErrors(vararg statuses: Int): List<ApiBody> = statuses.map { ApiBody(it, ApiErrorSchema::class) }
 
 /**

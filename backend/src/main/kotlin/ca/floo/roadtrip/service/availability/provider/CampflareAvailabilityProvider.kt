@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
+import ca.floo.roadtrip.model.api.HTTP_FORBIDDEN
+import ca.floo.roadtrip.model.api.HTTP_UNAUTHORIZED
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
