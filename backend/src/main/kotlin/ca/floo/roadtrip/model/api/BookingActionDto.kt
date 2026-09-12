@@ -5,11 +5,9 @@ import kotlinx.serialization.Serializable
 
 /** Wire vocabulary for [AddToCartResponseDto.status]. */
 @Serializable
-enum class BookingActionStatus(
-    val wireValue: String,
-) {
+enum class BookingActionStatus {
     @SerialName("completed")
-    COMPLETED("completed"),
+    COMPLETED,
 }
 
 /**

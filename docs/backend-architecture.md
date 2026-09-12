@@ -340,7 +340,10 @@ the boot; a row with no route does too, unless the row is marked `conditional`
 (the Slack interactivity endpoint, which mounts only when a signing secret is
 configured). `/api/docs` is exempt: the Swagger UI subtree is framework-generated
 and `openapi.json` answers with a Ktor type. `ApiContractCoverageTest` exercises
-the comparator; the boot guard is what sees the real tree.
+the comparator; the boot guard is what sees the real tree. The guard compares
+paths in both directions; the DTOs on each row are declared by hand, so a row
+pointing at the wrong body is not caught — feeding `components/schemas` from
+`ApiContract` (backlog on #743) is what would close that.
 
 `:backend:generateApiTypes` walks `serializer(kclass).descriptor` from every row,
 transitively, and writes `frontend/src/api/generated/api-types.ts`;
@@ -359,8 +362,11 @@ Optionality follows the one encoder (`route/common/RouteResponses.kt`:
 A wire vocabulary is a `@Serializable enum` — `WatchStatus`, `WatchDoneReason`,
 `RecgovSessionState`, `RecgovLoginStatus`, `BookingActionStatus` — so its
 TypeScript union is generated with it. `WireVocabularyTest` pins each constant's
-`@SerialName` and its `wireValue` against the strings already on the wire, so
-neither copy can drift. A value class is generated as the one value it wraps.
+`@SerialName` against the strings already on the wire. `WatchStatus` and
+`WatchDoneReason` are also `availability_watch` column values, so they carry a
+`wireValue` the repos write and the test pins both copies against the same list;
+the other three are wire-only and kotlinx encodes them from `@SerialName` alone.
+A value class is generated as the one value it wraps.
 
 Generation fails, by name, on: a sealed or polymorphic descriptor; a serial kind
 or a `kotlinx.serialization.json` type with no mapping; a nullable list element or

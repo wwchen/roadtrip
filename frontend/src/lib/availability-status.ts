@@ -1,14 +1,11 @@
-// The six values are the backend's `AvailabilityStatus` wire values, which
-// `api/generated/api-types.ts` also carries. This module is the single place
-// that maps them to display strings.
+// The union is the generated one, so a status added to the backend's
+// `AvailabilityStatus` makes `STATUS_META` below a compile error until it is
+// given a label, an aria string and a detail class. This module is the single
+// place that maps the wire values to display strings.
 
-export type AvailabilityStatus =
-  | 'available'
-  | 'first_come'
-  | 'reserved'
-  | 'closed'
-  | 'unknown'
-  | 'past';
+import type { AvailabilityStatus } from '@/api/generated/api-types';
+
+export type { AvailabilityStatus };
 
 export interface AvailabilityStatusMeta {
   value: AvailabilityStatus;

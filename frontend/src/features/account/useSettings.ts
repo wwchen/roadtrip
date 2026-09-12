@@ -28,6 +28,7 @@ import {
   type SettingsResponse,
   type UpdateBookingFields,
   type UpdateNotificationsFields,
+  type UpdateProfileFields,
 } from '@/api/account-api';
 import { coerceChoice } from '@/lib/theme';
 import { queryKeys } from '@/queries/keys';
@@ -77,7 +78,7 @@ function useSettingsWrite<TInput>(mutationFn: (input: TInput) => Promise<Setting
 }
 
 export function useSaveProfile() {
-  return useSettingsWrite((input: { display_name: string; theme: string }) => updateProfile(input));
+  return useSettingsWrite((input: UpdateProfileFields) => updateProfile(input));
 }
 
 export function useSaveNotifications() {

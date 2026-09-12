@@ -75,6 +75,8 @@ export type EmailTestResponse = EmailTestResponseDto;
 
 export type UpdateNotificationsFields = UpdateNotificationsRequest;
 
+export type UpdateProfileFields = UpdateProfileRequest;
+
 export function fetchSettings({ signal }: RequestOptions = {}): Promise<SettingsResponse> {
   return jsonGetOk<SettingsResponse>(SETTINGS_URL, { signal });
 }

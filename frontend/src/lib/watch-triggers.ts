@@ -57,7 +57,8 @@ export function watchStopWhenTriggered(
   fallback = true,
 ): boolean {
   if (!watch) return fallback;
-  return watch.stop_when_triggered ?? fallback;
+  const value = watch.stop_when_triggered;
+  return typeof value === 'boolean' ? value : fallback;
 }
 
 /** Read a watch into editable trigger state. */

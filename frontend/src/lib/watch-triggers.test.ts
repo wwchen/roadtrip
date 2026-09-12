@@ -91,6 +91,11 @@ describe('watchStopWhenTriggered', () => {
   ])('reads %j', (value, expected) => {
     expect(watchStopWhenTriggered(watch({ stop_when_triggered: value }))).toBe(expected);
   });
+
+  test('falls back when the wire value is not a boolean', () => {
+    const malformed = { stop_when_triggered: 'yes' } as unknown as Partial<Watch>;
+    expect(watchStopWhenTriggered(malformed, false)).toBe(false);
+  });
 });
 
 describe('triggerStateOf', () => {

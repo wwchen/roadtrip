@@ -90,6 +90,9 @@ const locatable = (lng: unknown, lat: unknown): boolean =>
   typeof lng === 'number' && Number.isFinite(lng) && typeof lat === 'number' && Number.isFinite(lat);
 
 export function poiSearchResults(results: readonly PoiSearchResult[] | undefined): SearchResult[] {
+  // The generated type says none of the guards below can fire. Nothing validates
+  // the JSON against it — `jsonGetOk` casts — so they stay as the last check
+  // between a malformed row and a bad render.
   return (results ?? [])
     .filter((row) => locatable(row.lng, row.lat))
     .map((row) => ({

@@ -5,14 +5,12 @@ import kotlinx.serialization.Serializable
 
 /** Wire vocabulary for [RecgovStatusDto.session]. */
 @Serializable
-enum class RecgovSessionState(
-    val wireValue: String,
-) {
+enum class RecgovSessionState {
     @SerialName("not_configured")
-    NOT_CONFIGURED("not_configured"),
+    NOT_CONFIGURED,
 
     @SerialName("active")
-    ACTIVE("active"),
+    ACTIVE,
 
     /**
      * Credentials are saved but this profile has never been signed in — the
@@ -20,33 +18,31 @@ enum class RecgovSessionState(
      * the user has not failed at anything yet; they simply have not started.
      */
     @SerialName("not_logged_in")
-    NOT_LOGGED_IN("not_logged_in"),
+    NOT_LOGGED_IN,
 
     @SerialName("expired")
-    EXPIRED("expired"),
+    EXPIRED,
 
     /** The companion answered, but its own health check threw. Not the user's problem. */
     @SerialName("check_failed")
-    CHECK_FAILED("check_failed"),
+    CHECK_FAILED,
 
     /** The companion could not be asked. Never an error — the row just says so. */
     @SerialName("companion_unavailable")
-    COMPANION_UNAVAILABLE("companion_unavailable"),
+    COMPANION_UNAVAILABLE,
 }
 
 /** Wire vocabulary for [RecgovLoginResponseDto.status]. */
 @Serializable
-enum class RecgovLoginStatus(
-    val wireValue: String,
-) {
+enum class RecgovLoginStatus {
     @SerialName("ok")
-    OK("ok"),
+    OK,
 
     @SerialName("mfa_required")
-    MFA_REQUIRED("mfa_required"),
+    MFA_REQUIRED,
 
     @SerialName("failed")
-    FAILED("failed"),
+    FAILED,
 }
 
 /**
