@@ -39,8 +39,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** An arbitrary but exactly representable fuzzy score: what matters is that it survives the round-trip. */
-private const val SAMPLE_FUZZY_SCORE = 0.75
+/** A Jaccard-shaped fuzzy score with no short binary expansion: a narrowing on the column path would lose digits. */
+private const val SAMPLE_FUZZY_SCORE = 0.6666666666666666
 
 class CatalogEntityRepoTest : SharedDbTest() {
     @BeforeEach
@@ -1452,6 +1452,10 @@ class CatalogEntityRepoTest : SharedDbTest() {
         repo.upsertCampgrounds(listOf(campgroundWithProvenance("cg-prov-1", exact)), source = "aspira-wa-campgrounds")
 
         assertEquals(exact, checkNotNull(repo.findById(campgroundId("cg-prov-1"))).geometryProvenance)
+
+        // A re-import that matched nothing clears the stale pin rather than keeping it.
+        repo.upsertCampgrounds(listOf(campgroundWithProvenance("cg-prov-1", null)), source = "aspira-wa-campgrounds")
+        assertNull(checkNotNull(repo.findById(campgroundId("cg-prov-1"))).geometryProvenance)
     }
 
     /** The partial index the non-exact review query plans against. */
