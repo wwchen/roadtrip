@@ -356,7 +356,9 @@ Optionality follows the one encoder (`route/common/RouteResponses.kt`:
 `encodeDefaults = true`, `explicitNulls = false`), not the Kotlin type:
 
 - **Response:** a field is optional exactly when it is nullable. A non-null field
-  with a default is always sent, so it is required. `| null` is never generated.
+  with a default is always sent, so it is required. `| null` is never generated,
+  because a Kotlin null is never encoded; a `JsonNull` *value* inside a `Json*`
+  field still is.
 - **Request:** a field is optional when it is nullable **or** has a default.
 
 A wire vocabulary is a `@Serializable enum` — `WatchStatus`, `WatchDoneReason`,

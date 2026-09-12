@@ -5,6 +5,7 @@ import ca.floo.roadtrip.route.common.API_PREFIX
 import ca.floo.roadtrip.route.common.SWAGGER_UI_PATH
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.underPrefix
 import io.ktor.http.ContentType
 import io.ktor.openapi.OpenApiDoc
 import io.ktor.openapi.OpenApiInfo
@@ -60,6 +61,6 @@ private fun Application.roadtripOpenApiRoutes(): Sequence<Route> =
 
 private fun includeInRoadtripOpenApi(route: Route): Boolean {
     val path = route.path(OpenApiRoutePathFormat)
-    val isApiPath = path.startsWith(API_PREFIX) && path != SWAGGER_UI_PATH && !path.startsWith("$SWAGGER_UI_PATH/")
+    val isApiPath = path.underPrefix(API_PREFIX) && path != SWAGGER_UI_PATH && !path.startsWith("$SWAGGER_UI_PATH/")
     return isApiPath || path.startsWith(TEST_PATH_PREFIX)
 }

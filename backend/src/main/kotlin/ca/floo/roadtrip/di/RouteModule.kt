@@ -208,7 +208,8 @@ internal fun Application.registerKoinRoutes() {
         "ApiContract and the routing tree disagree. " +
             "Routes with no contract row: ${drift.uncontractedRoutes.ifEmpty { listOf("none") }.joinToString()}. " +
             "Contract rows with no route: ${drift.unmountedRows.ifEmpty { listOf("none") }.joinToString()}. " +
-            "Fix model/api/ApiContract.kt, then run `make api-types`."
+            "Add the row to model/api/ApiContract.kt — if the verb is not one of ApiMethod's, add it " +
+            "there first — then run `make api-types`."
     }
 }
 

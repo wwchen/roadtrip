@@ -9,6 +9,8 @@ import kotlinx.serialization.descriptors.StructureKind
 import kotlinx.serialization.descriptors.nonNullOriginal
 
 private const val TS_STRING = "string"
+
+/** Every Kotlin number, including `Double` — and a `Double` on the wire is a *finite* one: the encoder rejects NaN/Infinity. */
 private const val TS_NUMBER = "number"
 private const val TS_BOOLEAN = "boolean"
 private const val TS_UNKNOWN = "unknown"
@@ -22,11 +24,12 @@ private const val JSON_OBJECT = "kotlinx.serialization.json.JsonObject"
 private const val JSON_ARRAY = "kotlinx.serialization.json.JsonArray"
 private const val JSON_PRIMITIVE = "kotlinx.serialization.json.JsonPrimitive"
 
-/** A list descriptor has one element; a map descriptor's are (key, value), and JSON keys are strings. */
+/** A list descriptor has one element; a map descriptor's are (key, value). */
 private const val LIST_ELEMENT = 0
 
 /** A value class carries exactly one element: the value it is encoded as. */
 private const val INLINE_ELEMENT = 0
+private const val MAP_KEY_ELEMENT = 0
 private const val MAP_VALUE_ELEMENT = 1
 
 /**
@@ -90,7 +93,8 @@ internal class DescriptorWalk(
             PrimitiveKind.LONG, PrimitiveKind.FLOAT, PrimitiveKind.DOUBLE,
             -> TS_NUMBER
             StructureKind.LIST -> "${elementType(target, LIST_ELEMENT, within)}[]"
-            StructureKind.MAP -> "Record<string, ${elementType(target, MAP_VALUE_ELEMENT, within)}>"
+            StructureKind.MAP ->
+                "Record<${mapKeyType(target, within)}, ${elementType(target, MAP_VALUE_ELEMENT, within)}>"
             SerialKind.ENUM -> enumType(target)
             StructureKind.CLASS, StructureKind.OBJECT -> interfaceType(target)
             is PolymorphicKind ->
@@ -127,6 +131,30 @@ internal class DescriptorWalk(
         return typeOf(element, within)
     }
 
+    /**
+     * A JSON object key is a string, so a primitive key renders `string`; an enum
+     * key renders the union the generator already knows. Anything else —
+     * `CLASS`, `OBJECT`, a nested `LIST` — is what `roadtripApiJson` refuses at
+     * runtime (`allowStructuredMapKeys` is off), so it is refused here instead of
+     * generating TypeScript for a body the encoder will 500 on.
+     */
+    private fun mapKeyType(
+        container: SerialDescriptor,
+        within: String,
+    ): String {
+        val key = container.getElementDescriptor(MAP_KEY_ELEMENT)
+        return when (val kind = key.nonNullOriginal.kind) {
+            is PrimitiveKind -> TS_STRING
+            SerialKind.ENUM -> enumType(key.nonNullOriginal)
+            else ->
+                throw ApiTypeGenerationException(
+                    "$within is a map keyed by ${key.serialName}, whose serial kind is $kind. JSON " +
+                        "object keys are strings, and roadtripApiJson refuses a structured key. Key " +
+                        "the map by a primitive or an enum.",
+                )
+        }
+    }
+
     private fun interfaceType(descriptor: SerialDescriptor): String {
         val name = claimName(descriptor.serialName)
         if (interfaces.containsKey(descriptor.serialName)) return name
@@ -161,6 +189,12 @@ internal class DescriptorWalk(
      * The encoder is `encodeDefaults = true, explicitNulls = false`: a response
      * omits exactly the nulls, so only a nullable field is optional. A request is
      * decoded, so a default also makes the element absent-tolerant.
+     *
+     * The one annotation that invalidates this — `@EncodeDefault(NEVER)`, which
+     * makes the encoder omit a key the descriptor still calls non-nullable — is
+     * not a `@SerialInfo` annotation, so it reaches neither
+     * `getElementAnnotations` nor `isElementOptional` and cannot be refused from
+     * here. `LayeringGuardTest` keeps it out of `model/` instead.
      */
     private fun isOptional(
         descriptor: SerialDescriptor,

@@ -19,12 +19,17 @@ internal data class TsEnum(
     val values: List<String>,
 )
 
-/** One row of the emitted `API_ENDPOINTS` literal. */
+/**
+ * One row of the emitted `API_ENDPOINTS` literal. [errors] carries the
+ * non-2xx bodies the route can serialize, sorted by name so the row does not
+ * move when the contract list is reordered.
+ */
 internal data class TsEndpoint(
     val method: String,
     val path: String,
     val request: String?,
     val response: String?,
+    val errors: List<String>,
 )
 
 /**

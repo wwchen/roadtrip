@@ -19,7 +19,8 @@ private const val GENERATED_HEADER =
 // encodeDefaults = true, explicitNulls = false). In a response body a field is
 // optional exactly when it is nullable, and a non-null field with a default is
 // always sent; in a request body a field is optional when it is nullable or has
-// a default. A nullable arm is never generated, because null is never encoded.
+// a default. A nullable arm is never generated, because a Kotlin null is never
+// encoded; a `JsonNull` value inside a `Json*` field still is.
 //
 // Every Kotlin integer is a TypeScript `number`: the ids are database bigints
 // that stay well below 2^53.
@@ -40,12 +41,16 @@ internal fun generateApiTypes(endpoints: List<ApiEndpoint> = ApiContract.endpoin
     // never name a type the collision map has not approved.
     val rows =
         endpoints.map { endpoint ->
-            endpoint.errors.forEach { responses.typeOf(it.descriptor()) }
             TsEndpoint(
                 method = endpoint.method.wireValue,
                 path = endpoint.path,
                 request = endpoint.request?.let { requests.typeOf(it.descriptor()) },
                 response = endpoint.response?.let { responses.typeOf(it.descriptor()) },
+                errors =
+                    endpoint.errors
+                        .map { responses.typeOf(it.descriptor()) }
+                        .distinct()
+                        .sorted(),
             )
         }
     return render(
@@ -55,7 +60,19 @@ internal fun generateApiTypes(endpoints: List<ApiEndpoint> = ApiContract.endpoin
     )
 }
 
-private fun KClass<*>.descriptor(): SerialDescriptor = serializer(createType()).descriptor
+private fun KClass<*>.descriptor(): SerialDescriptor {
+    // A contract row names a KClass, which carries no type arguments, so
+    // createType() below would hand reflection an under-applied type and fail
+    // with a message that names neither the DTO nor the row.
+    if (typeParameters.isNotEmpty()) {
+        throw ApiTypeGenerationException(
+            "$qualifiedName is generic. A contract row names a KClass, which carries no type " +
+                "arguments, so the generator cannot resolve its serializer. Declare a concrete DTO " +
+                "(e.g. WatchPage) rather than Page<Watch>.",
+        )
+    }
+    return serializer(createType()).descriptor
+}
 
 /**
  * One interface per class. A class both sides reach must describe the same
@@ -114,7 +131,8 @@ private fun renderEndpoints(endpoints: List<TsEndpoint>): String =
         endpoints.forEach { endpoint ->
             append("  { method: '${endpoint.method}', path: '${endpoint.path}'")
             append(", request: ${quoted(endpoint.request)}")
-            append(", response: ${quoted(endpoint.response)} },\n")
+            append(", response: ${quoted(endpoint.response)}")
+            append(", errors: [${endpoint.errors.joinToString { "'$it'" }}] },\n")
         }
         append("] as const;\n")
     }

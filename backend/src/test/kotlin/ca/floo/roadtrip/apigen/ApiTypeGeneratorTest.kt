@@ -3,6 +3,8 @@ package ca.floo.roadtrip.apigen
 import ca.floo.roadtrip.model.api.ApiEndpoint
 import ca.floo.roadtrip.model.api.ApiMethod
 import kotlinx.serialization.Contextual
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
@@ -113,6 +115,43 @@ sealed interface FixtureSealed {
         val a: String,
     ) : FixtureSealed
 }
+
+/** The one annotation that makes the encoder omit a key the descriptor calls non-nullable. */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class FixtureEncodeNever(
+    val always: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val never: String = "hidden",
+)
+
+/** `ALWAYS` is what `encodeDefaults = true` already does, so it is allowed through. */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class FixtureEncodeAlways(
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS) val shown: String = "seen",
+)
+
+@Serializable
+data class FixtureInnerKey(
+    val k: String,
+)
+
+/** `roadtripApiJson` has `allowStructuredMapKeys` off, so this body is a 500, not a `Record`. */
+@Serializable
+data class FixtureStructuredKeyMap(
+    val m: Map<FixtureInnerKey, String>,
+)
+
+@Serializable
+data class FixtureEnumKeyMap(
+    val m: Map<FixtureFlavour, String>,
+)
+
+/** A contract row names a `KClass`, which cannot carry the type argument this needs. */
+@Serializable
+data class FixtureGeneric<T>(
+    val items: List<T>,
+)
 
 /** Same simple name as [FixtureScalars] under a different serial name: a collision. */
 @Serializable
@@ -301,6 +340,81 @@ class ApiTypeGeneratorTest {
         assertTrue(failure.message!!.contains("not a legal type name"), failure.message!!)
     }
 
+    /**
+     * The one hole the generator cannot close, pinned so it stays a known one.
+     * `EncodeDefault(NEVER)` is not a `SerialInfo` annotation: it reaches neither
+     * `getElementAnnotations` nor `isElementOptional`, so the descriptor is
+     * indistinguishable from a plain non-nullable default and the walk generates a
+     * required field the encoder omits. `LayeringGuardTest` bans the annotation
+     * under `model/` because this is what would otherwise be emitted.
+     */
+    @Test
+    fun `the descriptor hides EncodeDefault NEVER, which is why the source guard exists`() {
+        val ts = generateApiTypes(listOf(responseRow(FixtureEncodeNever::class)))
+        assertBlock(
+            ts,
+            """
+            export interface FixtureEncodeNever {
+              always: string;
+              never: string;
+            }
+            """.trimIndent(),
+        )
+        assertEquals(
+            emptyList(),
+            FixtureEncodeNever.serializer().descriptor.getElementAnnotations(1),
+            "if kotlinx ever surfaces it here, DescriptorWalk can refuse it and the guard can go",
+        )
+    }
+
+    @Test
+    fun `an EncodeDefault ALWAYS field is generated as required`() {
+        val ts = generateApiTypes(listOf(responseRow(FixtureEncodeAlways::class)))
+        assertBlock(
+            ts,
+            """
+            export interface FixtureEncodeAlways {
+              shown: string;
+            }
+            """.trimIndent(),
+        )
+    }
+
+    @Test
+    fun `a structured map key fails generation, naming the field and the key`() {
+        val failure =
+            assertFailsWith<ApiTypeGenerationException> {
+                generateApiTypes(listOf(responseRow(FixtureStructuredKeyMap::class)))
+            }
+        assertTrue(failure.message!!.contains("FixtureStructuredKeyMap.m"), failure.message!!)
+        assertTrue(failure.message!!.contains("FixtureInnerKey"), failure.message!!)
+        assertTrue(failure.message!!.contains("structured key"), failure.message!!)
+    }
+
+    @Test
+    fun `an enum map key keeps its union`() {
+        val ts = generateApiTypes(listOf(responseRow(FixtureEnumKeyMap::class)))
+        assertBlock(
+            ts,
+            """
+            export interface FixtureEnumKeyMap {
+              m: Record<FixtureFlavour, string>;
+            }
+            """.trimIndent(),
+        )
+        assertTrue(ts.contains("export type FixtureFlavour = 'sweet' | 'sour';"), ts)
+    }
+
+    @Test
+    fun `a generic DTO fails generation by name, not by reflection`() {
+        val failure =
+            assertFailsWith<ApiTypeGenerationException> {
+                generateApiTypes(listOf(responseRow(FixtureGeneric::class)))
+            }
+        assertTrue(failure.message!!.contains("FixtureGeneric"), failure.message!!)
+        assertTrue(failure.message!!.contains("is generic"), failure.message!!)
+    }
+
     @Test
     fun `output is deterministic, sorted by name, LF only, newline terminated`() {
         val rows = listOf(responseRow(FixtureShapes::class), responseRow(FixtureNested::class))
@@ -317,28 +431,33 @@ class ApiTypeGeneratorTest {
     }
 
     @Test
-    fun `the endpoint literal names the request and response types`() {
+    fun `the endpoint literal names the request, response and error types`() {
         val ts =
             generateApiTypes(
                 listOf(
                     ApiEndpoint(
-                        ApiMethod.POST,
+                        ApiMethod.PATCH,
                         "/api/fixtures",
                         FixtureOptionality::class,
                         FixtureShapes::class,
-                        errors = emptyList(),
+                        errors = listOf(FixtureOddKeys::class, FixtureEncodeAlways::class),
                     ),
                     responseRow(FixtureNested::class),
                 ),
             )
         assertTrue(
-            ts.contains("{ method: 'POST', path: '/api/fixtures', request: 'FixtureOptionality', response: 'FixtureShapes' },"),
+            ts.contains(
+                "{ method: 'PATCH', path: '/api/fixtures', request: 'FixtureOptionality', " +
+                    "response: 'FixtureShapes', errors: ['FixtureEncodeAlways', 'FixtureOddKeys'] },",
+            ),
             ts,
         )
         assertTrue(
-            ts.contains("{ method: 'GET', path: '/api/fixture/FixtureNested', request: null, response: 'FixtureNested' },"),
+            ts.contains("{ method: 'GET', path: '/api/fixture/FixtureNested', request: null, response: 'FixtureNested', errors: [] },"),
             ts,
         )
+        // An error body is walked like any other: its declaration is emitted too.
+        assertTrue(ts.contains("export interface FixtureOddKeys {"), ts)
         assertTrue(ts.trimEnd().endsWith("] as const;"), ts)
     }
 

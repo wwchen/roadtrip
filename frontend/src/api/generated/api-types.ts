@@ -9,7 +9,8 @@
 // encodeDefaults = true, explicitNulls = false). In a response body a field is
 // optional exactly when it is nullable, and a non-null field with a default is
 // always sent; in a request body a field is optional when it is nullable or has
-// a default. A nullable arm is never generated, because null is never encoded.
+// a default. A nullable arm is never generated, because a Kotlin null is never
+// encoded; a `JsonNull` value inside a `Json*` field still is.
 //
 // Every Kotlin integer is a TypeScript `number`: the ids are database bigints
 // that stay well below 2^53.
@@ -131,7 +132,7 @@ export interface AvailabilityResponseDto {
   start_date: string;
   end_date: string;
   state: string;
-  season: unknown;
+  season?: unknown;
   availability: AvailabilityDayDto[];
   cache: AvailabilityCacheBlock;
 }
@@ -770,50 +771,50 @@ export type WatchDoneReason = 'triggered' | 'elapsed';
 export type WatchStatus = 'active' | 'paused' | 'done';
 
 export const API_ENDPOINTS = [
-  { method: 'POST', path: '/api/admin/data/import', request: null, response: 'FanOutResponseSchema' },
-  { method: 'POST', path: '/api/admin/data/import/{target}', request: null, response: 'RunOutcomeSchema' },
-  { method: 'GET', path: '/api/admin/data/runs', request: null, response: 'RunsListSchema' },
-  { method: 'GET', path: '/api/admin/data/runs/{id}', request: null, response: 'RunDetailSchema' },
-  { method: 'GET', path: '/api/admin/data/status', request: null, response: 'StatusResponseSchema' },
-  { method: 'GET', path: '/api/availability/changes', request: null, response: 'ListAvailabilityChangesResponse' },
-  { method: 'GET', path: '/api/availability/changes/summary', request: null, response: 'AvailabilitySnapshotsSummaryResponse' },
-  { method: 'GET', path: '/api/availability/pollers', request: null, response: 'AvailabilityPollersListResponse' },
-  { method: 'GET', path: '/api/availability/pollers/summary', request: null, response: 'AvailabilityPollersSummary' },
-  { method: 'POST', path: '/api/availability/pollers/{id}/force', request: null, response: 'CheckNowResponseDto' },
-  { method: 'GET', path: '/api/availability/pollers/{id}/runs', request: null, response: 'AvailabilityRunsListResponse' },
-  { method: 'GET', path: '/api/availability/runs', request: null, response: 'AvailabilityRunsListResponse' },
-  { method: 'POST', path: '/api/booking/add-to-cart', request: 'AddToCartRequestDto', response: 'AddToCartResponseDto' },
-  { method: 'GET', path: '/api/build-info', request: null, response: 'BuildInfoDto' },
-  { method: 'GET', path: '/api/geocode', request: null, response: 'GeocodeResponseDto' },
-  { method: 'GET', path: '/api/health', request: null, response: 'HealthResponseDto' },
-  { method: 'GET', path: '/api/health/ready', request: null, response: 'ReadinessResponseDto' },
-  { method: 'GET', path: '/api/me', request: null, response: 'MeResponseDto' },
-  { method: 'POST', path: '/api/pois', request: 'PoisRequestSchema', response: 'PoiFeatureCollectionSchema' },
-  { method: 'POST', path: '/api/pois/availability/bulk', request: 'BulkAvailabilityRequestDto', response: 'BulkAvailabilityResponseDto' },
-  { method: 'POST', path: '/api/pois/on-route', request: 'OnRouteRequestDto', response: 'PoisOnRouteResponseSchema' },
-  { method: 'GET', path: '/api/pois/search', request: null, response: 'PoiSearchResponseSchema' },
-  { method: 'GET', path: '/api/pois/{id}', request: null, response: 'PoiDetailFeatureSchema' },
-  { method: 'GET', path: '/api/pois/{id}/campsites', request: null, response: 'PoiCampsitesResponseSchema' },
-  { method: 'GET', path: '/api/pois/{id}/campsites/availability', request: null, response: 'PoiCampsitesAvailabilityResponseDto' },
-  { method: 'GET', path: '/api/route', request: null, response: 'RouteFeatureCollectionDto' },
-  { method: 'GET', path: '/api/settings', request: null, response: 'SettingsResponseDto' },
-  { method: 'PUT', path: '/api/settings/notifications', request: 'UpdateNotificationsRequest', response: 'SettingsResponseDto' },
-  { method: 'POST', path: '/api/settings/notifications/email/test', request: null, response: 'EmailTestResponseDto' },
-  { method: 'DELETE', path: '/api/settings/notifications/slack', request: null, response: 'SettingsResponseDto' },
-  { method: 'POST', path: '/api/settings/notifications/slack/test', request: 'SlackTestRequest', response: 'SlackTestResponseDto' },
-  { method: 'PUT', path: '/api/settings/profile', request: 'UpdateProfileRequest', response: 'SettingsResponseDto' },
-  { method: 'DELETE', path: '/api/settings/recgov', request: null, response: 'RecgovRemovedDto' },
-  { method: 'PUT', path: '/api/settings/recgov', request: 'UpdateRecgovRequest', response: 'BookingSettingsDto' },
-  { method: 'POST', path: '/api/settings/recgov/login', request: null, response: 'RecgovLoginResponseDto' },
-  { method: 'POST', path: '/api/settings/recgov/login/mfa', request: 'RecgovMfaRequest', response: 'RecgovLoginResponseDto' },
-  { method: 'GET', path: '/api/settings/recgov/status', request: null, response: 'RecgovStatusDto' },
-  { method: 'POST', path: '/api/settings/recgov/verify', request: null, response: 'RecgovVerifyResponseDto' },
-  { method: 'POST', path: '/api/slack/interactivity', request: null, response: null },
-  { method: 'GET', path: '/api/watches', request: null, response: 'AvailabilityWatchListResponse' },
-  { method: 'POST', path: '/api/watches', request: 'AvailabilityWatchCreateRequest', response: 'AvailabilityWatchResponse' },
-  { method: 'GET', path: '/api/watches/{id}', request: null, response: 'AvailabilityWatchResponse' },
-  { method: 'POST', path: '/api/watches/{id}/delete', request: null, response: null },
-  { method: 'POST', path: '/api/watches/{id}/modify', request: 'AvailabilityWatchUpdateRequest', response: 'AvailabilityWatchResponse' },
-  { method: 'POST', path: '/auth/password/begin', request: 'PasswordBeginRequestDto', response: 'PasswordBeginResponseDto' },
-  { method: 'POST', path: '/auth/password/complete', request: 'PasswordCompleteRequestDto', response: null },
+  { method: 'POST', path: '/api/admin/data/import', request: null, response: 'FanOutResponseSchema', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/admin/data/import/{target}', request: null, response: 'RunOutcomeSchema', errors: ['ApiErrorSchema', 'ErrorTargetBusySchema', 'ErrorUnknownTargetSchema'] },
+  { method: 'GET', path: '/api/admin/data/runs', request: null, response: 'RunsListSchema', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/admin/data/runs/{id}', request: null, response: 'RunDetailSchema', errors: ['ApiErrorSchema', 'ErrorNotFoundSchema'] },
+  { method: 'GET', path: '/api/admin/data/status', request: null, response: 'StatusResponseSchema', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/availability/changes', request: null, response: 'ListAvailabilityChangesResponse', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/availability/changes/summary', request: null, response: 'AvailabilitySnapshotsSummaryResponse', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/availability/pollers', request: null, response: 'AvailabilityPollersListResponse', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/availability/pollers/summary', request: null, response: 'AvailabilityPollersSummary', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/availability/pollers/{id}/force', request: null, response: 'CheckNowResponseDto', errors: ['ApiErrorSchema', 'CheckNowCooldownDto'] },
+  { method: 'GET', path: '/api/availability/pollers/{id}/runs', request: null, response: 'AvailabilityRunsListResponse', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/availability/runs', request: null, response: 'AvailabilityRunsListResponse', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/booking/add-to-cart', request: 'AddToCartRequestDto', response: 'AddToCartResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/build-info', request: null, response: 'BuildInfoDto', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/geocode', request: null, response: 'GeocodeResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/health', request: null, response: 'HealthResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/health/ready', request: null, response: 'ReadinessResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/me', request: null, response: 'MeResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/pois', request: 'PoisRequestSchema', response: 'PoiFeatureCollectionSchema', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/pois/availability/bulk', request: 'BulkAvailabilityRequestDto', response: 'BulkAvailabilityResponseDto', errors: ['ApiErrorSchema', 'AvailabilityErrorDto'] },
+  { method: 'POST', path: '/api/pois/on-route', request: 'OnRouteRequestDto', response: 'PoisOnRouteResponseSchema', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/pois/search', request: null, response: 'PoiSearchResponseSchema', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/pois/{id}', request: null, response: 'PoiDetailFeatureSchema', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/pois/{id}/campsites', request: null, response: 'PoiCampsitesResponseSchema', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/pois/{id}/campsites/availability', request: null, response: 'PoiCampsitesAvailabilityResponseDto', errors: ['ApiErrorSchema', 'AvailabilityErrorDto'] },
+  { method: 'GET', path: '/api/route', request: null, response: 'RouteFeatureCollectionDto', errors: ['ApiErrorSchema', 'RouteErrorDto'] },
+  { method: 'GET', path: '/api/settings', request: null, response: 'SettingsResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'PUT', path: '/api/settings/notifications', request: 'UpdateNotificationsRequest', response: 'SettingsResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/settings/notifications/email/test', request: null, response: 'EmailTestResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'DELETE', path: '/api/settings/notifications/slack', request: null, response: 'SettingsResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/settings/notifications/slack/test', request: 'SlackTestRequest', response: 'SlackTestResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'PUT', path: '/api/settings/profile', request: 'UpdateProfileRequest', response: 'SettingsResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'DELETE', path: '/api/settings/recgov', request: null, response: 'RecgovRemovedDto', errors: ['ApiErrorSchema'] },
+  { method: 'PUT', path: '/api/settings/recgov', request: 'UpdateRecgovRequest', response: 'BookingSettingsDto', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/settings/recgov/login', request: null, response: 'RecgovLoginResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/settings/recgov/login/mfa', request: 'RecgovMfaRequest', response: 'RecgovLoginResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/settings/recgov/status', request: null, response: 'RecgovStatusDto', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/settings/recgov/verify', request: null, response: 'RecgovVerifyResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/slack/interactivity', request: null, response: null, errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/watches', request: null, response: 'AvailabilityWatchListResponse', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/watches', request: 'AvailabilityWatchCreateRequest', response: 'AvailabilityWatchResponse', errors: ['ApiErrorSchema'] },
+  { method: 'GET', path: '/api/watches/{id}', request: null, response: 'AvailabilityWatchResponse', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/watches/{id}/delete', request: null, response: null, errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/api/watches/{id}/modify', request: 'AvailabilityWatchUpdateRequest', response: 'AvailabilityWatchResponse', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/auth/password/begin', request: 'PasswordBeginRequestDto', response: 'PasswordBeginResponseDto', errors: ['ApiErrorSchema'] },
+  { method: 'POST', path: '/auth/password/complete', request: 'PasswordCompleteRequestDto', response: null, errors: ['ApiErrorSchema'] },
 ] as const;

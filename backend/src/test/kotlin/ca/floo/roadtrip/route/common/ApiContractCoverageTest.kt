@@ -132,6 +132,21 @@ class ApiContractCoverageTest {
         assertEquals(listOf("GET /api/docsomething"), drift.uncontractedRoutes)
     }
 
+    /**
+     * `get("/api") { … }` mounts a real, reachable handler, and a glob over
+     * `/api` includes `/api` itself. A prefix test that only asked
+     * `startsWith("/api/")` let both roots serve with no contract row at all.
+     */
+    @Test
+    fun `a leaf at exactly a prefix root is contracted`() {
+        val drift =
+            driftFor {
+                get("/api") { call.respondText("ok") }.access(RouteAccess.Anonymous)
+                post("/auth/password") { call.respondText("ok") }.access(RouteAccess.Anonymous)
+            }
+        assertEquals(listOf("GET /api", "POST /auth/password"), drift.uncontractedRoutes)
+    }
+
     @Test
     fun `the contract declares every row the plan fixed`() = assertEquals(CONTRACT_ROW_COUNT, ApiContract.endpoints.size)
 

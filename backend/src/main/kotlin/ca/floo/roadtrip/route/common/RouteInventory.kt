@@ -32,9 +32,12 @@ internal data class ContractDrift(
 /**
  * Visits every node that answers an HTTP method.
  *
- * A method node that only groups children answers nothing and would be a phantom
- * leaf, but `RoutingNode.handlers` is internal to Ktor, so it cannot be filtered
- * out here; no route in this tree is built that way.
+ * The blind spot is a false *negative*, not a phantom leaf: a `route(...) { handle { } }`
+ * node answers every verb while installing no `HttpMethodRouteSelector`, so it
+ * produces no leaf and both guards that read this walk would let it serve
+ * uncontracted and unlabelled. `RoutingNode.handlers` is internal to Ktor, so it
+ * cannot be filtered on here; `LayeringGuardTest` keeps the whole `route` tree
+ * free of a bare `handle` builder instead.
  */
 internal fun RoutingNode.walkMethodLeaves(visit: (RoutingNode) -> Unit) {
     if (selector is HttpMethodRouteSelector) visit(this)
@@ -60,8 +63,17 @@ internal fun RoutingNode.methodLeaves(): List<RouteLeaf> {
  */
 internal fun isContractedPath(path: String): Boolean {
     if (path == SWAGGER_UI_PATH || path.startsWith("$SWAGGER_UI_PATH/")) return false
-    return path.startsWith(API_PREFIX) || path.startsWith(PASSWORD_AUTH_PREFIX)
+    return path.underPrefix(API_PREFIX) || path.underPrefix(PASSWORD_AUTH_PREFIX)
 }
+
+/**
+ * Whether [this] is the prefix root itself or something beneath it. A glob over
+ * `/api` includes `/api` itself, and `get("/api") { … }` mounts a real,
+ * reachable handler; a bare `startsWith("/api/")` would let it escape the
+ * contract guard, the generator and the OpenAPI document at once. The one
+ * spelling: [isContractedPath] and `apiDocsRoutes` both measure with it.
+ */
+internal fun String.underPrefix(prefix: String): Boolean = this == prefix.trimEnd('/') || startsWith(prefix)
 
 /** The leaves [ApiContract] is answerable for. */
 internal fun RoutingNode.contractedApiLeaves(): Set<RouteLeaf> = methodLeaves().filterTo(LinkedHashSet()) { isContractedPath(it.path) }

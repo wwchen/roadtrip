@@ -744,7 +744,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `POST modify pauses a watch and refuses a status outside the vocabulary`() =
+    fun `POST modify pauses a watch, refuses a status outside the vocabulary, and refuses done`() =
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
@@ -799,6 +799,20 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonObject["error"]!!
                     .jsonPrimitive.content,
             )
+
+            // `done` is in the vocabulary but is not user intent: the trigger and
+            // the reaper set it together with a done_reason, and a body that set
+            // it here would leave that reason null.
+            val done =
+                client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"status": "done"}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, done.status)
+            val doneBody = Json.parseToJsonElement(done.bodyAsText()).jsonObject
+            assertEquals("invalid_status", doneBody["error"]!!.jsonPrimitive.content)
+            assertEquals("done is set when a watch triggers or elapses", doneBody["detail"]!!.jsonPrimitive.content)
         }
 
     @Test

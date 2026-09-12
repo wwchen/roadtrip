@@ -93,9 +93,10 @@ export function alertName(watch: Watch, poiNames: ReadonlyMap<number, string>): 
 /**
  * Why a watch is done: availability was found, or its window elapsed.
  *
- * Read from `done_reason`, which the two done-transitions record since V63. The
- * end-date inference is the fallback for a row retired before that migration —
- * it mislabels a watch triggered on its last day, which is exactly why the
+ * Read from `done_reason`, which the two done-transitions record since V63. Those
+ * two are now the only writers — `POST /api/watches/{id}/modify` refuses
+ * `status: "done"` — so the end-date inference covers pre-V63 rows and nothing
+ * else. It mislabels a watch triggered on its last day, which is exactly why the
  * column exists. `today` is a parameter so a test does not have to mock the clock.
  */
 export function doneKind(watch: Watch, today: string = new Date().toISOString().slice(0, 10)) {

@@ -52,6 +52,17 @@ class WireVocabularyTest {
         assertEquals(wire, serialNames(BookingActionStatus.serializer()))
     }
 
+    /**
+     * Not a serialized vocabulary but a pinned one all the same: [ApiMethod] is
+     * closed, and a verb missing from it cannot be given a contract row at all,
+     * so the set a route may be mounted with is spelled out once here.
+     */
+    @Test
+    fun `the contract verb vocabulary keeps its wire strings`() {
+        val wire = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
+        assertEquals(wire, ApiMethod.entries.map { it.wireValue })
+    }
+
     @Test
     fun `parse answers the constant for a known wire value and null otherwise`() {
         assertEquals(WatchStatus.PAUSED, WatchStatus.parse("paused"))
