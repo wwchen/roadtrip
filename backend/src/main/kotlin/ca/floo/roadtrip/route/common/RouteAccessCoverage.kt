@@ -25,20 +25,11 @@ private const val OPENAPI_JSON_PATH = "/api/docs/openapi.json"
 internal fun RoutingNode.undeclaredAccessRoutes(): List<String> {
     val missing = mutableListOf<String>()
     walkMethodLeaves { leaf ->
-        if (!leaf.isAccessExempt() && !leaf.hasReachableAccess()) {
+        if (!leaf.isAccessExempt() && leaf.reachableAccess() == null) {
             missing += leaf.path(OpenApiRoutePathFormat)
         }
     }
     return missing.sorted()
-}
-
-private fun RoutingNode.hasReachableAccess(): Boolean {
-    var node: RoutingNode? = this
-    while (node != null) {
-        if (node.attributes.contains(routeAccessAttributeKey)) return true
-        node = node.parent
-    }
-    return false
 }
 
 private fun RoutingNode.isAccessExempt(): Boolean {

@@ -9,8 +9,12 @@ import ca.floo.roadtrip.route.common.encodeApiJson
 import io.ktor.openapi.JsonSchema
 import io.ktor.openapi.ReferenceOr
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.reflect.KClass
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -140,20 +144,27 @@ class JsonSchemaRenderTest {
     @Test
     fun `the real contract renders a schema for every name the TypeScript declares`() {
         val walk = walkContract()
+        val schemas = contractSchemas()
         assertEquals(
             (walk.interfaces.map { it.name } + walk.enums.map { it.name }).toSortedSet(),
-            contractSchemas().keys.toSortedSet(),
+            schemas.keys.toSortedSet(),
         )
-        assertTrue(contractSchemas().size > MIN_EXPECTED_SCHEMAS, "expected the contract to declare many schemas")
+        assertEquals(walk.interfaces.size + walk.enums.size, schemas.size, "one schema per declaration, no more")
+        assertTrue(
+            schemas.size > MIN_EXPECTED_SCHEMAS,
+            "expected the contract to declare many schemas, found ${schemas.size}",
+        )
     }
 
     @Test
     fun `no schema in the real contract claims a null type`() {
-        val document = encodeApiJson(contractSchemas())
-        assertTrue(
-            !document.contains("\"null\""),
-            "the one encoder never writes a null, so no schema may claim the type: $document",
-        )
+        val nullTyped =
+            Json
+                .parseToJsonElement(encodeApiJson(contractSchemas()))
+                .jsonObject
+                .filter { (_, schema) -> NULL_TYPE in typesOf(schema) }
+                .keys
+        assertEquals(emptySet(), nullTyped, "the one encoder never writes a null, so no schema may claim the type")
     }
 
     @Test
@@ -179,7 +190,7 @@ class JsonSchemaRenderTest {
     private fun assertSchema(
         expected: String,
         type: WireType,
-    ) = assertEquals(parsed(expected), Json.parseToJsonElement(encodeApiJson(jsonSchemaOf(type))), expected)
+    ) = assertEquals(parsed(expected), encoded(jsonSchemaOf(type)), expected)
 
     private fun encoded(value: JsonSchema): JsonElement = Json.parseToJsonElement(encodeApiJson(value))
 
@@ -187,8 +198,37 @@ class JsonSchemaRenderTest {
 
     private fun parsed(json: String): JsonElement = Json.parseToJsonElement(json).jsonObject
 
+    /**
+     * Every `type` this schema declares, at any depth — a nested property's as
+     * much as the outer one's. The recursion descends only where a *schema* can
+     * sit, because a DTO is free to have a field literally called `type`, whose
+     * entry under `properties` is a name and not the keyword.
+     */
+    private fun typesOf(schema: JsonElement): List<String> {
+        val obj = schema as? JsonObject ?: return emptyList()
+        val nested =
+            listOfNotNull(obj["items"], obj["additionalProperties"], obj["not"]) +
+                obj["properties"]?.jsonObject?.values.orEmpty() +
+                schemaListKeywords.flatMap { obj[it]?.jsonArray.orEmpty() }
+        return typeNames(obj["type"]) + nested.flatMap(::typesOf)
+    }
+
+    /** A `type` is absent, one name, or a list of them. */
+    private fun typeNames(value: JsonElement?): List<String> =
+        when (value) {
+            null -> emptyList()
+            is JsonArray -> value.map { it.jsonPrimitive.content }
+            else -> listOf(value.jsonPrimitive.content)
+        }
+
     private companion object {
         /** Well under the real count; a floor, so the check means "the walk found the contract". */
         const val MIN_EXPECTED_SCHEMAS = 60
+
+        /** The one JSON Schema type name no schema of ours may declare. */
+        const val NULL_TYPE = "null"
+
+        /** Keywords whose value is a list of schemas. */
+        val schemaListKeywords = listOf("oneOf", "anyOf", "allOf", "prefixItems")
     }
 }

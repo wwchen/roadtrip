@@ -1,16 +1,25 @@
 package ca.floo.roadtrip
 
+import ca.floo.roadtrip.apigen.contractSchemas
 import ca.floo.roadtrip.client.mapbox.MapboxDirections
 import ca.floo.roadtrip.config.RouteConfig
 import ca.floo.roadtrip.fixtures.testCampgroundService
+import ca.floo.roadtrip.model.api.ApiContract
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
+import ca.floo.roadtrip.repo.AvailabilityRunRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
+import ca.floo.roadtrip.route.api.availability.availabilityDashboardRoutes
 import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.route.api.health.healthRoutes
 import ca.floo.roadtrip.route.api.pois.poiRoutes
 import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
+import ca.floo.roadtrip.route.auth.authRoutes
+import ca.floo.roadtrip.service.availability.AvailabilityDashboardController
 import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiService
@@ -26,17 +35,66 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
+private const val SCHEMA_PREFIX = "#/components/schemas/"
+
+/** The second password row, whose success is a 204. */
+private const val PASSWORD_FINISH_PATH = "/auth/password/complete"
+
+/** Long enough that the force route never reports a cooldown of zero; never elapses here. */
+private const val FORCE_POLLER_COOLDOWN_SECONDS = 60L
+
+private fun responsesOf(
+    paths: JsonObject,
+    path: String,
+    verb: String,
+): JsonObject =
+    paths
+        .getValue(path)
+        .jsonObject
+        .getValue(verb)
+        .jsonObject
+        .getValue("responses")
+        .jsonObject
+
+/** The one media type's schema reference, from a `requestBody` or a `response`. */
+private fun schemaRef(holder: JsonElement): String =
+    holder.jsonObject["content"]!!
+        .jsonObject
+        .values
+        .single()
+        .jsonObject["schema"]!!
+        .jsonObject
+        .getValue("\$ref")
+        .jsonPrimitive
+        .content
+
+/** Every reference anywhere in the document, however deeply nested. */
+private fun refsIn(element: JsonElement): List<String> =
+    when (element) {
+        is JsonObject ->
+            element.entries.flatMap { (key, value) ->
+                if (key == "\$ref") listOf(value.jsonPrimitive.content) else refsIn(value)
+            }
+        is JsonArray -> element.flatMap(::refsIn)
+        else -> emptyList()
+    }
 
 // Smoke for /api/docs (issue #47).
 //
@@ -89,6 +147,8 @@ class OpenApiSmokeTest {
                         ),
                         routeConfig = testRouteConfig(),
                     )
+                    authRoutes(wiring = null)
+                    availabilityDashboardRoutes(testDashboardController(ctx))
                 }
             }
 
@@ -131,6 +191,9 @@ class OpenApiSmokeTest {
             )
 
             assertFalse(paths.containsKey("/api/availability/bulk"))
+            // The redirect rows are outside both contracted prefixes, so mounting
+            // authRoutes brings /auth/password/** into the document and nothing else.
+            assertFalse(paths.containsKey("/auth/login"))
             assertFalse(paths.containsKey("/api/docs"))
             assertFalse(paths.containsKey("/api/docs/openapi.json"))
             assertFalse(paths.containsKey("/"))
@@ -139,6 +202,82 @@ class OpenApiSmokeTest {
             assertFalse(paths.containsKey("/api/campsite/availability/{poi_id}"))
             assertFalse(paths.containsKey("/api/poi/{poi_id}/reservables/availability"))
             assertFalse(paths.containsKey("/api/admin/campsite/debug/synth-match"))
+        }
+
+    @Test
+    fun `the spec carries the contract's schemas, request bodies and statuses`() =
+        testApplication {
+            application {
+                val ctx = DSL.using(SQLDialect.POSTGRES)
+                val poiService = testPoiService(ctx)
+                routing {
+                    apiDocsRoutes()
+                    healthRoutes { ReadinessService.Report(databaseReachable = true) }
+                    poiRoutes(poiService)
+                    authRoutes(wiring = null)
+                    availabilityDashboardRoutes(testDashboardController(ctx))
+                }
+            }
+
+            val spec = Json.parseToJsonElement(client.get("/api/docs/openapi.json").bodyAsText()).jsonObject
+            val schemas = spec["components"]!!.jsonObject["schemas"]!!.jsonObject
+
+            // The schemas come from the whole contract, not from what this slice
+            // mounts, so every reference in a partial document still resolves.
+            assertEquals(contractSchemas().keys, schemas.keys)
+            listOf("ApiErrorSchema", "CampsiteDto", "CheckNowCooldownDto", "WatchStatus").forEach { name ->
+                assertTrue(name in schemas.keys, "$name missing from components/schemas")
+            }
+            assertEquals(emptyList(), refsIn(spec).filterNot { it.removePrefix(SCHEMA_PREFIX) in schemas.keys })
+
+            val paths = spec["paths"]!!.jsonObject
+
+            // A request body arrives as a reference to the same declaration the
+            // TypeScript names.
+            assertEquals(
+                "${SCHEMA_PREFIX}PoisRequestSchema",
+                schemaRef(
+                    paths
+                        .getValue("/api/pois")
+                        .jsonObject
+                        .getValue("post")
+                        .jsonObject["requestBody"]!!,
+                ),
+            )
+
+            // The readiness probe serves the same DTO at both statuses.
+            val ready = responsesOf(paths, "/api/health/ready", "get")
+            assertEquals("${SCHEMA_PREFIX}ReadinessResponseDto", schemaRef(ready.getValue("200")))
+            assertEquals("${SCHEMA_PREFIX}ReadinessResponseDto", schemaRef(ready.getValue("503")))
+
+            assertEquals(setOf("200", "400", "404"), responsesOf(paths, "/api/pois/{id}", "get").keys)
+
+            assertEquals(
+                "${SCHEMA_PREFIX}CheckNowCooldownDto",
+                schemaRef(responsesOf(paths, "/api/availability/pollers/{id}/force", "post").getValue("429")),
+            )
+
+            // /auth/password/** is in the document now, so its two rows carry schemas.
+            assertEquals(
+                "${SCHEMA_PREFIX}PasswordBeginResponseDto",
+                schemaRef(responsesOf(paths, "/auth/password/begin", "post").getValue("200")),
+            )
+            assertNull(
+                responsesOf(paths, PASSWORD_FINISH_PATH, "post").getValue("204").jsonObject["content"],
+                "a 204 publishes no content",
+            )
+
+            // Every mounted row got its responses; nothing in the contracted
+            // surface is left bare. A row this slice does not mount has no
+            // operation to carry them and is not counted (Resolution 7).
+            val bare =
+                ApiContract.endpoints
+                    .mapNotNull { row ->
+                        val verb = row.method.wireValue
+                        val operation = paths[row.path]?.jsonObject?.get(verb.lowercase())?.jsonObject
+                        "$verb ${row.path}".takeIf { operation != null && operation["responses"] == null }
+                    }
+            assertEquals(emptyList(), bare)
         }
 
     private fun testPoiService(ctx: DSLContext): PoiService =
@@ -150,6 +289,20 @@ class OpenApiSmokeTest {
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
                 ),
+        )
+
+    /**
+     * Mounted for its *shape*: the document is built from the routing tree, and
+     * these routes never answer here. A detached DSLContext is enough, the same
+     * way `RouteCorridorRepo` is built above.
+     */
+    private fun testDashboardController(ctx: DSLContext): AvailabilityDashboardController =
+        AvailabilityDashboardController(
+            pollerRepo = AvailabilityPollerRepo(ctx),
+            runRepo = AvailabilityRunRepo(ctx),
+            availabilityRepo = AvailabilityRepo(ctx),
+            campsiteRepo = CampsiteRepo(ctx),
+            forcePullCooldown = Duration.ofSeconds(FORCE_POLLER_COOLDOWN_SECONDS),
         )
 
     private fun testRouteConfig(): RouteConfig =

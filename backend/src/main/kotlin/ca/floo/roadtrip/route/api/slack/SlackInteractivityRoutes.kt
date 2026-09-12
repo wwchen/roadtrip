@@ -3,6 +3,7 @@ package ca.floo.roadtrip.route.api.slack
 import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.access
+import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -123,7 +124,15 @@ internal fun Route.slackInteractivityRoute(
                             )
                         }
                 }
-            }.access(RouteAccess.Signed)
+            }.describeApi(
+                tag = "slack",
+                summary = "Slack interactivity webhook: acks a signed block_actions payload and dispatches it",
+                description =
+                    "Mounted only when a Slack signing secret is configured. The body is Slack's own " +
+                        "form encoding, not JSON, and every answer is an empty body Slack reads the status " +
+                        "of: 200 acked, 400 unusable payload, 401 signature verification failed. The ack is " +
+                        "sent before the handler runs, because Slack wants a reply within three seconds.",
+            ).access(RouteAccess.Signed)
         }
     }
 }

@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.route.common
 
 import ca.floo.roadtrip.model.api.ApiContract
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import io.ktor.server.routing.HttpMethodRouteSelector
 import io.ktor.server.routing.OpenApiRoutePathFormat
 import io.ktor.server.routing.RoutingNode
@@ -90,4 +91,36 @@ internal fun RoutingNode.apiContractDrift(): ContractDrift {
         uncontractedRoutes = (mounted - ApiContract.keys()).map { "${it.first} ${it.second}" }.sorted(),
         unmountedRows = (ApiContract.requiredKeys() - mounted).map { "${it.first} ${it.second}" }.sorted(),
     )
+}
+
+/**
+ * The access level in force at each method leaf.
+ *
+ * The routing tree is the authority on 401 and 403: an [ApiContract] row does
+ * not restate what `.access(...)` already declares, so the OpenAPI document
+ * builder reads the level from here and adds those two responses itself.
+ */
+internal fun RoutingNode.declaredAccessByLeaf(): Map<RouteLeaf, RouteAccess> {
+    val byLeaf = LinkedHashMap<RouteLeaf, RouteAccess>()
+    walkMethodLeaves { node ->
+        node.reachableAccess()?.let { level ->
+            val method = (node.selector as HttpMethodRouteSelector).method.value
+            byLeaf[RouteLeaf(method, node.path(OpenApiRoutePathFormat))] = level
+        }
+    }
+    return byLeaf
+}
+
+/**
+ * The nearest declared [RouteAccess] at or above this node — a group-level
+ * `route("/x") { ... }.access(...)` covers its children — or null when nothing
+ * on the way to the root declares one.
+ */
+internal fun RoutingNode.reachableAccess(): RouteAccess? {
+    var node: RoutingNode? = this
+    while (node != null) {
+        node.attributes.getOrNull(routeAccessAttributeKey)?.let { return it }
+        node = node.parent
+    }
+    return null
 }

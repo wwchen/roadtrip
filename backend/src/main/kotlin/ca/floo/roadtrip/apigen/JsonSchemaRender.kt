@@ -48,9 +48,7 @@ internal fun jsonSchemaOf(type: WireType): ReferenceOr<JsonSchema> =
             ReferenceOr.value(JsonSchema(type = JsonSchema.SchemaType.AnyOf(jsonPrimitiveTypes)))
         is WireType.ArrayOf ->
             ReferenceOr.value(JsonSchema(type = JsonType.ARRAY, items = jsonSchemaOf(type.element)))
-        // JsonSchema carries no `propertyNames`, so an enum key's union is not
-        // expressible here; the value schema is, and the key constraint is
-        // documented in docs/backend-architecture.md.
+        // JsonSchema carries no `propertyNames`, so an enum key's union is documented rather than declared.
         is WireType.MapOf ->
             ReferenceOr.value(
                 JsonSchema(
