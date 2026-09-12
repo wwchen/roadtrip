@@ -19,7 +19,7 @@ import { WatchPopover } from './WatchPopover';
 import { WeekNav } from './WeekNav';
 import { GENERIC_AVAILABILITY_ERROR, classifyAvailabilityErrorCode } from './availability-errors';
 import { reservationUrlFromTemplate } from './booking-links';
-import type { AvailabilityDay } from '@/api/availability-api';
+import { type AvailabilityDay, seasonReopensOn } from '@/api/availability-api';
 import { DEFAULT_SITE_COLUMN_WIDTH } from './site-column';
 import { useAvailabilityController } from './availability-controller';
 import { useCampsites } from './useCampsites';
@@ -224,8 +224,8 @@ function AvailabilityWeekView({
           });
         })
         .catch((err: unknown) => {
-          const { code, provider_display: providerDisplay } = addToCartFailure(err);
-          actions.cartActionChanged({ type: 'failed', cell, code: code ?? '' });
+          const { error: code, provider_display: providerDisplay } = addToCartFailure(err);
+          actions.cartActionChanged({ type: 'failed', cell, code });
           toast({
             status: 'warning',
             title: 'Could not hold the site',
@@ -638,7 +638,7 @@ function WeekSurface({
   }
 
   if (week.data?.state === 'closed_for_season') {
-    const reopens = week.data.season?.reopens_on;
+    const reopens = seasonReopensOn(week.data.season);
     return withNav(
       <div className="cg-closed-banner">
         {/* A calendar rather than the ⛰️ this shipped with: both messages this

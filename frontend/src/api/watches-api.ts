@@ -1,12 +1,17 @@
 // Watches are user intent for availability polling; the backend persists them
 // and a scheduler turns them into polling jobs.
 //
-// DTOs are pinned against the backend (AvailabilityWatchSchema and friends).
-// Note the envelopes: the list route answers
-// `{ total, limit, offset, watches }` and the single-watch routes answer
-// `{ watch, watch_capabilities? }`.
-import type { WatchCapabilities } from './availability-api';
-import type { Campsite } from './campsite-api';
+// Note the envelopes: the list route answers `{ total, limit, offset, watches }`
+// and the single-watch routes answer `{ watch, watch_capabilities? }`.
+import type {
+  AvailabilityWatchCreateRequest,
+  AvailabilityWatchListResponse,
+  AvailabilityWatchResponse,
+  AvailabilityWatchSchema,
+  AvailabilityWatchTargetSchema,
+  AvailabilityWatchUpdateRequest,
+  WatchStatus,
+} from './generated/api-types';
 import { HttpError, jsonGetOk, type RequestOptions } from './http';
 
 const BASE = '/api/watches';
@@ -18,90 +23,26 @@ export const MAGIC_LINK_WATCH_PARAM = 'watch';
 export const MAGIC_LINK_ACTION_PARAM = 'action';
 export const MAGIC_LINK_STOP_ACTION = 'stop';
 
-/** The three values WatchStatus.parse accepts. */
-export type WatchStatus = 'active' | 'paused' | 'done';
+export type { WatchStatus } from './generated/api-types';
 
 /**
  * What a watch is pointed at. A watch has one or more targets; `poi_id` watches
  * a whole POI, `campsite_id` a single site.
  */
-export interface WatchTarget {
-  poi_id?: number | null;
-  campsite_id?: number | null;
-}
+export type WatchTarget = AvailabilityWatchTargetSchema;
 
-/** Mirrors AvailabilityWatchSchema. */
-export interface Watch {
-  id: number;
-  targets: WatchTarget[];
-  /** Convenience mirror of the first target; null for a multi-target watch. */
-  poi_id?: number | null;
-  campsite_id?: number | null;
-  /** Hydrated campsite row, when the watch targets a single site. */
-  campsite?: Campsite | null;
-  campsite_filters: Record<string, unknown>;
-  start_date: string;
-  end_date: string;
-  /** Null when the watch carries no cadence override — the resolver falls
-   *  through to the POI override, then the global default. */
-  cadence_sec?: number | null;
-  trigger_kinds: string[];
-  trigger_config: Record<string, unknown>;
-  stop_when_triggered: boolean;
-  status: WatchStatus;
-  created_at: string;
-  updated_at: string;
-  /**
-   * Freshness/error of the most recent poll run across this watch's poller(s).
-   * All null before the first run; `last_run_at` is the run's completed_at, so it
-   * stays null while a run is in flight. Read-only — sourced from
-   * availability_run and never accepted on create/update.
-   */
-  last_run_at?: string | null;
-  last_run_status?: string | null;
-  last_run_error?: string | null;
-}
+export type Watch = AvailabilityWatchSchema;
 
-/** Mirrors AvailabilityWatchListResponse — the GET /api/watches envelope. */
-export interface WatchListResponse {
-  total: number;
-  limit: number;
-  offset: number;
-  watches: Watch[];
-}
+/** The GET /api/watches envelope. */
+export type WatchListResponse = AvailabilityWatchListResponse;
 
-/** Mirrors AvailabilityWatchResponse — the single-watch envelope. */
-export interface WatchResponse {
-  watch: Watch;
-  watch_capabilities?: WatchCapabilities | null;
-}
+/** The single-watch envelope. */
+export type WatchResponse = AvailabilityWatchResponse;
 
-/** Mirrors AvailabilityWatchCreateRequest. */
-export interface CreateWatchRequest {
-  targets?: WatchTarget[];
-  poi_id?: number | null;
-  campsite_id?: number | null;
-  campsite_filters?: Record<string, unknown>;
-  start_date: string;
-  end_date: string;
-  cadence_sec?: number | null;
-  trigger_kinds: string[];
-  trigger_config?: Record<string, unknown>;
-  stop_when_triggered?: boolean;
-}
+export type CreateWatchRequest = AvailabilityWatchCreateRequest;
 
-/** Mirrors AvailabilityWatchUpdateRequest — every field is a partial update. */
-export interface UpdateWatchRequest {
-  targets?: WatchTarget[];
-  campsite_filters?: Record<string, unknown>;
-  start_date?: string;
-  end_date?: string;
-  cadence_sec?: number | null;
-  trigger_kinds?: string[];
-  trigger_config?: Record<string, unknown>;
-  stop_when_triggered?: boolean;
-  status?: WatchStatus;
-}
+/** Every field is a partial update. */
+export type UpdateWatchRequest = AvailabilityWatchUpdateRequest;
 
 export interface ListWatchesParams extends RequestOptions {
   status?: WatchStatus;

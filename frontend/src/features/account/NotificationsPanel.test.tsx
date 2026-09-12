@@ -23,15 +23,15 @@ const settings = (over: Partial<SettingsResponse['notifications']> = {}): Settin
     theme: 'system',
   },
   notifications: {
-    notification_email: null,
-    slack_channel: null,
+    notification_email: undefined,
+    slack_channel: undefined,
     slack_configured: false,
-    slack_token_hint: null,
+    slack_token_hint: undefined,
     ...over,
   },
   booking: {
     recgov_configured: false,
-    recgov_username: null,
+    recgov_username: undefined,
   },
 });
 
@@ -68,7 +68,7 @@ describe('SecretField — nothing stored', () => {
   test('an untouched token stays null, so it is omitted from the payload', () => {
     const { state } = renderPanel(settings());
     expect(state.values.slack_token).toBeNull();
-    expect(buildNotificationsPayload(state.values).slack_token).toBeNull();
+    expect(buildNotificationsPayload(state.values).slack_token).toBeUndefined();
   });
 
   test('an untouched panel is not dirty', () => {

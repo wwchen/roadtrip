@@ -28,7 +28,7 @@ const poller = (fields: Partial<AvailabilityPoller> = {}): AvailabilityPoller =>
   poi_id: 42,
   active: true,
   next_run_at: '2026-07-08T14:30:00.123Z',
-  claimed_until: null,
+  claimed_until: undefined,
   last_run_at: '2026-07-08T14:00:00Z',
   attached_watches: 3,
   created_at: '2026-06-01T00:00:00Z',
@@ -42,7 +42,7 @@ const run = (fields: Partial<AvailabilityRun> = {}): AvailabilityRun => ({
   status: 'completed',
   snapshot_count: 12,
   duration_ms: 850,
-  error: null,
+  error: undefined,
   started_at: '2026-07-08T14:00:00Z',
   completed_at: '2026-07-08T14:00:01Z',
   ...fields,
@@ -247,8 +247,8 @@ describe('pollers tab', () => {
     expect(within(table).getByText('2026-07-08 14:30:00')).toBeInTheDocument();
   });
 
-  test('a null last run and claim render as dashes', async () => {
-    stubApi(pollerList(poller({ last_run_at: null, claimed_until: null })));
+  test('an absent last run and claim render as dashes', async () => {
+    stubApi(pollerList(poller({ last_run_at: undefined, claimed_until: undefined })));
     renderPage();
 
     const table = await screen.findByRole('table');
@@ -438,8 +438,8 @@ describe('runs tab', () => {
     expect(within(table).getByText('completed')).toBeInTheDocument();
   });
 
-  test('a null duration renders as a dash', async () => {
-    stubApi(runList(run({ duration_ms: null })));
+  test('an absent duration renders as a dash', async () => {
+    stubApi(runList(run({ duration_ms: undefined })));
     renderPage('?tab=runs');
 
     const table = await screen.findByRole('table');
@@ -557,7 +557,7 @@ describe('changes tab', () => {
   });
 
   test('a date never seen open reads as infinity', async () => {
-    stubApi(changeList(change()), changesSummary(stats({ last_open_at: null })));
+    stubApi(changeList(change()), changesSummary(stats({ last_open_at: undefined })));
     renderPage('?tab=changes&poi_id=42');
 
     expect(await screen.findByText('∞')).toBeInTheDocument();
@@ -608,15 +608,15 @@ describe('changes tab', () => {
   });
 
   test('a change with no campsite name falls back to its id', async () => {
-    stubApi(changeList(change({ campsite_name: null, campsite_id: 99 })), changesSummary());
+    stubApi(changeList(change({ campsite_name: undefined, campsite_id: 99 })), changesSummary());
     renderPage('?tab=changes&poi_id=42');
 
     const table = await screen.findByRole('table');
     expect(within(table).getByText('#99')).toBeInTheDocument();
   });
 
-  test('a null from-status renders as a dash', async () => {
-    stubApi(changeList(change({ from_status: null })), changesSummary());
+  test('an absent from-status renders as a dash', async () => {
+    stubApi(changeList(change({ from_status: undefined })), changesSummary());
     renderPage('?tab=changes&poi_id=42');
 
     const table = await screen.findByRole('table');

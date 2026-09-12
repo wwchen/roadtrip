@@ -1,56 +1,16 @@
+import type { CampsiteDto, PoiCampsitesResponseSchema } from './generated/api-types';
 import { jsonGetOk, type RequestOptions } from './http';
 
-export interface CampsiteAttribute {
-  name: string;
-  value?: string | null;
-}
+export type { CampsiteAttribute } from './generated/api-types';
 
 /**
- * Mirrors CampsiteDto. Closed: every fact the drawer renders is a typed field.
- *
- * `data_provider`/`data_provider_ref` are the provider seam: which vendor owns
- * this site and its id there (see docs/reservation-providers.md).
+ * The campsite drawer's closed type. Generated from `CampsiteDto`, so a field the
+ * backend adds is a field the drawer can read, and a field it renames is a
+ * typecheck failure here.
  */
-export interface Campsite {
-  id: number;
-  campground_id: number;
-  name: string;
-  /** A `CampsiteKind` wire value; `kind_label` is the backend's wording for it. */
-  kind: string;
-  kind_label: string;
-  kind_listed?: string | null;
-  loop_name?: string | null;
-  description?: string | null;
-  min_people?: number | null;
-  max_people?: number | null;
-  max_cars?: number | null;
-  driveway_length?: number | null;
-  max_rv_length?: number | null;
-  max_trailer_length?: number | null;
-  firepit?: boolean | null;
-  picnic_table?: boolean | null;
-  ada_accessible?: boolean | null;
-  water_hookups?: boolean | null;
-  electric_hookups?: boolean | null;
-  sewer_hookups?: boolean | null;
-  pull_through?: boolean | null;
-  equipment: string[];
-  attributes: CampsiteAttribute[];
-  photo_url?: string | null;
-  data_provider: string;
-  data_provider_ref: string;
-  /** The booking site this row opens, as the backend names it. */
-  booking_system?: string | null;
-}
+export type Campsite = CampsiteDto;
 
-/** Mirrors PoiCampsitesResponseSchema. */
-export interface PoiCampsitesResponse {
-  poi_id: number;
-  type: string;
-  campsites: Campsite[];
-  /** campsite id → deep-link template containing `{start_date}` etc. */
-  reservation_url_templates: Record<number, string>;
-}
+export type PoiCampsitesResponse = PoiCampsitesResponseSchema;
 
 export function fetchPoiCampsites(
   poiId: number | string,

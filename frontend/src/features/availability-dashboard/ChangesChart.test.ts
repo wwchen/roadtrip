@@ -7,7 +7,7 @@ const change = (fields: Partial<AvailabilityChange> = {}): AvailabilityChange =>
   campsite_name: 'Loop A 001',
   target_date: '2026-07-08',
   observed_at: '2026-07-01T00:00:00Z',
-  from_status: null,
+  from_status: undefined,
   to_status: 'available',
   ...fields,
 });
@@ -28,7 +28,7 @@ describe('buildDatasets', () => {
   });
 
   test('falls back to the campsite id when there is no name', () => {
-    const [dataset] = buildDatasets([change({ campsite_name: null, campsite_id: 42 })]);
+    const [dataset] = buildDatasets([change({ campsite_name: undefined, campsite_id: 42 })]);
     expect(dataset.label).toBe('42 @ 2026-07-08');
   });
 

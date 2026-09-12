@@ -22,14 +22,8 @@ export interface TriggerPayload {
   stop_when_triggered: boolean;
 }
 
-/**
- * A watch's trigger config, tolerating both the snake_case wire form and the
- * camelCase form the availability week used internally.
- */
 function triggerConfigOf(watch: Partial<Watch> | null | undefined): Record<string, unknown> {
-  const config =
-    watch?.trigger_config ?? (watch as { triggerConfig?: unknown } | null)?.triggerConfig;
-  return (config ?? {}) as Record<string, unknown>;
+  return watch?.trigger_config ?? {};
 }
 
 const nestedString = (config: Record<string, unknown>, kind: string, field: string): string => {
@@ -63,10 +57,7 @@ export function watchStopWhenTriggered(
   fallback = true,
 ): boolean {
   if (!watch) return fallback;
-  const value =
-    watch.stop_when_triggered ??
-    (watch as { stopWhenTriggered?: unknown } | null)?.stopWhenTriggered;
-  return value == null ? fallback : Boolean(value);
+  return watch.stop_when_triggered ?? fallback;
 }
 
 /** Read a watch into editable trigger state. */

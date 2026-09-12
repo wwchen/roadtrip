@@ -5,87 +5,35 @@
 // The body is the campground's week already fused: the backend rolls the
 // campsite streams up per day and answers what to draw, so nothing here is
 // re-derived client-side.
-import type { AvailabilityStatus } from '@/lib/availability-status';
+import type {
+  AvailabilityCacheBlock,
+  AvailabilityCellDto,
+  AvailabilityDayDto,
+  AvailabilityWatchCapabilitiesDto,
+  PoiCampsitesAvailabilityResponseDto,
+} from './generated/api-types';
 import { CREDENTIALS, type RequestOptions } from './http';
 
 const START_DATE_PARAM = 'start_date';
 const END_DATE_PARAM = 'end_date';
 const SITE_TYPE_PARAM = 'site_type';
 
-/** Mirrors AvailabilityWindowState. */
-export type AvailabilityWindowState = 'success' | 'empty' | 'closed_for_season';
+export type { AddToCartState, AvailabilityWindowState } from './generated/api-types';
 
-/** Mirrors AddToCartState — why the cart is or is not reachable for this reader. */
-export type AddToCartState = 'ready' | 'no_credentials' | 'signed_out' | 'unsupported';
-
-/**
- * Mirrors AvailabilityCellDto — one campsite on one date.
- *
- * `watchable` is the backend's whole answer to "could a watch be created here":
- * the status, the provider's polling support and the booking window are already
- * folded in.
- */
-export interface AvailabilityCell {
-  status: AvailabilityStatus;
-  watchable: boolean;
-}
+export type AvailabilityCell = AvailabilityCellDto;
+export type AvailabilityDay = AvailabilityDayDto;
+export type AvailabilityCache = AvailabilityCacheBlock;
+export type WatchCapabilities = AvailabilityWatchCapabilitiesDto;
+export type PoiCampsitesAvailabilityResponse = PoiCampsitesAvailabilityResponseDto;
 
 /**
- * Mirrors AvailabilityDayDto.
- *
- * `status` is the campground rollup over `cells` and `watchable` is true when any
- * cell is. JSON object keys are strings, so `cells` is keyed by the campsite id
- * as text.
+ * The provider's season block rides the wire unparsed, so `reopens_on` is
+ * narrowed here rather than asserted at the one call site that reads it.
  */
-export interface AvailabilityDay {
-  date: string;
-  status: AvailabilityStatus;
-  watchable: boolean;
-  cells: Record<string, AvailabilityCell>;
-}
-
-/** Mirrors AvailabilityCacheBlock. */
-export interface AvailabilityCache {
-  hit: boolean;
-  age_seconds: number;
-  ttl_seconds: number;
-}
-
-/** The only field of a provider's season block anything reads. */
-export interface SeasonBlock {
-  reopens_on?: string | null;
-  [key: string]: unknown;
-}
-
-/** Mirrors AvailabilityWatchCapabilitiesDto. */
-export interface WatchCapabilities {
-  trigger_kinds: string[];
-  add_to_cart: {
-    state: AddToCartState;
-    /** Whose cart the state is about — not always the POI's serving provider. */
-    provider?: string | null;
-    provider_display?: string | null;
-  };
-}
-
-/** Mirrors PoiCampsitesAvailabilityResponseDto — the 200 body. */
-export interface PoiCampsitesAvailabilityResponse {
-  poi_id: number;
-  start_date: string;
-  end_date: string;
-  /**
-   * The provider's booking horizon: the last date the picker may offer. Null
-   * when no provider claims the campground, which leaves the picker uncapped
-   * rather than capped at a guess.
-   */
-  latest_date?: string | null;
-  state: AvailabilityWindowState;
-  /** Present only when `state` is `closed_for_season`. */
-  season?: SeasonBlock | null;
-  /** The stalest freshness block across the campsite streams. */
-  cache?: AvailabilityCache | null;
-  days: AvailabilityDay[];
-  watch_capabilities: WatchCapabilities;
+export function seasonReopensOn(season: unknown): string | undefined {
+  if (!season || typeof season !== 'object') return undefined;
+  const value = (season as Record<string, unknown>).reopens_on;
+  return typeof value === 'string' ? value : undefined;
 }
 
 export interface PoiCampsitesAvailabilityParams extends RequestOptions {

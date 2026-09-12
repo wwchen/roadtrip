@@ -1,30 +1,19 @@
+import type { GeocodeResponseDto, GeocodeResultDto } from './generated/api-types';
 import type { RequestOptions } from './http';
 
 const GEOCODE_URL = '/api/geocode';
 const DEFAULT_LIMIT = 5;
 const DEFAULT_AUTOCOMPLETE = true;
 
-/** Mirrors GeocodeResultDto. */
-export interface GeocodeResult {
-  id: string;
-  place_name: string;
-  place_type: string;
-  lng: number;
-  lat: number;
-  /**
-   * `[west, south, east, north]`, present only for a feature the upstream
-   * reports an extent for — a country, a region, a district, a place.
-   *
-   * A flat quad rather than the nested `Bbox` the map uses, because this
-   * mirrors the wire shape; `search-results.ts` is where it becomes a camera.
-   */
-  bbox?: [number, number, number, number];
-}
+/**
+ * `bbox` is `[west, south, east, north]`, present only for a feature the
+ * upstream reports an extent for — a country, a region, a district, a place. A
+ * flat quad rather than the nested `Bbox` the map uses, because this is the wire
+ * shape; `search-results.ts` is where it becomes a camera.
+ */
+export type GeocodeResult = GeocodeResultDto;
 
-/** Mirrors GeocodeResponseDto. */
-export interface GeocodeResponse {
-  results: GeocodeResult[];
-}
+export type GeocodeResponse = GeocodeResponseDto;
 
 export interface GeocodeParams extends RequestOptions {
   autocomplete?: boolean;

@@ -73,11 +73,6 @@ describe('watchSlackChannel', () => {
   ])('is empty for the config %j', (config) => {
     expect(watchSlackChannel(watch({ trigger_config: config }))).toBe('');
   });
-
-  test('reads the camelCase form the availability week used internally', () => {
-    const w = { triggerConfig: { slack_notify: { channel: '#camel' } } } as unknown as Partial<Watch>;
-    expect(watchSlackChannel(w)).toBe('#camel');
-  });
 });
 
 describe('watchStopWhenTriggered', () => {
@@ -95,11 +90,6 @@ describe('watchStopWhenTriggered', () => {
     [false, false],
   ])('reads %j', (value, expected) => {
     expect(watchStopWhenTriggered(watch({ stop_when_triggered: value }))).toBe(expected);
-  });
-
-  test('reads the camelCase form', () => {
-    const w = { stopWhenTriggered: false } as unknown as Partial<Watch>;
-    expect(watchStopWhenTriggered(w)).toBe(false);
   });
 });
 

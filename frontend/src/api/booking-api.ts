@@ -4,55 +4,53 @@
 // of seconds is a normal success. No local timeout — aborting would leave a hold
 // that may well have succeeded with nothing watching it.
 
+import type {
+  AddToCartRequestDto,
+  AddToCartResponseDto,
+  ApiErrorSchema,
+} from './generated/api-types';
 import { jsonPostOk, type RequestOptions } from './http';
 
 const ADD_TO_CART_URL = '/api/booking/add-to-cart';
 
-export interface AddToCartFields {
-  /** Numeric on the wire. The backend's DTO is a Long, and the grid carries ids
-   *  as strings — `Number()` at the call site, as `useWatches` does. */
-  campsite_id: number;
-  start_date: string;
-  end_date: string;
-}
+/**
+ * `campsite_id` is numeric on the wire. The backend's DTO is a Long, and the
+ * grid carries ids as strings — `Number()` at the call site, as `useWatches` does.
+ */
+export type AddToCartFields = AddToCartRequestDto;
 
-export interface AddToCartResponse {
-  status: 'completed';
-  /** Where the held site is. Shown to the user; they finish checkout there. */
-  cart_url: string;
-  /** The provider id whose cart it is — not always the one serving availability. */
-  provider: string;
-  /** The booking site as a person reads it — what the toasts name. Optional
-   *  because a rolling deploy runs this frontend against a backend that omits
-   *  the key, and nothing validates the response body. */
-  provider_display?: string;
-}
+export type AddToCartResponse = AddToCartResponseDto;
 
-/** Mirrors the add-to-cart route's ApiErrorSchema, as `HttpError` carries it. */
-export interface AddToCartFailure {
-  /** The backend's own reason, which `settings-errors.ts` maps to copy. */
-  code?: string;
-  /** The adapter that refused. Absent when a gate ran before one was chosen. */
-  provider?: string;
-  /** That adapter's booking site, absent whenever `provider` is. */
-  provider_display?: string;
-}
+/** The add-to-cart route's error envelope, as `HttpError` carries it. */
+export type AddToCartFailure = ApiErrorSchema;
+
+/** The envelope's `error` when the rejection carried none. */
+const UNKNOWN_ERROR = '';
 
 /**
  * Reads a rejected `addToCart` without every caller casting `unknown`.
  *
- * `HttpError` carries the envelope's `provider_display` camel-cased; a raw
- * rejection may still carry the wire spelling, so both are accepted.
+ * `HttpError` carries the envelope's `error` as `code` and its
+ * `provider_display` camel-cased; a raw rejection may still carry the wire
+ * spellings, so both are accepted.
  */
 export function addToCartFailure(err: unknown): AddToCartFailure {
   const carried = err as
-    | { code?: unknown; provider?: string; providerDisplay?: string; provider_display?: string }
+    | {
+        code?: unknown;
+        error?: string;
+        detail?: string;
+        provider?: string;
+        providerDisplay?: string;
+        provider_display?: string;
+      }
     | null
     | undefined;
   return {
     // A `DOMException` carries a *numeric* legacy `code` (`AbortError` is 20),
     // which `settings-errors.ts` would render as "Something went wrong (20)".
-    code: typeof carried?.code === 'string' ? carried.code : undefined,
+    error: typeof carried?.code === 'string' ? carried.code : (carried?.error ?? UNKNOWN_ERROR),
+    detail: carried?.detail,
     provider: carried?.provider,
     provider_display: carried?.providerDisplay ?? carried?.provider_display,
   };

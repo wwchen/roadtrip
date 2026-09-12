@@ -28,7 +28,7 @@ const settingsWith = (booking: Partial<SettingsResponse['booking']>): SettingsRe
   },
   booking: {
     recgov_configured: false,
-    recgov_username: null,
+    recgov_username: undefined,
     ...booking,
   },
 });
@@ -41,8 +41,8 @@ const CONFIGURED = settingsWith({
 const activeStatus: RecgovStatus = {
   configured: true,
   username: 'ada@example.test',
- 
   session: 'active',
+  mfa_pending: false,
 };
 
 interface DemoProps {
@@ -105,7 +105,7 @@ export const Unconfigured: Story = {
   render: () => (
     <Demo
       settings={settingsWith({})}
-      status={{ configured: false, username: null, session: 'not_configured' }}
+      status={{ configured: false, username: undefined, session: 'not_configured', mfa_pending: false }}
     />
   ),
 };

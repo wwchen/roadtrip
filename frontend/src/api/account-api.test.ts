@@ -55,13 +55,13 @@ describe('updateNotifications', () => {
     });
   });
 
-  test('drops a null slack_token', async () => {
+  test('drops an absent slack_token', async () => {
     const fetchStub = stubFetch(jsonResponse({}));
 
     await updateNotifications({
       notification_email: 'a@b.com',
       slack_channel: '#alerts',
-      slack_token: null,
+      slack_token: undefined,
     });
 
     expect(fetchStub.last.body).not.toHaveProperty('slack_token');

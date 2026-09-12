@@ -56,11 +56,11 @@ function fieldsFor(
 const valueOf = (e: Event): string => (e.target as HTMLInputElement).value;
 
 /** Parse the optional POI id into the backend DTO's numeric shape. */
-function parsePoiId(raw: string): number | null {
+function parsePoiId(raw: string): number | undefined {
   const trimmed = raw.trim();
-  if (trimmed === '') return null;
+  if (trimmed === '') return undefined;
   const n = Number(trimmed);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) ? n : undefined;
 }
 
 // LDS fields are seeded once and reseeded by a parent key. Edit mode locks target

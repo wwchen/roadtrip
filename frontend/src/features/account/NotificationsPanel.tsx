@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, SecretField, SeededTextField } from '@ui';
-import type { SettingsResponse } from '@/api/account-api';
+import type { SettingsResponse, UpdateNotificationsFields } from '@/api/account-api';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import { AccountStatusText } from './AccountStatusText';
 import './account.css';
@@ -41,12 +41,15 @@ export function isNotificationsDirty(
   );
 }
 
-/** Port of `buildNotificationsPayload`. */
-export function buildNotificationsPayload(values: NotificationValues): NotificationValues {
+/**
+ * The request body. `slack_token` leaves the editor as null for "unchanged" and
+ * leaves here as absent, which is how the wire says the same thing.
+ */
+export function buildNotificationsPayload(values: NotificationValues): UpdateNotificationsFields {
   return {
     notification_email: values.notification_email,
     slack_channel: values.slack_channel,
-    slack_token: values.slack_token,
+    slack_token: values.slack_token ?? undefined,
   };
 }
 

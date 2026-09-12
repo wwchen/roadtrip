@@ -25,14 +25,14 @@ const settings = (over: Partial<SettingsResponse['booking']> = {}): SettingsResp
     theme: 'system',
   },
   notifications: {
-    notification_email: null,
-    slack_channel: null,
+    notification_email: undefined,
+    slack_channel: undefined,
     slack_configured: false,
-    slack_token_hint: null,
+    slack_token_hint: undefined,
   },
   booking: {
     recgov_configured: false,
-    recgov_username: null,
+    recgov_username: undefined,
     ...over,
   },
 });
@@ -45,8 +45,8 @@ const CONFIGURED = {
 const activeStatus: RecgovStatus = {
   configured: true,
   username: 'ada@example.test',
- 
   session: 'active',
+  mfa_pending: false,
 };
 
 interface Handlers {
@@ -96,7 +96,7 @@ describe('the credential slice', () => {
     expect(values.recgov_username).toBe('ada@example.test');
     expect(values.recgov_password).toBeNull();
     expect(isBookingDirty(s, values)).toBe(false);
-    expect(buildBookingPayload(values).recgov_password).toBeNull();
+    expect(buildBookingPayload(values).password).toBeUndefined();
   });
 
   test('typing a username marks the form dirty', async () => {
@@ -130,7 +130,7 @@ describe('the credential slice', () => {
   test('the three not-active session states read differently', () => {
     const row = (session: RecgovStatus['session']) =>
       renderPanel(settings(CONFIGURED), {
-        status: { configured: true, username: 'ada@example.test', session },
+        status: { configured: true, username: 'ada@example.test', session, mfa_pending: false },
       });
 
     row('not_logged_in');
@@ -179,7 +179,7 @@ describe('the credential slice', () => {
 
     await userEvent.type(screen.getByLabelText('Recreation.gov password'), 'hunter2');
 
-    expect(buildBookingPayload(state.values).recgov_password).toBe('hunter2');
+    expect(buildBookingPayload(state.values).password).toBe('hunter2');
     expect(isBookingDirty(s, state.values)).toBe(true);
   });
 });
@@ -187,7 +187,7 @@ describe('the credential slice', () => {
 describe('the session row', () => {
   test('unconfigured', () => {
     renderPanel(settings(), {
-      status: { configured: false, username: null, session: 'not_configured' },
+      status: { configured: false, username: undefined, session: 'not_configured', mfa_pending: false },
     });
 
     expect(screen.getByText('Not configured')).toBeInTheDocument();

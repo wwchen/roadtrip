@@ -88,17 +88,17 @@ describe('relativeTime', () => {
 
 describe('watchFallbackName', () => {
   test('uses the campsite name when there is no POI', () => {
-    expect(watchFallbackName(watch({ poi_id: null, campsite: campsite() }))).toBe('Site 12');
+    expect(watchFallbackName(watch({ poi_id: undefined, campsite: campsite() }))).toBe('Site 12');
   });
 
   test('prefixes the loop when the campsite has one', () => {
     expect(
-      watchFallbackName(watch({ poi_id: null, campsite: campsite({ loop_name: 'Loop A' }) })),
+      watchFallbackName(watch({ poi_id: undefined, campsite: campsite({ loop_name: 'Loop A' }) })),
     ).toBe('Loop A / Site 12');
   });
 
   test('falls back to the watch id', () => {
-    expect(watchFallbackName(watch({ id: 9, poi_id: null, campsite: null }))).toBe('Watch #9');
+    expect(watchFallbackName(watch({ id: 9, poi_id: undefined, campsite: undefined }))).toBe('Watch #9');
   });
 });
 
@@ -252,7 +252,7 @@ describe('sorting', () => {
   test('keeps blanks last in both directions', async () => {
     const withBlanks = [
       watch({ id: 1, last_run_at: '2026-08-01T00:00:00Z' }),
-      watch({ id: 2, last_run_at: null }),
+      watch({ id: 2, last_run_at: undefined }),
       watch({ id: 3, last_run_at: '2026-08-05T00:00:00Z' }),
     ];
     renderTable(withBlanks, { poiNames: new Map() });

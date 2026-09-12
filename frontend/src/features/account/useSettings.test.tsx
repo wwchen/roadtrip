@@ -54,7 +54,7 @@ describe('rec.gov credential mutations', () => {
   test('saving the login invalidates the same two', async () => {
     const save = mount(() => useSaveBooking());
 
-    save.result.current.mutate({ recgov_username: 'ada@example.test', recgov_password: 'pw' });
+    save.result.current.mutate({ username: 'ada@example.test', password: 'pw' });
 
     await waitFor(() => expect(save.result.current.isSuccess).toBe(true));
     expect(save.invalidated).toContainEqual(queryKeys.settings());
