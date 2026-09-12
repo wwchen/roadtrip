@@ -3,7 +3,7 @@ package ca.floo.roadtrip.apigen
 /** One property of a generated interface. */
 internal data class TsField(
     val name: String,
-    val type: String,
+    val type: WireType,
     val optional: Boolean,
 )
 

@@ -29,36 +29,75 @@ private const val GENERATED_HEADER =
 @Suppress("TopLevelPropertyNaming")
 private val IDENTIFIER = Regex("^[A-Za-z_$][A-Za-z0-9_$]*$")
 
+/** Everything one walk of the contract produced. Rows stay in declaration order. */
+internal data class ContractWalk(
+    val interfaces: List<TsInterface>,
+    val enums: List<TsEnum>,
+    val rows: List<TsEndpoint>,
+)
+
 /**
- * The whole generated file, for [endpoints]. Deterministic: declarations sorted
- * by name, fields in declaration order, endpoints sorted by path then method.
+ * One walk of the descriptor graph from every row of [endpoints], under both
+ * optionality rules, sharing one name-collision map.
+ *
+ * The single source both renderers read: [generateApiTypes] writes the
+ * TypeScript from it and `OpenApiContractDocument` writes `components/schemas`
+ * and the per-operation bodies from the same result, so a schema can never name
+ * a type the TypeScript does not declare. Rows are **not** sorted here: the
+ * document builder zips them against `ApiContract.endpoints` positionally.
  */
-internal fun generateApiTypes(endpoints: List<ApiEndpoint> = ApiContract.endpoints): String {
+internal fun walkContract(endpoints: List<ApiEndpoint> = ApiContract.endpoints): ContractWalk {
     val declaredBy = HashMap<String, String>()
     val responses = DescriptorWalk(Optionality.RESPONSE, declaredBy)
     val requests = DescriptorWalk(Optionality.REQUEST, declaredBy)
-    // The row takes the names the walks claimed, so the endpoint literal can
-    // never name a type the collision map has not approved.
+    // The row takes the names the walks claimed, so no consumer can name a type
+    // the collision map has not approved.
     val rows =
         endpoints.map { endpoint ->
             TsEndpoint(
                 method = endpoint.method.wireValue,
                 path = endpoint.path,
-                request = endpoint.request?.let { requests.typeOf(it.descriptor()) },
-                response = endpoint.response?.let { responses.typeOf(it.descriptor()) },
+                request = endpoint.request?.let { requests.declaredName(it) },
+                response = endpoint.response?.let { responses.declaredName(it) },
                 errors =
                     endpoint.errors
-                        .map { responses.typeOf(it.descriptor()) }
+                        .map { responses.declaredName(it) }
                         .distinct()
                         .sorted(),
             )
         }
-    return render(
+    return ContractWalk(
         interfaces = merge(responses.interfaces, requests.interfaces),
         enums = (responses.enums + requests.enums).values.toList(),
-        endpoints = rows.sortedWith(compareBy({ it.path }, { it.method })),
+        rows = rows,
     )
 }
+
+/**
+ * The whole generated file, for [endpoints]. Deterministic: declarations sorted
+ * by name, fields in declaration order, endpoints sorted by path then method.
+ */
+internal fun generateApiTypes(endpoints: List<ApiEndpoint> = ApiContract.endpoints): String {
+    val walk = walkContract(endpoints)
+    return render(
+        interfaces = walk.interfaces,
+        enums = walk.enums,
+        endpoints = walk.rows.sortedWith(compareBy({ it.path }, { it.method })),
+    )
+}
+
+/** The claimed declaration name for a contract row's class, walking it on first mention. */
+private fun DescriptorWalk.declaredName(kClass: KClass<*>): String =
+    when (val type = typeOf(kClass.descriptor())) {
+        is WireType.Ref -> type.name
+        is WireType.EnumRef -> type.name
+        else ->
+            throw ApiTypeGenerationException(
+                "${kClass.qualifiedName} is named by a contract row, but its descriptor is a $type " +
+                    "rather than a declared class or enum. A request, response or error body must be a " +
+                    "@Serializable class or enum.",
+            )
+    }
 
 private fun KClass<*>.descriptor(): SerialDescriptor {
     // A contract row names a KClass, which carries no type arguments, so
@@ -120,7 +159,7 @@ private fun renderInterface(tsInterface: TsInterface): String =
     buildString {
         append("export interface ${tsInterface.name} {\n")
         tsInterface.fields.forEach { field ->
-            append("  ${key(field.name)}${if (field.optional) "?" else ""}: ${field.type};\n")
+            append("  ${key(field.name)}${if (field.optional) "?" else ""}: ${tsTypeOf(field.type)};\n")
         }
         append("}\n")
     }

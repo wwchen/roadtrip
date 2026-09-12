@@ -8,16 +8,6 @@ import kotlinx.serialization.descriptors.SerialKind
 import kotlinx.serialization.descriptors.StructureKind
 import kotlinx.serialization.descriptors.nonNullOriginal
 
-private const val TS_STRING = "string"
-
-/** Every Kotlin number, including `Double` — and a `Double` on the wire is a *finite* one: the encoder rejects NaN/Infinity. */
-private const val TS_NUMBER = "number"
-private const val TS_BOOLEAN = "boolean"
-private const val TS_UNKNOWN = "unknown"
-private const val TS_UNKNOWN_RECORD = "Record<string, unknown>"
-private const val TS_UNKNOWN_ARRAY = "unknown[]"
-private const val TS_JSON_PRIMITIVE = "string | number | boolean"
-
 private const val JSON_PACKAGE = "kotlinx.serialization.json."
 private const val JSON_ELEMENT = "kotlinx.serialization.json.JsonElement"
 private const val JSON_OBJECT = "kotlinx.serialization.json.JsonObject"
@@ -74,29 +64,29 @@ internal class DescriptorWalk(
     private val inProgress = HashSet<String>()
 
     /**
-     * Walks [descriptor] and everything it reaches; returns its TypeScript
-     * spelling. [within] is the `Class.field` this descriptor was reached
-     * through, so a refusal deep inside a collection still names the DTO.
+     * Walks [descriptor] and everything it reaches; returns its wire type.
+     * [within] is the `Class.field` this descriptor was reached through, so a
+     * refusal deep inside a collection still names the DTO.
      */
     fun typeOf(
         descriptor: SerialDescriptor,
         within: String = descriptor.serialName,
-    ): String {
+    ): WireType {
         val target = descriptor.nonNullOriginal
         embeddedJsonType(target)?.let { return it }
         // A value class is encoded as the one value it wraps, so that is its wire type.
         if (target.isInline) return typeOf(target.getElementDescriptor(INLINE_ELEMENT), within)
         return when (val kind = target.kind) {
-            PrimitiveKind.STRING, PrimitiveKind.CHAR -> TS_STRING
-            PrimitiveKind.BOOLEAN -> TS_BOOLEAN
-            PrimitiveKind.BYTE, PrimitiveKind.SHORT, PrimitiveKind.INT,
-            PrimitiveKind.LONG, PrimitiveKind.FLOAT, PrimitiveKind.DOUBLE,
-            -> TS_NUMBER
-            StructureKind.LIST -> "${elementType(target, LIST_ELEMENT, within)}[]"
+            PrimitiveKind.STRING, PrimitiveKind.CHAR -> WireType.Str
+            PrimitiveKind.BOOLEAN -> WireType.Bool
+            PrimitiveKind.BYTE, PrimitiveKind.SHORT, PrimitiveKind.INT, PrimitiveKind.LONG ->
+                WireType.Num(integer = true)
+            PrimitiveKind.FLOAT, PrimitiveKind.DOUBLE -> WireType.Num(integer = false)
+            StructureKind.LIST -> WireType.ArrayOf(elementType(target, LIST_ELEMENT, within))
             StructureKind.MAP ->
-                "Record<${mapKeyType(target, within)}, ${elementType(target, MAP_VALUE_ELEMENT, within)}>"
-            SerialKind.ENUM -> enumType(target)
-            StructureKind.CLASS, StructureKind.OBJECT -> interfaceType(target)
+                WireType.MapOf(mapKeyType(target, within), elementType(target, MAP_VALUE_ELEMENT, within))
+            SerialKind.ENUM -> WireType.EnumRef(enumType(target))
+            StructureKind.CLASS, StructureKind.OBJECT -> WireType.Ref(interfaceType(target))
             is PolymorphicKind ->
                 throw ApiTypeGenerationException(
                     "${target.serialName} is sealed or polymorphic. Nothing on the wire is today, and " +
@@ -118,7 +108,7 @@ internal class DescriptorWalk(
         container: SerialDescriptor,
         index: Int,
         within: String,
-    ): String {
+    ): WireType {
         val element = container.getElementDescriptor(index)
         if (element.isNullable) {
             throw ApiTypeGenerationException(
@@ -141,11 +131,11 @@ internal class DescriptorWalk(
     private fun mapKeyType(
         container: SerialDescriptor,
         within: String,
-    ): String {
+    ): WireType {
         val key = container.getElementDescriptor(MAP_KEY_ELEMENT)
         return when (val kind = key.nonNullOriginal.kind) {
-            is PrimitiveKind -> TS_STRING
-            SerialKind.ENUM -> enumType(key.nonNullOriginal)
+            is PrimitiveKind -> WireType.Str
+            SerialKind.ENUM -> WireType.EnumRef(enumType(key.nonNullOriginal))
             else ->
                 throw ApiTypeGenerationException(
                     "$within is a map keyed by ${key.serialName}, whose serial kind is $kind. JSON " +
@@ -226,13 +216,13 @@ internal class DescriptorWalk(
         return name
     }
 
-    private fun embeddedJsonType(descriptor: SerialDescriptor): String? {
+    private fun embeddedJsonType(descriptor: SerialDescriptor): WireType? {
         if (!descriptor.serialName.startsWith(JSON_PACKAGE)) return null
         return when (descriptor.serialName) {
-            JSON_ELEMENT -> TS_UNKNOWN
-            JSON_OBJECT -> TS_UNKNOWN_RECORD
-            JSON_ARRAY -> TS_UNKNOWN_ARRAY
-            JSON_PRIMITIVE -> TS_JSON_PRIMITIVE
+            JSON_ELEMENT -> WireType.Any
+            JSON_OBJECT -> WireType.AnyObject
+            JSON_ARRAY -> WireType.AnyArray
+            JSON_PRIMITIVE -> WireType.Primitive
             else ->
                 throw ApiTypeGenerationException(
                     "${descriptor.serialName} is a kotlinx.serialization.json type with no TypeScript " +
