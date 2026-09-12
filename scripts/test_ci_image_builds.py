@@ -9,6 +9,10 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
+AWAIT_IMAGES_ACTION = (
+    ROOT / ".github" / "actions" / "await-images" / "action.yml"
+).read_text()
+
 # The shipped shell scripts address their siblings through ${SCRIPT_DIR} and
 # the release root through ${REPO_ROOT}. On the deploy host both resolve
 # inside the unpacked release, so a file the manifest omits is simply absent
@@ -140,6 +144,43 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("setRequest({ operation: 'skip'", resolve_script)
         self.assertIn("operation: 'start'", resolve_script)
 
+    def test_deploy_resolves_every_release_image_before_touching_the_host(self) -> None:
+        # A workflow_dispatch deploy bypasses the `workflow_run` conclusion
+        # guard, so nothing else establishes that CI has published the tags
+        # the host is about to pull. Without this the failure lands on the
+        # host as a containerd "not found", after the data image has been
+        # pulled and a 30-minute volume guard parked.
+        deploy = workflow("deploy.yml")
+        job = deploy["jobs"]["deploy"]
+        step_names = [step.get("name", "") for step in job["steps"]]
+        await_step = step_by_name(job, "Await the release images")
+
+        self.assertEqual("read", deploy["permissions"]["packages"])
+        self.assertEqual("./.github/actions/await-images", await_step["uses"])
+        self.assertLess(
+            step_names.index("Await the release images"),
+            step_names.index("Reach the deploy host"),
+        )
+        # All three, because deploy.sh pulls all three on the host.
+        images = await_step["with"]["images"]
+        for repository, sha in (
+            ("backend", "env.DEPLOY_SHA"),
+            ("recgov-companion", "env.DEPLOY_COMPANION_SHA"),
+            ("data", "env.DEPLOY_DATA_SHA"),
+        ):
+            self.assertIn(f"/{repository}:${{{{ {sha} }}}}", images)
+
+    def test_the_image_wait_is_shared_rather_than_copied(self) -> None:
+        # Two call sites block on GHCR tags; the poll loop lives in one place
+        # so a fix to either reaches both.
+        sandbox_action = (ROOT / ".github" / "actions" / "sandbox" / "action.yml").read_text()
+        deploy = (ROOT / ".github" / "workflows" / "deploy.yml").read_text()
+
+        self.assertIn("docker manifest inspect", AWAIT_IMAGES_ACTION)
+        for caller in (sandbox_action, deploy):
+            self.assertIn("uses: ./.github/actions/await-images", caller)
+            self.assertNotIn("docker manifest inspect", caller)
+
     def test_sandbox_status_comment_updates_before_image_wait(self) -> None:
         sandbox = workflow("sandbox.yml")
         sweep = workflow("sandbox-sweep.yml")
@@ -163,7 +204,10 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("SANDBOX_TRIGGER", status_step["env"])
         self.assertNotIn("SANDBOX_PR_NUMBER", status_step["env"])
         self.assertNotIn("SANDBOX_PR_NUMBER", sandbox_action)
-        self.assertIn("Log in to GHCR", sandbox_action)
+        # The GHCR login moved into the shared await-images action; the
+        # sandbox reaches it through that action rather than inlining it.
+        self.assertIn("uses: ./.github/actions/await-images", sandbox_action)
+        self.assertIn("Log in to GHCR", AWAIT_IMAGES_ACTION)
         self.assertIn("Wait for GHCR images", sandbox_action)
         self.assertLess(
             sandbox_action.index("- name: Wait for GHCR images"),

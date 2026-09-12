@@ -14,6 +14,7 @@ concurrency:
 permissions:
   contents: read
   actions: read
+  packages: read
 
 env:
   DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
@@ -36,6 +37,22 @@ jobs:
         run: |
           echo "DEPLOY_DATA_SHA=$(git rev-parse HEAD:data)" >> "$GITHUB_ENV"
           echo "DEPLOY_COMPANION_SHA=$(git rev-parse HEAD:companion)" >> "$GITHUB_ENV"
+
+      # workflow_dispatch skips the `workflow_run` guard above, so a manual
+      # deploy can outrun CI's image push and fail on the host with a bare
+      # containerd "not found" -- after it has already pulled the data image
+      # and parked a 30-minute volume guard. Resolving the tags here fails in
+      # the runner instead, and waits rather than fails while CI is still
+      # pushing. On the workflow_run path CI has already succeeded, so this
+      # returns on its first attempt.
+      - name: Await the release images
+        uses: ./.github/actions/await-images
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          images: |
+            ghcr.io/${{ github.repository }}/backend:${{ env.DEPLOY_SHA }}
+            ghcr.io/${{ github.repository }}/recgov-companion:${{ env.DEPLOY_COMPANION_SHA }}
+            ghcr.io/${{ github.repository }}/data:${{ env.DEPLOY_DATA_SHA }}
 
       - name: Reach the deploy host
         uses: ./.github/actions/deploy-host-access

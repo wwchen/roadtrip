@@ -1,0 +1,63 @@
+name: Await GHCR images
+description: >-
+  Block until every named image tag resolves on GHCR, so a deploy fails in the
+  runner with the tag it is missing rather than on the host with a containerd
+  "not found".
+
+inputs:
+  images:
+    description: Newline-separated fully-qualified image references
+    required: true
+  github-token:
+    description: Token used to read GHCR images
+    required: true
+  max-attempts:
+    description: How many times to poll before giving up
+    required: false
+    default: '60'
+  wait-seconds:
+    description: Delay between polls
+    required: false
+    default: '20'
+
+runs:
+  using: composite
+  steps:
+    - name: Log in to GHCR
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v3.4.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.github-token }}
+
+    - name: Wait for GHCR images
+      shell: bash
+      env:
+        AWAIT_IMAGES: ${{ inputs.images }}
+        MAX_ATTEMPTS: ${{ inputs.max-attempts }}
+        WAIT_SECONDS: ${{ inputs.wait-seconds }}
+      run: |
+        set -euo pipefail
+
+        images=()
+        while read -r image; do
+          [ -n "$image" ] && images+=("$image")
+        done <<< "$AWAIT_IMAGES"
+        if [ "${#images[@]}" -eq 0 ]; then
+          echo "::error::no images named to wait for"
+          exit 1
+        fi
+
+        missing=("${images[@]}")
+        for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+          missing=()
+          for image in "${images[@]}"; do
+            docker manifest inspect "$image" >/dev/null 2>&1 || missing+=("$image")
+          done
+          [ "${#missing[@]}" -eq 0 ] && exit 0
+          printf 'Attempt %s/%s; waiting for %s\n' \
+            "$attempt" "$MAX_ATTEMPTS" "${missing[*]}"
+          [ "$attempt" -lt "$MAX_ATTEMPTS" ] && sleep "$WAIT_SECONDS"
+        done
+        printf 'Images were not published: %s\n' "${missing[*]}" >&2
+        exit 1
