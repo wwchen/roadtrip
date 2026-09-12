@@ -90,6 +90,21 @@ class AspiraCampgroundsEtlTest {
             parentName = "Banff",
         )
 
+    // A campground leaf whose name is a strict token subset of the seeded
+    // "Two Jack Lakeside" key: two of the three union tokens overlap, so it
+    // misses exact lookup and lands as a fuzzy match above the default
+    // threshold, carrying that overlap as its score.
+    private val campgroundFuzzyName =
+        AspiraLeaf(
+            name = "Two Jack",
+            transactionLocationId = 1006L,
+            mapId = -2147483644L,
+            resourceLocationId = 9006L,
+            parentName = null,
+        )
+
+    private val twoOfThreeTokenOverlap = 2.0 / 3.0
+
     // A campground leaf whose own name misses geometry but whose parent park
     // centroid matches. This is the load-bearing correctness claim of the
     // change: dropping park-container leaves is only safe because each park's
@@ -391,6 +406,24 @@ class AspiraCampgroundsEtlTest {
         val extras = campground.sourcePayload!!.jsonObject
         assertEquals("Two Jack Lakeside", extras["name"]!!.jsonPrimitive.content)
         assertNull(extras["match_kind"], "match_kind now lives in geometry_provenance, not the payload blob")
+    }
+
+    @Test
+    fun `a fuzzy match stamps its kind, the matched key and the Jaccard score`() {
+        val campground = campgrounds(dtoOf(campgroundFuzzyName)).single()
+
+        assertEquals(
+            GeometryProvenance(
+                matchKind = "fuzzy",
+                source = "test-geom",
+                matchedName = "two jack lakeside",
+                score = twoOfThreeTokenOverlap,
+            ),
+            campground.geometryProvenance,
+        )
+        // The point came from the key it fuzzy-matched, not the other seeded entry.
+        assertEquals(-115.49, campground.longitude)
+        assertEquals(51.22, campground.latitude)
     }
 
     @Test
