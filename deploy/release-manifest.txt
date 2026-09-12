@@ -6,6 +6,7 @@ grafana
 postgres-init
 scripts/cloudflare_sandbox.sh
 scripts/deploy.sh
+scripts/reclaim.sh
 scripts/sandbox-private-tables.txt
 scripts/sandbox_scrub.sql
 scripts/sandbox_snapshot.sh
