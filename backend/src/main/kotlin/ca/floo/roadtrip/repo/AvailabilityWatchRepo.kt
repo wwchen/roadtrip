@@ -4,7 +4,7 @@ import ca.floo.roadtrip.db.generated.tables.AvailabilityRun.Companion.AVAILABILI
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatch.Companion.AVAILABILITY_WATCH
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchPoller.Companion.AVAILABILITY_WATCH_POLLER
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchTarget.Companion.AVAILABILITY_WATCH_TARGET
-import ca.floo.roadtrip.service.availability.WatchStatus
+import ca.floo.roadtrip.model.availability.WatchStatus
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject

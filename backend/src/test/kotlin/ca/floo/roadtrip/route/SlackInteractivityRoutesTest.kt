@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.route.api.slack.slackInteractivityRoute
-import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
 import ca.floo.roadtrip.service.notification.slack.SlackResponseSender

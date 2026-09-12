@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.notification.slack
 
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
-import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject

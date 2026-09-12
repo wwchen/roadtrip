@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route.api
 
+import ca.floo.roadtrip.model.api.BookingActionStatus
 import ca.floo.roadtrip.model.booking.BookingFailureCategory
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.UserId
@@ -387,4 +388,9 @@ class BookingRoutesTest {
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             assertEquals(0, service.calls)
         }
+
+    @Test
+    fun `the booking action vocabulary keeps its wire string`() {
+        assertEquals(listOf("completed"), BookingActionStatus.entries.map { it.wireValue })
+    }
 }

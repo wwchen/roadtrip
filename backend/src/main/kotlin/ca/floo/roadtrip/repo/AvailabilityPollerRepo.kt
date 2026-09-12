@@ -4,8 +4,8 @@ import ca.floo.roadtrip.db.generated.tables.AvailabilityPoller.Companion.AVAILAB
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatch.Companion.AVAILABILITY_WATCH
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchPoller.Companion.AVAILABILITY_WATCH_POLLER
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.scheduler.Schedulable
-import ca.floo.roadtrip.service.availability.WatchStatus
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL

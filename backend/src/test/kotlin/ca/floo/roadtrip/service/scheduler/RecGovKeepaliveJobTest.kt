@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.scheduler
 
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.observability.AtcOutcome
@@ -8,7 +9,6 @@ import ca.floo.roadtrip.observability.PollSkipReason
 import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
-import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.booking.RecentAtcFires
 import ca.floo.roadtrip.service.settings.CompanionActionResult
 import ca.floo.roadtrip.service.settings.CompanionLoginResult

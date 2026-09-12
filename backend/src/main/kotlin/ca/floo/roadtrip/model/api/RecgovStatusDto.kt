@@ -4,30 +4,49 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /** Wire vocabulary for [RecgovStatusDto.session]. */
-object RecgovSessionState {
-    const val NOT_CONFIGURED = "not_configured"
-    const val ACTIVE = "active"
+@Serializable
+enum class RecgovSessionState(
+    val wireValue: String,
+) {
+    @SerialName("not_configured")
+    NOT_CONFIGURED("not_configured"),
+
+    @SerialName("active")
+    ACTIVE("active"),
 
     /**
      * Credentials are saved but this profile has never been signed in — the
      * companion has no session to have lost. Distinct from [EXPIRED] because
      * the user has not failed at anything yet; they simply have not started.
      */
-    const val NOT_LOGGED_IN = "not_logged_in"
-    const val EXPIRED = "expired"
+    @SerialName("not_logged_in")
+    NOT_LOGGED_IN("not_logged_in"),
+
+    @SerialName("expired")
+    EXPIRED("expired"),
 
     /** The companion answered, but its own health check threw. Not the user's problem. */
-    const val CHECK_FAILED = "check_failed"
+    @SerialName("check_failed")
+    CHECK_FAILED("check_failed"),
 
     /** The companion could not be asked. Never an error — the row just says so. */
-    const val COMPANION_UNAVAILABLE = "companion_unavailable"
+    @SerialName("companion_unavailable")
+    COMPANION_UNAVAILABLE("companion_unavailable"),
 }
 
 /** Wire vocabulary for [RecgovLoginResponseDto.status]. */
-object RecgovLoginStatus {
-    const val OK = "ok"
-    const val MFA_REQUIRED = "mfa_required"
-    const val FAILED = "failed"
+@Serializable
+enum class RecgovLoginStatus(
+    val wireValue: String,
+) {
+    @SerialName("ok")
+    OK("ok"),
+
+    @SerialName("mfa_required")
+    MFA_REQUIRED("mfa_required"),
+
+    @SerialName("failed")
+    FAILED("failed"),
 }
 
 /**
@@ -41,8 +60,7 @@ object RecgovLoginStatus {
 data class RecgovStatusDto(
     val configured: Boolean,
     val username: String?,
-    /** One of [RecgovSessionState]. */
-    val session: String,
+    val session: RecgovSessionState,
     val detail: String? = null,
     /**
      * True while a login of this user's is waiting on a verification code.
@@ -82,8 +100,7 @@ data class RecgovMfaRequest(
  */
 @Serializable
 data class RecgovLoginResponseDto(
-    /** One of [RecgovLoginStatus]. */
-    val status: String,
+    val status: RecgovLoginStatus,
     @SerialName("challenge_id") val challengeId: String? = null,
     @SerialName("expires_at") val expiresAt: String? = null,
     val error: String? = null,

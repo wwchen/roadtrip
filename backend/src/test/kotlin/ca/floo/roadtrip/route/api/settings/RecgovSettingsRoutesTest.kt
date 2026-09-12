@@ -275,7 +275,7 @@ class RecgovSettingsRoutesTest {
 
             assertEquals(HttpStatusCode.OK, resp.status)
             val json = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals(RecgovLoginStatus.MFA_REQUIRED, json["status"]!!.jsonPrimitive.content)
+            assertEquals(RecgovLoginStatus.MFA_REQUIRED.wireValue, json["status"]!!.jsonPrimitive.content)
             assertEquals("chal-1", json["challenge_id"]!!.jsonPrimitive.content)
         }
 
@@ -294,7 +294,7 @@ class RecgovSettingsRoutesTest {
 
             assertEquals(HttpStatusCode.OK, resp.status)
             val json = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals(RecgovLoginStatus.FAILED, json["status"]!!.jsonPrimitive.content)
+            assertEquals(RecgovLoginStatus.FAILED.wireValue, json["status"]!!.jsonPrimitive.content)
             assertEquals(RecGovSessionCodes.CAPTCHA_REQUIRED, json["error"]!!.jsonPrimitive.content)
         }
 
@@ -403,9 +403,21 @@ class RecgovSettingsRoutesTest {
 
             assertEquals(HttpStatusCode.OK, resp.status)
             val json = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals(RecgovSessionState.COMPANION_UNAVAILABLE, json["session"]!!.jsonPrimitive.content)
+            assertEquals(RecgovSessionState.COMPANION_UNAVAILABLE.wireValue, json["session"]!!.jsonPrimitive.content)
             assertTrue(json["configured"]!!.jsonPrimitive.content.toBoolean())
         }
+
+    @Test
+    fun `the session vocabulary keeps its wire strings`() {
+        assertEquals(
+            listOf("not_configured", "active", "not_logged_in", "expired", "check_failed", "companion_unavailable"),
+            RecgovSessionState.entries.map { it.wireValue },
+        )
+        assertEquals(
+            listOf("ok", "mfa_required", "failed"),
+            RecgovLoginStatus.entries.map { it.wireValue },
+        )
+    }
 
     private fun errorCode(body: String): String? =
         Json

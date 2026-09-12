@@ -1147,7 +1147,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             triggerKinds = emptyList(),
             triggerConfig = kotlinx.serialization.json.JsonObject(emptyMap()),
             stopWhenTriggered = false,
-            status = ca.floo.roadtrip.service.availability.WatchStatus.ACTIVE,
+            status = ca.floo.roadtrip.model.availability.WatchStatus.ACTIVE,
             createdAt = now(),
             updatedAt = now(),
         )

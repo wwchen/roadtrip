@@ -9,13 +9,13 @@ import ca.floo.roadtrip.model.api.RecgovStatusDto
 import ca.floo.roadtrip.model.api.RecgovVerifyResponseDto
 import ca.floo.roadtrip.model.api.UpdateRecgovRequest
 import ca.floo.roadtrip.model.api.redact
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.BookingCredentials
 import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
-import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.security.SecretCipher
 import org.slf4j.LoggerFactory
 import java.time.Clock

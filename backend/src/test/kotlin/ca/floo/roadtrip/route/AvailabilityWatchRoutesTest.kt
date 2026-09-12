@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.api.MAGIC_LINK_TOKEN_PARAM
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.Principal
@@ -1816,6 +1817,13 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val getAfter = client.get(watchPath(id)) { asUser(ADMIN_TOKEN) }
             assertEquals(HttpStatusCode.NotFound, getAfter.status)
         }
+
+    @Test
+    fun `the watch status vocabulary keeps its wire strings`() {
+        assertEquals(listOf("active", "paused", "done"), WatchStatus.entries.map { it.wireValue })
+        assertEquals(WatchStatus.PAUSED, WatchStatus.parse("paused"))
+        assertEquals(null, WatchStatus.parse("retired"))
+    }
 
     private fun seedPoi(
         sourceId: String,

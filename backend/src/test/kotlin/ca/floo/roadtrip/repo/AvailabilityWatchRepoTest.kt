@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.auth.UserId
-import ca.floo.roadtrip.service.availability.WatchStatus
 import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

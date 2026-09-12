@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.model.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.model.api.AvailabilityWatchTargetSchema
 import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 
 private const val MIN_CADENCE_SEC = 5
@@ -53,15 +54,7 @@ internal object AvailabilityWatchRequestMapper {
         }
         validateCadence(req.cadenceSec)?.let { return it }
         req.triggerKinds?.let { validateTriggerKinds(it)?.let { error -> return error } }
-        val status =
-            req.status?.let {
-                WatchStatus.parse(it)
-                    ?: return WatchRequestMapping.Invalid(
-                        error = "invalid_status",
-                        detail = "status must be active, paused, or done",
-                    )
-            }
-        return valid(ParsedUpdateWatchRequest(targets = null, dateWindow = null, status = status))
+        return valid(ParsedUpdateWatchRequest(targets = null, dateWindow = null, status = req.status))
     }
 
     private fun createTargets(req: AvailabilityWatchCreateRequest): WatchRequestMapping<List<AvailabilityWatchTargetRepo.TargetInput>> {

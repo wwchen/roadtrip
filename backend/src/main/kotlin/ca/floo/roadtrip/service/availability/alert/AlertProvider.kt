@@ -29,7 +29,7 @@ internal interface AlertProvider : Dispatchable<AlertProviderId> {
     override fun canHandle(key: AlertProviderId): Boolean = key.slug == id
 
     /**
-     * Called after a watch is created or transitions into [ca.floo.roadtrip.service.availability.WatchStatus.ACTIVE].
+     * Called after a watch is created or transitions into [ca.floo.roadtrip.model.availability.WatchStatus.ACTIVE].
      * Internal poller: reconciles the watch's poller links to its resolved
      * (provider, parent_ref) set and pulls the coalesced poller's next run
      * earlier when this watch's cadence is tighter. Vendor-hosted: registers

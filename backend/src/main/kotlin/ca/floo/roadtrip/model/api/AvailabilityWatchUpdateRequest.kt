@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.api
 
+import ca.floo.roadtrip.model.availability.WatchStatus
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -14,5 +15,5 @@ data class AvailabilityWatchUpdateRequest(
     @SerialName("trigger_kinds") val triggerKinds: List<String>? = null,
     @SerialName("trigger_config") val triggerConfig: JsonObject? = null,
     @SerialName("stop_when_triggered") val stopWhenTriggered: Boolean? = null,
-    val status: String? = null,
+    val status: WatchStatus? = null,
 )
