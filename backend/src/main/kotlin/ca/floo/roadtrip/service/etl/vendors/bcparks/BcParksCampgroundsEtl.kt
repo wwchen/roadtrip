@@ -11,13 +11,13 @@ import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
+import ca.floo.roadtrip.model.metadata.registry.AspiraInputRoles
 import ca.floo.roadtrip.model.metadata.registry.GeometryPolicy
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraBookingCtaRef
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraBookingCtaRefs
-import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraInputRoles
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraInventoryCategories
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeaf
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeafMatch
@@ -98,9 +98,13 @@ class BcParksCampgroundsEtl(
             AspiraBookingCtaRefs.bookableMapIdsByResourceLocationId(dto.inventoryEnvelopes, dto.dictionaryPayload)
 
         val strapiByName = GeometryIndex.byNormalizedName(dto.strapiRows) { it.name }
+        val byName = GeometryIndex.build(dto.geomSources, log, etlSlug)
+        if (byName.size < GeometryIndex.MIN_GEOMETRY_KEYS) {
+            error("$etlSlug: geometry index is empty; no declared source yielded a point")
+        }
         val matcher =
             AspiraLeafMatcher(
-                byName = GeometryIndex.build(dto.geomSources, log, etlSlug),
+                byName = byName,
                 nonBookableResourceLocationIds = nonBookableResLocs,
                 policy = geometry.match,
             )

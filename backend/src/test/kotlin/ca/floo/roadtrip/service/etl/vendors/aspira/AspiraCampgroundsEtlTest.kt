@@ -21,6 +21,7 @@ import org.junit.jupiter.api.TestInstance
 import java.nio.file.Files
 import java.time.Instant
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -356,6 +357,23 @@ class AspiraCampgroundsEtlTest {
         assertEquals(listOf("test-geom", "test-centroids"), sources.map { it.first })
         assertTrue(sources[0].second is GeoJsonFeaturesSource, sources[0].second.toString())
         assertTrue(sources[1].second is ArcGisCentroidSource, sources[1].second.toString())
+    }
+
+    /**
+     * A declared source read with the wrong `name_property` yields no points,
+     * and the run would otherwise upsert zero campgrounds and report success.
+     */
+    @Test
+    fun `an empty geometry index fails the run instead of quietly emitting nothing`() {
+        val dto =
+            AspiraJoinDto(
+                leaves = listOf(campground),
+                geomSources = listOf("test-geom" to GeoJsonFeaturesSource(listOf(geomEnvelope()), "Name_fr")),
+                fetchedAt = Instant.parse("2026-07-05T00:00:00Z"),
+            )
+
+        val err = assertFailsWith<IllegalStateException> { campgrounds(dto) }
+        assertEquals("$slug: geometry index is empty; no declared source yielded a point", err.message)
     }
 
     @Test

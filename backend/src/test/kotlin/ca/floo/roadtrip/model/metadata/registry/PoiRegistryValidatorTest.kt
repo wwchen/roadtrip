@@ -739,6 +739,12 @@ class PoiRegistryValidatorTest {
                   executor: python3
                   filename: scripts/fetch_aspira.py
                   output_dir_prefix: data/raw/aspira-maps-wa
+              - slug: aspira-inventory-wa
+                name: Aspira WA inventory
+                fetcher:
+                  executor: python3
+                  filename: scripts/fetch_aspira_inventory.py
+                  output_dir_prefix: data/raw/aspira-inventory-wa
               - slug: uscampgrounds
                 name: uscampgrounds.info
                 fetcher:
@@ -752,7 +758,7 @@ class PoiRegistryValidatorTest {
                 etls:
                   - slug: aspira-wa-campgrounds
                     adapter: $adapter
-                    inputs: [aspira-maps-wa, uscampgrounds]
+                    inputs: [aspira-maps-wa, aspira-inventory-wa, uscampgrounds]
                     args:
             """.trimIndent() +
             args.joinToString("") { "\n" + ARG_KEY_INDENT + it } +
@@ -983,7 +989,7 @@ class PoiRegistryValidatorTest {
 
     /** `CampflareCampgroundsEtl` has no adapter policy, so the WA args pass through it unjudged. */
     @Test
-    fun `an adapter that joins no geometry may not declare a geometry block`() {
+    fun `an adapter with no policy may not declare a geometry block`() {
         val message =
             waError(
                 etlBody = WA_GEOMETRY_BLOCK,
@@ -991,10 +997,88 @@ class PoiRegistryValidatorTest {
             )
         assertTrue(
             message.contains(
-                "adapter 'CampflareCampgroundsEtl' does not join geometry, so it must not declare 'geometry'",
+                "adapter 'CampflareCampgroundsEtl' has no adapter policy, so it must not declare 'geometry'",
             ),
             message,
         )
+    }
+
+    /** The other branch: a policy that exists and says this adapter joins nothing. */
+    @Test
+    fun `an adapter whose policy joins no geometry may not declare a geometry block`() {
+        val message =
+            waError(
+                etlBody = WA_GEOMETRY_BLOCK,
+                adapter = "ReserveAmericaCampgroundsEtl",
+                args = listOf("contract: ABPP"),
+            )
+        assertTrue(
+            message.contains(
+                "adapter 'ReserveAmericaCampgroundsEtl' does not join geometry, so it must not declare 'geometry'",
+            ),
+            message,
+        )
+    }
+
+    /**
+     * The run-time partition is `inputs - declared geometry sources`, then each
+     * role picked by substring. A geometry source carrying a role marker eats
+     * the feed that role names.
+     */
+    @Test
+    fun `a geometry source input carrying a role marker fails`() {
+        val message =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: aspira-inventory-wa
+                      format: uscampgrounds_csv
+                """,
+            )
+        assertTrue(
+            message.contains(
+                "geometry source input 'aspira-inventory-wa' carries the 'inventory' role marker",
+            ),
+            message,
+        )
+    }
+
+    /**
+     * Losing the inventory feed is not a lighter configuration: every Aspira row
+     * is then written with a null `booking_provider_ref` while the run reports
+     * success. Boot is where that belongs.
+     */
+    @Test
+    fun `a geometry-joining row missing its inventory input fails`() {
+        val registry =
+            waRegistry(WA_GEOMETRY_BLOCK)
+                .replace("inputs: [aspira-maps-wa, aspira-inventory-wa, uscampgrounds]", "inputs: [aspira-maps-wa, uscampgrounds]")
+        val message = assertFailsWith<IllegalArgumentException> { PoiRegistry.loadString(registry) }.message!!
+        assertTrue(message.contains("must declare exactly one 'inventory' input, got 0"), message)
+    }
+
+    @Test
+    fun `a geometry-joining row declaring two maps inputs fails`() {
+        val registry =
+            waRegistry(WA_GEOMETRY_BLOCK)
+                .replace(
+                    "inputs: [aspira-maps-wa, aspira-inventory-wa, uscampgrounds]",
+                    "inputs: [aspira-maps-wa, aspira-maps-wa-2, aspira-inventory-wa, uscampgrounds]",
+                ).replace(
+                    "poi_data:",
+                    """
+                      - slug: aspira-maps-wa-2
+                        name: Aspira WA maps, second capture
+                        fetcher:
+                          executor: python3
+                          filename: scripts/fetch_aspira.py
+                          output_dir_prefix: data/raw/aspira-maps-wa-2
+                    poi_data:
+                    """.trimIndent(),
+                )
+        val message = assertFailsWith<IllegalArgumentException> { PoiRegistry.loadString(registry) }.message!!
+        assertTrue(message.contains("must declare exactly one 'maps' input, got 2"), message)
     }
 
     @Test
@@ -1111,8 +1195,8 @@ class PoiRegistryValidatorTest {
         for ((adapter, policy) in ADAPTER_POLICIES) {
             val accepted = policy.acceptedArgKeys ?: continue
             assertTrue(
-                accepted.containsAll(policy.requiredArgKeys),
-                "$adapter requires ${policy.requiredArgKeys - accepted} but does not accept them",
+                accepted.containsAll(policy.mandatoryArgKeys),
+                "$adapter requires ${policy.mandatoryArgKeys - accepted} but does not accept them",
             )
         }
     }

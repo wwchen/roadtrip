@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
+import ca.floo.roadtrip.model.metadata.registry.AspiraInputRoles
 import ca.floo.roadtrip.model.metadata.registry.GeometryPolicy
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
@@ -104,9 +105,10 @@ class AspiraCampgroundsEtl(
         val agency = ctx.requiredConstantAgency(etlSlug)
 
         // Non-bookable filter, driven by the fetched data (no curated list):
-        // Aspira's own `showResourceCapacityOnline: false`. Empty when a tenant
-        // declares no inventory + dictionary inputs, or when its dictionary
-        // marks everything bookable (WA/BC today) — then nothing is dropped.
+        // Aspira's own `showResourceCapacityOnline: false`. Empty when the
+        // tenant's dictionary marks everything bookable (WA/BC today) — then
+        // nothing is dropped. The inventory feed itself is required at boot:
+        // without it every row would also lose its booking CTA.
         val nonBookableResLocs =
             AspiraInventoryCategories.nonBookableResourceLocationIds(
                 inventory = dto.inventoryEnvelopes,
@@ -115,9 +117,13 @@ class AspiraCampgroundsEtl(
         val bookableMapIds =
             AspiraBookingCtaRefs.bookableMapIdsByResourceLocationId(dto.inventoryEnvelopes, dto.dictionaryPayload)
 
+        val byName = GeometryIndex.build(dto.geomSources, log, etlSlug)
+        if (byName.size < GeometryIndex.MIN_GEOMETRY_KEYS) {
+            error("$etlSlug: geometry index is empty; no declared source yielded a point")
+        }
         val matcher =
             AspiraLeafMatcher(
-                byName = GeometryIndex.build(dto.geomSources, log, etlSlug),
+                byName = byName,
                 nonBookableResourceLocationIds = nonBookableResLocs,
                 policy = geometry.match,
             )

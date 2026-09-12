@@ -26,6 +26,10 @@ private val TENANT_ARG_KEYS =
 
 private const val ARG_HOST = "host"
 private const val ARG_TENANT = "tenant"
+private const val ARG_MAPS_INPUT = "maps_input"
+private const val ARG_INVENTORY_INPUT = "inventory_input"
+private const val ARG_DICTIONARIES_INPUT = "dictionaries_input"
+private const val ARG_PARENT_DATA_PROVIDER = "parent_data_provider"
 
 private const val ASPIRA_CAMPGROUNDS_ADAPTER = "AspiraCampgroundsEtl"
 private const val BC_PARKS_CAMPGROUNDS_ADAPTER = "BcParksCampgroundsEtl"
@@ -40,20 +44,23 @@ private const val SOURCE_NAME_PROPERTY_KEY = "name_property"
  * Everything the validator knows about one adapter: the vendor whose tenant its
  * args must name, whether its `transform` reads `args.host` and fails the run
  * without it, whether it joins its vendor's leaves to a sibling geometry feed by
- * name, and the complete `args` key set it accepts — a key outside that set is a
- * boot error, since a dead or misspelled arg used to boot cleanly and do
- * nothing. A null [acceptedArgKeys] leaves the adapter's args unjudged.
+ * name, the further `args` keys its factory reads with no default, and the
+ * complete `args` key set it accepts — a key outside that set is a boot error,
+ * since a dead or misspelled arg used to boot cleanly and do nothing. A null
+ * [acceptedArgKeys] leaves the adapter's args unjudged.
  */
 internal data class AdapterPolicy(
     val tenantProvider: BookingProvider? = null,
     val requiresHost: Boolean = false,
     val joinsGeometry: Boolean = false,
+    val requiredArgKeys: Set<String> = emptySet(),
     val acceptedArgKeys: Set<String>? = null,
 ) {
-    /** The arg keys [tenantProvider] and [requiresHost] make mandatory. */
-    val requiredArgKeys: Set<String>
+    /** [requiredArgKeys] plus the keys [tenantProvider] and [requiresHost] imply. */
+    val mandatoryArgKeys: Set<String>
         get() =
             buildSet {
+                addAll(requiredArgKeys)
                 tenantProvider?.let { add(TENANT_ARG_KEYS.getValue(it)) }
                 if (requiresHost) add(ARG_HOST)
             }
@@ -80,7 +87,13 @@ internal val ADAPTER_POLICIES =
                 joinsGeometry = true,
                 acceptedArgKeys = setOf(ARG_HOST, ARG_TENANT),
             ),
-        "AspiraCampsitesEtl" to AdapterPolicy(tenantProvider = BookingProvider.ASPIRA),
+        "AspiraCampsitesEtl" to
+            AdapterPolicy(
+                tenantProvider = BookingProvider.ASPIRA,
+                requiredArgKeys = setOf(ARG_MAPS_INPUT, ARG_INVENTORY_INPUT),
+                acceptedArgKeys =
+                    setOf(ARG_TENANT, ARG_MAPS_INPUT, ARG_INVENTORY_INPUT, ARG_DICTIONARIES_INPUT, ARG_PARENT_DATA_PROVIDER),
+            ),
         "ReserveAmericaCampgroundsEtl" to AdapterPolicy(tenantProvider = BookingProvider.RESERVEAMERICA),
         "ReserveAmericaSitesEtl" to AdapterPolicy(tenantProvider = BookingProvider.RESERVEAMERICA),
     )
@@ -319,7 +332,7 @@ class PoiRegistry(
     ) {
         for (row in rows) {
             for (etl in row.etls) {
-                for (key in ADAPTER_POLICIES[etl.adapter]?.requiredArgKeys.orEmpty()) {
+                for (key in ADAPTER_POLICIES[etl.adapter]?.mandatoryArgKeys.orEmpty()) {
                     if (key !in etl.args) {
                         errs += "$label '${row.name}' etl '${etl.slug}' adapter '${etl.adapter}' " +
                             "is missing required arg '$key'"
@@ -362,24 +375,62 @@ class PoiRegistry(
                             "(accepted: ${accepted.sorted().joinToString()})"
                     }
                 }
-                if (policy?.joinsGeometry != true) {
-                    if (etl.geometry != null) {
-                        errs += "$where adapter '${etl.adapter}' does not join geometry, so it must not declare 'geometry'"
-                    }
-                    continue
+                when {
+                    policy == null ->
+                        if (etl.geometry != null) {
+                            errs += "$where adapter '${etl.adapter}' has no adapter policy, so it must not declare 'geometry'"
+                        }
+
+                    !policy.joinsGeometry ->
+                        if (etl.geometry != null) {
+                            errs += "$where adapter '${etl.adapter}' does not join geometry, so it must not declare 'geometry'"
+                        }
+
+                    else -> validateJoinedGeometry(where, etl, errs)
                 }
-                val geometry = etl.geometry
-                if (geometry == null || geometry.sources.isEmpty()) {
-                    errs += "$where adapter '${etl.adapter}' must declare 'geometry' with at least one source"
-                    continue
-                }
-                validateGeometrySources(where, etl, geometry, errs)
-                val threshold = geometry.match.fuzzyThreshold
-                // Stated positively so NaN, which compares false to everything, falls into the error branch.
-                if (!(threshold > MIN_FUZZY_THRESHOLD_EXCLUSIVE && threshold <= MAX_FUZZY_THRESHOLD_INCLUSIVE)) {
-                    errs += "$where match.fuzzy_threshold=$threshold is outside " +
-                        "($MIN_FUZZY_THRESHOLD_EXCLUSIVE, $MAX_FUZZY_THRESHOLD_INCLUSIVE]"
-                }
+            }
+        }
+    }
+
+    /**
+     * One geometry-joining row: the sibling role feeds its `parse` partitions
+     * the inputs into, then the `geometry:` block itself.
+     */
+    private fun validateJoinedGeometry(
+        where: String,
+        etl: EtlEntry,
+        errs: MutableList<String>,
+    ) {
+        validateInputRoles(where, etl, errs)
+        val geometry = etl.geometry
+        if (geometry == null || geometry.sources.isEmpty()) {
+            errs += "$where adapter '${etl.adapter}' must declare 'geometry' with at least one source"
+            return
+        }
+        validateGeometrySources(where, etl, geometry, errs)
+        val threshold = geometry.match.fuzzyThreshold
+        // Stated positively so NaN, which compares false to everything, falls into the error branch.
+        if (!(threshold > MIN_FUZZY_THRESHOLD_EXCLUSIVE && threshold <= MAX_FUZZY_THRESHOLD_INCLUSIVE)) {
+            errs += "$where match.fuzzy_threshold=$threshold is outside " +
+                "($MIN_FUZZY_THRESHOLD_EXCLUSIVE, $MAX_FUZZY_THRESHOLD_INCLUSIVE]"
+        }
+    }
+
+    /**
+     * The run-time partition, checked at boot. A missing inventory feed is not a
+     * lighter configuration: it empties the booking-CTA index, so every row is
+     * written without its "Book" deep link while the run reports success.
+     */
+    private fun validateInputRoles(
+        where: String,
+        etl: EtlEntry,
+        errs: MutableList<String>,
+    ) {
+        for (role in AspiraInputRoles.required) {
+            val carrying = etl.inputs.filter { it.contains(role) }
+            if (carrying.size != 1) {
+                errs += "$where must declare exactly one '$role' input, got ${carrying.size} " +
+                    "(inputs: ${etl.inputs.joinToString()})"
             }
         }
     }
@@ -397,6 +448,12 @@ class PoiRegistry(
             }
             if (!seen.add(source.input)) {
                 errs += "$where declares geometry source input '${source.input}' twice"
+            }
+            for (marker in AspiraInputRoles.all) {
+                if (source.input.contains(marker)) {
+                    errs += "$where geometry source input '${source.input}' carries the '$marker' role marker, " +
+                        "so it would be claimed by geometry and never read as that role feed"
+                }
             }
             validateSourceFilter(where, source, SOURCE_STATE_KEY, source.state, GeometryFormat.USCAMPGROUNDS_CSV, errs)
             validateSourceFilter(

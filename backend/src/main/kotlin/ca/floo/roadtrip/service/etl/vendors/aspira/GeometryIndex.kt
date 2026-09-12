@@ -9,8 +9,19 @@ import org.slf4j.Logger
  * normalized name keeps it, so `geometry.sources` order is preference order:
  * campground-level feeds declared before park-polygon centroids win whenever
  * both carry the same name.
+ *
+ * A declared source that lands nothing is the shape of a format/feed mismatch
+ * or upstream drift, so it warns rather than reading as a healthy INFO line.
  */
 object GeometryIndex {
+    /** Fewer keys than this and the run cannot pin a single leaf; callers fail rather than emit nothing. */
+    const val MIN_GEOMETRY_KEYS = 1
+
+    private const val MIN_LATITUDE = -90.0
+    private const val MAX_LATITUDE = 90.0
+    private const val MIN_LONGITUDE = -180.0
+    private const val MAX_LONGITUDE = 180.0
+
     fun build(
         sources: List<Pair<String, GeometrySource>>,
         log: Logger,
@@ -19,16 +30,26 @@ object GeometryIndex {
         val byName = LinkedHashMap<String, GeometryPoint>()
         for ((slug, source) in sources) {
             val before = byName.size
-            for ((key, point) in byNormalizedName(source.points().asIterable()) { it.name }) {
+            val (plottable, dropped) = source.points().partition { it.isOnEarth() }
+            for ((key, point) in byNormalizedName(plottable) { it.name }) {
                 byName.putIfAbsent(key, GeometryPoint(point.latitude, point.longitude, slug))
             }
+            val added = byName.size - before
             log.info(
-                "{}: geometry input slug={} contributed {} new keys (total={})",
+                "{}: geometry input slug={} contributed {} new keys, dropped {} off-earth points (total={})",
                 etlSlug,
                 slug,
-                byName.size - before,
+                added,
+                dropped.size,
                 byName.size,
             )
+            if (added == 0) {
+                log.warn(
+                    "{}: geometry input slug={} contributed no keys; check its declared format and name_property against the feed",
+                    etlSlug,
+                    slug,
+                )
+            }
         }
         return byName
     }
@@ -49,4 +70,15 @@ object GeometryIndex {
         }
         return byName
     }
+
+    /**
+     * A coordinate the catalog can plot and its JSON codec can encode. `NaN`,
+     * `Infinity` and overflowing literals all survive `toDoubleOrNull`, and a
+     * single one of them aborts the whole import at JSONB-encode time.
+     */
+    private fun NamedPoint.isOnEarth(): Boolean =
+        latitude.isFinite() &&
+            longitude.isFinite() &&
+            latitude in MIN_LATITUDE..MAX_LATITUDE &&
+            longitude in MIN_LONGITUDE..MAX_LONGITUDE
 }

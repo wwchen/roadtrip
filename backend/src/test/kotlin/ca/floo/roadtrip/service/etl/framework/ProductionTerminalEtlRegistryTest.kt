@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.registry.ADAPTER_POLICIES
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampgroundsEtl
 import kotlin.test.Test
@@ -26,6 +27,17 @@ class ProductionTerminalEtlRegistryTest {
         val campsite = registry.campsiteData.mapNotNull { it.etls.lastOrNull()?.adapter }.toSet()
         assertTrue((poi - poiAdapters.keys).isEmpty(), "missing poi adapters: ${poi - poiAdapters.keys}")
         assertTrue((campsite - campsiteAdapters.keys).isEmpty(), "missing campsite adapters: ${campsite - campsiteAdapters.keys}")
+    }
+
+    /**
+     * The validator's table and the factory are two halves of one fact. A policy
+     * keyed on an adapter no factory builds judges nothing and drifts unnoticed.
+     */
+    @Test
+    fun `every adapter policy names an adapter some factory builds`() {
+        val known = poiAdapters.keys + campsiteAdapters.keys
+        val orphaned = ADAPTER_POLICIES.keys - known
+        assertTrue(orphaned.isEmpty(), "ADAPTER_POLICIES names adapters no factory builds: $orphaned")
     }
 
     @Test

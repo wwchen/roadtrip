@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.nio.file.Files
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -145,6 +146,22 @@ class BcParksCampgroundsEtlTest {
         // … so losing only the Strapi row is what drops the second one.
         val rowsMissingGoldstream = dto.copy(strapiRows = BcParksStrapiSource(listOf(strapiEnvelope())).rows())
         assertEquals(listOf("Rathtrevor Beach"), records(etl.transform(rowsMissingGoldstream, ctx)).map { it.name })
+    }
+
+    /** Strapi drifting out from under `data[]` empties the index; the run fails rather than upserting nothing. */
+    @Test
+    fun `an empty geometry index fails the run instead of quietly emitting nothing`() {
+        val dto =
+            BcParksCampgroundsDto(
+                leaves = listOf(leaf("Rathtrevor Beach", mapId = RATHTREVOR_MAP_ID)),
+                strapiRows = BcParksStrapiSource(listOf(strapiEnvelope())).rows(),
+                geomSources = listOf("bcparks-strapi" to BcParksStrapiSource(emptyList())),
+                inventoryEnvelopes = listOf(inventoryEnvelope()),
+                dictionaryPayload = dictionaryEnvelope().payload as JsonObject,
+            )
+
+        val err = assertFailsWith<IllegalStateException> { records(etl.transform(dto, ctx)) }
+        assertEquals("$slug: geometry index is empty; no declared source yielded a point", err.message)
     }
 
     @Test
