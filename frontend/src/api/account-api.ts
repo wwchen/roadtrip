@@ -13,8 +13,10 @@ import type {
   RecgovStatusDto,
   RecgovVerifyResponseDto,
   SettingsResponseDto,
+  SlackTestRequest,
   SlackTestResponseDto,
   UpdateNotificationsRequest,
+  UpdateProfileRequest,
   UpdateRecgovRequest,
 } from './generated/api-types';
 import { jsonDeleteOk, jsonGetOk, jsonPostOk, jsonPutOk, type RequestOptions } from './http';
@@ -78,7 +80,7 @@ export function fetchSettings({ signal }: RequestOptions = {}): Promise<Settings
 }
 
 export function updateProfile(
-  { display_name, theme }: { display_name: string; theme: string },
+  { display_name, theme }: UpdateProfileRequest,
   options: RequestOptions = {},
 ): Promise<SettingsResponse> {
   return jsonPutOk<SettingsResponse>(PROFILE_URL, { display_name, theme }, options);
@@ -118,7 +120,7 @@ export function sendSlackTest(
   channel: string | null | undefined,
   options: RequestOptions = {},
 ): Promise<SlackTestResponse> {
-  const body = channel != null ? { channel } : {};
+  const body: SlackTestRequest = channel != null ? { channel } : {};
   return jsonPostOk<SlackTestResponse>(SLACK_TEST_URL, body, options);
 }
 
@@ -130,7 +132,7 @@ export function sendEmailTest(options: RequestOptions = {}): Promise<EmailTestRe
 /**
  * Store the rec.gov username and, when the user typed one, a new password.
  *
- * `password` is omitted entirely when null — the backend reads a missing key as
+ * `password` is omitted entirely when absent — the backend reads a missing key as
  * "unchanged", the same contract `updateNotifications` follows for the Slack
  * token. Clearing is `removeRecgov`, never an empty save.
  */

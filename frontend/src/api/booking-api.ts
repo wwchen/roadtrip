@@ -39,7 +39,6 @@ export function addToCartFailure(err: unknown): AddToCartFailure {
     | {
         code?: unknown;
         error?: string;
-        detail?: string;
         provider?: string;
         providerDisplay?: string;
         provider_display?: string;
@@ -50,7 +49,6 @@ export function addToCartFailure(err: unknown): AddToCartFailure {
     // A `DOMException` carries a *numeric* legacy `code` (`AbortError` is 20),
     // which `settings-errors.ts` would render as "Something went wrong (20)".
     error: typeof carried?.code === 'string' ? carried.code : (carried?.error ?? UNKNOWN_ERROR),
-    detail: carried?.detail,
     provider: carried?.provider,
     provider_display: carried?.providerDisplay ?? carried?.provider_display,
   };

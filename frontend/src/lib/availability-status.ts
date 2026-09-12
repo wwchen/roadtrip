@@ -1,7 +1,6 @@
-// The six values are the backend's `AvailabilityStatus` wire values
-// (backend/.../model/availability/AvailabilityStatus.kt). This module is the
-// single place that maps them to display strings, so the API layer imports the
-// type from here rather than restating the union.
+// The six values are the backend's `AvailabilityStatus` wire values, which
+// `api/generated/api-types.ts` also carries. This module is the single place
+// that maps them to display strings.
 
 export type AvailabilityStatus =
   | 'available'
