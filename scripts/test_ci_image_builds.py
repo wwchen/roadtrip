@@ -161,7 +161,6 @@ class DeploymentContractTest(unittest.TestCase):
             step_names.index("Await the release images"),
             step_names.index("Reach the deploy host"),
         )
-        # All three, because deploy.sh pulls all three on the host.
         images = await_step["with"]["images"]
         for repository, sha in (
             ("backend", "env.DEPLOY_SHA"),
@@ -169,6 +168,33 @@ class DeploymentContractTest(unittest.TestCase):
             ("data", "env.DEPLOY_DATA_SHA"),
         ):
             self.assertIn(f"/{repository}:${{{{ {sha} }}}}", images)
+
+        # Pinning today's three would let a fourth image be added to the prod
+        # stack and pulled on the host without ever being preflighted -- the
+        # guard would rot open silently, into exactly the containerd "not
+        # found" it exists to prevent. So derive the set deploy.sh actually
+        # pulls and require the await list to cover it.
+        pulled = set(
+            re.findall(
+                r'export ROADTRIP_[A-Z]+_IMAGE="ghcr\.io/[^/]+/[^/]+/([^:"]+):',
+                (ROOT / "scripts" / "deploy.sh").read_text(),
+            )
+        )
+        self.assertTrue(pulled, "found no prod image exports in deploy.sh")
+        for repository in sorted(pulled):
+            self.assertIn(
+                f"/{repository}:",
+                images,
+                f"deploy.sh pulls {repository} on the host, but the deploy "
+                "workflow does not preflight it",
+            )
+
+        # The deploy queue is serialized, so this job must not inherit the
+        # sandbox's 20-minute patience.
+        budget = int(await_step["with"]["max-attempts"]) * int(
+            await_step["with"]["wait-seconds"]
+        )
+        self.assertLessEqual(budget, 300, "the image wait must stay well inside the job budget")
 
     def test_the_image_wait_is_shared_rather_than_copied(self) -> None:
         # Two call sites block on GHCR tags; the poll loop lives in one place

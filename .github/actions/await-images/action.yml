@@ -47,8 +47,11 @@ runs:
           echo "::error::no images named to wait for"
           exit 1
         fi
+        if [ "$MAX_ATTEMPTS" -lt 1 ]; then
+          echo "::error::max-attempts must be at least 1, got $MAX_ATTEMPTS"
+          exit 1
+        fi
 
-        missing=("${images[@]}")
         for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
           missing=()
           for image in "${images[@]}"; do

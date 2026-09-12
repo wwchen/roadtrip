@@ -42,13 +42,20 @@ jobs:
       # deploy can outrun CI's image push and fail on the host with a bare
       # containerd "not found" -- after it has already pulled the data image
       # and parked a 30-minute volume guard. Resolving the tags here fails in
-      # the runner instead, and waits rather than fails while CI is still
-      # pushing. On the workflow_run path CI has already succeeded, so this
-      # returns on its first attempt.
+      # the runner instead.
+      #
+      # The sandbox's 60x20s patience is wrong for this job: `concurrency:
+      # deploy` is serialized, so a run that waits holds up every queued
+      # deploy behind it, and 20 minutes of a 30-minute budget would leave too
+      # little for the host work and the gates. 150s covers a dispatch fired
+      # while CI is still pushing; on the workflow_run path CI has already
+      # succeeded, so this returns on its first attempt.
       - name: Await the release images
         uses: ./.github/actions/await-images
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          max-attempts: '15'
+          wait-seconds: '10'
           images: |
             ghcr.io/${{ github.repository }}/backend:${{ env.DEPLOY_SHA }}
             ghcr.io/${{ github.repository }}/recgov-companion:${{ env.DEPLOY_COMPANION_SHA }}
