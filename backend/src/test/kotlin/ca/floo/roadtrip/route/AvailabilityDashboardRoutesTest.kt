@@ -259,11 +259,45 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `GET changes filtered by poi id lists the recorded change rows`() =
+        testApplication {
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
+            val fixture = seedSummaryFixture()
+            val observedAt = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1)
+            recordObservation(fixture.campsiteId, "2026-07-04", observedAt, available = true)
+            recordObservation(fixture.campsiteId, "2026-07-04", observedAt.plusMinutes(10), available = false)
+
+            val resp = client.get("/api/availability/changes?poi_id=${fixture.poiId}")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val changes = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["changes"]!!.jsonArray
+            assertEquals(
+                true,
+                changes.isNotEmpty(),
+                "two observations of one campsite-date produce at least one change row",
+            )
+        }
+
+    @Test
     fun `GET pollers id runs returns 400 on invalid id`() =
         testApplication {
             application { routeTestApplication { testAvailabilityDashboardRoutes() } }
             val resp = client.get("/api/availability/pollers/not-a-number/runs")
             assertEquals(HttpStatusCode.BadRequest, resp.status)
+        }
+
+    @Test
+    fun `GET pollers id runs lists that poller's runs`() =
+        testApplication {
+            application { routeTestApplication { testAvailabilityDashboardRoutes() } }
+            val pollerId = seedPoller()
+            val runRepo = AvailabilityRunRepo(ctx)
+            val runId = runRepo.start(pollerId, OffsetDateTime.now(ZoneOffset.UTC))
+            runRepo.complete(runId, snapshotCount = 3, completedAt = OffsetDateTime.now(ZoneOffset.UTC), durationMs = 12)
+
+            val resp = client.get("/api/availability/pollers/$pollerId/runs")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val runs = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["runs"]!!.jsonArray
+            assertEquals(listOf(runId), runs.map { it.jsonObject["id"]!!.jsonPrimitive.long })
         }
 
     @Test

@@ -21,9 +21,13 @@ import ca.floo.roadtrip.service.auth.SessionService
 import ca.floo.roadtrip.service.auth.UserProvisioningService
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.application.install
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
@@ -230,6 +234,34 @@ class AuthRoutesTest {
 
             assertEquals(HttpStatusCode.Found, resp.status)
             assertEquals(AUTHORIZE_URL, resp.headers[HttpHeaders.Location])
+        }
+
+    @Test
+    fun `POST password begin returns the flow the frontend needs`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
+            }
+            val resp =
+                client.post("/auth/password/begin") {
+                    contentType(ContentType.Application.Json)
+                    setBody("{}")
+                }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("state", body["state"]!!.jsonPrimitive.content)
+            assertEquals("nonce", body["nonce"]!!.jsonPrimitive.content)
+            assertEquals(
+                "https://test.example/auth/callback",
+                body["redirect_uri"]!!.jsonPrimitive.content,
+                "the frontend must send auth0-js the same redirect_uri the backend exchanges with",
+            )
+            assertEquals(
+                true,
+                body["code_challenge"]!!.jsonPrimitive.content.isNotBlank(),
+                "the PKCE challenge is derived from the verifier the flow cookie carries",
+            )
         }
 
     @Test

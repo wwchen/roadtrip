@@ -36,6 +36,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -172,6 +173,30 @@ class AdminIngestRoutesTest : SharedDbTest() {
             val runs = body["runs"]!!.jsonArray
             assertEquals(1, runs.size)
             assertEquals("alpha", runs[0].jsonObject["target"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `GET one run returns its detail with an empty phase list`() =
+        testApplication {
+            val controller = controllerWith(mapOf("alpha" to Target("alpha", emptyList())))
+            application { routeTestApplication { adminIngestRoutes(controller) } }
+
+            assertEquals(HttpStatusCode.OK, client.post("/api/admin/data/import/alpha").status)
+            val listed =
+                Json
+                    .parseToJsonElement(client.get("/api/admin/data/runs").bodyAsText())
+                    .jsonObject["runs"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            val runId = listed["id"]!!.jsonPrimitive.long
+
+            val resp = client.get("/api/admin/data/runs/$runId")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val detail = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(runId, detail["id"]!!.jsonPrimitive.long)
+            assertEquals("alpha", detail["target"]!!.jsonPrimitive.content)
+            assertEquals(0, detail["phases"]!!.jsonArray.size, "a target with no import phases runs none")
         }
 
     @Test

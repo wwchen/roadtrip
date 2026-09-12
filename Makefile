@@ -97,11 +97,11 @@ install: install-hooks
 # :backend:test, whose compilation consumes the generated jOOQ sources
 # (generateSchemaSourceOnCompilation), so excluding it would break a fresh clone.
 #
-# checkApiTypes rides along for the same reason: it runs the generator over main's
-# runtime classpath, so it needs the same compile (and therefore the same Docker)
-# :backend:test already needs. ci.yml runs it in backend-tests, never in gradle-lint.
+# checkApiTypes and contractLedgerCheck both run over the backend's own classpath,
+# so they need the same compile (and therefore the same Docker) :backend:test
+# already needs. ci.yml runs them in backend-tests, never in gradle-lint.
 test: _ensure-hooks
-	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :backend:checkApiTypes :detekt-rules:test
+	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :backend:checkApiTypes :backend:contractLedgerCheck :detekt-rules:test
 	# npm run build includes the TypeScript check before bundling.
 	cd frontend && npm ci && npm run lint && npm run test && npm run build && npm run build-storybook
 	node scripts/check-color-tokens.mjs

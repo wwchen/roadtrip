@@ -94,6 +94,13 @@ tasks.register<JavaExec>("checkApiTypes") {
     args(generatedApiTypesFile.absolutePath, "--check")
 }
 
+// The contract exercise ledger. ContractBodyCheck appends one line per checked
+// response; contractLedgerCheck reads the file back and fails when a row with a
+// success body was never produced. A JavaExec rather than a second Test task, so
+// Kover's instrumented set — and therefore koverVerify's number — does not change.
+val contractLedgerFile = layout.buildDirectory.file("contract-ledger/exercised.tsv")
+val contractLedgerProperty = "roadtrip.contractLedger"
+
 // The secret registry is authored once at secrets/registry.yaml and copied into
 // the jar so SecretsBootstrap can enforce `required_in` at boot. Copied rather
 // than duplicated: a second checked-in copy is exactly the drift this whole
@@ -468,7 +475,34 @@ tasks.test {
     // Headroom for the parallel test workers (classes run concurrently in one
     // JVM — see src/test/resources/junit-platform.properties).
     maxHeapSize = "4g"
+    systemProperty(contractLedgerProperty, contractLedgerFile.get().asFile.absolutePath)
+    // One JVM, so one file; cleared here rather than by the plugin, which has no
+    // notion of when a run begins.
+    doFirst { delete(contractLedgerFile) }
+    finalizedBy("contractLedgerCheck")
 }
+
+tasks.register<JavaExec>("contractLedgerCheck") {
+    group = "verification"
+    description = "Fail when a contract row's success body was never produced by a route test."
+    mainClass.set("ca.floo.roadtrip.route.ContractLedgerCheckKt")
+    classpath = sourceSets["test"].runtimeClasspath
+    args(contractLedgerFile.get().asFile.absolutePath)
+    mustRunAfter(tasks.test)
+    // A failed or skipped :backend:test leaves an incomplete ledger; the test
+    // failure is the message that matters, so do not add a second one.
+    onlyIf {
+        val testState = tasks.test.get().state
+        // TaskState.getFailure() is @Nullable in Gradle's javadoc but not in its
+        // signature, so Kotlin reads it as non-null; the typed local is what keeps
+        // `== null` a real comparison instead of a condition the compiler warns is dead.
+        val testFailure: Throwable? = testState.failure
+        testState.didWork && testFailure == null
+    }
+    outputs.upToDateWhen { false }
+}
+
+tasks.named("check") { dependsOn("contractLedgerCheck") }
 
 // Playwright-driven end-to-end smoke against an already-running backend. Opt-in
 // (not wired into `check`) — it needs QA_BASE_URL pointing at a live server, and
