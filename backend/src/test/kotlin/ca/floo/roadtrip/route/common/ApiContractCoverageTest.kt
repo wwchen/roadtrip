@@ -3,6 +3,11 @@ package ca.floo.roadtrip.route.common
 import ca.floo.roadtrip.client.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.config.BuildInfoConfig
 import ca.floo.roadtrip.model.api.ApiContract
+import ca.floo.roadtrip.model.api.ApiErrorSchema
+import ca.floo.roadtrip.model.api.HTTP_FORBIDDEN
+import ca.floo.roadtrip.model.api.HTTP_NO_CONTENT
+import ca.floo.roadtrip.model.api.HTTP_OK
+import ca.floo.roadtrip.model.api.HTTP_UNAUTHORIZED
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.model.api.poi.PoiSearchResponseSchema
@@ -32,10 +37,15 @@ import kotlinx.serialization.serializer
 import kotlin.reflect.full.createType
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The endpoint count the plan fixed for this phase; a row added or dropped is a deliberate change. */
 private const val CONTRACT_ROW_COUNT = 46
+
+/** The last status any HTTP response can carry, and the last 2xx. */
+private const val MAX_HTTP_STATUS = 599
+private const val LAST_SUCCESS_STATUS = 299
 
 /**
  * The contract's *authoritative* check is the boot guard in `registerKoinRoutes`,
@@ -167,6 +177,74 @@ class ApiContractCoverageTest {
         )
     }
 
+    @Test
+    fun `every declared status is a real HTTP status`() {
+        assertEquals(
+            emptyList(),
+            ApiContract.endpoints
+                .flatMap { row -> (listOf(row.success) + row.errors).map { row.method.wireValue to it } }
+                .filterNot { (_, body) -> body.status in HTTP_OK..MAX_HTTP_STATUS }
+                .map { (method, body) -> "$method ${body.status}" },
+        )
+    }
+
+    @Test
+    fun `the success body is the only 2xx a row declares`() {
+        ApiContract.endpoints.forEach { row ->
+            assertTrue(
+                row.success.status in HTTP_OK..LAST_SUCCESS_STATUS,
+                "${row.method.wireValue} ${row.path}: success declares ${row.success.status}, not a 2xx",
+            )
+            assertEquals(
+                emptyList(),
+                row.errors.filter { it.status in HTTP_OK..LAST_SUCCESS_STATUS }.map { it.status },
+                "${row.method.wireValue} ${row.path}: a 2xx belongs in success, not errors",
+            )
+        }
+    }
+
+    @Test
+    fun `no row declares the same status and class twice`() {
+        ApiContract.endpoints.forEach { row ->
+            val keys = (listOf(row.success) + row.errors).map { it.status to it.body }
+            assertEquals(
+                keys.size,
+                keys.toSet().size,
+                "${row.method.wireValue} ${row.path} declares a duplicate (status, class): " +
+                    "${keys.groupBy { it }.filterValues { it.size > 1 }.keys}",
+            )
+        }
+    }
+
+    @Test
+    fun `a 204 carries no body`() {
+        ApiContract.endpoints
+            .flatMap { row -> (listOf(row.success) + row.errors).map { row to it } }
+            .filter { (_, body) -> body.status == HTTP_NO_CONTENT }
+            .forEach { (row, body) ->
+                assertNull(body.body, "${row.method.wireValue} ${row.path}: a 204 cannot carry a body")
+            }
+    }
+
+    /**
+     * The checkable half of the 401/403 rule: the document builder supplies those
+     * statuses from the route's access level, and a row states one only where its
+     * own handler writes it — which, everywhere in this tree, means
+     * [ApiErrorSchema]. A row naming anything else at 401 or 403 is a row that
+     * has started restating the access guard in its own vocabulary.
+     */
+    @Test
+    fun `a 401 or 403 on a row is always an ApiErrorSchema`() {
+        assertEquals(
+            emptyList(),
+            ApiContract.endpoints
+                .flatMap { row -> row.errors.map { row to it } }
+                .filter { (_, body) -> body.status == HTTP_UNAUTHORIZED || body.status == HTTP_FORBIDDEN }
+                .filterNot { (_, body) -> body.body == ApiErrorSchema::class }
+                .map { (row, body) -> "${row.method.wireValue} ${row.path} ${body.status}" },
+        )
+    }
+
     /**
      * `createType()` supplies no type arguments, so a generic DTO would abort this
      * loop with a Kotlin reflection message naming neither the class nor the row.
@@ -176,7 +254,9 @@ class ApiContractCoverageTest {
     @Test
     fun `every class the contract names is serializable`() {
         val classes =
-            ApiContract.endpoints.flatMap { listOfNotNull(it.request, it.response) + it.errors }.distinct()
+            ApiContract.endpoints
+                .flatMap { listOfNotNull(it.request, it.success.body) + it.errors.mapNotNull { body -> body.body } }
+                .distinct()
         assertEquals(
             emptyList(),
             classes.filter { it.typeParameters.isNotEmpty() }.map { it.qualifiedName },

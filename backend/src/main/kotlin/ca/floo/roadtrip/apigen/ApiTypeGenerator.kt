@@ -24,6 +24,10 @@ private const val GENERATED_HEADER =
 //
 // Every Kotlin integer is a TypeScript `number`: the ids are database bigints
 // that stay well below 2^53.
+//
+// Each API_ENDPOINTS row states the status of every body it can serve. 401 and
+// 403 are absent wherever the route's declared access level supplies them; see
+// /api/docs/openapi.json for the merged picture.
 """
 
 @Suppress("TopLevelPropertyNaming")
@@ -58,12 +62,16 @@ internal fun walkContract(endpoints: List<ApiEndpoint> = ApiContract.endpoints):
                 method = endpoint.method.wireValue,
                 path = endpoint.path,
                 request = endpoint.request?.let { requests.declaredName(it) },
-                response = endpoint.response?.let { responses.declaredName(it) },
+                success =
+                    TsBody(
+                        endpoint.success.status,
+                        endpoint.success.body?.let { responses.declaredName(it) },
+                    ),
                 errors =
                     endpoint.errors
-                        .map { responses.declaredName(it) }
+                        .map { body -> TsBody(body.status, body.body?.let { responses.declaredName(it) }) }
                         .distinct()
-                        .sorted(),
+                        .sortedWith(compareBy({ it.status }, { it.type.orEmpty() })),
             )
         }
     return ContractWalk(
@@ -170,11 +178,13 @@ private fun renderEndpoints(endpoints: List<TsEndpoint>): String =
         endpoints.forEach { endpoint ->
             append("  { method: '${endpoint.method}', path: '${endpoint.path}'")
             append(", request: ${quoted(endpoint.request)}")
-            append(", response: ${quoted(endpoint.response)}")
-            append(", errors: [${endpoint.errors.joinToString { "'$it'" }}] },\n")
+            append(", success: ${renderBody(endpoint.success)}")
+            append(", errors: [${endpoint.errors.joinToString(transform = ::renderBody)}] },\n")
         }
         append("] as const;\n")
     }
+
+private fun renderBody(body: TsBody): String = "{ status: ${body.status}, type: ${quoted(body.type)} }"
 
 private fun quoted(name: String?): String = name?.let { "'$it'" } ?: "null"
 

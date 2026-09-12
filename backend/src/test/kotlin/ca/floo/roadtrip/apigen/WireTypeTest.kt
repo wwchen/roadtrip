@@ -1,11 +1,20 @@
 package ca.floo.roadtrip.apigen
 
 import ca.floo.roadtrip.model.api.ApiContract
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.serializer
 import kotlin.reflect.KClass
 import kotlin.reflect.full.createType
 import kotlin.test.Test
 import kotlin.test.assertEquals
+
+/** The integer widths [FixtureScalars] does not carry, and the one fractional width beside them. */
+@Serializable
+data class FixtureWidths(
+    val b: Byte,
+    val s: Short,
+    val f: Float,
+)
 
 /**
  * The walk's structured output, and the TypeScript renderer over it.
@@ -55,6 +64,19 @@ class WireTypeTest {
         )
         assertEquals("number", tsTypeOf(WireType.Num(integer = true)))
         assertEquals("number", tsTypeOf(WireType.Num(integer = false)))
+    }
+
+    @Test
+    fun `every integer width is an integer, and a float is not`() {
+        val walk = DescriptorWalk(Optionality.RESPONSE, HashMap())
+        walk.typeOf(descriptorOf(FixtureWidths::class))
+        assertEquals(
+            listOf(WireType.Num(integer = true), WireType.Num(integer = true), WireType.Num(integer = false)),
+            walk.interfaces
+                .getValue(FixtureWidths::class.qualifiedName!!)
+                .fields
+                .map { it.type },
+        )
     }
 
     @Test
