@@ -15,14 +15,15 @@ import type { AlertDto, CampgroundDetail, PriceDto } from '@/api/poi-api';
 type Props = Record<string, unknown>;
 
 /**
- * The half of the bag the backend has taken ownership of.
+ * The typed view of a hydrated POI's campground bag.
  *
  * `flattenHydratedPoi` is open on purpose — most of a hydrated POI is still
- * whatever the vendor sent — but the fields on `CampgroundDetail` are
- * `PoiCategoryDetailSchema`'s own, typed and labelled server-side. Every reader
- * of a campground bag field goes through this assertion rather than indexing the
- * open bag, so a wire rename to one of them is a typecheck failure here instead
- * of a row that silently stops rendering.
+ * whatever the vendor sent — and an open bag cannot be narrowed without an
+ * assertion. What changed is what it asserts to: `CampgroundDetail` is now
+ * `PoiCategoryDetailSchema` in full, so every field a drawer row reads is the
+ * server's own, and a wire rename is a typecheck failure here instead of a row
+ * that silently stops rendering. `Partial` stays because the schema has fields
+ * the server always sends but a flattened bag need not carry.
  */
 const typed = (p: Props): Partial<CampgroundDetail> => p as Partial<CampgroundDetail>;
 
