@@ -17,6 +17,7 @@ import io.ktor.openapi.ReferenceOr
 import io.ktor.openapi.RequestBody
 import io.ktor.openapi.Response
 import io.ktor.openapi.Responses
+import kotlin.reflect.KClass
 
 private const val REQUEST_BODY_DESCRIPTION = "The body this endpoint decodes, as the DTO the contract names."
 
@@ -75,7 +76,7 @@ internal object OpenApiContractDocument {
             val item = paths[row.path]?.valueOrNull() ?: return@forEach
             val slot = operationSlots.getValue(row.method)
             val operation = slot.read(item) ?: return@forEach
-            val described = operation.withContract(names, accessOf(row.method, row.path))
+            val described = operation.withContract(names, accessOf(row.method, row.path), rendering.guardSchemas)
             paths[row.path] = ReferenceOr.Value(slot.write(item, described))
         }
         // The contract's declarations win, but anything already in components —
@@ -90,15 +91,18 @@ internal object OpenApiContractDocument {
     }
 
     private fun renderingFor(endpoints: List<ApiEndpoint>): Rendering =
-        walkContract(endpoints).let { Rendering(rows = it.rows, schemas = schemasOf(it)) }
+        walkContract(endpoints).let {
+            Rendering(rows = it.rows, schemas = schemasOf(it), guardSchemas = it.guardSchemas)
+        }
 
     private fun Operation.withContract(
         names: TsEndpoint,
         access: RouteAccess?,
+        guardSchemas: Map<KClass<*>, String>,
     ): Operation =
         copy(
             requestBody = names.request?.let(::requestBodyFor) ?: requestBody,
-            responses = responsesFor(names, access),
+            responses = responsesFor(names, access, guardSchemas),
         )
 
     private fun requestBodyFor(schemaName: String): ReferenceOr<RequestBody> =
@@ -121,10 +125,11 @@ internal object OpenApiContractDocument {
     private fun responsesFor(
         names: TsEndpoint,
         access: RouteAccess?,
+        guardSchemas: Map<KClass<*>, String>,
     ): Responses =
         Responses(
             responses =
-                (listOf(names.success) + names.errors + accessResponses(access))
+                (listOf(names.success) + names.errors + accessResponses(access, guardSchemas))
                     .distinct()
                     .groupBy({ it.status }, { it.type })
                     .toSortedMap()
@@ -136,11 +141,18 @@ internal object OpenApiContractDocument {
      * [guardBodies] is the one enumeration of which level refuses with what — the
      * body check behind every route test reads the same list — and an unmounted or
      * unlabelled leaf reaches here as null and adds nothing.
+     *
+     * The names come from [guardSchemas], the walk's own claim for those classes,
+     * so a guard response can never `$ref` a name the collision map did not
+     * approve.
      */
-    private fun accessResponses(access: RouteAccess?): List<TsBody> =
+    private fun accessResponses(
+        access: RouteAccess?,
+        guardSchemas: Map<KClass<*>, String>,
+    ): List<TsBody> =
         access?.guardBodies().orEmpty().map { body ->
             // Every guard body names a class: the guard answers ApiErrorSchema or nothing at all.
-            TsBody(body.status, tsName(requireNotNull(requireNotNull(body.body).qualifiedName)))
+            TsBody(body.status, guardSchemas.getValue(requireNotNull(body.body)))
         }
 
     private fun responseFor(
@@ -157,9 +169,10 @@ internal object OpenApiContractDocument {
         )
     }
 
-    /** One walk's two products, cached together so the names and the schemas can never be from different walks. */
+    /** One walk's products, cached together so the names and the schemas can never be from different walks. */
     private class Rendering(
         val rows: List<TsEndpoint>,
         val schemas: Map<String, JsonSchema>,
+        val guardSchemas: Map<KClass<*>, String>,
     )
 }

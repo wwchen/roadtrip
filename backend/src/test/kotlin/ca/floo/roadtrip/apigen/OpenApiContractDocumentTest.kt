@@ -82,6 +82,18 @@ class OpenApiContractDocumentTest {
         assertEquals("No Content", noContent["description"]!!.jsonPrimitive.content)
     }
 
+    /**
+     * Resolution 21 at the one reference no row supplies: a guard response names
+     * a declaration the walk claimed, so a `@SerialName` on the guard's DTO moves
+     * the schema and the reference together instead of leaving a dangling `$ref`.
+     */
+    @Test
+    fun `a guard body references a name the walk claimed`() {
+        val guards = walkContract().guardSchemas
+        assertTrue(guards.isNotEmpty(), "an access guard answers with at least one class")
+        assertEquals(emptyList(), guards.values.filterNot { it in contractSchemas().keys })
+    }
+
     @Test
     fun `an anonymous row gets no 401 and no 403`() {
         val doc =

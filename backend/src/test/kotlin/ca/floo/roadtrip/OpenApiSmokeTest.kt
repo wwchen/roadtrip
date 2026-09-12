@@ -40,6 +40,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -73,6 +74,13 @@ private const val USER_GATED_PATH = "/api/watches"
  * `roadtripOpenApiSource` sets the content type.
  */
 private const val UI_SPEC_PATH = "/api/docs/documentation.yaml"
+
+/** The one key the two copies of the document differ on. */
+private const val WEBHOOKS_KEY = "webhooks"
+
+/** [spec] without an empty `webhooks`, so the two copies can be compared whole. */
+private fun withoutEmptyWebhooks(spec: JsonObject): JsonObject =
+    if (spec[WEBHOOKS_KEY]?.jsonObject?.isEmpty() == true) JsonObject(spec - WEBHOOKS_KEY) else spec
 
 // Smoke for /api/docs (issue #47).
 //
@@ -263,10 +271,15 @@ class OpenApiSmokeTest {
             assertEquals("${SCHEMA_PREFIX}ApiErrorSchema", schemaRef(gated.getValue("401")))
 
             // The copy the Swagger UI renders goes through the same contract pass,
-            // and is the artifact a human reads.
+            // and is the artifact a human reads. It is the same document, whole:
+            // the only difference is the empty `webhooks` OpenApiDocSource.Routing
+            // puts on the model it hands serializeModel, which `explicitNulls =
+            // false` drops from the hand-mounted copy.
             val uiSpec = Json.parseToJsonElement(client.get(UI_SPEC_PATH).bodyAsText()).jsonObject
             assertEquals(contractSchemas().keys, uiSpec["components"]!!.jsonObject["schemas"]!!.jsonObject.keys)
             assertEquals(gated, responsesOf(uiSpec["paths"]!!.jsonObject, USER_GATED_PATH, "get"))
+            assertEquals(emptyMap(), uiSpec.getValue(WEBHOOKS_KEY).jsonObject)
+            assertEquals(withoutEmptyWebhooks(spec), withoutEmptyWebhooks(uiSpec))
 
             // Every mounted row got its responses; nothing in the contracted
             // surface is left bare. A row this slice does not mount has no

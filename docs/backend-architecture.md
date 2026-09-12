@@ -358,6 +358,12 @@ its DTO lacks is the drift being hunted. `Json*` fields compare as trees, so a
 `JsonNull` inside one round-trips honestly. A response on a path no row names is
 skipped, which is what covers `/test/**` and `/data/**`.
 
+The bodies a `StatusPages` handler writes are checked too — the universal
+`400 ApiErrorSchema` and the whole `SettingsError` vocabulary among them. Ktor
+catches a handler's throw on the engine call, which carries no matched route, so
+the plugin stashes the matched leaf in the call's attributes while still inside
+routing and reads it back when the response is rendered.
+
 `:backend:contractLedgerCheck` then holds the *suite* to the contract. The plugin
 appends every checked `(method, path, status)` to
 `backend/build/contract-ledger/exercised.tsv`, once per triple, and records a
@@ -411,12 +417,20 @@ add the route  ->  add the row with its statuses  ->  make api-types  ->  commit
 ### `/api/docs`
 
 `GET /api/docs/openapi.json` and the Swagger UI's own copy of the spec are built
-in two halves, both through `roadtripApiJson` so they are byte-identical.
+in two halves, both through the same contract pass and the same
+`roadtripApiJson`, so they are one document: `OpenApiSmokeTest` compares the two
+whole. The UI copy additionally carries Ktor's empty `webhooks`, which
+`OpenApiDocSource.Routing` puts on the model it hands `serializeModel` and
+`explicitNulls = false` drops from the other.
 
 The **routing tree** contributes the paths — spelled by
 `RoutingNode.path(OpenApiRoutePathFormat)`, which is the same spelling
 `ApiContract` uses — plus the tag, the summary and the description each route
-declares with `describeApi(...)`. The included surface is `isContractedPath` from
+declares with `describeApi(...)`, plus the path and query parameters Ktor infers
+from the route selectors: a `{id}` segment becomes a `path` parameter and a
+`param("x")` selector a `query` one. The contract pass overwrites only
+`requestBody` and `responses`, so those inferred parameters survive onto the
+served operation. The included surface is `isContractedPath` from
 `route/common/RouteInventory.kt` plus `/test/**`: `/api/**` and
 `/auth/password/**`, minus the whole `/api/docs/` subtree.
 

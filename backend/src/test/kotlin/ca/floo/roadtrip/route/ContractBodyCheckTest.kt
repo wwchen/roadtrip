@@ -7,17 +7,23 @@ import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import io.ktor.client.request.get
+import io.ktor.client.request.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 private const val BUILD_INFO = "/api/build-info"
+
+/** The one row that declares nothing at all at 400, so a `StatusPages` 400 on it is undeclared. */
+private const val SLACK_INTERACTIVITY = "/api/slack/interactivity"
 
 /** A body shaped like `HealthResponseDto`, which is not the class the `/api/build-info` row names. */
 private const val WRONG_DTO_BODY = """{"status":"ok","now":17}"""
@@ -123,6 +129,27 @@ class ContractBodyCheckTest {
             }
             assertDrifted(client.get(BUILD_INFO).status)
             violation("GET $BUILD_INFO -> 400", "re-encoded")
+        }
+
+    /**
+     * The body a `StatusPages` handler writes is checked too.
+     *
+     * Ktor catches the throw on the engine call, not on the routing call, so this
+     * response reaches the check only through the leaf routing stashed on the way
+     * in. The Slack row declares no error bodies at all, so the shared
+     * `BadRequestException` handler's `400 ApiErrorSchema` is an undeclared status.
+     */
+    @Test
+    fun `a StatusPages answer on a contracted route is checked against the row`() =
+        testApplication {
+            application {
+                routeTestApplication(fixture = true) {
+                    post(SLACK_INTERACTIVITY) { throw BadRequestException("no signature") }
+                        .access(RouteAccess.Anonymous)
+                }
+            }
+            assertDrifted(client.post(SLACK_INTERACTIVITY).status)
+            violation("POST $SLACK_INTERACTIVITY -> 400", "declares no body")
         }
 
     @Test

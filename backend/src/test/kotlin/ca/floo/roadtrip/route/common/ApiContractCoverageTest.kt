@@ -15,6 +15,7 @@ import ca.floo.roadtrip.model.api.poi.PoiSearchResponseSchema
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.model.domain.poi.PoiRow
+import ca.floo.roadtrip.route.CONTRACT_DRIFT_STATUS
 import ca.floo.roadtrip.route.api.buildInfoRoutes
 import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
@@ -190,6 +191,23 @@ class ApiContractCoverageTest {
                 .flatMap { row -> (listOf(row.success) + row.errors).map { row.method.wireValue to it } }
                 .filterNot { (_, body) -> body.status in MIN_HTTP_STATUS..MAX_HTTP_STATUS }
                 .map { (method, body) -> "$method ${body.status}" },
+        )
+    }
+
+    /**
+     * 599 is a legal HTTP status, and it is the one `ContractBodyCheck` rewrites a
+     * drifted response to. A row that declared it would make a genuine drift
+     * indistinguishable from a declared answer, in the ledger and in the test that
+     * produced it.
+     */
+    @Test
+    fun `no row declares the status the body check reserves for drift`() {
+        assertEquals(
+            emptyList(),
+            ApiContract.endpoints
+                .flatMap { row -> (listOf(row.success) + row.errors).map { row to it } }
+                .filter { (_, body) -> body.status == CONTRACT_DRIFT_STATUS }
+                .map { (row, _) -> "${row.method.wireValue} ${row.path}" },
         )
     }
 

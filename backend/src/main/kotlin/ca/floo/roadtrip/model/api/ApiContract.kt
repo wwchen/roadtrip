@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.api.poi.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.model.api.poi.PoiSearchResponseSchema
 import ca.floo.roadtrip.model.api.poi.PoisOnRouteResponseSchema
 import ca.floo.roadtrip.model.api.poi.PoisRequestSchema
+import ca.floo.roadtrip.model.domain.auth.Role
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import kotlin.reflect.KClass
 
@@ -82,6 +83,29 @@ fun RouteAccess.guardBodies(): List<ApiBody> =
             )
         RouteAccess.Anonymous, RouteAccess.Signed, RouteAccess.UserOrCapability -> emptyList()
     }
+
+/**
+ * Every inhabitant of the sealed type: the four levels that carry no data, and
+ * one [RouteAccess.HasRole] per [Role]. Enumerated rather than sampled, so
+ * [guardBodyClasses] cannot miss a level.
+ */
+private val everyAccessLevel: List<RouteAccess> =
+    listOf(RouteAccess.Anonymous, RouteAccess.Signed, RouteAccess.User, RouteAccess.UserOrCapability) +
+        Role.entries.map(RouteAccess::HasRole)
+
+/**
+ * Every class an access guard can answer with, read off [guardBodies] rather
+ * than listed a second time.
+ *
+ * The type generator claims a name for each in the same walk the rows come from,
+ * so the OpenAPI document's guard responses reference a name the collision map
+ * approved instead of one re-derived at the reference site.
+ */
+val guardBodyClasses: List<KClass<*>> =
+    everyAccessLevel
+        .flatMap { it.guardBodies() }
+        .mapNotNull { it.body }
+        .distinct()
 
 /**
  * Every endpoint the backend serves beneath the `/api/` and `/auth/password/`

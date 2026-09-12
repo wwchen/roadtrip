@@ -21,6 +21,8 @@ import io.ktor.server.routing.OpenApiRoutePathFormat
 import io.ktor.server.routing.RoutingNode
 import io.ktor.server.routing.RoutingPipelineCall
 import io.ktor.server.routing.path
+import io.ktor.server.routing.routing
+import io.ktor.util.AttributeKey
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -130,6 +132,12 @@ internal class ContractBodyCheckConfig {
 internal val ContractBodyCheck =
     createApplicationPlugin(name = "ContractBodyCheck", ::ContractBodyCheckConfig) {
         val fixture = pluginConfig.fixture
+        // The routing root's own pipeline is merged into every route's, so this
+        // runs on the RoutingPipelineCall of every matched request — the one place
+        // the matched leaf is readable for a call that is about to throw.
+        application.routing { }.intercept(ApplicationCallPipeline.Plugins) {
+            (context as? RoutingPipelineCall)?.route?.matchedRoute()?.let { context.attributes.put(matchedRouteKey, it) }
+        }
         on(ResponseRendered) { call, content ->
             if (content.contentType?.withoutParameters() != ContentType.Application.Json) return@on null
             val matched = call.matchedRoute() ?: return@on null
@@ -157,11 +165,26 @@ private class MatchedRoute(
 )
 
 /**
+ * Where routing leaves the matched leaf for Render to find.
+ *
+ * `StatusPages` catches a handler's throw on the *engine* call and answers
+ * there, so the response it writes reaches Render with no `route` to read and
+ * every `StatusPages`-produced body would be skipped. `RoutingPipelineCall`
+ * has no attributes of its own — it delegates to the engine call's — so a value
+ * written while still inside routing is readable from either call object.
+ */
+private val matchedRouteKey = AttributeKey<MatchedRoute>("ContractBodyCheckMatchedRoute")
+
+/**
  * The matched route, spelled the way [ApiContract] spells it. Null for a call
  * that never reached a routing node carrying a verb.
  */
-private fun ApplicationCall.matchedRoute(): MatchedRoute? {
-    var node: RoutingNode? = (this as? RoutingPipelineCall)?.route
+private fun ApplicationCall.matchedRoute(): MatchedRoute? =
+    (this as? RoutingPipelineCall)?.route?.matchedRoute() ?: attributes.getOrNull(matchedRouteKey)
+
+/** The nearest ancestor of this node that carries a verb, as a contract leaf. */
+private fun RoutingNode.matchedRoute(): MatchedRoute? {
+    var node: RoutingNode? = this
     while (node != null) {
         val selector = node.selector
         if (selector is HttpMethodRouteSelector) {

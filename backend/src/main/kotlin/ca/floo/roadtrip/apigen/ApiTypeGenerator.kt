@@ -2,6 +2,7 @@ package ca.floo.roadtrip.apigen
 
 import ca.floo.roadtrip.model.api.ApiContract
 import ca.floo.roadtrip.model.api.ApiEndpoint
+import ca.floo.roadtrip.model.api.guardBodyClasses
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.serializer
 import kotlin.reflect.KClass
@@ -33,11 +34,19 @@ private const val GENERATED_HEADER =
 @Suppress("TopLevelPropertyNaming")
 private val IDENTIFIER = Regex("^[A-Za-z_$][A-Za-z0-9_$]*$")
 
-/** Everything one walk of the contract produced. Rows stay in declaration order. */
+/**
+ * Everything one walk of the contract produced. Rows stay in declaration order.
+ *
+ * [guardSchemas] is the claimed name of every class an access guard answers
+ * with — no row names them, and the OpenAPI builder publishes them on each
+ * gated operation, so the walk claims them here rather than letting the
+ * reference site re-derive a name the collision map never approved.
+ */
 internal data class ContractWalk(
     val interfaces: List<TsInterface>,
     val enums: List<TsEnum>,
     val rows: List<TsEndpoint>,
+    val guardSchemas: Map<KClass<*>, String>,
 )
 
 /**
@@ -74,10 +83,15 @@ internal fun walkContract(endpoints: List<ApiEndpoint> = ApiContract.endpoints):
                         .sortedWith(compareBy({ it.status }, { it.type.orEmpty() })),
             )
         }
+    // Claimed before the declarations are read off the walk: a guard class no row
+    // mentions is a declaration in its own right, and would otherwise be a `$ref`
+    // to a schema `components` never got.
+    val guardSchemas = guardBodyClasses.associateWith { responses.declaredName(it) }
     return ContractWalk(
         interfaces = merge(responses.interfaces, requests.interfaces),
         enums = (responses.enums + requests.enums).values.toList(),
         rows = rows,
+        guardSchemas = guardSchemas,
     )
 }
 

@@ -1,7 +1,13 @@
 package ca.floo.roadtrip.model.api
 
 /**
- * The statuses [ApiContract] rows declare.
+ * The HTTP statuses this codebase names, in the one package `model/` may always
+ * import.
+ *
+ * [ApiContract]'s rows are the first reader; the second is the provider layer,
+ * which classifies an *upstream* vendor's status
+ * (`service/availability/provider/ProviderUpstreamErrors.kt` and the adapters it
+ * serves). Both used to carry their own copies of the same literals.
  *
  * `model/` never names Ktor (`LayeringGuardTest`), so `HttpStatusCode.Created.value`
  * is unavailable where the rows are written, and a bare `201` at a call site is

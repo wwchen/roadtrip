@@ -26,6 +26,7 @@ fun upstreamAvailabilityError(
     blockedMessageMarker: String? = null,
 ): AvailabilityProviderError =
     when {
+        // Upstream said "slow down". Always retryable, always its own outcome.
         httpStatus == HTTP_TOO_MANY_REQUESTS -> AvailabilityProviderError.RateLimited(cause)
         httpStatus != null && httpStatus in blockedStatuses -> AvailabilityProviderError.UpstreamBlocked(cause)
         blockedMessageMarker != null && cause.message?.contains(blockedMessageMarker) == true ->

@@ -17,7 +17,7 @@ private const val STATUS_FIELD = 3
  * is what keeps this an exit code with a message rather than an
  * `IndexOutOfBoundsException` for whoever is reading the output under pressure.
  */
-private const val LEDGER_FIELD_COUNT = 4
+private const val LEDGER_FIELD_COUNT = 5
 
 /**
  * Every contract row with a success body was produced by some route test.
