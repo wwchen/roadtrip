@@ -71,6 +71,29 @@ tasks.register<JavaExec>("installPlaywrightBrowsers") {
     args = listOf("install", "chromium")
 }
 
+// The TypeScript API contract. Both tasks run the same generator over `main`'s
+// runtime classpath, so both inherit `main`'s compile — which means generateJooq,
+// which means Docker, exactly like :backend:test. They belong in the backend-tests
+// CI job and in `make test`; never in gradle-lint, which exists to run without codegen.
+val generatedApiTypesFile = rootProject.file("frontend/src/api/generated/api-types.ts")
+val apiGenMainClass = "ca.floo.roadtrip.apigen.GenerateApiTypesKt"
+
+tasks.register<JavaExec>("generateApiTypes") {
+    group = "build"
+    description = "Write frontend/src/api/generated/api-types.ts from the Kotlin @Serializable DTOs."
+    mainClass.set(apiGenMainClass)
+    classpath = sourceSets["main"].runtimeClasspath
+    args(generatedApiTypesFile.absolutePath)
+}
+
+tasks.register<JavaExec>("checkApiTypes") {
+    group = "verification"
+    description = "Fail when the committed api-types.ts no longer matches the Kotlin @Serializable DTOs."
+    mainClass.set(apiGenMainClass)
+    classpath = sourceSets["main"].runtimeClasspath
+    args(generatedApiTypesFile.absolutePath, "--check")
+}
+
 // The secret registry is authored once at secrets/registry.yaml and copied into
 // the jar so SecretsBootstrap can enforce `required_in` at boot. Copied rather
 // than duplicated: a second checked-in copy is exactly the drift this whole
@@ -409,6 +432,9 @@ kover {
                 classes(
                     "ca.floo.roadtrip.MainKt",
                     "ca.floo.roadtrip.RoadtripRoutingKt*",
+                    // Build tooling, not served code: the generator's logic is covered by
+                    // ApiTypeGeneratorTest; only this argv-and-exit wrapper is not.
+                    "ca.floo.roadtrip.apigen.GenerateApiTypesKt",
                 )
             }
         }
