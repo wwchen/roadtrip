@@ -36,45 +36,53 @@ private const val MAX_FUZZY_THRESHOLD_INCLUSIVE = 1.0
 private const val SOURCE_STATE_KEY = "state"
 private const val SOURCE_NAME_PROPERTY_KEY = "name_property"
 
-/** Tenant-scoped adapter name → the vendor whose tenant its args must name. */
-@Suppress("TopLevelPropertyNaming")
-private val TENANT_SCOPED_ADAPTER_PROVIDERS =
-    mapOf(
-        ASPIRA_CAMPGROUNDS_ADAPTER to BookingProvider.ASPIRA,
-        "AspiraCampsitesEtl" to BookingProvider.ASPIRA,
-        BC_PARKS_CAMPGROUNDS_ADAPTER to BookingProvider.ASPIRA,
-        "ReserveAmericaCampgroundsEtl" to BookingProvider.RESERVEAMERICA,
-        "ReserveAmericaSitesEtl" to BookingProvider.RESERVEAMERICA,
-    )
+/**
+ * Everything the validator knows about one adapter: the vendor whose tenant its
+ * args must name, whether its `transform` reads `args.host` and fails the run
+ * without it, whether it joins its vendor's leaves to a sibling geometry feed by
+ * name, and the complete `args` key set it accepts — a key outside that set is a
+ * boot error, since a dead or misspelled arg used to boot cleanly and do
+ * nothing. A null [acceptedArgKeys] leaves the adapter's args unjudged.
+ */
+internal data class AdapterPolicy(
+    val tenantProvider: BookingProvider? = null,
+    val requiresHost: Boolean = false,
+    val joinsGeometry: Boolean = false,
+    val acceptedArgKeys: Set<String>? = null,
+) {
+    /** The arg keys [tenantProvider] and [requiresHost] make mandatory. */
+    val requiredArgKeys: Set<String>
+        get() =
+            buildSet {
+                tenantProvider?.let { add(TENANT_ARG_KEYS.getValue(it)) }
+                if (requiresHost) add(ARG_HOST)
+            }
+}
 
 /**
- * Adapters whose `transform` reads `args.host` and fails the run without it.
- * Boot is where that should be caught, not the first row-insert.
+ * One row per adapter the validator judges. A new adapter capability is a new
+ * [AdapterPolicy] field, not a fifth adapter-keyed literal to keep in step.
  */
 @Suppress("TopLevelPropertyNaming")
-private val HOST_REQUIRED_ADAPTERS =
-    setOf(
-        ASPIRA_CAMPGROUNDS_ADAPTER,
-        BC_PARKS_CAMPGROUNDS_ADAPTER,
-    )
-
-/** Adapters that join their vendor's leaves to a sibling geometry feed by name. */
-@Suppress("TopLevelPropertyNaming")
-private val GEOMETRY_ADAPTERS =
-    setOf(
-        ASPIRA_CAMPGROUNDS_ADAPTER,
-        BC_PARKS_CAMPGROUNDS_ADAPTER,
-    )
-
-/**
- * Adapter name → the complete `args` key set it accepts. A key outside the set
- * is a boot error: a dead or misspelled arg used to boot cleanly and do nothing.
- */
-@Suppress("TopLevelPropertyNaming")
-private val ACCEPTED_ARG_KEYS =
+internal val ADAPTER_POLICIES =
     mapOf(
-        ASPIRA_CAMPGROUNDS_ADAPTER to setOf(ARG_HOST, ARG_TENANT),
-        BC_PARKS_CAMPGROUNDS_ADAPTER to setOf(ARG_HOST, ARG_TENANT),
+        ASPIRA_CAMPGROUNDS_ADAPTER to
+            AdapterPolicy(
+                tenantProvider = BookingProvider.ASPIRA,
+                requiresHost = true,
+                joinsGeometry = true,
+                acceptedArgKeys = setOf(ARG_HOST, ARG_TENANT),
+            ),
+        BC_PARKS_CAMPGROUNDS_ADAPTER to
+            AdapterPolicy(
+                tenantProvider = BookingProvider.ASPIRA,
+                requiresHost = true,
+                joinsGeometry = true,
+                acceptedArgKeys = setOf(ARG_HOST, ARG_TENANT),
+            ),
+        "AspiraCampsitesEtl" to AdapterPolicy(tenantProvider = BookingProvider.ASPIRA),
+        "ReserveAmericaCampgroundsEtl" to AdapterPolicy(tenantProvider = BookingProvider.RESERVEAMERICA),
+        "ReserveAmericaSitesEtl" to AdapterPolicy(tenantProvider = BookingProvider.RESERVEAMERICA),
     )
 
 // In-memory representation of the configured POI registry.
@@ -311,12 +319,7 @@ class PoiRegistry(
     ) {
         for (row in rows) {
             for (etl in row.etls) {
-                val requiredArgKeys =
-                    buildList {
-                        TENANT_SCOPED_ADAPTER_PROVIDERS[etl.adapter]?.let { add(TENANT_ARG_KEYS.getValue(it)) }
-                        if (etl.adapter in HOST_REQUIRED_ADAPTERS) add(ARG_HOST)
-                    }
-                for (key in requiredArgKeys) {
+                for (key in ADAPTER_POLICIES[etl.adapter]?.requiredArgKeys.orEmpty()) {
                     if (key !in etl.args) {
                         errs += "$label '${row.name}' etl '${etl.slug}' adapter '${etl.adapter}' " +
                             "is missing required arg '$key'"
@@ -352,13 +355,14 @@ class PoiRegistry(
         for (row in rows) {
             for (etl in row.etls) {
                 val where = "$label '${row.name}' etl '${etl.slug}'"
-                ACCEPTED_ARG_KEYS[etl.adapter]?.let { accepted ->
+                val policy = ADAPTER_POLICIES[etl.adapter]
+                policy?.acceptedArgKeys?.let { accepted ->
                     for (key in etl.args.keys - accepted) {
                         errs += "$where adapter '${etl.adapter}' does not accept arg '$key' " +
                             "(accepted: ${accepted.sorted().joinToString()})"
                     }
                 }
-                if (etl.adapter !in GEOMETRY_ADAPTERS) {
+                if (policy?.joinsGeometry != true) {
                     if (etl.geometry != null) {
                         errs += "$where adapter '${etl.adapter}' does not join geometry, so it must not declare 'geometry'"
                     }

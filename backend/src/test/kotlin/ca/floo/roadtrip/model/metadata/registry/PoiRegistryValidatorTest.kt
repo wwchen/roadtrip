@@ -981,7 +981,7 @@ class PoiRegistryValidatorTest {
         )
     }
 
-    /** `CampflareCampgroundsEtl` has no `ACCEPTED_ARG_KEYS` entry, so the WA args pass through it unjudged. */
+    /** `CampflareCampgroundsEtl` has no adapter policy, so the WA args pass through it unjudged. */
     @Test
     fun `an adapter that joins no geometry may not declare a geometry block`() {
         val message =
@@ -1099,5 +1099,21 @@ class PoiRegistryValidatorTest {
             bySlug.getValue("aspira-pc-campgrounds").geometry,
         )
         assertEquals(mapOf("host" to "reservation.pc.gc.ca", "tenant" to "pc"), bySlug.getValue("aspira-pc-campgrounds").args)
+    }
+
+    /**
+     * The one invariant a single adapter table cannot enforce by construction: a
+     * policy that requires an arg its own closed set does not accept would fail
+     * every row twice over, once for the missing key and once for the extra one.
+     */
+    @Test
+    fun `every adapter policy accepts the args its own tenant and host rules require`() {
+        for ((adapter, policy) in ADAPTER_POLICIES) {
+            val accepted = policy.acceptedArgKeys ?: continue
+            assertTrue(
+                accepted.containsAll(policy.requiredArgKeys),
+                "$adapter requires ${policy.requiredArgKeys - accepted} but does not accept them",
+            )
+        }
     }
 }

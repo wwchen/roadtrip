@@ -4,7 +4,6 @@ import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.model.domain.GeometryProvenance
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -26,21 +25,13 @@ import java.time.Instant
 // `/api/maps` carries booking IDs but no lat/lng (the SPA renders against
 // pixel-coord image maps, not geographic). To put a pin on the map we
 // have to join Aspira leaves to a sibling source that actually carries
-// coordinates. Each tenant has its own pairing:
+// coordinates. Each tenant's pairing lives in its registry row's `geometry:`
+// block — which of its inputs carry coordinates, in which preference order,
+// and how names are matched. One ETL class, reading only that declaration.
 //
-//   WA → uscampgrounds.info CSV (state column 12)
-//   BC → BC Parks Strapi (already provincial-shape; protectedAreaName)
-//   PC → APCA ArcGIS Accommodation (campground points) + Places
-//        (per-park polygon centroids). A campground leaf whose own name
-//        misses geometry falls back to its parent park's centroid via
-//        parent_name. Park-container leaves themselves are dropped before
-//        emission (see the resourceLocationId gate in transform), so the
-//        centroid now only backstops campground leaves, never emits a
-//        park-level pin.
-//
-// One ETL class. Each row's `geometry:` block declares which of its inputs
-// carry coordinates, in which preference order, and how names are matched;
-// this class reads only that declaration.
+// Park-container leaves are dropped before emission (see the
+// resourceLocationId gate in transform), so a parent fallback only ever
+// backstops a campground leaf, never emits a park-level pin.
 //
 // Match strategy: aggressive name normalization (lowercase, drop park /
 // campground / national-park-of-canada / etc. suffixes), then exact
@@ -175,13 +166,7 @@ class AspiraCampgroundsEtl(
             management = CampgroundManagement(agency),
             sourceUrl = "https://$host/",
             sourcePayload = aspiraSourcePayload(leaf),
-            geometryProvenance =
-                GeometryProvenance(
-                    matchKind = match.kind.label,
-                    source = point.source,
-                    matchedName = match.matchedName,
-                    score = match.score,
-                ),
+            geometryProvenance = match.toProvenance(),
         )
     }
 

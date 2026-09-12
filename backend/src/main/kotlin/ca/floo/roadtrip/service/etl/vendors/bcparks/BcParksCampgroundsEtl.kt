@@ -6,7 +6,6 @@ import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogPhoto
-import ca.floo.roadtrip.model.domain.GeometryProvenance
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -28,6 +27,7 @@ import ca.floo.roadtrip.service.etl.vendors.aspira.BcParksStrapiRow
 import ca.floo.roadtrip.service.etl.vendors.aspira.BcParksStrapiSource
 import ca.floo.roadtrip.service.etl.vendors.aspira.GeometryIndex
 import ca.floo.roadtrip.service.etl.vendors.aspira.GeometryPoint
+import ca.floo.roadtrip.service.etl.vendors.aspira.toProvenance
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -160,13 +160,7 @@ class BcParksCampgroundsEtl(
             contact = strapiRow.phone?.let { CampgroundContact(phone = it) },
             sourceUrl = bookingUrl,
             sourcePayload = sourcePayload(leaf, strapiRow),
-            geometryProvenance =
-                GeometryProvenance(
-                    matchKind = match.kind.label,
-                    source = match.value.source,
-                    matchedName = match.matchedName,
-                    score = match.score,
-                ),
+            geometryProvenance = match.toProvenance(),
         )
     }
 

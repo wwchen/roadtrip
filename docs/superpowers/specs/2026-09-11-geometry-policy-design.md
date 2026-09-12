@@ -197,7 +197,8 @@ Review query (documented):
 ```sql
 SELECT name, geometry_provenance->>'match_kind' AS kind, geometry_provenance->>'source' AS source,
        geometry_provenance->>'matched_name' AS matched, geometry_provenance->>'score' AS score
-FROM campgrounds WHERE geometry_provenance->>'match_kind' <> 'exact' ORDER BY score NULLS LAST;
+FROM campgrounds WHERE geometry_provenance->>'match_kind' <> 'exact'
+ORDER BY (geometry_provenance->>'score')::double precision NULLS LAST;
 ```
 
 ### 6. ETL wiring

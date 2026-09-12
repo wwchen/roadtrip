@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.etl.vendors.aspira
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.registry.GeometryFormat
 import ca.floo.roadtrip.model.metadata.registry.GeometrySourceSpec
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
@@ -16,6 +17,15 @@ private const val PARK = "Two Jack Lakeside"
 private const val DECOY_PARK = "Lake Louise"
 private const val LON = -115.49
 private const val LAT = 51.22
+
+/** The shipped Parks Canada row and the two feeds its `geometry:` block declares, in declared order. */
+private const val PC_ETL_SLUG = "aspira-pc-campgrounds"
+private const val ACCOMMODATION_SLUG = "apca-accommodation"
+private const val PLACES_SLUG = "apca-places"
+
+/** The park's polygon centroid: the same park, kilometres from its campground. */
+private const val CENTROID_LON = -115.57
+private const val CENTROID_LAT = 51.42
 
 /**
  * Two things the format dispatch has to get right, neither visible through a
@@ -65,6 +75,17 @@ class GeometrySourcesTest {
             """.trimIndent(),
         )
 
+    private fun centroidEnvelope(
+        name: String,
+        lon: Double,
+        lat: Double,
+    ): Envelope =
+        envelope(
+            """
+            { "features": [ { "attributes": { "DESC_EN": "$name" }, "centroid": { "x": $lon, "y": $lat } } ] }
+            """.trimIndent(),
+        )
+
     private fun forSpec(
         format: GeometryFormat,
         envelopes: List<Envelope>,
@@ -97,11 +118,7 @@ class GeometrySourcesTest {
 
     @Test
     fun `arcgis_centroids builds the centroid reader`() {
-        val payload =
-            """
-            { "features": [ { "attributes": { "DESC_EN": "$PARK" }, "centroid": { "x": $LON, "y": $LAT } } ] }
-            """.trimIndent()
-        val source = forSpec(GeometryFormat.ARCGIS_CENTROIDS, listOf(envelope(payload)))
+        val source = forSpec(GeometryFormat.ARCGIS_CENTROIDS, listOf(centroidEnvelope(PARK, LON, LAT)))
 
         assertIs<ArcGisCentroidSource>(source)
         assertEquals(point(), index(source)[normalize(PARK)])
@@ -164,5 +181,36 @@ class GeometrySourcesTest {
         // feature drops out of the index entirely.
         val blankThenCapitalized = GeoJsonFeaturesSource(listOf(geoJsonEnvelope("""{ "name": "   ", "Name": "$PARK" }""")))
         assertEquals(point(), index(blankThenCapitalized)[normalize(PARK)])
+    }
+
+    /**
+     * The shipped Parks Canada row, end to end: both declared feeds carry the
+     * same park, and the campground point wins over the park centroid because
+     * `apca-accommodation` is declared first. Format dispatch, `name_property`,
+     * declared order and the first-writer-wins merge in one assertion — the
+     * claim 38% of the PC pins rest on, otherwise only pinned in pieces.
+     */
+    @Test
+    fun `the shipped PC policy pins a park to its accommodation point, not its centroid`() {
+        val pcEtl =
+            PoiRegistry
+                .loadResource("poi-registry.yaml")
+                .poiData
+                .flatMap { it.etls }
+                .single { it.slug == PC_ETL_SLUG }
+        val feeds =
+            mapOf(
+                ACCOMMODATION_SLUG to listOf(geoJsonEnvelope("""{ "Name_e": "$PARK" }""")),
+                PLACES_SLUG to listOf(centroidEnvelope(PARK, CENTROID_LON, CENTROID_LAT)),
+            )
+        val sources =
+            checkNotNull(pcEtl.geometry).sources.map { spec ->
+                spec.input to GeometrySources.forSpec(spec, feeds.getValue(spec.input))
+            }
+
+        assertEquals(
+            GeometryPoint(LAT, LON, ACCOMMODATION_SLUG),
+            GeometryIndex.build(sources, log, PC_ETL_SLUG)[normalize(PARK)],
+        )
     }
 }
