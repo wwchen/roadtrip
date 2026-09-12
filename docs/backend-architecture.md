@@ -327,6 +327,55 @@ to direct `data_provider`/`booking_provider` columns, and nothing recreates
 them. Imports write straight to the base tables; there is no refresh step
 between an import and the row becoming visible to reads.
 
+## The API Contract
+
+`model/api/ApiContract.kt` declares every endpoint under `/api/**` and
+`/auth/password/**` as data: its method (an `ApiMethod`, because `model/` never
+names Ktor), its path as registered, its request DTO, its 2xx response DTO, and
+the error DTOs it can serialize. Two things read it.
+
+`registerKoinRoutes` compares it against the live routing tree at boot, in both
+directions, beside the RFC 0010 access guard. A mounted route with no row fails
+the boot; a row with no route does too, unless the row is marked `conditional`
+(the Slack interactivity endpoint, which mounts only when a signing secret is
+configured). `/api/docs` is exempt: the Swagger UI subtree is framework-generated
+and `openapi.json` answers with a Ktor type. `ApiContractCoverageTest` exercises
+the comparator; the boot guard is what sees the real tree.
+
+`:backend:generateApiTypes` walks `serializer(kclass).descriptor` from every row,
+transitively, and writes `frontend/src/api/generated/api-types.ts`;
+`:backend:checkApiTypes` runs the same generator and fails when the committed file
+differs. Both go through `main`'s runtime classpath, so both need the same compile
+— and therefore the same Docker for `generateJooq` — that `:backend:test` needs.
+They run in `make test` and in CI's `backend-tests` job, never in `gradle-lint`.
+
+Optionality follows the one encoder (`route/common/RouteResponses.kt`:
+`encodeDefaults = true`, `explicitNulls = false`), not the Kotlin type:
+
+- **Response:** a field is optional exactly when it is nullable. A non-null field
+  with a default is always sent, so it is required. `| null` is never generated.
+- **Request:** a field is optional when it is nullable **or** has a default.
+
+A wire vocabulary is a `@Serializable enum` — `WatchStatus`, `WatchDoneReason`,
+`RecgovSessionState`, `RecgovLoginStatus`, `BookingActionStatus` — so its
+TypeScript union is generated with it. `WireVocabularyTest` pins each constant's
+`@SerialName` and its `wireValue` against the strings already on the wire, so
+neither copy can drift. A value class is generated as the one value it wraps.
+
+Generation fails, by name, on: a sealed or polymorphic descriptor; a serial kind
+or a `kotlinx.serialization.json` type with no mapping; a nullable list element or
+map value, which `explicitNulls = false` would leave on the wire as a null the
+TypeScript cannot honestly describe; a serial name that would not make a legal
+type name; two classes that would generate the same name; and a class reached
+from both a request root and a response root whose two optionality rules
+disagree. Each is a build failure a human resolves, not a half-built variant.
+
+The loop when you add or change an endpoint:
+
+```
+add the route  ->  add the ApiContract row  ->  make api-types  ->  commit the diff
+```
+
 ## Adding Code
 
 When adding a new route, add only HTTP parsing, status mapping, OpenAPI
