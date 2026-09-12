@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.GeometryProvenance
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -173,7 +174,14 @@ class AspiraCampgroundsEtl(
             links = listOf(CampgroundLink("https://$host/")),
             management = CampgroundManagement(agency),
             sourceUrl = "https://$host/",
-            sourcePayload = aspiraSourcePayload(leaf, match.kind),
+            sourcePayload = aspiraSourcePayload(leaf),
+            geometryProvenance =
+                GeometryProvenance(
+                    matchKind = match.kind.label,
+                    source = point.source,
+                    matchedName = match.matchedName,
+                    score = match.score,
+                ),
         )
     }
 
@@ -189,17 +197,13 @@ class AspiraCampgroundsEtl(
                 resourceLocationId = bookingCtaRef.resourceLocationId,
             ).serialize()
 
-    private fun aspiraSourcePayload(
-        leaf: AspiraLeaf,
-        matchKind: AspiraLeafMatchKind,
-    ): JsonObject =
+    private fun aspiraSourcePayload(leaf: AspiraLeaf): JsonObject =
         buildJsonObject {
             put("name", leaf.name)
             put(ASPIRA_TRANSACTION_LOCATION_ID_KEY, leaf.transactionLocationId)
             put(ASPIRA_MAP_ID_KEY, leaf.mapId)
             leaf.resourceLocationId?.let { put(ASPIRA_RESOURCE_LOCATION_ID_KEY, it) }
             leaf.parentName?.let { put("parent_name", it) }
-            put("match_kind", matchKind.label)
         }
 
     companion object {

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.framework
 
+import ca.floo.roadtrip.model.domain.GeometryProvenance
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
@@ -379,7 +380,11 @@ class EtlExtrasDtoTest {
         assertEquals(22, extras["mapId"]!!.jsonPrimitive.int)
         assertEquals(33, extras["resourceLocationId"]!!.jsonPrimitive.int)
         assertNull(extras["parent_name"])
-        assertEquals("exact", extras["match_kind"]!!.jsonPrimitive.content)
+        assertNull(extras["match_kind"])
+        assertEquals(
+            GeometryProvenance(matchKind = "exact", source = "fixture", matchedName = "lakeside"),
+            campground.geometryProvenance,
+        )
     }
 
     private fun geoJsonEnvelope(): Envelope =

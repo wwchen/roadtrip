@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.GeometryProvenance
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.registry.GeometryFormat
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.TestInstance
 import java.nio.file.Files
 import java.time.Instant
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -379,11 +381,16 @@ class AspiraCampgroundsEtlTest {
     }
 
     @Test
-    fun `source payload records match provenance`() {
+    fun `an exact match stamps provenance and leaves match_kind out of the payload`() {
         val campground = campgrounds(dtoOf(campground)).single()
+
+        assertEquals(
+            GeometryProvenance(matchKind = "exact", source = "test-geom", matchedName = "two jack lakeside"),
+            campground.geometryProvenance,
+        )
         val extras = campground.sourcePayload!!.jsonObject
         assertEquals("Two Jack Lakeside", extras["name"]!!.jsonPrimitive.content)
-        assertEquals("exact", extras["match_kind"]!!.jsonPrimitive.content)
+        assertNull(extras["match_kind"], "match_kind now lives in geometry_provenance, not the payload blob")
     }
 
     @Test
@@ -461,10 +468,8 @@ class AspiraCampgroundsEtlTest {
 
         assertEquals("Backcountry Site With No Geometry", campground.name)
         assertEquals(
-            "parent",
-            campground.sourcePayload!!
-                .jsonObject["match_kind"]!!
-                .jsonPrimitive.content,
+            GeometryProvenance(matchKind = "parent", source = "test-geom", matchedName = "banff"),
+            campground.geometryProvenance,
         )
         // Located at Banff's seeded centroid (lon -115.57, lat 51.18), not its own.
         assertEquals(-115.57, campground.longitude)
