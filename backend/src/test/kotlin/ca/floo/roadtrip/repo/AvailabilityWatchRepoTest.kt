@@ -178,6 +178,24 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
     }
 
     @Test
+    fun `resuming a done watch clears the reason it ended with`() {
+        val owner = seedAppUser()
+        val poi = insertPoi()
+        val repo = AvailabilityWatchRepo(ctx)
+        val created =
+            repo.create(
+                createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, campsiteId = null)), ownerUserId = owner.value),
+            )
+        repo.update(created.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE, doneReason = WatchDoneReason.TRIGGERED))
+
+        val resumed = repo.update(created.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.ACTIVE))!!
+
+        assertEquals(WatchStatus.ACTIVE, resumed.status)
+        assertNull(resumed.doneReason)
+        assertNull(repo.findById(created.id)!!.doneReason)
+    }
+
+    @Test
     fun `list filtered by poiId matches watches whose target set includes that poi`() {
         val owner = seedAppUser()
         val poiA = insertPoi()

@@ -344,7 +344,11 @@ open class AvailabilityWatchRepo(
                 )
         }
         if (input.stopWhenTriggered != null) query = query.set(AVAILABILITY_WATCH.STOP_WHEN_TRIGGERED, input.stopWhenTriggered)
-        if (input.status != null) query = query.set(AVAILABILITY_WATCH.STATUS, input.status.wireValue)
+        if (input.status != null) {
+            query = query.set(AVAILABILITY_WATCH.STATUS, input.status.wireValue)
+            // A resumed or paused watch has not ended, so it carries no reason.
+            if (input.status != WatchStatus.DONE) query = query.setNull(AVAILABILITY_WATCH.DONE_REASON)
+        }
         if (input.doneReason != null) query = query.set(AVAILABILITY_WATCH.DONE_REASON, input.doneReason.wireValue)
         val rows = query.where(AVAILABILITY_WATCH.ID.eq(id)).execute()
         if (rows == 0) return null
@@ -377,7 +381,10 @@ open class AvailabilityWatchRepo(
             triggerConfig = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.TRIGGER_CONFIG)!!.data()).jsonObject,
             stopWhenTriggered = r.get(AVAILABILITY_WATCH.STOP_WHEN_TRIGGERED)!!,
             status = WatchStatus.parse(r.get(AVAILABILITY_WATCH.STATUS)!!) ?: error("invalid watch status"),
-            doneReason = WatchDoneReason.parse(r.get(AVAILABILITY_WATCH.DONE_REASON)),
+            doneReason =
+                r.get(AVAILABILITY_WATCH.DONE_REASON)?.let {
+                    WatchDoneReason.parse(it) ?: error("invalid done reason: $it")
+                },
             createdAt = r.get(AVAILABILITY_WATCH.CREATED_AT)!!,
             updatedAt = r.get(AVAILABILITY_WATCH.UPDATED_AT)!!,
         )

@@ -21,6 +21,7 @@ enum class WatchDoneReason(
     ;
 
     companion object {
+        /** Null for an unrecognised value; `availability_watch`'s CHECK keeps the column inside this vocabulary. */
         fun parse(value: String?): WatchDoneReason? = entries.firstOrNull { it.wireValue == value }
     }
 }

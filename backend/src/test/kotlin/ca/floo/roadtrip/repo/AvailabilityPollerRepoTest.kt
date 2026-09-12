@@ -2,6 +2,7 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.AvailabilityPoller.Companion.AVAILABILITY_POLLER
 import ca.floo.roadtrip.model.availability.WatchDoneReason
+import ca.floo.roadtrip.model.availability.WatchStatus
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Duration
@@ -161,6 +162,21 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
 
         assertEquals("done", watchStatus(elapsed))
         assertEquals(WatchDoneReason.ELAPSED.wireValue, watchDoneReason(elapsed))
+    }
+
+    @Test
+    fun `the reaper leaves an already-triggered watch's reason alone`() {
+        val repo = AvailabilityPollerRepo(ctx)
+        val poi = insertPoi()
+        val elapsed = insertElapsedWatch(poiId = poi)
+        AvailabilityWatchRepo(ctx).update(
+            elapsed,
+            AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE, doneReason = WatchDoneReason.TRIGGERED),
+        )
+
+        repo.reapElapsedWatches()
+
+        assertEquals(WatchDoneReason.TRIGGERED.wireValue, watchDoneReason(elapsed))
     }
 
     @Test
