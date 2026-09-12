@@ -57,11 +57,11 @@ internal fun Route.apiDocsRoutes() {
  * the tags and the summaries, and `ApiContract` contributes `components/schemas`,
  * each operation's request body and every status it can answer.
  */
-private fun Application.roadtripOpenApiDoc(): OpenApiDoc {
-    val fromTree = OpenApiDoc(info = roadtripOpenApiInfo) + roadtripOpenApiRoutes()
-    val access = contractRouteAccess()
-    return OpenApiContractDocument.apply(fromTree) { method, path -> access(method, path) }
-}
+private fun Application.roadtripOpenApiDoc(): OpenApiDoc =
+    OpenApiContractDocument.apply(
+        OpenApiDoc(info = roadtripOpenApiInfo) + roadtripOpenApiRoutes(),
+        accessOf = contractRouteAccess(),
+    )
 
 /**
  * The Swagger UI's own copy of the spec, through the same contract pass.
@@ -81,9 +81,10 @@ private fun roadtripOpenApiSource(): OpenApiDocSource {
             roadtripOpenApiRoutes()
         },
         serializeModel = { doc ->
-            encodeApiJson(
-                OpenApiContractDocument.apply(doc) { method, path -> access.get()?.invoke(method, path) },
-            )
+            // Loud rather than silently un-gated: a null here would publish every
+            // access-gated operation without its 401 and its 403.
+            val lookup = requireNotNull(access.get()) { "the routes hook must run before serializeModel" }
+            encodeApiJson(OpenApiContractDocument.apply(doc, accessOf = lookup))
         },
     )
 }

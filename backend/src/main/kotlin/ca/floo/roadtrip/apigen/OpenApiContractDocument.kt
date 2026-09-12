@@ -32,16 +32,19 @@ private class OperationSlot(
     val write: (PathItem, Operation) -> PathItem,
 )
 
+/** Built from the enum, so a verb added to [ApiMethod] is a compile error here rather than a 500 from `/api/docs`. */
 private val operationSlots: Map<ApiMethod, OperationSlot> =
-    mapOf(
-        ApiMethod.GET to OperationSlot({ it.get }, { item, op -> item.copy(get = op) }),
-        ApiMethod.POST to OperationSlot({ it.post }, { item, op -> item.copy(post = op) }),
-        ApiMethod.PUT to OperationSlot({ it.put }, { item, op -> item.copy(put = op) }),
-        ApiMethod.PATCH to OperationSlot({ it.patch }, { item, op -> item.copy(patch = op) }),
-        ApiMethod.DELETE to OperationSlot({ it.delete }, { item, op -> item.copy(delete = op) }),
-        ApiMethod.HEAD to OperationSlot({ it.head }, { item, op -> item.copy(head = op) }),
-        ApiMethod.OPTIONS to OperationSlot({ it.options }, { item, op -> item.copy(options = op) }),
-    )
+    ApiMethod.entries.associateWith { method ->
+        when (method) {
+            ApiMethod.GET -> OperationSlot({ it.get }, { item, op -> item.copy(get = op) })
+            ApiMethod.POST -> OperationSlot({ it.post }, { item, op -> item.copy(post = op) })
+            ApiMethod.PUT -> OperationSlot({ it.put }, { item, op -> item.copy(put = op) })
+            ApiMethod.PATCH -> OperationSlot({ it.patch }, { item, op -> item.copy(patch = op) })
+            ApiMethod.DELETE -> OperationSlot({ it.delete }, { item, op -> item.copy(delete = op) })
+            ApiMethod.HEAD -> OperationSlot({ it.head }, { item, op -> item.copy(head = op) })
+            ApiMethod.OPTIONS -> OperationSlot({ it.options }, { item, op -> item.copy(options = op) })
+        }
+    }
 
 /**
  * The contract's half of `/api/docs/openapi.json`.
@@ -70,7 +73,9 @@ internal object OpenApiContractDocument {
         endpoints: List<ApiEndpoint> = ApiContract.endpoints,
         accessOf: (ApiMethod, String) -> RouteAccess?,
     ): OpenApiDoc {
-        val rendering = if (endpoints == ApiContract.endpoints) defaultRendering else renderingFor(endpoints)
+        // Identity, not equality: the cached walk is for the real contract, and the
+        // caller that should hit it passes the very instance the default supplies.
+        val rendering = if (endpoints === ApiContract.endpoints) defaultRendering else renderingFor(endpoints)
         val paths = LinkedHashMap(doc.paths)
         endpoints.zip(rendering.rows).forEach { (row, names) ->
             // A row whose operation is not mounted is skipped: every test mounts a
@@ -82,10 +87,14 @@ internal object OpenApiContractDocument {
             val described = operation.withContract(names, accessOf(row.method, row.path))
             paths[row.path] = ReferenceOr.Value(slot.write(item, described))
         }
+        // The contract's declarations win, but anything already in components —
+        // the securitySchemes Ktor's own scan contributes to the Swagger UI's
+        // copy, or a schema its JsonSchemaInference produced — is kept.
+        val existing = doc.components
+        val schemas = existing?.schemas.orEmpty() + rendering.schemas
         return doc.copy(
             paths = paths,
-            components =
-                doc.components?.copy(schemas = rendering.schemas) ?: Components(schemas = rendering.schemas),
+            components = existing?.copy(schemas = schemas) ?: Components(schemas = schemas),
         )
     }
 
@@ -136,7 +145,11 @@ internal object OpenApiContractDocument {
      * can only ever answer 401 — `check` returns `Forbidden` for a role alone —
      * so it publishes one status, and `HasRole` publishes both. `Anonymous`,
      * `Signed` and `UserOrCapability` refuse nobody at this layer, so they add
-     * nothing and whatever their handlers answer stays on the row.
+     * nothing and whatever their handlers answer stays on the row — and so does an
+     * unmounted or unlabelled leaf, which reaches here as null.
+     *
+     * Every case is enumerated: a level added to the sealed [RouteAccess] must
+     * decide here whether it can refuse, rather than publishing no 401 by default.
      */
     private fun accessResponses(access: RouteAccess?): List<TsBody> =
         when (access) {
@@ -146,7 +159,7 @@ internal object OpenApiContractDocument {
                     TsBody(HTTP_UNAUTHORIZED, apiErrorSchemaName),
                     TsBody(HTTP_FORBIDDEN, apiErrorSchemaName),
                 )
-            else -> emptyList()
+            null, RouteAccess.Anonymous, RouteAccess.Signed, RouteAccess.UserOrCapability -> emptyList()
         }
 
     private fun responseFor(

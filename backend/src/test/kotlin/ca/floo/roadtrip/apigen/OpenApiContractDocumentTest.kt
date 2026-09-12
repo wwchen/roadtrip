@@ -1,5 +1,8 @@
 package ca.floo.roadtrip.apigen
 
+import ca.floo.roadtrip.fixtures.refsIn
+import ca.floo.roadtrip.fixtures.schemaOf
+import ca.floo.roadtrip.fixtures.schemaRef
 import ca.floo.roadtrip.model.api.ApiBody
 import ca.floo.roadtrip.model.api.ApiEndpoint
 import ca.floo.roadtrip.model.api.ApiErrorSchema
@@ -7,7 +10,9 @@ import ca.floo.roadtrip.model.api.ApiMethod
 import ca.floo.roadtrip.model.api.BuildInfoDto
 import ca.floo.roadtrip.model.api.CheckNowCooldownDto
 import ca.floo.roadtrip.model.api.HTTP_CONFLICT
+import ca.floo.roadtrip.model.api.HTTP_FORBIDDEN
 import ca.floo.roadtrip.model.api.HTTP_OK
+import ca.floo.roadtrip.model.api.HTTP_UNAUTHORIZED
 import ca.floo.roadtrip.model.domain.auth.Role
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.encodeApiJson
@@ -17,9 +22,9 @@ import io.ktor.openapi.Operation
 import io.ktor.openapi.PathItem
 import io.ktor.openapi.ReferenceOr
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -32,6 +37,10 @@ private const val WATCHES = "/api/watches"
 private const val WATCH_DELETE = "/api/watches/{id}/delete"
 private const val FORCE_POLLER = "/api/availability/pollers/{id}/force"
 private const val SCHEMA_PREFIX = "#/components/schemas/"
+private const val API_ERROR_REF = "${SCHEMA_PREFIX}ApiErrorSchema"
+
+/** The path of every synthetic row here; only one is ever in a document at a time. */
+private const val SYNTHETIC = "/api/synthetic"
 
 /**
  * The contract pass over a document, against hand-built `PathItem`s.
@@ -47,36 +56,28 @@ class OpenApiContractDocumentTest {
         val doc = applied(WATCHES to PathItem(post = Operation(summary = "Create a watch")))
         val post = operation(doc, WATCHES, "post")
         assertEquals("Create a watch", post["summary"]!!.jsonPrimitive.content, "the tree's summary survives")
-        assertEquals(
-            "${SCHEMA_PREFIX}AvailabilityWatchCreateRequest",
-            ref(post["requestBody"]!!.jsonObject),
-        )
-        assertEquals(
-            true,
-            post["requestBody"]!!
-                .jsonObject["required"]!!
-                .jsonPrimitive.content
-                .toBoolean(),
-        )
-        val responses = post["responses"]!!.jsonObject
-        assertEquals("${SCHEMA_PREFIX}AvailabilityWatchResponse", ref(responses.getValue("201").jsonObject))
-        assertEquals("${SCHEMA_PREFIX}ApiErrorSchema", ref(responses.getValue("401").jsonObject))
+        val requestBody = post.getValue("requestBody").jsonObject
+        assertEquals("${SCHEMA_PREFIX}AvailabilityWatchCreateRequest", schemaRef(requestBody))
+        assertTrue(requestBody.getValue("required").jsonPrimitive.boolean, "a declared body is required")
+        val responses = responses(doc, WATCHES, "post")
+        assertEquals("${SCHEMA_PREFIX}AvailabilityWatchResponse", schemaRef(responses.getValue("201")))
+        assertEquals(API_ERROR_REF, schemaRef(responses.getValue("401")))
         assertTrue("200" !in responses.keys, "the success status is 201, so no 200 is published: ${responses.keys}")
     }
 
     @Test
     fun `a 429 row references the cooldown DTO, not the generic error`() {
         val doc = applied(FORCE_POLLER to PathItem(post = Operation()))
-        val responses = operation(doc, FORCE_POLLER, "post")["responses"]!!.jsonObject
-        assertEquals("${SCHEMA_PREFIX}CheckNowCooldownDto", ref(responses.getValue("429").jsonObject))
-        assertEquals("${SCHEMA_PREFIX}CheckNowResponseDto", ref(responses.getValue("200").jsonObject))
-        assertEquals("${SCHEMA_PREFIX}ApiErrorSchema", ref(responses.getValue("404").jsonObject))
+        val responses = responses(doc, FORCE_POLLER, "post")
+        assertEquals("${SCHEMA_PREFIX}CheckNowCooldownDto", schemaRef(responses.getValue("429")))
+        assertEquals("${SCHEMA_PREFIX}CheckNowResponseDto", schemaRef(responses.getValue("200")))
+        assertEquals(API_ERROR_REF, schemaRef(responses.getValue("404")))
     }
 
     @Test
     fun `a 204 is published with no content`() {
         val doc = applied(WATCH_DELETE to PathItem(post = Operation()))
-        val noContent = operation(doc, WATCH_DELETE, "post")["responses"]!!.jsonObject.getValue("204").jsonObject
+        val noContent = responses(doc, WATCH_DELETE, "post").getValue("204").jsonObject
         assertNull(noContent["content"], "a 204 carries no body, so it publishes no content")
         assertEquals("No Content", noContent["description"]!!.jsonPrimitive.content)
     }
@@ -87,8 +88,7 @@ class OpenApiContractDocumentTest {
             OpenApiContractDocument.apply(
                 docWith("/api/health" to PathItem(get = Operation())),
             ) { _, _ -> RouteAccess.Anonymous }
-        val responses = operation(doc, "/api/health", "get")["responses"]!!.jsonObject
-        assertEquals(setOf("200", "400"), responses.keys)
+        assertEquals(setOf("200", "400"), responses(doc, "/api/health", "get").keys)
     }
 
     @Test
@@ -97,46 +97,52 @@ class OpenApiContractDocumentTest {
             OpenApiContractDocument.apply(
                 docWith("/api/health" to PathItem(get = Operation())),
             ) { _, _ -> RouteAccess.HasRole(Role.ADMIN) }
-        assertEquals(
-            setOf("200", "400", "401", "403"),
-            operation(doc, "/api/health", "get")["responses"]!!.jsonObject.keys,
-        )
+        assertEquals(setOf("200", "400", "401", "403"), responses(doc, "/api/health", "get").keys)
     }
 
     @Test
-    fun `a row whose access level already 401s is not published twice`() {
+    fun `a row that declares its own 401 publishes one bare ref`() {
         val doc = applied("/api/watches/{id}" to PathItem(get = Operation()))
-        val unauthorized = operation(doc, "/api/watches/{id}", "get")["responses"]!!.jsonObject.getValue("401")
-        assertEquals("${SCHEMA_PREFIX}ApiErrorSchema", ref(unauthorized.jsonObject))
-        assertNull(schemaOf(unauthorized.jsonObject)["oneOf"], "one class at 401 is a bare ref, not a oneOf")
+        val unauthorized = responses(doc, "/api/watches/{id}", "get").getValue("401")
+        assertEquals(API_ERROR_REF, schemaRef(unauthorized))
+        assertNull(schemaOf(unauthorized)["oneOf"], "one class at 401 is a bare ref, not a oneOf")
+    }
+
+    /**
+     * The dedup R6 turns on. `POST /api/booking/add-to-cart` is the live instance:
+     * `RouteAccess.User` supplies a 401 and the row declares one too, and the two
+     * must collapse into a single bare reference rather than a `oneOf` of one
+     * class with itself.
+     */
+    @Test
+    fun `the access-derived 401 merges with the one the row declares`() {
+        val doc = withAccess(RouteAccess.User, ApiBody(HTTP_UNAUTHORIZED, ApiErrorSchema::class))
+        val responses = responses(doc, SYNTHETIC, "get")
+        assertEquals(setOf("200", "401"), responses.keys)
+        assertBareApiError(responses.getValue("401"))
+    }
+
+    @Test
+    fun `the access-derived 403 merges with the one the row declares`() {
+        val doc = withAccess(RouteAccess.HasRole(Role.ADMIN), ApiBody(HTTP_FORBIDDEN, ApiErrorSchema::class))
+        val responses = responses(doc, SYNTHETIC, "get")
+        assertEquals(setOf("200", "401", "403"), responses.keys)
+        assertBareApiError(responses.getValue("403"))
+        assertBareApiError(responses.getValue("401"))
     }
 
     @Test
     fun `two classes at one status become a oneOf`() {
-        val row =
-            ApiEndpoint(
-                ApiMethod.GET,
-                "/api/two-bodies",
-                success = ApiBody(HTTP_OK, BuildInfoDto::class),
-                errors =
-                    listOf(
-                        ApiBody(HTTP_CONFLICT, ApiErrorSchema::class),
-                        ApiBody(HTTP_CONFLICT, CheckNowCooldownDto::class),
-                    ),
-            )
         val doc =
-            OpenApiContractDocument.apply(
-                docWith("/api/two-bodies" to PathItem(get = Operation())),
-                listOf(row),
-            ) { _, _ -> RouteAccess.Anonymous }
-        val conflict = operation(doc, "/api/two-bodies", "get")["responses"]!!.jsonObject.getValue("409")
+            withAccess(
+                RouteAccess.Anonymous,
+                ApiBody(HTTP_CONFLICT, ApiErrorSchema::class),
+                ApiBody(HTTP_CONFLICT, CheckNowCooldownDto::class),
+            )
+        val conflict = responses(doc, SYNTHETIC, "get").getValue("409")
         assertEquals(
-            listOf("${SCHEMA_PREFIX}ApiErrorSchema", "${SCHEMA_PREFIX}CheckNowCooldownDto"),
-            schemaOf(conflict.jsonObject)["oneOf"]!!.jsonArray.map {
-                it.jsonObject
-                    .getValue("\$ref")
-                    .jsonPrimitive.content
-            },
+            listOf(API_ERROR_REF, "${SCHEMA_PREFIX}CheckNowCooldownDto"),
+            schemaOf(conflict)["oneOf"]!!.jsonArray.map(::schemaRefOf),
         )
     }
 
@@ -170,6 +176,28 @@ class OpenApiContractDocumentTest {
         assertEquals(emptyList(), unresolved)
     }
 
+    private fun assertBareApiError(response: JsonElement) {
+        assertEquals(API_ERROR_REF, schemaRef(response))
+        assertNull(schemaOf(response)["oneOf"], "the row's entry and the access level's are one class, so no oneOf")
+    }
+
+    /** One synthetic GET row at [SYNTHETIC], under [access], declaring exactly [errors]. */
+    private fun withAccess(
+        access: RouteAccess,
+        vararg errors: ApiBody,
+    ): OpenApiDoc =
+        OpenApiContractDocument.apply(
+            docWith(SYNTHETIC to PathItem(get = Operation())),
+            listOf(
+                ApiEndpoint(
+                    ApiMethod.GET,
+                    SYNTHETIC,
+                    success = ApiBody(HTTP_OK, BuildInfoDto::class),
+                    errors = errors.toList(),
+                ),
+            ),
+        ) { _, _ -> access }
+
     private fun applied(vararg items: Pair<String, PathItem>): OpenApiDoc =
         OpenApiContractDocument.apply(docWith(*items)) { _, path ->
             // Mirrors the levels the real tree declares for the rows under test.
@@ -200,25 +228,15 @@ class OpenApiContractDocumentTest {
             .getValue(verb)
             .jsonObject
 
-    /** The one media type's schema, from a `requestBody` or a `response`. */
-    private fun schemaOf(holder: JsonObject): JsonObject =
-        holder["content"]!!
-            .jsonObject
-            .values
-            .single()
-            .jsonObject["schema"]!!
-            .jsonObject
+    private fun responses(
+        doc: OpenApiDoc,
+        path: String,
+        verb: String,
+    ): JsonObject = operation(doc, path, verb).getValue("responses").jsonObject
 
-    private fun ref(holder: JsonObject): String = schemaOf(holder).getValue("\$ref").jsonPrimitive.content
-
-    /** Every reference anywhere in the document, however deeply nested. */
-    private fun refsIn(element: JsonElement): List<String> =
-        when (element) {
-            is JsonObject ->
-                element.entries.flatMap { (key, value) ->
-                    if (key == "\$ref") listOf(value.jsonPrimitive.content) else refsIn(value)
-                }
-            is JsonArray -> element.flatMap(::refsIn)
-            else -> emptyList()
-        }
+    /** One entry of a `oneOf` list, which is a reference and not a media type. */
+    private fun schemaRefOf(schema: JsonElement): String =
+        schema.jsonObject
+            .getValue("\$ref")
+            .jsonPrimitive.content
 }
