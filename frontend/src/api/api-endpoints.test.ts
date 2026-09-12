@@ -2,7 +2,9 @@
 // makes it load-bearing. Every client in this directory still hardcodes its own
 // URL, so without a check here a backend path rename passes the boot guard,
 // `checkApiTypes` and `tsc`, and 404s in production. Read as source text rather
-// than imported, because the URLs are module-private constants.
+// than imported, because the URLs are module-private constants — and the clients
+// compose most of them through those constants, so a `${NAME}` reference is
+// resolved against the same file's `const NAME = '…'` before matching.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
@@ -12,27 +14,41 @@ const API_DIR = join(process.cwd(), 'src/api');
 const SOURCE_SUFFIX = '.ts';
 const TEST_SUFFIX = '.test.ts';
 
-/** A string or template literal whose content starts at one of the two contracted prefixes. */
-const PATH_LITERAL = /['"`](\/(?:api|auth\/password)\/[^'"`]*)['"`]/g;
+const CONTRACTED_PREFIXES = ['/api/', '/auth/password/'];
+const QUERY_SEPARATOR = '?';
+const SEGMENT_SEPARATOR = '/';
 
-/** One `${…}` in a template literal: a segment this test cannot read statically. */
+/** Every string and template literal in a source. A template keeps its `${…}` for now. */
+const LITERAL = /'([^'\n]*)'|"([^"\n]*)"|`([^`]*)`/g;
+
+/** A `const NAME = '…'`, module-level or local: the indirection the URLs are built through. */
+const CONST_LITERAL = /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(?:'([^'\n]*)'|`([^`]*)`)/g;
+
+/** A `${NAME}` a same-file constant may resolve. A constant's own value can hold more. */
+const REFERENCE = /\$\{\s*([A-Za-z_$][\w$]*)\s*\}/g;
+const RESOLUTION_PASSES = 4;
+
+/** Any interpolation left over: a value this test cannot read statically. */
 const INTERPOLATION = /\$\{[^}]*\}/g;
 const WILDCARD = '{param}';
 
-/** A contract segment like `{id}`, which matches any single mounted segment. */
-const CONTRACT_PARAM = /^\{.+\}$/;
+/** A `{param}` here or an `{id}` in the contract: either side matches any one segment. */
+const ONE_SEGMENT = /^\{.+\}$/;
 
 /**
- * The contract paths the clients in this directory call today. A path that stops
- * being called is a client that stopped working, so the set is pinned rather
- * than merely non-empty. Not all 46 rows appear: the admin surface, the bulk
- * endpoint and the Slack webhook have no client here.
+ * Every contract row these clients reach. A row that stops being reached is a
+ * client that stopped working, and a row renamed in the backend disappears from
+ * here, so the set is pinned rather than merely non-empty. Not all 46 rows
+ * appear: the admin surface, the bulk endpoint and the Slack webhook have no
+ * client in this directory.
  */
 const CALLED_TODAY = [
   '/api/availability/changes',
   '/api/availability/changes/summary',
   '/api/availability/pollers',
   '/api/availability/pollers/summary',
+  '/api/availability/pollers/{id}/force',
+  '/api/availability/pollers/{id}/runs',
   '/api/availability/runs',
   '/api/booking/add-to-cart',
   '/api/build-info',
@@ -41,6 +57,7 @@ const CALLED_TODAY = [
   '/api/pois',
   '/api/pois/on-route',
   '/api/pois/search',
+  '/api/pois/{id}',
   '/api/pois/{id}/campsites',
   '/api/pois/{id}/campsites/availability',
   '/api/route',
@@ -56,9 +73,14 @@ const CALLED_TODAY = [
   '/api/settings/recgov/status',
   '/api/settings/recgov/verify',
   '/api/watches',
+  '/api/watches/{id}',
+  '/api/watches/{id}/delete',
+  '/api/watches/{id}/modify',
   '/auth/password/begin',
   '/auth/password/complete',
 ];
+
+const CONTRACT_PATHS: string[] = [...new Set(API_ENDPOINTS.map((row) => row.path as string))];
 
 function clientSources(): string[] {
   return readdirSync(API_DIR)
@@ -66,45 +88,74 @@ function clientSources(): string[] {
     .sort();
 }
 
+function constantsIn(source: string): Map<string, string> {
+  const constants = new Map<string, string>();
+  for (const match of source.matchAll(CONST_LITERAL)) {
+    constants.set(match[1], match[2] ?? match[3]);
+  }
+  return constants;
+}
+
+/** `${BASE}/x` becomes `/api/watches/x`. Repeated, because a constant's value can reference another. */
+function resolveReferences(literal: string, constants: Map<string, string>): string {
+  let resolved = literal;
+  for (let pass = 0; pass < RESOLUTION_PASSES; pass += 1) {
+    const next = resolved.replace(REFERENCE, (reference, name) => constants.get(name) ?? reference);
+    if (next === resolved) break;
+    resolved = next;
+  }
+  return resolved;
+}
+
 /**
- * An interpolation that is a whole segment becomes a wildcard; one glued to text
- * — the query-string suffix in `…/availability${suffix}` — is dropped, since
- * what it appends is not part of the path.
+ * The query string is cut off, and an unreadable interpolation becomes a wildcard
+ * segment. Glued to text — the suffix in `…/availability${suffix}` — it is
+ * dropped instead, since what it appends is not part of the path.
  */
-function normalize(literal: string): string {
-  return literal
+function normalize(resolved: string): string {
+  return resolved
+    .split(QUERY_SEPARATOR)[0]
     .replace(INTERPOLATION, WILDCARD)
-    .split('/')
+    .split(SEGMENT_SEPARATOR)
     .map((segment) => (segment === WILDCARD ? segment : segment.replaceAll(WILDCARD, '')))
-    .join('/');
+    .join(SEGMENT_SEPARATOR);
 }
 
 function pathsIn(source: string): string[] {
-  return [...source.matchAll(PATH_LITERAL)].map((match) => normalize(match[1]));
+  const constants = constantsIn(source);
+  return [...source.matchAll(LITERAL)]
+    .map((match) => normalize(resolveReferences(match[1] ?? match[2] ?? match[3], constants)))
+    .filter((path) => CONTRACTED_PREFIXES.some((prefix) => path.startsWith(prefix)));
 }
 
-function resolve(called: string): string | undefined {
-  const wanted = called.split('/');
-  return API_ENDPOINTS.map((row) => row.path as string).find((path) => {
-    const declared = path.split('/');
-    if (declared.length !== wanted.length) return false;
-    return declared.every((segment, i) =>
-      CONTRACT_PARAM.test(segment) ? wanted[i].length > 0 : segment === wanted[i],
+/**
+ * Every row a called path could be. All of them, not the first: a path whose last
+ * segment arrives as an argument (`watchUrl(id, MODIFY_ACTION)`) reads here as
+ * `/api/watches/{param}/{param}`, and both rows it could be are reached.
+ */
+function matchingPaths(called: string): string[] {
+  const wanted = called.split(SEGMENT_SEPARATOR);
+  return CONTRACT_PATHS.filter((declared) => {
+    const segments = declared.split(SEGMENT_SEPARATOR);
+    if (segments.length !== wanted.length) return false;
+    return segments.every(
+      (segment, i) => ONE_SEGMENT.test(segment) || ONE_SEGMENT.test(wanted[i]) || segment === wanted[i],
     );
   });
 }
 
+const sourceOf = (name: string) => readFileSync(join(API_DIR, name), 'utf8');
+
 test.each(clientSources())('%s calls only paths the contract declares', (name) => {
-  const called = pathsIn(readFileSync(join(API_DIR, name), 'utf8'));
-  for (const path of called) {
-    expect(resolve(path), `${name} calls ${path}, which no API_ENDPOINTS row declares`).toBeDefined();
+  for (const path of pathsIn(sourceOf(name))) {
+    expect(
+      matchingPaths(path),
+      `${name} calls ${path}, which no API_ENDPOINTS row declares`,
+    ).not.toEqual([]);
   }
 });
 
-test('the contract paths these clients call are exactly the pinned set', () => {
-  const resolved = clientSources()
-    .flatMap((name) => pathsIn(readFileSync(join(API_DIR, name), 'utf8')))
-    .map(resolve)
-    .filter((path): path is string => path !== undefined);
-  expect([...new Set(resolved)].sort()).toEqual(CALLED_TODAY);
+test('the contract rows these clients reach are exactly the pinned set', () => {
+  const reached = clientSources().flatMap((name) => pathsIn(sourceOf(name))).flatMap(matchingPaths);
+  expect([...new Set(reached)].sort()).toEqual(CALLED_TODAY);
 });
