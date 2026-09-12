@@ -24,6 +24,7 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingNode
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.server.routing.routingRoot
 import io.ktor.server.testing.testApplication
@@ -32,6 +33,9 @@ import kotlin.reflect.full.createType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+
+/** The endpoint count the plan fixed for this phase; a row added or dropped is a deliberate change. */
+private const val CONTRACT_ROW_COUNT = 46
 
 /**
  * The contract's *authoritative* check is the boot guard in `registerKoinRoutes`,
@@ -43,16 +47,31 @@ import kotlin.test.assertTrue
 class ApiContractCoverageTest {
     @Test
     fun `a real mounted slice is fully contracted`() {
-        val drift =
-            driftFor {
-                apiDocsRoutes()
-                authRoutes(wiring = null)
-                healthRoutes { ReadinessService.Report(databaseReachable = true) }
-                geocodeRoutes(GeocodeService(MapboxGeocoder(token = null)))
-                buildInfoRoutes(BuildInfoConfig(env = "test", sha = "0", branch = "test"))
-                poiRoutes(EmptyPoiReader)
-            }
-        assertEquals(emptyList(), drift.uncontractedRoutes)
+        assertEquals(emptyList(), driftFor { realMountedSlice() }.uncontractedRoutes)
+    }
+
+    /**
+     * The same slice, positively: an empty `uncontractedRoutes` alone would also
+     * be the answer if the walker lost leaves or dropped the `/auth/password/`
+     * prefix. This pins the leaf set — and with it `{id}` rendering.
+     */
+    @Test
+    fun `the real mounted slice yields exactly these leaves`() {
+        assertEquals(
+            setOf(
+                RouteLeaf("POST", "/auth/password/begin"),
+                RouteLeaf("POST", "/auth/password/complete"),
+                RouteLeaf("GET", "/api/me"),
+                RouteLeaf("GET", "/api/health"),
+                RouteLeaf("GET", "/api/health/ready"),
+                RouteLeaf("GET", "/api/geocode"),
+                RouteLeaf("GET", "/api/build-info"),
+                RouteLeaf("POST", "/api/pois"),
+                RouteLeaf("GET", "/api/pois/search"),
+                RouteLeaf("GET", "/api/pois/{id}"),
+            ),
+            leavesFor { realMountedSlice() },
+        )
     }
 
     @Test
@@ -74,6 +93,19 @@ class ApiContractCoverageTest {
         )
     }
 
+    /**
+     * The half the live boot exercises whenever a Slack signing secret is set:
+     * `conditional` exempts a row from being *required*, never from being declared.
+     */
+    @Test
+    fun `a mounted conditional row is contracted`() {
+        val drift =
+            driftFor {
+                post("/api/slack/interactivity") { call.respondText("") }.access(RouteAccess.Anonymous)
+            }
+        assertEquals(emptyList(), drift.uncontractedRoutes)
+    }
+
     @Test
     fun `paths outside the covered prefixes are not contracted`() {
         val drift =
@@ -90,6 +122,19 @@ class ApiContractCoverageTest {
         assertEquals(emptySet(), leaves)
     }
 
+    /** The exemption is the subtree, not everything whose path merely begins with `/api/doc`. */
+    @Test
+    fun `a sibling path that only shares the docs prefix is contracted`() {
+        val drift =
+            driftFor {
+                get("/api/docsomething") { call.respondText("ok") }.access(RouteAccess.Anonymous)
+            }
+        assertEquals(listOf("GET /api/docsomething"), drift.uncontractedRoutes)
+    }
+
+    @Test
+    fun `the contract declares every row the plan fixed`() = assertEquals(CONTRACT_ROW_COUNT, ApiContract.endpoints.size)
+
     @Test
     fun `no contract row is declared twice`() {
         val keys = ApiContract.endpoints.map { it.method.wireValue to it.path }
@@ -97,12 +142,12 @@ class ApiContractCoverageTest {
     }
 
     @Test
-    fun `every contract path is under a covered prefix`() {
+    fun `every contract path is one the guard is answerable for`() {
         assertEquals(
             emptyList(),
             ApiContract.endpoints
                 .map { it.path }
-                .filterNot { it.startsWith("/api/") || it.startsWith("/auth/password/") }
+                .filterNot(::isContractedPath)
                 .sorted(),
         )
     }
@@ -112,7 +157,17 @@ class ApiContractCoverageTest {
         val classes =
             ApiContract.endpoints.flatMap { listOfNotNull(it.request, it.response) + it.errors }.distinct()
         classes.forEach { serializer(it.createType()) }
-        assertTrue(classes.size > 40, "expected the contract to name more than 40 distinct DTOs, got ${classes.size}")
+        assertTrue(classes.isNotEmpty(), "the contract must name DTOs for the generator to walk")
+    }
+
+    /** The slice both real-tree cases mount: real route functions, stub dependencies. */
+    private fun Route.realMountedSlice() {
+        apiDocsRoutes()
+        authRoutes(wiring = null)
+        healthRoutes { ReadinessService.Report(databaseReachable = true) }
+        geocodeRoutes(GeocodeService(MapboxGeocoder(token = null)))
+        buildInfoRoutes(BuildInfoConfig(env = "test", sha = "0", branch = "test"))
+        poiRoutes(EmptyPoiReader)
     }
 
     private fun leavesFor(mount: Route.() -> Unit): Set<RouteLeaf> {

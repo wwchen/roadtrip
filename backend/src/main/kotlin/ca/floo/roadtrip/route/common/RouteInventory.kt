@@ -6,13 +6,16 @@ import io.ktor.server.routing.OpenApiRoutePathFormat
 import io.ktor.server.routing.RoutingNode
 import io.ktor.server.routing.path
 
-private const val API_PREFIX = "/api/"
-private const val PASSWORD_AUTH_PREFIX = "/auth/password/"
+internal const val API_PREFIX = "/api/"
+internal const val PASSWORD_AUTH_PREFIX = "/auth/password/"
 
-// The Swagger UI subtree is framework-generated, and openapi.json answers with
-// io.ktor.openapi.OpenApiDoc — a Ktor type no DTO of ours describes. Both are
-// outside the contract, for the same reason the access guard exempts the subtree.
-private const val API_DOCS_PATH = "/api/docs"
+/**
+ * Root of the Swagger subtree. The one spelling: both guards in this package and
+ * `apiDocsRoutes` measure against it. What each of them *does* with the subtree
+ * differs — the access guard exempts the framework's assets but still requires
+ * `openapi.json` to declare access, while [ApiContract] exempts the whole subtree.
+ */
+internal const val SWAGGER_UI_PATH = "/api/docs"
 
 /** One mounted handler: the verb it answers and the path it answers on. */
 internal data class RouteLeaf(
@@ -26,24 +29,48 @@ internal data class ContractDrift(
     val unmountedRows: List<String>,
 )
 
+/**
+ * Visits every node that answers an HTTP method.
+ *
+ * A method node that only groups children answers nothing and would be a phantom
+ * leaf, but `RoutingNode.handlers` is internal to Ktor, so it cannot be filtered
+ * out here; no route in this tree is built that way.
+ */
+internal fun RoutingNode.walkMethodLeaves(visit: (RoutingNode) -> Unit) {
+    if (selector is HttpMethodRouteSelector) visit(this)
+    children.forEach { it.walkMethodLeaves(visit) }
+}
+
 /** Every method leaf under this node, in tree order. */
 internal fun RoutingNode.methodLeaves(): List<RouteLeaf> {
     val leaves = mutableListOf<RouteLeaf>()
-    collectMethodLeaves(leaves)
+    walkMethodLeaves { node ->
+        leaves += RouteLeaf((node.selector as HttpMethodRouteSelector).method.value, node.path(OpenApiRoutePathFormat))
+    }
     return leaves
 }
 
+/**
+ * Whether [path] — spelled as `RoutingNode.path(OpenApiRoutePathFormat)` renders
+ * it — is a path [ApiContract] is answerable for.
+ *
+ * The whole `/api/docs/` subtree is excluded: the Swagger assets are
+ * framework-generated, and `openapi.json` answers with `io.ktor.openapi.OpenApiDoc`,
+ * a Ktor type no DTO of ours describes.
+ */
+internal fun isContractedPath(path: String): Boolean {
+    if (path == SWAGGER_UI_PATH || path.startsWith("$SWAGGER_UI_PATH/")) return false
+    return path.startsWith(API_PREFIX) || path.startsWith(PASSWORD_AUTH_PREFIX)
+}
+
 /** The leaves [ApiContract] is answerable for. */
-internal fun RoutingNode.contractedApiLeaves(): Set<RouteLeaf> =
-    methodLeaves()
-        .filter { it.path.startsWith(API_PREFIX) || it.path.startsWith(PASSWORD_AUTH_PREFIX) }
-        .filterNot { it.path == API_DOCS_PATH || it.path.startsWith("$API_DOCS_PATH/") }
-        .toSet()
+internal fun RoutingNode.contractedApiLeaves(): Set<RouteLeaf> = methodLeaves().filterTo(LinkedHashSet()) { isContractedPath(it.path) }
 
 /**
  * Both directions at once: routes nobody declared, and declared rows nobody
  * mounted. A [ca.floo.roadtrip.model.api.ApiEndpoint.conditional] row is exempt
- * from the second half only.
+ * from the second half only — a mounted conditional route still needs its row,
+ * which is why the first half compares against `keys()` rather than `requiredKeys()`.
  */
 internal fun RoutingNode.apiContractDrift(): ContractDrift {
     val mounted = contractedApiLeaves().mapTo(LinkedHashSet()) { it.method to it.path }
@@ -51,9 +78,4 @@ internal fun RoutingNode.apiContractDrift(): ContractDrift {
         uncontractedRoutes = (mounted - ApiContract.keys()).map { "${it.first} ${it.second}" }.sorted(),
         unmountedRows = (ApiContract.requiredKeys() - mounted).map { "${it.first} ${it.second}" }.sorted(),
     )
-}
-
-private fun RoutingNode.collectMethodLeaves(into: MutableList<RouteLeaf>) {
-    (selector as? HttpMethodRouteSelector)?.let { into += RouteLeaf(it.method.value, path(OpenApiRoutePathFormat)) }
-    children.forEach { it.collectMethodLeaves(into) }
 }

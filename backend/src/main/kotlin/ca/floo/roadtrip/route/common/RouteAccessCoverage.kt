@@ -1,14 +1,13 @@
 package ca.floo.roadtrip.route.common
 
-import io.ktor.server.routing.HttpMethodRouteSelector
 import io.ktor.server.routing.OpenApiRoutePathFormat
 import io.ktor.server.routing.RoutingNode
 import io.ktor.server.routing.path
 
-// Swagger UI mounts framework-generated asset routes under this prefix that
+// Swagger UI mounts framework-generated asset routes under SWAGGER_UI_PATH that
 // cannot carry our attribute. openapi.json is our own route and is labelled, so
-// it is deliberately not exempt.
-private const val SWAGGER_UI_PATH = "/api/docs"
+// it is deliberately not exempt — unlike the contract guard, which exempts the
+// whole subtree because openapi.json answers with a Ktor type.
 private const val OPENAPI_JSON_PATH = "/api/docs/openapi.json"
 
 /**
@@ -31,11 +30,6 @@ internal fun RoutingNode.undeclaredAccessRoutes(): List<String> {
         }
     }
     return missing.sorted()
-}
-
-private fun RoutingNode.walkMethodLeaves(visit: (RoutingNode) -> Unit) {
-    if (selector is HttpMethodRouteSelector) visit(this)
-    children.forEach { it.walkMethodLeaves(visit) }
 }
 
 private fun RoutingNode.hasReachableAccess(): Boolean {

@@ -35,8 +35,13 @@ data class ApiEndpoint(
  * `registerKoinRoutes`, for the routing tree itself: a route with no row here
  * fails the boot, and a row with no route does too.
  *
- * `/api/docs` and `/api/docs/openapi.json` are exempt — the Swagger subtree is
- * framework-generated and the spec document is a Ktor type, not one of ours.
+ * Each path is spelled exactly as `RoutingNode.path(OpenApiRoutePathFormat)`
+ * renders the mounted route — `{id}` for a parameter, no trailing slash — since
+ * that rendering is what the boot guard compares against.
+ *
+ * The whole `/api/docs/` subtree is exempt: framework-generated Swagger assets,
+ * plus `openapi.json`, which answers with the framework's own `OpenApiDoc` — a
+ * type no DTO of ours describes, and one this package may not even name.
  * `/auth/login`, `/auth/callback` and `/auth/logout` redirect and carry no body.
  */
 object ApiContract {
