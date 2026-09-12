@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.domain.CampgroundLocation
 import ca.floo.roadtrip.model.domain.CampgroundManagement
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogPhoto
+import ca.floo.roadtrip.model.domain.GeometryProvenance
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -21,7 +22,6 @@ import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraInputRoles
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraInventoryCategories
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeaf
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeafMatch
-import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeafMatchKind
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeafMatcher
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeavesWalk
 import ca.floo.roadtrip.service.etl.vendors.aspira.BcParksStrapiRow
@@ -159,7 +159,14 @@ class BcParksCampgroundsEtl(
             management = CampgroundManagement(agency),
             contact = strapiRow.phone?.let { CampgroundContact(phone = it) },
             sourceUrl = bookingUrl,
-            sourcePayload = sourcePayload(leaf, match.kind, strapiRow),
+            sourcePayload = sourcePayload(leaf, strapiRow),
+            geometryProvenance =
+                GeometryProvenance(
+                    matchKind = match.kind.label,
+                    source = match.value.source,
+                    matchedName = match.matchedName,
+                    score = match.score,
+                ),
         )
     }
 
@@ -179,7 +186,6 @@ class BcParksCampgroundsEtl(
 
     private fun sourcePayload(
         leaf: AspiraLeaf,
-        matchKind: AspiraLeafMatchKind,
         strapiRow: BcParksStrapiRow,
     ): JsonObject =
         buildJsonObject {
@@ -188,7 +194,6 @@ class BcParksCampgroundsEtl(
             put("mapId", leaf.mapId)
             leaf.resourceLocationId?.let { put("resourceLocationId", it) }
             leaf.parentName?.let { put("parent_name", it) }
-            put("match_kind", matchKind.label)
             strapiRow.orcs?.let { put("strapi_orcs", it) }
             strapiRow.url?.let { put("strapi_url", it) }
         }

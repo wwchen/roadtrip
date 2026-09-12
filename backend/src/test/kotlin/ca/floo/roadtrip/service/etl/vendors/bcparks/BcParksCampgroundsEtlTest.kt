@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.bcparks
 
+import ca.floo.roadtrip.model.domain.GeometryProvenance
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
@@ -14,6 +15,9 @@ import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeaf
 import ca.floo.roadtrip.service.etl.vendors.aspira.BcParksStrapiSource
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -68,6 +72,25 @@ class BcParksCampgroundsEtlTest {
     }
 
     @Test
+    fun `the merged campground records its geometry provenance and Strapi payload keys`() {
+        val cg = terminalRecords(etl, bundle(), ctx).single()
+
+        assertEquals(
+            GeometryProvenance(
+                matchKind = "exact",
+                source = "bcparks-strapi",
+                matchedName = "rathtrevor beach",
+            ),
+            cg.geometryProvenance,
+        )
+        val payload = cg.sourcePayload!!.jsonObject
+        assertNull(payload["match_kind"], "match_kind now lives in geometry_provenance, not the payload blob")
+        assertEquals(1234, payload["strapi_orcs"]!!.jsonPrimitive.int)
+        assertEquals("https://bcparks.ca/rathtrevor-beach/", payload["strapi_url"]!!.jsonPrimitive.content)
+        assertEquals("Rathtrevor Beach", payload["name"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `skips park container leaves with no resourceLocationId`() {
         val output = terminalRecords(etl, bundleWithContainer(), ctx)
         assertEquals(1, output.size)
@@ -87,6 +110,17 @@ class BcParksCampgroundsEtlTest {
         assertEquals(-124.2833, cg.longitude)
         assertEquals("<p>A beautiful sandy beach campground.</p>", cg.mediumDescription)
         assertEquals("250-555-1234", cg.contact!!.phone)
+
+        // Two of three tokens overlap; the provenance carries that score.
+        assertEquals(
+            GeometryProvenance(
+                matchKind = "fuzzy",
+                source = "bcparks-strapi",
+                matchedName = "rathtrevor beach",
+                score = 2.0 / 3.0,
+            ),
+            cg.geometryProvenance,
+        )
     }
 
     /**
