@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 
+import re
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# The shipped shell scripts address their siblings through ${SCRIPT_DIR} and
+# the release root through ${REPO_ROOT}. On the deploy host both resolve
+# inside the unpacked release, so a file the manifest omits is simply absent
+# there.
+SHELL_PATH_REFERENCE = re.compile(r"\$\{(SCRIPT_DIR|REPO_ROOT)\}/([A-Za-z0-9._/-]+)")
+SHELL_REFERENCE_ROOTS = {"SCRIPT_DIR": "scripts", "REPO_ROOT": ""}
 
 
 def workflow(name: str) -> dict:
@@ -68,6 +76,40 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertTrue(entries)
         for entry in entries:
             self.assertTrue((ROOT / entry).exists(), entry)
+
+    def test_the_release_ships_every_file_its_scripts_reach_for(self) -> None:
+        # The manifest existing in the repo is only half the contract: the
+        # deploy host runs these scripts out of the unpacked archive, so a
+        # sibling the manifest forgets fails there and nowhere else. That is
+        # exactly how `scripts/reclaim.sh` -- added to deploy.sh's preflight
+        # but never to the manifest -- turned every prod deploy red for nine
+        # days while CI stayed green.
+        entries = (ROOT / "deploy" / "release-manifest.txt").read_text().splitlines()
+        shipped = set(entries)
+
+        def is_shipped(path: str) -> bool:
+            # An entry may be a directory (grafana, postgres-init), which
+            # ships everything under it.
+            parts = PurePosixPath(path).parts
+            return any("/".join(parts[:depth]) in shipped for depth in range(1, len(parts) + 1))
+
+        for entry in entries:
+            source = ROOT / entry
+            if source.suffix != ".sh":
+                continue
+            for variable, target in SHELL_PATH_REFERENCE.findall(source.read_text()):
+                prefix = SHELL_REFERENCE_ROOTS[variable]
+                referenced = f"{prefix}/{target}" if prefix else target
+                # Directories the scripts create at runtime (the sandbox Caddy
+                # snippet dir) and `..`-style path arithmetic name nothing the
+                # release has to carry.
+                if not (ROOT / referenced).is_file():
+                    continue
+                self.assertTrue(
+                    is_shipped(referenced),
+                    f"{entry} runs {referenced} on the deploy host, "
+                    "but deploy/release-manifest.txt does not ship it",
+                )
 
     def test_tilt_builds_the_backend_without_the_production_frontend_stage(self) -> None:
         dockerfile = (ROOT / "Dockerfile").read_text()
