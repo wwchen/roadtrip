@@ -55,7 +55,7 @@ Three layers of identity:
 
 - `transactionLocationId` — the **park** (e.g. "Battle Ground Lake
   State Park"). One per bookable destination. This is what
-  `AspiraJoinByNameEtl` uses to identify a POI.
+  `AspiraCampgroundsEtl` uses to identify a POI.
 - `resourceLocationId` — usually equal to `transactionLocationId` for
   state parks; can differ in multi-resource configurations (e.g.
   marinas + campgrounds at the same park).
@@ -118,7 +118,7 @@ GET https://{host}/api/maps
 ```
 
 Used for: POI enumeration and parent-name labeling for nested loops.
-`AspiraJoinByNameEtl` emits one campground POI per leaf that carries
+`AspiraCampgroundsEtl` emits one campground POI per leaf that carries
 **both** a `transactionLocationId` and a `resourceLocationId`. Leaves
 with a `transactionLocationId` but a null `resourceLocationId` are
 park-level container nodes (e.g. "Banff", "Camano Island", "Wells Gray"),
@@ -425,7 +425,7 @@ GET https://{host}/api/resourceLocation
 Used for: not currently. Today we get park name + GPS from external
 geometry feeds (uscampgrounds, bcparks-strapi, apca-accommodation)
 because Aspira's `/api/maps` carries booking IDs but no lat/lng. This
-endpoint *does* carry GPS — we could simplify `AspiraJoinByNameEtl`
+endpoint *does* carry GPS — we could simplify `AspiraCampgroundsEtl`
 by reading from here instead of the external feeds, but that's a
 separate refactor.
 
@@ -838,6 +838,59 @@ $B disconnect
 `resourceLocationId=-2147483646` is Battle Ground Lake State Park (WA).
 Substitute any park's ID — the shape is identical across parks within
 a tenant.
+
+## Geometry: the name join, its policy, and its provenance
+
+`/api/maps` carries booking IDs but no lat/lng, so each Aspira-backed
+campground ETL joins its leaves to a sibling geometry feed by name. Which feed,
+in which order, and how names are matched is declared on the ETL row in
+`poi-registry.yaml` under `geometry:` — see the "Geometry-joined adapters"
+section of [adding-a-data-source.md](../adding-a-data-source.md) for the
+block's full shape and its boot errors. Nothing in the code sniffs an input
+slug to pick a parser; the run's remaining inputs are resolved to the maps,
+inventory and dictionaries roles, and an input that is neither a declared
+geometry source nor one of those three fails the parse.
+
+The match ladder, per leaf:
+
+1. **Exact** — the leaf name, aggressively normalized (lowercase, punctuation
+   dropped, park-y suffixes like `state park`, `provincial park`,
+   `national park of canada`, `campground` stripped), against the merged
+   name → point index.
+2. **Fuzzy** — the highest Jaccard token overlap at or above
+   `match.fuzzy_threshold` (default `0.5`). Each candidate is scored once and
+   the first maximum in index order wins, so a tie resolves by source
+   preference and then feed row order — the same rule that settles an exact
+   name collision.
+3. **Parent** — only when `match.parent_fallback` is set: the leaf's
+   `parent_name`, normalized the same way. This is what keeps a park
+   represented through its campgrounds after park-container leaves are dropped.
+
+A leaf that clears none of the three is dropped: a booking ID alone does not
+earn a pin. BC additionally drops a matched leaf whose matched name has no
+Strapi metadata row, warning per leaf and counting them as `noStrapiRow` in the
+run's summary line.
+
+Every emitted campground records the outcome in the `campgrounds`
+`geometry_provenance` JSONB column (`GeometryProvenance`):
+
+| key | meaning |
+|---|---|
+| `match_kind` | `exact`, `fuzzy` or `parent` |
+| `source` | the geometry input slug that supplied the point |
+| `matched_name` | the normalized index key the leaf resolved to |
+| `score` | the Jaccard overlap for a `fuzzy` match; absent otherwise |
+
+Reviewing the pins that are not exact:
+
+```sql
+SELECT name, geometry_provenance->>'match_kind' AS kind, geometry_provenance->>'source' AS source,
+       geometry_provenance->>'matched_name' AS matched, geometry_provenance->>'score' AS score
+FROM campgrounds WHERE geometry_provenance->>'match_kind' <> 'exact' ORDER BY score NULLS LAST;
+```
+
+The column is populated by `make data-import`, not by a migration, so it is
+null on any row that has not been re-imported since `V62`.
 
 ## See also
 

@@ -293,6 +293,12 @@ admin route
 The ETL framework owns orchestration and run lifecycle. Vendor ETLs parse,
 validate, and transform their upstream inputs. Persistence stays in repos.
 
+The two Aspira-backed campground ETLs join their leaves to a sibling geometry
+feed by name; that join is registry-declared per row (`geometry:` in
+`poi-registry.yaml`, typed and validated at boot), not inferred from input
+slugs, and each emitted candidate records how its pin was found in the
+`campgrounds.geometry_provenance` column.
+
 A terminal ETL's sink factory is `(Repos) -> TerminalSink`: the binding is handed
 repo handles, never a connection context, and production binds them to
 `JooqUnitOfWork.autocommit`. A phase's counts cross back as
