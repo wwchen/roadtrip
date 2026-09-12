@@ -14,13 +14,27 @@ import org.slf4j.Logger
  * or upstream drift, so it warns rather than reading as a healthy INFO line.
  */
 object GeometryIndex {
-    /** Fewer keys than this and the run cannot pin a single leaf; callers fail rather than emit nothing. */
-    const val MIN_GEOMETRY_KEYS = 1
+    /** Fewer keys than this and the run cannot pin a single leaf; [buildOrFail] fails rather than emit nothing. */
+    private const val MIN_GEOMETRY_KEYS = 1
 
     private const val MIN_LATITUDE = -90.0
     private const val MAX_LATITUDE = 90.0
     private const val MIN_LONGITUDE = -180.0
     private const val MAX_LONGITUDE = 180.0
+
+    /**
+     * [build], plus the rule every geometry-joining ETL shares: an index with no
+     * keys cannot pin a single leaf, so the run fails instead of upserting
+     * nothing and reporting success.
+     */
+    fun buildOrFail(
+        sources: List<Pair<String, GeometrySource>>,
+        log: Logger,
+        etlSlug: String,
+    ): Map<String, GeometryPoint> =
+        build(sources, log, etlSlug).also {
+            if (it.size < MIN_GEOMETRY_KEYS) error("$etlSlug: geometry index is empty; no declared source yielded a point")
+        }
 
     fun build(
         sources: List<Pair<String, GeometrySource>>,
@@ -45,7 +59,8 @@ object GeometryIndex {
             )
             if (added == 0) {
                 log.warn(
-                    "{}: geometry input slug={} contributed no keys; check its declared format and name_property against the feed",
+                    "{}: geometry input slug={} contributed no new keys; either an earlier source already claimed " +
+                        "every name, or its declared format / name_property does not match the feed",
                     etlSlug,
                     slug,
                 )

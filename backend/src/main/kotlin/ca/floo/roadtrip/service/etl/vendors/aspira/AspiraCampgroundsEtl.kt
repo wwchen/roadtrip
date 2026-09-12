@@ -117,13 +117,9 @@ class AspiraCampgroundsEtl(
         val bookableMapIds =
             AspiraBookingCtaRefs.bookableMapIdsByResourceLocationId(dto.inventoryEnvelopes, dto.dictionaryPayload)
 
-        val byName = GeometryIndex.build(dto.geomSources, log, etlSlug)
-        if (byName.size < GeometryIndex.MIN_GEOMETRY_KEYS) {
-            error("$etlSlug: geometry index is empty; no declared source yielded a point")
-        }
         val matcher =
             AspiraLeafMatcher(
-                byName = byName,
+                byName = GeometryIndex.buildOrFail(dto.geomSources, log, etlSlug),
                 nonBookableResourceLocationIds = nonBookableResLocs,
                 policy = geometry.match,
             )

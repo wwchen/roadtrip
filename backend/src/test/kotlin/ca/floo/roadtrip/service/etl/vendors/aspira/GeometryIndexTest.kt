@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.model.metadata.Envelope
 import ch.qos.logback.classic.Level
+import ch.qos.logback.classic.LoggerContext
 import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.read.ListAppender
 import kotlinx.serialization.json.Json
@@ -9,7 +10,6 @@ import org.junit.jupiter.api.Test
 import org.slf4j.LoggerFactory
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import ch.qos.logback.classic.Logger as LogbackLogger
 
 private const val ETL_SLUG = "geometry-index-test"
 
@@ -21,6 +21,9 @@ private const val ETL_SLUG = "geometry-index-test"
  */
 class GeometryIndexTest {
     private val log = LoggerFactory.getLogger(javaClass)
+
+    /** Independent of the global SLF4J binding; only [eventsFrom] logs into it. */
+    private val captureContext = LoggerContext()
 
     private fun geoJson(
         name: String,
@@ -53,9 +56,13 @@ class GeometryIndexTest {
             """.trimIndent(),
         )
 
-    /** Runs [build] against a private logger so its events can be read back. */
+    /**
+     * Runs [build] against a logger from this test's own logback context, so
+     * nothing depends on the state of the global SLF4J binding — which hands
+     * back a `SubstituteLogger` while its one-time init is in flight.
+     */
     private fun eventsFrom(build: (org.slf4j.Logger) -> Unit): List<ILoggingEvent> {
-        val logger = LoggerFactory.getLogger("geometry-index-capture-${System.nanoTime()}") as LogbackLogger
+        val logger = captureContext.getLogger("geometry-index-capture-${System.nanoTime()}")
         val appender = ListAppender<ILoggingEvent>()
         appender.start()
         logger.addAppender(appender)
@@ -132,6 +139,33 @@ class GeometryIndexTest {
         val warnings = events.filter { it.level == Level.WARN }.map { it.formattedMessage }
         assertEquals(1, warnings.size, "exactly the empty source warns: $warnings")
         assertTrue(warnings.single().contains("slug=apca-accommodation"), warnings.single())
+    }
+
+    /** The bounds are inclusive: a real pole or antimeridian point is a point, not a poisoned row. */
+    @Test
+    fun `a point at exactly the coordinate bounds is kept`() {
+        val index =
+            GeometryIndex.build(
+                listOf(
+                    "edges" to
+                        GeoJsonFeaturesSource(
+                            listOf(
+                                rawGeoJson("North Pole Site", "180.0", "90.0"),
+                                rawGeoJson("South Pole Site", "-180.0", "-90.0"),
+                            ),
+                        ),
+                ),
+                log,
+                ETL_SLUG,
+            )
+
+        assertEquals(
+            mapOf(
+                normalize("North Pole Site") to GeometryPoint(90.0, 180.0, "edges"),
+                normalize("South Pole Site") to GeometryPoint(-90.0, -180.0, "edges"),
+            ),
+            index,
+        )
     }
 
     @Test
