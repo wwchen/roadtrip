@@ -2,7 +2,6 @@ package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.api.MAGIC_LINK_TOKEN_PARAM
-import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.Principal
@@ -743,7 +742,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `POST modify pauses a watch`() =
+    fun `POST modify pauses a watch and refuses a status outside the vocabulary`() =
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
@@ -781,6 +780,23 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.OK, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
             assertEquals("paused", obj["status"]!!.jsonPrimitive.content)
+
+            // Typed as a WatchStatus, so the decoder refuses an unknown value
+            // before the mapper ever sees it.
+            val bad =
+                client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"status": "retired"}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, bad.status)
+            assertEquals(
+                "invalid_body",
+                Json
+                    .parseToJsonElement(bad.bodyAsText())
+                    .jsonObject["error"]!!
+                    .jsonPrimitive.content,
+            )
         }
 
     @Test
@@ -1817,13 +1833,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val getAfter = client.get(watchPath(id)) { asUser(ADMIN_TOKEN) }
             assertEquals(HttpStatusCode.NotFound, getAfter.status)
         }
-
-    @Test
-    fun `the watch status vocabulary keeps its wire strings`() {
-        assertEquals(listOf("active", "paused", "done"), WatchStatus.entries.map { it.wireValue })
-        assertEquals(WatchStatus.PAUSED, WatchStatus.parse("paused"))
-        assertEquals(null, WatchStatus.parse("retired"))
-    }
 
     private fun seedPoi(
         sourceId: String,

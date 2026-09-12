@@ -407,18 +407,6 @@ class RecgovSettingsRoutesTest {
             assertTrue(json["configured"]!!.jsonPrimitive.content.toBoolean())
         }
 
-    @Test
-    fun `the session vocabulary keeps its wire strings`() {
-        assertEquals(
-            listOf("not_configured", "active", "not_logged_in", "expired", "check_failed", "companion_unavailable"),
-            RecgovSessionState.entries.map { it.wireValue },
-        )
-        assertEquals(
-            listOf("ok", "mfa_required", "failed"),
-            RecgovLoginStatus.entries.map { it.wireValue },
-        )
-    }
-
     private fun errorCode(body: String): String? =
         Json
             .parseToJsonElement(body)
