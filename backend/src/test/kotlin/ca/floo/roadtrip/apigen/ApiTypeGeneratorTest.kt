@@ -2,11 +2,14 @@ package ca.floo.roadtrip.apigen
 
 import ca.floo.roadtrip.model.api.ApiEndpoint
 import ca.floo.roadtrip.model.api.ApiMethod
+import kotlinx.serialization.Contextual
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.reflect.KClass
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,6 +38,13 @@ data class FixtureScalars(
     val flag: Boolean,
 )
 
+/** A value class: no declaration of its own, just the primitive kind its descriptor reports. */
+@JvmInline
+@Serializable
+value class FixtureId(
+    val raw: Long,
+)
+
 @Serializable
 data class FixtureShapes(
     val names: List<String>,
@@ -44,6 +54,43 @@ data class FixtureShapes(
     val blob: JsonElement,
     val bag: JsonObject,
     val rows: JsonArray,
+    val scalar: JsonPrimitive,
+    val id: FixtureId,
+)
+
+@Serializable
+data class FixtureOddKeys(
+    @SerialName("odd-key") val oddKey: String,
+)
+
+@Serializable
+data class FixtureUnmappedJson(
+    val nothing: JsonNull,
+)
+
+/** Not `@Serializable`: the field below only reaches it through a contextual serializer. */
+class FixtureOpaque
+
+@Serializable
+data class FixtureContextual(
+    @Contextual val opaque: FixtureOpaque,
+)
+
+@Serializable
+data class FixtureNullableElement(
+    val names: List<String?>,
+)
+
+@Serializable
+data class FixtureNullableMapValue(
+    @SerialName("by_id") val byId: Map<String, FixtureScalars?>,
+)
+
+/** A serial name whose generated spelling is not a legal TypeScript type name. */
+@Serializable
+@SerialName("my-dto")
+data class FixtureIllegalName(
+    val x: String,
 )
 
 @Serializable
@@ -106,10 +153,25 @@ class ApiTypeGeneratorTest {
               blob: unknown;
               bag: Record<string, unknown>;
               rows: unknown[];
+              scalar: string | number | boolean;
+              id: number;
             }
             """.trimIndent(),
         )
         assertTrue(ts.contains("export type FixtureFlavour = 'sweet' | 'sour';"), ts)
+    }
+
+    @Test
+    fun `a wire key that is not an identifier is quoted`() {
+        val ts = generateApiTypes(listOf(responseRow(FixtureOddKeys::class)))
+        assertBlock(
+            ts,
+            """
+            export interface FixtureOddKeys {
+              'odd-key': string;
+            }
+            """.trimIndent(),
+        )
     }
 
     @Test
@@ -187,6 +249,59 @@ class ApiTypeGeneratorTest {
     }
 
     @Test
+    fun `an unmapped kotlinx json type fails generation by name`() {
+        val failure =
+            assertFailsWith<ApiTypeGenerationException> {
+                generateApiTypes(listOf(responseRow(FixtureUnmappedJson::class)))
+            }
+        assertTrue(failure.message!!.contains("kotlinx.serialization.json.JsonNull"), failure.message!!)
+        assertTrue(
+            failure.message!!.contains("JsonElement, JsonObject, JsonArray and JsonPrimitive"),
+            failure.message!!,
+        )
+    }
+
+    @Test
+    fun `a contextual descriptor fails generation by name`() {
+        val failure =
+            assertFailsWith<ApiTypeGenerationException> {
+                generateApiTypes(listOf(responseRow(FixtureContextual::class)))
+            }
+        assertTrue(failure.message!!.contains("CONTEXTUAL"), failure.message!!)
+        assertTrue(failure.message!!.contains("no TypeScript mapping"), failure.message!!)
+    }
+
+    @Test
+    fun `a nullable list element fails generation, naming the field`() {
+        val failure =
+            assertFailsWith<ApiTypeGenerationException> {
+                generateApiTypes(listOf(responseRow(FixtureNullableElement::class)))
+            }
+        assertTrue(failure.message!!.contains("FixtureNullableElement.names"), failure.message!!)
+        assertTrue(failure.message!!.contains("nullable element type"), failure.message!!)
+    }
+
+    @Test
+    fun `a nullable map value fails generation, naming the field`() {
+        val failure =
+            assertFailsWith<ApiTypeGenerationException> {
+                generateApiTypes(listOf(responseRow(FixtureNullableMapValue::class)))
+            }
+        assertTrue(failure.message!!.contains("FixtureNullableMapValue.by_id"), failure.message!!)
+        assertTrue(failure.message!!.contains("nullable element type"), failure.message!!)
+    }
+
+    @Test
+    fun `a serial name that is not a legal type name fails generation`() {
+        val failure =
+            assertFailsWith<ApiTypeGenerationException> {
+                generateApiTypes(listOf(responseRow(FixtureIllegalName::class)))
+            }
+        assertTrue(failure.message!!.contains("my-dto"), failure.message!!)
+        assertTrue(failure.message!!.contains("not a legal type name"), failure.message!!)
+    }
+
+    @Test
     fun `output is deterministic, sorted by name, LF only, newline terminated`() {
         val rows = listOf(responseRow(FixtureShapes::class), responseRow(FixtureNested::class))
         val first = generateApiTypes(rows)
@@ -213,10 +328,15 @@ class ApiTypeGeneratorTest {
                         FixtureShapes::class,
                         errors = emptyList(),
                     ),
+                    responseRow(FixtureNested::class),
                 ),
             )
         assertTrue(
             ts.contains("{ method: 'POST', path: '/api/fixtures', request: 'FixtureOptionality', response: 'FixtureShapes' },"),
+            ts,
+        )
+        assertTrue(
+            ts.contains("{ method: 'GET', path: '/api/fixture/FixtureNested', request: null, response: 'FixtureNested' },"),
             ts,
         )
         assertTrue(ts.trimEnd().endsWith("] as const;"), ts)

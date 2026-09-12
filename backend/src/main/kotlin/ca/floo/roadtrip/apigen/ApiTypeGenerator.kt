@@ -36,14 +36,22 @@ internal fun generateApiTypes(endpoints: List<ApiEndpoint> = ApiContract.endpoin
     val declaredBy = HashMap<String, String>()
     val responses = DescriptorWalk(Optionality.RESPONSE, declaredBy)
     val requests = DescriptorWalk(Optionality.REQUEST, declaredBy)
-    endpoints.forEach { endpoint ->
-        (listOfNotNull(endpoint.response) + endpoint.errors).forEach { responses.typeOf(it.descriptor()) }
-        endpoint.request?.let { requests.typeOf(it.descriptor()) }
-    }
+    // The row takes the names the walks claimed, so the endpoint literal can
+    // never name a type the collision map has not approved.
+    val rows =
+        endpoints.map { endpoint ->
+            endpoint.errors.forEach { responses.typeOf(it.descriptor()) }
+            TsEndpoint(
+                method = endpoint.method.wireValue,
+                path = endpoint.path,
+                request = endpoint.request?.let { requests.typeOf(it.descriptor()) },
+                response = endpoint.response?.let { responses.typeOf(it.descriptor()) },
+            )
+        }
     return render(
         interfaces = merge(responses.interfaces, requests.interfaces),
         enums = (responses.enums + requests.enums).values.toList(),
-        endpoints = endpointRows(endpoints),
+        endpoints = rows.sortedWith(compareBy({ it.path }, { it.method })),
     )
 }
 
@@ -75,17 +83,6 @@ private fun merge(
     }
     return (responses + requests).values.sortedBy { it.name }
 }
-
-private fun endpointRows(endpoints: List<ApiEndpoint>): List<TsEndpoint> =
-    endpoints
-        .map { endpoint ->
-            TsEndpoint(
-                method = endpoint.method.wireValue,
-                path = endpoint.path,
-                request = endpoint.request?.let { tsName(it.descriptor().serialName) },
-                response = endpoint.response?.let { tsName(it.descriptor().serialName) },
-            )
-        }.sortedWith(compareBy({ it.path }, { it.method }))
 
 private fun render(
     interfaces: List<TsInterface>,

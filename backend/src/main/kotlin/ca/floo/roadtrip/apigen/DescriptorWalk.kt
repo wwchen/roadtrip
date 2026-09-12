@@ -22,8 +22,21 @@ private const val JSON_OBJECT = "kotlinx.serialization.json.JsonObject"
 private const val JSON_ARRAY = "kotlinx.serialization.json.JsonArray"
 private const val JSON_PRIMITIVE = "kotlinx.serialization.json.JsonPrimitive"
 
-/** A map descriptor's elements are (key, value); JSON object keys are always strings. */
+/** A list descriptor has one element; a map descriptor's are (key, value), and JSON keys are strings. */
+private const val LIST_ELEMENT = 0
+
+/** A value class carries exactly one element: the value it is encoded as. */
+private const val INLINE_ELEMENT = 0
 private const val MAP_VALUE_ELEMENT = 1
+
+/**
+ * What a generated declaration may be called. Stricter than a bare TypeScript
+ * identifier on purpose: a type name starts with a capital, so a serial name
+ * that would emit `export interface my-dto` (invalid) or `export interface
+ * campsite` (legal but not a type name) is refused rather than written out.
+ */
+@Suppress("TopLevelPropertyNaming")
+private val DECLARED_NAME = Regex("^[A-Z][A-Za-z0-9_]*$")
 
 /** Which side of the wire a walk describes. It decides optionality, nothing else. */
 internal enum class Optionality { RESPONSE, REQUEST }
@@ -57,18 +70,27 @@ internal class DescriptorWalk(
     val enums: MutableMap<String, TsEnum> = LinkedHashMap()
     private val inProgress = HashSet<String>()
 
-    /** Walks [descriptor] and everything it reaches; returns its TypeScript spelling. */
-    fun typeOf(descriptor: SerialDescriptor): String {
+    /**
+     * Walks [descriptor] and everything it reaches; returns its TypeScript
+     * spelling. [within] is the `Class.field` this descriptor was reached
+     * through, so a refusal deep inside a collection still names the DTO.
+     */
+    fun typeOf(
+        descriptor: SerialDescriptor,
+        within: String = descriptor.serialName,
+    ): String {
         val target = descriptor.nonNullOriginal
         embeddedJsonType(target)?.let { return it }
+        // A value class is encoded as the one value it wraps, so that is its wire type.
+        if (target.isInline) return typeOf(target.getElementDescriptor(INLINE_ELEMENT), within)
         return when (val kind = target.kind) {
             PrimitiveKind.STRING, PrimitiveKind.CHAR -> TS_STRING
             PrimitiveKind.BOOLEAN -> TS_BOOLEAN
             PrimitiveKind.BYTE, PrimitiveKind.SHORT, PrimitiveKind.INT,
             PrimitiveKind.LONG, PrimitiveKind.FLOAT, PrimitiveKind.DOUBLE,
             -> TS_NUMBER
-            StructureKind.LIST -> "${typeOf(target.getElementDescriptor(0))}[]"
-            StructureKind.MAP -> "Record<string, ${typeOf(target.getElementDescriptor(MAP_VALUE_ELEMENT))}>"
+            StructureKind.LIST -> "${elementType(target, LIST_ELEMENT, within)}[]"
+            StructureKind.MAP -> "Record<string, ${elementType(target, MAP_VALUE_ELEMENT, within)}>"
             SerialKind.ENUM -> enumType(target)
             StructureKind.CLASS, StructureKind.OBJECT -> interfaceType(target)
             is PolymorphicKind ->
@@ -83,6 +105,28 @@ internal class DescriptorWalk(
         }
     }
 
+    /**
+     * The element of a list, or the value of a map. `explicitNulls = false`
+     * omits a null *property*; it says nothing about a null sitting inside an
+     * array or a map value, so a nullable element has no honest TypeScript.
+     */
+    private fun elementType(
+        container: SerialDescriptor,
+        index: Int,
+        within: String,
+    ): String {
+        val element = container.getElementDescriptor(index)
+        if (element.isNullable) {
+            throw ApiTypeGenerationException(
+                "$within has a nullable element type (${element.serialName}). The encoder's " +
+                    "explicitNulls = false drops a null property, but leaves a null inside an array " +
+                    "or a map value on the wire, so either TypeScript would be a guess. Make the " +
+                    "element non-null.",
+            )
+        }
+        return typeOf(element, within)
+    }
+
     private fun interfaceType(descriptor: SerialDescriptor): String {
         val name = claimName(descriptor.serialName)
         if (interfaces.containsKey(descriptor.serialName)) return name
@@ -92,7 +136,11 @@ internal class DescriptorWalk(
             (0 until descriptor.elementsCount).map { index ->
                 TsField(
                     name = descriptor.getElementName(index),
-                    type = typeOf(descriptor.getElementDescriptor(index)),
+                    type =
+                        typeOf(
+                            descriptor.getElementDescriptor(index),
+                            "${descriptor.serialName}.${descriptor.getElementName(index)}",
+                        ),
                     optional = isOptional(descriptor, index),
                 )
             }
@@ -127,6 +175,13 @@ internal class DescriptorWalk(
 
     private fun claimName(serialName: String): String {
         val name = tsName(serialName)
+        if (!DECLARED_NAME.matches(name)) {
+            throw ApiTypeGenerationException(
+                "$serialName would generate the TypeScript declaration name '$name', which is not a " +
+                    "legal type name. Give the class a @SerialName whose last segment is a " +
+                    "capitalised identifier.",
+            )
+        }
         val owner = declaredBy.putIfAbsent(name, serialName)
         if (owner != null && owner != serialName) {
             throw ApiTypeGenerationException(

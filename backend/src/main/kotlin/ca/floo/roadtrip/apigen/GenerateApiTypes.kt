@@ -13,10 +13,10 @@ private const val DRIFT_EXIT_CODE = 1
  * `:backend:checkApiTypes` are the two Gradle faces of this one entry point.
  */
 fun main(args: Array<String>) {
-    val target = args.firstOrNull() ?: error(USAGE)
+    val target = args.firstOrNull { it != CHECK_FLAG } ?: error(USAGE)
     val generated = generateApiTypes()
     val file = File(target)
-    if (!args.drop(1).contains(CHECK_FLAG)) {
+    if (!args.contains(CHECK_FLAG)) {
         file.parentFile?.mkdirs()
         file.writeText(generated)
         println("wrote ${file.path}")
