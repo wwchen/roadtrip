@@ -19,23 +19,29 @@ import kotlin.test.assertTrue
 
 private const val BUILD_INFO = "/api/build-info"
 
+/** A body shaped like `HealthResponseDto`, which is not the class the `/api/build-info` row names. */
+private const val WRONG_DTO_BODY = """{"status":"ok","now":17}"""
+
 /**
  * The check behind the harness, driven through `/api/build-info` — a row with a
  * three-field success DTO and the default `400 ApiErrorSchema`, so each failure
  * mode is a one-line change to what the handler sends.
  *
- * A [ContractBodyMismatch] thrown from the send pipeline does not reach the
- * client: Ktor's fallback turns it into a 500, which is what fails the test that
- * produced the drift. So each failure case here asserts the 500 and reads the
- * message off [ContractLedger], which records every violation whether or not a
- * ledger file is configured.
+ * Drift does not throw: a send-pipeline throw never reaches the client, since
+ * Ktor's fallback turns it into a 500 a test may well be asserting. The check
+ * rewrites the response to [CONTRACT_DRIFT_STATUS] instead, so each failure case
+ * here asserts that status and reads the message off [ContractLedger].
+ *
+ * This is the one suite that drifts on purpose, so it installs the check as a
+ * fixture: its violations go to the ledger under their own kind and the ledger
+ * gate needs no exemption for the live row it borrows.
  */
 class ContractBodyCheckTest {
     @Test
     fun `a body the row's DTO encodes to passes`() =
         testApplication {
             application {
-                routeTestApplication {
+                routeTestApplication(fixture = true) {
                     get(BUILD_INFO) {
                         call.respondEncodedJson(BuildInfoDto(env = "test", sha = "abc", branch = "master"))
                     }.access(RouteAccess.Anonymous)
@@ -48,7 +54,7 @@ class ContractBodyCheckTest {
     fun `a field the DTO does not declare fails, naming the route and the status`() =
         testApplication {
             application {
-                routeTestApplication {
+                routeTestApplication(fixture = true) {
                     get(BUILD_INFO) {
                         call.respondText(
                             """{"env":"test","sha":"abc","branch":"master","surprise":1}""",
@@ -57,17 +63,36 @@ class ContractBodyCheckTest {
                     }.access(RouteAccess.Anonymous)
                 }
             }
-            assertEquals(HttpStatusCode.InternalServerError, client.get(BUILD_INFO).status)
-            val message = violation("GET $BUILD_INFO -> 200")
+            assertDrifted(client.get(BUILD_INFO).status)
+            val message = violation("GET $BUILD_INFO -> 200", "surprise")
             assertTrue(message.contains("strict-decode"), message)
-            assertTrue(message.contains("surprise"), message)
+        }
+
+    /**
+     * The spec's own verification step: point a row at the wrong class — here by
+     * serving another row's shape — and the check says so.
+     */
+    @Test
+    fun `a body shaped like another row's DTO fails`() =
+        testApplication {
+            application {
+                routeTestApplication(fixture = true) {
+                    get(BUILD_INFO) {
+                        call.respondText(WRONG_DTO_BODY, ContentType.Application.Json)
+                    }.access(RouteAccess.Anonymous)
+                }
+            }
+            assertDrifted(client.get(BUILD_INFO).status)
+            val message = violation("GET $BUILD_INFO -> 200", "'status'")
+            assertTrue(message.contains("strict-decode"), message)
+            assertTrue(message.contains(BuildInfoDto::class.qualifiedName!!), message)
         }
 
     @Test
     fun `a status the row does not declare fails, naming the status`() =
         testApplication {
             application {
-                routeTestApplication {
+                routeTestApplication(fixture = true) {
                     get(BUILD_INFO) {
                         call.respondEncodedJson(
                             BuildInfoDto(env = "t", sha = "s", branch = "b"),
@@ -76,15 +101,15 @@ class ContractBodyCheckTest {
                     }.access(RouteAccess.Anonymous)
                 }
             }
-            assertEquals(HttpStatusCode.InternalServerError, client.get(BUILD_INFO).status)
-            assertTrue(violation("GET $BUILD_INFO -> 404").contains("declares no body"))
+            assertDrifted(client.get(BUILD_INFO).status)
+            violation("GET $BUILD_INFO -> 404", "declares no body")
         }
 
     @Test
     fun `a body that decodes but re-encodes differently fails`() =
         testApplication {
             application {
-                routeTestApplication {
+                routeTestApplication(fixture = true) {
                     get(BUILD_INFO) {
                         // Decodes fine — `detail` is nullable — but the one encoder omits a
                         // null rather than writing it, so the two trees differ.
@@ -96,15 +121,15 @@ class ContractBodyCheckTest {
                     }.access(RouteAccess.Anonymous)
                 }
             }
-            assertEquals(HttpStatusCode.InternalServerError, client.get(BUILD_INFO).status)
-            assertTrue(violation("GET $BUILD_INFO -> 400").contains("re-encoded"))
+            assertDrifted(client.get(BUILD_INFO).status)
+            violation("GET $BUILD_INFO -> 400", "re-encoded")
         }
 
     @Test
     fun `a path the contract does not name is ignored`() =
         testApplication {
             application {
-                routeTestApplication {
+                routeTestApplication(fixture = true) {
                     get("/test/anything") {
                         call.respondText("""{"whatever":true}""", ContentType.Application.Json)
                     }.access(RouteAccess.Anonymous)
@@ -117,7 +142,7 @@ class ContractBodyCheckTest {
     fun `a non-JSON body is ignored`() =
         testApplication {
             application {
-                routeTestApplication {
+                routeTestApplication(fixture = true) {
                     get(BUILD_INFO) { call.respondText("not json at all") }.access(RouteAccess.Anonymous)
                 }
             }
@@ -131,9 +156,18 @@ class ContractBodyCheckTest {
         assertEquals("""{"error":"boom"}""", encodeApiJson(ApiErrorSchema(error = "boom")))
     }
 
-    private fun violation(prefix: String): String {
-        val recorded = ContractLedger.violationsStartingWith(prefix)
-        assertEquals(1, recorded.size, "expected one violation starting with '$prefix', got $recorded")
+    private fun assertDrifted(status: HttpStatusCode) = assertEquals(CONTRACT_DRIFT_STATUS, status.value)
+
+    /**
+     * The one recorded violation for [prefix] that [marker] identifies — the cases
+     * share a route, and two of them share its success status.
+     */
+    private fun violation(
+        prefix: String,
+        marker: String,
+    ): String {
+        val recorded = ContractLedger.violationsStartingWith(prefix).filter { it.contains(marker) }
+        assertEquals(1, recorded.size, "expected one violation '$prefix' mentioning '$marker', got $recorded")
         return recorded.single()
     }
 }

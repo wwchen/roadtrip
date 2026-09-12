@@ -139,7 +139,8 @@ internal object OpenApiContractDocument {
      */
     private fun accessResponses(access: RouteAccess?): List<TsBody> =
         access?.guardBodies().orEmpty().map { body ->
-            TsBody(body.status, body.body?.let { tsName(requireNotNull(it.qualifiedName)) })
+            // Every guard body names a class: the guard answers ApiErrorSchema or nothing at all.
+            TsBody(body.status, tsName(requireNotNull(requireNotNull(body.body).qualifiedName)))
         }
 
     private fun responseFor(

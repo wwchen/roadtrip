@@ -13,9 +13,16 @@ import io.ktor.server.routing.routing
  * [ContractBodyCheck] is installed after [installRoadtripPlugins], so its
  * Render-phase hook sees the text `ContentNegotiation` produced and sees it
  * before `Compression` touches it.
+ *
+ * [fixture] belongs to `ContractBodyCheckTest` alone — the one suite that serves
+ * drifted bodies on purpose. Its violations are then recorded under their own
+ * ledger kind, so the ledger gate fails on every real one with nothing exempted.
  */
-internal fun Application.routeTestApplication(body: Route.() -> Unit) {
+internal fun Application.routeTestApplication(
+    fixture: Boolean = false,
+    body: Route.() -> Unit,
+) {
     installRoadtripPlugins()
-    install(ContractBodyCheck)
+    install(ContractBodyCheck) { this.fixture = fixture }
     routing(body)
 }
