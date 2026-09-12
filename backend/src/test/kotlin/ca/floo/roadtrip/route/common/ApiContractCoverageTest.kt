@@ -167,10 +167,22 @@ class ApiContractCoverageTest {
         )
     }
 
+    /**
+     * `createType()` supplies no type arguments, so a generic DTO would abort this
+     * loop with a Kotlin reflection message naming neither the class nor the row.
+     * The generator refuses one by name; so does this, rather than failing in the
+     * same run with the error the generator exists to replace.
+     */
     @Test
     fun `every class the contract names is serializable`() {
         val classes =
             ApiContract.endpoints.flatMap { listOfNotNull(it.request, it.response) + it.errors }.distinct()
+        assertEquals(
+            emptyList(),
+            classes.filter { it.typeParameters.isNotEmpty() }.map { it.qualifiedName },
+            "a contract row names a KClass, which carries no type arguments. Declare a concrete DTO " +
+                "(e.g. WatchPage) rather than Page<Watch>.",
+        )
         classes.forEach { serializer(it.createType()) }
         assertTrue(classes.isNotEmpty(), "the contract must name DTOs for the generator to walk")
     }
