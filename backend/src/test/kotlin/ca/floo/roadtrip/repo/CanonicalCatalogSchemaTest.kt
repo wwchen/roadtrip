@@ -62,6 +62,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "data_provider_ref",
                 "default_campsite_schedule",
                 "deleted_at",
+                "geometry_provenance",
                 "has_pull_through_sites",
                 "id",
                 "kind",

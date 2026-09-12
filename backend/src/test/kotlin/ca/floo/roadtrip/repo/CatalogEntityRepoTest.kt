@@ -24,6 +24,7 @@ import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.Carrier
 import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.CatalogPhoto
+import ca.floo.roadtrip.model.domain.GeometryProvenance
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingAlias
@@ -37,6 +38,9 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
+/** A Jaccard-shaped fuzzy score with no short binary expansion: a narrowing on the column path would lose digits. */
+private const val SAMPLE_FUZZY_SCORE = 0.6666666666666666
 
 class CatalogEntityRepoTest : SharedDbTest() {
     @BeforeEach
@@ -1415,6 +1419,76 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals(emptyList(), checkNotNull(CampgroundRepo(ctx).findById(campgroundId("cg-alias-none"))).bookingAliases)
         assertEquals(emptyList(), checkNotNull(CampsiteRepo(ctx).findById(campsiteId("cs-alias-none"))).bookingAliases)
     }
+
+    @Test
+    fun `geometry provenance round-trips and is replaced on conflict`() {
+        val fuzzy =
+            GeometryProvenance(
+                matchKind = "fuzzy",
+                source = "uscampgrounds",
+                matchedName = "brooks memorial",
+                score = SAMPLE_FUZZY_SCORE,
+            )
+        val repo = CampgroundRepo(ctx)
+        repo.upsertCampgrounds(
+            listOf(
+                campgroundWithProvenance("cg-prov-1", fuzzy),
+                campgroundWithProvenance("cg-prov-none", null),
+            ),
+            source = "aspira-wa-campgrounds",
+        )
+
+        assertEquals(fuzzy, checkNotNull(repo.findById(campgroundId("cg-prov-1"))).geometryProvenance)
+        assertNull(checkNotNull(repo.findById(campgroundId("cg-prov-none"))).geometryProvenance)
+        assertNull(
+            ctx
+                .fetchOne("SELECT geometry_provenance::text AS p FROM campgrounds WHERE data_provider_ref = ?", "cg-prov-none")!!
+                .get("p", String::class.java),
+            "an absent provenance must be SQL NULL, not an empty object",
+        )
+
+        // The re-import path: the same vendor ref, a better match this time.
+        val exact = GeometryProvenance(matchKind = "exact", source = "uscampgrounds", matchedName = "brooks memorial")
+        repo.upsertCampgrounds(listOf(campgroundWithProvenance("cg-prov-1", exact)), source = "aspira-wa-campgrounds")
+
+        assertEquals(exact, checkNotNull(repo.findById(campgroundId("cg-prov-1"))).geometryProvenance)
+
+        // A re-import that matched nothing clears the stale pin rather than keeping it.
+        repo.upsertCampgrounds(listOf(campgroundWithProvenance("cg-prov-1", null)), source = "aspira-wa-campgrounds")
+        assertNull(checkNotNull(repo.findById(campgroundId("cg-prov-1"))).geometryProvenance)
+    }
+
+    /** The partial index the non-exact review query plans against. */
+    @Test
+    fun `the geometry provenance index is built and valid`() {
+        val indexes =
+            ctx
+                .fetch(
+                    """
+                    SELECT c.relname AS indexname
+                    FROM pg_index i
+                    JOIN pg_class c ON c.oid = i.indexrelid
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    WHERE n.nspname = 'public' AND i.indisvalid AND c.relname = ?
+                    """.trimIndent(),
+                    "campgrounds_geometry_provenance_match_kind_idx",
+                ).map { it.get("indexname", String::class.java) }
+
+        assertEquals(listOf("campgrounds_geometry_provenance_match_kind_idx"), indexes)
+    }
+
+    private fun campgroundWithProvenance(
+        ref: String,
+        provenance: GeometryProvenance?,
+    ): CampgroundUpsertCandidate =
+        CampgroundUpsertCandidate(
+            dataProviderRef = DataProviderRef.Campflare(id = ref),
+            name = ref,
+            latitude = 1.0,
+            longitude = 2.0,
+            location = CampgroundLocation(1.0, 2.0),
+            geometryProvenance = provenance,
+        )
 
     /** A NULL bag predates the column's default, and both it and `[]` read as "no aliases". */
     @Test

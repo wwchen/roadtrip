@@ -101,10 +101,71 @@ poi_data:
       - slug: <terminal-etl-slug>
         adapter: <Vendor>Etl
         inputs: [<data_source-slug>, <other-data_source-slug>]
-        args: {}                    # optional; transformer-specific (e.g. host, state_filter)
+        args: {}                    # optional; transformer-specific (e.g. host, tenant)
 ```
 
 The other steps just create the things these rows reference — fetcher scripts, Kotlin classes, env vars.
+
+### Geometry-joined adapters
+
+Some vendors carry booking IDs but no coordinates. `AspiraCampgroundsEtl` and
+`BcParksCampgroundsEtl` therefore join each leaf to a sibling feed *by name*,
+and the row declares that join in a `geometry:` block on the ETL entry:
+
+```yaml
+      - slug: aspira-pc-campgrounds
+        adapter: AspiraCampgroundsEtl
+        inputs: [aspira-maps-pc, apca-accommodation, apca-places, aspira-inventory-pc, aspira-dictionaries-pc]
+        args:
+          host: reservation.pc.gc.ca
+          tenant: pc
+        geometry:
+          sources:
+            - input: apca-accommodation
+              format: geojson_points
+              name_property: Name_e
+            - input: apca-places
+              format: arcgis_centroids
+          match:
+            parent_fallback: true
+```
+
+- `sources` is **ordered, and the order is preference**: when two sources carry
+  the same normalized name, the earlier one's point wins. Parks Canada declares
+  campground points before park-polygon centroids for exactly that reason.
+- `format` is a closed enum — one value, one parser class:
+
+  | `format` | reads |
+  |---|---|
+  | `uscampgrounds_csv` | the nationwide uscampgrounds.info CSV |
+  | `bcparks_strapi` | BC Parks Strapi protected-area pages |
+  | `arcgis_centroids` | ArcGIS centroid-mode JSON (`attributes.DESC_EN` + `centroid`) |
+  | `geojson_points` | a GeoJSON FeatureCollection of Points |
+
+- `state` filters a source to one state code, matched case-insensitively
+  against the CSV's state column. Valid **only** on `uscampgrounds_csv`, the
+  only nationwide feed.
+- `name_property` names the feature attribute holding the name. Valid **only**
+  on `geojson_points`; the default is `name`, then `Name`.
+- `match.fuzzy_threshold` is the minimum Jaccard token overlap for a fuzzy name
+  match. Default `0.5`, valid range `(0, 1]`.
+- `match.parent_fallback` lets a leaf that matches nothing itself take its
+  parent park's point. Default `false`.
+
+The registry is decoded strictly and validated at boot, so each of these is a
+startup failure rather than a silently dropped setting:
+
+- a geometry adapter with no `geometry:` block, or with an empty `sources` list;
+- a `geometry.sources[].input` that is not in the row's `inputs:`, or declared twice;
+- `state` on a format other than `uscampgrounds_csv`, or `name_property` on a
+  format other than `geojson_points`;
+- a blank `state` or `name_property` — a filter that matches nothing would empty
+  the join rather than narrow it;
+- a `fuzzy_threshold` outside `(0, 1]`, `NaN` included;
+- `BcParksCampgroundsEtl` declaring anything but exactly one `bcparks_strapi` source;
+- a `geometry:` block on an adapter that joins no geometry;
+- any `args` key on these two adapters other than `host` and `tenant`;
+- any key anywhere in the file that no model declares.
 
 **Verify** the YAML parses cleanly and the DAG is valid. Restart the backend (or `docker compose restart backend`) and watch logs:
 

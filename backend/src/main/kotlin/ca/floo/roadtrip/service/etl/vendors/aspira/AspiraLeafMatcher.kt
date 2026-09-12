@@ -1,16 +1,16 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
+import ca.floo.roadtrip.model.metadata.registry.MatchPolicy
+
 // Misses named in the summary log; enough to start a diagnosis without
 // turning one line into a dump.
 private const val LOGGED_MISS_SAMPLES = 5
 
-// Minimum Jaccard token overlap for a fuzzy name match.
-private const val FUZZY_THRESHOLD = 0.5
-
 /**
  * Resolves Aspira `/api/maps` leaves to geometry through a normalized-name
- * index (see [normalize]): exact name first, then Jaccard token overlap,
- * then the parent park's name.
+ * index (see [normalize]): exact name first, then Jaccard token overlap at
+ * [MatchPolicy.fuzzyThreshold], then — only when [MatchPolicy.parentFallback]
+ * is set — the parent park's name.
  *
  * [matchBookable] also owns the two gates every Aspira tenant applies before
  * lookup. Leaves without a resourceLocationId are park containers (Banff,
@@ -23,9 +23,16 @@ private const val FUZZY_THRESHOLD = 0.5
 class AspiraLeafMatcher<T : Any>(
     private val byName: Map<String, T>,
     private val nonBookableResourceLocationIds: Set<Long>,
+    private val policy: MatchPolicy,
 ) {
-    private val tokenIndex: List<Pair<Set<String>, T>> =
-        byName.entries.map { (key, value) -> key.split(' ').toSet() to value }
+    private val tokenIndex: List<IndexEntry<T>> =
+        byName.entries.map { (key, value) -> IndexEntry(key, key.split(' ').toSet(), value) }
+
+    private data class IndexEntry<T>(
+        val key: String,
+        val tokens: Set<String>,
+        val value: T,
+    )
 
     /** Per-run counts of how leaves were matched or skipped, for the summary log. */
     data class Tally(
@@ -88,15 +95,27 @@ class AspiraLeafMatcher<T : Any>(
 
     fun match(leaf: AspiraLeaf): AspiraLeafMatch<T>? {
         val key = normalize(leaf.name)
-        byName[key]?.let { return AspiraLeafMatch(leaf, it, AspiraLeafMatchKind.EXACT) }
+        byName[key]?.let { return AspiraLeafMatch(leaf, it, AspiraLeafMatchKind.EXACT, matchedName = key) }
 
+        // One score per entry, first maximum kept: ties resolve by index order,
+        // which is source preference and then feed row order — the same rule
+        // that settles an exact-name collision.
         val tokens = key.split(' ').toSet()
-        val best = tokenIndex.maxByOrNull { jaccard(it.first, tokens) }
-        if (best != null && jaccard(best.first, tokens) >= FUZZY_THRESHOLD) {
-            return AspiraLeafMatch(leaf, best.second, AspiraLeafMatchKind.FUZZY)
+        var best: IndexEntry<T>? = null
+        var bestScore = 0.0
+        for (entry in tokenIndex) {
+            val score = jaccard(entry.tokens, tokens)
+            if (best == null || score > bestScore) {
+                best = entry
+                bestScore = score
+            }
+        }
+        if (best != null && bestScore >= policy.fuzzyThreshold) {
+            return AspiraLeafMatch(leaf, best.value, AspiraLeafMatchKind.FUZZY, matchedName = best.key, score = bestScore)
         }
 
+        if (!policy.parentFallback) return null
         val parentKey = leaf.parentName?.let(::normalize) ?: return null
-        return byName[parentKey]?.let { AspiraLeafMatch(leaf, it, AspiraLeafMatchKind.PARENT) }
+        return byName[parentKey]?.let { AspiraLeafMatch(leaf, it, AspiraLeafMatchKind.PARENT, matchedName = parentKey) }
     }
 }

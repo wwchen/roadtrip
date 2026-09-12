@@ -1,7 +1,5 @@
 package ca.floo.roadtrip.model.metadata.registry
 
-import com.charleskorn.kaml.Yaml
-import com.charleskorn.kaml.YamlConfiguration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -11,6 +9,28 @@ import kotlin.test.assertTrue
 private const val BLANK_DISPLAY_NAME = "display_name: \"\""
 private const val BLANK_HOST = "host: \"\""
 private const val BLANK_CODE = "- code: \"\""
+
+/** Six-space list indent plus two: the column an `etls:` entry's own keys sit at. */
+private const val ETL_KEY_INDENT = "        "
+
+/** Two deeper again: the column an `args:` key sits at. */
+private const val ARG_KEY_INDENT = "          "
+
+/** The default `args` for the WA fixture row: exactly what the adapter accepts. */
+@Suppress("TopLevelPropertyNaming")
+private val WA_ARGS = listOf("host: washington.goingtocamp.com", "tenant: wa")
+
+/** The production WA geometry block, the shape every positive fixture reuses. */
+private const val WA_GEOMETRY_BLOCK =
+    """
+    geometry:
+      sources:
+        - input: uscampgrounds
+          format: uscampgrounds_csv
+          state: WA
+      match:
+        parent_fallback: true
+    """
 
 /** The shipped booking_providers section. Every fixture needs it: validate()
  *  requires one row per BookingProvider member. */
@@ -72,16 +92,12 @@ private val BOOKING_PROVIDERS =
  *     with the tenant args ETL rows declare.
  */
 class PoiRegistryValidatorTest {
-    private val yaml = Yaml(configuration = YamlConfiguration(strictMode = false))
-
-    private fun load(text: String): PoiRegistry = yaml.decodeFromString(PoiRegistry.serializer(), text).also { it.validate() }
-
     @Test
     fun `legacy single-poi_data YAML still loads`() {
         // No campsite_data or poi_reservable_joiner sections — should
         // default to empty lists and pass the validator unchanged.
         val r =
-            load(
+            PoiRegistry.loadString(
                 BOOKING_PROVIDERS + "\n" +
                     """
                     data_sources:
@@ -106,7 +122,7 @@ class PoiRegistryValidatorTest {
     @Test
     fun `poi_data agency accepts scalar constants and derived field mappings`() {
         val r =
-            load(
+            PoiRegistry.loadString(
                 BOOKING_PROVIDERS + "\n" +
                     """
                     data_sources:
@@ -149,7 +165,7 @@ class PoiRegistryValidatorTest {
     fun `poi_data agency rejects blank scalar constants`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
-                load(
+                PoiRegistry.loadString(
                     BOOKING_PROVIDERS + "\n" +
                         """
                         data_sources:
@@ -180,7 +196,7 @@ class PoiRegistryValidatorTest {
     @Test
     fun `campsite_data row with valid terminal etl loads`() {
         val r =
-            load(
+            PoiRegistry.loadString(
                 BOOKING_PROVIDERS + "\n" +
                     """
                     data_sources:
@@ -207,7 +223,7 @@ class PoiRegistryValidatorTest {
     fun `poi_data rows reject intermediate etl chains`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
-                load(
+                PoiRegistry.loadString(
                     BOOKING_PROVIDERS + "\n" +
                         """
                         data_sources:
@@ -241,7 +257,7 @@ class PoiRegistryValidatorTest {
     fun `etl slugs across poi_data and campsite_data share one namespace`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
-                load(
+                PoiRegistry.loadString(
                     BOOKING_PROVIDERS + "\n" +
                         """
                         data_sources:
@@ -277,7 +293,7 @@ class PoiRegistryValidatorTest {
     fun `data_source slug colliding with campsite_data etl slug fails`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
-                load(
+                PoiRegistry.loadString(
                     BOOKING_PROVIDERS + "\n" +
                         """
                         data_sources:
@@ -307,7 +323,7 @@ class PoiRegistryValidatorTest {
     fun `etl inputs cannot reference a different row etl`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
-                load(
+                PoiRegistry.loadString(
                     BOOKING_PROVIDERS + "\n" +
                         """
                         data_sources:
@@ -342,7 +358,7 @@ class PoiRegistryValidatorTest {
     fun `cross-section refs rejected (campsite_data inputs cannot reference poi_data etls)`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
-                load(
+                PoiRegistry.loadString(
                     BOOKING_PROVIDERS + "\n" +
                         """
                         data_sources:
@@ -702,5 +718,486 @@ class PoiRegistryValidatorTest {
             ),
             err.message,
         )
+    }
+
+    /**
+     * A minimal one-row WA registry. [etlBody] is spliced in at the `etls:`
+     * entry's own key column, so each geometry test varies only the block it
+     * is about.
+     */
+    private fun waRegistry(
+        etlBody: String,
+        adapter: String = "AspiraCampgroundsEtl",
+        args: List<String> = WA_ARGS,
+    ): String =
+        BOOKING_PROVIDERS + "\n" +
+            """
+            data_sources:
+              - slug: aspira-maps-wa
+                name: Aspira WA maps
+                fetcher:
+                  executor: python3
+                  filename: scripts/fetch_aspira.py
+                  output_dir_prefix: data/raw/aspira-maps-wa
+              - slug: aspira-inventory-wa
+                name: Aspira WA inventory
+                fetcher:
+                  executor: python3
+                  filename: scripts/fetch_aspira_inventory.py
+                  output_dir_prefix: data/raw/aspira-inventory-wa
+              - slug: uscampgrounds
+                name: uscampgrounds.info
+                fetcher:
+                  executor: python3
+                  filename: scripts/fetch_uscampgrounds.py
+                  output_dir_prefix: data/raw/uscampgrounds
+            poi_data:
+              - name: Washington State Parks
+                category: campground
+                agency: WA State Parks
+                etls:
+                  - slug: aspira-wa-campgrounds
+                    adapter: $adapter
+                    inputs: [aspira-maps-wa, aspira-inventory-wa, uscampgrounds]
+                    args:
+            """.trimIndent() +
+            args.joinToString("") { "\n" + ARG_KEY_INDENT + it } +
+            etlBody.trimIndent().let { if (it.isBlank()) "" else "\n" + it.prependIndent(ETL_KEY_INDENT) } + "\n"
+
+    private fun waError(
+        etlBody: String,
+        adapter: String = "AspiraCampgroundsEtl",
+        args: List<String> = WA_ARGS,
+    ): String =
+        assertFailsWith<IllegalArgumentException> {
+            PoiRegistry.loadString(waRegistry(etlBody, adapter, args))
+        }.message!!
+
+    @Test
+    fun `a declared geometry block decodes to typed sources and match policy`() {
+        val registry = PoiRegistry.loadString(waRegistry(WA_GEOMETRY_BLOCK))
+
+        val geometry =
+            registry.poiData
+                .single()
+                .etls
+                .single()
+                .geometry!!
+        assertEquals(
+            listOf(
+                GeometrySourceSpec(
+                    input = "uscampgrounds",
+                    format = GeometryFormat.USCAMPGROUNDS_CSV,
+                    state = "WA",
+                ),
+            ),
+            geometry.sources,
+        )
+        assertEquals(MatchPolicy(parentFallback = true), geometry.match)
+    }
+
+    @Test
+    fun `a geometry adapter declaring no geometry block fails`() {
+        val expected =
+            "poi_data 'Washington State Parks' etl 'aspira-wa-campgrounds' adapter 'AspiraCampgroundsEtl' " +
+                "must declare 'geometry' with at least one source"
+        assertTrue(waError("").contains(expected))
+
+        // The other half of the same rule: a block that declares an empty list.
+        val empty = waError("geometry:\n  sources: []")
+        assertTrue(empty.contains(expected), empty)
+    }
+
+    @Test
+    fun `a geometry source naming an input the etl does not declare fails`() {
+        val message =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: apca-places
+                      format: arcgis_centroids
+                """,
+            )
+        assertTrue(
+            message.contains(
+                "poi_data 'Washington State Parks' etl 'aspira-wa-campgrounds' " +
+                    "geometry source input 'apca-places' is not one of the etl's inputs",
+            ),
+            message,
+        )
+    }
+
+    @Test
+    fun `the same geometry input declared twice fails`() {
+        val message =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: uscampgrounds
+                      format: uscampgrounds_csv
+                    - input: uscampgrounds
+                      format: geojson_points
+                """,
+            )
+        assertTrue(message.contains("declares geometry source input 'uscampgrounds' twice"), message)
+    }
+
+    @Test
+    fun `state on a format that cannot honour it fails`() {
+        val message =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: uscampgrounds
+                      format: geojson_points
+                      state: WA
+                """,
+            )
+        assertTrue(
+            message.contains(
+                "geometry source 'uscampgrounds' declares 'state', which only 'uscampgrounds_csv' honours",
+            ),
+            message,
+        )
+    }
+
+    /** A blank filter matches nothing, so it would empty the join instead of narrowing it. */
+    @Test
+    fun `a blank state fails`() {
+        val message =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: uscampgrounds
+                      format: uscampgrounds_csv
+                      state: ""
+                """,
+            )
+        assertTrue(message.contains("geometry source 'uscampgrounds' declares a blank 'state'"), message)
+    }
+
+    @Test
+    fun `a blank name_property fails`() {
+        val message =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: uscampgrounds
+                      format: geojson_points
+                      name_property: ""
+                """,
+            )
+        assertTrue(message.contains("geometry source 'uscampgrounds' declares a blank 'name_property'"), message)
+    }
+
+    @Test
+    fun `name_property on a format that cannot honour it fails`() {
+        val message =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: uscampgrounds
+                      format: uscampgrounds_csv
+                      name_property: Name_e
+                """,
+            )
+        assertTrue(
+            message.contains(
+                "geometry source 'uscampgrounds' declares 'name_property', which only 'geojson_points' honours",
+            ),
+            message,
+        )
+    }
+
+    @Test
+    fun `a fuzzy threshold outside the open-zero-to-one range fails`() {
+        val tooLow =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: uscampgrounds
+                      format: uscampgrounds_csv
+                  match:
+                    fuzzy_threshold: 0.0
+                """,
+            )
+        assertTrue(tooLow.contains("match.fuzzy_threshold=0.0 is outside (0.0, 1.0]"), tooLow)
+
+        val tooHigh =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: uscampgrounds
+                      format: uscampgrounds_csv
+                  match:
+                    fuzzy_threshold: 1.5
+                """,
+            )
+        assertTrue(tooHigh.contains("match.fuzzy_threshold=1.5 is outside (0.0, 1.0]"), tooHigh)
+
+        // NaN compares false to every bound, so a naive range check lets it boot
+        // and then silently downgrades every fuzzy comparison to exact-only.
+        val notANumber =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: uscampgrounds
+                      format: uscampgrounds_csv
+                  match:
+                    fuzzy_threshold: .nan
+                """,
+            )
+        assertTrue(notANumber.contains("match.fuzzy_threshold=NaN is outside (0.0, 1.0]"), notANumber)
+    }
+
+    /** The inclusive bound itself: nothing else pins `>` against `>=`. */
+    @Test
+    fun `a fuzzy threshold of exactly one is accepted`() {
+        val registry =
+            PoiRegistry.loadString(
+                waRegistry(
+                    """
+                    geometry:
+                      sources:
+                        - input: uscampgrounds
+                          format: uscampgrounds_csv
+                      match:
+                        fuzzy_threshold: 1.0
+                    """,
+                ),
+            )
+
+        assertEquals(
+            MatchPolicy(fuzzyThreshold = 1.0),
+            registry.poiData
+                .single()
+                .etls
+                .single()
+                .geometry!!
+                .match,
+        )
+    }
+
+    /** `CampflareCampgroundsEtl` has no adapter policy, so the WA args pass through it unjudged. */
+    @Test
+    fun `an adapter with no policy may not declare a geometry block`() {
+        val message =
+            waError(
+                etlBody = WA_GEOMETRY_BLOCK,
+                adapter = "CampflareCampgroundsEtl",
+            )
+        assertTrue(
+            message.contains(
+                "adapter 'CampflareCampgroundsEtl' has no adapter policy, so it must not declare 'geometry'",
+            ),
+            message,
+        )
+    }
+
+    /** The other branch: a policy that exists and says this adapter joins nothing. */
+    @Test
+    fun `an adapter whose policy joins no geometry may not declare a geometry block`() {
+        val message =
+            waError(
+                etlBody = WA_GEOMETRY_BLOCK,
+                adapter = "ReserveAmericaCampgroundsEtl",
+                args = listOf("contract: ABPP"),
+            )
+        assertTrue(
+            message.contains(
+                "adapter 'ReserveAmericaCampgroundsEtl' does not join geometry, so it must not declare 'geometry'",
+            ),
+            message,
+        )
+    }
+
+    /**
+     * The run-time partition is `inputs - declared geometry sources`, then each
+     * role picked by substring. A geometry source carrying a role marker eats
+     * the feed that role names.
+     */
+    @Test
+    fun `a geometry source input carrying a role marker fails`() {
+        val message =
+            waError(
+                """
+                geometry:
+                  sources:
+                    - input: aspira-inventory-wa
+                      format: uscampgrounds_csv
+                """,
+            )
+        assertTrue(
+            message.contains(
+                "geometry source input 'aspira-inventory-wa' carries the 'inventory' role marker",
+            ),
+            message,
+        )
+    }
+
+    /**
+     * Losing the inventory feed is not a lighter configuration: every Aspira row
+     * is then written with a null `booking_provider_ref` while the run reports
+     * success. Boot is where that belongs.
+     */
+    @Test
+    fun `a geometry-joining row missing its inventory input fails`() {
+        val registry =
+            waRegistry(WA_GEOMETRY_BLOCK)
+                .replace("inputs: [aspira-maps-wa, aspira-inventory-wa, uscampgrounds]", "inputs: [aspira-maps-wa, uscampgrounds]")
+        val message = assertFailsWith<IllegalArgumentException> { PoiRegistry.loadString(registry) }.message!!
+        assertTrue(message.contains("must declare exactly one 'inventory' input, got 0"), message)
+    }
+
+    @Test
+    fun `a geometry-joining row declaring two maps inputs fails`() {
+        val registry =
+            waRegistry(WA_GEOMETRY_BLOCK)
+                .replace(
+                    "inputs: [aspira-maps-wa, aspira-inventory-wa, uscampgrounds]",
+                    "inputs: [aspira-maps-wa, aspira-maps-wa-2, aspira-inventory-wa, uscampgrounds]",
+                ).replace(
+                    "poi_data:",
+                    """
+                      - slug: aspira-maps-wa-2
+                        name: Aspira WA maps, second capture
+                        fetcher:
+                          executor: python3
+                          filename: scripts/fetch_aspira.py
+                          output_dir_prefix: data/raw/aspira-maps-wa-2
+                    poi_data:
+                    """.trimIndent(),
+                )
+        val message = assertFailsWith<IllegalArgumentException> { PoiRegistry.loadString(registry) }.message!!
+        assertTrue(message.contains("must declare exactly one 'maps' input, got 2"), message)
+    }
+
+    @Test
+    fun `BcParksCampgroundsEtl must declare exactly one bcparks_strapi source`() {
+        val expected =
+            "adapter 'BcParksCampgroundsEtl' must declare exactly one geometry source with format 'bcparks_strapi'"
+        val wrongFormat =
+            waError(
+                etlBody =
+                    """
+                    geometry:
+                      sources:
+                        - input: uscampgrounds
+                          format: uscampgrounds_csv
+                    """,
+                adapter = "BcParksCampgroundsEtl",
+            )
+        assertTrue(wrongFormat.contains(expected), wrongFormat)
+
+        // "Exactly one" is the other half: the right format, twice over, is still wrong.
+        val twoSources =
+            waError(
+                etlBody =
+                    """
+                    geometry:
+                      sources:
+                        - input: uscampgrounds
+                          format: bcparks_strapi
+                        - input: aspira-maps-wa
+                          format: bcparks_strapi
+                    """,
+                adapter = "BcParksCampgroundsEtl",
+            )
+        assertTrue(twoSources.contains(expected), twoSources)
+    }
+
+    /** The dead `parent_name_fallback` arg's whole failure class, now a boot error. */
+    @Test
+    fun `an args key the adapter does not accept fails`() {
+        val message =
+            waError(
+                etlBody = WA_GEOMETRY_BLOCK,
+                args = WA_ARGS + "parent_name_fallback: true",
+            )
+        assertTrue(
+            message.contains(
+                "adapter 'AspiraCampgroundsEtl' does not accept arg 'parent_name_fallback' (accepted: host, tenant)",
+            ),
+            message,
+        )
+    }
+
+    @Test
+    fun `strict decoding rejects an unknown key inside the geometry block`() {
+        val err =
+            assertFailsWith<Exception> {
+                PoiRegistry.loadString(
+                    waRegistry(
+                        """
+                        geometry:
+                          sources:
+                            - input: uscampgrounds
+                              format: uscampgrounds_csv
+                          matcher:
+                            parent_fallback: true
+                        """,
+                    ),
+                )
+            }
+        assertTrue(err.message!!.contains("matcher"), err.message)
+    }
+
+    /** The shipped rows, decoded. This is the test the production YAML edit has to satisfy. */
+    @Test
+    fun `the three shipped geometry rows decode to their declared policies`() {
+        val registry = PoiRegistry.loadResource("poi-registry.yaml")
+        val bySlug = registry.poiData.flatMap { it.etls }.associateBy { it.slug }
+
+        assertEquals(
+            GeometryPolicy(
+                sources = listOf(GeometrySourceSpec("uscampgrounds", GeometryFormat.USCAMPGROUNDS_CSV, state = "WA")),
+                match = MatchPolicy(parentFallback = true),
+            ),
+            bySlug.getValue("aspira-wa-campgrounds").geometry,
+        )
+        assertEquals(
+            GeometryPolicy(
+                sources = listOf(GeometrySourceSpec("bcparks-strapi", GeometryFormat.BCPARKS_STRAPI)),
+                match = MatchPolicy(parentFallback = true),
+            ),
+            bySlug.getValue("aspira-bc-campgrounds").geometry,
+        )
+        assertEquals(
+            GeometryPolicy(
+                sources =
+                    listOf(
+                        GeometrySourceSpec("apca-accommodation", GeometryFormat.GEOJSON_POINTS, nameProperty = "Name_e"),
+                        GeometrySourceSpec("apca-places", GeometryFormat.ARCGIS_CENTROIDS),
+                    ),
+                match = MatchPolicy(parentFallback = true),
+            ),
+            bySlug.getValue("aspira-pc-campgrounds").geometry,
+        )
+        assertEquals(mapOf("host" to "reservation.pc.gc.ca", "tenant" to "pc"), bySlug.getValue("aspira-pc-campgrounds").args)
+    }
+
+    /**
+     * The one invariant a single adapter table cannot enforce by construction: a
+     * policy that requires an arg its own closed set does not accept would fail
+     * every row twice over, once for the missing key and once for the extra one.
+     */
+    @Test
+    fun `every adapter policy accepts the args its own tenant and host rules require`() {
+        for ((adapter, policy) in ADAPTER_POLICIES) {
+            val accepted = policy.acceptedArgKeys ?: continue
+            assertTrue(
+                accepted.containsAll(policy.mandatoryArgKeys),
+                "$adapter requires ${policy.mandatoryArgKeys - accepted} but does not accept them",
+            )
+        }
     }
 }

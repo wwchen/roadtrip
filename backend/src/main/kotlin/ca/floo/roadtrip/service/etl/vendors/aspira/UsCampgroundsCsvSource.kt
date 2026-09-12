@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
+import ca.floo.roadtrip.model.metadata.Envelope
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -19,25 +20,25 @@ private const val MIN_COLS = STATE_COL + 1
  * what the non-US tenants want.
  */
 class UsCampgroundsCsvSource(
-    private val envelopes: List<ca.floo.roadtrip.model.metadata.Envelope>,
+    private val envelopes: List<Envelope>,
     private val stateFilter: String? = null,
 ) : GeometrySource {
-    override fun indexInto(byName: MutableMap<String, Pair<Double, Double>>) {
-        val wantedState = stateFilter?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }
-        for (env in envelopes) {
-            val text = env.payload.jsonPrimitive.contentOrNull ?: continue
-            for (line in text.lineSequence()) {
-                if (line.isBlank()) continue
-                val cols = csvSplit(line)
-                if (cols.size < MIN_COLS) continue
-                if (wantedState != null && cols[STATE_COL].trim().uppercase() != wantedState) continue
-                val lon = cols[LONGITUDE_COL].toDoubleOrNull() ?: continue
-                val lat = cols[LATITUDE_COL].toDoubleOrNull() ?: continue
-                val name = cols.getOrNull(NAME_COL)?.trim().orEmpty()
-                if (name.isEmpty()) continue
-                val key = normalize(name)
-                if (key.isNotEmpty()) byName.putIfAbsent(key, lat to lon)
+    override fun points(): Sequence<NamedPoint> =
+        sequence {
+            val wantedState = stateFilter?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }
+            for (env in envelopes) {
+                val text = env.payload.jsonPrimitive.contentOrNull ?: continue
+                for (line in text.lineSequence()) {
+                    if (line.isBlank()) continue
+                    val cols = csvSplit(line)
+                    if (cols.size < MIN_COLS) continue
+                    if (wantedState != null && cols[STATE_COL].trim().uppercase() != wantedState) continue
+                    val lon = cols[LONGITUDE_COL].toDoubleOrNull() ?: continue
+                    val lat = cols[LATITUDE_COL].toDoubleOrNull() ?: continue
+                    val name = cols.getOrNull(NAME_COL)?.trim().orEmpty()
+                    if (name.isEmpty()) continue
+                    yield(NamedPoint(name, lat, lon))
+                }
             }
         }
-    }
 }

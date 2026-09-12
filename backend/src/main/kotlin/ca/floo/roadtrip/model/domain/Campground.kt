@@ -45,6 +45,7 @@ data class Campground(
     val bookingProvider: String?,
     val bookingProviderRef: String?,
     val bookingAliases: List<BookingAlias> = emptyList(),
+    val geometryProvenance: GeometryProvenance? = null,
 )
 
 fun Campground.bookingRef(): BookingProviderRef? {

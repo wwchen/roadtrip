@@ -6,10 +6,11 @@ import ca.floo.roadtrip.model.domain.CampgroundManagement
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
+import ca.floo.roadtrip.model.metadata.registry.AspiraInputRoles
+import ca.floo.roadtrip.model.metadata.registry.GeometryPolicy
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -25,82 +26,73 @@ import java.time.Instant
 // `/api/maps` carries booking IDs but no lat/lng (the SPA renders against
 // pixel-coord image maps, not geographic). To put a pin on the map we
 // have to join Aspira leaves to a sibling source that actually carries
-// coordinates. Each tenant has its own pairing:
+// coordinates. Each tenant's pairing lives in its registry row's `geometry:`
+// block — which of its inputs carry coordinates, in which preference order,
+// and how names are matched. One ETL class, reading only that declaration.
 //
-//   WA → uscampgrounds.info CSV (state column 12)
-//   BC → BC Parks Strapi (already provincial-shape; protectedAreaName)
-//   PC → APCA ArcGIS Accommodation (campground points) + Places
-//        (per-park polygon centroids). A campground leaf whose own name
-//        misses geometry falls back to its parent park's centroid via
-//        parent_name. Park-container leaves themselves are dropped before
-//        emission (see the resourceLocationId gate in transform), so the
-//        centroid now only backstops campground leaves, never emits a
-//        park-level pin.
-//
-// One ETL class. Inputs are declared in YAML; this class dispatches on
-// the slug shape (recognized via the envelope contents) at parse time.
+// Park-container leaves are dropped before emission (see the
+// resourceLocationId gate in transform), so a parent fallback only ever
+// backstops a campground leaf, never emits a park-level pin.
 //
 // Match strategy: aggressive name normalization (lowercase, drop park /
 // campground / national-park-of-canada / etc. suffixes), then exact
-// match against the union name → coords index; fallback to ≥0.5
-// Jaccard token overlap; final fallback to the leaf's `parent_name`.
+// match against the union name → coords index; fallback to a Jaccard token
+// overlap at `match.fuzzy_threshold`; final fallback, when
+// `match.parent_fallback` is set, to the leaf's `parent_name`.
 // Leaves that can't be matched are dropped — the booking ID alone
 // doesn't earn a pin on the map.
 class AspiraCampgroundsEtl(
     override val etlSlug: String,
-    private val dataProviderValue: DataProvider,
     private val aspiraTenant: String,
-    /**
-     * Two-letter state a US tenant books, from the registry's `state_filter`.
-     * The uscampgrounds.info geometry file is nationwide and campground names
-     * repeat across states, so without this a leaf can match another state's
-     * row. Null for the non-US tenants, which want the whole file.
-     */
-    private val stateFilter: String? = null,
+    private val geometry: GeometryPolicy,
 ) : CampgroundEtl<AspiraJoinDto> {
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
 
-    /**
-     * The geometry inputs, paired with the source that reads each one — every
-     * declared input that is not maps, inventory or dictionaries.
-     */
-    internal fun geometrySourcesFor(inputs: InputBundle): List<Pair<String, GeometrySource>> {
-        val slugs = inputs.dataSourceSlugs()
-        val mapsSlug = slugs.first { it.contains("maps") }
-        val inventorySlug = slugs.firstOrNull { it.contains("inventory") }
-        val dictionarySlug = slugs.firstOrNull { it.contains("dictionaries") }
-        return slugs
-            .filter { it != mapsSlug && it != inventorySlug && it != dictionarySlug }
-            .map { slug -> slug to detectGeometrySource(slug, inputs.envelopes(slug)) }
-    }
+    /** The declared geometry inputs, paired with the parser each format names, in preference order. */
+    internal fun geometrySourcesFor(inputs: InputBundle): List<Pair<String, GeometrySource>> =
+        geometry.sources.map { spec -> spec.input to GeometrySources.forSpec(spec, inputs.envelopes(spec.input)) }
 
     override fun parse(inputs: InputBundle): Sequence<ParseResult<AspiraJoinDto>> =
         sequence {
-            val mapsSlug = inputs.dataSourceSlugs().first { it.contains("maps") }
-            val inventorySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("inventory") }
-            val dictionarySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("dictionaries") }
+            val slugs = inputs.dataSourceSlugs()
+            val declared = geometry.sources.map { it.input }.toSet()
+            val roleSlugs = slugs.filterNot { it in declared }
+            val mapsSlug = roleSlugs.firstOrNull { it.contains(AspiraInputRoles.MAPS) }
+            val inventorySlug = roleSlugs.firstOrNull { it.contains(AspiraInputRoles.INVENTORY) }
+            val dictionarySlug = roleSlugs.firstOrNull { it.contains(AspiraInputRoles.DICTIONARIES) }
 
-            val mapsArray = inputs.envelope(mapsSlug).payload.jsonArray
-            val leaves = AspiraLeavesWalk.walk(mapsArray)
+            val errs = mutableListOf<String>()
+            for (spec in geometry.sources) {
+                when {
+                    spec.input !in slugs -> errs += "declared geometry source '${spec.input}' is not among this run's inputs"
+                    inputs.envelopes(spec.input).isEmpty() -> errs += "declared geometry source '${spec.input}' has no envelopes"
+                }
+            }
+            val accounted = declared + setOfNotNull(mapsSlug, inventorySlug, dictionarySlug)
+            for (slug in slugs - accounted) {
+                errs += "input '$slug' is neither a declared geometry source nor the maps, inventory or dictionaries feed"
+            }
+            if (mapsSlug == null) errs += "no /api/maps input declared"
 
-            val geomEntries = geometrySourcesFor(inputs)
+            if (errs.isNotEmpty()) {
+                yield(ParseResult.Bad(null, errs))
+                return@sequence
+            }
 
+            val leaves = AspiraLeavesWalk.walk(inputs.envelope(checkNotNull(mapsSlug)).payload.jsonArray)
             val dto =
                 AspiraJoinDto(
                     leaves = leaves,
-                    geomSources = geomEntries,
+                    geomSources = geometrySourcesFor(inputs),
                     inventoryEnvelopes = inventorySlug?.let { inputs.envelopes(it) } ?: emptyList(),
                     dictionaryPayload = dictionarySlug?.let { inputs.envelope(it).payload as? JsonObject },
                     fetchedAt = Instant.now(),
                 )
-            val errs = mutableListOf<String>()
-            if (dto.leaves.isEmpty()) errs += "no leaves from /api/maps"
-            if (dto.geomSources.isEmpty()) errs += "no geometry sources declared"
-            if (errs.isEmpty()) {
-                yield(ParseResult.Ok(dto))
+            if (dto.leaves.isEmpty()) {
+                yield(ParseResult.Bad(null, listOf("no leaves from /api/maps")))
             } else {
-                yield(ParseResult.Bad(null, errs))
+                yield(ParseResult.Ok(dto))
             }
         }
 
@@ -113,9 +105,10 @@ class AspiraCampgroundsEtl(
         val agency = ctx.requiredConstantAgency(etlSlug)
 
         // Non-bookable filter, driven by the fetched data (no curated list):
-        // Aspira's own `showResourceCapacityOnline: false`. Empty when a tenant
-        // declares no inventory + dictionary inputs, or when its dictionary
-        // marks everything bookable (WA/BC today) — then nothing is dropped.
+        // Aspira's own `showResourceCapacityOnline: false`. Empty when the
+        // tenant's dictionary marks everything bookable (WA/BC today) — then
+        // nothing is dropped. The inventory feed itself is required at boot:
+        // without it every row would also lose its booking CTA.
         val nonBookableResLocs =
             AspiraInventoryCategories.nonBookableResourceLocationIds(
                 inventory = dto.inventoryEnvelopes,
@@ -124,7 +117,12 @@ class AspiraCampgroundsEtl(
         val bookableMapIds =
             AspiraBookingCtaRefs.bookableMapIdsByResourceLocationId(dto.inventoryEnvelopes, dto.dictionaryPayload)
 
-        val matcher = AspiraLeafMatcher(indexGeometry(dto.geomSources), nonBookableResLocs)
+        val matcher =
+            AspiraLeafMatcher(
+                byName = GeometryIndex.buildOrFail(dto.geomSources, log, etlSlug),
+                nonBookableResourceLocationIds = nonBookableResLocs,
+                policy = geometry.match,
+            )
         val (matches, tally) = matcher.matchBookable(dto.leaves)
         val campgrounds = matches.map { campgroundCandidate(it, host, subcategory, agency, bookableMapIds) }
 
@@ -144,37 +142,15 @@ class AspiraCampgroundsEtl(
         return campgrounds.asSequence().map { TransformResult.Ok(it) }
     }
 
-    /**
-     * One merged name index: normalized name → first (lat, lon). Geometry
-     * entries are walked in declared order, so the YAML's `inputs:` order
-     * doubles as a preference order — earlier sources (campground-level)
-     * win over later sources (park-polygon centroids) when both carry the
-     * same normalized name.
-     */
-    private fun indexGeometry(geomSources: List<Pair<String, GeometrySource>>): Map<String, Pair<Double, Double>> {
-        val byName = LinkedHashMap<String, Pair<Double, Double>>()
-        for ((slug, geomSource) in geomSources) {
-            val before = byName.size
-            geomSource.indexInto(byName)
-            log.info(
-                "$etlSlug: geometry input slug={} contributed {} new keys (total={})",
-                slug,
-                byName.size - before,
-                byName.size,
-            )
-        }
-        return byName
-    }
-
     private fun campgroundCandidate(
-        match: AspiraLeafMatch<Pair<Double, Double>>,
+        match: AspiraLeafMatch<GeometryPoint>,
         host: String,
         subcategory: String?,
         agency: String,
         bookableMapIds: Map<Long, Set<Long>>,
     ): CampgroundUpsertCandidate {
         val leaf = match.leaf
-        val (lat, lon) = match.value
+        val point = match.value
         val dataRef = DataProviderRef.Aspira(transactionLocationId = leaf.transactionLocationId, mapId = leaf.mapId)
         val bookingCtaRef = AspiraBookingCtaRefs.forLeaf(leaf, bookableMapIds)
         return CampgroundUpsertCandidate(
@@ -183,15 +159,16 @@ class AspiraCampgroundsEtl(
             bookingProviderRef = bookingCtaRef?.let { campgroundBookingProviderRef(leaf, it) },
             name = leaf.name,
             parentName = leaf.parentName,
-            latitude = lat,
-            longitude = lon,
+            latitude = point.latitude,
+            longitude = point.longitude,
             kind = subcategory,
-            location = CampgroundLocation(latitude = lat, longitude = lon),
+            location = CampgroundLocation(latitude = point.latitude, longitude = point.longitude),
             reservationUrl = "https://$host/",
             links = listOf(CampgroundLink("https://$host/")),
             management = CampgroundManagement(agency),
             sourceUrl = "https://$host/",
-            sourcePayload = aspiraSourcePayload(leaf, match.kind),
+            sourcePayload = aspiraSourcePayload(leaf),
+            geometryProvenance = match.toProvenance(),
         )
     }
 
@@ -207,33 +184,14 @@ class AspiraCampgroundsEtl(
                 resourceLocationId = bookingCtaRef.resourceLocationId,
             ).serialize()
 
-    private fun aspiraSourcePayload(
-        leaf: AspiraLeaf,
-        matchKind: AspiraLeafMatchKind,
-    ): JsonObject =
+    private fun aspiraSourcePayload(leaf: AspiraLeaf): JsonObject =
         buildJsonObject {
             put("name", leaf.name)
             put(ASPIRA_TRANSACTION_LOCATION_ID_KEY, leaf.transactionLocationId)
             put(ASPIRA_MAP_ID_KEY, leaf.mapId)
             leaf.resourceLocationId?.let { put(ASPIRA_RESOURCE_LOCATION_ID_KEY, it) }
             leaf.parentName?.let { put("parent_name", it) }
-            put("match_kind", matchKind.label)
         }
-
-    private fun detectGeometrySource(
-        slug: String,
-        envelopes: List<ca.floo.roadtrip.model.metadata.Envelope>,
-    ): GeometrySource {
-        // We have a few characteristic shapes; sniff by slug first (cheap)
-        // and fall back to payload inspection if the slug is unknown.
-        return when {
-            slug.contains("uscampgrounds") -> UsCampgroundsCsvSource(envelopes, stateFilter)
-            slug.contains("bcparks") -> BcParksStrapiSource(envelopes)
-            slug.contains("places") -> ApcaPlacesCentroidSource(envelopes)
-            slug.contains("accommodation") -> ApcaAccommodationSource(envelopes)
-            else -> GeoJsonFeaturesSource(envelopes, slug)
-        }
-    }
 
     companion object {
         private const val ASPIRA_TRANSACTION_LOCATION_ID_KEY = "transactionLocationId"

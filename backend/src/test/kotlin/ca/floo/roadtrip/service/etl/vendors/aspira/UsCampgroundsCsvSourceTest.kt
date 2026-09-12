@@ -1,10 +1,12 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.productionTerminalEtlDefinitions
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
+import org.slf4j.LoggerFactory
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
@@ -46,16 +48,17 @@ class UsCampgroundsCsvSourceTest {
             """.trimIndent(),
         )
 
-    private fun index(stateFilter: String?): Map<String, Pair<Double, Double>> {
-        val out = mutableMapOf<String, Pair<Double, Double>>()
-        UsCampgroundsCsvSource(listOf(envelope()), stateFilter).indexInto(out)
-        return out
-    }
+    private fun index(stateFilter: String?): Map<String, GeometryPoint> =
+        GeometryIndex.build(
+            listOf("uscampgrounds" to UsCampgroundsCsvSource(listOf(envelope()), stateFilter)),
+            LoggerFactory.getLogger(javaClass),
+            "uscampgrounds-csv-source-test",
+        )
 
     @Test
     fun `a state filter keeps the matching state's coordinates`() {
         val byName = index(stateFilter = "WA")
-        assertEquals(46.039 to -120.667, byName[normalize("Brooks Memorial")])
+        assertEquals(GeometryPoint(46.039, -120.667, "uscampgrounds"), byName[normalize("Brooks Memorial")])
     }
 
     @Test
@@ -72,21 +75,30 @@ class UsCampgroundsCsvSourceTest {
         // Tenants outside the US (Parks Canada, BC) declare no filter and must
         // keep the previous nationwide behaviour.
         val byName = index(stateFilter = null)
-        assertEquals(43.177 to -101.732, byName[normalize("Brooks Memorial")])
-        assertEquals(47.548 to -122.545, byName[normalize("Manchester")])
+        assertEquals(GeometryPoint(43.177, -101.732, "uscampgrounds"), byName[normalize("Brooks Memorial")])
+        assertEquals(GeometryPoint(47.548, -122.545, "uscampgrounds"), byName[normalize("Manchester")])
     }
 
     /**
      * The half that actually broke: `state_filter: WA` sat in the registry and
      * nothing read it. Driving the real YAML through the real registry is what
-     * catches that — a test against the source alone passes either way.
+     * catches that — a test against the source alone passes either way. The
+     * filter now lives at `geometry.sources[0].state`.
      */
     @Test
-    fun `the WA terminal reads state_filter from the registry`() {
+    fun `the WA terminal reads the geometry source state from the registry`() {
         val definition =
             productionTerminalEtlDefinitions["aspira-wa-campgrounds"]
                 ?: error("aspira-wa-campgrounds is not a registered terminal")
         val etl = definition.etl as AspiraCampgroundsEtl
+
+        val entry =
+            PoiRegistry
+                .loadResource("poi-registry.yaml")
+                .poiData
+                .flatMap { it.etls }
+                .single { it.slug == "aspira-wa-campgrounds" }
+        assertEquals("WA", checkNotNull(entry.geometry).sources.single().state)
 
         val inputs =
             InputBundle(
@@ -98,10 +110,14 @@ class UsCampgroundsCsvSourceTest {
                 ),
             )
 
-        val byName = mutableMapOf<String, Pair<Double, Double>>()
-        etl.geometrySourcesFor(inputs).forEach { (_, source) -> source.indexInto(byName) }
+        val byName =
+            GeometryIndex.build(
+                etl.geometrySourcesFor(inputs),
+                LoggerFactory.getLogger(javaClass),
+                "aspira-wa-campgrounds",
+            )
 
-        assertEquals(46.039 to -120.667, byName[normalize("Brooks Memorial")])
+        assertEquals(GeometryPoint(46.039, -120.667, "uscampgrounds"), byName[normalize("Brooks Memorial")])
     }
 
     private fun jsonEnvelope(payload: String): Envelope =

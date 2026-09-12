@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
+import ca.floo.roadtrip.model.metadata.registry.GeometryPolicy
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.Repos
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampgroundsEtl
@@ -53,15 +54,20 @@ internal val poiAdapters: Map<String, PoiAdapterSpec> =
                 campgroundSink(
                     AspiraCampgroundsEtl(
                         etlSlug = entry.slug,
-                        dataProviderValue = DataProvider.ASPIRA,
                         aspiraTenant = entry.args.require("tenant"),
-                        stateFilter = entry.args["state_filter"],
+                        geometry = entry.requireGeometry(),
                     ),
                 )
             },
         "BcParksCampgroundsEtl" to
             PoiAdapterSpec(DataProvider.STRAPI) { entry ->
-                campgroundSink(BcParksCampgroundsEtl(etlSlug = entry.slug, aspiraTenant = entry.args.require("tenant")))
+                campgroundSink(
+                    BcParksCampgroundsEtl(
+                        etlSlug = entry.slug,
+                        aspiraTenant = entry.args.require("tenant"),
+                        geometry = entry.requireGeometry(),
+                    ),
+                )
             },
         "ReserveAmericaCampgroundsEtl" to
             PoiAdapterSpec(DataProvider.RESERVEAMERICA) { entry ->
@@ -113,6 +119,9 @@ private fun createCampsiteTerminal(entry: EtlEntry): TerminalEtlDefinition<*, *>
         ?: error("Unknown campsite_data adapter: ${entry.adapter} (slug=${entry.slug})")
 
 private fun Map<String, String>.require(key: String): String = this[key] ?: error("Missing required ETL arg '$key'")
+
+/** Validation guarantees presence; this is the belt. */
+private fun EtlEntry.requireGeometry(): GeometryPolicy = geometry ?: error("$slug: geometry policy is required for $adapter")
 
 private fun <DTO> campgroundSink(etl: SourceEtl<DTO, CampgroundUpsertCandidate>): TerminalEtlDefinition<DTO, CampgroundUpsertCandidate> =
     TerminalEtlDefinition(etl) { repos ->

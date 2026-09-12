@@ -39,4 +39,5 @@ data class CampgroundUpsertCandidate(
     val metadata: CampgroundMetadata? = null,
     val sourceUrl: String? = null,
     val sourcePayload: JsonElement? = null,
+    val geometryProvenance: GeometryProvenance? = null,
 )
