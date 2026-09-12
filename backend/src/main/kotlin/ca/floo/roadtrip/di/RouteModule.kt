@@ -33,6 +33,7 @@ import ca.floo.roadtrip.route.api.slack.slackInteractivityRoute
 import ca.floo.roadtrip.route.auth.AuthRouteWiring
 import ca.floo.roadtrip.route.auth.authRoutes
 import ca.floo.roadtrip.route.auth.roadtripAuthorization
+import ca.floo.roadtrip.route.common.apiContractDrift
 import ca.floo.roadtrip.route.common.undeclaredAccessRoutes
 import ca.floo.roadtrip.route.static.staticSiteRoutes
 import ca.floo.roadtrip.service.api.RouteResponseMapper
@@ -196,6 +197,18 @@ internal fun Application.registerKoinRoutes() {
     val undeclared = routingRoot.undeclaredAccessRoutes()
     check(undeclared.isEmpty()) {
         "every route must declare an access level with .access(...); missing on: ${undeclared.joinToString()}"
+    }
+
+    // The same completeness guarantee for the wire contract: the live tree and
+    // model/api/ApiContract.kt must name the same endpoints. A route with no row
+    // would ship types nobody generated; a row with no route would generate types
+    // nothing serves. ApiContractCoverageTest exercises the comparator.
+    val drift = routingRoot.apiContractDrift()
+    check(drift.uncontractedRoutes.isEmpty() && drift.unmountedRows.isEmpty()) {
+        "ApiContract and the routing tree disagree. " +
+            "Routes with no contract row: ${drift.uncontractedRoutes.ifEmpty { listOf("none") }.joinToString()}. " +
+            "Contract rows with no route: ${drift.unmountedRows.ifEmpty { listOf("none") }.joinToString()}. " +
+            "Fix model/api/ApiContract.kt, then run `make api-types`."
     }
 }
 

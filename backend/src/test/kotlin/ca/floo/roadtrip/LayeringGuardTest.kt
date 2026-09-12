@@ -29,11 +29,13 @@ private const val KTOR_ALLOWED_UNDER_SERVICE = "ca/floo/roadtrip/service/auth/Oi
 
 private const val SERVICE_PREFIX = "ca/floo/roadtrip/service/"
 private const val ROUTE_PREFIX = "ca/floo/roadtrip/route/"
+private const val MODEL_PREFIX = "ca/floo/roadtrip/model/"
 
 /**
- * Three seams that no compiler enforces. Each was a real drift: a service that
+ * Four seams that no compiler enforces. Each was a real drift: a service that
  * held a DSLContext, an adapter that imported HttpStatusCode to build a 503
- * nothing called, a route that reached past its controller into a repo.
+ * nothing called, a route that reached past its controller into a repo, a
+ * contract list that reached for Ktor's own `HttpMethod`.
  */
 class LayeringGuardTest {
     private val sourceRoot = File(repoRoot, MAIN_SOURCE_ROOT)
@@ -71,6 +73,14 @@ class LayeringGuardTest {
                     path.startsWith(SERVICE_PREFIX) && text.contains(KTOR_PACKAGE) && path != KTOR_ALLOWED_UNDER_SERVICE
                 }.map { it.first },
             "services do not construct HTTP responses. Return a typed outcome and let the route map it to a status.",
+        )
+
+    @Test
+    fun `models never name Ktor`() =
+        assertEquals(
+            emptyList(),
+            sources.filter { (path, text) -> path.startsWith(MODEL_PREFIX) && text.contains(KTOR_PACKAGE) }.map { it.first },
+            "models are pure data shapes. ApiContract declares ApiMethod rather than importing io.ktor.http.HttpMethod.",
         )
 
     @Test
