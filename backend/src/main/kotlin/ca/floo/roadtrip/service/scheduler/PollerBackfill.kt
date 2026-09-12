@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.scheduler
 
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.UnitOfWork
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
-import ca.floo.roadtrip.service.availability.WatchStatus
 import org.slf4j.LoggerFactory
 import java.time.OffsetDateTime
 

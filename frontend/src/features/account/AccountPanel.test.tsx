@@ -26,15 +26,15 @@ const settings = (over: {
     ...over.profile,
   },
   notifications: {
-    notification_email: null,
-    slack_channel: null,
+    notification_email: undefined,
+    slack_channel: undefined,
     slack_configured: false,
-    slack_token_hint: null,
+    slack_token_hint: undefined,
     ...over.notifications,
   },
   booking: {
     recgov_configured: false,
-    recgov_username: null,
+    recgov_username: undefined,
     ...over.booking,
   },
 });
@@ -153,8 +153,8 @@ describe('ProfilePanel', () => {
 });
 
 describe('profile dirty tracking', () => {
-  test('a null saved name is equivalent to empty, not to the string "null"', () => {
-    const s = settings({ profile: { display_name: null } });
+  test('an absent saved name is equivalent to empty, not to the string "undefined"', () => {
+    const s = settings({ profile: { display_name: undefined } });
     expect(profileValuesOf(s)).toEqual({ display_name: '', theme: 'system' });
     expect(isProfileDirty(s, { display_name: '', theme: 'system' })).toBe(false);
   });

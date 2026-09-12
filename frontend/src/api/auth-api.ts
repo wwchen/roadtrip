@@ -5,6 +5,7 @@
 // Sign-in and sign-out are full-page navigations, not fetches. They end in a
 // cross-site redirect to the identity provider, which XHR cannot follow.
 import { clearStoredMode } from '@/lib/theme';
+import type { MeResponseDto, MeUserDto } from './generated/api-types';
 import { jsonGetOk, type RequestOptions } from './http';
 
 const ME_URL = '/api/me';
@@ -14,43 +15,24 @@ const LOGOUT_URL = '/auth/logout';
 const RETURN_TO_PARAM = 'return_to';
 const CONNECTION_PARAM = 'connection';
 
-/** `GET /api/me` → `user`. Mirrors MeUserDto. */
-export interface MeUser {
-  id: number;
-  email: string;
-  display_name?: string | null;
-  email_verified: boolean;
-  roles: string[];
-  /**
-   * The saved appearance preference — one of the `ThemeChoice` values in
-   * `@/lib/theme`, but read as `unknown` shape here since an older/newer
-   * server or a hand-edited row is possible; `useMe` narrows it through
-   * `coerceChoice` before applying it. Absent for every anonymous caller.
-   */
-  theme?: string | null;
-}
+/**
+ * `GET /api/me` → `user`.
+ *
+ * `theme` is the saved appearance preference — one of the `ThemeChoice` values
+ * in `@/lib/theme`, but typed as the server's own `string` here since an
+ * older/newer server or a hand-edited row is possible; `useMe` narrows it
+ * through `coerceChoice` before applying it.
+ */
+export type MeUser = MeUserDto;
 
 /**
- * `GET /api/me`. Mirrors MeResponseDto.
+ * `GET /api/me`.
  *
  * Resolves for anonymous visitors too — `authenticated: false` is a normal
  * answer, not an error, and the backend deliberately answers 200 for everyone so
  * 401 keeps meaning a genuine authorization failure.
  */
-export interface Me {
-  authenticated: boolean;
-  user?: MeUser | null;
-  /** False when no identity provider is configured: hide sign-in entirely. */
-  auth_enabled: boolean;
-  /** Public (non-secret) config for the embedded resource-owner login flow. */
-  auth_client_id?: string | null;
-  auth_domain?: string | null;
-  auth_realm?: string | null;
-  /** Provider name for login copy ("Continue with Clerk"). */
-  provider_label?: string | null;
-  /** True → mount the embedded email/password card; false → redirect to /auth/login. */
-  auth_embedded?: boolean;
-}
+export type Me = MeResponseDto;
 
 export function fetchMe({ signal }: RequestOptions = {}): Promise<Me> {
   return jsonGetOk<Me>(ME_URL, { signal });

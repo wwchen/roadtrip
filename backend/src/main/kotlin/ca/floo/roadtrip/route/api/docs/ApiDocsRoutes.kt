@@ -1,8 +1,11 @@
 package ca.floo.roadtrip.route.api.docs
 
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
+import ca.floo.roadtrip.route.common.API_PREFIX
+import ca.floo.roadtrip.route.common.SWAGGER_UI_PATH
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.underPrefix
 import io.ktor.http.ContentType
 import io.ktor.openapi.OpenApiDoc
 import io.ktor.openapi.OpenApiInfo
@@ -19,8 +22,6 @@ import io.ktor.server.routing.path
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routingRoot
 
-private const val API_DOCS_PATH = "/api/docs"
-private const val API_PATH_PREFIX = "/api/"
 private const val TEST_PATH_PREFIX = "/test/"
 private const val OPENAPI_TITLE = "roadtrip API"
 private const val OPENAPI_VERSION = "0.1.0"
@@ -34,12 +35,12 @@ private val roadtripOpenApiInfo =
     )
 
 internal fun Route.apiDocsRoutes() {
-    swaggerUI(API_DOCS_PATH) {
+    swaggerUI(SWAGGER_UI_PATH) {
         info = roadtripOpenApiInfo
         source = roadtripOpenApiSource()
     }
 
-    route(API_DOCS_PATH) {
+    route(SWAGGER_UI_PATH) {
         get("/openapi.json") {
             val doc = OpenApiDoc(info = roadtripOpenApiInfo) + call.application.roadtripOpenApiRoutes()
             call.respondEncodedJson(doc)
@@ -60,6 +61,6 @@ private fun Application.roadtripOpenApiRoutes(): Sequence<Route> =
 
 private fun includeInRoadtripOpenApi(route: Route): Boolean {
     val path = route.path(OpenApiRoutePathFormat)
-    val isApiPath = path.startsWith(API_PATH_PREFIX) && path != API_DOCS_PATH && !path.startsWith("$API_DOCS_PATH/")
+    val isApiPath = path.underPrefix(API_PREFIX) && path != SWAGGER_UI_PATH && !path.startsWith("$SWAGGER_UI_PATH/")
     return isApiPath || path.startsWith(TEST_PATH_PREFIX)
 }

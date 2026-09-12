@@ -4,7 +4,8 @@ import ca.floo.roadtrip.db.generated.tables.AvailabilityRun.Companion.AVAILABILI
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatch.Companion.AVAILABILITY_WATCH
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchPoller.Companion.AVAILABILITY_WATCH_POLLER
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchTarget.Companion.AVAILABILITY_WATCH_TARGET
-import ca.floo.roadtrip.service.availability.WatchStatus
+import ca.floo.roadtrip.model.availability.WatchDoneReason
+import ca.floo.roadtrip.model.availability.WatchStatus
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -48,6 +49,7 @@ open class AvailabilityWatchRepo(
         val triggerConfig: JsonObject? = null,
         val stopWhenTriggered: Boolean? = null,
         val status: WatchStatus? = null,
+        val doneReason: WatchDoneReason? = null,
     )
 
     data class Watch(
@@ -63,6 +65,8 @@ open class AvailabilityWatchRepo(
         val triggerConfig: JsonObject,
         val stopWhenTriggered: Boolean,
         val status: WatchStatus,
+        // Null on any row retired before V63, and on every row that is not done.
+        val doneReason: WatchDoneReason?,
         val createdAt: OffsetDateTime,
         val updatedAt: OffsetDateTime,
         // Latest poll run across this watch's poller(s); null when never run.
@@ -340,7 +344,12 @@ open class AvailabilityWatchRepo(
                 )
         }
         if (input.stopWhenTriggered != null) query = query.set(AVAILABILITY_WATCH.STOP_WHEN_TRIGGERED, input.stopWhenTriggered)
-        if (input.status != null) query = query.set(AVAILABILITY_WATCH.STATUS, input.status.wireValue)
+        if (input.status != null) {
+            query = query.set(AVAILABILITY_WATCH.STATUS, input.status.wireValue)
+            // A resumed or paused watch has not ended, so it carries no reason.
+            if (input.status != WatchStatus.DONE) query = query.setNull(AVAILABILITY_WATCH.DONE_REASON)
+        }
+        if (input.doneReason != null) query = query.set(AVAILABILITY_WATCH.DONE_REASON, input.doneReason.wireValue)
         val rows = query.where(AVAILABILITY_WATCH.ID.eq(id)).execute()
         if (rows == 0) return null
         if (input.targets != null) targetsRepo.replaceForWatch(id, input.targets)
@@ -372,6 +381,10 @@ open class AvailabilityWatchRepo(
             triggerConfig = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.TRIGGER_CONFIG)!!.data()).jsonObject,
             stopWhenTriggered = r.get(AVAILABILITY_WATCH.STOP_WHEN_TRIGGERED)!!,
             status = WatchStatus.parse(r.get(AVAILABILITY_WATCH.STATUS)!!) ?: error("invalid watch status"),
+            doneReason =
+                r.get(AVAILABILITY_WATCH.DONE_REASON)?.let {
+                    WatchDoneReason.parse(it) ?: error("invalid done reason: $it")
+                },
             createdAt = r.get(AVAILABILITY_WATCH.CREATED_AT)!!,
             updatedAt = r.get(AVAILABILITY_WATCH.UPDATED_AT)!!,
         )

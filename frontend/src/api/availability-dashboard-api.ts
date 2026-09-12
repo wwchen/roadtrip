@@ -1,5 +1,17 @@
 // Availability dashboard reads plus the "check now" force-pull action.
-import type { AvailabilityStatus } from '@/lib/availability-status';
+import type {
+  AvailabilityChangeSchema,
+  AvailabilityPollersListResponse,
+  AvailabilityPollerSchema,
+  AvailabilityPollersSummary,
+  AvailabilityRunSchema,
+  AvailabilityRunsListResponse,
+  AvailabilitySnapshotsSummaryResponse,
+  AvailabilitySnapshotStatsSchema,
+  CheckNowCooldownDto,
+  CheckNowResponseDto,
+  ListAvailabilityChangesResponse,
+} from './generated/api-types';
 import { jsonGetOk, jsonPost, type RequestOptions } from './http';
 
 const POLLERS_URL = '/api/availability/pollers';
@@ -11,106 +23,37 @@ const CHANGES_SUMMARY_URL = '/api/availability/changes/summary';
 const FORCE_ACTION = 'force';
 const RUNS_ACTION = 'runs';
 
-/** Mirrors AvailabilityPollerSchema. */
-export interface AvailabilityPoller {
-  id: number;
-  provider: string;
-  parent_ref: string;
-  poi_id: number;
-  active: boolean;
-  next_run_at: string;
-  claimed_until?: string | null;
-  last_run_at?: string | null;
-  attached_watches: number;
-  created_at: string;
-  updated_at: string;
-}
+export type AvailabilityPoller = AvailabilityPollerSchema;
 
-/** Mirrors AvailabilityPollersListResponse. */
-export interface PollersListResponse {
-  total: number;
-  limit: number;
-  offset: number;
-  pollers: AvailabilityPoller[];
-}
+export type PollersListResponse = AvailabilityPollersListResponse;
 
-/** Mirrors AvailabilityPollersSummary. */
-export interface PollersSummary {
-  active: number;
-  dormant: number;
-  due_now: number;
-  claimed: number;
-}
+export type PollersSummary = AvailabilityPollersSummary;
 
-/** Mirrors AvailabilityRunSchema. */
-export interface AvailabilityRun {
-  id: number;
-  poller_id: number;
-  status: string;
-  snapshot_count: number;
-  duration_ms?: number | null;
-  error?: string | null;
-  started_at: string;
-  completed_at?: string | null;
-}
+export type AvailabilityRun = AvailabilityRunSchema;
 
-/** Mirrors AvailabilityRunsListResponse. */
-export interface RunsListResponse {
-  runs: AvailabilityRun[];
-}
+export type RunsListResponse = AvailabilityRunsListResponse;
 
-/** Mirrors AvailabilityChangeSchema. */
-export interface AvailabilityChange {
-  campsite_id?: number | null;
-  campsite_name?: string | null;
-  target_date: string;
-  observed_at: string;
-  from_status?: AvailabilityStatus | null;
-  to_status: AvailabilityStatus;
-}
+export type AvailabilityChange = AvailabilityChangeSchema;
 
-/** Mirrors ListAvailabilityChangesResponse. */
-export interface ChangesListResponse {
-  changes: AvailabilityChange[];
-}
+export type ChangesListResponse = ListAvailabilityChangesResponse;
 
-/** Mirrors AvailabilitySnapshotStatsSchema — per-date stats for one POI. */
-export interface SnapshotStats {
-  target_date: string;
-  total_runs: number;
-  first_run_at?: string | null;
-  last_run_at?: string | null;
-  median_cadence_sec?: number | null;
-  last_open_at?: string | null;
-  is_currently_open: boolean;
-  min_open_window_sec?: number | null;
-  max_open_window_sec?: number | null;
-}
+/** Per-date stats for one POI. */
+export type SnapshotStats = AvailabilitySnapshotStatsSchema;
 
-/** Mirrors AvailabilitySnapshotsSummaryResponse. */
-export interface ChangesSummaryResponse {
-  poi_id: number;
-  stats: SnapshotStats[];
-}
+export type ChangesSummaryResponse = AvailabilitySnapshotsSummaryResponse;
+
+/** The 200 body. */
+export type ForcePollerAccepted = CheckNowResponseDto;
+
+/** The 429 body. */
+export type ForcePollerCooldown = CheckNowCooldownDto;
 
 /** 200 accepted · 429 cooldown (body has retry_after_sec) · 404 poller gone. */
 export interface ForcePollerResult {
   status: number;
   ok: boolean;
-  /** CheckNowResponseDto on 200, CheckNowCooldownDto on 429, error DTO otherwise. */
+  /** `ForcePollerAccepted` on 200, `ForcePollerCooldown` on 429, error DTO otherwise. */
   body: ForcePollerAccepted | ForcePollerCooldown | Record<string, unknown> | null;
-}
-
-/** Mirrors CheckNowResponseDto (200). */
-export interface ForcePollerAccepted {
-  poller_id: number;
-  next_run_at: string;
-}
-
-/** Mirrors CheckNowCooldownDto (429). */
-export interface ForcePollerCooldown {
-  poller_id: number;
-  retry_after_sec: number;
 }
 
 export interface ListPollersParams extends RequestOptions {

@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability.alert
 
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
-import ca.floo.roadtrip.service.availability.WatchStatus
 import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
@@ -59,6 +59,7 @@ class AlertProviderRegistryTest {
             triggerConfig = JsonObject(emptyMap()),
             stopWhenTriggered = false,
             status = WatchStatus.ACTIVE,
+            doneReason = null,
             createdAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
             updatedAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
         )

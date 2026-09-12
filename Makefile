@@ -1,4 +1,4 @@
-.PHONY: help run test data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend reclaim reclaim-report
+.PHONY: help run test api-types data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend reclaim reclaim-report
 
 PORT ?= 8765
 RUN_ENV ?= $(or $(env),dev)
@@ -36,6 +36,7 @@ help:
 	@echo "  make recgov-refresh   Force-refresh the companion Recreation.gov session"
 	@echo "  make recgov-atc       Run one Rec.gov add-to-cart attempt (PAYLOAD=/path/to/atc.json)"
 	@echo "  make test             Run everything CI runs: backend + lint + frontend + companion + scripts + secrets/dashboards checks"
+	@echo "  make api-types        Regenerate frontend/src/api/generated/api-types.ts from the Kotlin DTOs"
 	@echo "  make data-fetch       Fetch upstream data on the host (TARGET=<data_source slug> for one)."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / campsite_data)."
 	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
@@ -95,8 +96,12 @@ install: install-hooks
 # codegen Testcontainer. Here ktlintCheck shares an invocation with
 # :backend:test, whose compilation consumes the generated jOOQ sources
 # (generateSchemaSourceOnCompilation), so excluding it would break a fresh clone.
+#
+# checkApiTypes rides along for the same reason: it runs the generator over main's
+# runtime classpath, so it needs the same compile (and therefore the same Docker)
+# :backend:test already needs. ci.yml runs it in backend-tests, never in gradle-lint.
 test: _ensure-hooks
-	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :detekt-rules:test
+	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :backend:checkApiTypes :detekt-rules:test
 	# npm run build includes the TypeScript check before bundling.
 	cd frontend && npm ci && npm run lint && npm run test && npm run build && npm run build-storybook
 	node scripts/check-color-tokens.mjs
@@ -109,6 +114,11 @@ test: _ensure-hooks
 	python3 secrets/manage.py generate --check
 	python3 secrets/manage.py check
 	python3 scripts/validate_grafana_dashboards.py
+
+# Regenerate the committed TypeScript API contract after changing a DTO or adding
+# a route. `make test` and CI fail when it is stale.
+api-types:
+	./gradlew :backend:generateApiTypes
 
 # Two-step refresh:
 #   make data-fetch                       # all targets

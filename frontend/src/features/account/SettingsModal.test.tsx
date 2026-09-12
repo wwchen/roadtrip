@@ -22,15 +22,15 @@ const settingsBody = (
     theme: 'system',
   },
   notifications: {
-    notification_email: null,
+    notification_email: undefined,
     slack_channel: '#alerts',
     slack_configured: false,
-    slack_token_hint: null,
+    slack_token_hint: undefined,
     ...over,
   },
   booking: {
     recgov_configured: false,
-    recgov_username: null,
+    recgov_username: undefined,
     ...booking,
   },
 });

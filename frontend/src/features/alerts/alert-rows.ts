@@ -93,12 +93,15 @@ export function alertName(watch: Watch, poiNames: ReadonlyMap<number, string>): 
 /**
  * Why a watch is done: availability was found, or its window elapsed.
  *
- * Inferred rather than read, because the list payload does not carry the trigger flag
- * (see `WatchAlertDispatcher` / `AvailabilityPollerRepo.retire`): a watch whose end
- * date has passed expired, and anything else that is done was triggered. `today` is a
- * parameter so a test does not have to mock the clock.
+ * Read from `done_reason`, which the two done-transitions record since V63. Those
+ * two are now the only writers — `POST /api/watches/{id}/modify` refuses
+ * `status: "done"` — so the end-date inference covers pre-V63 rows and nothing
+ * else. It mislabels a watch triggered on its last day, which is exactly why the
+ * column exists. `today` is a parameter so a test does not have to mock the clock.
  */
 export function doneKind(watch: Watch, today: string = new Date().toISOString().slice(0, 10)) {
+  if (watch.done_reason === 'triggered') return 'found' as const;
+  if (watch.done_reason === 'elapsed') return 'expired' as const;
   const end = watch.end_date ?? '';
   return end && end < today ? 'expired' : ('found' as const);
 }

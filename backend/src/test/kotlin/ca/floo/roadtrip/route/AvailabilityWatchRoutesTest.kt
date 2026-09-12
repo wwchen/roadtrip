@@ -2,6 +2,8 @@ package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.api.MAGIC_LINK_TOKEN_PARAM
+import ca.floo.roadtrip.model.availability.WatchDoneReason
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.Principal
@@ -742,7 +744,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `POST modify pauses a watch`() =
+    fun `POST modify pauses a watch, refuses a status outside the vocabulary, and refuses done`() =
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
@@ -780,6 +782,37 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.OK, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
             assertEquals("paused", obj["status"]!!.jsonPrimitive.content)
+
+            // Typed as a WatchStatus, so the decoder refuses an unknown value
+            // before the mapper ever sees it.
+            val bad =
+                client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"status": "retired"}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, bad.status)
+            assertEquals(
+                "invalid_body",
+                Json
+                    .parseToJsonElement(bad.bodyAsText())
+                    .jsonObject["error"]!!
+                    .jsonPrimitive.content,
+            )
+
+            // `done` is in the vocabulary but is not user intent: the trigger and
+            // the reaper set it together with a done_reason, and a body that set
+            // it here would leave that reason null.
+            val done =
+                client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"status": "done"}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, done.status)
+            val doneBody = Json.parseToJsonElement(done.bodyAsText()).jsonObject
+            assertEquals("invalid_status", doneBody["error"]!!.jsonPrimitive.content)
+            assertEquals("done is set when a watch triggers or elapses", doneBody["detail"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -1320,6 +1353,29 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.OK, resp.status)
             val watch = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
             assertEquals(id, watch["id"]!!.jsonPrimitive.long)
+        }
+
+    @Test
+    fun `the watch payload carries done_reason only once one is recorded`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "done-reason", name = "Done Reason")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+
+            val before = Json.parseToJsonElement(client.get(watchPath(id)) { asUser(USER_TOKEN) }.bodyAsText()).jsonObject
+            assertNull(before["watch"]!!.jsonObject["done_reason"])
+
+            AvailabilityWatchRepo(ctx).update(
+                id,
+                AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE, doneReason = WatchDoneReason.ELAPSED),
+            )
+
+            val after = Json.parseToJsonElement(client.get(watchPath(id)) { asUser(USER_TOKEN) }.bodyAsText()).jsonObject
+            assertEquals("elapsed", after["watch"]!!.jsonObject["done_reason"]!!.jsonPrimitive.content)
         }
 
     @Test

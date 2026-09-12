@@ -39,10 +39,15 @@ export function isBookingDirty(settings: SettingsResponse, values: BookingValues
   );
 }
 
+/**
+ * The request body. The editor's `recgov_*` fields are this panel's own naming;
+ * the wire's are `username` and `password`, and a null password leaves here as
+ * absent, which is how the wire says "unchanged".
+ */
 export function buildBookingPayload(values: BookingValues): UpdateBookingFields {
   return {
-    recgov_username: values.recgov_username,
-    recgov_password: values.recgov_password,
+    username: values.recgov_username,
+    password: values.recgov_password ?? undefined,
   };
 }
 

@@ -4,8 +4,10 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /** Wire vocabulary for [AddToCartResponseDto.status]. */
-object BookingActionStatus {
-    const val COMPLETED = "completed"
+@Serializable
+enum class BookingActionStatus {
+    @SerialName("completed")
+    COMPLETED,
 }
 
 /**
@@ -24,7 +26,7 @@ data class AddToCartRequestDto(
 @Serializable
 data class AddToCartResponseDto(
     /** [BookingActionStatus.COMPLETED]; a failure is an HTTP error, not a status. */
-    val status: String,
+    val status: BookingActionStatus,
     /** Where the site is held — the booking provider's own cart, as it reported it. */
     @SerialName("cart_url") val cartUrl: String,
     /** Whose cart it is: an aliased campground is served by one vendor and booked through another. */

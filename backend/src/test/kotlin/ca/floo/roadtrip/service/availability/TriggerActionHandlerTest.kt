@@ -10,6 +10,7 @@ import ca.floo.roadtrip.fixtures.RECGOV_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.PoiDateContext
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
@@ -954,6 +955,7 @@ class TriggerActionHandlerTest {
             triggerConfig = triggerConfig,
             stopWhenTriggered = stopWhenTriggered,
             status = WatchStatus.ACTIVE,
+            doneReason = null,
             createdAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
             updatedAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
         )

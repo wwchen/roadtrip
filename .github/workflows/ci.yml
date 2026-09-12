@@ -41,6 +41,9 @@ jobs:
               - 'build.gradle.kts'
               - 'settings.gradle.kts'
               - 'codecov.yml'
+              # A hand edit to the generated API types must run the backend job that
+              # checks them, even in an otherwise frontend-only PR.
+              - 'frontend/src/api/generated/**'
               - '.github/workflows/ci.yml'
             smoke:
               - 'backend/**'
@@ -400,8 +403,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
-      - name: Run backend tests + coverage
-        run: ./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify
+      # checkApiTypes runs the generator over main's runtime classpath, so it
+      # needs the same compile — and therefore the same Docker — :backend:test
+      # already needs. It belongs here, never in gradle-lint.
+      - name: Run backend tests + coverage + API contract check
+        run: ./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:checkApiTypes
 
       - name: Upload coverage to Codecov
         if: github.actor != 'dependabot[bot]'

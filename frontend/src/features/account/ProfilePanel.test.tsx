@@ -7,7 +7,7 @@ const profile: Profile = {
   login_email: 'wm@example.com',
   is_email_verified: true,
   roles: [],
-  provider_label: null,
+  provider_label: undefined,
   theme: 'system',
 };
 

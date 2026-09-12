@@ -3,12 +3,12 @@ package ca.floo.roadtrip.service.settings
 import ca.floo.roadtrip.model.api.RecgovLoginStatus
 import ca.floo.roadtrip.model.api.RecgovSessionState
 import ca.floo.roadtrip.model.api.UpdateRecgovRequest
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.BookingCredentials
 import ca.floo.roadtrip.repo.UserBookingCredentialsRepo
-import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.security.SecretCipher
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart

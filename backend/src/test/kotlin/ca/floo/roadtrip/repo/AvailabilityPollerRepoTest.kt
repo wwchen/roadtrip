@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.AvailabilityPoller.Companion.AVAILABILITY_POLLER
+import ca.floo.roadtrip.model.availability.WatchDoneReason
+import ca.floo.roadtrip.model.availability.WatchStatus
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Duration
@@ -92,6 +94,11 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
             .fetchOne("SELECT status FROM availability_watch WHERE id = ?", watchId)!!
             .get("status", String::class.java)
 
+    private fun watchDoneReason(watchId: Long): String? =
+        ctx
+            .fetchOne("SELECT done_reason FROM availability_watch WHERE id = ?", watchId)!!
+            .get("done_reason", String::class.java)
+
     /** Test-only helper: parks a poller's next_run_at far in the future so claimDue skips it. */
     private fun AvailabilityPollerRepo.parkFar(pollerId: Long) {
         ctx
@@ -143,6 +150,33 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
         assertFalse(repo.findById(poller)!!.active)
         assertTrue(repo.pollerIdsForWatch(watch).isEmpty())
         assertEquals("done", watchStatus(watch)) // helper reads availability_watch.status
+    }
+
+    @Test
+    fun `the reaper records why the watch ended`() {
+        val repo = AvailabilityPollerRepo(ctx)
+        val poi = insertPoi()
+        val elapsed = insertElapsedWatch(poiId = poi)
+
+        repo.reapElapsedWatches()
+
+        assertEquals("done", watchStatus(elapsed))
+        assertEquals(WatchDoneReason.ELAPSED.wireValue, watchDoneReason(elapsed))
+    }
+
+    @Test
+    fun `the reaper leaves an already-triggered watch's reason alone`() {
+        val repo = AvailabilityPollerRepo(ctx)
+        val poi = insertPoi()
+        val elapsed = insertElapsedWatch(poiId = poi)
+        AvailabilityWatchRepo(ctx).update(
+            elapsed,
+            AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE, doneReason = WatchDoneReason.TRIGGERED),
+        )
+
+        repo.reapElapsedWatches()
+
+        assertEquals(WatchDoneReason.TRIGGERED.wireValue, watchDoneReason(elapsed))
     }
 
     @Test

@@ -24,4 +24,8 @@ Design principles (apply to all code, all layers):
 - **Layered abstractions, not flat ones.** Routes don't reach into repos; services don't construct HTTP responses; clients don't know about persistence. If a layer would have to import "downward" to do its job, the abstraction is wrong — re-shape the seam.
 - **No leaky abstractions.** A port (e.g. `ReservationProvider`) hides upstream-specific shape from its callers. Adapters do not surface vendor types through the interface; provider-specific richness stays inside the adapter or in well-defined extension points.
 - **Reusable components and CSS.** Always prefer existing shared components, layout primitives, and shared CSS before adding page-specific markup or styles. Before adding a new helper, check whether an existing one fits. Before duplicating a `when` block over a sealed type, ask whether the dispatch should become a registry. Three similar code sites are usually one missing abstraction.
+- **The TypeScript API types are generated.** `frontend/src/api/generated/api-types.ts` comes
+  from the Kotlin `@Serializable` DTOs named in `model/api/ApiContract.kt`. Never edit it by
+  hand. Adding a route means adding a contract row; changing a DTO means running
+  `make api-types` and committing the diff. `make test` and CI fail when it is stale.
 - **No half-finished implementations.** If a method exists, it works. Stubs that throw `UnsupportedOperationException` are acceptable only as explicit capability gates (e.g. an adapter method whose provider capability is explicitly unsupported); they are not an excuse for "I'll fill this in later."

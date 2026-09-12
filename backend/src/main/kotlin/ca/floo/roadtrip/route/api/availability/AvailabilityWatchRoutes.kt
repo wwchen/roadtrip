@@ -3,6 +3,7 @@ package ca.floo.roadtrip.route.api.availability
 import ca.floo.roadtrip.model.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.model.api.MAGIC_LINK_TOKEN_PARAM
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.BAD_REQUEST_ERROR
@@ -22,7 +23,6 @@ import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.siteTypeFilterError
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchControllerResult
-import ca.floo.roadtrip.service.availability.WatchStatus
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call

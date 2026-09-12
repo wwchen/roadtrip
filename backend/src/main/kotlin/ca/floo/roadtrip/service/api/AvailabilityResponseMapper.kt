@@ -12,7 +12,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.DayClassification
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.encodeToJsonElement
 import java.time.Instant
 import java.time.LocalDate
@@ -241,7 +240,7 @@ internal fun availabilityResponseDto(
         startDate = startDate.toString(),
         endDate = endDate.toString(),
         state = state.wireValue,
-        season = seasonElement(seasonBlock) ?: JsonNull,
+        season = seasonElement(seasonBlock),
         availability =
             perDay.map { day ->
                 val cells =

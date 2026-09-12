@@ -7,6 +7,12 @@
 // All four are kept: the map page uses the Response form for its hydration
 // AbortController guard, and the drawer uses the throwing form.
 import type { Feature, FeatureCollection, Point } from 'geojson';
+import type {
+  PoiCategoryDetailSchema,
+  PoiSearchHitSchema,
+  PoiSearchResponseSchema,
+  SlimPoiPropertiesSchema,
+} from './generated/api-types';
 import { HttpError, jsonGetOk, jsonPostOk, type RequestOptions } from './http';
 
 const POIS_URL = '/api/pois';
@@ -18,25 +24,15 @@ const DEFAULT_TYPEAHEAD_LIMIT = 8;
 const DEFAULT_CATALOG_LIMIT = 25;
 const CATEGORY_SEPARATOR = ',';
 
-/**
- * A POI as the search endpoints return it.
- *
- * Left open past the fields every result carries: the per-category richness is
- * exactly what `lib/poi.ts`'s flattener normalises, and Phase 4 pins the fields
- * each drawer type renders. See `PoiFeature` there for the hydrated shape.
- */
-export interface PoiSearchResult {
-  id: number | string;
-  name?: string;
-  category?: string;
-  lng?: number;
-  lat?: number;
-  [key: string]: unknown;
-}
+export type { AlertDto, AmenityDto, CarrierSignalDto, PriceDto, RatingDto, ScheduleDto } from './generated/api-types';
 
-export interface PoiSearchResponse {
-  results: PoiSearchResult[];
-}
+/**
+ * A POI as the search endpoints return it. Closed: `id` is the row's `pois.id`,
+ * and `region` is the one the dropdown shows beside the name.
+ */
+export type PoiSearchResult = PoiSearchHitSchema;
+
+export type PoiSearchResponse = PoiSearchResponseSchema;
 
 export interface PoiSearchUrlParams {
   q?: string;
@@ -51,95 +47,19 @@ export interface SearchPoisOptions extends RequestOptions {
 }
 
 /**
- * The properties a pin carries on the two FeatureCollection endpoints
- * (`SlimPoiPropertiesSchema` / `PoisOnRouteFeaturePropertiesSchema` — identical
- * today, deliberately so).
- *
- * This is the whole payload: no name, no address, nothing per-provider. Those are
- * fetched on click through `GET /api/pois/{id}`, which is why the map's drawer
- * hydrates by id rather than reading what it was handed.
+ * The properties a pin carries on the two FeatureCollection endpoints. This is
+ * the whole payload: no name, no address, nothing per-provider. Those are fetched
+ * on click through `GET /api/pois/{id}`, which is why the map's drawer hydrates
+ * by id rather than reading what it was handed.
  */
-export interface PoiPinProperties {
-  category: string;
-  subcategory?: string;
-  agency?: string;
-}
-
-// ---------------------------------------------------------------------------
-// The campground detail bags, as the backend types them
-// ---------------------------------------------------------------------------
-//
-// One mirror per DTO in `model/api/poi/`. These are the fields the campground
-// page reads, and the backend owns both their shape AND their words: `label` on
-// an amenity or a carrier is render-ready, so the frontend never keeps a
-// vocabulary of its own. A rename on either side is a typecheck failure here
-// rather than a row that silently stops rendering.
-//
-// Optional here means absent on the wire, which is what `null` encodes to; the
-// five lists are always sent, empty when there is nothing.
-
-/** `AmenityDto`. `label` already reads "No water" when `present` is false. */
-export interface AmenityDto {
-  key: string;
-  label: string;
-  present: boolean;
-  detail?: string;
-}
-
-/** `CarrierSignalDto`. `average` is the vendor's own reception score; `label` is the carrier's name. */
-export interface CarrierSignalDto {
-  carrier: string;
-  label: string;
-  average: number;
-  count?: number;
-}
-
-/** `RatingDto`. */
-export interface RatingDto {
-  average: number;
-  count: number;
-}
-
-/** `PriceDto`. Nightly range; every part is optional because vendors differ. */
-export interface PriceDto {
-  minimum?: number;
-  maximum?: number;
-  currency?: string;
-}
-
-/** `ScheduleDto`. `HH:mm`, as the vendor stated it. */
-export interface ScheduleDto {
-  check_in?: string;
-  check_out?: string;
-}
-
-/** `AlertDto`. `body` is the only part every alert has. */
-export interface AlertDto {
-  title?: string;
-  body: string;
-  ends_on?: string;
-  source_url?: string;
-}
+export type PoiPinProperties = SlimPoiPropertiesSchema;
 
 /**
- * The typed half of a campground's `PoiCategoryDetailSchema`.
- *
- * Not the whole payload: the rest of a hydrated campground (name, status, the
- * address bag, `upstream`, the provider CTAs) stays open, because it is still
- * whatever the vendor sent. These are the fields the backend has taken
- * ownership of.
+ * A campground's served detail bag, in full. The backend owns both the shape and
+ * the words — `label` on an amenity or a carrier is render-ready — so the
+ * frontend keeps no vocabulary of its own.
  */
-export interface CampgroundDetail {
-  amenities: AmenityDto[];
-  cell_coverage: CarrierSignalDto[];
-  activities: string[];
-  rating?: RatingDto;
-  price?: PriceDto;
-  schedule?: ScheduleDto;
-  alerts: AlertDto[];
-  parent_name?: string;
-  last_verified?: string;
-}
+export type CampgroundDetail = PoiCategoryDetailSchema;
 
 export type PoiPinFeature = Feature<Point, PoiPinProperties>;
 export type PoiPinCollection = FeatureCollection<Point, PoiPinProperties>;

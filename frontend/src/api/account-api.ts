@@ -3,6 +3,22 @@
 //
 // Error responses carry `{ error: "<code>", detail }`. The thrown HttpError has
 // `.code` set to that string so callers can map it to specific copy.
+import type {
+  BookingSettingsDto,
+  EmailTestResponseDto,
+  NotificationsDto,
+  ProfileDto,
+  RecgovLoginResponseDto,
+  RecgovRemovedDto,
+  RecgovStatusDto,
+  RecgovVerifyResponseDto,
+  SettingsResponseDto,
+  SlackTestRequest,
+  SlackTestResponseDto,
+  UpdateNotificationsRequest,
+  UpdateProfileRequest,
+  UpdateRecgovRequest,
+} from './generated/api-types';
 import { jsonDeleteOk, jsonGetOk, jsonPostOk, jsonPutOk, type RequestOptions } from './http';
 
 const SETTINGS_URL = '/api/settings';
@@ -17,35 +33,16 @@ const RECGOV_LOGIN_URL = '/api/settings/recgov/login';
 const RECGOV_MFA_URL = '/api/settings/recgov/login/mfa';
 const RECGOV_VERIFY_URL = '/api/settings/recgov/verify';
 
-/** Mirrors ProfileDto. */
-export interface Profile {
-  display_name: string | null;
-  login_email: string;
-  is_email_verified: boolean;
-  roles: string[];
-  provider_label: string | null;
-  /** One of ThemeChoice. Narrow with `coerceChoice` before use — an older
-   *  server may omit it. */
-  theme: string;
-}
+export type Profile = ProfileDto;
 
 /**
- * Mirrors NotificationsDto.
- *
  * The Slack token is never returned. `slack_configured` says whether one is
  * stored and `slack_token_hint` is a redacted fragment for display — the
  * write-only SecretField pattern Phase 3 rebuilds.
  */
-export interface Notifications {
-  notification_email: string | null;
-  slack_channel: string | null;
-  slack_configured: boolean;
-  slack_token_hint: string | null;
-}
+export type Notifications = NotificationsDto;
 
 /**
- * Mirrors BookingSettingsDto.
- *
  * Stored credentials only — a pure database read, which is why it rides in the
  * settings document. The live session state comes from `fetchRecgovStatus`,
  * whose own request is the one that can wait on the companion.
@@ -55,100 +52,37 @@ export interface Notifications {
  * human-chosen password's last characters are credential material, so the field
  * renders a fixed-length mask instead.
  */
-export interface BookingSettings {
-  recgov_configured: boolean;
-  recgov_username: string | null;
-}
+export type BookingSettings = BookingSettingsDto;
 
-/** Mirrors SettingsResponseDto — returned by the GET and by every mutation. */
-export interface SettingsResponse {
-  profile: Profile;
-  notifications: Notifications;
-  booking: BookingSettings;
-}
+/** Returned by the GET and by every mutation. */
+export type SettingsResponse = SettingsResponseDto;
 
-/** Mirrors RecgovStatusDto. `session` is one of RecgovSessionState. */
-export interface RecgovStatus {
-  configured: boolean;
-  username: string | null;
-  session:
-    | 'not_configured'
-    | 'active'
-    /** Credentials saved, this profile never signed in. Not a failure. */
-    | 'not_logged_in'
-    | 'expired'
-    /** The booking service's own health check threw. Not the user's problem. */
-    | 'check_failed'
-    | 'companion_unavailable';
-  detail?: string | null;
-  /**
-   * True while a login of this user's is waiting on a verification code. The
-   * companion holds the prompt page for minutes, so a panel that remounted can
-   * resume the step rather than orphan a challenge holding the profile's lock.
-   */
-  mfa_pending?: boolean;
-}
+export type RecgovStatus = RecgovStatusDto;
 
-/** Mirrors RecgovLoginResponseDto. A blocked login is a 200 with a code. */
-export interface RecgovLoginResponse {
-  status: 'ok' | 'mfa_required' | 'failed';
-  challenge_id?: string | null;
-  expires_at?: string | null;
-  error?: string | null;
-  detail?: string | null;
-}
+/** A blocked login is a 200 with a code. */
+export type RecgovLoginResponse = RecgovLoginResponseDto;
 
-/** Mirrors RecgovVerifyResponseDto. The dry run never places a cart hold. */
-export interface RecgovVerifyResponse {
-  ok: boolean;
-  error?: string | null;
-  detail?: string | null;
-}
+/** The dry run never places a cart hold. */
+export type RecgovVerifyResponse = RecgovVerifyResponseDto;
 
-/** Mirrors RecgovRemovedDto. */
-export interface RecgovRemovedResponse {
-  removed: boolean;
-  stranded_atc_watches: number;
-  companion_signed_out: boolean;
-  /** False when the companion was unreachable: the saved browser session may remain on its host. */
-  profile_destroyed: boolean;
-}
+export type RecgovRemovedResponse = RecgovRemovedDto;
 
-export interface UpdateBookingFields {
-  recgov_username: string;
-  /** Only send this when the user typed a new password; null means "unchanged". */
-  recgov_password?: string | null;
-}
+export type UpdateBookingFields = UpdateRecgovRequest;
 
-/** Mirrors SlackTestResponseDto. */
-export interface SlackTestResponse {
-  sent: boolean;
-  channel?: string | null;
-}
+export type SlackTestResponse = SlackTestResponseDto;
 
-/** Mirrors EmailTestResponseDto. */
-export interface EmailTestResponse {
-  sent: boolean;
-  recipient?: string | null;
-}
+export type EmailTestResponse = EmailTestResponseDto;
 
-export interface UpdateNotificationsFields {
-  notification_email?: string;
-  slack_channel?: string;
-  /**
-   * Only send this when the user has typed a new token. `null`/`undefined` mean
-   * "unchanged" and the key is omitted from the request entirely — see
-   * `updateNotifications`.
-   */
-  slack_token?: string | null;
-}
+export type UpdateNotificationsFields = UpdateNotificationsRequest;
+
+export type UpdateProfileFields = UpdateProfileRequest;
 
 export function fetchSettings({ signal }: RequestOptions = {}): Promise<SettingsResponse> {
   return jsonGetOk<SettingsResponse>(SETTINGS_URL, { signal });
 }
 
 export function updateProfile(
-  { display_name, theme }: { display_name: string; theme: string },
+  { display_name, theme }: UpdateProfileRequest,
   options: RequestOptions = {},
 ): Promise<SettingsResponse> {
   return jsonPutOk<SettingsResponse>(PROFILE_URL, { display_name, theme }, options);
@@ -188,7 +122,7 @@ export function sendSlackTest(
   channel: string | null | undefined,
   options: RequestOptions = {},
 ): Promise<SlackTestResponse> {
-  const body = channel != null ? { channel } : {};
+  const body: SlackTestRequest = channel != null ? { channel } : {};
   return jsonPostOk<SlackTestResponse>(SLACK_TEST_URL, body, options);
 }
 
@@ -200,16 +134,17 @@ export function sendEmailTest(options: RequestOptions = {}): Promise<EmailTestRe
 /**
  * Store the rec.gov username and, when the user typed one, a new password.
  *
- * `recgov_password` is omitted entirely when null — the backend reads a missing
- * key as "unchanged", the same contract `updateNotifications` follows for the
- * Slack token. Clearing is `removeRecgov`, never an empty save.
+ * `password` is omitted entirely when absent — the backend reads a missing key as
+ * "unchanged", the same contract `updateNotifications` follows for the Slack
+ * token. Clearing is `removeRecgov`, never an empty save.
  */
 export function updateBooking(
-  { recgov_username, recgov_password }: UpdateBookingFields,
+  { username, password }: UpdateBookingFields,
   options: RequestOptions = {},
 ): Promise<BookingSettings> {
-  const body: Record<string, string> = { username: recgov_username };
-  if (recgov_password != null) body.password = recgov_password;
+  const body: Record<string, string> = {};
+  if (username != null) body.username = username;
+  if (password != null) body.password = password;
   return jsonPutOk<BookingSettings>(RECGOV_URL, body, options);
 }
 

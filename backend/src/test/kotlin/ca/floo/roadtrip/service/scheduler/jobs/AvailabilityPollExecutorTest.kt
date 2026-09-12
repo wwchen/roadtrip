@@ -12,6 +12,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
+import ca.floo.roadtrip.model.availability.WatchDoneReason
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -715,6 +716,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private fun watchStatus(watchId: Long): String =
         ctx.fetchOne("SELECT status FROM availability_watch WHERE id = ?", watchId)!!.get("status", String::class.java)
 
+    private fun watchDoneReason(watchId: Long): String? =
+        ctx.fetchOne("SELECT done_reason FROM availability_watch WHERE id = ?", watchId)!!.get("done_reason", String::class.java)
+
     /** Records one interval row directly (no poll), so initial-notify tests
      *  can set the current window state without firing the transition path. */
     private fun seedCell(
@@ -810,6 +814,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             executorFor(provider, alertDispatcher = dispatcherWith(provider, RecordingSlackNotifications(result = true))).handle(poller)
 
             assertEquals("done", watchStatus(watchId))
+            assertEquals(WatchDoneReason.TRIGGERED.wireValue, watchDoneReason(watchId))
         }
 
     @Test
@@ -1147,7 +1152,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             triggerKinds = emptyList(),
             triggerConfig = kotlinx.serialization.json.JsonObject(emptyMap()),
             stopWhenTriggered = false,
-            status = ca.floo.roadtrip.service.availability.WatchStatus.ACTIVE,
+            status = ca.floo.roadtrip.model.availability.WatchStatus.ACTIVE,
+            doneReason = null,
             createdAt = now(),
             updatedAt = now(),
         )

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, it, test } from 'vitest';
 import type { Watch } from '@/api/watches-api';
 import {
   ALERT_PARAM,
@@ -102,11 +102,17 @@ describe('alertName', () => {
 });
 
 describe('doneKind', () => {
-  test('a window that has passed expired', () => {
-    expect(doneKind(watch({ end_date: '2026-08-01' }), '2026-08-09')).toBe('expired');
+  it('reads the recorded reason', () => {
+    expect(doneKind(watch({ done_reason: 'elapsed', end_date: '2026-08-20' }), '2026-08-09')).toBe('expired');
+    expect(doneKind(watch({ done_reason: 'triggered', end_date: '2026-08-01' }), '2026-08-09')).toBe('found');
   });
 
-  test('anything else that is done was triggered', () => {
+  it('does not mislabel a watch triggered on its last day', () => {
+    expect(doneKind(watch({ done_reason: 'triggered', end_date: '2026-08-09' }), '2026-08-09')).toBe('found');
+  });
+
+  it('falls back to the end date for a pre-migration row', () => {
+    expect(doneKind(watch({ end_date: '2026-08-01' }), '2026-08-09')).toBe('expired');
     expect(doneKind(watch({ end_date: '2026-08-20' }), '2026-08-09')).toBe('found');
     expect(doneKind(watch({ end_date: undefined }), '2026-08-09')).toBe('found');
   });

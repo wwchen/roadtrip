@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route.api.settings
 
+import ca.floo.roadtrip.model.api.SlackTestRequest
 import ca.floo.roadtrip.model.api.UpdateNotificationsRequest
 import ca.floo.roadtrip.model.api.UpdateProfileRequest
 import ca.floo.roadtrip.model.domain.auth.Principal
@@ -20,7 +21,6 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 import io.ktor.server.routing.route
-import kotlinx.serialization.Serializable
 
 // ── Path segments ────────────────────────────────────────────────────────────
 private const val SEGMENT_PROFILE = "/profile"
@@ -28,12 +28,6 @@ private const val SEGMENT_NOTIFICATIONS = "/notifications"
 private const val SLACK_PATH = "/notifications/slack"
 private const val SLACK_TEST_PATH = "/notifications/slack/test"
 private const val EMAIL_TEST_PATH = "/notifications/email/test"
-
-/** Body for `POST /api/settings/notifications/slack/test`. */
-@Serializable
-private data class SlackTestRequest(
-    val channel: String? = null,
-)
 
 /**
  * Account settings HTTP shell.

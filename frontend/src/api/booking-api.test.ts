@@ -13,7 +13,7 @@ describe('addToCartFailure', () => {
     err.providerDisplay = 'Recreation.gov';
 
     expect(addToCartFailure(err)).toEqual({
-      code: 'cart_not_added',
+      error: 'cart_not_added',
       provider: 'recgov',
       provider_display: 'Recreation.gov',
     });
@@ -22,10 +22,10 @@ describe('addToCartFailure', () => {
   test('reads the raw wire spelling when a rejection carries it instead', () => {
     // A rejection that never went through `attachErrorCode` still speaks the
     // envelope's own key, so the reader accepts both.
-    const raw = { code: 'credentials_required', provider: 'aspira', provider_display: 'BC Parks' };
+    const raw = { error: 'credentials_required', provider: 'aspira', provider_display: 'BC Parks' };
 
     expect(addToCartFailure(raw)).toEqual({
-      code: 'credentials_required',
+      error: 'credentials_required',
       provider: 'aspira',
       provider_display: 'BC Parks',
     });
@@ -42,7 +42,7 @@ describe('addToCartFailure', () => {
     err.code = 'unsupported_target';
 
     expect(addToCartFailure(err)).toEqual({
-      code: 'unsupported_target',
+      error: 'unsupported_target',
       provider: undefined,
       provider_display: undefined,
     });

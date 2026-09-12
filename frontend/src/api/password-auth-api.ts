@@ -5,6 +5,8 @@
 // request helper because it takes an injectable `_fetch` — the embedded auth
 // flow is driven from a form whose tests supply a fake — and because its error
 // is a plain Error with `.code`, not an HttpError.
+import type { PasswordBeginResponseDto } from './generated/api-types';
+
 const BEGIN_URL = '/auth/password/begin';
 const COMPLETE_URL = '/auth/password/complete';
 const CREDENTIALS: RequestCredentials = 'same-origin';
@@ -27,13 +29,8 @@ export class PasswordAuthError extends Error {
   }
 }
 
-/** Mirrors PasswordBeginResponseDto. Public flow material — no secrets. */
-export interface PasswordBeginResponse {
-  state: string;
-  nonce: string;
-  code_challenge: string;
-  redirect_uri: string;
-}
+/** Public flow material — no secrets. */
+export type PasswordBeginResponse = PasswordBeginResponseDto;
 
 export interface PasswordAuthOptions {
   /** Injection seam for tests; defaults to the global fetch. */

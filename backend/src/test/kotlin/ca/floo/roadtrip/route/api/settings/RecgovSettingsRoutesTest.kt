@@ -275,7 +275,7 @@ class RecgovSettingsRoutesTest {
 
             assertEquals(HttpStatusCode.OK, resp.status)
             val json = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals(RecgovLoginStatus.MFA_REQUIRED, json["status"]!!.jsonPrimitive.content)
+            assertEquals("mfa_required", json["status"]!!.jsonPrimitive.content)
             assertEquals("chal-1", json["challenge_id"]!!.jsonPrimitive.content)
         }
 
@@ -294,7 +294,7 @@ class RecgovSettingsRoutesTest {
 
             assertEquals(HttpStatusCode.OK, resp.status)
             val json = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals(RecgovLoginStatus.FAILED, json["status"]!!.jsonPrimitive.content)
+            assertEquals("failed", json["status"]!!.jsonPrimitive.content)
             assertEquals(RecGovSessionCodes.CAPTCHA_REQUIRED, json["error"]!!.jsonPrimitive.content)
         }
 
@@ -403,7 +403,7 @@ class RecgovSettingsRoutesTest {
 
             assertEquals(HttpStatusCode.OK, resp.status)
             val json = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals(RecgovSessionState.COMPANION_UNAVAILABLE, json["session"]!!.jsonPrimitive.content)
+            assertEquals("companion_unavailable", json["session"]!!.jsonPrimitive.content)
             assertTrue(json["configured"]!!.jsonPrimitive.content.toBoolean())
         }
 

@@ -9,7 +9,6 @@ import ca.floo.roadtrip.model.availability.DayClassification
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.route.common.encodeApiJson
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -58,7 +57,9 @@ class AvailabilityResponseTest {
 
         assertEquals("recgov", json["provider"]!!.jsonPrimitive.content)
         assertEquals("232447", json["scope_ref"]!!.jsonPrimitive.content)
-        assertEquals(JsonNull, json["season"])
+        // No season block: a Kotlin null, so explicitNulls = false omits the key
+        // and the generated `season?: unknown` is honest.
+        assertNull(json["season"])
         assertEquals("2026-06-10", json["start_date"]!!.jsonPrimitive.content)
         assertEquals("2026-06-11", json["end_date"]!!.jsonPrimitive.content)
         assertNull(json["window"])

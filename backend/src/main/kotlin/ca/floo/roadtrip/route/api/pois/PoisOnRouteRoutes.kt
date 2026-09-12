@@ -2,6 +2,8 @@ package ca.floo.roadtrip.route.api.pois
 
 import ca.floo.roadtrip.config.RouteConfig
 import ca.floo.roadtrip.model.api.ApiErrorSchema
+import ca.floo.roadtrip.model.api.poi.OnRouteRequestDto
+import ca.floo.roadtrip.model.api.poi.OnRouteWaypointDto
 import ca.floo.roadtrip.model.api.poi.PointGeometrySchema
 import ca.floo.roadtrip.model.api.poi.PoisOnRouteFeaturePropertiesSchema
 import ca.floo.roadtrip.model.api.poi.PoisOnRouteFeatureSchema
@@ -23,8 +25,6 @@ import io.ktor.server.application.call
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 
 private val onRouteLog = LoggerFactory.getLogger("PoisOnRouteRoutes")
@@ -94,46 +94,33 @@ private data class OnRouteRequest(
     val categories: List<String>?,
 )
 
-@Serializable
-private class OnRouteRequestDto(
-    val waypoints: List<WaypointDto> = emptyList(),
-    @SerialName("radius_miles") val radiusMiles: Double? = null,
-    val categories: List<String>? = null,
-) {
-    fun validated(routeConfig: RouteConfig): OnRouteRequest {
-        require(waypoints.size in 2..routeConfig.maxWaypoints) {
-            "waypoints must have 2..${routeConfig.maxWaypoints} entries (got ${waypoints.size})"
-        }
-        val radius = radiusMiles ?: error("radius_miles is missing or not a number")
-        require(radius in routeConfig.minCorridorRadiusMiles..routeConfig.maxCorridorRadiusMiles) {
-            "radius_miles must be in [${routeConfig.minCorridorRadiusMiles}, ${routeConfig.maxCorridorRadiusMiles}] (got $radius)"
-        }
-        val parsedCategories =
-            categories
-                ?.mapNotNull {
-                    it.trim().takeIf { category -> category.isNotEmpty() }
-                }?.let(::canonicalPoiCategories)
-                ?.takeIf { it.isNotEmpty() }
-        return OnRouteRequest(
-            waypoints = waypoints.mapIndexed { index, waypoint -> waypoint.validated(index) },
-            radiusMiles = radius,
-            categories = parsedCategories,
-        )
+private fun OnRouteRequestDto.validated(routeConfig: RouteConfig): OnRouteRequest {
+    require(waypoints.size in 2..routeConfig.maxWaypoints) {
+        "waypoints must have 2..${routeConfig.maxWaypoints} entries (got ${waypoints.size})"
     }
+    val radius = radiusMiles ?: error("radius_miles is missing or not a number")
+    require(radius in routeConfig.minCorridorRadiusMiles..routeConfig.maxCorridorRadiusMiles) {
+        "radius_miles must be in [${routeConfig.minCorridorRadiusMiles}, ${routeConfig.maxCorridorRadiusMiles}] (got $radius)"
+    }
+    val parsedCategories =
+        categories
+            ?.mapNotNull {
+                it.trim().takeIf { category -> category.isNotEmpty() }
+            }?.let(::canonicalPoiCategories)
+            ?.takeIf { it.isNotEmpty() }
+    return OnRouteRequest(
+        waypoints = waypoints.mapIndexed { index, waypoint -> waypoint.validated(index) },
+        radiusMiles = radius,
+        categories = parsedCategories,
+    )
 }
 
-@Serializable
-private class WaypointDto(
-    val lat: Double? = null,
-    val lng: Double? = null,
-) {
-    fun validated(index: Int): OnRouteWaypoint {
-        val parsedLat = lat ?: error("waypoint[$index].lat is missing or not a number")
-        val parsedLng = lng ?: error("waypoint[$index].lng is missing or not a number")
-        require(parsedLat in -90.0..90.0) { "waypoint[$index].lat out of range" }
-        require(parsedLng in -180.0..180.0) { "waypoint[$index].lng out of range" }
-        return OnRouteWaypoint(lat = parsedLat, lng = parsedLng)
-    }
+private fun OnRouteWaypointDto.validated(index: Int): OnRouteWaypoint {
+    val parsedLat = lat ?: error("waypoint[$index].lat is missing or not a number")
+    val parsedLng = lng ?: error("waypoint[$index].lng is missing or not a number")
+    require(parsedLat in -90.0..90.0) { "waypoint[$index].lat out of range" }
+    require(parsedLng in -180.0..180.0) { "waypoint[$index].lng out of range" }
+    return OnRouteWaypoint(lat = parsedLat, lng = parsedLng)
 }
 
 private fun parseOnRouteRequest(

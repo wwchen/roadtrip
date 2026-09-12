@@ -15,7 +15,7 @@ data class AvailabilityResponseDto(
     @SerialName("start_date") val startDate: String,
     @SerialName("end_date") val endDate: String,
     val state: String,
-    val season: JsonElement,
+    val season: JsonElement? = null,
     val availability: List<AvailabilityDayDto>,
     val cache: AvailabilityCacheBlock,
 )

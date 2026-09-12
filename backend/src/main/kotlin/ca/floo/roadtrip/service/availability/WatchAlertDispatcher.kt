@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.CellTransition
+import ca.floo.roadtrip.model.availability.WatchDoneReason
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -195,7 +197,10 @@ internal class WatchAlertDispatcher(
                     }
                 }.any { it }
         if (fired && watch.stopWhenTriggered) {
-            watchRepo.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
+            watchRepo.update(
+                watch.id,
+                AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE, doneReason = WatchDoneReason.TRIGGERED),
+            )
         }
     }
 
