@@ -2,6 +2,8 @@ package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.api.MAGIC_LINK_TOKEN_PARAM
+import ca.floo.roadtrip.model.availability.WatchDoneReason
+import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.Principal
@@ -1337,6 +1339,29 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.OK, resp.status)
             val watch = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
             assertEquals(id, watch["id"]!!.jsonPrimitive.long)
+        }
+
+    @Test
+    fun `the watch payload carries done_reason only once one is recorded`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "done-reason", name = "Done Reason")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+
+            val before = Json.parseToJsonElement(client.get(watchPath(id)) { asUser(USER_TOKEN) }.bodyAsText()).jsonObject
+            assertNull(before["watch"]!!.jsonObject["done_reason"])
+
+            AvailabilityWatchRepo(ctx).update(
+                id,
+                AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE, doneReason = WatchDoneReason.ELAPSED),
+            )
+
+            val after = Json.parseToJsonElement(client.get(watchPath(id)) { asUser(USER_TOKEN) }.bodyAsText()).jsonObject
+            assertEquals("elapsed", after["watch"]!!.jsonObject["done_reason"]!!.jsonPrimitive.content)
         }
 
     @Test

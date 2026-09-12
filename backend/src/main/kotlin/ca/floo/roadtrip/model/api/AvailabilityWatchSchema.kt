@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.api
 
+import ca.floo.roadtrip.model.availability.WatchDoneReason
 import ca.floo.roadtrip.model.availability.WatchStatus
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -22,6 +23,8 @@ data class AvailabilityWatchSchema(
     @SerialName("trigger_config") val triggerConfig: JsonObject,
     @SerialName("stop_when_triggered") val stopWhenTriggered: Boolean,
     val status: WatchStatus,
+    // Null on any row retired before V63, and on every row that is not done.
+    @SerialName("done_reason") val doneReason: WatchDoneReason? = null,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String,
     // Freshness/error of the most recent poll run across this watch's

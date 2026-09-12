@@ -110,6 +110,7 @@ class SlackInteractivityHandlerTest {
         triggerConfig = triggerConfig,
         stopWhenTriggered = false,
         status = status,
+        doneReason = null,
         createdAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
         updatedAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
     )

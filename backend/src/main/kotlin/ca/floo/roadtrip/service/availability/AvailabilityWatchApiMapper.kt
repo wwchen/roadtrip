@@ -69,6 +69,7 @@ internal class AvailabilityWatchApiMapper(
             triggerConfig = watch.triggerConfig,
             stopWhenTriggered = watch.stopWhenTriggered,
             status = watch.status,
+            doneReason = watch.doneReason,
             createdAt = watch.createdAt.toString(),
             updatedAt = watch.updatedAt.toString(),
             lastRunAt = watch.lastRun?.completedAt?.toString(),

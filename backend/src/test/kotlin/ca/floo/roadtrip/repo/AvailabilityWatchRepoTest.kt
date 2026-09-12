@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.model.availability.WatchDoneReason
 import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.auth.UserId
 import kotlinx.serialization.json.JsonObject
@@ -152,6 +153,28 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
         assertEquals(1, updated.targets.size)
         assertEquals(poi, updated.targets.single().poiId)
         assertEquals(WatchStatus.PAUSED, updated.status)
+    }
+
+    @Test
+    fun `done reason round-trips and starts null`() {
+        val owner = seedAppUser()
+        val poi = insertPoi()
+        val repo = AvailabilityWatchRepo(ctx)
+        val created =
+            repo.create(
+                createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, campsiteId = null)), ownerUserId = owner.value),
+            )
+        assertNull(repo.findById(created.id)!!.doneReason)
+
+        val updated =
+            repo.update(
+                created.id,
+                AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE, doneReason = WatchDoneReason.TRIGGERED),
+            )!!
+
+        assertEquals(WatchStatus.DONE, updated.status)
+        assertEquals(WatchDoneReason.TRIGGERED, updated.doneReason)
+        assertEquals(WatchDoneReason.TRIGGERED, repo.findById(created.id)!!.doneReason)
     }
 
     @Test

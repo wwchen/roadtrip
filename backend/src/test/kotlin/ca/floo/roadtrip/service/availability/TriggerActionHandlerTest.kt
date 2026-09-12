@@ -955,6 +955,7 @@ class TriggerActionHandlerTest {
             triggerConfig = triggerConfig,
             stopWhenTriggered = stopWhenTriggered,
             status = WatchStatus.ACTIVE,
+            doneReason = null,
             createdAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
             updatedAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
         )

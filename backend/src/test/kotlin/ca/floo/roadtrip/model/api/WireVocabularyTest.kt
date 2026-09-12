@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.api
 
+import ca.floo.roadtrip.model.availability.WatchDoneReason
 import ca.floo.roadtrip.model.availability.WatchStatus
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
@@ -23,6 +24,13 @@ class WireVocabularyTest {
         val wire = listOf("active", "paused", "done")
         assertEquals(wire, serialNames(WatchStatus.serializer()))
         assertEquals(wire, WatchStatus.entries.map { it.wireValue })
+    }
+
+    @Test
+    fun `the done reason vocabulary keeps its wire strings`() {
+        val wire = listOf("triggered", "elapsed")
+        assertEquals(wire, serialNames(WatchDoneReason.serializer()))
+        assertEquals(wire, WatchDoneReason.entries.map { it.wireValue })
     }
 
     @Test

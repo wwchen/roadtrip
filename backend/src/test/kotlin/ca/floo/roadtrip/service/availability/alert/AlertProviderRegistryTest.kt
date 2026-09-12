@@ -59,6 +59,7 @@ class AlertProviderRegistryTest {
             triggerConfig = JsonObject(emptyMap()),
             stopWhenTriggered = false,
             status = WatchStatus.ACTIVE,
+            doneReason = null,
             createdAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
             updatedAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
         )

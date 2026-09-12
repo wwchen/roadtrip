@@ -4,6 +4,7 @@ import ca.floo.roadtrip.db.generated.tables.AvailabilityPoller.Companion.AVAILAB
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatch.Companion.AVAILABILITY_WATCH
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchPoller.Companion.AVAILABILITY_WATCH_POLLER
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
+import ca.floo.roadtrip.model.availability.WatchDoneReason
 import ca.floo.roadtrip.model.availability.WatchStatus
 import ca.floo.roadtrip.model.domain.scheduler.Schedulable
 import org.jooq.DSLContext
@@ -370,6 +371,7 @@ class AvailabilityPollerRepo(
                 txn
                     .update(AVAILABILITY_WATCH)
                     .set(AVAILABILITY_WATCH.STATUS, WatchStatus.DONE.wireValue)
+                    .set(AVAILABILITY_WATCH.DONE_REASON, WatchDoneReason.ELAPSED.wireValue)
                     .set(AVAILABILITY_WATCH.UPDATED_AT, OffsetDateTime.now())
                     .where(AVAILABILITY_WATCH.STATUS.eq(WatchStatus.ACTIVE.wireValue))
                     .and(AVAILABILITY_WATCH.END_DATE.lt(DSL.currentLocalDate()))
