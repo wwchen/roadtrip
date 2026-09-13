@@ -7,6 +7,8 @@ import ca.floo.roadtrip.model.domain.CampgroundLink
 import ca.floo.roadtrip.model.domain.CampgroundMetadata
 import ca.floo.roadtrip.model.domain.CampgroundPrice
 import ca.floo.roadtrip.model.domain.CampgroundSchedule
+import ca.floo.roadtrip.model.domain.CampgroundSiteSummary
+import ca.floo.roadtrip.model.domain.CampgroundSummaryRow
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CarrierSignal
 import ca.floo.roadtrip.model.domain.CatalogColumnJson
@@ -101,6 +103,53 @@ class CampgroundRepo(
             propertiesJson = record.get("properties_text", String::class.java),
             memberSources = memberSourcesOf(record.get("member_sources")),
         )
+    }
+
+    /** Bulk read for the in-view list, in the order the ids were asked for; unknown ids are skipped. */
+    fun findSummariesByPoiIds(poiIds: List<Long>): List<CampgroundSummaryRow> {
+        val wanted = poiIds.distinct()
+        if (wanted.isEmpty()) return emptyList()
+        val placeholders = wanted.joinToString(", ") { "?" }
+        val rows =
+            ctx.fetch(
+                """
+                SELECT
+                  $baseSelectColumns,
+                  p.id AS poi_id,
+                  ST_X(ST_PointOnSurface(p.geom)) AS lng,
+                  ST_Y(ST_PointOnSurface(p.geom)) AS lat,
+                  s.site_total,
+                  s.site_counts::text AS site_counts_text,
+                  s.max_people
+                FROM poi_campgrounds pc
+                JOIN pois p ON p.id = pc.poi_id
+                JOIN campgrounds cg ON cg.id = pc.campground_id
+                LEFT JOIN campground_site_summary s ON s.campground_id = cg.id
+                WHERE pc.poi_id IN ($placeholders)
+                  AND cg.deleted_at IS NULL
+                  AND p.deleted_at IS NULL
+                """.trimIndent(),
+                *wanted.toTypedArray(),
+            )
+        val byPoi =
+            rows.associateBy({ it.get("poi_id", Long::class.java) }) { record ->
+                val total = record.get("site_total", Int::class.javaObjectType)
+                CampgroundSummaryRow(
+                    poiId = record.get("poi_id", Long::class.java),
+                    lng = record.get("lng", Double::class.java),
+                    lat = record.get("lat", Double::class.java),
+                    campground = fromRecord(record),
+                    summary =
+                        total?.let {
+                            CampgroundSiteSummary(
+                                siteTotal = it,
+                                siteCounts = decodeSiteCounts(record.get("site_counts_text", String::class.java)),
+                                maxPeople = record.get("max_people", Int::class.javaObjectType),
+                            )
+                        },
+                )
+            }
+        return wanted.mapNotNull(byPoi::get)
     }
 
     private fun fromRecord(record: Record): Campground {
