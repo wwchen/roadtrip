@@ -379,6 +379,11 @@ not set, and `<ref>` defaults to the current branch if `REF` is not set. The
 chosen name is a logical owner; `deploy.sh` assigns it the first empty slot from
 1-2 unless it already has a slot marker.
 
+A `sandbox-up` that fails after claiming a slot prints the backend's last log
+lines and runs `sandbox-down` on itself, so a failed deploy cannot strand the
+slot, its database volume, or its DNS record. Set `SANDBOX_KEEP_ON_FAILURE=true`
+to leave it up for inspection, then stop it by hand.
+
 `make sandbox-stop` calls `scripts/deploy.sh sandbox-down <name>` directly;
 `NAME` is required. `sandbox-down` also accepts a numeric slot and resolves it
 back to the owning marker.
@@ -515,6 +520,9 @@ change.
 | `SANDBOX_PORT_RANGE_START` | `41000` | First port in the host-local range allocated to sandboxes |
 | `SANDBOX_PORT_RANGE_END` | `41999` | Last port in the range |
 | `POSTGRES_HEALTH_RETRIES` | `30` | Seconds to wait for `pg_isready` before failing |
+| `HEALTH_RETRIES` | `180` | Seconds to wait for the backend's `/api/health/ready`, which includes Flyway migrating the restored snapshot |
+| `SANDBOX_KEEP_ON_FAILURE` | `false` | When `true`, a failed `sandbox-up` is left running instead of torn down |
+| `SANDBOX_FAILURE_LOG_LINES` | `200` | Backend log lines printed when `sandbox-up` fails |
 | `SANDBOX_TTL_HOURS` | `2` | Sweep: sandboxes older than this are torn down. Set as a repo variable, not on the host |
 
 ## Scheduled jobs
