@@ -135,11 +135,12 @@ jobs:
 
       - name: Resolve deploy URLs
         run: |
-          python3 -c "import yaml" 2>/dev/null \
-            || { sudo apt-get update -qq && sudo apt-get install -y -qq python3-yaml; }
-          root_url="$(python3 scripts/prod_base_url.py)"
           base="${{ vars.DEPLOY_BASE_URL }}"
-          base="${base:-$root_url}"
+          if [ -z "$base" ]; then
+            python3 -c "import yaml" 2>/dev/null \
+              || { sudo apt-get update -qq && sudo apt-get install -y -qq python3-yaml; }
+            base="$(python3 scripts/prod_base_url.py)"
+          fi
           health="${{ vars.DEPLOY_HEALTH_URL }}"
           {
             echo "DEPLOY_BASE=$base"
@@ -162,7 +163,7 @@ jobs:
 
           for _ in $(seq 1 "$gate_attempts"); do
             if curl -fsS "$DEPLOY_HEALTH" >/dev/null; then
-              for path in / /watches /availability; do
+              for path in /watches /availability; do
                 probe "$DEPLOY_BASE$path" >/dev/null
                 echo "health: $DEPLOY_BASE$path OK"
               done

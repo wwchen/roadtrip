@@ -39,10 +39,10 @@ runs:
       run: |
         set -euo pipefail
 
-        images=()
-        while read -r image; do
-          [ -n "$image" ] && images+=("$image")
-        done <<< "$AWAIT_IMAGES"
+        # Image references carry no whitespace and no glob characters, so the
+        # default word split is the whole parse and blank lines fall out of it.
+        # shellcheck disable=SC2206
+        images=($AWAIT_IMAGES)
         if [ "${#images[@]}" -eq 0 ]; then
           echo "::error::no images named to wait for"
           exit 1
