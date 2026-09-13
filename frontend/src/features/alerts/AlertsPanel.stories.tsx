@@ -66,9 +66,21 @@ function watchListResponse(watches: Watch[]): WatchListResponse {
  * (one per `ALERT_STATUSES`) and every POI name `useWatchPoiNames` would otherwise
  * fetch already have an answer in the cache, so the panel mounts straight into its
  * settled state with no fetch in flight.
+ *
+ * `createTestQueryClient()` leaves `staleTime` at 0, so a seeded entry is
+ * immediately stale and `refetchOnMount` (the query default) fires a real fetch
+ * the moment `AlertsPanel` mounts and observes it — against `/api/watches`, which
+ * Storybook has no proxy for. Neither `watchListQuery` nor the POI-name query set
+ * their own `staleTime`, so the fix belongs here, at the client: `staleTime:
+ * Infinity` plus `refetchOnMount: false` makes the seeded cache the only data
+ * source, for every query this client will ever hold.
  */
 function seededClient(watches: readonly Watch[]): QueryClient {
   const client = createTestQueryClient();
+  client.setDefaultOptions({
+    queries: { retry: false, gcTime: Infinity, staleTime: Infinity, refetchOnMount: false },
+    mutations: { retry: false },
+  });
   for (const status of ALERT_STATUSES) {
     client.setQueryData(
       queryKeys.watches.list({ status, limit: WATCH_LIST_LIMIT }),

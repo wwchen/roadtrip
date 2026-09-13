@@ -141,10 +141,22 @@ const MANAGED_WATCH: Watch = watch({
 
 const LINK: MagicLink = { watchId: '601', token: 'story-token', stopOnArrival: false };
 
-/** `ManageWatchCard` reads its watch through `useManagedWatch`, keyed on the magic
- *  link's id — not through props — so this seeds the query cache instead. */
+/**
+ * `ManageWatchCard` reads its watch through `useManagedWatch`, keyed on the magic
+ * link's id — not through props — so this seeds the query cache instead.
+ *
+ * `createTestQueryClient()` leaves `staleTime` at 0, and `useManagedWatch` sets
+ * none of its own, so a seeded entry is stale on arrival and `refetchOnMount`
+ * fires a real `GET /api/watches/601` the moment the card mounts — which
+ * Storybook has no proxy for. `staleTime: Infinity` plus `refetchOnMount: false`
+ * on this client's defaults makes the seeded cache the only data source.
+ */
 function seededManageClient(watch: Watch | null): QueryClient {
   const client = createTestQueryClient();
+  client.setDefaultOptions({
+    queries: { retry: false, gcTime: Infinity, staleTime: Infinity, refetchOnMount: false },
+    mutations: { retry: false },
+  });
   if (watch) {
     const response: WatchResponse = { watch };
     client.setQueryData(queryKeys.watches.detail(LINK.watchId), response);
