@@ -5,7 +5,12 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [master]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Deploy even if CI did not succeed for this commit
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy
@@ -18,6 +23,11 @@ permissions:
 
 env:
   DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+  # Production tracks this branch. It is the ref a dispatch is held to, the
+  # branch deploy.sh stamps into the build, and the one the health gate then
+  # reads back -- previously a `master` literal at each of the last two, so
+  # the gate compared a constant against itself.
+  DEPLOY_BRANCH: master
 
 jobs:
   deploy:
@@ -32,6 +42,32 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.DEPLOY_SHA }}
+
+      # workflow_dispatch skips the `workflow_run` guard on this job, which is
+      # what normally establishes that CI succeeded for this commit. Awaiting
+      # the images does not re-establish it: ci.yml's three image jobs declare
+      # `needs: changes` alone, so a tag is published whenever its build
+      # succeeds, whatever the tests then say -- and CI publishes
+      # backend:<head sha> for same-repo PRs too, so an unmerged branch has
+      # tags as well. Check the run and the ref directly.
+      - name: Require a green CI run for this commit
+        if: github.event_name == 'workflow_dispatch' && !inputs.force
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/$DEPLOY_BRANCH" ]; then
+            echo "::error::refusing to deploy $GITHUB_REF: production tracks $DEPLOY_BRANCH. Re-run with force to override."
+            exit 1
+          fi
+          conclusion="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$DEPLOY_SHA&status=completed" \
+            --jq '[.workflow_runs[] | select(.name == "CI")] | first | .conclusion // "none"')"
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::CI for $DEPLOY_SHA concluded '$conclusion', not success. Re-run with force to override."
+            exit 1
+          fi
+          echo "CI succeeded for $DEPLOY_SHA"
 
       - name: Resolve independently versioned images
         run: |
@@ -91,13 +127,14 @@ jobs:
           sha="$1"
           data_sha="$2"
           companion_sha="$3"
+          branch="$4"
           release="$HOME/.roadtrip/releases/$sha"
           cd "$release"
-          scripts/deploy.sh prod "$sha" "$data_sha" "$companion_sha" master
+          scripts/deploy.sh prod "$sha" "$data_sha" "$companion_sha" "$branch"
           ln -sfn "$release" "$HOME/.roadtrip/current"
           REMOTE
           ssh -o BatchMode=yes mini@mini-ca \
-            "bash -s -- '$DEPLOY_SHA' '$DEPLOY_DATA_SHA' '$DEPLOY_COMPANION_SHA'" \
+            "bash -s -- '$DEPLOY_SHA' '$DEPLOY_DATA_SHA' '$DEPLOY_COMPANION_SHA' '$DEPLOY_BRANCH'" \
             < "$RUNNER_TEMP/deploy-remote.sh" 2>&1 \
             | tee "$RUNNER_TEMP/deploy.log"
 
@@ -173,7 +210,7 @@ jobs:
               fi
               echo "health: / is the React shell OK"
               probe "$DEPLOY_BASE/api/build-info" \
-                | DEPLOY_SHA="$DEPLOY_SHA" python3 -c 'import json,os,sys; info=json.load(sys.stdin); expected={"env":"prod","sha":os.environ["DEPLOY_SHA"],"branch":"master"}; actual={key:info.get(key) for key in expected}; actual == expected or sys.exit(f"build-info mismatch: expected {expected}, got {actual}"); print("health: build-info prod SHA master OK")'
+                | python3 -c 'import json,os,sys; info=json.load(sys.stdin); expected={"env":"prod","sha":os.environ["DEPLOY_SHA"],"branch":os.environ["DEPLOY_BRANCH"]}; actual={key:info.get(key) for key in expected}; actual == expected or sys.exit(f"build-info mismatch: expected {expected}, got {actual}"); print("health: build-info prod SHA branch OK")'
               echo "health: $DEPLOY_HEALTH OK"
               exit 0
             fi

@@ -196,6 +196,66 @@ class DeploymentContractTest(unittest.TestCase):
         )
         self.assertLessEqual(budget, 300, "the image wait must stay well inside the job budget")
 
+    def test_a_manual_deploy_must_still_establish_that_ci_passed(self) -> None:
+        # The `workflow_run` trigger carries the CI-succeeded precondition;
+        # workflow_dispatch bypasses it. Awaiting the images does not stand in
+        # for it, because the image jobs do not depend on the tests -- so a
+        # dispatch of a red commit finds every tag present.
+        deploy = workflow("deploy.yml")
+        job = deploy["jobs"]["deploy"]
+        triggers = workflow_triggers(deploy)
+        gate = step_by_name(job, "Require a green CI run for this commit")
+        step_names = [step.get("name", "") for step in job["steps"]]
+
+        self.assertIn("force", triggers["workflow_dispatch"]["inputs"])
+        self.assertIn("workflow_dispatch", gate["if"])
+        self.assertIn("!inputs.force", gate["if"])
+        # Both halves: the run concluded success, and the ref is production's.
+        self.assertIn("conclusion", gate["run"])
+        self.assertIn("refs/heads/$DEPLOY_BRANCH", gate["run"])
+        # Before anything reaches the host or the registry.
+        for later in ("Await the release images", "Reach the deploy host"):
+            self.assertLess(step_names.index(gate["name"]), step_names.index(later))
+
+    def test_the_production_branch_is_named_once(self) -> None:
+        # deploy.sh stamped a `master` literal into build-info and the health
+        # gate asserted another `master` literal against it, so the check
+        # compared a constant with itself and could not fail.
+        deploy = workflow("deploy.yml")
+        body = (ROOT / ".github" / "workflows" / "deploy.yml").read_text()
+
+        self.assertEqual("master", deploy["env"]["DEPLOY_BRANCH"])
+        # The `on:` block cannot read env, so that one literal stays.
+        self.assertEqual(
+            1,
+            len([line for line in body.splitlines()
+                 if "master" in line and "#" not in line and "branches:" not in line]),
+            "the production branch should be defined once, as DEPLOY_BRANCH",
+        )
+
+    def test_smoke_does_not_serialize_behind_the_unit_tests(self) -> None:
+        # Smoke rebuilds the fat jar and frontend itself, so the edge bought
+        # nothing but a spared runner -- at the cost of the two jobs' durations
+        # summing on every push before deploy could start.
+        ci = workflow("ci.yml")
+        smoke = ci["jobs"]["smoke"]
+        aggregate = ci["jobs"]["ci-passed"]
+
+        self.assertNotIn("backend-tests", smoke["needs"])
+        self.assertNotIn("backend-tests", smoke["if"])
+        # The safety property lives here, and still covers both.
+        for job in ("smoke", "backend-tests"):
+            self.assertIn(job, aggregate["needs"])
+
+    def test_the_deploy_does_not_restart_what_it_just_recreated(self) -> None:
+        # Compose resolves the observability bind mounts against the release
+        # directory, which is keyed by SHA, so `up -d` has already recreated
+        # them; restarting again only resets the health start periods that
+        # `--wait` and the telemetry poll then wait through.
+        deploy_script = (ROOT / "scripts" / "deploy.sh").read_text()
+
+        self.assertNotIn("restart grafana", deploy_script)
+
     def test_the_image_wait_is_shared_rather_than_copied(self) -> None:
         # Two call sites block on GHCR tags; the poll loop lives in one place
         # so a fix to either reaches both.

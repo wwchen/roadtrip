@@ -429,11 +429,14 @@ jobs:
           retention-days: 7
 
   smoke:
-    needs: [changes, backend-tests]
-    if: >-
-      always() &&
-      needs.changes.outputs.smoke == 'true' &&
-      (needs.backend-tests.result == 'success' || needs.backend-tests.result == 'skipped')
+    # Deliberately not `needs: backend-tests`. Smoke shares no artifact with
+    # it -- it re-checks-out and rebuilds the fat jar and frontend itself --
+    # so that edge only ever served to spare a runner when the unit tests were
+    # already red. It cost every master push the sum of the two jobs before
+    # deploy could start, and `ci-passed` fails on either one regardless, so
+    # the gate is unchanged by running them side by side.
+    needs: [changes]
+    if: needs.changes.outputs.smoke == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
