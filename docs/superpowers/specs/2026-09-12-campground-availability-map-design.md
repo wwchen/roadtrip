@@ -137,7 +137,8 @@ both come from `make api-types`, never by hand.
 | `site_type` | `String?` (`CampsiteKind` wire) | `site_counts[site_type] > 0` |
 | `group_size` | `Int?` | `max_people >= group_size` **or `max_people` is null** |
 | `amenities` | `List<String>` (`AmenityKey` wire) | each key is listed with `present = true`, **or the key is absent** |
-| `checkable_only` | `Boolean` (default false) | `availability_supported` (M4's toggle; cheap to carry now) |
+
+`checkable_only` (M4's toggle) is not in M2a: `availability_supported` is decided by the booking identity resolver in the service, not by a column, so a server-side predicate for it needs its own design.
 
 **No data is not a miss.** A campground the provider gives no field for passes the filter, and
 the card shows the facet in its no-data state. Only a stated miss (`present = false`, a people
