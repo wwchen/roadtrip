@@ -61,10 +61,15 @@ interface TestPin {
   properties: Record<string, string>;
 }
 
-const pin = (id: number, category: string, agency?: string): TestPin => ({
+const pin = (
+  id: number,
+  category: string,
+  agency?: string,
+  coordinates: [number, number] = [-121, 40],
+): TestPin => ({
   type: 'Feature',
   id,
-  geometry: { type: 'Point', coordinates: [-121, 40] },
+  geometry: { type: 'Point', coordinates },
   properties: agency === undefined ? { category } : { category, agency },
 });
 
@@ -340,7 +345,9 @@ describe('the in-view campgrounds', () => {
   test('are published to the store once campgrounds are requested', async () => {
     poiResponses = [
       collection([pin(9, 'tesla_supercharger')]),
-      collection([pin(1, 'campground', 'USFS'), pin(9, 'tesla_supercharger')]),
+      // Counting now always clips to the requested bbox, so this fresh fetch's
+      // campground pin has to actually sit inside BAY_AREA to be counted.
+      collection([pin(1, 'campground', 'USFS', [-122, 37.5]), pin(9, 'tesla_supercharger')]),
     ];
     await renderMap();
     await waitFor(() => expect(poiRequests()).toHaveLength(1));
@@ -356,7 +363,9 @@ describe('the in-view campgrounds', () => {
   });
 
   test('are cleared while a route owns the map', async () => {
-    poiResponses = [collection([]), collection([pin(1, 'campground', 'USFS')])];
+    // Counting now always clips to the requested bbox, so this fresh fetch's
+    // campground pin has to actually sit inside BAY_AREA to be counted.
+    poiResponses = [collection([]), collection([pin(1, 'campground', 'USFS', [-122, 37.5])])];
     await renderMap();
     await panTo(BAY_AREA, 6);
     await waitFor(() =>
@@ -380,6 +389,36 @@ describe('the in-view campgrounds', () => {
     // transient empty render before it resolves cannot pass this by accident.
     await waitFor(() => expect(pinIdsIn('cg')).toEqual([9]));
     expect(useMapStore.getState().viewportCampgrounds).toEqual([]);
+  });
+
+  test('a pan into a cached superset only counts the pins inside the new bbox', async () => {
+    const pinAt = (id: number, coordinates: [number, number], agency: string): TestPin => ({
+      type: 'Feature',
+      id,
+      geometry: { type: 'Point', coordinates },
+      properties: { category: 'campground', agency },
+    });
+    const inBayArea = pinAt(1, [-122, 37.5], 'USFS');
+    const outsideBayArea = pinAt(2, [-116, 40], 'BC Parks');
+    // A single fetch, at a zoom that already unlocks campgrounds, over a bbox
+    // that contains both pins.
+    poiResponses = [collection([inBayArea, outsideBayArea])];
+    await renderMap({ zoom: 7 });
+    await waitFor(() => expect(poiRequests()).toHaveLength(1));
+    await waitFor(() =>
+      expect(useMapStore.getState().viewportCampgrounds.map((f) => f.id)).toEqual([1, 2]),
+    );
+
+    // Same zoom band, and BAY_AREA sits inside CALIFORNIA, so the containment
+    // cache answers this pan without a second fetch — with the wider response.
+    await panTo(BAY_AREA, 7);
+    await waitFor(() => expect(useMapStore.getState().viewport?.bbox).toEqual(BAY_AREA));
+    await settle();
+
+    expect(poiRequests()).toHaveLength(1);
+    // The legend and the in-view list must describe BAY_AREA, not CALIFORNIA:
+    // only the pin actually inside the new bbox should remain.
+    expect(useMapStore.getState().viewportCampgrounds.map((f) => f.id)).toEqual([1]);
   });
 });
 

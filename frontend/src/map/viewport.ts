@@ -112,3 +112,35 @@ export interface MapCenter {
 export function bboxCenter([west, south, east, north]: ViewportBbox): MapCenter {
   return { lng: (west + east) / 2, lat: (south + north) / 2 };
 }
+
+/**
+ * Keep only the features whose Point falls inside `bbox`.
+ *
+ * The containment cache (`viewport-cache.ts`) answers a sub-view with the
+ * larger, already-fetched response it sits inside of — correct for painting,
+ * since MapLibre only draws what intersects the screen, but wrong for anything
+ * that counts pins (the legend, the in-view campground list). This is how a
+ * caller narrows that superset back down to the requested bbox. A feature with
+ * no usable point coordinates is dropped rather than guessed at. Returns the
+ * same array instance when nothing is dropped, so a memo keyed on it stays
+ * stable.
+ */
+export function clipToBbox<T extends { geometry?: unknown }>(
+  features: readonly T[],
+  [west, south, east, north]: ViewportBbox,
+): T[] {
+  const kept = features.filter((feature) => {
+    // Widened to `unknown` rather than a GeoJSON geometry shape: some geometry
+    // variants (e.g. GeometryCollection) have no `coordinates` at all, which
+    // TypeScript's structural check treats as having nothing in common with a
+    // `{ coordinates?: unknown }` constraint. This still only ever reads a
+    // Point's coordinates, and anything else is dropped below.
+    const geometry = feature.geometry as { coordinates?: unknown } | null | undefined;
+    const coordinates = geometry?.coordinates;
+    if (!Array.isArray(coordinates) || coordinates.length < 2) return false;
+    const [lng, lat] = coordinates;
+    if (typeof lng !== 'number' || typeof lat !== 'number') return false;
+    return west <= lng && lng <= east && south <= lat && lat <= north;
+  });
+  return kept.length === features.length ? (features as T[]) : kept;
+}
