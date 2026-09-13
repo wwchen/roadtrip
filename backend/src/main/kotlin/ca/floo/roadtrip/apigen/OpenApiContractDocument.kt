@@ -101,11 +101,20 @@ internal object OpenApiContractDocument {
         guardSchemas: Map<KClass<*>, String>,
     ): Operation =
         copy(
-            requestBody = names.request?.let(::requestBodyFor) ?: requestBody,
+            requestBody = names.request?.let { requestBodyFor(it, names.requestRequired) } ?: requestBody,
             responses = responsesFor(names, access, guardSchemas),
         )
 
-    private fun requestBodyFor(schemaName: String): ReferenceOr<RequestBody> =
+    /**
+     * [required] is the row's own answer, not a constant: two settings handlers
+     * decode through `decodeOptionalTextJsonBody` and answer a blank body with a
+     * default, and a generated client told the body is mandatory would be wrong
+     * about a call the server serves.
+     */
+    private fun requestBodyFor(
+        schemaName: String,
+        required: Boolean,
+    ): ReferenceOr<RequestBody> =
         ReferenceOr.value(
             RequestBody(
                 description = REQUEST_BODY_DESCRIPTION,
@@ -113,7 +122,7 @@ internal object OpenApiContractDocument {
                     mapOf(
                         ContentType.Application.Json to MediaType(schema = ReferenceOr.schema(schemaName)),
                     ),
-                required = true,
+                required = required,
             ),
         )
 

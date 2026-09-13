@@ -336,6 +336,21 @@ apiece — the 2xx it answers with and every non-2xx body it can serialize, each
 with its status. The statuses are `HTTP_*` constants in `model/api/ApiStatus.kt`
 for the same reason `ApiMethod` exists. Four things read it.
 
+`errors` has no default. It once defaulted to `400 ApiErrorSchema`, so a row
+acquired a published 400 by saying nothing at all — and the contract is
+one-directional, so nothing could fail a declared error no route can serve.
+Every row now states its errors, `emptyList()` included, read off the handler:
+`/api/build-info`, `/api/health` and `/api/me` take no body and no parameter and
+throw nothing, so no `StatusPages` mapping can fire on them and they declare
+nothing but their 200.
+
+`requestRequired` is what the document publishes as `requestBody.required`. It
+is `true` everywhere except the two rows whose handler reads the body through
+`decodeOptionalTextJsonBody` and answers a blank one with a default — `PUT
+/api/settings/notifications` and `POST /api/settings/notifications/slack/test`.
+`ApiContractCoverageTest` pins that set and that a row with no request body never
+carries a `false`.
+
 `registerKoinRoutes` compares it against the live routing tree at boot, in both
 directions, beside the RFC 0010 access guard. A mounted route with no row fails
 the boot; a row with no route does too, unless the row is marked `conditional`
@@ -358,20 +373,48 @@ its DTO lacks is the drift being hunted. `Json*` fields compare as trees, so a
 `JsonNull` inside one round-trips honestly. A response on a path no row names is
 skipped, which is what covers `/test/**` and `/data/**`.
 
-The bodies a `StatusPages` handler writes are checked too — the universal
-`400 ApiErrorSchema` and the whole `SettingsError` vocabulary among them. Ktor
-catches a handler's throw on the engine call, which carries no matched route, so
-the plugin stashes the matched leaf in the call's attributes while still inside
-routing and reads it back when the response is rendered.
+JSON means `application/json`, any `application/*+json` — `problem+json` and the
+`geo+json` `RoadtripRouting` already configures gzip for — and `text/json`. On a
+`(leaf, status)` whose row declares a *body*, a response the check cannot read as
+JSON is drift rather than a skip: the row's claim is that the status carries that
+DTO. A status the row declares body-less, or does not declare at all, is skipped,
+which is what leaves Slack's empty `text/plain` acks alone.
+
+The bodies a `StatusPages` handler writes are checked too — the `SettingsError`
+vocabulary among them. Ktor catches a handler's throw on the engine call, which
+carries no matched route, so the plugin stashes the matched leaf in the call's
+attributes while still inside routing and reads it back when the response is
+rendered. A plugin that refuses a call *before* routing binds a node leaves no
+leaf to stash; a JSON response with none has its request's method and path
+resolved against the contract's path templates instead, and is checked against
+that row when exactly one matches.
 
 `:backend:contractLedgerCheck` then holds the *suite* to the contract. The plugin
 appends every checked `(method, path, status)` to
-`backend/build/contract-ledger/exercised.tsv`, once per triple, and records a
-drift there too; the task fails on any recorded violation and on any row with a
-success body that no test produced. The ledger is `:backend:test`'s declared
-output, so an up-to-date or cached test run still has a current one to verify,
-and the task is a finalizer on `:backend:test` as well as being named outright in
-`make test` and in CI's `Run backend tests + coverage + contract checks` step.
+`backend/build/contract-ledger/exercised.tsv`, once per triple and kind, and
+records a drift there too; the task fails on any recorded violation and on any
+row with a success body that no test produced. `ContractBodyCheckTest` is the one
+suite that drifts on purpose, so it installs the plugin as a fixture and both its
+violations *and* its passes go under their own kinds — a fixture mounts a stub on
+a live row's path, and counting its pass as coverage would call a row covered
+that no real route test produces.
+
+The ledger's first line carries a digest of `ApiContract.endpoints` — every row's
+verb, path, declared statuses and classes, and `requestRequired`. The task
+refuses a ledger whose digest does not match the contract on its own classpath
+and says to rerun `:backend:test`, which is what stops a standalone
+`./gradlew :backend:contractLedgerCheck` reporting green off a file written
+against a different contract. On a green run it also prints every declared
+`(method, path, status, class)` with a body that no test produced, and the count
+in the summary line. That half is informational: the check is one-directional by
+construction, so nothing can *fail* a declared response no route serves, and the
+list is what says how much of the published document is a claim rather than a
+verified fact.
+
+The ledger is `:backend:test`'s declared output, so an up-to-date or cached test
+run still has a current one to verify, and the task is a finalizer on
+`:backend:test` as well as being named outright in `make test` and in CI's
+`Run backend tests + coverage + contract checks` step.
 
 `:backend:generateApiTypes` walks `serializer(kclass).descriptor` from every row,
 transitively, and writes `frontend/src/api/generated/api-types.ts`;
@@ -408,10 +451,13 @@ disagree. Each is a build failure a human resolves, not a half-built variant.
 
 The loop when you add or change an endpoint. "Its statuses" means every status
 the handler can answer with a body, read off the handler — the body check fails
-the first test that produces one the row does not declare:
+the first test that produces one the row does not declare, and the ledger gate
+prints the ones you declared that no test produces. `errors` is mandatory:
+`emptyList()` is the answer for a handler that cannot refuse. Set
+`requestRequired = false` where the handler answers a blank body with a default:
 
 ```
-add the route  ->  add the row with its statuses  ->  make api-types  ->  commit the diff
+add the route  ->  add the row with its statuses and requestRequired  ->  make api-types  ->  commit the diff
 ```
 
 ### `/api/docs`
@@ -430,7 +476,17 @@ declares with `describeApi(...)`, plus the path and query parameters Ktor infers
 from the route selectors: a `{id}` segment becomes a `path` parameter and a
 `param("x")` selector a `query` one. The contract pass overwrites only
 `requestBody` and `responses`, so those inferred parameters survive onto the
-served operation. The included surface is `isContractedPath` from
+served operation.
+
+**The document therefore carries no query parameters at all.** This tree uses no
+`param("x")` selectors — every handler reads `call.request.queryParameters[…]`
+directly — so Ktor infers none, and neither `ApiEndpoint` nor `describeApi` has
+anywhere to declare one. `/api/geocode` answers 400 without `q` and the document
+does not say `q` exists, so `/api/docs` cannot be used to call most of the GET
+surface. The path-parameter half does work, though `{id}` is typed `string` where
+the handler parses a `Long`. Declaring query parameters on the row and merging
+them into `Operation.parameters`, the way `requestBody` and `responses` are
+merged, is backlogged on #754. The included surface is `isContractedPath` from
 `route/common/RouteInventory.kt` plus `/test/**`: `/api/**` and
 `/auth/password/**`, minus the whole `/api/docs/` subtree.
 
@@ -438,10 +494,10 @@ served operation. The included surface is `isContractedPath` from
 comes from one walk of the whole contract — the same `walkContract` the
 TypeScript generator reads, cached per process — so a schema name and a generated
 `interface` name are one declaration rendered twice. Each row then fills its
-operation's `requestBody` (`application/json`, a `$ref`, `required = true`) and
-its `responses`: the success status, every declared error status, and an empty
-response where the status carries no body. Two classes at one status become a
-`oneOf`.
+operation's `requestBody` (`application/json`, a `$ref`, and the row's own
+`requestRequired` as `required`) and its `responses`: the success status, every
+declared error status, and an empty response where the status carries no body.
+Two classes at one status become a `oneOf`.
 
 `401` and `403` are **not** on the rows where the tree already knows them.
 `apiDocsRoutes` builds a lookup with `RoutingNode.declaredAccessByLeaf()` and
@@ -465,7 +521,10 @@ the contract's *statement* for a request, where `ignoreUnknownKeys = true` means
 the decoder tolerates an extra key and promises nothing about it.
 `io.ktor.openapi.JsonSchema` carries no `propertyNames`, so an enum-keyed map
 publishes its value schema and not the union its keys are drawn from; the union
-is still a component, because the walk reaches it.
+is still a component, because the walk reaches it. TypeScript can say it, and
+says it as `Partial<Record<Union, V>>` — a bare `Record<Union, V>` is a mapped
+type in which every member of the union is a *required* key, which a Kotlin
+`Map<SomeEnum, V>` is not. No contracted DTO has one today.
 
 ## Adding Code
 

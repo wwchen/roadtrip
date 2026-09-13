@@ -90,7 +90,9 @@ class WireTypeTest {
                 .single()
                 .type
         assertEquals(WireType.MapOf(WireType.EnumRef("FixtureFlavour"), WireType.Str), map)
-        assertEquals("Record<FixtureFlavour, string>", tsTypeOf(map))
+        // Partial, because `Record<Union, V>` would make every member of the union a
+        // required key and a Kotlin `Map<SomeEnum, V>` is routinely partial.
+        assertEquals("Partial<Record<FixtureFlavour, string>>", tsTypeOf(map))
     }
 
     @Test

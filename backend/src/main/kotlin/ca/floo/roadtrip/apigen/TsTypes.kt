@@ -29,11 +29,16 @@ internal data class TsBody(
  * One row of the emitted `API_ENDPOINTS` literal. [errors] carries the non-2xx
  * bodies the route can serialize, sorted by status then type so the row does not
  * move when the contract list is reordered.
+ *
+ * [requestRequired] is the row's `ApiEndpoint.requestRequired`, which the OpenAPI
+ * document publishes as `requestBody.required`. It is carried here too so the one
+ * walk stays the single source both renderers read.
  */
 internal data class TsEndpoint(
     val method: String,
     val path: String,
     val request: String?,
+    val requestRequired: Boolean,
     val success: TsBody,
     val errors: List<TsBody>,
 )

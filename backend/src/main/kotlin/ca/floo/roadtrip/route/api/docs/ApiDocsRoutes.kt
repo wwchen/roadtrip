@@ -69,8 +69,10 @@ private fun Application.roadtripOpenApiDoc(): OpenApiDoc =
  * `OpenApiDocSource` is sealed, so the pass has to happen inside `Routing`'s two
  * hooks — and Ktor hands the application to `routes` and not to `serializeModel`,
  * which is why the access lookup is captured between them. `read` invokes the two
- * in that order, on the same call, so `serializeModel` always sees the lookup the
- * matching `routes` pass stored.
+ * in that order, so `serializeModel` always sees an equivalent lookup: the
+ * reference is shared across calls rather than held per call, and two concurrent
+ * fetches can interleave, but every lookup either pass stores is
+ * `routingRoot.declaredAccessByLeaf()` over the same `Application`.
  */
 private fun roadtripOpenApiSource(): OpenApiDocSource {
     val access = AtomicReference<(ApiMethod, String) -> RouteAccess?>(null)

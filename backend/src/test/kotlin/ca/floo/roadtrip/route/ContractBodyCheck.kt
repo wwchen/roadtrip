@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.route
 
+import ca.floo.roadtrip.model.api.ApiBody
 import ca.floo.roadtrip.model.api.ApiContract
+import ca.floo.roadtrip.model.api.ApiEndpoint
 import ca.floo.roadtrip.model.api.bodyAt
 import ca.floo.roadtrip.model.api.guardBodies
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
@@ -15,6 +17,8 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.Hook
 import io.ktor.server.application.createApplicationPlugin
+import io.ktor.server.request.httpMethod
+import io.ktor.server.request.path
 import io.ktor.server.response.ApplicationSendPipeline
 import io.ktor.server.routing.HttpMethodRouteSelector
 import io.ktor.server.routing.OpenApiRoutePathFormat
@@ -29,6 +33,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.serializer
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.reflect.KClass
@@ -47,7 +52,48 @@ internal const val LEDGER_VIOLATION = "VIOLATION"
  */
 internal const val LEDGER_EXPECTED_VIOLATION = "EXPECTED_VIOLATION"
 
+/**
+ * A pass a fixture app produced. Also its own kind, for the same reason the
+ * violations are: a fixture mounts a stub handler on a real row's path, so
+ * counting its success as coverage would let `ContractLedgerCheck` call a row
+ * covered that no real route test ever produced. Recorded rather than dropped so
+ * the ledger stays a full record of what the run checked.
+ */
+internal const val LEDGER_EXPECTED_EXERCISED = "EXPECTED_EXERCISED"
+
+/**
+ * The first line of a ledger, carrying [contractDigest]. The gate refuses a
+ * ledger whose digest does not match the contract on its own classpath, which is
+ * what stops `:backend:contractLedgerCheck` verifying yesterday's file.
+ */
+internal const val LEDGER_DIGEST_KIND = "CONTRACT"
+
 internal const val LEDGER_FIELD_SEPARATOR = "\t"
+
+private const val DIGEST_ALGORITHM = "SHA-256"
+private const val HEX_BYTE = "%02x"
+
+/**
+ * Everything about [endpoints] the ledger's verdict depends on: each row's verb
+ * and path, every status it declares and the class at that status, and whether
+ * its request body is required.
+ *
+ * Order-sensitive on purpose — a reordered contract is still a changed contract
+ * for a reader diffing the two — and it deliberately ignores `conditional`, which
+ * says what a boot must mount and nothing about what a test produced.
+ */
+internal fun contractDigest(endpoints: List<ApiEndpoint> = ApiContract.endpoints): String {
+    val canonical =
+        endpoints.joinToString("\n") { row ->
+            val bodies =
+                (listOf(row.success) + row.errors).joinToString(",") { "${it.status}=${it.body?.qualifiedName}" }
+            "${row.method.wireValue} ${row.path} required=${row.requestRequired} [$bodies]"
+        }
+    return MessageDigest
+        .getInstance(DIGEST_ALGORITHM)
+        .digest(canonical.toByteArray())
+        .joinToString("") { HEX_BYTE.format(it) }
+}
 
 /**
  * The status a drifted response is rewritten to.
@@ -139,13 +185,71 @@ internal val ContractBodyCheck =
             (context as? RoutingPipelineCall)?.route?.matchedRoute()?.let { context.attributes.put(matchedRouteKey, it) }
         }
         on(ResponseRendered) { call, content ->
-            if (content.contentType?.withoutParameters() != ContentType.Application.Json) return@on null
-            val matched = call.matchedRoute() ?: return@on null
+            val matched = call.contractRoute(content) ?: return@on null
             ContractLedger
                 .check(matched.leaf, matched.access, call.sendStatusOf(content), content, fixture)
                 ?.let { TextContent(it, ContentType.Text.Plain, HttpStatusCode(CONTRACT_DRIFT_STATUS, CONTRACT_DRIFT_REASON)) }
         }
     }
+
+/** The two top-level types a JSON media type can carry, spelled by Ktor rather than by hand. */
+@Suppress("TopLevelPropertyNaming")
+private val JSON_TYPES = setOf(ContentType.Application.Json.contentType, ContentType.Text.Plain.contentType)
+
+private const val JSON_SUBTYPE = "json"
+private const val JSON_SUBTYPE_SUFFIX = "+json"
+
+/**
+ * Whether this is a media type the check can read as JSON.
+ *
+ * `application/json` is the one this tree serves today, but a `+json` subtype is
+ * the obvious next one — RFC 7807's `application/problem+json` for a refusal,
+ * `application/geo+json` for the feature collections, which `RoadtripRouting`
+ * already configures gzip for. Matching only the exact type meant a contracted
+ * route adopting one would lose its body check with no signal at all.
+ */
+private fun ContentType.isJson(): Boolean =
+    contentType in JSON_TYPES &&
+        (contentSubtype == JSON_SUBTYPE || contentSubtype.endsWith(JSON_SUBTYPE_SUFFIX))
+
+private fun OutgoingContent.isJson(): Boolean = contentType?.withoutParameters()?.isJson() == true
+
+/**
+ * The row this response is answerable to.
+ *
+ * Normally the leaf routing matched, stashed on the way in. A JSON response with
+ * no leaf at all is the case H1's fix does not reach — a plugin that refuses a
+ * call before routing binds a node, which `StatusPages` then answers — so the
+ * request's own method and path are resolved against the contract's templates
+ * instead. Only an unambiguous match counts: `/api/pois/search` is matched by
+ * both its own row and `/api/pois/{id}`, and guessing between them would check a
+ * body against the wrong DTO.
+ */
+private fun ApplicationCall.contractRoute(content: OutgoingContent): MatchedRoute? =
+    matchedRoute() ?: takeIf { content.isJson() }?.contractRouteByRequest()
+
+private fun ApplicationCall.contractRouteByRequest(): MatchedRoute? {
+    val method = request.httpMethod.value
+    val segments = request.path().segments()
+    return ApiContract.endpoints
+        .filter { it.method.wireValue == method && it.path.segments().matches(segments) }
+        .singleOrNull()
+        // No access level: nothing bound a routing node, so nothing declared one.
+        ?.let { MatchedRoute(RouteLeaf(it.method.wireValue, it.path), access = null) }
+}
+
+private const val PATH_SEPARATOR = '/'
+private const val TEMPLATE_OPEN = '{'
+private const val TEMPLATE_CLOSE = '}'
+
+private fun String.segments(): List<String> = trim(PATH_SEPARATOR).split(PATH_SEPARATOR)
+
+/** A `{x}` template segment matches exactly one request segment; every other segment matches itself. */
+private fun List<String>.matches(segments: List<String>): Boolean =
+    size == segments.size &&
+        zip(segments).all { (template, segment) ->
+            (template.startsWith(TEMPLATE_OPEN) && template.endsWith(TEMPLATE_CLOSE)) || template == segment
+        }
 
 /**
  * The status [content] will be sent with.
@@ -212,7 +316,8 @@ internal object ContractLedger {
     private val rowsByLeaf = ApiContract.endpoints.associateBy { RouteLeaf(it.method.wireValue, it.path) }
     private val serializers = ConcurrentHashMap<KClass<*>, KSerializer<Any?>>()
     private val ledgerFile = System.getProperty(CONTRACT_LEDGER_PROPERTY)?.let(::File)
-    private val exercised = ConcurrentHashMap.newKeySet<Triple<String, String, Int>>()
+    private val exercised = ConcurrentHashMap.newKeySet<List<String>>()
+    private val exercisedKinds = setOf(LEDGER_EXERCISED, LEDGER_EXPECTED_EXERCISED)
     private val violations = CopyOnWriteArrayList<String>()
     private val lock = Any()
 
@@ -234,16 +339,16 @@ internal object ContractLedger {
         // The access guard refuses before any handler runs, and a row must not
         // restate what the level already declares, so its 401 and 403 count as
         // declared here exactly as the OpenAPI document publishes them.
-        val declared =
-            row.bodyAt(status)
-                ?: access?.guardBodies()?.firstOrNull { it.status == status }
-                ?: return fail(
-                    leaf,
-                    status,
-                    fixture,
-                    "the contract declares no body at $status. Add an ApiBody($status, …) to the row in " +
-                        "model/api/ApiContract.kt, or stop serving that status.",
-                )
+        val declared = row.bodyAt(status) ?: access?.guardBodies()?.firstOrNull { it.status == status }
+        if (!content.isJson()) return unreadable(leaf, status, declared, content, fixture)
+        declared
+            ?: return fail(
+                leaf,
+                status,
+                fixture,
+                "the contract declares no body at $status. Add an ApiBody($status, …) to the row in " +
+                    "model/api/ApiContract.kt, or stop serving that status.",
+            )
         val expected =
             declared.body
                 ?: return fail(leaf, status, fixture, "the contract declares $status as body-less, but the route sent JSON.")
@@ -261,8 +366,40 @@ internal object ContractLedger {
                         "Respond with a DTO or respondEncodedJson so the body is TextContent.",
                 )
         compare(leaf, status, expected, body)?.let { return fail(leaf, status, fixture, it) }
-        record(LEDGER_EXERCISED, leaf, status, requireNotNull(expected.qualifiedName))
+        record(
+            if (fixture) LEDGER_EXPECTED_EXERCISED else LEDGER_EXERCISED,
+            leaf,
+            status,
+            requireNotNull(expected.qualifiedName),
+        )
         return null
+    }
+
+    /**
+     * What a response the check cannot read as JSON means on a contracted row.
+     *
+     * A status the row declares a *body* at has to arrive as JSON — that is the
+     * whole claim the row makes — so anything else is drift. A status it declares
+     * body-less, or does not declare at all, is another matter: Slack's empty
+     * `text/plain` acks and Ktor's own plain-text refusals are not this check's
+     * business, and a skip is the honest answer.
+     */
+    private fun unreadable(
+        leaf: RouteLeaf,
+        status: Int,
+        declared: ApiBody?,
+        content: OutgoingContent,
+        fixture: Boolean,
+    ): String? {
+        val expected = declared?.body ?: return null
+        return fail(
+            leaf,
+            status,
+            fixture,
+            "the contract declares ${expected.qualifiedName} at $status, but the route answered " +
+                "${content.contentType}, which the check cannot read as JSON. Serve the DTO as JSON, " +
+                "or take the body off the row.",
+        )
     }
 
     /** What is wrong with [body] as an [expected], or null when nothing is. */
@@ -310,11 +447,18 @@ internal object ContractLedger {
         val file = ledgerFile ?: return
         // One line per exercised triple, not per response: the gate reads them into
         // a set, and every route test would otherwise append to one locked file at
-        // its response boundary. Violations are always written.
-        if (kind == LEDGER_EXERCISED && !exercised.add(Triple(leaf.method, leaf.path, status))) return
+        // its response boundary. Keyed by kind as well, so a fixture's pass on a
+        // path never suppresses the real route test's line for the same triple.
+        // Violations are always written.
+        if (kind in exercisedKinds && !exercised.add(listOf(kind, leaf.method, leaf.path, status.toString()))) return
         val fields = listOf(kind, leaf.method, leaf.path, status.toString(), detail.replace('\n', ' '))
         synchronized(lock) {
             file.parentFile?.mkdirs()
+            // The digest goes in first, once, so the gate can tell whether the
+            // contract on its classpath is the one this run was checking.
+            if (file.length() == 0L) {
+                file.appendText(LEDGER_DIGEST_KIND + LEDGER_FIELD_SEPARATOR + contractDigest() + "\n")
+            }
             file.appendText(fields.joinToString(LEDGER_FIELD_SEPARATOR) + "\n")
         }
     }

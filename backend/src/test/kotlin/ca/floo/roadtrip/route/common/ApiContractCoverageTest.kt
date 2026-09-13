@@ -261,6 +261,44 @@ class ApiContractCoverageTest {
         }
     }
 
+    /**
+     * `requestRequired` is what the document publishes as `requestBody.required`,
+     * and the builder emits a `requestBody` only where the row names a request
+     * DTO. A `false` on a row with no request is therefore a statement about a
+     * document section that does not exist — dead data that reads as a decision.
+     */
+    @Test
+    fun `requestRequired is false only on a row that has a request`() {
+        assertEquals(
+            emptyList(),
+            ApiContract.endpoints
+                .filter { !it.requestRequired && it.request == null }
+                .map { "${it.method.wireValue} ${it.path}" },
+            "requestRequired says whether an existing requestBody is mandatory; a row with no request " +
+                "body publishes none either way.",
+        )
+    }
+
+    /**
+     * The two rows that tolerate an absent body, pinned by name. Both decode
+     * through `decodeOptionalTextJsonBody` and answer a blank one with a default,
+     * so a generated client told the body was mandatory would be wrong about a
+     * call the server serves. A third row joining them is a deliberate change.
+     */
+    @Test
+    fun `exactly the optional-body rows declare requestRequired false`() {
+        assertEquals(
+            listOf(
+                "POST /api/settings/notifications/slack/test",
+                "PUT /api/settings/notifications",
+            ),
+            ApiContract.endpoints
+                .filterNot { it.requestRequired }
+                .map { "${it.method.wireValue} ${it.path}" }
+                .sorted(),
+        )
+    }
+
     /** The ordering that matters: [bodyAt] reaches the success body for its own status. */
     @Test
     fun `bodyAt answers the success body and nothing for an undeclared status`() {

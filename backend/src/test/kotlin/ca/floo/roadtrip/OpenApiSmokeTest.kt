@@ -278,7 +278,12 @@ class OpenApiSmokeTest {
             val uiSpec = Json.parseToJsonElement(client.get(UI_SPEC_PATH).bodyAsText()).jsonObject
             assertEquals(contractSchemas().keys, uiSpec["components"]!!.jsonObject["schemas"]!!.jsonObject.keys)
             assertEquals(gated, responsesOf(uiSpec["paths"]!!.jsonObject, USER_GATED_PATH, "get"))
-            assertEquals(emptyMap(), uiSpec.getValue(WEBHOOKS_KEY).jsonObject)
+            // Present-and-empty is what Ktor puts there today; absent is equally
+            // fine and is what the other copy has. Either way it carries nothing,
+            // which is the claim — `getValue` would have thrown on the absent case
+            // instead of failing with a message.
+            val webhooks = uiSpec[WEBHOOKS_KEY]?.jsonObject
+            assertTrue(webhooks == null || webhooks.isEmpty(), "the UI copy declares webhooks: $webhooks")
             assertEquals(withoutEmptyWebhooks(spec), withoutEmptyWebhooks(uiSpec))
 
             // Every mounted row got its responses; nothing in the contracted

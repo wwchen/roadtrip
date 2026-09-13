@@ -30,12 +30,17 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val WATCHES = "/api/watches"
 private const val WATCH_DELETE = "/api/watches/{id}/delete"
 private const val FORCE_POLLER = "/api/availability/pollers/{id}/force"
+
+/** One of the two rows whose handler answers a blank body with a default. */
+private const val NOTIFICATIONS = "/api/settings/notifications"
+
 private const val SCHEMA_PREFIX = "#/components/schemas/"
 private const val API_ERROR_REF = "${SCHEMA_PREFIX}ApiErrorSchema"
 
@@ -63,6 +68,22 @@ class OpenApiContractDocumentTest {
         assertEquals("${SCHEMA_PREFIX}AvailabilityWatchResponse", schemaRef(responses.getValue("201")))
         assertEquals(API_ERROR_REF, schemaRef(responses.getValue("401")))
         assertTrue("200" !in responses.keys, "the success status is 201, so no 200 is published: ${responses.keys}")
+    }
+
+    /**
+     * `required` is the row's own answer. `PUT /api/settings/notifications`
+     * decodes through `decodeOptionalTextJsonBody` and answers a blank body with
+     * `UpdateNotificationsRequest()`, so publishing a mandatory body would tell a
+     * generated client the opposite of what the server does — and the DTO is
+     * all-optional, which would have made it a mandatory body with no mandatory
+     * fields.
+     */
+    @Test
+    fun `a row whose handler tolerates an absent body publishes required false`() {
+        val doc = applied(NOTIFICATIONS to PathItem(put = Operation()))
+        val requestBody = operation(doc, NOTIFICATIONS, "put").getValue("requestBody").jsonObject
+        assertEquals("${SCHEMA_PREFIX}UpdateNotificationsRequest", schemaRef(requestBody))
+        assertFalse(requestBody.getValue("required").jsonPrimitive.boolean, "the handler defaults a blank body")
     }
 
     @Test
@@ -100,7 +121,9 @@ class OpenApiContractDocumentTest {
             OpenApiContractDocument.apply(
                 docWith("/api/health" to PathItem(get = Operation())),
             ) { _, _ -> RouteAccess.Anonymous }
-        assertEquals(setOf("200", "400"), responses(doc, "/api/health", "get").keys)
+        // The liveness row declares nothing but its 200, so the published set is
+        // exactly what the row says and the level adds nothing.
+        assertEquals(setOf("200"), responses(doc, "/api/health", "get").keys)
     }
 
     @Test
@@ -109,7 +132,7 @@ class OpenApiContractDocumentTest {
             OpenApiContractDocument.apply(
                 docWith("/api/health" to PathItem(get = Operation())),
             ) { _, _ -> RouteAccess.HasRole(Role.ADMIN) }
-        assertEquals(setOf("200", "400", "401", "403"), responses(doc, "/api/health", "get").keys)
+        assertEquals(setOf("200", "401", "403"), responses(doc, "/api/health", "get").keys)
     }
 
     @Test

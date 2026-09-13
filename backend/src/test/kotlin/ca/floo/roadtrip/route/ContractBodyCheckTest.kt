@@ -10,8 +10,10 @@ import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.call
 import io.ktor.server.plugins.BadRequestException
+import io.ktor.server.request.path
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -22,15 +24,21 @@ import kotlin.test.assertTrue
 
 private const val BUILD_INFO = "/api/build-info"
 
+/** A row that declares `400 ApiErrorSchema` — `/api/build-info` declares nothing but its 200. */
+private const val GEOCODE = "/api/geocode"
+
 /** The one row that declares nothing at all at 400, so a `StatusPages` 400 on it is undeclared. */
 private const val SLACK_INTERACTIVITY = "/api/slack/interactivity"
 
 /** A body shaped like `HealthResponseDto`, which is not the class the `/api/build-info` row names. */
 private const val WRONG_DTO_BODY = """{"status":"ok","now":17}"""
 
+/** RFC 7807's media type: a `+json` subtype the check has to read as JSON. */
+private val problemJson = ContentType("application", "problem+json")
+
 /**
  * The check behind the harness, driven through `/api/build-info` — a row with a
- * three-field success DTO and the default `400 ApiErrorSchema`, so each failure
+ * three-field success DTO and no declared error at all, so each failure
  * mode is a one-line change to what the handler sends.
  *
  * Drift does not throw: a send-pipeline throw never reaches the client, since
@@ -116,7 +124,7 @@ class ContractBodyCheckTest {
         testApplication {
             application {
                 routeTestApplication(fixture = true) {
-                    get(BUILD_INFO) {
+                    get(GEOCODE) {
                         // Decodes fine — `detail` is nullable — but the one encoder omits a
                         // null rather than writing it, so the two trees differ.
                         call.respondText(
@@ -127,8 +135,33 @@ class ContractBodyCheckTest {
                     }.access(RouteAccess.Anonymous)
                 }
             }
-            assertDrifted(client.get(BUILD_INFO).status)
-            violation("GET $BUILD_INFO -> 400", "re-encoded")
+            assertDrifted(client.get(GEOCODE).status)
+            violation("GET $GEOCODE -> 400", "re-encoded")
+        }
+
+    /**
+     * A `+json` subtype is JSON. The gate once compared the media type to
+     * `application/json` exactly, so an RFC 7807 refusal on a contracted row was
+     * skipped silently — no violation, no ledger line — and the row's declared
+     * error would have disappeared from everything that checks it.
+     */
+    @Test
+    fun `a problem+json body is read as JSON and checked against the row`() =
+        testApplication {
+            application {
+                routeTestApplication(fixture = true) {
+                    get(GEOCODE) {
+                        call.respondText(
+                            """{"error":"boom","surprise":1}""",
+                            problemJson,
+                            HttpStatusCode.BadRequest,
+                        )
+                    }.access(RouteAccess.Anonymous)
+                }
+            }
+            assertDrifted(client.get(GEOCODE).status)
+            val message = violation("GET $GEOCODE -> 400", "surprise")
+            assertTrue(message.contains("strict-decode"), message)
         }
 
     /**
@@ -165,15 +198,63 @@ class ContractBodyCheckTest {
             assertEquals(HttpStatusCode.OK, client.get("/test/anything").status)
         }
 
+    /**
+     * The row declares `BuildInfoDto` at 200, so a `text/plain` 200 is a row the
+     * check can no longer read — which is drift, not a skip. Skipping it meant a
+     * contracted route could stop serving JSON entirely and the only signal would
+     * be the ledger gate calling its success body unexercised.
+     */
     @Test
-    fun `a non-JSON body is ignored`() =
+    fun `a non-JSON body on a status the row declares a body at is drift`() =
         testApplication {
             application {
                 routeTestApplication(fixture = true) {
                     get(BUILD_INFO) { call.respondText("not json at all") }.access(RouteAccess.Anonymous)
                 }
             }
-            assertEquals(HttpStatusCode.OK, client.get(BUILD_INFO).status)
+            assertDrifted(client.get(BUILD_INFO).status)
+            violation("GET $BUILD_INFO -> 200", "cannot read as JSON")
+        }
+
+    /**
+     * The other half of the same rule: the Slack row's answers are empty
+     * `text/plain` bodies Slack only reads the status of, and it declares no body
+     * at 200. Nothing to read means nothing to check.
+     */
+    @Test
+    fun `a non-JSON body on a status the row declares body-less is ignored`() =
+        testApplication {
+            application {
+                routeTestApplication(fixture = true) {
+                    post(SLACK_INTERACTIVITY) { call.respondText("") }.access(RouteAccess.Anonymous)
+                }
+            }
+            assertEquals(HttpStatusCode.OK, client.post(SLACK_INTERACTIVITY).status)
+        }
+
+    /**
+     * H1's fix stashes the leaf routing matched, so a plugin that refuses a call
+     * *before* routing binds a node left the `StatusPages` answer unchecked — 400
+     * with `ApiErrorSchema` on the one row that declares nothing at 400, and the
+     * client saw the 400. Nothing in `installRoadtripPlugins` throws that early
+     * today; the first rate limiter or signature check would. With no leaf to
+     * read, the request's own method and path resolve against the contract.
+     */
+    @Test
+    fun `a refusal thrown before routing is checked against the row the path resolves to`() =
+        testApplication {
+            application {
+                routeTestApplication(fixture = true) {
+                    get(BUILD_INFO) {
+                        call.respondEncodedJson(BuildInfoDto(env = "test", sha = "abc", branch = "master"))
+                    }.access(RouteAccess.Anonymous)
+                }
+                intercept(ApplicationCallPipeline.Plugins) {
+                    if (call.request.path() == BUILD_INFO) throw BadRequestException("thrown before routing")
+                }
+            }
+            assertDrifted(client.get(BUILD_INFO).status)
+            violation("GET $BUILD_INFO -> 400", "declares no body")
         }
 
     @Test

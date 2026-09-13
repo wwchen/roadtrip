@@ -37,6 +37,15 @@ data class ApiBody(
  * `password/complete`, and the two rows whose refusal vocabulary is richer than
  * their access level.
  *
+ * [errors] has no default. It once defaulted to `400 ApiErrorSchema`, which meant
+ * a row acquired a published 400 by saying nothing at all — and the contract is
+ * one-directional, so nothing could see an error the route cannot serve. Every
+ * row now states its errors, `emptyList()` included, read off the handler.
+ *
+ * [requestRequired] is what the document publishes as `requestBody.required`. It
+ * is true for almost every row; `false` belongs to a handler that reads the body
+ * through `decodeOptionalTextJsonBody` and answers a blank one with a default.
+ *
  * [conditional] marks a route mounted only under some configuration, which the
  * boot guard must not require and the document builder skips when absent.
  */
@@ -45,7 +54,8 @@ data class ApiEndpoint(
     val path: String,
     val request: KClass<*>? = null,
     val success: ApiBody,
-    val errors: List<ApiBody> = listOf(ApiBody(HTTP_BAD_REQUEST, ApiErrorSchema::class)),
+    val errors: List<ApiBody>,
+    val requestRequired: Boolean = true,
     val conditional: Boolean = false,
 )
 
@@ -159,6 +169,9 @@ object ApiContract {
                 ApiMethod.GET,
                 "/api/me",
                 success = ApiBody(HTTP_OK, MeResponseDto::class),
+                // AuthRoutes.kt:193 answers one of three MeResponseDto shapes and reads
+                // no parameter and no body: nothing it does can reach a 400.
+                errors = emptyList(),
             ),
             ApiEndpoint(
                 ApiMethod.GET,
@@ -179,6 +192,9 @@ object ApiContract {
                 UpdateNotificationsRequest::class,
                 ApiBody(HTTP_OK, SettingsResponseDto::class),
                 settingsErrors,
+                // SettingsRoutes.kt:65 decodes through decodeOptionalTextJsonBody and
+                // answers a blank body with UpdateNotificationsRequest().
+                requestRequired = false,
             ),
             ApiEndpoint(
                 ApiMethod.DELETE,
@@ -192,6 +208,9 @@ object ApiContract {
                 SlackTestRequest::class,
                 ApiBody(HTTP_OK, SlackTestResponseDto::class),
                 settingsErrors,
+                // SettingsRoutes.kt:89, the same optional-body decode: an absent body is
+                // SlackTestRequest(), which is the "test the stored webhook" call.
+                requestRequired = false,
             ),
             ApiEndpoint(
                 ApiMethod.POST,
@@ -257,11 +276,16 @@ object ApiContract {
                 "/api/pois",
                 PoisRequestSchema::class,
                 ApiBody(HTTP_OK, PoiFeatureCollectionSchema::class),
+                // PoiRoutes.kt:57 answers an unparseable body or an out-of-range bbox.
+                apiErrors(HTTP_BAD_REQUEST),
             ),
             ApiEndpoint(
                 ApiMethod.GET,
                 "/api/pois/search",
                 success = ApiBody(HTTP_OK, PoiSearchResponseSchema::class),
+                // PoiRoutes.kt:89 reads q, limit and categories through helpers that
+                // coerce rather than refuse; a missing or malformed one is not a 400.
+                errors = emptyList(),
             ),
             ApiEndpoint(
                 ApiMethod.GET,
@@ -309,6 +333,8 @@ object ApiContract {
                 ApiMethod.GET,
                 "/api/watches",
                 success = ApiBody(HTTP_OK, AvailabilityWatchListResponse::class),
+                // AvailabilityWatchRoutes.kt:49 refuses a ?status= outside the vocabulary.
+                errors = apiErrors(HTTP_BAD_REQUEST),
             ),
             ApiEndpoint(
                 ApiMethod.POST,
@@ -340,16 +366,23 @@ object ApiContract {
                 ApiMethod.GET,
                 "/api/availability/pollers",
                 success = ApiBody(HTTP_OK, AvailabilityPollersListResponse::class),
+                // AvailabilityDashboardRoutes.kt:42 refuses an ?active= that is neither
+                // true nor false; limit and offset are coerced, not refused.
+                errors = apiErrors(HTTP_BAD_REQUEST),
             ),
             ApiEndpoint(
                 ApiMethod.GET,
                 "/api/availability/pollers/summary",
                 success = ApiBody(HTTP_OK, AvailabilityPollersSummary::class),
+                // AvailabilityDashboardRoutes.kt:58 reads nothing off the call.
+                errors = emptyList(),
             ),
             ApiEndpoint(
                 ApiMethod.GET,
                 "/api/availability/pollers/{id}/runs",
                 success = ApiBody(HTTP_OK, AvailabilityRunsListResponse::class),
+                // AvailabilityDashboardRoutes.kt:67 refuses an unparseable {id}.
+                errors = apiErrors(HTTP_BAD_REQUEST),
             ),
             ApiEndpoint(
                 ApiMethod.POST,
@@ -363,6 +396,9 @@ object ApiContract {
                 ApiMethod.GET,
                 "/api/availability/runs",
                 success = ApiBody(HTTP_OK, AvailabilityRunsListResponse::class),
+                // AvailabilityDashboardRoutes.kt:92 parses every filter leniently — an
+                // unreadable ?since= or ?poller_id= is dropped, not refused.
+                errors = emptyList(),
             ),
             ApiEndpoint(
                 ApiMethod.GET,
@@ -396,21 +432,25 @@ object ApiContract {
                 ApiMethod.GET,
                 "/api/build-info",
                 success = ApiBody(HTTP_OK, BuildInfoDto::class),
+                // BuildInfoRoutes.kt:15 reads three config strings and responds. No body,
+                // no parameter, no throw: no StatusPages mapping can fire on it.
+                errors = emptyList(),
             ),
             ApiEndpoint(
                 ApiMethod.GET,
                 "/api/health",
                 success = ApiBody(HTTP_OK, HealthResponseDto::class),
+                // HealthRoutes.kt:32 is the liveness probe: a clock read and a DTO.
+                errors = emptyList(),
             ),
             ApiEndpoint(
                 ApiMethod.GET,
                 "/api/health/ready",
                 // The readiness probe answers the same DTO at both statuses: 503 is the
-                // load balancer's signal, not a different shape.
+                // load balancer's signal, not a different shape. HealthRoutes.kt:37 reads
+                // nothing off the call, so 503 is the only non-2xx it can reach.
                 success = ApiBody(HTTP_OK, ReadinessResponseDto::class),
-                errors =
-                    apiErrors(HTTP_BAD_REQUEST) +
-                        ApiBody(HTTP_SERVICE_UNAVAILABLE, ReadinessResponseDto::class),
+                errors = listOf(ApiBody(HTTP_SERVICE_UNAVAILABLE, ReadinessResponseDto::class)),
             ),
             ApiEndpoint(
                 ApiMethod.POST,
@@ -436,6 +476,8 @@ object ApiContract {
                 ApiMethod.GET,
                 "/api/admin/data/runs",
                 success = ApiBody(HTTP_OK, RunsListSchema::class),
+                // AdminIngestRoutes.kt:74 passes ?target= straight through as a filter.
+                errors = emptyList(),
             ),
             ApiEndpoint(
                 ApiMethod.GET,
@@ -453,6 +495,8 @@ object ApiContract {
                 ApiMethod.GET,
                 "/api/admin/data/status",
                 success = ApiBody(HTTP_OK, StatusResponseSchema::class),
+                // AdminIngestRoutes.kt:96 reads nothing off the call.
+                errors = emptyList(),
             ),
             ApiEndpoint(
                 ApiMethod.POST,

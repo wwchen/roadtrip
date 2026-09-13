@@ -15,6 +15,12 @@ private const val TS_JSON_PRIMITIVE = "string | number | boolean"
  *
  * Both [WireType.Num] arms render `number`: the ids are database bigints that
  * stay well below 2^53, and TypeScript has no integer type to narrow them to.
+ *
+ * A map keyed by an enum renders `Partial<Record<…>>`. `Record<Union, V>` is a
+ * mapped type in which every member of the union is a *required* key, and a
+ * Kotlin `Map<SomeEnum, V>` is routinely partial — so the bare form would be the
+ * mirror image of the JSON Schema note in `JsonSchemaRender.kt`, which documents
+ * the key union rather than declaring it: too loose there, too strict here.
  */
 internal fun tsTypeOf(type: WireType): String =
     when (type) {
@@ -28,5 +34,10 @@ internal fun tsTypeOf(type: WireType): String =
         is WireType.Ref -> type.name
         is WireType.EnumRef -> type.name
         is WireType.ArrayOf -> "${tsTypeOf(type.element)}[]"
-        is WireType.MapOf -> "Record<${tsTypeOf(type.key)}, ${tsTypeOf(type.value)}>"
+        is WireType.MapOf -> mapType(type)
     }
+
+private fun mapType(type: WireType.MapOf): String {
+    val record = "Record<${tsTypeOf(type.key)}, ${tsTypeOf(type.value)}>"
+    return if (type.key is WireType.EnumRef) "Partial<$record>" else record
+}

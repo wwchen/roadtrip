@@ -28,7 +28,8 @@ private const val GENERATED_HEADER =
 //
 // Each API_ENDPOINTS row states the status of every body it can serve. 401 and
 // 403 are absent wherever the route's declared access level supplies them; see
-// /api/docs/openapi.json for the merged picture.
+// /api/docs/openapi.json for the merged picture. `requestRequired` is false on
+// the rows whose handler answers a blank body with a default.
 """
 
 @Suppress("TopLevelPropertyNaming")
@@ -41,12 +42,18 @@ private val IDENTIFIER = Regex("^[A-Za-z_$][A-Za-z0-9_$]*$")
  * with — no row names them, and the OpenAPI builder publishes them on each
  * gated operation, so the walk claims them here rather than letting the
  * reference site re-derive a name the collision map never approved.
+ *
+ * [serialNames] is every serial name the walk declared a type for, under either
+ * optionality. The generated names are lossy — two packages render the same
+ * TypeScript name and the walk refuses them — so the origin is carried here for
+ * the one guard that has to reason about where a reached type lives.
  */
 internal data class ContractWalk(
     val interfaces: List<TsInterface>,
     val enums: List<TsEnum>,
     val rows: List<TsEndpoint>,
     val guardSchemas: Map<KClass<*>, String>,
+    val serialNames: Set<String>,
 )
 
 /**
@@ -71,6 +78,7 @@ internal fun walkContract(endpoints: List<ApiEndpoint> = ApiContract.endpoints):
                 method = endpoint.method.wireValue,
                 path = endpoint.path,
                 request = endpoint.request?.let { requests.declaredName(it) },
+                requestRequired = endpoint.requestRequired,
                 success =
                     TsBody(
                         endpoint.success.status,
@@ -92,6 +100,8 @@ internal fun walkContract(endpoints: List<ApiEndpoint> = ApiContract.endpoints):
         enums = (responses.enums + requests.enums).values.toList(),
         rows = rows,
         guardSchemas = guardSchemas,
+        serialNames =
+            responses.interfaces.keys + responses.enums.keys + requests.interfaces.keys + requests.enums.keys,
     )
 }
 
@@ -192,6 +202,7 @@ private fun renderEndpoints(endpoints: List<TsEndpoint>): String =
         endpoints.forEach { endpoint ->
             append("  { method: '${endpoint.method}', path: '${endpoint.path}'")
             append(", request: ${quoted(endpoint.request)}")
+            append(", requestRequired: ${endpoint.requestRequired}")
             append(", success: ${renderBody(endpoint.success)}")
             append(", errors: [${endpoint.errors.joinToString(transform = ::renderBody)}] },\n")
         }
