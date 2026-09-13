@@ -148,14 +148,11 @@ export function TripResults(props: TripResultsProps) {
   );
 }
 
-/** "3 of 12" only while something is filtered out — otherwise the second number is noise. */
+/** "3 of 12" only while something is filtered out or capped — otherwise the second number is noise. */
 function countLine(props: TripResultsProps, visible: TripCard[], total: number): string {
-  // The rendered list is capped below the true viewport count: report against
-  // that whole count rather than the (already-truncated) list length.
-  if (props.variant === 'viewport' && visible.length < props.totalInView) {
-    return `· ${visible.length} of ${props.totalInView}`;
-  }
-  const count = visible.length === total ? String(total) : `${visible.length} of ${total}`;
+  const capped = props.variant === 'viewport' && total < props.totalInView;
+  const denominator = capped ? props.totalInView : total;
+  const count = visible.length === denominator ? String(denominator) : `${visible.length} of ${denominator}`;
   if (props.variant === 'route') return `· ${count}`;
   // The checkable count waits for every visible card, so it never counts up from 0.
   if (visible.length === 0 || !visible.every((card) => card.hydrated)) return `· ${count}`;

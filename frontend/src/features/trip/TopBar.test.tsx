@@ -1014,6 +1014,21 @@ describe('the in-view list', () => {
     await waitFor(() => expect(screen.getByText('· 2 · 1 checkable online')).toBeInTheDocument());
   });
 
+  test('keeps the checkable count when an agency is hidden', async () => {
+    withViewport();
+    mount();
+
+    await waitFor(() => expect(screen.getByText('Bowman Bay')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Denny Creek')).toBeInTheDocument());
+
+    act(() => {
+      useMapStore.getState().setAgencyHidden('USFS', true);
+    });
+
+    expect(screen.getByText('· 1 of 2 · 1 checkable online')).toBeInTheDocument();
+    expect(screen.queryByText('Denny Creek')).toBeNull();
+  });
+
   test('says to zoom in before campgrounds are requested', () => {
     withViewport();
     useMapStore.setState({ viewportCampgrounds: [], campgroundsRequested: false });
@@ -1108,5 +1123,8 @@ describe('the in-view list', () => {
 
     await waitFor(() => expect(document.querySelectorAll('.tb-card').length).toBe(50));
     expect(screen.getByText(/50 of 60/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText(/^· 50 of 60 · \d+ checkable online$/)).toBeInTheDocument(),
+    );
   });
 });
