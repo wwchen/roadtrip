@@ -113,8 +113,11 @@ Session-only; no URL or localStorage persistence. `activeFilterCount` is a selec
 - `TripCard` gains `amenities: readonly { key: string; label: string; present: boolean }[]`, copied
   from the POI detail's `amenities` in `hydrateCard`.
 - Amenity chips exposed: `toilets`, `showers`, `water`, `pets_allowed`, listed in a named
-  `FILTER_AMENITY_KEYS` const. Chip labels come from the first hydrated card that carries the
-  key, falling back to a local label table that mirrors `AmenityKey` for keys no card in view has.
+  `FILTER_AMENITY_KEYS` const. Chip and segment labels come from one frontend table,
+  `lib/campground-vocab.ts`, that mirrors the backend's `AmenityKey.label` and
+  `CampsiteKind.label` wire-to-label pairs for the exposed values ("Toilets", "Showers",
+  "Water", "Pets allowed"; "Tent", "RV", "Cabin"). Facet labels on a card prefer the label the
+  detail response carries and fall back to the table.
 
 ### Facets
 
