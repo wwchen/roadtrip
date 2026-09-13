@@ -87,8 +87,18 @@ class AspiraCampsitesEtlTest {
                 },
                 "aspectType": 0
               },
+              null,
+              { "photoUrlResult": "nope", "aspectType": 0 },
+              { "photoUrlResult": { "url": {} }, "aspectType": 0 },
               { "aspectType": 0 },
-              { "photoUrlResult": { "url": "" }, "aspectType": 0 }
+              { "photoUrlResult": { "url": "" }, "aspectType": 0 },
+              {
+                "photoUrlResult": {
+                  "url": "https://washington.goingtocamp.com/images/2b1c0d9e-0000-4000-8000-000000000002.jpg",
+                  "avifUrl": "https://washington.goingtocamp.com/images/2b1c0d9e-0000-4000-8000-000000000002.avif"
+                },
+                "aspectType": 0
+              }
             ]
           }
         }
@@ -250,7 +260,10 @@ class AspiraCampsitesEtlTest {
         val campsite = records(etl.transform(dto, ctx)).single()
 
         assertEquals(
-            listOf(CatalogPhoto("https://washington.goingtocamp.com/images/07008492-6f89-47e1-acaf-d986cb314dbc.jpg")),
+            listOf(
+                CatalogPhoto("https://washington.goingtocamp.com/images/07008492-6f89-47e1-acaf-d986cb314dbc.jpg"),
+                CatalogPhoto("https://washington.goingtocamp.com/images/2b1c0d9e-0000-4000-8000-000000000002.jpg"),
+            ),
             campsite.photos,
         )
     }

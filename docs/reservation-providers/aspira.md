@@ -351,7 +351,7 @@ GET https://{host}/api/resourcelocation/resources
       {"attributeDefinitionId": -32714, "attributeId": -2147464258, "value": 11, "values": []},
       ...
     ],
-    "photos": [                              // site photos; url is the JPEG
+    "photos": [                              // site photos; url is the raster (jpg or png), avifUrl the AVIF
       {"photoUrlResult": {"url": "https://{host}/images/{uuid}.jpg", "avifUrl": "https://{host}/images/{uuid}.avif"}, "aspectType": 0}
     ],
     "mapIds": [-2147483464],                 // which leaf(s) this site belongs to

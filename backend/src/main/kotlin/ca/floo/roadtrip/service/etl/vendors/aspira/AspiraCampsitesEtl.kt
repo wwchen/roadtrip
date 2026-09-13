@@ -317,9 +317,7 @@ class AspiraCampsitesEtl(
     private fun resourcePhotos(obj: JsonObject): List<CatalogPhoto> =
         (obj[PHOTOS_FIELD] as? JsonArray).orEmpty().mapNotNull { entry ->
             val result = (entry as? JsonObject)?.get(PHOTO_URL_RESULT_FIELD) as? JsonObject
-            result
-                ?.get(PHOTO_URL_FIELD)
-                ?.jsonPrimitive
+            (result?.get(PHOTO_URL_FIELD) as? JsonPrimitive)
                 ?.contentOrNull
                 ?.takeIf { it.isNotBlank() }
                 ?.let(::CatalogPhoto)
