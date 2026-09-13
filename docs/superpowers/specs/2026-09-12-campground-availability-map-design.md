@@ -83,6 +83,103 @@ catalog season data and is a follow-up.
 4. **M4** — pins recolour by status, legend colour key with counts, Only ones we can check.
 5. **M5** — mobile parity (bottom sheet, folded filter summary, status strip, progress bar).
 
+## M2 design (2026-09-13)
+
+Approved in conversation on 2026-09-13. Frontend only; no backend, no generated-type edits.
+Every label the UI shows for a kind or amenity is the backend's own (`CampsiteKind.label`,
+`AmenityDto.label`); the mock's wording is not a source.
+
+### State: `campgroundFilterStore`
+
+A Zustand store under `frontend/src/stores/`, because the filters are read by the trip
+feature (M2), the polling layer (M3) and the map feature's pins and legend (M4), and features
+never import each other.
+
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `siteType` | `string \| null` | `null` | A `CampsiteKind` wire value; null is "Any". |
+| `groupSize` | `number \| null` | `null` | People count; null means the filter is off. First increment sets `MIN_GROUP_SIZE` (2). |
+| `amenities` | `string[]` | `[]` | `AmenityKey` wire values switched on. |
+| `dateWindow` | `{ start: string; end: string } \| null` | `null` | ISO dates. M2 stores it; M3 polls with it. |
+
+Setters: `setSiteType`, `setGroupSize`, `toggleAmenity`, `setDateWindow`, `clearFilters`, `reset`.
+Session-only; no URL or localStorage persistence. `activeFilterCount` is a selector.
+
+### Data
+
+- `SiteCounts` gains `byKind: Record<string, number>` and `maxPeople: number \| null` (max over
+  campsite `max_people`; null when no site carries one). Computed in `site-counts.ts` from the
+  campsites response M1 already fetches.
+- `TripCard` gains `amenities: readonly { key: string; label: string; present: boolean }[]`, copied
+  from the POI detail's `amenities` in `hydrateCard`.
+- Amenity chips exposed: `toilets`, `showers`, `water`, `pets_allowed`, listed in a named
+  `FILTER_AMENITY_KEYS` const. Chip labels come from the first hydrated card that carries the
+  key, falling back to a local label table that mirrors `AmenityKey` for keys no card in view has.
+
+### Facets
+
+`features/trip/facets.ts` is pure: `facetsFor(card, counts, filters): Facet[]`, where
+`Facet = { key, label, state: 'match' \| 'miss' \| 'no-data' }`. One facet per active filter,
+in the order site type, group size, amenities.
+
+| Filter | match | miss | no data |
+|---|---|---|---|
+| Site type | `byKind[type] > 0` | counts loaded and `byKind[type]` is 0 | catalog empty (`total === 0`) |
+| Group size | `maxPeople >= groupSize` | `maxPeople < groupSize` | `maxPeople === null` |
+| Amenity | listed with `present: true` | listed with `present: false` | key absent from the list |
+
+Facets render only once the card is hydrated and its counts have landed, the same rule as the
+M1 site count. No facet row at all when no filter is active. Nothing is ever removed from the
+list by a filter; the agency and layer visibility rules from M1 are the only removals.
+
+Facet labels: site type uses the kind label ("Tent"); group size reads "Up to N" on match or
+miss and "Group size" on no data; amenities use the amenity label. Icons: `check`, `close`,
+`help` from the sprite; colours `--rt-text`, `--rt-muted`, `--rt-faint`.
+
+### Count line and heads
+
+- Card count line with a type selected: `"{byKind[type]} {kindLabel} sites · {total} total"`
+  when the two differ, `"{total} {kindLabel} sites"` when equal, singular-aware. No type:
+  M1's `"{total} sites"`. Zero total renders no line (M1 rule).
+- Panel head under the filter pill: `"Campgrounds"` and `"{totalInView} in view"`.
+- List head is unchanged from M1: `· N · M checkable online`.
+
+### Controls
+
+Desktop only in M2 (mobile folding is M5). All through `@ui`:
+
+- **Filter campgrounds** pill under the search row with the hint "Then check dates". Toggles the
+  filter block; open state is local to `TopBar`. Shows a count badge when filters are active.
+- Site type: LDS `SegmentedControl`, options `Any` plus `CampsiteKind` labels for `tent`, `rv`,
+  `cabin`.
+- Group size: LDS has no stepper. `GroupSizeStepper` in `features/trip/`: minus and plus icon
+  `Button`s around the count, `aria-label`s "Fewer people" / "More people", clamped to
+  `[MIN_GROUP_SIZE, MAX_GROUP_SIZE]` (2..12); stepping below the minimum turns the filter off.
+  Storybook story required.
+- Amenities: LDS `Chip` with `selected`, one per exposed key.
+- **Check availability** banner: LDS `Banner` with the calendar icon, "Check availability" /
+  "Add dates to see which of these have a site." and an **Add dates** primary `Button`. Add dates
+  reveals two `type="date"` `TextField`s (Start date, End date) as the watch form does, plus
+  Save. Save writes `dateWindow` and the banner collapses to a summary,
+  "Fri Sep 11 → Sun Sep 13 · 2 nights", with Edit and Clear. End before start disables Save.
+  No network call.
+
+Copy goes in `lib/strings.ts` as `filterCopy`. New CSS goes in `features/trip/topbar.css`
+under `.tb-filters*` and `.tb-facet*`, tokens only.
+
+### Route list
+
+Unchanged. Filters, facets and the banner apply to the viewport variant only; the route variant
+does not fetch campsites and stays as M1 left it.
+
+### Viewport clipping (M1 follow-up)
+
+`useViewportPois` bucketed the whole cached response. The containment cache answers a sub-view
+with a superset, so after a card fly-to the list and legend counts described the wider, older
+view. Fix: clip features to the current request bbox before `bucketPins`, so map, list and
+legend agree. Point-in-bbox on the flat `[west, south, east, north]` the request already
+carries. Ships first as its own small PR.
+
 ## Out of scope for the issue
 
 - Creating availability watches from the result list.
