@@ -336,6 +336,26 @@ describe('the viewport request', () => {
   });
 });
 
+describe('the in-view campgrounds', () => {
+  test('are published to the store once campgrounds are requested', async () => {
+    poiResponses = [
+      collection([pin(9, 'tesla_supercharger')]),
+      collection([pin(1, 'campground', 'USFS'), pin(9, 'tesla_supercharger')]),
+    ];
+    await renderMap();
+    await waitFor(() => expect(poiRequests()).toHaveLength(1));
+    expect(useMapStore.getState().campgroundsRequested).toBe(false);
+    expect(useMapStore.getState().viewportCampgrounds).toEqual([]);
+
+    await panTo(BAY_AREA, 6);
+
+    await waitFor(() =>
+      expect(useMapStore.getState().viewportCampgrounds.map((f) => f.id)).toEqual([1]),
+    );
+    expect(useMapStore.getState().campgroundsRequested).toBe(true);
+  });
+});
+
 describe('painting', () => {
   test('the pins already on the map survive while the next viewport loads', async () => {
     poiResponses = [collection([pin(1, 'tesla_supercharger')]), collection([pin(2, 'tesla_supercharger')])];

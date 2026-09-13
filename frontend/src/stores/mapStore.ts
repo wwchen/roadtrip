@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import type { ViewportBbox } from '@/map/viewport';
 import type { OverlayKey } from '@/map/overlays';
+import type { PinFeature } from '@/map/pins';
 
 export type { ViewportBbox };
 
@@ -51,6 +52,14 @@ export interface MapState {
    * this list means visible, so a never-seen agency shows.
    */
   hiddenAgencies: string[];
+  /**
+   * The campground pins the viewport loop last returned, and whether campgrounds
+   * were requested at all (false below the zoom gate). Published by
+   * `features/map/useViewportPois` for the topbar's in-view list, which sits
+   * across the feature boundary. With a route up these are the corridor's pins.
+   */
+  viewportCampgrounds: PinFeature[];
+  campgroundsRequested: boolean;
   /** The POI whose drawer is open, or null when the drawer is closed. */
   selectedPoiId: string | number | null;
   /**
@@ -67,6 +76,7 @@ export interface MapState {
   setOverlayHidden: (overlay: OverlayKey, hidden: boolean) => void;
   toggleOverlay: (overlay: OverlayKey) => void;
   setAgencyHidden: (agency: string, hidden: boolean) => void;
+  setViewportCampgrounds: (features: PinFeature[], requested: boolean) => void;
   /** Open the drawer for a POI. */
   selectPoi: (id: string | number) => void;
   /** Close the drawer. */
@@ -82,6 +92,8 @@ const INITIAL_MAP = {
   userLocation: null,
   hiddenOverlays: [],
   hiddenAgencies: [],
+  viewportCampgrounds: [],
+  campgroundsRequested: false,
   selectedPoiId: null,
   selectedRegion: null,
 } satisfies Omit<
@@ -91,6 +103,7 @@ const INITIAL_MAP = {
   | 'setOverlayHidden'
   | 'toggleOverlay'
   | 'setAgencyHidden'
+  | 'setViewportCampgrounds'
   | 'selectPoi'
   | 'clearSelectedPoi'
   | 'selectRegion'
@@ -124,6 +137,9 @@ export const useMapStore = create<MapState>()((set) => ({
 
   setAgencyHidden: (agency, hidden) =>
     set((s) => ({ hiddenAgencies: withMembership(s.hiddenAgencies, agency, hidden) })),
+
+  setViewportCampgrounds: (viewportCampgrounds, campgroundsRequested) =>
+    set({ viewportCampgrounds, campgroundsRequested }),
 
   selectPoi: (selectedPoiId) => set({ selectedPoiId }),
   clearSelectedPoi: () => set({ selectedPoiId: null }),

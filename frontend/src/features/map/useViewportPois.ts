@@ -200,13 +200,15 @@ export function useViewportPois(): ViewportPois {
   const counts = useMemo(() => countPins(buckets), [buckets]);
   const agencies = useMemo(() => agencyCounts(buckets.cg.features), [buckets]);
 
-  return {
-    buckets,
-    counts,
-    agencies,
-    // A route supplies campgrounds whatever the zoom, so the hint would otherwise
-    // tell the user to zoom in while the legend lists the corridor's agencies
-    // right below it.
-    campgroundsRequested: routeActive || (request?.campgroundsRequested ?? false),
-  };
+  // A route supplies campgrounds whatever the zoom, so the hint would otherwise
+  // tell the user to zoom in while the legend lists the corridor's agencies
+  // right below it.
+  const campgroundsRequested = routeActive || (request?.campgroundsRequested ?? false);
+
+  const setViewportCampgrounds = useMapStore((s) => s.setViewportCampgrounds);
+  useEffect(() => {
+    setViewportCampgrounds(buckets.cg.features, campgroundsRequested);
+  }, [buckets, campgroundsRequested, setViewportCampgrounds]);
+
+  return { buckets, counts, agencies, campgroundsRequested };
 }
