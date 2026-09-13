@@ -98,6 +98,19 @@ class AspiraCampsitesEtlTest {
                   "avifUrl": "https://washington.goingtocamp.com/images/2b1c0d9e-0000-4000-8000-000000000002.avif"
                 },
                 "aspectType": 0
+              },
+              {
+                "photoUrlResult": {
+                  "url": "https://washington.goingtocamp.com/images/07008492-6f89-47e1-acaf-d986cb314dbc.jpg",
+                  "avifUrl": "https://washington.goingtocamp.com/images/07008492-6f89-47e1-acaf-d986cb314dbc.avif"
+                },
+                "aspectType": 0
+              },
+              {
+                "photoUrlResult": {
+                  "url": "  https://washington.goingtocamp.com/images/2b1c0d9e-0000-4000-8000-000000000002.jpg  "
+                },
+                "aspectType": 0
               }
             ]
           }
@@ -241,7 +254,7 @@ class AspiraCampsitesEtlTest {
     }
 
     @Test
-    fun `promotes inventory photo urls in source order and skips entries without a url`() {
+    fun `promotes distinct inventory photo urls in source order and skips entries without a url`() {
         val etl =
             AspiraCampsitesEtl(
                 etlSlug = "aspira-wa-campsites",

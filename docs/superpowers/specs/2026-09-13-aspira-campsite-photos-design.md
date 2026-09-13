@@ -18,6 +18,7 @@ Measured on the newest capture per tenant (2026-06-16): WA 6,086 of 7,212 resour
 
 - **Read `photoUrlResult.url` only.** `CatalogPhoto` has one `url`; the JPEG is the universally renderable one. `avifUrl` and `aspectType` are not promoted. Nothing reads them, and adding fields to `CatalogPhoto` would touch every vendor for no consumer.
 - **All photos, in source order.** `CampsiteDto.photo_url` takes the first; the rest are in the column for a future gallery, the same as Campflare and rec.gov.
+- **Duplicates by URL dropped, first occurrence kept.** One Parks Canada resource in the 2026-06-16 capture lists each of its three photos twice. URLs are trimmed before comparison and storage.
 - **Skip entries without a usable URL.** A missing `photoUrlResult`, a missing `url`, or a blank `url` drops that entry, never the row. A resource with no `photos` key or an empty array yields an empty list, as today.
 - **No schema, wire, or frontend change.** The column and the DTO field exist; the frontend already renders `photo_url`. `sourcePayload` does not gain photos.
 - **Doc:** the inventory example in `docs/reservation-providers/aspira.md` shows the real `photos` shape and the field table gains a `photos[]` row pointing at `campsites.photos`. The rest of that table is stale (it names a `reservables` table); rewriting it is out of scope and noted on the issue.

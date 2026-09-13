@@ -315,13 +315,16 @@ class AspiraCampsitesEtl(
     }
 
     private fun resourcePhotos(obj: JsonObject): List<CatalogPhoto> =
-        (obj[PHOTOS_FIELD] as? JsonArray).orEmpty().mapNotNull { entry ->
-            val result = (entry as? JsonObject)?.get(PHOTO_URL_RESULT_FIELD) as? JsonObject
-            (result?.get(PHOTO_URL_FIELD) as? JsonPrimitive)
-                ?.contentOrNull
-                ?.takeIf { it.isNotBlank() }
-                ?.let(::CatalogPhoto)
-        }
+        (obj[PHOTOS_FIELD] as? JsonArray)
+            .orEmpty()
+            .mapNotNull { entry ->
+                val result = (entry as? JsonObject)?.get(PHOTO_URL_RESULT_FIELD) as? JsonObject
+                (result?.get(PHOTO_URL_FIELD) as? JsonPrimitive)
+                    ?.contentOrNull
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(::CatalogPhoto)
+            }.distinctBy { it.url }
 
     /**
      * Build the `raw` JSON we persist on the campsite. The per-resource
