@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from 'vitest';
+import type { PinFeature } from '@/map/pins';
 import {
   selectIsAgencyVisible,
   selectIsDrawerOpen,
@@ -135,5 +136,32 @@ describe('reset', () => {
       hiddenAgencies: [],
       selectedPoiId: null,
     });
+  });
+});
+
+describe('viewport campgrounds', () => {
+  const pin: PinFeature = {
+    type: 'Feature',
+    id: 7,
+    geometry: { type: 'Point', coordinates: [-121, 40] },
+    properties: { category: 'campground', agency: 'USFS' },
+  };
+
+  test('starts with none, and none requested', () => {
+    expect(map()).toMatchObject({ viewportCampgrounds: [], campgroundsRequested: false });
+  });
+
+  test('records the pins and whether campgrounds were asked for', () => {
+    map().setViewportCampgrounds([pin], true);
+
+    expect(map().viewportCampgrounds).toEqual([pin]);
+    expect(map().campgroundsRequested).toBe(true);
+  });
+
+  test('reset clears them', () => {
+    map().setViewportCampgrounds([pin], true);
+    map().reset();
+
+    expect(map()).toMatchObject({ viewportCampgrounds: [], campgroundsRequested: false });
   });
 });

@@ -9,7 +9,10 @@ import { TripResults } from './TripResults';
 import { MAX_SEARCH_RESULTS, type SearchResult } from './search-results';
 import { allStopsFilled, isLocated } from '@/domain/trip/stops';
 import { buildRouteIndex } from './route-index';
-import { tripCardsFromFeatures } from './trip-cards';
+import { bboxCenter, CG_ZOOM_THRESHOLD } from '@/map/viewport';
+import { useMapStore } from '@/stores/mapStore';
+import { tripCardsFromFeatures, viewportCardsFromFeatures, type TripCard } from './trip-cards';
+import { useSiteCounts } from './useSiteCounts';
 import { useOnRoutePois } from './useOnRoutePois';
 import { useRoute } from './useRoute';
 import { useTripCards } from './useTripCards';
@@ -24,6 +27,12 @@ import './topbar.css';
 
 /** What the keyboard has selected before any arrow key is pressed. */
 const NO_ACTIVE_RESULT = -1;
+
+/** Stable empty, so the in-view pipeline does nothing while a route owns the list. */
+const NO_CARDS: TripCard[] = [];
+
+/** The list is nearest-first, so a cap keeps the useful end and bounds the per-card fetches. */
+const MAX_IN_VIEW_CARDS = 50;
 
 const COPY_LABEL = 'Copy trip link';
 const COPIED_LABEL = 'Trip link copied';
@@ -69,6 +78,32 @@ export function TopBar({ alerts }: TopBarProps) {
   // "there is a whole trip here".
   const shareable = allStopsFilled(planner.stops);
   const share = useCopyLink();
+
+  // Which list the panel shows: the corridor's once the trip is whole and routed,
+  // otherwise whatever is in view.
+  const showRoute = shareable && !!route.route;
+
+  // The in-view list: the viewport loop's campground pins, hydrated the same way as
+  // the corridor's, plus one catalog fetch per card for the site count.
+  const viewportCampgrounds = useMapStore((s) => s.viewportCampgrounds);
+  const campgroundsRequested = useMapStore((s) => s.campgroundsRequested);
+  const viewportBbox = useMapStore((s) => s.viewport?.bbox ?? null);
+  const viewportZoom = useMapStore((s) => s.viewport?.zoom ?? 0);
+  // The sticky flag never goes back to false once campgrounds have been
+  // requested once, so the zoom itself decides whether the hint still applies.
+  const zoomAllowsCampgrounds = viewportZoom >= CG_ZOOM_THRESHOLD;
+  const inViewPlaceholders = useMemo(
+    () =>
+      showRoute
+        ? NO_CARDS
+        : viewportCardsFromFeatures(
+            viewportCampgrounds,
+            viewportBbox ? bboxCenter(viewportBbox) : null,
+          ).slice(0, MAX_IN_VIEW_CARDS),
+    [showRoute, viewportCampgrounds, viewportBbox],
+  );
+  const inViewCards = useTripCards(inViewPlaceholders);
+  const siteCounts = useSiteCounts(inViewCards);
 
   const pick = (result: SearchResult) => {
     planner.pickResult(draft?.row ?? 0, result);
@@ -240,20 +275,28 @@ export function TopBar({ alerts }: TopBarProps) {
       />
 
       {/* The results section owns the corridor slider, because the radius is a property
-          of this list: it is what decides which campgrounds are in it. That nesting is
+          of that list: it is what decides which campgrounds are in it. That nesting is
           also the DOM contract `SmokeTest.kt` asserts —
-          `#tb-results .tb-results-body #tb-corridor` must be visible.
+          `#tb-results .tb-results-body #tb-corridor` must be visible with a route.
 
-          It appears only with a live route: without one there is nothing for a radius
-          to be a radius of, and nothing to be "along". */}
-      {shareable && route.route ? (
+          Without a route the same section lists what is in view instead. */}
+      {showRoute ? (
         <TripResults
+          variant="route"
           cards={cards}
           loading={corridor.isFetching}
           corridorMiles={planner.corridorMiles}
           onCorridorMilesChange={planner.setCorridorMiles}
         />
-      ) : null}
+      ) : (
+        <TripResults
+          variant="viewport"
+          cards={inViewCards}
+          siteCounts={siteCounts}
+          campgroundsRequested={campgroundsRequested && zoomAllowsCampgrounds}
+          totalInView={viewportCampgrounds.length}
+        />
+      )}
     </div>
   );
 }

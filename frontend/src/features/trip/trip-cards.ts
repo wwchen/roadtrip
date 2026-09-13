@@ -5,6 +5,7 @@
 // placeholder and gains its name, type and region when `GET /api/pois/{id}` lands.
 // Sorting, filtering and copy all have to work on both.
 import { distanceKm } from '@/lib/geo';
+import type { MapCenter } from '@/map/viewport';
 import { UNCATEGORIZED_AGENCY } from '@/map/agencies';
 import type { TripStop } from '@/stores/tripStore';
 import { distanceAlongRouteKm, type RouteIndex } from './route-index';
@@ -20,10 +21,14 @@ export interface TripCard {
   agency: string;
   lng: number;
   lat: number;
-  /** Kilometres along the route — the sort key, and the card's headline number. */
-  routeKm: number;
-  /** Straight-line kilometres from the origin. Carried for parity; not rendered. */
+  /** Kilometres along the route — the sort key with a route; null without one. */
+  routeKm: number | null;
+  /** Straight-line kilometres from the origin, or from the map centre with no route. */
   distKm: number;
+  /** True when the campground has a booking provider we can ask (`availability_supported`). */
+  checkable: boolean;
+  /** Average rating, when the detail carries one. */
+  rating: number | null;
   hydrated: boolean;
 }
 
@@ -43,6 +48,41 @@ interface SlimFeature {
   properties?: { agency?: unknown; id?: unknown } | null;
 }
 
+const PLACEHOLDER_NAME = 'Campground';
+
+interface CardBase {
+  id: string | number;
+  lng: number;
+  lat: number;
+  agency: string;
+}
+
+/** What a slim feature contributes to a card, or null when it cannot be one. */
+function cardBaseOf(feature: SlimFeature): CardBase | null {
+  const id = feature?.id ?? (feature?.properties?.id as string | number | undefined);
+  if (id == null) return null;
+  const coordinates = feature?.geometry?.coordinates;
+  if (!Array.isArray(coordinates)) return null;
+  const [lng, lat] = coordinates as [unknown, unknown];
+  if (typeof lng !== 'number' || !Number.isFinite(lng)) return null;
+  if (typeof lat !== 'number' || !Number.isFinite(lat)) return null;
+  return { id, lng, lat, agency: (feature.properties?.agency as string | undefined) || '' };
+}
+
+function placeholderCard(base: CardBase, routeKm: number | null, distKm: number): TripCard {
+  return {
+    ...base,
+    name: PLACEHOLDER_NAME,
+    sub: '',
+    location: '',
+    routeKm,
+    distKm,
+    checkable: false,
+    rating: null,
+    hydrated: false,
+  };
+}
+
 /**
  * Placeholder cards from a fresh corridor response, in the order a driver meets them.
  *
@@ -57,30 +97,37 @@ export function tripCardsFromFeatures(
 ): TripCard[] {
   const cards: TripCard[] = [];
   for (const feature of features ?? []) {
-    const id = feature?.id ?? (feature?.properties?.id as string | number | undefined);
-    if (id == null) continue;
-    const coordinates = feature?.geometry?.coordinates;
-    if (!Array.isArray(coordinates)) continue;
-    const [lng, lat] = coordinates as [unknown, unknown];
-    if (typeof lng !== 'number' || !Number.isFinite(lng)) continue;
-    if (typeof lat !== 'number' || !Number.isFinite(lat)) continue;
-
-    cards.push({
-      id,
-      name: 'Campground',
-      sub: '',
-      location: '',
-      agency: (feature.properties?.agency as string | undefined) || '',
-      lng,
-      lat,
-      routeKm: distanceAlongRouteKm(routeIndex, lng, lat),
-      distKm: origin ? distanceKm(origin.lat, origin.lng, lat, lng) : 0,
-      hydrated: false,
-    });
+    const base = cardBaseOf(feature);
+    if (!base) continue;
+    cards.push(
+      placeholderCard(
+        base,
+        distanceAlongRouteKm(routeIndex, base.lng, base.lat),
+        origin ? distanceKm(origin.lat, origin.lng, base.lat, base.lng) : 0,
+      ),
+    );
   }
   // The order the driver encounters them, which is the only ordering that makes the
   // list useful — see `route-index.ts`.
-  return cards.sort((a, b) => a.routeKm - b.routeKm);
+  return cards.sort((a, b) => (a.routeKm ?? 0) - (b.routeKm ?? 0));
+}
+
+/**
+ * Placeholder cards for the campgrounds in view, nearest the map centre first.
+ * Without a centre (no viewport reported yet) the wire order stands.
+ */
+export function viewportCardsFromFeatures(
+  features: readonly SlimFeature[] | null | undefined,
+  center: MapCenter | null,
+): TripCard[] {
+  const cards: TripCard[] = [];
+  for (const feature of features ?? []) {
+    const base = cardBaseOf(feature);
+    if (!base) continue;
+    const distKm = center ? distanceKm(center.lat, center.lng, base.lat, base.lng) : 0;
+    cards.push(placeholderCard(base, null, distKm));
+  }
+  return center ? cards.sort((a, b) => a.distKm - b.distKm) : cards;
 }
 
 /** Fold a hydrated POI's flattened properties into its placeholder card. */
@@ -89,12 +136,15 @@ export function hydrateCard(
   properties: Record<string, unknown> | null | undefined,
 ): TripCard {
   const p = properties ?? {};
+  const rating = p.rating as { average?: unknown } | null | undefined;
   return {
     ...card,
-    name: (p.name as string | undefined) || 'Campground',
+    name: (p.name as string | undefined) || PLACEHOLDER_NAME,
     sub: (p.typeLabel as string | undefined) || '',
     location: (p.state as string | undefined) || (p.country as string | undefined) || '',
     agency: (p.agency as string | undefined) || card.agency,
+    checkable: p.availability_supported === true,
+    rating: typeof rating?.average === 'number' ? rating.average : null,
     hydrated: true,
   };
 }

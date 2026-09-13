@@ -336,6 +336,53 @@ describe('the viewport request', () => {
   });
 });
 
+describe('the in-view campgrounds', () => {
+  test('are published to the store once campgrounds are requested', async () => {
+    poiResponses = [
+      collection([pin(9, 'tesla_supercharger')]),
+      collection([pin(1, 'campground', 'USFS'), pin(9, 'tesla_supercharger')]),
+    ];
+    await renderMap();
+    await waitFor(() => expect(poiRequests()).toHaveLength(1));
+    expect(useMapStore.getState().campgroundsRequested).toBe(false);
+    expect(useMapStore.getState().viewportCampgrounds).toEqual([]);
+
+    await panTo(BAY_AREA, 6);
+
+    await waitFor(() =>
+      expect(useMapStore.getState().viewportCampgrounds.map((f) => f.id)).toEqual([1]),
+    );
+    expect(useMapStore.getState().campgroundsRequested).toBe(true);
+  });
+
+  test('are cleared while a route owns the map', async () => {
+    poiResponses = [collection([]), collection([pin(1, 'campground', 'USFS')])];
+    await renderMap();
+    await panTo(BAY_AREA, 6);
+    await waitFor(() =>
+      expect(useMapStore.getState().viewportCampgrounds.map((f) => f.id)).toEqual([1]),
+    );
+
+    // The corridor itself has a campground: before the fix the effect publishes
+    // it anyway, which is the bug (the field should mean "in the viewport").
+    onRouteResponse = collection([pin(9, 'campground', 'BC Parks')]);
+    act(() => {
+      const trip = useTripStore.getState();
+      trip.setMode('directions');
+      trip.setStops([
+        { name: 'A', lng: -122, lat: 37 },
+        { name: 'B', lng: -118, lat: 34 },
+      ]);
+      trip.setRoute({ type: 'FeatureCollection', features: [] });
+    });
+
+    // Wait for the corridor's campground to actually land on the map, so a
+    // transient empty render before it resolves cannot pass this by accident.
+    await waitFor(() => expect(pinIdsIn('cg')).toEqual([9]));
+    expect(useMapStore.getState().viewportCampgrounds).toEqual([]);
+  });
+});
+
 describe('painting', () => {
   test('the pins already on the map survive while the next viewport loads', async () => {
     poiResponses = [collection([pin(1, 'tesla_supercharger')]), collection([pin(2, 'tesla_supercharger')])];

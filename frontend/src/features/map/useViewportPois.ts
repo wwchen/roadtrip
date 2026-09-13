@@ -55,7 +55,7 @@ export interface ViewportPois {
    * Whether campgrounds are being requested at all.
    *
    * False only until the user first zooms in past the server's campground zoom
-   * gate; the legend shows its "zoom in to load" hint while it is.
+   * gate; the topbar's in-view list shows its "zoom in to load" hint while it is.
    */
   campgroundsRequested: boolean;
 }
@@ -200,13 +200,17 @@ export function useViewportPois(): ViewportPois {
   const counts = useMemo(() => countPins(buckets), [buckets]);
   const agencies = useMemo(() => agencyCounts(buckets.cg.features), [buckets]);
 
-  return {
-    buckets,
-    counts,
-    agencies,
-    // A route supplies campgrounds whatever the zoom, so the hint would otherwise
-    // tell the user to zoom in while the legend lists the corridor's agencies
-    // right below it.
-    campgroundsRequested: routeActive || (request?.campgroundsRequested ?? false),
-  };
+  // A route supplies campgrounds whatever the zoom, so the topbar's in-view hint
+  // would otherwise tell the user to zoom in while the route list already shows
+  // the corridor's campgrounds.
+  const campgroundsRequested = routeActive || (request?.campgroundsRequested ?? false);
+
+  const setViewportCampgrounds = useMapStore((s) => s.setViewportCampgrounds);
+  useEffect(() => {
+    // The field means what it says: while a route owns the map, the corridor's
+    // pins are not "in the viewport", so publish nothing rather than them.
+    setViewportCampgrounds(routeActive ? [] : buckets.cg.features, campgroundsRequested);
+  }, [routeActive, buckets, campgroundsRequested, setViewportCampgrounds]);
+
+  return { buckets, counts, agencies, campgroundsRequested };
 }
