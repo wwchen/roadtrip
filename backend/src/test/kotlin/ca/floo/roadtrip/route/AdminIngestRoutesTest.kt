@@ -28,7 +28,6 @@ import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -37,6 +36,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -57,7 +57,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
     fun `POST fetch routes are not registered`() =
         testApplication {
             val controller = controllerWith(emptyMap())
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             assertEquals(HttpStatusCode.NotFound, client.post("/api/admin/data/fetch").status)
             assertEquals(HttpStatusCode.NotFound, client.post("/api/admin/data/fetch/t").status)
@@ -74,7 +74,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         "Aspira Resources → Aspira Pins" to Target("Aspira Resources → Aspira Pins", emptyList()),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             val resp = client.post("/api/admin/data/import")
 
@@ -96,7 +96,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         "t" to Target("t", emptyList()),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             val resp = client.post("/api/admin/data/import/t")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -113,7 +113,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         FAILING_TARGET to Target(FAILING_TARGET, listOf(Phase.Import(FAILING_PHASE, "absent-poi-data"))),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             val resp = client.post("/api/admin/data/import/$FAILING_TARGET")
 
@@ -129,7 +129,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
             val gate = CountDownLatch(1)
             val release = CountDownLatch(1)
             val controller = blockingController(gate, release)
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             coroutineScope {
                 val running = async(Dispatchers.IO) { controller.startRun(BUSY_TARGET, RunKind.IMPORT, "test") }
@@ -163,7 +163,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         "beta" to Target("beta", emptyList()),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             client.post("/api/admin/data/import/alpha")
             client.post("/api/admin/data/import/beta")
@@ -176,6 +176,30 @@ class AdminIngestRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `GET one run returns its detail with an empty phase list`() =
+        testApplication {
+            val controller = controllerWith(mapOf("alpha" to Target("alpha", emptyList())))
+            application { routeTestApplication { adminIngestRoutes(controller) } }
+
+            assertEquals(HttpStatusCode.OK, client.post("/api/admin/data/import/alpha").status)
+            val listed =
+                Json
+                    .parseToJsonElement(client.get("/api/admin/data/runs").bodyAsText())
+                    .jsonObject["runs"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            val runId = listed["id"]!!.jsonPrimitive.long
+
+            val resp = client.get("/api/admin/data/runs/$runId")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val detail = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(runId, detail["id"]!!.jsonPrimitive.long)
+            assertEquals("alpha", detail["target"]!!.jsonPrimitive.content)
+            assertEquals(0, detail["phases"]!!.jsonArray.size, "a target with no import phases runs none")
+        }
+
+    @Test
     fun `GET status includes every known target`() =
         testApplication {
             val controller =
@@ -185,7 +209,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
                         "beta" to Target("beta", listOf(Phase.Import("k", "x"))),
                     ),
                 )
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             val resp = client.get("/api/admin/data/status")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -205,7 +229,7 @@ class AdminIngestRoutesTest : SharedDbTest() {
     fun `POST catalog-match is not registered`() =
         testApplication {
             val controller = controllerWith(emptyMap())
-            application { routing { adminIngestRoutes(controller) } }
+            application { routeTestApplication { adminIngestRoutes(controller) } }
 
             val resp = client.post("/api/admin/etl/catalog-match")
             assertEquals(HttpStatusCode.NotFound, resp.status)

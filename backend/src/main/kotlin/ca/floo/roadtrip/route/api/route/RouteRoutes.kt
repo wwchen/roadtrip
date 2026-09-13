@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.api.RouteErrorDto
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.OptionalQuery
 import ca.floo.roadtrip.route.common.access
+import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.optionalDoubleQuery
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.trimmedQuery
@@ -20,13 +21,8 @@ import io.ktor.server.routing.route
 /**
  * GET /api/route?coords=lng,lat;lng,lat;...
  *
- * Backend proxy for Mapbox Directions API. Token stays server-side.
- *
- * Returns:
- *   200 { type:"FeatureCollection", features: [ LineString feature with
- *         distance_m, duration_s, legs[] in properties ] }
- *   400 for malformed coords / wrong number of waypoints
- *   503 when roadtrip.mapbox.token is unset or upstream fails
+ * Backend proxy for the Mapbox Directions API. The token stays server-side, and
+ * the corridor radius is validated against [RouteConfig] rather than trusted.
  */
 internal fun Route.routeRoutes(
     routePlanService: RoutePlanService,
@@ -141,7 +137,15 @@ internal fun Route.routeRoutes(
                 is RoutePlanResult.Planned ->
                     call.respondEncodedJson(routeResponseMapper.featureCollection(result.plan))
             }
-        }.access(RouteAccess.Anonymous)
+        }.describeApi(
+            tag = "route",
+            summary = "Driving route through the given waypoints, as a GeoJSON FeatureCollection",
+            description =
+                "`coords` is `lng,lat;lng,lat[;...]`, 2..${routeConfig.maxWaypoints} points. " +
+                    "The single LineString feature carries `distance_m`, `duration_s` and `legs[]` in its " +
+                    "properties. `radius_miles` optionally buffers the corridor, " +
+                    "${routeConfig.minCorridorRadiusMiles}..${routeConfig.maxCorridorRadiusMiles}.",
+        ).access(RouteAccess.Anonymous)
     }
 }
 

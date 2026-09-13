@@ -148,7 +148,11 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
                     redirectUri = auth.redirectUri,
                 ),
             )
-        }.access(RouteAccess.Anonymous)
+        }.describeApi(
+            tag = "auth",
+            summary = "Start an embedded password login: mint the flow and hand back its challenge",
+            description = "Answers 502 when the provider refuses and 503 when no identity provider is configured.",
+        ).access(RouteAccess.Anonymous)
 
         post("/password/complete") {
             val auth = wiring ?: return@post call.respondAuthDisabled()
@@ -176,7 +180,13 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
                 maxAgeSeconds = auth.sessionMaxAgeSeconds,
             )
             call.respond(HttpStatusCode.NoContent)
-        }.access(RouteAccess.Anonymous)
+        }.describeApi(
+            tag = "auth",
+            summary = "Exchange the login code for a session cookie; answers 204 with no body",
+            description =
+                "The flow cookie set by the begin route is required and is cleared either way. " +
+                    "401 means the provider refused the code; 503 means no identity provider is configured.",
+        ).access(RouteAccess.Anonymous)
     }
 
     route("/api") {

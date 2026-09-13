@@ -1,11 +1,15 @@
 package ca.floo.roadtrip.route.api.docs
 
+import ca.floo.roadtrip.apigen.OpenApiContractDocument
+import ca.floo.roadtrip.model.api.ApiMethod
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
-import ca.floo.roadtrip.route.common.API_PREFIX
+import ca.floo.roadtrip.route.common.RouteLeaf
 import ca.floo.roadtrip.route.common.SWAGGER_UI_PATH
 import ca.floo.roadtrip.route.common.access
+import ca.floo.roadtrip.route.common.declaredAccessByLeaf
+import ca.floo.roadtrip.route.common.encodeApiJson
+import ca.floo.roadtrip.route.common.isContractedPath
 import ca.floo.roadtrip.route.common.respondEncodedJson
-import ca.floo.roadtrip.route.common.underPrefix
 import io.ktor.http.ContentType
 import io.ktor.openapi.OpenApiDoc
 import io.ktor.openapi.OpenApiInfo
@@ -21,6 +25,7 @@ import io.ktor.server.routing.openapi.plus
 import io.ktor.server.routing.path
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routingRoot
+import java.util.concurrent.atomic.AtomicReference
 
 private const val TEST_PATH_PREFIX = "/test/"
 private const val OPENAPI_TITLE = "roadtrip API"
@@ -42,25 +47,68 @@ internal fun Route.apiDocsRoutes() {
 
     route(SWAGGER_UI_PATH) {
         get("/openapi.json") {
-            val doc = OpenApiDoc(info = roadtripOpenApiInfo) + call.application.roadtripOpenApiRoutes()
-            call.respondEncodedJson(doc)
+            call.respondEncodedJson(call.application.roadtripOpenApiDoc())
         }.hide().access(RouteAccess.Anonymous)
     }
 }
 
-private fun roadtripOpenApiSource(): OpenApiDocSource =
-    OpenApiDocSource.Routing(
-        contentType = ContentType.Application.Json,
-        routes = { roadtripOpenApiRoutes() },
+/**
+ * The document, both times it is served: the routing tree contributes the paths,
+ * the tags and the summaries, and `ApiContract` contributes `components/schemas`,
+ * each operation's request body and every status it can answer.
+ */
+private fun Application.roadtripOpenApiDoc(): OpenApiDoc =
+    OpenApiContractDocument.apply(
+        OpenApiDoc(info = roadtripOpenApiInfo) + roadtripOpenApiRoutes(),
+        accessOf = contractRouteAccess(),
     )
+
+/**
+ * The Swagger UI's own copy of the spec, through the same contract pass.
+ *
+ * `OpenApiDocSource` is sealed, so the pass has to happen inside `Routing`'s two
+ * hooks — and Ktor hands the application to `routes` and not to `serializeModel`,
+ * which is why the access lookup is captured between them. `read` invokes the two
+ * in that order, so `serializeModel` always sees an equivalent lookup: the
+ * reference is shared across calls rather than held per call, and two concurrent
+ * fetches can interleave, but every lookup either pass stores is
+ * `routingRoot.declaredAccessByLeaf()` over the same `Application`.
+ */
+private fun roadtripOpenApiSource(): OpenApiDocSource {
+    val access = AtomicReference<(ApiMethod, String) -> RouteAccess?>(null)
+    return OpenApiDocSource.Routing(
+        contentType = ContentType.Application.Json,
+        routes = {
+            access.set(contractRouteAccess())
+            roadtripOpenApiRoutes()
+        },
+        serializeModel = { doc ->
+            // Loud rather than silently un-gated: a null here would publish every
+            // access-gated operation without its 401 and its 403.
+            val lookup = requireNotNull(access.get()) { "the routes hook must run before serializeModel" }
+            encodeApiJson(OpenApiContractDocument.apply(doc, accessOf = lookup))
+        },
+    )
+}
+
+private fun Application.contractRouteAccess(): (ApiMethod, String) -> RouteAccess? {
+    val byLeaf = routingRoot.declaredAccessByLeaf()
+    return { method, path -> byLeaf[RouteLeaf(method.wireValue, path)] }
+}
 
 private fun Application.roadtripOpenApiRoutes(): Sequence<Route> =
     routingRoot
         .descendants()
         .filter(::includeInRoadtripOpenApi)
 
+/**
+ * The contracted surface plus the `/test/` probes.
+ *
+ * `isContractedPath` is the one spelling `RouteInventory` already owns — under
+ * `/api/` or `/auth/password/`, minus the whole Swagger subtree — so the two
+ * `/auth/password/` rows reach the document and can carry their schemas.
+ */
 private fun includeInRoadtripOpenApi(route: Route): Boolean {
     val path = route.path(OpenApiRoutePathFormat)
-    val isApiPath = path.underPrefix(API_PREFIX) && path != SWAGGER_UI_PATH && !path.startsWith("$SWAGGER_UI_PATH/")
-    return isApiPath || path.startsWith(TEST_PATH_PREFIX)
+    return isContractedPath(path) || path.startsWith(TEST_PATH_PREFIX)
 }

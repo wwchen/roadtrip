@@ -382,6 +382,28 @@ class PoiRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `poi detail returns the wide feature for a seeded row`() =
+        testApplication {
+            // Seeded directly rather than through `seed`, because this case needs the id.
+            val poiId =
+                ctx
+                    .seedCatalogPoi(
+                        sourceId = "detail-1",
+                        name = "Upper Pines",
+                        lon = -119.56,
+                        lat = 37.74,
+                        poiType = "campground",
+                    ).poiId
+            application { routeTestApplication { poiRoutes(poiService()) } }
+
+            val resp = client.get("/api/pois/$poiId")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val feature = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("Feature", feature["type"]!!.jsonPrimitive.content)
+            assertEquals("Upper Pines", feature["properties"]!!.jsonObject["name"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `zoom below CG_MIN_ZOOM drops campground from results`() =
         testApplication {
             seed(

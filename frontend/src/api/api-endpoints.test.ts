@@ -35,6 +35,10 @@ const WILDCARD = '{param}';
 /** A `{param}` here or an `{id}` in the contract: either side matches any one segment. */
 const ONE_SEGMENT = /^\{.+\}$/;
 
+/** A generated declaration, read as source: the contract's own list of legal type names. */
+const DECLARED_TYPE = /^export (?:interface|type) (\w+)/gm;
+const GENERATED_TYPES = join(API_DIR, 'generated/api-types.ts');
+
 /**
  * Every contract row these clients reach. A row that stops being reached is a
  * client that stopped working, and a row renamed in the backend disappears from
@@ -158,4 +162,27 @@ test.each(clientSources())('%s calls only paths the contract declares', (name) =
 test('the contract rows these clients reach are exactly the pinned set', () => {
   const reached = clientSources().flatMap((name) => pathsIn(sourceOf(name))).flatMap(matchingPaths);
   expect([...new Set(reached)].sort()).toEqual(CALLED_TODAY);
+});
+
+test('every type a contract row names is a declared interface or union', () => {
+  const declared = new Set(
+    [...readFileSync(GENERATED_TYPES, 'utf8').matchAll(DECLARED_TYPE)].map((match) => match[1]),
+  );
+  const named: (string | null)[] = [];
+  for (const row of API_ENDPOINTS) {
+    named.push(row.request, row.success.type);
+    for (const entry of row.errors) named.push(entry.type);
+  }
+  const undeclared = [...new Set(named.filter((name): name is string => name !== null))]
+    .filter((name) => !declared.has(name))
+    .sort();
+  expect(undeclared, 'a row names a type this file does not declare').toEqual([]);
+});
+
+test('every declared status is a plausible HTTP status', () => {
+  const statuses = API_ENDPOINTS.flatMap((row) => [
+    row.success.status,
+    ...row.errors.map((entry) => entry.status),
+  ]);
+  expect(statuses.filter((status) => status < 200 || status > 599)).toEqual([]);
 });

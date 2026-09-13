@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.route.auth.SESSION_COOKIE
 import ca.floo.roadtrip.route.auth.roadtripAuthorization
+import ca.floo.roadtrip.route.routeTestApplication
 import ca.floo.roadtrip.service.booking.AddToCartOutcome
 import ca.floo.roadtrip.service.booking.BookingActionCodes
 import ca.floo.roadtrip.service.booking.BookingActionPort
@@ -20,7 +21,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.application.install
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
@@ -50,7 +50,7 @@ private fun resolve(token: String?): Principal =
 private fun ApplicationTestBuilder.mount(service: BookingActionPort) {
     application {
         install(roadtripAuthorization) { resolvePrincipal = ::resolve }
-        routing { bookingRoutes(service) }
+        routeTestApplication { bookingRoutes(service) }
     }
 }
 

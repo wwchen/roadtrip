@@ -3,12 +3,19 @@ package ca.floo.roadtrip.route.common
 import ca.floo.roadtrip.client.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.config.BuildInfoConfig
 import ca.floo.roadtrip.model.api.ApiContract
+import ca.floo.roadtrip.model.api.ApiErrorSchema
+import ca.floo.roadtrip.model.api.HTTP_FORBIDDEN
+import ca.floo.roadtrip.model.api.HTTP_NO_CONTENT
+import ca.floo.roadtrip.model.api.HTTP_OK
+import ca.floo.roadtrip.model.api.HTTP_UNAUTHORIZED
+import ca.floo.roadtrip.model.api.bodyAt
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.model.api.poi.PoiSearchResponseSchema
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.model.domain.poi.PoiRow
+import ca.floo.roadtrip.route.CONTRACT_DRIFT_STATUS
 import ca.floo.roadtrip.route.api.buildInfoRoutes
 import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
@@ -32,10 +39,19 @@ import kotlinx.serialization.serializer
 import kotlin.reflect.full.createType
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The endpoint count the plan fixed for this phase; a row added or dropped is a deliberate change. */
 private const val CONTRACT_ROW_COUNT = 46
+
+/** The first and last status any HTTP response can carry, and the last 2xx. */
+private const val MIN_HTTP_STATUS = 200
+private const val MAX_HTTP_STATUS = 599
+private const val LAST_SUCCESS_STATUS = 299
+
+/** A status no row declares, so `bodyAt` has to answer null for it. */
+private const val UNDECLARED_STATUS = 418
 
 /**
  * The contract's *authoritative* check is the boot guard in `registerKoinRoutes`,
@@ -167,6 +183,159 @@ class ApiContractCoverageTest {
         )
     }
 
+    @Test
+    fun `every declared status is a real HTTP status`() {
+        assertEquals(
+            emptyList(),
+            ApiContract.endpoints
+                .flatMap { row -> (listOf(row.success) + row.errors).map { row.method.wireValue to it } }
+                .filterNot { (_, body) -> body.status in MIN_HTTP_STATUS..MAX_HTTP_STATUS }
+                .map { (method, body) -> "$method ${body.status}" },
+        )
+    }
+
+    /**
+     * 599 is a legal HTTP status, and it is the one `ContractBodyCheck` rewrites a
+     * drifted response to. A row that declared it would make a genuine drift
+     * indistinguishable from a declared answer, in the ledger and in the test that
+     * produced it.
+     */
+    @Test
+    fun `no row declares the status the body check reserves for drift`() {
+        assertEquals(
+            emptyList(),
+            ApiContract.endpoints
+                .flatMap { row -> (listOf(row.success) + row.errors).map { row to it } }
+                .filter { (_, body) -> body.status == CONTRACT_DRIFT_STATUS }
+                .map { (row, _) -> "${row.method.wireValue} ${row.path}" },
+        )
+    }
+
+    @Test
+    fun `the success body is the only 2xx a row declares`() {
+        ApiContract.endpoints.forEach { row ->
+            assertTrue(
+                row.success.status in HTTP_OK..LAST_SUCCESS_STATUS,
+                "${row.method.wireValue} ${row.path}: success declares ${row.success.status}, not a 2xx",
+            )
+            assertEquals(
+                emptyList(),
+                row.errors.filter { it.status in HTTP_OK..LAST_SUCCESS_STATUS }.map { it.status },
+                "${row.method.wireValue} ${row.path}: a 2xx belongs in success, not errors",
+            )
+        }
+    }
+
+    @Test
+    fun `no row declares the same status and class twice`() {
+        ApiContract.endpoints.forEach { row ->
+            val keys = (listOf(row.success) + row.errors).map { it.status to it.body }
+            assertEquals(
+                keys.size,
+                keys.toSet().size,
+                "${row.method.wireValue} ${row.path} declares a duplicate (status, class): " +
+                    "${keys.groupBy { it }.filterValues { it.size > 1 }.keys}",
+            )
+        }
+    }
+
+    /**
+     * What makes [bodyAt] total. The `(status, class)` case above still allows
+     * two *different* classes at one status, and the body check behind every
+     * route test asks for one class per status: an ambiguous row would be
+     * checked against whichever entry came first.
+     */
+    @Test
+    fun `no row declares two bodies at one status`() {
+        ApiContract.endpoints.forEach { row ->
+            val statuses = (listOf(row.success) + row.errors).map { it.status }
+            assertEquals(
+                emptyList(),
+                statuses
+                    .groupBy { it }
+                    .filterValues { it.size > 1 }
+                    .keys
+                    .toList(),
+                "${row.method.wireValue} ${row.path}: bodyAt() cannot answer an ambiguous status",
+            )
+        }
+    }
+
+    /**
+     * `requestRequired` is what the document publishes as `requestBody.required`,
+     * and the builder emits a `requestBody` only where the row names a request
+     * DTO. A `false` on a row with no request is therefore a statement about a
+     * document section that does not exist — dead data that reads as a decision.
+     */
+    @Test
+    fun `requestRequired is false only on a row that has a request`() {
+        assertEquals(
+            emptyList(),
+            ApiContract.endpoints
+                .filter { !it.requestRequired && it.request == null }
+                .map { "${it.method.wireValue} ${it.path}" },
+            "requestRequired says whether an existing requestBody is mandatory; a row with no request " +
+                "body publishes none either way.",
+        )
+    }
+
+    /**
+     * The two rows that tolerate an absent body, pinned by name. Both decode
+     * through `decodeOptionalTextJsonBody` and answer a blank one with a default,
+     * so a generated client told the body was mandatory would be wrong about a
+     * call the server serves. A third row joining them is a deliberate change.
+     */
+    @Test
+    fun `exactly the optional-body rows declare requestRequired false`() {
+        assertEquals(
+            listOf(
+                "POST /api/settings/notifications/slack/test",
+                "PUT /api/settings/notifications",
+            ),
+            ApiContract.endpoints
+                .filterNot { it.requestRequired }
+                .map { "${it.method.wireValue} ${it.path}" }
+                .sorted(),
+        )
+    }
+
+    /** The ordering that matters: [bodyAt] reaches the success body for its own status. */
+    @Test
+    fun `bodyAt answers the success body and nothing for an undeclared status`() {
+        val row = ApiContract.endpoints.first()
+        assertEquals(row.success.body, row.bodyAt(row.success.status)?.body)
+        assertNull(row.bodyAt(UNDECLARED_STATUS))
+    }
+
+    @Test
+    fun `a 204 carries no body`() {
+        ApiContract.endpoints
+            .flatMap { row -> (listOf(row.success) + row.errors).map { row to it } }
+            .filter { (_, body) -> body.status == HTTP_NO_CONTENT }
+            .forEach { (row, body) ->
+                assertNull(body.body, "${row.method.wireValue} ${row.path}: a 204 cannot carry a body")
+            }
+    }
+
+    /**
+     * The checkable half of the 401/403 rule: the document builder supplies those
+     * statuses from the route's access level, and a row states one only where its
+     * own handler writes it — which, everywhere in this tree, means
+     * [ApiErrorSchema]. A row naming anything else at 401 or 403 is a row that
+     * has started restating the access guard in its own vocabulary.
+     */
+    @Test
+    fun `a 401 or 403 on a row is always an ApiErrorSchema`() {
+        assertEquals(
+            emptyList(),
+            ApiContract.endpoints
+                .flatMap { row -> row.errors.map { row to it } }
+                .filter { (_, body) -> body.status == HTTP_UNAUTHORIZED || body.status == HTTP_FORBIDDEN }
+                .filterNot { (_, body) -> body.body == ApiErrorSchema::class }
+                .map { (row, body) -> "${row.method.wireValue} ${row.path} ${body.status}" },
+        )
+    }
+
     /**
      * `createType()` supplies no type arguments, so a generic DTO would abort this
      * loop with a Kotlin reflection message naming neither the class nor the row.
@@ -176,7 +345,9 @@ class ApiContractCoverageTest {
     @Test
     fun `every class the contract names is serializable`() {
         val classes =
-            ApiContract.endpoints.flatMap { listOfNotNull(it.request, it.response) + it.errors }.distinct()
+            ApiContract.endpoints
+                .flatMap { listOfNotNull(it.request, it.success.body) + it.errors.mapNotNull { body -> body.body } }
+                .distinct()
         assertEquals(
             emptyList(),
             classes.filter { it.typeParameters.isNotEmpty() }.map { it.qualifiedName },

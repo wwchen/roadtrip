@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.domain.auth.UserStatus
 import ca.floo.roadtrip.repo.JooqUnitOfWork
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSessionRepo
+import ca.floo.roadtrip.route.routeTestApplication
 import ca.floo.roadtrip.service.auth.AuthController
 import ca.floo.roadtrip.service.auth.IdentityProvider
 import ca.floo.roadtrip.service.auth.IdentityProviderId
@@ -20,11 +21,14 @@ import ca.floo.roadtrip.service.auth.SessionService
 import ca.floo.roadtrip.service.auth.UserProvisioningService
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.application.install
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
@@ -38,6 +42,7 @@ import java.time.Duration
 import java.time.OffsetDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 private val detachedCtx = DSL.using(SQLDialect.POSTGRES)
 
@@ -168,7 +173,7 @@ class AuthRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = null) }
+                routeTestApplication { authRoutes(wiring = null) }
             }
             val resp = client.get("/api/me")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -188,7 +193,7 @@ class AuthRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = authOnWiring()) }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
             }
             val resp =
                 client.get("/api/me") { header(HttpHeaders.Cookie, "$SESSION_COOKIE=$AUTH_ON_TOKEN") }
@@ -211,7 +216,7 @@ class AuthRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = authOnWiring()) }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
             }
             val resp = createClient { followRedirects = false }.get("/auth/login?connection=google-oauth2")
 
@@ -224,7 +229,7 @@ class AuthRoutesTest {
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = authOnWiring()) }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
             }
             val resp = createClient { followRedirects = false }.get("/auth/login?connection=bogus")
 
@@ -233,11 +238,38 @@ class AuthRoutesTest {
         }
 
     @Test
+    fun `POST password begin returns the flow the frontend needs`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
+            }
+            val resp =
+                client.post("/auth/password/begin") {
+                    contentType(ContentType.Application.Json)
+                    setBody("{}")
+                }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("state", body["state"]!!.jsonPrimitive.content)
+            assertEquals("nonce", body["nonce"]!!.jsonPrimitive.content)
+            assertEquals(
+                "https://test.example/auth/callback",
+                body["redirect_uri"]!!.jsonPrimitive.content,
+                "the frontend must send auth0-js the same redirect_uri the backend exchanges with",
+            )
+            assertTrue(
+                body["code_challenge"]!!.jsonPrimitive.content.isNotBlank(),
+                "the PKCE challenge is derived from the verifier the flow cookie carries",
+            )
+        }
+
+    @Test
     fun `GET me with no session and auth on reports not authenticated`() =
         testApplication {
             application {
                 install(roadtripAuthorization) { resolvePrincipal = { Principal.Anonymous } }
-                routing { authRoutes(wiring = authOnWiring()) }
+                routeTestApplication { authRoutes(wiring = authOnWiring()) }
             }
             val resp = client.get("/api/me")
             assertEquals(HttpStatusCode.OK, resp.status)

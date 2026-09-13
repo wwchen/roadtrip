@@ -3,7 +3,7 @@ package ca.floo.roadtrip.apigen
 /** One property of a generated interface. */
 internal data class TsField(
     val name: String,
-    val type: String,
+    val type: WireType,
     val optional: Boolean,
 )
 
@@ -19,17 +19,28 @@ internal data class TsEnum(
     val values: List<String>,
 )
 
+/** One declared body in an emitted `API_ENDPOINTS` row: the status, and the type it carries. */
+internal data class TsBody(
+    val status: Int,
+    val type: String?,
+)
+
 /**
- * One row of the emitted `API_ENDPOINTS` literal. [errors] carries the
- * non-2xx bodies the route can serialize, sorted by name so the row does not
+ * One row of the emitted `API_ENDPOINTS` literal. [errors] carries the non-2xx
+ * bodies the route can serialize, sorted by status then type so the row does not
  * move when the contract list is reordered.
+ *
+ * [requestRequired] is the row's `ApiEndpoint.requestRequired`, which the OpenAPI
+ * document publishes as `requestBody.required`. It is carried here too so the one
+ * walk stays the single source both renderers read.
  */
 internal data class TsEndpoint(
     val method: String,
     val path: String,
     val request: String?,
-    val response: String?,
-    val errors: List<String>,
+    val requestRequired: Boolean,
+    val success: TsBody,
+    val errors: List<TsBody>,
 )
 
 /**

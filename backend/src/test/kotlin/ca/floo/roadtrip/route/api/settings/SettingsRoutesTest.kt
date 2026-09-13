@@ -227,6 +227,41 @@ class SettingsRoutesTest {
             assertEquals("Bob", body["profile"]!!.jsonObject["display_name"]!!.jsonPrimitive.content)
         }
 
+    @Test
+    fun `PUT notifications authenticated returns 200 with the updated settings`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolve }
+                routeTestApplication {
+                    settingsRoutes(
+                        StubSettingsService(
+                            onUpdateNotifications = { _, req ->
+                                defaultSettingsDto().copy(
+                                    notifications =
+                                        defaultSettingsDto().notifications.copy(
+                                            notificationEmail = req.notificationEmail,
+                                        ),
+                                )
+                            },
+                        ),
+                    )
+                }
+            }
+            val resp =
+                client.put(NOTIFICATIONS_PATH) {
+                    userSession()
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"notification_email": "bob@example.com"}""")
+                }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val notifications =
+                Json
+                    .parseToJsonElement(resp.bodyAsText())
+                    .jsonObject["notifications"]!!
+                    .jsonObject
+            assertEquals("bob@example.com", notifications["notification_email"]!!.jsonPrimitive.content)
+        }
+
     // ── PUT notifications error mapping ────────────────────────────────────────
 
     @Test

@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route.api.geocode
 
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.access
+import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
@@ -20,9 +21,6 @@ private const val AUTOCOMPLETE_OFF = "0"
  *
  * Backend proxy for Mapbox forward-geocoding. The frontend's top-bar search
  * debounces input then hits this endpoint for autofill suggestions.
- *
- * Response shape (also documented for swagger):
- *   { "results": [ { id, place_name, place_type, lng, lat, bbox? }, ... ] }
  *
  * `bbox` is `[west, south, east, north]` and is present only for a feature the
  * upstream reports an extent for — a country, a region, a district, a place, a
@@ -51,6 +49,15 @@ internal fun Route.geocodeRoutes(geocodeService: GeocodeService) {
                 GeocodeOutcome.Unavailable -> call.respondApiError("geocoding_unavailable", HttpStatusCode.ServiceUnavailable)
                 is GeocodeOutcome.Found -> call.respondEncodedJson(outcome.response)
             }
-        }.access(RouteAccess.Anonymous)
+        }.describeApi(
+            tag = "geocode",
+            summary = "Forward-geocode free text to coordinates (Mapbox proxy; the token stays server-side)",
+            description =
+                "`q` is the text to match. `autocomplete=0` turns off prefix matching, `proximity=lng,lat` " +
+                    "biases toward a point, and `limit` caps the results. A result's `bbox` is " +
+                    "`[west, south, east, north]` and is present only where the upstream reports an extent — " +
+                    "a country, a region, a district, a place, a park with a footprint — which is what lets a " +
+                    "client frame a searched-for region as an area instead of flying to a point inside it.",
+        ).access(RouteAccess.Anonymous)
     }
 }

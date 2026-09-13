@@ -14,7 +14,6 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -93,7 +92,7 @@ class SlackInteractivityRoutesTest {
             val watches = RecordingWatches()
             val handler = SlackInteractivityHandler(watches = watches, slack = SilentSlack())
             application {
-                routing {
+                routeTestApplication {
                     slackInteractivityRoute(verifier(), handler, CoroutineScope(Dispatchers.Unconfined))
                 }
             }
@@ -121,7 +120,7 @@ class SlackInteractivityRoutesTest {
             val watches = RecordingWatches()
             val handler = SlackInteractivityHandler(watches = watches, slack = SilentSlack())
             application {
-                routing {
+                routeTestApplication {
                     slackInteractivityRoute(verifier(), handler, CoroutineScope(Dispatchers.Unconfined))
                 }
             }
@@ -145,7 +144,7 @@ class SlackInteractivityRoutesTest {
             val watches = RecordingWatches()
             val handler = SlackInteractivityHandler(watches = watches, slack = SilentSlack())
             application {
-                routing {
+                routeTestApplication {
                     slackInteractivityRoute(verifier(), handler, CoroutineScope(Dispatchers.Unconfined))
                 }
             }
@@ -166,7 +165,7 @@ class SlackInteractivityRoutesTest {
             val watches = RecordingWatches()
             val handler = SlackInteractivityHandler(watches = watches, slack = SilentSlack())
             application {
-                routing {
+                routeTestApplication {
                     slackInteractivityRoute(verifier(), handler, CoroutineScope(Dispatchers.Unconfined))
                 }
             }
@@ -192,7 +191,7 @@ class SlackInteractivityRoutesTest {
             val watches = RecordingWatches()
             val handler = SlackInteractivityHandler(watches = watches, slack = SilentSlack())
             application {
-                routing {
+                routeTestApplication {
                     slackInteractivityRoute(verifier(), handler, CoroutineScope(Dispatchers.Unconfined))
                 }
             }

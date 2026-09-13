@@ -1,7 +1,13 @@
 package ca.floo.roadtrip.apigen
 
+import ca.floo.roadtrip.model.api.ApiBody
 import ca.floo.roadtrip.model.api.ApiEndpoint
 import ca.floo.roadtrip.model.api.ApiMethod
+import ca.floo.roadtrip.model.api.HTTP_BAD_REQUEST
+import ca.floo.roadtrip.model.api.HTTP_CONFLICT
+import ca.floo.roadtrip.model.api.HTTP_CREATED
+import ca.floo.roadtrip.model.api.HTTP_NO_CONTENT
+import ca.floo.roadtrip.model.api.HTTP_OK
 import kotlinx.serialization.Contextual
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -159,6 +165,9 @@ data class FixtureGeneric<T>(
 data class FixtureCollider(
     val x: String,
 )
+
+/** Where every type the real contract reaches has to live, serial name first segment onward. */
+private const val MODEL_SERIAL_PREFIX = "ca.floo.roadtrip.model."
 
 /**
  * The generator, against a fixture DTO set that exercises every row of the
@@ -391,14 +400,20 @@ class ApiTypeGeneratorTest {
         assertTrue(failure.message!!.contains("structured key"), failure.message!!)
     }
 
+    /**
+     * `Partial`, not a bare `Record`: in TypeScript `Record<Union, V>` is a mapped
+     * type in which every union member is a *required* key, and a Kotlin
+     * `Map<SomeEnum, V>` is routinely partial. The union is still what the keys
+     * are drawn from, which is the half this test exists for.
+     */
     @Test
-    fun `an enum map key keeps its union`() {
+    fun `an enum map key keeps its union, and every key stays optional`() {
         val ts = generateApiTypes(listOf(responseRow(FixtureEnumKeyMap::class)))
         assertBlock(
             ts,
             """
             export interface FixtureEnumKeyMap {
-              m: Record<FixtureFlavour, string>;
+              m: Partial<Record<FixtureFlavour, string>>;
             }
             """.trimIndent(),
         )
@@ -431,7 +446,7 @@ class ApiTypeGeneratorTest {
     }
 
     @Test
-    fun `the endpoint literal names the request, response and error types`() {
+    fun `the endpoint literal names the request, the success body and every error status`() {
         val ts =
             generateApiTypes(
                 listOf(
@@ -439,8 +454,12 @@ class ApiTypeGeneratorTest {
                         ApiMethod.PATCH,
                         "/api/fixtures",
                         FixtureOptionality::class,
-                        FixtureShapes::class,
-                        errors = listOf(FixtureOddKeys::class, FixtureEncodeAlways::class),
+                        ApiBody(HTTP_CREATED, FixtureShapes::class),
+                        errors =
+                            listOf(
+                                ApiBody(HTTP_CONFLICT, FixtureEncodeAlways::class),
+                                ApiBody(HTTP_BAD_REQUEST, FixtureOddKeys::class),
+                            ),
                     ),
                     responseRow(FixtureNested::class),
                 ),
@@ -448,17 +467,60 @@ class ApiTypeGeneratorTest {
         assertTrue(
             ts.contains(
                 "{ method: 'PATCH', path: '/api/fixtures', request: 'FixtureOptionality', " +
-                    "response: 'FixtureShapes', errors: ['FixtureEncodeAlways', 'FixtureOddKeys'] },",
+                    "requestRequired: true, success: { status: 201, type: 'FixtureShapes' }, errors: " +
+                    "[{ status: 400, type: 'FixtureOddKeys' }, { status: 409, type: 'FixtureEncodeAlways' }] },",
             ),
             ts,
         )
         assertTrue(
-            ts.contains("{ method: 'GET', path: '/api/fixture/FixtureNested', request: null, response: 'FixtureNested', errors: [] },"),
+            ts.contains(
+                "{ method: 'GET', path: '/api/fixture/FixtureNested', request: null, " +
+                    "requestRequired: true, success: { status: 200, type: 'FixtureNested' }, errors: [] },",
+            ),
             ts,
         )
         // An error body is walked like any other: its declaration is emitted too.
         assertTrue(ts.contains("export interface FixtureOddKeys {"), ts)
         assertTrue(ts.trimEnd().endsWith("] as const;"), ts)
+    }
+
+    @Test
+    fun `a body-less success emits a null type`() {
+        val ts = generateApiTypes(listOf(requestRow(FixtureOptionality::class)))
+        assertTrue(ts.contains("success: { status: 204, type: null }, errors: [] },"), ts)
+    }
+
+    /**
+     * A value class has no declaration of its own — its descriptor is the
+     * primitive kind it wraps — so a contract row naming one has nothing the
+     * generator could `$ref` or emit an `export interface` for.
+     */
+    @Test
+    fun `a contract row naming a non-class descriptor fails generation`() {
+        val failure =
+            assertFailsWith<ApiTypeGenerationException> { generateApiTypes(listOf(responseRow(FixtureId::class))) }
+        assertTrue(failure.message!!.contains("FixtureId"), failure.message!!)
+        assertTrue(failure.message!!.contains("rather than a declared class or enum"), failure.message!!)
+    }
+
+    /**
+     * `LayeringGuardTest` bans `@EncodeDefault` under `model/`, and
+     * `DescriptorWalk` documents that the whole optionality rule rests on that
+     * ban: the annotation is invisible to `isElementOptional`, so a field
+     * carrying it would be generated required and never arrive. The ban is
+     * scoped to a directory; the walk follows descriptors, and a `model/api` DTO
+     * naming a `@Serializable` class from `client/` or `service/` would reach a
+     * type no guard covers. This is what makes the directory scope correct by
+     * construction.
+     */
+    @Test
+    fun `every type the contract walk reaches lives under model`() {
+        assertEquals(
+            emptyList(),
+            walkContract().serialNames.filterNot { it.startsWith(MODEL_SERIAL_PREFIX) }.sorted(),
+            "a contract row reaches a @Serializable type outside $MODEL_SERIAL_PREFIX, where " +
+                "LayeringGuardTest's @EncodeDefault ban does not apply. Move the DTO under model/.",
+        )
     }
 
     @Test
@@ -472,10 +534,21 @@ class ApiTypeGeneratorTest {
     }
 
     private fun responseRow(kClass: KClass<*>): ApiEndpoint =
-        ApiEndpoint(ApiMethod.GET, "/api/fixture/${kClass.simpleName}", response = kClass, errors = emptyList())
+        ApiEndpoint(
+            ApiMethod.GET,
+            "/api/fixture/${kClass.simpleName}",
+            success = ApiBody(HTTP_OK, kClass),
+            errors = emptyList(),
+        )
 
     private fun requestRow(kClass: KClass<*>): ApiEndpoint =
-        ApiEndpoint(ApiMethod.POST, "/api/fixture/${kClass.simpleName}", request = kClass, errors = emptyList())
+        ApiEndpoint(
+            ApiMethod.POST,
+            "/api/fixture/${kClass.simpleName}",
+            request = kClass,
+            success = ApiBody(HTTP_NO_CONTENT),
+            errors = emptyList(),
+        )
 
     private fun assertBlock(
         generated: String,

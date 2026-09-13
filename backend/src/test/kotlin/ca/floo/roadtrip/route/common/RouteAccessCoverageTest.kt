@@ -96,6 +96,46 @@ class RouteAccessCoverageTest {
         assertTrue(undeclared.isEmpty(), "expected no undeclared routes, got $undeclared")
     }
 
+    /**
+     * The key spelling the OpenAPI document builder looks rows up by: the verb as
+     * Ktor's `HttpMethod.value` and the path as `OpenApiRoutePathFormat` renders
+     * it, which is also how `ApiContract` spells its rows. A change to either
+     * half silently strips every 401 and 403 from the published spec, so it is
+     * pinned here rather than only end-to-end.
+     */
+    @Test
+    fun `the access walk keys each leaf by wire verb and OpenAPI path`() {
+        val byLeaf =
+            declaredAccess {
+                get("/api/x") { call.respondText("ok") }.access(RouteAccess.User)
+                route("/api/group") {
+                    get("/{id}") { call.respondText("ok") }
+                }.access(RouteAccess.HasRole(Role.ADMIN))
+                // Nothing declares this one, so it contributes no entry at all.
+                get("/api/unlabelled") { call.respondText("ok") }
+            }
+        assertEquals(RouteAccess.User, byLeaf[RouteLeaf("GET", "/api/x")])
+        assertEquals(RouteAccess.HasRole(Role.ADMIN), byLeaf[RouteLeaf("GET", "/api/group/{id}")])
+        assertEquals(
+            setOf(RouteLeaf("GET", "/api/x"), RouteLeaf("GET", "/api/group/{id}")),
+            byLeaf.keys,
+            "an unlabelled leaf is absent, which the builder reads as no access-derived status",
+        )
+    }
+
+    /** Mounts [mount] into a test app and returns the access level in force at each leaf. */
+    private fun declaredAccess(mount: Route.() -> Unit): Map<RouteLeaf, RouteAccess> {
+        lateinit var byLeaf: Map<RouteLeaf, RouteAccess>
+        testApplication {
+            application {
+                routing { mount() }
+                byLeaf = routingRoot.declaredAccessByLeaf()
+            }
+            client.get("/__access_probe__")
+        }
+        return byLeaf
+    }
+
     /** Mounts [mount] into a test app and returns the undeclared method-leaf paths. */
     private fun undeclaredRoutes(mount: Route.() -> Unit): List<String> {
         lateinit var undeclared: List<String>

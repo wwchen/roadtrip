@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.route.api
 
 import ca.floo.roadtrip.config.BuildInfoConfig
+import ca.floo.roadtrip.route.routeTestApplication
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -17,7 +17,7 @@ class BuildInfoRoutesTest {
     fun `GET build-info returns env sha branch`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     buildInfoRoutes(BuildInfoConfig(env = "sandbox", sha = "abc1234", branch = "fix-foo"))
                 }
             }

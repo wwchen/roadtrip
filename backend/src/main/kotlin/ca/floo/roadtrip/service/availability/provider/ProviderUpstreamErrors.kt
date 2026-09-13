@@ -1,13 +1,8 @@
 package ca.floo.roadtrip.service.availability.provider
 
+import ca.floo.roadtrip.model.api.HTTP_TOO_MANY_REQUESTS
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import kotlinx.coroutines.CancellationException
-
-/** Upstream said "slow down". Always retryable, always its own outcome. */
-const val HTTP_TOO_MANY_REQUESTS = 429
-const val HTTP_UNAUTHORIZED = 401
-const val HTTP_FORBIDDEN = 403
-const val HTTP_SERVICE_UNAVAILABLE = 503
 
 /**
  * Translates a vendor exception's HTTP status into the provider-neutral
@@ -31,6 +26,7 @@ fun upstreamAvailabilityError(
     blockedMessageMarker: String? = null,
 ): AvailabilityProviderError =
     when {
+        // Upstream said "slow down". Always retryable, always its own outcome.
         httpStatus == HTTP_TOO_MANY_REQUESTS -> AvailabilityProviderError.RateLimited(cause)
         httpStatus != null && httpStatus in blockedStatuses -> AvailabilityProviderError.UpstreamBlocked(cause)
         blockedMessageMarker != null && cause.message?.contains(blockedMessageMarker) == true ->
