@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.model.domain.CampsiteAttribute
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProvider
@@ -27,6 +28,10 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
+
+private const val PHOTOS_FIELD = "photos"
+private const val PHOTO_URL_RESULT_FIELD = "photoUrlResult"
+private const val PHOTO_URL_FIELD = "url"
 
 /**
  * Terminal ETL for the `campsite_data` section. Reads the per-park
@@ -205,6 +210,7 @@ class AspiraCampsitesEtl(
                                 attributes = campsiteAttributes(inv.definedAttributes, dto.dictionaries),
                                 description = inv.description?.let(HtmlText::stripTags)?.takeIf { it.isNotBlank() },
                                 minPeople = inv.minCapacity,
+                                photos = inv.photos,
                                 sourcePayload =
                                     buildResourceRaw(
                                         inv = inv,
@@ -304,8 +310,20 @@ class AspiraCampsitesEtl(
             allowedEquipment = allowedEquipment,
             definedAttributes = definedAttributes,
             mapIds = mapIds,
+            photos = resourcePhotos(obj),
         )
     }
+
+    private fun resourcePhotos(obj: JsonObject): List<CatalogPhoto> =
+        (obj[PHOTOS_FIELD] as? JsonArray).orEmpty().mapNotNull { entry ->
+            val result = (entry as? JsonObject)?.get(PHOTO_URL_RESULT_FIELD) as? JsonObject
+            result
+                ?.get(PHOTO_URL_FIELD)
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.takeIf { it.isNotBlank() }
+                ?.let(::CatalogPhoto)
+        }
 
     /**
      * Build the `raw` JSON we persist on the campsite. The per-resource
@@ -652,6 +670,7 @@ class AspiraCampsitesEtl(
         val allowedEquipment: JsonArray?,
         val definedAttributes: JsonArray?,
         val mapIds: List<Long>,
+        val photos: List<CatalogPhoto>,
     ) {
         val firstMapId: Long? get() = mapIds.firstOrNull()
     }

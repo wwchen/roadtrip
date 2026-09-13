@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.model.domain.CampsiteAttribute
+import ca.floo.roadtrip.model.domain.CatalogPhoto
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
@@ -60,6 +61,34 @@ class AspiraCampsitesEtlTest {
             "definedAttributes": [
               { "attributeDefinitionId": -32715, "attributeVisibility": 0, "value": 3, "values": [] },
               { "attributeDefinitionId": -40001, "attributeVisibility": 0, "value": 7, "values": [] }
+            ]
+          }
+        }
+        """.trimIndent()
+
+    private val inventoryWithPhotosPayload =
+        """
+        {
+          "-2147481558": {
+            "resourceId": -2147481558,
+            "resourceLocationId": -2147483624,
+            "resourceCategoryId": -2147483648,
+            "localizedValues": [
+              { "cultureName": "en-US", "name": "31", "description": "Lakeside" }
+            ],
+            "mapIds": [-2147483615],
+            "allowedEquipment": [],
+            "definedAttributes": [],
+            "photos": [
+              {
+                "photoUrlResult": {
+                  "url": "https://washington.goingtocamp.com/images/07008492-6f89-47e1-acaf-d986cb314dbc.jpg",
+                  "avifUrl": "https://washington.goingtocamp.com/images/07008492-6f89-47e1-acaf-d986cb314dbc.avif"
+                },
+                "aspectType": 0
+              },
+              { "aspectType": 0 },
+              { "photoUrlResult": { "url": "" }, "aspectType": 0 }
             ]
           }
         }
@@ -199,6 +228,53 @@ class AspiraCampsitesEtlTest {
         val campsite = records(etl.transform(dto, ctx)).single()
 
         assertEquals(listOf(CampsiteAttribute("Max Vehicle Length", "3")), campsite.attributes)
+    }
+
+    @Test
+    fun `promotes inventory photo urls in source order and skips entries without a url`() {
+        val etl =
+            AspiraCampsitesEtl(
+                etlSlug = "aspira-wa-campsites",
+                mapsInputSlug = "aspira-maps-wa",
+                inventoryInputSlug = "aspira-inventory-wa",
+                aspiraTenant = "wa",
+            )
+
+        val dto =
+            AspiraCampsitesEtl.Parsed(
+                inventory = listOf(envelopeOf(inventoryWithPhotosPayload)),
+                maps = Json.parseToJsonElement(mapsPayload).jsonObject["payload"] as kotlinx.serialization.json.JsonArray,
+                dictionaries = AspiraCampsitesEtl.AspiraDictionaries.empty,
+            )
+
+        val campsite = records(etl.transform(dto, ctx)).single()
+
+        assertEquals(
+            listOf(CatalogPhoto("https://washington.goingtocamp.com/images/07008492-6f89-47e1-acaf-d986cb314dbc.jpg")),
+            campsite.photos,
+        )
+    }
+
+    @Test
+    fun `a resource without photos yields no photos`() {
+        val etl =
+            AspiraCampsitesEtl(
+                etlSlug = "aspira-wa-campsites",
+                mapsInputSlug = "aspira-maps-wa",
+                inventoryInputSlug = "aspira-inventory-wa",
+                aspiraTenant = "wa",
+            )
+
+        val dto =
+            AspiraCampsitesEtl.Parsed(
+                inventory = listOf(envelopeOf(inventoryPayload)),
+                maps = Json.parseToJsonElement(mapsPayload).jsonObject["payload"] as kotlinx.serialization.json.JsonArray,
+                dictionaries = AspiraCampsitesEtl.AspiraDictionaries.empty,
+            )
+
+        val campsite = records(etl.transform(dto, ctx)).single()
+
+        assertEquals(emptyList(), campsite.photos)
     }
 
     private fun envelopeOf(payloadJson: String): Envelope =

@@ -351,7 +351,9 @@ GET https://{host}/api/resourcelocation/resources
       {"attributeDefinitionId": -32714, "attributeId": -2147464258, "value": 11, "values": []},
       ...
     ],
-    "photos": [],
+    "photos": [                              // site photos; url is the JPEG
+      {"photoUrlResult": {"url": "https://{host}/images/{uuid}.jpg", "avifUrl": "https://{host}/images/{uuid}.avif"}, "aspectType": 0}
+    ],
     "mapIds": [-2147483464],                 // which leaf(s) this site belongs to
     "order": 690
   },
@@ -371,6 +373,7 @@ Field mapping to our reservable model:
 | `maxCapacity`, `minCapacity` | `raw.capacity` | Both useful for filters |
 | `maxBoatLength`, `maxBoatDraft`, `slipWidth` | `raw.marina` | Marina/boat-only fields; null for camping |
 | `definedAttributes[]` | `raw.attributes` | Enrich through `/api/attribute/filterable` for human labels |
+| `photos[]` | `campsites.photos` | `photoUrlResult.url` per entry, in order; entries without a URL are skipped. First one is `CampsiteDto.photo_url` |
 | `mapIds[]` | `raw._parent_map_ids` | Already partially in our raw under `_parent_aspira_map_id` |
 
 Used for: `AspiraResourcesEtl` reads this catalog and populates
