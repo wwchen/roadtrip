@@ -122,7 +122,9 @@ export function TripResults({
                   </span>
                   {card.sub ? <span className="tb-card-sub">{card.sub}</span> : null}
                   <span className="tb-card-meta">
-                    <span className="tb-card-dist">{formatDistanceAlongRoute(card.routeKm)}</span>
+                    {card.routeKm != null ? (
+                      <span className="tb-card-dist">{formatDistanceAlongRoute(card.routeKm)}</span>
+                    ) : null}
                   </span>
                 </span>
               </button>

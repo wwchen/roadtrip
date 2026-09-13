@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   BASE_VIEWPORT_CATEGORIES,
+  bboxCenter,
   CG_ZOOM_THRESHOLD,
   readMapViewport,
   viewportRequestFor,
@@ -71,5 +72,11 @@ describe('the cache key', () => {
     expect(unlockedButTooFarOut.cacheKey).not.toBe(closeEnough.cacheKey);
     expect(unlockedButTooFarOut.cacheKey.endsWith('|cg=0')).toBe(true);
     expect(closeEnough.cacheKey.endsWith('|cg=1')).toBe(true);
+  });
+});
+
+describe('bboxCenter', () => {
+  test('is the midpoint of the box', () => {
+    expect(bboxCenter([-124, 32, -114, 42])).toEqual({ lng: -119, lat: 37 });
   });
 });

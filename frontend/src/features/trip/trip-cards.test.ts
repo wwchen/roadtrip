@@ -2,7 +2,13 @@ import { describe, expect, test } from 'vitest';
 import type { LineString } from 'geojson';
 import type { TripStop } from '@/stores/tripStore';
 import { buildRouteIndex, distanceAlongRouteKm } from './route-index';
-import { hydrateCard, tripCardsFromFeatures, visibleCards, type TripCard } from './trip-cards';
+import {
+  hydrateCard,
+  tripCardsFromFeatures,
+  viewportCardsFromFeatures,
+  visibleCards,
+  type TripCard,
+} from './trip-cards';
 
 /** Seattle → Bellingham, roughly north along the I-5 corridor. */
 const line: LineString = {
@@ -33,6 +39,8 @@ const card = (over: Partial<TripCard> = {}): TripCard => ({
   lat: 48.1,
   routeKm: 50,
   distKm: 60,
+  checkable: false,
+  rating: null,
   hydrated: false,
   ...over,
 });
@@ -101,7 +109,7 @@ describe('tripCardsFromFeatures', () => {
     );
 
     expect(cards.map((c) => c.id)).toEqual([2, 1]);
-    expect(cards[0]!.routeKm).toBeLessThan(cards[1]!.routeKm);
+    expect(cards[0]!.routeKm as number).toBeLessThan(cards[1]!.routeKm as number);
   });
 
   test('starts every card as a placeholder', () => {
@@ -167,6 +175,55 @@ describe('hydrateCard', () => {
 
   test('falls back to country when there is no state', () => {
     expect(hydrateCard(card(), { country: 'Canada' }).location).toBe('Canada');
+  });
+});
+
+describe('viewportCardsFromFeatures', () => {
+  test('orders cards nearest the map centre first, with no route distance', () => {
+    const near = slim(1, -122.4, 48.1);
+    const far = slim(2, -122.4, 49.0);
+
+    const cards = viewportCardsFromFeatures([far, near], { lng: -122.4, lat: 48.0 });
+
+    expect(cards.map((c) => c.id)).toEqual([1, 2]);
+    expect(cards[0]!.routeKm).toBeNull();
+    expect(cards[0]!.distKm).toBeGreaterThan(0);
+    expect(cards[0]!.distKm).toBeLessThan(cards[1]!.distKm);
+    expect(cards[0]!.agency).toBe('WA Parks');
+  });
+
+  test('keeps the wire order when the centre is unknown', () => {
+    const cards = viewportCardsFromFeatures([slim(2, -122.4, 49.0), slim(1, -122.4, 48.1)], null);
+
+    expect(cards.map((c) => c.id)).toEqual([2, 1]);
+    expect(cards.every((c) => c.distKm === 0)).toBe(true);
+  });
+
+  test('drops a feature with no id or no point', () => {
+    const noId = { type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [-122, 48] }, properties: {} };
+    const noPoint = { type: 'Feature' as const, id: 3, geometry: null, properties: {} };
+
+    expect(viewportCardsFromFeatures([noId, noPoint], null)).toEqual([]);
+  });
+});
+
+describe('hydrateCard: availability and rating', () => {
+  test('reads whether availability can be checked, and the rating', () => {
+    const hydrated = hydrateCard(card(), {
+      name: 'Bowman Bay',
+      availability_supported: true,
+      rating: { average: 4.6, count: 12 },
+    });
+
+    expect(hydrated.checkable).toBe(true);
+    expect(hydrated.rating).toBe(4.6);
+  });
+
+  test('treats a missing flag as not checkable and a missing rating as none', () => {
+    const hydrated = hydrateCard(card(), { name: 'Bowman Bay' });
+
+    expect(hydrated.checkable).toBe(false);
+    expect(hydrated.rating).toBeNull();
   });
 });
 

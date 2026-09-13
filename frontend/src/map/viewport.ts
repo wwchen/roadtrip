@@ -102,3 +102,13 @@ export function viewportRequestFor({
   const cacheKey = `${[...categories].sort().join(',')}|cg=${zoomAllowsCampgrounds ? '1' : '0'}`;
   return { bbox, zoom, categories, campgroundsRequested, cacheKey };
 }
+
+export interface MapCenter {
+  lng: number;
+  lat: number;
+}
+
+/** The midpoint of a bbox; what "nearest" means for a list with no route. */
+export function bboxCenter([west, south, east, north]: ViewportBbox): MapCenter {
+  return { lng: (west + east) / 2, lat: (south + north) / 2 };
+}
