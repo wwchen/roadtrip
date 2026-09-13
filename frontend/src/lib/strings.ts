@@ -137,3 +137,18 @@ export const accountCopy = {
   removed: `${VENDOR} credentials and saved browser session removed.`,
   removedNoSession: `${VENDOR} credentials removed. There was no saved browser session to erase.`,
 } as const;
+
+/**
+ * The topbar's list of campgrounds in view, before any dates are chosen.
+ * "Checkable online" is the one availability word here: the campground has a
+ * booking provider we can ask (`availability_supported`).
+ */
+export const inViewCopy = {
+  heading: 'Campgrounds in view',
+  /** The card's count line: the whole catalog, until a site type narrows it (M2). */
+  sites: (total: number) => (total === 1 ? '1 site' : `${total} sites`),
+  checkableCount: (checkable: number) => `${checkable} checkable online`,
+  notCheckable: 'Not checkable online',
+  zoomIn: 'Zoom in to load campgrounds.',
+  none: 'No campgrounds in view — pan or zoom out to find some.',
+} as const;
