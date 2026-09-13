@@ -83,105 +83,133 @@ catalog season data and is a follow-up.
 4. **M4** — pins recolour by status, legend colour key with counts, Only ones we can check.
 5. **M5** — mobile parity (bottom sheet, folded filter summary, status strip, progress bar).
 
-## M2 design (2026-09-13)
+## M2 design (2026-09-13, revised)
 
-Approved in conversation on 2026-09-13. Frontend only; no backend, no generated-type edits.
-Every label the UI shows for a kind or amenity is the backend's own (`CampsiteKind.label`,
-`AmenityDto.label`); the mock's wording is not a source.
+Approved direction, 2026-09-13: **the backend filters.** M2 adds two campground endpoints and
+the frontend builds the filter controls and the list on top of them. This supersedes the
+"no new backend for M2" scoping note above. Every kind and amenity label the UI shows is the
+backend's own (`CampsiteKind.label`, `AmenityKey.label`); the mock's wording is not a source.
 
-### State: `campgroundFilterStore`
+### Why two endpoints
 
-A Zustand store under `frontend/src/stores/`, because the filters are read by the trip
-feature (M2), the polling layer (M3) and the map feature's pins and legend (M4), and features
-never import each other.
+`POST /api/pois` stays the pin layer: every category, sampled, with a per-category budget and
+`truncated`. It is what the initial page load and every pan use for pins. The campground
+**list** needs an exact answer over one category with a filter applied, plus per-campground
+data that today costs two requests per card (detail + campsites, up to 100 round trips for the
+50-card cap). So:
 
-| Field | Type | Default | Meaning |
+| Endpoint | Request | Response | Purpose |
 |---|---|---|---|
-| `siteType` | `string \| null` | `null` | A `CampsiteKind` wire value; null is "Any". |
-| `groupSize` | `number \| null` | `null` | People count; null means the filter is off. First increment sets `MIN_GROUP_SIZE` (2). |
-| `amenities` | `string[]` | `[]` | `AmenityKey` wire values switched on. |
-| `dateWindow` | `{ start: string; end: string } \| null` | `null` | ISO dates. M2 stores it; M3 polls with it. |
+| `POST /api/campgrounds/search` | `{ boundary: GeoJSON Polygon/MultiPolygon, filter?: CampgroundFilterDto }` | `{ campground_ids: number[], total_in_boundary: number, truncated: boolean }` | Which campgrounds inside a boundary satisfy the filter. |
+| `POST /api/campgrounds/details` | `{ campground_ids: number[] }` | `{ campgrounds: CampgroundSummaryDto[] }` | Bulk summaries for the ids the list will render. |
 
-Setters: `setSiteType`, `setGroupSize`, `toggleAmenity`, `setDateWindow`, `clearFilters`, `reset`.
-Session-only; no URL or localStorage persistence. `activeFilterCount` is a selector.
+Identity: `campground_ids` are **POI ids** (the `pois` row of category campground), because
+the cards, pins and drawer already key on POI id; the service resolves them to `campgrounds.id`
+through `poi_campground`, as `PoiServingRepo` does today. The boundary is GeoJSON rather than a
+bbox so the same route serves the viewport, a framed region, and a route corridor; the repo
+reuses the `ST_Within(ST_Centroid(geom), poly)` shape already in `PoiServingRepo`.
 
-### Data
+### Filter and summary DTOs
 
-- `SiteCounts` gains `byKind: Record<string, number>` and `maxPeople: number \| null` (max over
-  campsite `max_people`; null when no site carries one). Computed in `site-counts.ts` from the
-  campsites response M1 already fetches.
-- `TripCard` gains `amenities: readonly { key: string; label: string; present: boolean }[]`, copied
-  from the POI detail's `amenities` in `hydrateCard`.
-- Amenity chips exposed: `toilets`, `showers`, `water`, `pets_allowed`, listed in a named
-  `FILTER_AMENITY_KEYS` const. Chip and segment labels come from one frontend table,
-  `lib/campground-vocab.ts`, that mirrors the backend's `AmenityKey.label` and
-  `CampsiteKind.label` wire-to-label pairs for the exposed values ("Toilets", "Showers",
-  "Water", "Pets allowed"; "Tent", "RV", "Cabin"). Facet labels on a card prefer the label the
-  detail response carries and fall back to the table.
+The filter schema is derived from the summary DTO: every filterable field on
+`CampgroundSummaryDto` has a counterpart on `CampgroundFilterDto`, and the TypeScript types for
+both come from `make api-types`, never by hand.
 
-### Facets
+`CampgroundSummaryDto` (`@Serializable`, in `model/api/campground/`):
 
-`features/trip/facets.ts` is pure: `facetsFor(card, counts, filters): Facet[]`, where
-`Facet = { key, label, state: 'match' \| 'miss' \| 'no-data' }`. One facet per active filter,
-in the order site type, group size, amenities.
+| Field | Type | Source |
+|---|---|---|
+| `id` | `Long` | POI id |
+| `campground_id` | `Long` | `campgrounds.id` |
+| `name`, `region`, `agency` | `String?` | as `GET /api/pois/{id}` |
+| `lng`, `lat` | `Double` | POI centroid |
+| `rating` | `RatingDto?` | as detail |
+| `availability_supported`, `booking_system` | `Boolean`, `String?` | as detail |
+| `amenities` | `List<AmenityDto>` | `campgrounds.amenities` (key, label, present) |
+| `site_counts` | `Map<String, Int>` | campsites per `CampsiteKind` wire value |
+| `site_total` | `Int` | live campsites |
+| `max_people` | `Int?` | max over campsite `max_people`; null when no site carries one |
 
-| Filter | match | miss | no data |
-|---|---|---|---|
-| Site type | `byKind[type] > 0` | counts loaded and `byKind[type]` is 0 | catalog empty (`total === 0`) |
-| Group size | `maxPeople >= groupSize` | `maxPeople < groupSize` | `maxPeople === null` |
-| Amenity | listed with `present: true` | listed with `present: false` | key absent from the list |
+`CampgroundFilterDto`:
 
-Facets render only once the card is hydrated and its counts have landed, the same rule as the
-M1 site count. No facet row at all when no filter is active. Nothing is ever removed from the
-list by a filter; the agency and layer visibility rules from M1 are the only removals.
+| Field | Type | Matches when |
+|---|---|---|
+| `site_type` | `String?` (`CampsiteKind` wire) | `site_counts[site_type] > 0` |
+| `group_size` | `Int?` | `max_people >= group_size` **or `max_people` is null** |
+| `amenities` | `List<String>` (`AmenityKey` wire) | each key is listed with `present = true`, **or the key is absent** |
+| `checkable_only` | `Boolean` (default false) | `availability_supported` (M4's toggle; cheap to carry now) |
 
-Facet labels: site type uses the kind label ("Tent"); group size reads "Up to N" on match or
-miss and "Group size" on no data; amenities use the amenity label. Icons: `check`, `close`,
-`help` from the sprite; colours `--rt-text`, `--rt-muted`, `--rt-faint`.
+**No data is not a miss.** A campground the provider gives no field for passes the filter, and
+the card shows the facet in its no-data state. Only a stated miss (`present = false`, a people
+count below the group, a zero count for the kind) drops it. This is how the backend filter and
+the issue's "nothing drops out silently" rule reconcile: what is dropped is exactly what the
+data says does not fit, and the list head reports the drop ("9 of 17 in view match").
 
-### Count line and heads
+### Aggregates are built by the ETL
 
-- Card count line with a type selected: `"{byKind[type]} {kindLabel} sites · {total} total"`
-  when the two differ, `"{total} {kindLabel} sites"` when equal, singular-aware. No type:
-  M1's `"{total} sites"`. Zero total renders no line (M1 rule).
-- Panel head under the filter pill: `"Campgrounds"` and `"{totalInView} in view"`.
-- List head is unchanged from M1: `· N · M checkable online`.
+`site_counts`, `site_total` and `max_people` are per-campground aggregates. They are written
+when the catalog loads, not grouped from `campsites` on every search, so the search is a
+filter over one row per campground. Storage: a `campground_summary` table (one row per
+`campgrounds.id`, refreshed by the campsite ETL step that already upserts the catalog) or
+columns on `campgrounds`; the plan picks whichever the existing bag/typed-jsonb pattern favours.
+A migration is required either way; existing applied migrations are never edited.
 
-### Controls
+### Caps and errors
 
-Desktop only in M2 (mobile folding is M5). All through `@ui`:
+- `search`: results are ordered by distance from the boundary centroid and capped at a
+  config-driven `CampgroundSearchConfig.maxResults`; `truncated = true` past it. An empty or
+  invalid boundary is `400`.
+- `details`: capped at `CampgroundSearchConfig.maxDetailIds` (same idea as
+  `BulkAvailabilityConfig.maxPois`); more is `400` with a `too_many_ids` error. Unknown ids are
+  omitted, not an error.
+- Both are `ApiContract` rows with every body they serve; route tests produce each success body
+  so `contractLedgerCheck` passes. Layering is routes → `CampgroundSearchService` → repos.
 
-- **Filter campgrounds** pill under the search row with the hint "Then check dates". Toggles the
-  filter block; open state is local to `TopBar`. Shows a count badge when filters are active.
-- Site type: LDS `SegmentedControl`, options `Any` plus `CampsiteKind` labels for `tent`, `rv`,
-  `cabin`.
-- Group size: LDS has no stepper. `GroupSizeStepper` in `features/trip/`: minus and plus icon
-  `Button`s around the count, `aria-label`s "Fewer people" / "More people", clamped to
-  `[MIN_GROUP_SIZE, MAX_GROUP_SIZE]` (2..12); stepping below the minimum turns the filter off.
-  Storybook story required.
-- Amenities: LDS `Chip` with `selected`, one per exposed key.
-- **Check availability** banner: LDS `Banner` with the calendar icon, "Check availability" /
-  "Add dates to see which of these have a site." and an **Add dates** primary `Button`. Add dates
-  reveals two `type="date"` `TextField`s (Start date, End date) as the watch form does, plus
-  Save. Save writes `dateWindow` and the banner collapses to a summary,
-  "Fri Sep 11 → Sun Sep 13 · 2 nights", with Edit and Clear. End before start disables Save.
-  No network call.
+### Frontend
 
-Copy goes in `lib/strings.ts` as `filterCopy`. New CSS goes in `features/trip/topbar.css`
-under `.tb-filters*` and `.tb-facet*`, tokens only.
+- **State.** `campgroundFilterStore` (Zustand, `frontend/src/stores/`): `siteType`, `groupSize`,
+  `amenities`, `dateWindow`, `clearFilters`, `reset`. Session-only. Read by trip (M2), polling
+  (M3), map (M4).
+- **Fetching.** `useCampgroundSearch(boundary, filter)` calls `search` on the debounced viewport
+  (same `VIEWPORT_DEBOUNCE_MS` as the pin loop) and takes the nearest `MAX_IN_VIEW_CARDS`.
+  `useCampgroundSummaries(ids)` calls `details` for the ids not already in the Query cache and
+  fans the response into per-id entries under `queryKeys.campgrounds.summary(id)`, staleness
+  matching the catalog's five minutes. The M1 detail + campsites pipeline for the in-view list
+  is retired; `useSiteCounts` goes with it. The route list keeps its own pipeline.
+- **Cards** render from `CampgroundSummaryDto`: name, region, agency, rating, count line,
+  facets. Count line with a type selected: `"{site_counts[type]} {kindLabel} sites · {site_total}
+  total"` when they differ, `"{site_total} {kindLabel} sites"` when equal; no type: M1's
+  `"{site_total} sites"`; zero total renders no line.
+- **Facets** (`features/trip/facets.ts`, pure): one per active filter, state `match` or
+  `no-data` (a miss never reaches the list). Labels: kind label; "Up to N" / "Group size";
+  amenity label from the DTO. Icons `check` / `help`; colours `--rt-text` / `--rt-faint`.
+- **Heads.** Filter block: "Campgrounds" and `"{matching} of {total_in_boundary} in view"` when
+  a filter is active, else `"{total_in_boundary} in view"`. List head as M1:
+  `· N · M checkable online`.
+- **Controls** (desktop only; mobile is M5), all via `@ui`: the **Filter campgrounds** pill
+  with hint "Then check dates" and an active-count badge; `SegmentedControl` for site type
+  (Any + `tent`/`rv`/`cabin` labels); `GroupSizeStepper` (two icon `Button`s, clamped
+  2..12, below the minimum turns the filter off; Storybook story); `Chip` per exposed amenity
+  (`toilets`, `showers`, `water`, `pets_allowed` in a named const); the **Check availability**
+  `Banner` whose **Add dates** reveals two `type="date"` fields with Save, writing
+  `dateWindow` only and collapsing to "Fri Sep 11 → Sun Sep 13 · 2 nights" with Edit and
+  Clear. Labels for kinds and amenities come from one table in `lib/campground-vocab.ts`
+  mirroring the backend enums.
+- Copy in `lib/strings.ts` (`filterCopy`); CSS in `features/trip/topbar.css`, tokens only.
 
-### Route list
+### Viewport clipping (M1 follow-up, pins side)
 
-Unchanged. Filters, facets and the banner apply to the viewport variant only; the route variant
-does not fetch campsites and stays as M1 left it.
+`useViewportPois` buckets the whole cached response, and the containment cache answers a
+sub-view with a superset, so legend counts described a wider, older view. Clip features to the
+request bbox before `bucketPins`. The list no longer reads that cache once it moves to
+`search`, but the legend still does. Ships first as its own small PR.
 
-### Viewport clipping (M1 follow-up)
+### Milestone split
 
-`useViewportPois` bucketed the whole cached response. The containment cache answers a sub-view
-with a superset, so after a card fly-to the list and legend counts described the wider, older
-view. Fix: clip features to the current request bbox before `bucketPins`, so map, list and
-legend agree. Point-in-bbox on the flat `[west, south, east, north]` the request already
-carries. Ships first as its own small PR.
+- **M2a (backend):** migration + ETL aggregate, the two DTO pairs, `CampgroundSearchService`,
+  repos, routes, contract rows, route tests, `make api-types`.
+- **M2b (frontend):** store, hooks, cards on summaries, facets, controls, banner, retiring the
+  per-card pipeline for the in-view list.
 
 ## Out of scope for the issue
 
