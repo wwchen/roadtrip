@@ -431,7 +431,14 @@ SCRUB_SQL="${SCRUB_SQL:-${SCRIPT_DIR}/sandbox_scrub.sql}"
 POSTGRES_DB="roadtrip"
 POSTGRES_USER="roadtrip"
 
-HEALTH_RETRIES="${HEALTH_RETRIES:-60}"
+# Covers Flyway catching a restored snapshot up to the image's schema before the
+# app serves; on the arm64 host that took 56s for 14 migrations.
+HEALTH_RETRIES="${HEALTH_RETRIES:-180}"
+
+# A failed sandbox-up tears itself down unless this is true.
+SANDBOX_KEEP_ON_FAILURE="${SANDBOX_KEEP_ON_FAILURE:-false}"
+
+SANDBOX_FAILURE_LOG_LINES="${SANDBOX_FAILURE_LOG_LINES:-200}"
 
 POSTGRES_HEALTH_RETRIES="${POSTGRES_HEALTH_RETRIES:-30}"
 
@@ -741,6 +748,29 @@ _sandbox_down() {
     echo "==> sandbox ${sandbox_owner} is down"
 }
 
+# A failed bring-up otherwise strands its slot, database volume and DNS record,
+# and the next deploy then fails the disk check. Teardown runs as its own
+# process so `set -e` still applies inside it.
+_sandbox_up_exit() {
+    local rc=$?
+
+    trap - EXIT
+    if (( rc == 0 )); then
+        exit 0
+    fi
+    echo "==> backend logs (last ${SANDBOX_FAILURE_LOG_LINES} lines)" >&2
+    _sandbox_compose -p "${COMPOSE_PROJECT}" -f "${COMPOSE_FILE}" \
+        logs --no-color --tail "${SANDBOX_FAILURE_LOG_LINES}" backend >&2 || true
+    if [[ "${SANDBOX_KEEP_ON_FAILURE}" == "true" ]]; then
+        echo "==> SANDBOX_KEEP_ON_FAILURE=true; leaving ${SANDBOX_OWNER} up" >&2
+    else
+        echo "==> sandbox-up failed; tearing down ${SANDBOX_OWNER}" >&2
+        "${SCRIPT_DIR}/deploy.sh" sandbox-down "${SANDBOX_OWNER}" >&2 \
+            || echo "==> warning: teardown of ${SANDBOX_OWNER} failed" >&2
+    fi
+    exit "${rc}"
+}
+
 if [[ "${DEPLOY_ENV}" == "sandbox-down" ]]; then
     # Teardown skips the disk check because it frees space, but a pile of hung
     # deploys blocks it just as surely as a full disk does.
@@ -853,6 +883,8 @@ echo "==> ${DEPLOY_ENV}: ${SANDBOX_OWNER}  (slot: ${SANDBOX_SLOT}, project: ${CO
 echo "==> allocated port ${SANDBOX_PORT}"
 _write_sandbox_marker "starting"
 _sandbox_lock_release
+trap _sandbox_up_exit EXIT
+trap _sandbox_up_exit EXIT
 
 # ── Export vars consumed by docker-compose.sandbox.yml ───────────────────────
 export SANDBOX_SHA
