@@ -9,7 +9,7 @@ import { TripResults } from './TripResults';
 import { MAX_SEARCH_RESULTS, type SearchResult } from './search-results';
 import { allStopsFilled, isLocated } from '@/domain/trip/stops';
 import { buildRouteIndex } from './route-index';
-import { bboxCenter } from '@/map/viewport';
+import { bboxCenter, CG_ZOOM_THRESHOLD } from '@/map/viewport';
 import { useMapStore } from '@/stores/mapStore';
 import { tripCardsFromFeatures, viewportCardsFromFeatures, type TripCard } from './trip-cards';
 import { useSiteCounts } from './useSiteCounts';
@@ -30,6 +30,9 @@ const NO_ACTIVE_RESULT = -1;
 
 /** Stable empty, so the in-view pipeline does nothing while a route owns the list. */
 const NO_CARDS: TripCard[] = [];
+
+/** The list is nearest-first, so a cap keeps the useful end and bounds the per-card fetches. */
+const MAX_IN_VIEW_CARDS = 50;
 
 const COPY_LABEL = 'Copy trip link';
 const COPIED_LABEL = 'Trip link copied';
@@ -85,11 +88,18 @@ export function TopBar({ alerts }: TopBarProps) {
   const viewportCampgrounds = useMapStore((s) => s.viewportCampgrounds);
   const campgroundsRequested = useMapStore((s) => s.campgroundsRequested);
   const viewportBbox = useMapStore((s) => s.viewport?.bbox ?? null);
+  const viewportZoom = useMapStore((s) => s.viewport?.zoom ?? 0);
+  // The sticky flag never goes back to false once campgrounds have been
+  // requested once, so the zoom itself decides whether the hint still applies.
+  const zoomAllowsCampgrounds = viewportZoom >= CG_ZOOM_THRESHOLD;
   const inViewPlaceholders = useMemo(
     () =>
       showRoute
         ? NO_CARDS
-        : viewportCardsFromFeatures(viewportCampgrounds, viewportBbox ? bboxCenter(viewportBbox) : null),
+        : viewportCardsFromFeatures(
+            viewportCampgrounds,
+            viewportBbox ? bboxCenter(viewportBbox) : null,
+          ).slice(0, MAX_IN_VIEW_CARDS),
     [showRoute, viewportCampgrounds, viewportBbox],
   );
   const inViewCards = useTripCards(inViewPlaceholders);
@@ -283,7 +293,8 @@ export function TopBar({ alerts }: TopBarProps) {
           variant="viewport"
           cards={inViewCards}
           siteCounts={siteCounts}
-          campgroundsRequested={campgroundsRequested}
+          campgroundsRequested={campgroundsRequested && zoomAllowsCampgrounds}
+          totalInView={viewportCampgrounds.length}
         />
       )}
     </div>

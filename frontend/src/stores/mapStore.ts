@@ -56,7 +56,8 @@ export interface MapState {
    * The campground pins the viewport loop last returned, and whether campgrounds
    * were requested at all (false below the zoom gate). Published by
    * `features/map/useViewportPois` for the topbar's in-view list, which sits
-   * across the feature boundary. With a route up these are the corridor's pins.
+   * across the feature boundary. Empty while a route owns the map: the corridor's
+   * pins are not in the viewport, and the route list shows them instead.
    */
   viewportCampgrounds: PinFeature[];
   campgroundsRequested: boolean;

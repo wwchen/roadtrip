@@ -53,6 +53,8 @@ beforeEach(() => {
     selectedRegion: null,
     hiddenAgencies: [],
     hiddenOverlays: [],
+    viewportCampgrounds: [],
+    campgroundsRequested: false,
   });
   poiResults = [
     { id: 7, name: 'Bowman Bay', category: 'campground', region: 'WA', lng: -122.65, lat: 48.41 },
@@ -883,6 +885,29 @@ describe('the results list', () => {
 
     expect(document.querySelector('#tb-corridor')).toBeNull();
   });
+
+  test('an empty corridor outranks the hidden-layer card', async () => {
+    // Default fetch stub answers `/api/pois/on-route` with no features, so the
+    // corridor is empty without needing `withCorridor()`.
+    useTripStore.setState({
+      mode: 'directions',
+      stops: [
+        { name: 'Seattle', lng: -122.33, lat: 47.6 },
+        { name: 'Bowman Bay', lng: -122.65, lat: 48.41 },
+      ],
+    });
+    mount();
+    await waitFor(() => expect(screen.getByText('120 km')).toBeInTheDocument());
+
+    await act(async () => {
+      useMapStore.getState().setOverlayHidden('cg', true);
+    });
+
+    expect(
+      screen.getByText('Pan the map or widen the corridor to find campgrounds.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Campgrounds are switched off')).toBeNull();
+  });
 });
 
 describe('the in-view list', () => {
@@ -997,6 +1022,28 @@ describe('the in-view list', () => {
     expect(screen.getByText('Zoom in to load campgrounds.')).toBeInTheDocument();
   });
 
+  test('says to zoom in again after zooming back out', () => {
+    // `campgroundsRequested` latches true forever once it flips — the zoom itself,
+    // not the sticky flag, is what should decide the hint.
+    withViewport();
+    useMapStore.setState({
+      viewportCampgrounds: [],
+      viewport: { bbox: [-122.7, 47.5, -122.3, 48.0], zoom: 4 },
+    });
+    mount();
+
+    expect(screen.getByText('Zoom in to load campgrounds.')).toBeInTheDocument();
+  });
+
+  test('the hidden-layer card gives way to the zoom hint', () => {
+    withViewport();
+    useMapStore.setState({ campgroundsRequested: false, hiddenOverlays: ['cg'] });
+    mount();
+
+    expect(screen.getByText('Zoom in to load campgrounds.')).toBeInTheDocument();
+    expect(screen.queryByText('Campgrounds are switched off')).toBeNull();
+  });
+
   test('says so when the view holds none', () => {
     withViewport();
     useMapStore.setState({ viewportCampgrounds: [] });
@@ -1031,5 +1078,35 @@ describe('the in-view list', () => {
 
     await waitFor(() => expect(screen.getByText('Campgrounds along route')).toBeInTheDocument());
     expect(screen.queryByText('Campgrounds in view')).toBeNull();
+  });
+
+  test('caps the list and still counts the whole view', async () => {
+    // The server can return up to ~2000 pins at low zoom; each card fires two
+    // fetches, so the rendered list has to stay bounded regardless of view size.
+    const pins = Array.from({ length: 60 }, (_, i) => ({
+      type: 'Feature',
+      id: i + 1,
+      geometry: { type: 'Point', coordinates: [-122.5 + i * 0.001, 47.8] },
+      properties: { category: 'campground', agency: 'USFS' },
+    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        urls.push(url);
+        if (/\/api\/pois\/\d+\/campsites$/.test(url)) return json({ campsites: [] });
+        if (/\/api\/pois\/\d+$/.test(url)) return json({ type: 'Feature', properties: { name: 'Campground' } });
+        return json({ results: [] });
+      }),
+    );
+    useMapStore.setState({
+      viewport: { bbox: [-122.7, 47.5, -122.3, 48.0], zoom: 9 },
+      viewportCampgrounds: pins as never,
+      campgroundsRequested: true,
+    });
+    mount();
+
+    await waitFor(() => expect(document.querySelectorAll('.tb-card').length).toBe(50));
+    expect(screen.getByText(/50 of 60/)).toBeInTheDocument();
   });
 });

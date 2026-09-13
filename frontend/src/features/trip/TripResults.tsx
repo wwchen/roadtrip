@@ -38,6 +38,8 @@ interface ViewportProps extends CommonProps {
   siteCounts: SiteCountsById;
   /** False below the zoom gate, where the server sends no campgrounds. */
   campgroundsRequested: boolean;
+  /** The whole viewport count, before the rendered list is capped. */
+  totalInView: number;
 }
 
 export type TripResultsProps = RouteProps | ViewportProps;
@@ -57,6 +59,7 @@ export function TripResults(props: TripResultsProps) {
 
   const visible = visibleCards(cards, { hiddenAgencies, campgroundsHidden });
   const total = cards.length;
+  const emptyMessage = emptyCopy(props, total, campgroundsHidden);
 
   const openCard = (card: TripCard) => {
     // Fly, then select. The drawer reads `selectedPoiId` and hydrates from the id.
@@ -93,7 +96,7 @@ export function TripResults(props: TripResultsProps) {
 
         <div className="tb-results-cards" id="tb-results-cards">
           {visible.length === 0 ? (
-            campgroundsHidden ? (
+            emptyMessage === null ? (
               <EmptyState
                 icon="eye-off"
                 title="Campgrounds are switched off"
@@ -105,36 +108,39 @@ export function TripResults(props: TripResultsProps) {
                 }
               />
             ) : (
-              <div className="tb-card-empty">{emptyCopy(props, total)}</div>
+              <div className="tb-card-empty">{emptyMessage}</div>
             )
           ) : (
-            visible.map((card) => (
-              <button
-                type="button"
-                className="tb-card"
-                key={String(card.id)}
-                data-id={String(card.id)}
-                onClick={() => openCard(card)}
-              >
-                <span className="tb-card-dot" style={{ background: token('--rt-layer-cg') }} />
-                <span className="tb-card-body">
-                  <span className="tb-card-head">
-                    <span className="tb-card-name">{card.name}</span>
-                    {card.location ? (
-                      <span className="tb-card-location">{card.location}</span>
-                    ) : null}
+            visible.map((card) => {
+              const sub = subLine(props, card);
+              return (
+                <button
+                  type="button"
+                  className="tb-card"
+                  key={String(card.id)}
+                  data-id={String(card.id)}
+                  onClick={() => openCard(card)}
+                >
+                  <span className="tb-card-dot" style={{ background: token('--rt-layer-cg') }} />
+                  <span className="tb-card-body">
+                    <span className="tb-card-head">
+                      <span className="tb-card-name">{card.name}</span>
+                      {card.location ? (
+                        <span className="tb-card-location">{card.location}</span>
+                      ) : null}
+                    </span>
+                    {sub ? <span className="tb-card-sub">{sub}</span> : null}
+                    <span className="tb-card-meta">
+                      {props.variant === 'route' ? (
+                        <RouteMeta card={card} />
+                      ) : (
+                        <ViewportMeta card={card} siteCounts={props.siteCounts} />
+                      )}
+                    </span>
                   </span>
-                  {subLine(props, card) ? <span className="tb-card-sub">{subLine(props, card)}</span> : null}
-                  <span className="tb-card-meta">
-                    {props.variant === 'route' ? (
-                      <RouteMeta card={card} />
-                    ) : (
-                      <ViewportMeta card={card} siteCounts={props.siteCounts} />
-                    )}
-                  </span>
-                </span>
-              </button>
-            ))
+                </button>
+              );
+            })
           )}
         </div>
       </div>
@@ -144,6 +150,11 @@ export function TripResults(props: TripResultsProps) {
 
 /** "3 of 12" only while something is filtered out — otherwise the second number is noise. */
 function countLine(props: TripResultsProps, visible: TripCard[], total: number): string {
+  // The rendered list is capped below the true viewport count: report against
+  // that whole count rather than the (already-truncated) list length.
+  if (props.variant === 'viewport' && visible.length < props.totalInView) {
+    return `· ${visible.length} of ${props.totalInView}`;
+  }
   const count = visible.length === total ? String(total) : `${visible.length} of ${total}`;
   if (props.variant === 'route') return `· ${count}`;
   // The checkable count waits for every visible card, so it never counts up from 0.
@@ -152,7 +163,14 @@ function countLine(props: TripResultsProps, visible: TripCard[], total: number):
   return `· ${count} · ${inViewCopy.checkableCount(checkable)}`;
 }
 
-function emptyCopy(props: TripResultsProps, total: number): string {
+/**
+ * The empty-list copy, or null when the hidden-campgrounds card should render instead.
+ *
+ * Precedence: a computing/empty route or an unrequested/empty viewport outranks the
+ * layer-off card, because those states explain themselves better than "turn it back
+ * on" does. Only once neither applies does a hidden layer get its own card.
+ */
+function emptyCopy(props: TripResultsProps, total: number, campgroundsHidden: boolean): string | null {
   if (props.variant === 'route') {
     if (props.loading) return 'Looking for campgrounds along the route…';
     if (total === 0) return 'Pan the map or widen the corridor to find campgrounds.';
@@ -160,6 +178,7 @@ function emptyCopy(props: TripResultsProps, total: number): string {
     if (!props.campgroundsRequested) return inViewCopy.zoomIn;
     if (total === 0) return inViewCopy.none;
   }
+  if (campgroundsHidden) return null;
   return 'All campgrounds hidden — re-enable a category in the legend.';
 }
 
@@ -178,7 +197,7 @@ function ViewportMeta({ card, siteCounts }: { card: TripCard; siteCounts: SiteCo
   const counts = siteCounts.get(String(card.id));
   return (
     <>
-      {counts ? <span>{inViewCopy.sites(counts.total)}</span> : null}
+      {counts && counts.total > 0 ? <span>{inViewCopy.sites(counts.total)}</span> : null}
       {card.rating != null ? <span>{`${RATING_PREFIX} ${card.rating.toFixed(1)}`}</span> : null}
       {card.hydrated && !card.checkable ? <span>{inViewCopy.notCheckable}</span> : null}
     </>
