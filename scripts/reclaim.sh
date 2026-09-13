@@ -5,10 +5,11 @@
 # developer machine with a healthy deploy host.
 #
 # The host is shared with unrelated Docker stacks, so every destructive call
-# stays inside `ca.floo.roadtrip.managed=true`. The one exception is the
-# anonymous-volume prune, which by definition cannot filter on a label; it is
-# gated behind --include-anonymous, on for --scope=host and off for
-# --scope=local.
+# stays inside `ca.floo.roadtrip.managed=true`. The exceptions are the two
+# prunes that by definition cannot filter on a label: anonymous volumes, gated
+# behind --include-anonymous, on for --scope=host and off for --scope=local;
+# and the BuildKit cache, gated behind --include-build-cache and off for every
+# scope.
 set -euo pipefail
 
 MANAGED_LABEL="ca.floo.roadtrip.managed=true"
@@ -47,6 +48,7 @@ CONTAINER_PRUNE_MIN_AGE="10m"
 SCOPE=""
 DRY_RUN=0
 INCLUDE_ANONYMOUS=""
+INCLUDE_BUILD_CACHE=""
 MIN_GB=""
 DISK_PATH="${HOME}"
 LABEL="reclaim"
@@ -68,6 +70,8 @@ options:
   --label TEXT
   --include-anonymous
   --no-include-anonymous
+  --include-build-cache
+  --no-include-build-cache
 USAGE
 }
 
@@ -88,6 +92,8 @@ _parse_args() {
             --label) _need_value "$@"; LABEL="$2"; shift 2 ;;
             --include-anonymous) INCLUDE_ANONYMOUS=1; shift ;;
             --no-include-anonymous) INCLUDE_ANONYMOUS=0; shift ;;
+            --include-build-cache) INCLUDE_BUILD_CACHE=1; shift ;;
+            --no-include-build-cache) INCLUDE_BUILD_CACHE=0; shift ;;
             *) echo "error: unknown option $1" >&2; _usage; exit 2 ;;
         esac
     done
@@ -111,9 +117,11 @@ _apply_scope_defaults() {
     if [[ "${SCOPE}" == host ]]; then
         : "${ROADTRIP_IMAGE_KEEP:=${HOST_IMAGE_KEEP}}"
         [[ -n "${INCLUDE_ANONYMOUS}" ]] || INCLUDE_ANONYMOUS=1
+        [[ -n "${INCLUDE_BUILD_CACHE}" ]] || INCLUDE_BUILD_CACHE=0
     else
         : "${ROADTRIP_IMAGE_KEEP:=${LOCAL_IMAGE_KEEP}}"
         [[ -n "${INCLUDE_ANONYMOUS}" ]] || INCLUDE_ANONYMOUS=0
+        [[ -n "${INCLUDE_BUILD_CACHE}" ]] || INCLUDE_BUILD_CACHE=0
     fi
     : "${MIN_GB:=${ROADTRIP_MIN_FREE_DISK_GB:-${RECLAIM_FREE_TARGET_GB}}}"
 }
@@ -187,6 +195,14 @@ _prune_volumes() {
     fi
 }
 
+# The retention filter keeps recent layers warm; no --all, which would also
+# drop the BuildKit frontend images.
+_prune_build_cache() {
+    (( INCLUDE_BUILD_CACHE )) || return 0
+    echo "==> pruning build cache older than ${ROADTRIP_IMAGE_RETENTION}"
+    _docker builder prune --force --filter "until=${ROADTRIP_IMAGE_RETENTION}" | tail -1
+}
+
 _prune_containers() {
     _docker container prune --force --filter "label=${MANAGED_LABEL}" \
         --filter "until=${CONTAINER_PRUNE_MIN_AGE}" | tail -1
@@ -196,6 +212,7 @@ cmd_prune() {
     _prune_containers
     _prune_images
     _prune_volumes
+    _prune_build_cache
 }
 
 cmd_report() {

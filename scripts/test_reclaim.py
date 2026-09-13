@@ -191,6 +191,49 @@ class PruneTest(ReclaimTestCase):
                 if c.startswith("volume prune") and "label=" not in c]
         self.assertTrue(bare, "host scope must reach anonymous volumes")
 
+    def test_build_cache_is_never_pruned_by_default(self) -> None:
+        # BuildKit cache carries no label, so like anonymous volumes it is an
+        # explicit opt-in -- but off for both scopes: the host never builds and
+        # locally the cache is what keeps the next Tilt build fast.
+        for scope in ("local", "host"):
+            done = self.run_reclaim("prune", "--scope", scope)
+            self.assertEqual(done.returncode, 0, done.stderr)
+        for call in self.docker_calls():
+            self.assertFalse(call.startswith("builder prune"), call)
+
+    def test_include_build_cache_prunes_cache_older_than_image_retention(self) -> None:
+        done = self.run_reclaim("prune", "--scope", "local", "--include-build-cache")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        builder = [c for c in self.docker_calls() if c.startswith("builder prune")]
+        self.assertEqual(builder, ["builder prune --force --filter until=336h"])
+
+        self.log.unlink()
+        done = self.run_reclaim(
+            "prune", "--scope", "local", "--include-build-cache",
+            ROADTRIP_IMAGE_RETENTION="24h",
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        builder = [c for c in self.docker_calls() if c.startswith("builder prune")]
+        self.assertEqual(builder, ["builder prune --force --filter until=24h"])
+
+    def test_no_include_build_cache_wins(self) -> None:
+        done = self.run_reclaim(
+            "prune", "--scope", "host",
+            "--include-build-cache", "--no-include-build-cache",
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        for call in self.docker_calls():
+            self.assertFalse(call.startswith("builder prune"), call)
+
+    def test_report_with_build_cache_prints_the_line_and_calls_nothing(self) -> None:
+        done = self.run_reclaim("report", "--scope", "local", "--include-build-cache")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(
+            "dry-run: docker builder prune --force --filter until=336h", done.stdout
+        )
+        for call in self.docker_calls():
+            self.assertFalse(call.startswith("builder prune"), call)
+
     def test_dry_run_makes_no_destructive_call(self) -> None:
         self.image_ls.write_text(FOUR_TAGS)
         self.run_reclaim("prune", "--scope", "local", "--dry-run")

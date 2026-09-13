@@ -45,6 +45,7 @@ help:
 	@echo "  make grafana-export   Snapshot UI-edited dashboards and apply shared links"
 	@echo "  make reclaim          Remove stopped roadtrip containers, images, volumes (labelled only)"
 	@echo "  make reclaim-report   Show what make reclaim would remove, change nothing"
+	@echo "  make reclaim RECLAIM_FLAGS=--include-build-cache   Also prune BuildKit cache older than the image retention"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (host backend + Rec.gov companion)."
 
@@ -193,7 +194,7 @@ sandbox-stop:
 # Local scope keeps 2 tags per repo and never touches anonymous volumes, so
 # unrelated stacks sharing this machine are out of range.
 reclaim:
-	@scripts/reclaim.sh prune --scope local
+	@scripts/reclaim.sh prune --scope local $(RECLAIM_FLAGS)
 
 reclaim-report:
-	@scripts/reclaim.sh report --scope local
+	@scripts/reclaim.sh report --scope local $(RECLAIM_FLAGS)
