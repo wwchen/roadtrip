@@ -9,6 +9,10 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
+AWAIT_IMAGES_ACTION = (
+    ROOT / ".github" / "actions" / "await-images" / "action.yml"
+).read_text()
+
 # The shipped shell scripts address their siblings through ${SCRIPT_DIR} and
 # the release root through ${REPO_ROOT}. On the deploy host both resolve
 # inside the unpacked release, so a file the manifest omits is simply absent
@@ -140,6 +144,129 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("setRequest({ operation: 'skip'", resolve_script)
         self.assertIn("operation: 'start'", resolve_script)
 
+    def test_deploy_resolves_every_release_image_before_touching_the_host(self) -> None:
+        # A workflow_dispatch deploy bypasses the `workflow_run` conclusion
+        # guard, so nothing else establishes that CI has published the tags
+        # the host is about to pull. Without this the failure lands on the
+        # host as a containerd "not found", after the data image has been
+        # pulled and a 30-minute volume guard parked.
+        deploy = workflow("deploy.yml")
+        job = deploy["jobs"]["deploy"]
+        step_names = [step.get("name", "") for step in job["steps"]]
+        await_step = step_by_name(job, "Await the release images")
+
+        self.assertEqual("read", deploy["permissions"]["packages"])
+        self.assertEqual("./.github/actions/await-images", await_step["uses"])
+        self.assertLess(
+            step_names.index("Await the release images"),
+            step_names.index("Reach the deploy host"),
+        )
+        images = await_step["with"]["images"]
+        for repository, sha in (
+            ("backend", "env.DEPLOY_SHA"),
+            ("recgov-companion", "env.DEPLOY_COMPANION_SHA"),
+            ("data", "env.DEPLOY_DATA_SHA"),
+        ):
+            self.assertIn(f"/{repository}:${{{{ {sha} }}}}", images)
+
+        # Pinning today's three would let a fourth image be added to the prod
+        # stack and pulled on the host without ever being preflighted -- the
+        # guard would rot open silently, into exactly the containerd "not
+        # found" it exists to prevent. So derive the set deploy.sh actually
+        # pulls and require the await list to cover it.
+        pulled = set(
+            re.findall(
+                r'export ROADTRIP_[A-Z]+_IMAGE="ghcr\.io/[^/]+/[^/]+/([^:"]+):',
+                (ROOT / "scripts" / "deploy.sh").read_text(),
+            )
+        )
+        self.assertTrue(pulled, "found no prod image exports in deploy.sh")
+        for repository in sorted(pulled):
+            self.assertIn(
+                f"/{repository}:",
+                images,
+                f"deploy.sh pulls {repository} on the host, but the deploy "
+                "workflow does not preflight it",
+            )
+
+        # The deploy queue is serialized, so this job must not inherit the
+        # sandbox's 20-minute patience.
+        budget = int(await_step["with"]["max-attempts"]) * int(
+            await_step["with"]["wait-seconds"]
+        )
+        self.assertLessEqual(budget, 300, "the image wait must stay well inside the job budget")
+
+    def test_a_manual_deploy_must_still_establish_that_ci_passed(self) -> None:
+        # The `workflow_run` trigger carries the CI-succeeded precondition;
+        # workflow_dispatch bypasses it. Awaiting the images does not stand in
+        # for it, because the image jobs do not depend on the tests -- so a
+        # dispatch of a red commit finds every tag present.
+        deploy = workflow("deploy.yml")
+        job = deploy["jobs"]["deploy"]
+        triggers = workflow_triggers(deploy)
+        gate = step_by_name(job, "Require a green CI run for this commit")
+        step_names = [step.get("name", "") for step in job["steps"]]
+
+        self.assertIn("force", triggers["workflow_dispatch"]["inputs"])
+        self.assertIn("workflow_dispatch", gate["if"])
+        self.assertIn("!inputs.force", gate["if"])
+        # Both halves: the run concluded success, and the ref is production's.
+        self.assertIn("conclusion", gate["run"])
+        self.assertIn("refs/heads/$DEPLOY_BRANCH", gate["run"])
+        # Before anything reaches the host or the registry.
+        for later in ("Await the release images", "Reach the deploy host"):
+            self.assertLess(step_names.index(gate["name"]), step_names.index(later))
+
+    def test_the_production_branch_is_named_once(self) -> None:
+        # deploy.sh stamped a `master` literal into build-info and the health
+        # gate asserted another `master` literal against it, so the check
+        # compared a constant with itself and could not fail.
+        deploy = workflow("deploy.yml")
+        body = (ROOT / ".github" / "workflows" / "deploy.yml").read_text()
+
+        self.assertEqual("master", deploy["env"]["DEPLOY_BRANCH"])
+        # The `on:` block cannot read env, so that one literal stays.
+        self.assertEqual(
+            1,
+            len([line for line in body.splitlines()
+                 if "master" in line and "#" not in line and "branches:" not in line]),
+            "the production branch should be defined once, as DEPLOY_BRANCH",
+        )
+
+    def test_smoke_does_not_serialize_behind_the_unit_tests(self) -> None:
+        # Smoke rebuilds the fat jar and frontend itself, so the edge bought
+        # nothing but a spared runner -- at the cost of the two jobs' durations
+        # summing on every push before deploy could start.
+        ci = workflow("ci.yml")
+        smoke = ci["jobs"]["smoke"]
+        aggregate = ci["jobs"]["ci-passed"]
+
+        self.assertNotIn("backend-tests", smoke["needs"])
+        self.assertNotIn("backend-tests", smoke["if"])
+        # The safety property lives here, and still covers both.
+        for job in ("smoke", "backend-tests"):
+            self.assertIn(job, aggregate["needs"])
+
+    def test_the_deploy_does_not_restart_what_it_just_recreated(self) -> None:
+        # Compose resolves the observability bind mounts against the release
+        # directory, which is keyed by SHA, so `up -d` has already recreated
+        # them; restarting again only resets the health start periods that
+        # `--wait` and the telemetry poll then wait through.
+        deploy_script = (ROOT / "scripts" / "deploy.sh").read_text()
+
+        self.assertNotIn("restart grafana", deploy_script)
+
+    def test_the_image_wait_is_shared_rather_than_copied(self) -> None:
+        # Two call sites block on GHCR tags; the poll loop lives in one place
+        # so a fix to either reaches both.
+        sandbox_action = (ROOT / ".github" / "actions" / "sandbox" / "action.yml").read_text()
+        deploy = (ROOT / ".github" / "workflows" / "deploy.yml").read_text()
+
+        self.assertIn("docker manifest inspect", AWAIT_IMAGES_ACTION)
+        for caller in (sandbox_action, deploy):
+            self.assertIn("uses: ./.github/actions/await-images", caller)
+            self.assertNotIn("docker manifest inspect", caller)
+
     def test_sandbox_status_comment_updates_before_image_wait(self) -> None:
         sandbox = workflow("sandbox.yml")
         sweep = workflow("sandbox-sweep.yml")
@@ -163,7 +290,10 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("SANDBOX_TRIGGER", status_step["env"])
         self.assertNotIn("SANDBOX_PR_NUMBER", status_step["env"])
         self.assertNotIn("SANDBOX_PR_NUMBER", sandbox_action)
-        self.assertIn("Log in to GHCR", sandbox_action)
+        # The GHCR login moved into the shared await-images action; the
+        # sandbox reaches it through that action rather than inlining it.
+        self.assertIn("uses: ./.github/actions/await-images", sandbox_action)
+        self.assertIn("Log in to GHCR", AWAIT_IMAGES_ACTION)
         self.assertIn("Wait for GHCR images", sandbox_action)
         self.assertLess(
             sandbox_action.index("- name: Wait for GHCR images"),

@@ -323,8 +323,13 @@ _deploy_prod() {
     _ensure_data_volume "${data_sha}"
     "${secret_exec[@]}" "${compose[@]}" pull backend recgov-companion
     "${secret_exec[@]}" "${compose[@]}" up -d --force-recreate backend
+    # No `restart` of the observability services here: compose resolves their
+    # ./grafana bind mounts against the release directory, which is keyed by
+    # SHA, so every release changes their config hash and the `up -d` above
+    # has already recreated them. Restarting again only resets the health
+    # start periods that `--wait` below, and the telemetry poll after it, then
+    # have to sit through.
     "${secret_exec[@]}" "${compose[@]}" up -d
-    "${secret_exec[@]}" "${compose[@]}" restart grafana alloy tempo prometheus loki
     # Compose reports only "container X is unhealthy" when a dependency never
     # comes up, which says nothing about why. The backend's own log holds the
     # reason (a Flyway checksum mismatch, a bad secret), so surface it here

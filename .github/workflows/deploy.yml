@@ -5,7 +5,12 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [master]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Deploy even if CI did not succeed for this commit
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy
@@ -14,9 +19,15 @@ concurrency:
 permissions:
   contents: read
   actions: read
+  packages: read
 
 env:
   DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+  # Production tracks this branch. It is the ref a dispatch is held to, the
+  # branch deploy.sh stamps into the build, and the one the health gate then
+  # reads back -- previously a `master` literal at each of the last two, so
+  # the gate compared a constant against itself.
+  DEPLOY_BRANCH: master
 
 jobs:
   deploy:
@@ -32,10 +43,59 @@ jobs:
         with:
           ref: ${{ env.DEPLOY_SHA }}
 
+      # workflow_dispatch skips the `workflow_run` guard on this job, which is
+      # what normally establishes that CI succeeded for this commit. Awaiting
+      # the images does not re-establish it: ci.yml's three image jobs declare
+      # `needs: changes` alone, so a tag is published whenever its build
+      # succeeds, whatever the tests then say -- and CI publishes
+      # backend:<head sha> for same-repo PRs too, so an unmerged branch has
+      # tags as well. Check the run and the ref directly.
+      - name: Require a green CI run for this commit
+        if: github.event_name == 'workflow_dispatch' && !inputs.force
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/$DEPLOY_BRANCH" ]; then
+            echo "::error::refusing to deploy $GITHUB_REF: production tracks $DEPLOY_BRANCH. Re-run with force to override."
+            exit 1
+          fi
+          conclusion="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$DEPLOY_SHA&status=completed" \
+            --jq '[.workflow_runs[] | select(.name == "CI")] | first | .conclusion // "none"')"
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::CI for $DEPLOY_SHA concluded '$conclusion', not success. Re-run with force to override."
+            exit 1
+          fi
+          echo "CI succeeded for $DEPLOY_SHA"
+
       - name: Resolve independently versioned images
         run: |
           echo "DEPLOY_DATA_SHA=$(git rev-parse HEAD:data)" >> "$GITHUB_ENV"
           echo "DEPLOY_COMPANION_SHA=$(git rev-parse HEAD:companion)" >> "$GITHUB_ENV"
+
+      # workflow_dispatch skips the `workflow_run` guard above, so a manual
+      # deploy can outrun CI's image push and fail on the host with a bare
+      # containerd "not found" -- after it has already pulled the data image
+      # and parked a 30-minute volume guard. Resolving the tags here fails in
+      # the runner instead.
+      #
+      # The sandbox's 60x20s patience is wrong for this job: `concurrency:
+      # deploy` is serialized, so a run that waits holds up every queued
+      # deploy behind it, and 20 minutes of a 30-minute budget would leave too
+      # little for the host work and the gates. 150s covers a dispatch fired
+      # while CI is still pushing; on the workflow_run path CI has already
+      # succeeded, so this returns on its first attempt.
+      - name: Await the release images
+        uses: ./.github/actions/await-images
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          max-attempts: '15'
+          wait-seconds: '10'
+          images: |
+            ghcr.io/${{ github.repository }}/backend:${{ env.DEPLOY_SHA }}
+            ghcr.io/${{ github.repository }}/recgov-companion:${{ env.DEPLOY_COMPANION_SHA }}
+            ghcr.io/${{ github.repository }}/data:${{ env.DEPLOY_DATA_SHA }}
 
       - name: Reach the deploy host
         uses: ./.github/actions/deploy-host-access
@@ -67,13 +127,14 @@ jobs:
           sha="$1"
           data_sha="$2"
           companion_sha="$3"
+          branch="$4"
           release="$HOME/.roadtrip/releases/$sha"
           cd "$release"
-          scripts/deploy.sh prod "$sha" "$data_sha" "$companion_sha" master
+          scripts/deploy.sh prod "$sha" "$data_sha" "$companion_sha" "$branch"
           ln -sfn "$release" "$HOME/.roadtrip/current"
           REMOTE
           ssh -o BatchMode=yes mini@mini-ca \
-            "bash -s -- '$DEPLOY_SHA' '$DEPLOY_DATA_SHA' '$DEPLOY_COMPANION_SHA'" \
+            "bash -s -- '$DEPLOY_SHA' '$DEPLOY_DATA_SHA' '$DEPLOY_COMPANION_SHA' '$DEPLOY_BRANCH'" \
             < "$RUNNER_TEMP/deploy-remote.sh" 2>&1 \
             | tee "$RUNNER_TEMP/deploy.log"
 
@@ -111,11 +172,12 @@ jobs:
 
       - name: Resolve deploy URLs
         run: |
-          python3 -c "import yaml" 2>/dev/null \
-            || { sudo apt-get update -qq && sudo apt-get install -y -qq python3-yaml; }
-          root_url="$(python3 scripts/prod_base_url.py)"
           base="${{ vars.DEPLOY_BASE_URL }}"
-          base="${base:-$root_url}"
+          if [ -z "$base" ]; then
+            python3 -c "import yaml" 2>/dev/null \
+              || { sudo apt-get update -qq && sudo apt-get install -y -qq python3-yaml; }
+            base="$(python3 scripts/prod_base_url.py)"
+          fi
           health="${{ vars.DEPLOY_HEALTH_URL }}"
           {
             echo "DEPLOY_BASE=$base"
@@ -138,7 +200,7 @@ jobs:
 
           for _ in $(seq 1 "$gate_attempts"); do
             if curl -fsS "$DEPLOY_HEALTH" >/dev/null; then
-              for path in / /watches /availability; do
+              for path in /watches /availability; do
                 probe "$DEPLOY_BASE$path" >/dev/null
                 echo "health: $DEPLOY_BASE$path OK"
               done
@@ -148,7 +210,7 @@ jobs:
               fi
               echo "health: / is the React shell OK"
               probe "$DEPLOY_BASE/api/build-info" \
-                | DEPLOY_SHA="$DEPLOY_SHA" python3 -c 'import json,os,sys; info=json.load(sys.stdin); expected={"env":"prod","sha":os.environ["DEPLOY_SHA"],"branch":"master"}; actual={key:info.get(key) for key in expected}; actual == expected or sys.exit(f"build-info mismatch: expected {expected}, got {actual}"); print("health: build-info prod SHA master OK")'
+                | python3 -c 'import json,os,sys; info=json.load(sys.stdin); expected={"env":"prod","sha":os.environ["DEPLOY_SHA"],"branch":os.environ["DEPLOY_BRANCH"]}; actual={key:info.get(key) for key in expected}; actual == expected or sys.exit(f"build-info mismatch: expected {expected}, got {actual}"); print("health: build-info prod SHA branch OK")'
               echo "health: $DEPLOY_HEALTH OK"
               exit 0
             fi
