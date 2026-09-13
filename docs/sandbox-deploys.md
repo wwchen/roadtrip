@@ -243,14 +243,14 @@ reason.
 
 A `reclaim` job runs alongside `plan` on the same schedule and frees derived
 Docker data on the deploy host: stopped containers, unused images, and
-volumes, through the same `reclaim.sh` that `deploy.sh` uses. It never touches
-build cache — that is `builder.gc`'s job (below), deliberately left alone here
-so a periodic sweep cannot race an in-flight deploy for it. `reclaim.sh` never
-prunes build cache on either scope unless `--include-build-cache` is passed,
-because the cache cannot be label-scoped and the host does not build. The job is
-separate from `stop` because the host can run out of disk with no sandbox due
-for reaping, and `stop` runs only when there are targets. It warns when the
-host is left under `RECLAIM_FREE_TARGET_GB` (repo variable, default **20**).
+volumes, through the same `reclaim.sh` that `deploy.sh` uses. The sweep never
+passes `--include-build-cache`, so build cache stays `builder.gc`'s job (below)
+on the host and a periodic sweep cannot race an in-flight deploy for it;
+`reclaim.sh` prunes cache only behind that flag, off for every scope, because
+cache cannot be label-scoped. The job is separate from `stop` because the host
+can run out of disk with no sandbox due for reaping, and `stop` runs only when
+there are targets. It warns when the host is left under
+`RECLAIM_FREE_TARGET_GB` (repo variable, default **20**).
 
 Every prune is scoped to the `ca.floo.roadtrip.managed=true` label, which the
 three Dockerfiles set and which `deploy.sh` puts on the volumes it creates. That
