@@ -1028,4 +1028,77 @@ describe('the in-view list', () => {
     await waitFor(() => expect(screen.getByText('Campgrounds along route')).toBeInTheDocument());
     expect(screen.queryByText('Campgrounds in view')).toBeNull();
   });
+
+  test('hiding an agency removes its cards and updates the checkable count', async () => {
+    withViewport();
+    mount();
+    await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+    expect(screen.getByText('Zephyr Cove')).toBeInTheDocument();
+
+    act(() => {
+      useMapStore.setState({ hiddenAgencies: ['Private'] });
+    });
+
+    expect(screen.getByText('· 1 of 2 · 1 checkable online')).toBeInTheDocument();
+    expect(screen.queryByText('Zephyr Cove')).toBeNull();
+  });
+
+  test('the hidden-layer card gives way to the zoom hint', async () => {
+    useMapStore.setState({
+      viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 9 },
+      campgroundsRequested: true,
+      hiddenOverlays: ['cg'],
+    });
+    const above = mount();
+    await waitFor(() => expect(screen.getByText('Campgrounds are switched off')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Turn campgrounds back on' })).toBeInTheDocument();
+    above.unmount();
+
+    useMapStore.setState({
+      viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 4 },
+      campgroundsRequested: true,
+      hiddenOverlays: ['cg'],
+    });
+    mount();
+
+    expect(screen.getByText('Zoom in to load campgrounds.')).toBeInTheDocument();
+    expect(screen.queryByText('Campgrounds are switched off')).toBeNull();
+  });
+
+  test('a card click flies to it and opens its drawer', async () => {
+    withViewport();
+    mount();
+    await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+    await act(async () => {
+      screen.getByRole('button', { name: /Fallen Leaf/ }).click();
+    });
+
+    expect(fakeMap.flyToCalls.at(-1)).toMatchObject({ center: [-120.05, 38.93], zoom: 13 });
+    expect(useMapStore.getState().selectedPoiId).toBe(21);
+  });
+
+  test('says so when the view holds none', async () => {
+    campgroundSearch = { campground_ids: [], total_in_boundary: 0, total_matching: 0, truncated: false };
+    withViewport();
+    mount();
+
+    await waitFor(() =>
+      expect(screen.getByText('No campgrounds in view — pan or zoom out to find some.')).toBeInTheDocument(),
+    );
+    expect(screen.getByText('· 0')).toBeInTheDocument();
+  });
+
+  test('says to zoom in again after zooming back out', () => {
+    // `campgroundsRequested` latches true forever once it flips — the zoom itself,
+    // not the sticky flag, is what should decide the hint and whether a request goes out.
+    useMapStore.setState({
+      viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 4 },
+      campgroundsRequested: true,
+    });
+    mount();
+
+    expect(screen.getByText('Zoom in to load campgrounds.')).toBeInTheDocument();
+    expect(urls.filter((u) => u.startsWith('/api/campgrounds'))).toHaveLength(0);
+  });
 });
