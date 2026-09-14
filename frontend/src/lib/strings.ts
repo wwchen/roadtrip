@@ -169,7 +169,8 @@ export const filterCopy = {
   morePeople: 'More people',
   /** The card's count line with a type selected: the kind's count, then the total when they differ. */
   kindSites: (count: number, kindLabel: string, total: number) => {
-    const kind = `${count} ${kindLabel.toLowerCase()} ${count === 1 ? 'site' : 'sites'}`;
+    const noun = kindLabel === kindLabel.toUpperCase() ? kindLabel : kindLabel.toLowerCase();
+    const kind = `${count} ${noun} ${count === 1 ? 'site' : 'sites'}`;
     return count === total ? kind : `${kind} · ${total} total`;
   },
   /** Facet labels. */

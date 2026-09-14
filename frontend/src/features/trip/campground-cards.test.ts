@@ -47,6 +47,10 @@ describe('countLine', () => {
     expect(countLine(summary({ id: 1 }), 'tent')).toBe('48 tent sites · 81 total');
   });
 
+  test('keeps acronyms uppercase', () => {
+    expect(countLine(summary({ id: 1 }), 'rv')).toBe('33 RV sites · 81 total');
+  });
+
   test('drops the total when every site is of the kind', () => {
     expect(countLine(summary({ id: 1, site_counts: { tent: 81 } }), 'tent')).toBe('81 tent sites');
   });
