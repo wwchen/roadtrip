@@ -1,9 +1,11 @@
 import { useEffect, type ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { CampgroundSummary } from '@/api/campground-api';
 import { MapRuntimeContext, type MapContextValue } from '@/map/context';
+import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
+import { cardsFromSummaries, type InViewCard } from './campground-cards';
 import { TripResults } from './TripResults';
-import type { SiteCountsById } from './useSiteCounts';
 import type { TripCard } from './trip-cards';
 import './topbar.css';
 
@@ -23,39 +25,63 @@ const NO_MAP: MapContextValue = {
   setSatellite: () => {},
 };
 
-const NO_SITE_COUNTS: SiteCountsById = new Map();
-
-const card = (over: Partial<TripCard> & Pick<TripCard, 'id' | 'name'>): TripCard => ({
-  sub: '',
-  location: 'CA',
+const summary = (over: Partial<CampgroundSummary> & Pick<CampgroundSummary, 'id' | 'name'>): CampgroundSummary => ({
+  campground_id: over.id,
+  region: 'CA',
   agency: 'USDA Forest Service',
   lng: -120.05,
   lat: 38.93,
-  routeKm: null,
-  distKm: 0,
-  checkable: true,
-  rating: null,
-  hydrated: true,
+  availability_supported: true,
+  amenities: [],
+  site_counts: {},
+  site_total: 0,
   ...over,
 });
 
-/** Three campgrounds as the detail endpoint describes them, nearest the map centre first. */
-const IN_VIEW: TripCard[] = [
-  card({ id: 1, name: 'Fallen Leaf', rating: 4.7, distKm: 5.4 }),
-  card({ id: 2, name: 'D. L. Bliss', agency: 'California State Parks', rating: 4.8, distKm: 13.7 }),
-  card({ id: 3, name: 'Zephyr Cove', location: 'NV', agency: 'Private', checkable: false, distKm: 2.7 }),
+/** Three campgrounds as the details endpoint describes them, nearest the map centre first. */
+const SUMMARIES: CampgroundSummary[] = [
+  summary({
+    id: 1,
+    name: 'Fallen Leaf',
+    site_counts: { tent: 132, rv: 74 },
+    site_total: 206,
+    max_people: 8,
+    rating: { average: 4.7, count: 40 },
+    amenities: [
+      { key: 'toilets', label: 'Toilets', present: true },
+      { key: 'showers', label: 'Showers', present: true },
+    ],
+  }),
+  summary({
+    id: 2,
+    name: 'D. L. Bliss',
+    agency: 'California State Parks',
+    site_counts: { tent: 165 },
+    site_total: 165,
+    max_people: 8,
+    rating: { average: 4.8, count: 22 },
+  }),
+  summary({
+    id: 3,
+    name: 'Zephyr Cove',
+    region: 'NV',
+    agency: 'Private',
+    site_counts: { rv: 110, tent: 60 },
+    site_total: 170,
+    availability_supported: false,
+  }),
 ];
 
-const SITE_COUNTS: SiteCountsById = new Map([
-  ['1', { total: 206 }],
-  ['2', { total: 165 }],
-  ['3', { total: 170 }],
-]);
+const BY_ID = new Map(SUMMARIES.map((s) => [s.id, s]));
+const IDS = SUMMARIES.map((s) => s.id);
+
+/** Cards in the order the search would return them; no centre, so the wire order stands. */
+const IN_VIEW: InViewCard[] = cardsFromSummaries(IDS, BY_ID, null);
 
 const ALONG_ROUTE: TripCard[] = [
-  card({ id: 11, name: 'Nevada Beach', sub: 'Standard campground', location: 'NV', routeKm: 4.9 }),
-  card({ id: 12, name: 'Meeks Bay', sub: 'Standard campground', routeKm: 18.2 }),
-  card({ id: 13, name: 'William Kent', sub: 'Standard campground', routeKm: 26.5 }),
+  { id: 11, name: 'Nevada Beach', sub: 'Standard campground', location: 'NV', agency: '', lng: -120.05, lat: 38.93, routeKm: 4.9, distKm: 0, checkable: true, rating: null, hydrated: true },
+  { id: 12, name: 'Meeks Bay', sub: 'Standard campground', location: '', agency: '', lng: -120.05, lat: 38.93, routeKm: 18.2, distKm: 0, checkable: true, rating: null, hydrated: true },
+  { id: 13, name: 'William Kent', sub: 'Standard campground', location: '', agency: '', lng: -120.05, lat: 38.93, routeKm: 26.5, distKm: 0, checkable: true, rating: null, hydrated: true },
 ];
 
 function Panel({
@@ -80,6 +106,19 @@ function Panel({
   );
 }
 
+/** Seeds the filter store so a story's facet rows render, and resets it on unmount. */
+function FilteredPanel({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    const { setSiteType, setGroupSize, toggleAmenity, reset } = useCampgroundFilterStore.getState();
+    setSiteType('tent');
+    setGroupSize(4);
+    toggleAmenity('toilets');
+    return () => reset();
+  }, []);
+
+  return <Panel>{children}</Panel>;
+}
+
 const meta = {
   title: 'Trip/TripResults',
   parameters: {
@@ -87,11 +126,9 @@ const meta = {
       description: {
         component:
           'The topbar’s campground list. With a route it lists the corridor in driving ' +
-          'order under the corridor slider; without one it lists what is in view, nearest ' +
-          'the map centre first, with each card’s site count and whether its availability ' +
-          'can be checked online. The head counts the whole view even when the rendered ' +
-          'list is capped, and the checkable count appears only once every visible card ' +
-          'has hydrated.',
+          'order under the corridor slider; without one it lists what is in view, from a ' +
+          'boundary search over the campground catalog, with each card’s count line, rating, ' +
+          'checkable flag, and a facet row for the active filters.',
       },
     },
   },
@@ -122,9 +159,11 @@ export const InViewZoomedOut: Story = {
       <TripResults
         variant="viewport"
         cards={[]}
-        siteCounts={NO_SITE_COUNTS}
         campgroundsRequested={false}
-        totalInView={0}
+        loading={false}
+        totalInBoundary={0}
+        totalMatching={0}
+        truncated={false}
       />
     </Panel>
   ),
@@ -137,39 +176,45 @@ export const InViewEmpty: Story = {
       <TripResults
         variant="viewport"
         cards={[]}
-        siteCounts={NO_SITE_COUNTS}
         campgroundsRequested
-        totalInView={0}
+        loading={false}
+        totalInBoundary={0}
+        totalMatching={0}
+        truncated={false}
       />
     </Panel>
   ),
 };
 
-/** Pins have landed, details have not: placeholder names, no counts, no checkable tally yet. */
-export const InViewHydrating: Story = {
+/** The search has answered but the summaries have not landed yet. */
+export const InViewLoading: Story = {
   render: () => (
     <Panel>
       <TripResults
         variant="viewport"
-        cards={IN_VIEW.map((c) => ({ ...c, name: 'Campground', location: '', hydrated: false }))}
-        siteCounts={NO_SITE_COUNTS}
+        cards={[]}
         campgroundsRequested
-        totalInView={3}
+        loading
+        totalInBoundary={3}
+        totalMatching={3}
+        truncated={false}
       />
     </Panel>
   ),
 };
 
-/** The settled list: agency line, site count, rating where the catalog has one, and the not-checkable tag. */
+/** The settled list: agency line, count line, rating where the catalog has one, and the not-checkable tag. */
 export const InView: Story = {
   render: () => (
     <Panel>
       <TripResults
         variant="viewport"
         cards={IN_VIEW}
-        siteCounts={SITE_COUNTS}
         campgroundsRequested
-        totalInView={3}
+        loading={false}
+        totalInBoundary={3}
+        totalMatching={3}
+        truncated={false}
       />
     </Panel>
   ),
@@ -178,28 +223,32 @@ export const InView: Story = {
 /** An agency switched off in the legend: the head reads "2 of 3" and the checkable count survives. */
 export const InViewFiltered: Story = {
   render: () => (
-    <Panel hiddenAgencies={['California State Parks']}>
+    <FilteredPanel>
       <TripResults
         variant="viewport"
         cards={IN_VIEW}
-        siteCounts={SITE_COUNTS}
         campgroundsRequested
-        totalInView={3}
+        loading={false}
+        totalInBoundary={3}
+        totalMatching={3}
+        truncated={false}
       />
-    </Panel>
+    </FilteredPanel>
   ),
 };
 
-/** A dense view: only the nearest cards render, and the head still counts the whole viewport. */
+/** A dense view: only the nearest cards render, and the head still counts every match. */
 export const InViewCapped: Story = {
   render: () => (
     <Panel>
       <TripResults
         variant="viewport"
         cards={IN_VIEW}
-        siteCounts={SITE_COUNTS}
         campgroundsRequested
-        totalInView={128}
+        loading={false}
+        totalInBoundary={80}
+        totalMatching={60}
+        truncated
       />
     </Panel>
   ),

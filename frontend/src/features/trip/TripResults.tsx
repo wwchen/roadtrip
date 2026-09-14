@@ -2,16 +2,18 @@
 //
 // Collapse state stays local and defaults closed on phones so results do not cover
 // the route immediately after it is computed.
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button, EmptyState, Icon } from '@ui';
 import { token } from '@tokens';
-import { inViewCopy } from '@/lib/strings';
+import { filterCopy, inViewCopy } from '@/lib/strings';
 import { useMapContext } from '@/map/context';
+import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
+import { countLine as facetCountLine, type InViewCard } from './campground-cards';
 import { CorridorSlider } from './CorridorSlider';
+import { facetsFor, type FacetState } from './facets';
 import { formatDistanceAlongRoute } from './route-summary';
 import { visibleCards, type TripCard } from './trip-cards';
-import type { SiteCountsById } from './useSiteCounts';
 import { shouldAutoFocus } from '@/domain/trip/viewport';
 
 /** Where a card click puts the camera: tight enough to see the pin, wide enough to place it. */
@@ -20,6 +22,13 @@ const FLY_SPEED = 1.6;
 
 const ROUTE_HEADING = 'Campgrounds along route';
 const RATING_PREFIX = '★';
+
+/** A facet's icon and class, keyed by state rather than chained ternaries. */
+const FACET_APPEARANCE: Record<FacetState, { icon: string; className: string }> = {
+  match: { icon: 'check', className: 'tb-facet' },
+  miss: { icon: 'close', className: 'tb-facet tb-facet--miss' },
+  'no-data': { icon: 'help', className: 'tb-facet tb-facet--no-data' },
+};
 
 interface CommonProps {
   cards: readonly TripCard[];
@@ -35,11 +44,14 @@ interface RouteProps extends CommonProps {
 
 interface ViewportProps extends CommonProps {
   variant: 'viewport';
-  siteCounts: SiteCountsById;
-  /** False below the zoom gate, where the server sends no campgrounds. */
+  cards: readonly InViewCard[];
+  /** False below the zoom gate, where nothing is asked. */
   campgroundsRequested: boolean;
-  /** The whole viewport count, before the rendered list is capped. */
-  totalInView: number;
+  /** True while the search or the summaries are in flight and the list is empty. */
+  loading: boolean;
+  totalInBoundary: number;
+  totalMatching: number;
+  truncated: boolean;
 }
 
 export type TripResultsProps = RouteProps | ViewportProps;
@@ -82,7 +94,7 @@ export function TripResults(props: TripResultsProps) {
         }}
       >
         {props.variant === 'route' ? ROUTE_HEADING : inViewCopy.heading}
-        <span className="tb-results-count">{countLine(props, visible, total)}</span>
+        <span className="tb-results-count">{countLine(props, visible)}</span>
         {/* Points up when expanded; `.tb-results.collapsed` rotates it. */}
         <Icon name="chevron-up" className="tb-results-chevron" aria-hidden="true" />
       </div>
@@ -110,37 +122,21 @@ export function TripResults(props: TripResultsProps) {
             ) : (
               <div className="tb-card-empty">{emptyMessage}</div>
             )
+          ) : props.variant === 'route' ? (
+            visible.map((card) => (
+              <Card key={String(card.id)} card={card} onOpen={openCard} sub={card.sub} meta={<RouteMeta card={card} />} />
+            ))
           ) : (
-            visible.map((card) => {
-              const sub = subLine(props, card);
-              return (
-                <button
-                  type="button"
-                  className="tb-card"
-                  key={String(card.id)}
-                  data-id={String(card.id)}
-                  onClick={() => openCard(card)}
-                >
-                  <span className="tb-card-dot" style={{ background: token('--rt-layer-cg') }} />
-                  <span className="tb-card-body">
-                    <span className="tb-card-head">
-                      <span className="tb-card-name">{card.name}</span>
-                      {card.location ? (
-                        <span className="tb-card-location">{card.location}</span>
-                      ) : null}
-                    </span>
-                    {sub ? <span className="tb-card-sub">{sub}</span> : null}
-                    <span className="tb-card-meta">
-                      {props.variant === 'route' ? (
-                        <RouteMeta card={card} />
-                      ) : (
-                        <ViewportMeta card={card} siteCounts={props.siteCounts} />
-                      )}
-                    </span>
-                  </span>
-                </button>
-              );
-            })
+            (visible as InViewCard[]).map((card) => (
+              <Card
+                key={String(card.id)}
+                card={card}
+                onOpen={openCard}
+                sub={card.agency || card.sub}
+                meta={<ViewportMeta card={card} />}
+                facets={<FacetRow card={card} />}
+              />
+            ))
           )}
         </div>
       </div>
@@ -148,14 +144,46 @@ export function TripResults(props: TripResultsProps) {
   );
 }
 
+function Card({
+  card,
+  onOpen,
+  sub,
+  meta,
+  facets,
+}: {
+  card: TripCard;
+  onOpen: (card: TripCard) => void;
+  sub: string;
+  meta: ReactNode;
+  facets?: ReactNode;
+}) {
+  return (
+    <button type="button" className="tb-card" data-id={String(card.id)} onClick={() => onOpen(card)}>
+      <span className="tb-card-dot" style={{ background: token('--rt-layer-cg') }} />
+      <span className="tb-card-body">
+        <span className="tb-card-head">
+          <span className="tb-card-name">{card.name}</span>
+          {card.location ? <span className="tb-card-location">{card.location}</span> : null}
+        </span>
+        {sub ? <span className="tb-card-sub">{sub}</span> : null}
+        <span className="tb-card-meta">{meta}</span>
+        {facets}
+      </span>
+    </button>
+  );
+}
+
 /** "3 of 12" only while something is filtered out or capped — otherwise the second number is noise. */
-function countLine(props: TripResultsProps, visible: TripCard[], total: number): string {
-  const capped = props.variant === 'viewport' && total < props.totalInView;
-  const denominator = capped ? props.totalInView : total;
+function countLine(props: TripResultsProps, visible: readonly TripCard[]): string {
+  if (props.variant === 'route') {
+    const total = props.cards.length;
+    const count = visible.length === total ? String(total) : `${visible.length} of ${total}`;
+    return `· ${count}`;
+  }
+  // All viewport cards are hydrated now, so the count is against the search's total.
+  const denominator = props.totalMatching;
   const count = visible.length === denominator ? String(denominator) : `${visible.length} of ${denominator}`;
-  if (props.variant === 'route') return `· ${count}`;
-  // The checkable count waits for every visible card, so it never counts up from 0.
-  if (visible.length === 0 || !visible.every((card) => card.hydrated)) return `· ${count}`;
+  if (visible.length === 0) return `· ${count}`;
   const checkable = visible.filter((card) => card.checkable).length;
   return `· ${count} · ${inViewCopy.checkableCount(checkable)}`;
 }
@@ -163,9 +191,9 @@ function countLine(props: TripResultsProps, visible: TripCard[], total: number):
 /**
  * The empty-list copy, or null when the hidden-campgrounds card should render instead.
  *
- * Precedence: a computing/empty route or an unrequested/empty viewport outranks the
- * layer-off card, because those states explain themselves better than "turn it back
- * on" does. Only once neither applies does a hidden layer get its own card.
+ * Precedence: a computing/empty route or an unrequested/loading/empty viewport
+ * outranks the layer-off card, because those states explain themselves better than
+ * "turn it back on" does. Only once neither applies does a hidden layer get its own card.
  */
 function emptyCopy(props: TripResultsProps, total: number, campgroundsHidden: boolean): string | null {
   if (props.variant === 'route') {
@@ -173,15 +201,11 @@ function emptyCopy(props: TripResultsProps, total: number, campgroundsHidden: bo
     if (total === 0) return 'Pan the map or widen the corridor to find campgrounds.';
   } else {
     if (!props.campgroundsRequested) return inViewCopy.zoomIn;
+    if (props.loading) return inViewCopy.loading;
     if (total === 0) return inViewCopy.none;
   }
   if (campgroundsHidden) return null;
   return 'All campgrounds hidden — re-enable a category in the legend.';
-}
-
-/** The route list reads the type; the in-view list reads the agency, as the design does. */
-function subLine(props: TripResultsProps, card: TripCard): string {
-  return props.variant === 'route' ? card.sub : card.agency || card.sub;
 }
 
 function RouteMeta({ card }: { card: TripCard }) {
@@ -190,13 +214,39 @@ function RouteMeta({ card }: { card: TripCard }) {
   ) : null;
 }
 
-function ViewportMeta({ card, siteCounts }: { card: TripCard; siteCounts: SiteCountsById }) {
-  const counts = siteCounts.get(String(card.id));
+function ViewportMeta({ card }: { card: InViewCard }) {
+  const siteType = useCampgroundFilterStore((s) => s.siteType);
+  const line = facetCountLine(card.summary, siteType);
   return (
     <>
-      {counts && counts.total > 0 ? <span>{inViewCopy.sites(counts.total)}</span> : null}
+      {line ? <span>{line}</span> : null}
       {card.rating != null ? <span>{`${RATING_PREFIX} ${card.rating.toFixed(1)}`}</span> : null}
-      {card.hydrated && !card.checkable ? <span>{inViewCopy.notCheckable}</span> : null}
+      {!card.checkable ? <span>{inViewCopy.notCheckable}</span> : null}
     </>
+  );
+}
+
+function FacetRow({ card }: { card: InViewCard }) {
+  const siteType = useCampgroundFilterStore((s) => s.siteType);
+  const groupSize = useCampgroundFilterStore((s) => s.groupSize);
+  const amenities = useCampgroundFilterStore((s) => s.amenities);
+  const facets = facetsFor(card.summary, { siteType, groupSize, amenities });
+  if (facets.length === 0) return null;
+  return (
+    <span className="tb-facets">
+      {facets.map((facet) => {
+        const appearance = FACET_APPEARANCE[facet.state];
+        return (
+          <span
+            key={facet.key}
+            className={appearance.className}
+            title={facet.state === 'no-data' ? filterCopy.noData : undefined}
+          >
+            <Icon name={appearance.icon} aria-hidden="true" />
+            {facet.label}
+          </span>
+        );
+      })}
+    </span>
   );
 }

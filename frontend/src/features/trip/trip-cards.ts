@@ -5,7 +5,6 @@
 // placeholder and gains its name, type and region when `GET /api/pois/{id}` lands.
 // Sorting, filtering and copy all have to work on both.
 import { distanceKm } from '@/lib/geo';
-import type { MapCenter } from '@/map/viewport';
 import { UNCATEGORIZED_AGENCY } from '@/map/agencies';
 import type { TripStop } from '@/stores/tripStore';
 import { distanceAlongRouteKm, type RouteIndex } from './route-index';
@@ -110,24 +109,6 @@ export function tripCardsFromFeatures(
   // The order the driver encounters them, which is the only ordering that makes the
   // list useful — see `route-index.ts`.
   return cards.sort((a, b) => (a.routeKm ?? 0) - (b.routeKm ?? 0));
-}
-
-/**
- * Placeholder cards for the campgrounds in view, nearest the map centre first.
- * Without a centre (no viewport reported yet) the wire order stands.
- */
-export function viewportCardsFromFeatures(
-  features: readonly SlimFeature[] | null | undefined,
-  center: MapCenter | null,
-): TripCard[] {
-  const cards: TripCard[] = [];
-  for (const feature of features ?? []) {
-    const base = cardBaseOf(feature);
-    if (!base) continue;
-    const distKm = center ? distanceKm(center.lat, center.lng, base.lat, base.lng) : 0;
-    cards.push(placeholderCard(base, null, distKm));
-  }
-  return center ? cards.sort((a, b) => a.distKm - b.distKm) : cards;
 }
 
 /** Fold a hydrated POI's flattened properties into its placeholder card. */
