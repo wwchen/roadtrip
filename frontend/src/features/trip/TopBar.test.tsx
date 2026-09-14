@@ -985,6 +985,47 @@ describe('the in-view list', () => {
     expect(screen.getAllByLabelText('Tent, matches')).toHaveLength(2);
   });
 
+  test('publishes the matching ids to the map while a filter is active, and clears them', async () => {
+    withViewport();
+    mount();
+    await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+    expect(useMapStore.getState().campgroundFilterIds).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Tent' }));
+
+    await waitFor(() =>
+      expect(useMapStore.getState().campgroundFilterIds).toEqual(new Set(campgroundSearch.campground_ids)),
+    );
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Any' }));
+
+    await waitFor(() => expect(useMapStore.getState().campgroundFilterIds).toBeNull());
+  });
+
+  test('clears the map filter when the search fails', async () => {
+    withViewport();
+    mount();
+    await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Tent' }));
+    await waitFor(() => expect(useMapStore.getState().campgroundFilterIds).not.toBeNull());
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        urls.push(url);
+        if (url.startsWith('/api/campgrounds/search')) return json({ error: 'bad_boundary' }, 400);
+        return json({}, 404);
+      }),
+    );
+    fireEvent.click(screen.getByRole('radio', { name: 'RV' }));
+
+    await waitFor(() => expect(useMapStore.getState().campgroundFilterIds).toBeNull());
+  });
+
   test('a failed search says so, not that the view is empty', async () => {
     vi.stubGlobal(
       'fetch',

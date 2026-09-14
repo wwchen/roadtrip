@@ -1,6 +1,7 @@
 // Trip-planner composition. Local state is limited to drafts, focus, and keyboard
 // selection; route, corridor, and search data live in their respective hooks.
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { Icon } from '@ui';
 import { FilterPanel } from './FilterPanel';
 import { RouteStatus } from './RouteStatus';
@@ -13,7 +14,7 @@ import { buildRouteIndex } from './route-index';
 import { bboxCenter } from '@/map/viewport';
 import { useMapStore } from '@/stores/mapStore';
 import { tripCardsFromFeatures } from './trip-cards';
-import { cardsFromSummaries } from './campground-cards';
+import { cardsFromSummaries, rankCards } from './campground-cards';
 import { useCampgroundSearch } from './useCampgroundSearch';
 import { MAX_IN_VIEW_CARDS, useCampgroundSummaries } from './useCampgroundSummaries';
 import { useOnRoutePois } from './useOnRoutePois';
@@ -23,6 +24,7 @@ import { useSearchResults } from './useSearchResults';
 import { useSharedTrip } from './useSharedTrip';
 import { useTopbarClearance } from './useTopbarClearance';
 import { useTripPlanner } from './useTripPlanner';
+import { selectActiveFilterCount, useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { MAX_STOPS } from '@/stores/tripStore';
 import { routeShareUrl } from '@/lib/share-links';
 import { useCopyLink } from '@/lib/use-copy-link';
@@ -92,10 +94,25 @@ export function TopBar({ alerts }: TopBarProps) {
   const search = useCampgroundSearch({ paused: showRoute });
   const inViewIds = useMemo(() => search.ids.slice(0, MAX_IN_VIEW_CARDS), [search.ids]);
   const summaries = useCampgroundSummaries(inViewIds);
-  const inViewCards = useMemo(
-    () => cardsFromSummaries(inViewIds, summaries.byId, viewportBbox ? bboxCenter(viewportBbox) : null),
-    [inViewIds, summaries.byId, viewportBbox],
+  const rankFilter = useCampgroundFilterStore(
+    useShallow((s) => ({ siteType: s.siteType, groupSize: s.groupSize, amenities: s.amenities })),
   );
+  const inViewCards = useMemo(() => {
+    const cards = cardsFromSummaries(inViewIds, summaries.byId, viewportBbox ? bboxCenter(viewportBbox) : null);
+    return rankCards(cards, rankFilter);
+  }, [inViewIds, summaries.byId, viewportBbox, rankFilter]);
+
+  // The map's pin filter and legend counts follow the same search this list
+  // does — the full matching id set, not the 50-card slice — so the two
+  // features agree on what "matches the filter" means. Cleared on unmount so a
+  // closed topbar does not leave a stale filter painted.
+  const setCampgroundFilterIds = useMapStore((s) => s.setCampgroundFilterIds);
+  const activeFilterCount = useCampgroundFilterStore(selectActiveFilterCount);
+  useEffect(() => {
+    const filtered = activeFilterCount > 0 && search.enabled && !search.isError;
+    setCampgroundFilterIds(filtered ? search.ids : null);
+  }, [activeFilterCount, search.enabled, search.isError, search.ids, setCampgroundFilterIds]);
+  useEffect(() => () => setCampgroundFilterIds(null), [setCampgroundFilterIds]);
 
   const pick = (result: SearchResult) => {
     planner.pickResult(draft?.row ?? 0, result);
