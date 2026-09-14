@@ -1,3 +1,5 @@
+import type { Geometry } from 'geojson';
+
 // What to ask `POST /api/pois` for, given where the map is looking.
 
 /** `[west, south, east, north]` — the flat order the endpoint takes. */
@@ -125,21 +127,16 @@ export function bboxCenter([west, south, east, north]: ViewportBbox): MapCenter 
  * same array instance when nothing is dropped, so a memo keyed on it stays
  * stable.
  */
-export function clipToBbox<T extends { geometry?: unknown }>(
+export function clipToBbox<T extends { geometry?: Geometry | null }>(
   features: readonly T[],
   [west, south, east, north]: ViewportBbox,
 ): T[] {
   const kept = features.filter((feature) => {
-    // Widened to `unknown` rather than a GeoJSON geometry shape: some geometry
-    // variants (e.g. GeometryCollection) have no `coordinates` at all, which
-    // TypeScript's structural check treats as having nothing in common with a
-    // `{ coordinates?: unknown }` constraint. This still only ever reads a
-    // Point's coordinates, and anything else is dropped below.
-    const geometry = feature.geometry as { coordinates?: unknown } | null | undefined;
-    const coordinates = geometry?.coordinates;
-    if (!Array.isArray(coordinates) || coordinates.length < 2) return false;
-    const [lng, lat] = coordinates;
-    if (typeof lng !== 'number' || typeof lat !== 'number') return false;
+    const geometry = feature.geometry;
+    if (!geometry || geometry.type !== 'Point') return false;
+    if (!Array.isArray(geometry.coordinates) || geometry.coordinates.length < 2) return false;
+    const [lng, lat] = geometry.coordinates;
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return false;
     return west <= lng && lng <= east && south <= lat && lat <= north;
   });
   return kept.length === features.length ? (features as T[]) : kept;
