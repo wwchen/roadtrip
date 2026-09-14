@@ -4,9 +4,12 @@ import ca.floo.roadtrip.config.CampgroundSearchConfig
 import ca.floo.roadtrip.fixtures.RECGOV_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.testBookingHorizons
+import ca.floo.roadtrip.model.api.campground.BoundaryDto
 import ca.floo.roadtrip.model.api.campground.CampgroundDetailsRequestDto
 import ca.floo.roadtrip.model.api.campground.CampgroundFilterDto
 import ca.floo.roadtrip.model.api.campground.CampgroundSearchRequestDto
+import ca.floo.roadtrip.model.api.campground.GeoJsonBoundaryType
+import ca.floo.roadtrip.model.domain.CampgroundSearchError
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampgroundSearchRepo
@@ -17,8 +20,10 @@ import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.BookingIdentityResolver
 import ca.floo.roadtrip.service.poi.campground.CampgroundCta
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -41,7 +46,7 @@ class CampgroundSearchServiceTest : SharedDbTest() {
             config = config,
         )
 
-    private fun boundary(json: String) = Json.parseToJsonElement(json).jsonObject
+    private fun boundary(json: String) = Json.decodeFromString<BoundaryDto>(json)
 
     @BeforeEach
     fun cleanup() {
@@ -70,29 +75,9 @@ class CampgroundSearchServiceTest : SharedDbTest() {
     }
 
     @Test
-    fun `a missing or non-polygon boundary is refused`() {
+    fun `a missing boundary is refused`() {
         val missing = assertFailsWith<CampgroundSearchRequestException> { service().search(CampgroundSearchRequestDto()) }
-        assertEquals("bad_boundary", missing.code)
-
-        val point =
-            assertFailsWith<CampgroundSearchRequestException> {
-                service().search(CampgroundSearchRequestDto(boundary = boundary("""{"type":"Point","coordinates":[0,0]}""")))
-            }
-        assertEquals("bad_boundary", point.code)
-
-        val nullCoordinates =
-            assertFailsWith<CampgroundSearchRequestException> {
-                service().search(CampgroundSearchRequestDto(boundary = boundary("""{"type":"Polygon","coordinates":null}""")))
-            }
-        assertEquals("bad_boundary", nullCoordinates.code)
-
-        val arrayType =
-            assertFailsWith<CampgroundSearchRequestException> {
-                service().search(
-                    CampgroundSearchRequestDto(boundary = boundary("""{"type":["Polygon"],"coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}""")),
-                )
-            }
-        assertEquals("bad_boundary", arrayType.code)
+        assertEquals(CampgroundSearchError.BAD_BOUNDARY, missing.error)
     }
 
     @Test
@@ -145,15 +130,26 @@ class CampgroundSearchServiceTest : SharedDbTest() {
     }
 
     @Test
-    fun `a structurally invalid boundary is refused as bad_boundary`() {
-        val nonArrayCoordinates = boundary("""{"type":"Polygon","coordinates":"nope"}""")
+    fun `a boundary PostGIS rejects is refused as bad_boundary`() {
+        // Structurally a JsonArray, so it decodes fine as BoundaryDto; ST_GeomFromGeoJSON still
+        // rejects it because a Polygon's coordinates must nest into linear rings, not bare numbers.
+        val notARing =
+            BoundaryDto(
+                type = GeoJsonBoundaryType.POLYGON,
+                coordinates =
+                    buildJsonArray {
+                        add(JsonPrimitive(1))
+                        add(JsonPrimitive(2))
+                        add(JsonPrimitive(3))
+                    },
+            )
 
         val error =
             assertFailsWith<CampgroundSearchRequestException> {
-                service().search(CampgroundSearchRequestDto(boundary = nonArrayCoordinates))
+                service().search(CampgroundSearchRequestDto(boundary = notARing))
             }
 
-        assertEquals("bad_boundary", error.code)
+        assertEquals(CampgroundSearchError.BAD_BOUNDARY, error.error)
     }
 
     @Test
@@ -174,7 +170,7 @@ class CampgroundSearchServiceTest : SharedDbTest() {
                 service(CampgroundSearchConfig(maxResults = 10, maxDetailIds = 2))
                     .details(CampgroundDetailsRequestDto(campgroundIds = listOf(1, 2, 3)))
             }
-        assertEquals("too_many_ids", error.code)
+        assertEquals(CampgroundSearchError.TOO_MANY_IDS, error.error)
     }
 
     @Test

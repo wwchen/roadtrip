@@ -3,6 +3,7 @@ package ca.floo.roadtrip.route.api.campgrounds
 import ca.floo.roadtrip.config.CampgroundSearchConfig
 import ca.floo.roadtrip.model.api.campground.CampgroundDetailsRequestDto
 import ca.floo.roadtrip.model.api.campground.CampgroundSearchRequestDto
+import ca.floo.roadtrip.model.domain.CampgroundSearchError
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.access
@@ -18,8 +19,6 @@ import io.ktor.server.application.call
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
-
-private const val BAD_REQUEST_ERROR = "bad_request"
 
 // POST /api/campgrounds/search and POST /api/campgrounds/details.
 //
@@ -42,7 +41,7 @@ internal fun Route.campgroundRoutes(
                     try {
                         service.search(request)
                     } catch (e: CampgroundSearchRequestException) {
-                        return@post call.respondApiError(e.code, HttpStatusCode.BadRequest, e.message)
+                        return@post call.respondApiError(e.error.wire, HttpStatusCode.BadRequest, e.message)
                     }
                 call.respondEncodedJson(response)
             }.describeApi(
@@ -64,7 +63,7 @@ internal fun Route.campgroundRoutes(
                     try {
                         service.details(request)
                     } catch (e: CampgroundSearchRequestException) {
-                        return@post call.respondApiError(e.code, HttpStatusCode.BadRequest, e.message)
+                        return@post call.respondApiError(e.error.wire, HttpStatusCode.BadRequest, e.message)
                     }
                 call.respondEncodedJson(response)
             }.describeApi(
@@ -79,4 +78,4 @@ internal fun Route.campgroundRoutes(
 }
 
 private suspend fun ApplicationCall.respondBadRequest(detail: String?) =
-    respondApiError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest, detail ?: "parse failed")
+    respondApiError(CampgroundSearchError.BAD_REQUEST.wire, HttpStatusCode.BadRequest, detail ?: "parse failed")

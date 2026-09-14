@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.model.domain.CAMPGROUND_POI_TYPE
 import ca.floo.roadtrip.model.domain.CampgroundSearchFilter
 import ca.floo.roadtrip.model.domain.CampgroundSearchResult
 import ca.floo.roadtrip.model.domain.InvalidBoundaryException
@@ -22,6 +23,12 @@ internal class CampgroundSearchRepo(
     private val ctx: DSLContext,
     private val enabledDataProviders: Set<String>,
 ) {
+    /** One WHERE-clause fragment and the single bind it needs, kept together so reordering the list can't split them. */
+    private data class Predicate(
+        val sql: String,
+        val arg: Any,
+    )
+
     fun searchWithinBoundary(
         boundaryGeoJson: String,
         filter: CampgroundSearchFilter,
@@ -31,25 +38,24 @@ internal class CampgroundSearchRepo(
             return CampgroundSearchResult(emptyList(), totalInBoundary = 0, totalMatching = 0, truncated = false)
         }
 
-        val predicates = mutableListOf<String>()
-        val predicateArgs = mutableListOf<Any>()
+        val predicates = mutableListOf<Predicate>()
         filter.siteType?.let {
-            predicates += "(s.site_total IS NULL OR COALESCE((s.site_counts->>?)::int, 0) > 0)"
-            predicateArgs += it.wire
+            predicates += Predicate("(s.site_total IS NULL OR COALESCE((s.site_counts->>?)::int, 0) > 0)", it.wire)
         }
         filter.groupSize?.let {
-            predicates += "(s.max_people IS NULL OR s.max_people >= ?)"
-            predicateArgs += it
+            predicates += Predicate("(s.max_people IS NULL OR s.max_people >= ?)", it)
         }
         for (key in filter.amenities) {
             predicates +=
-                """NOT EXISTS (
-                     SELECT 1 FROM jsonb_array_elements(cg.amenities) a
-                     WHERE a->>'key' = ? AND COALESCE((a->>'present')::boolean, true) = false
-                   )"""
-            predicateArgs += key.wire
+                Predicate(
+                    """NOT EXISTS (
+                         SELECT 1 FROM jsonb_array_elements(cg.amenities) a
+                         WHERE a->>'key' = ? AND COALESCE((a->>'present')::boolean, true) = false
+                       )""",
+                    key.wire,
+                )
         }
-        val passes = if (predicates.isEmpty()) "true" else predicates.joinToString(" AND ")
+        val passes = if (predicates.isEmpty()) "true" else predicates.joinToString(" AND ") { it.sql }
         val providerPlaceholders = enabledDataProviders.joinToString(",") { "?" }
 
         val sql =
@@ -70,7 +76,7 @@ internal class CampgroundSearchRepo(
               LEFT JOIN campground_site_summary s ON s.campground_id = cg.id,
               boundary
               WHERE p.deleted_at IS NULL
-                AND p.poi_type = 'campground'
+                AND p.poi_type = ?
                 AND cg.data_provider IN ($providerPlaceholders)
                 AND p.geom && boundary.poly
                 AND ST_Within(ST_Centroid(p.geom), boundary.poly)
@@ -85,7 +91,8 @@ internal class CampgroundSearchRepo(
             """.trimIndent()
 
         val args = mutableListOf<Any>(boundaryGeoJson)
-        args.addAll(predicateArgs)
+        args.addAll(predicates.map { it.arg })
+        args += CAMPGROUND_POI_TYPE
         args.addAll(enabledDataProviders)
         args += limit
 
@@ -99,10 +106,10 @@ internal class CampgroundSearchRepo(
                 return CampgroundSearchResult(emptyList(), totalInBoundary = 0, totalMatching = 0, truncated = false)
             }
         val passing = rows.filter { it.get("passes", Boolean::class.java) }
-        val totalInBoundary = rows.firstOrNull()?.let { (it.get("total_in_boundary") as Number).toInt() } ?: 0
-        val totalPassing = rows.firstOrNull()?.let { (it.get("total_passing") as Number).toInt() } ?: 0
+        val totalInBoundary = rows.firstOrNull()?.get("total_in_boundary", Int::class.java) ?: 0
+        val totalPassing = rows.firstOrNull()?.get("total_passing", Int::class.java) ?: 0
         return CampgroundSearchResult(
-            poiIds = passing.map { (it.get("poi_id") as Number).toLong() },
+            poiIds = passing.map { it.get("poi_id", Long::class.java) },
             totalInBoundary = totalInBoundary,
             totalMatching = totalPassing,
             truncated = totalPassing > passing.size,

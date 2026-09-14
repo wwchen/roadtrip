@@ -78,19 +78,51 @@ class CampgroundRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `search with a structurally invalid boundary is a 400 bad_boundary`() =
+    fun `search with a boundary PostGIS rejects is a 400 bad_boundary`() =
         testApplication {
             application { routeTestApplication { campgroundRoutes(service(), CampgroundSearchConfig.default) } }
-            val nonArrayCoordinates = """{"type":"Polygon","coordinates":"nope"}"""
+            // Structurally a JSON array, so it decodes fine as BoundaryDto; ST_GeomFromGeoJSON still
+            // rejects it because a Polygon's coordinates must nest into linear rings, not bare numbers.
+            val notARing = """{"type":"Polygon","coordinates":[1,2,3]}"""
 
             val resp =
                 client.post("/api/campgrounds/search") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"boundary":$nonArrayCoordinates}""")
+                    setBody("""{"boundary":$notARing}""")
                 }
 
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             assertEquals("bad_boundary", error(resp.bodyAsText()))
+        }
+
+    @Test
+    fun `search with a boundary of the wrong shape is a 400 bad_request`() =
+        testApplication {
+            application { routeTestApplication { campgroundRoutes(service(), CampgroundSearchConfig.default) } }
+
+            val point =
+                client.post("/api/campgrounds/search") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"boundary":{"type":"Point","coordinates":[0,0]}}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, point.status)
+            assertEquals("bad_request", error(point.bodyAsText()))
+
+            val nullCoordinates =
+                client.post("/api/campgrounds/search") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"boundary":{"type":"Polygon","coordinates":null}}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, nullCoordinates.status)
+            assertEquals("bad_request", error(nullCoordinates.bodyAsText()))
+
+            val arrayType =
+                client.post("/api/campgrounds/search") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"boundary":{"type":["Polygon"],"coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, arrayType.status)
+            assertEquals("bad_request", error(arrayType.bodyAsText()))
         }
 
     @Test

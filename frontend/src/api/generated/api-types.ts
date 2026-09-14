@@ -261,6 +261,11 @@ export interface BookingSettingsDto {
   recgov_username?: string;
 }
 
+export interface BoundaryDto {
+  type: GeoJsonBoundaryType;
+  coordinates: unknown[];
+}
+
 export interface BuildInfoDto {
   env: string;
   sha: string;
@@ -302,7 +307,7 @@ export interface CampgroundFilterDto {
 }
 
 export interface CampgroundSearchRequestDto {
-  boundary?: Record<string, unknown>;
+  boundary?: BoundaryDto;
   filter?: CampgroundFilterDto;
 }
 
@@ -411,6 +416,8 @@ export interface FanOutResponseSchema {
   kind: string;
   outcomes: RunOutcomeSchema[];
 }
+
+export type GeoJsonBoundaryType = 'Polygon' | 'MultiPolygon';
 
 export interface GeocodeResponseDto {
   results: GeocodeResultDto[];

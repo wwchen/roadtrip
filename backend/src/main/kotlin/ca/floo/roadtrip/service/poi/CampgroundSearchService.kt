@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.poi
 
 import ca.floo.roadtrip.config.CampgroundSearchConfig
+import ca.floo.roadtrip.model.api.campground.BoundaryDto
 import ca.floo.roadtrip.model.api.campground.CampgroundDetailsRequestDto
 import ca.floo.roadtrip.model.api.campground.CampgroundDetailsResponseDto
 import ca.floo.roadtrip.model.api.campground.CampgroundFilterDto
@@ -9,6 +10,7 @@ import ca.floo.roadtrip.model.api.campground.CampgroundSearchResponseDto
 import ca.floo.roadtrip.model.api.campground.CampgroundSummaryDto
 import ca.floo.roadtrip.model.api.poi.AmenityDto
 import ca.floo.roadtrip.model.api.poi.RatingDto
+import ca.floo.roadtrip.model.domain.CampgroundSearchError
 import ca.floo.roadtrip.model.domain.CampgroundSearchFilter
 import ca.floo.roadtrip.model.domain.CampgroundSummaryRow
 import ca.floo.roadtrip.model.domain.InvalidBoundaryException
@@ -17,17 +19,14 @@ import ca.floo.roadtrip.repo.CampgroundSearchRepo
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.BookingIdentityResolver
 import ca.floo.roadtrip.service.poi.campground.CampgroundCta
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.Json
 
-/** A request the caller can fix; [code] is the wire error code. */
+/** A request the caller can fix; [error] is the wire error code. */
 class CampgroundSearchRequestException(
-    val code: String,
+    val error: CampgroundSearchError,
     message: String,
 ) : IllegalArgumentException(message)
 
-private val boundaryTypes = setOf("Polygon", "MultiPolygon")
 private const val MIN_GROUP_SIZE = 1
 
 internal class CampgroundSearchService(
@@ -43,9 +42,10 @@ internal class CampgroundSearchService(
         val filter = validatedFilter(request.filter ?: CampgroundFilterDto())
         val result =
             try {
-                searchRepo.searchWithinBoundary(boundary.toString(), filter, limit = config.maxResults)
+                val boundaryGeoJson = Json.encodeToString(BoundaryDto.serializer(), boundary)
+                searchRepo.searchWithinBoundary(boundaryGeoJson, filter, limit = config.maxResults)
             } catch (e: InvalidBoundaryException) {
-                throw CampgroundSearchRequestException("bad_boundary", "boundary is not valid GeoJSON geometry")
+                throw CampgroundSearchRequestException(CampgroundSearchError.BAD_BOUNDARY, "boundary is not valid GeoJSON geometry")
             }
         return CampgroundSearchResponseDto(
             campgroundIds = result.poiIds,
@@ -59,7 +59,7 @@ internal class CampgroundSearchService(
         val ids = request.campgroundIds.distinct()
         if (ids.size > config.maxDetailIds) {
             throw CampgroundSearchRequestException(
-                "too_many_ids",
+                CampgroundSearchError.TOO_MANY_IDS,
                 "at most ${config.maxDetailIds} campground_ids per request",
             )
         }
@@ -67,23 +67,13 @@ internal class CampgroundSearchService(
         return CampgroundDetailsResponseDto(campgrounds = campgroundRepo.findSummariesByPoiIds(ids).map(::summaryOf))
     }
 
-    private fun validatedBoundary(boundary: JsonObject?): JsonObject {
-        boundary ?: throw CampgroundSearchRequestException("bad_boundary", "boundary is required")
-        val type = (boundary["type"] as? JsonPrimitive)?.content
-        if (type !in boundaryTypes) {
-            throw CampgroundSearchRequestException("bad_boundary", "boundary must be a GeoJSON Polygon or MultiPolygon")
-        }
-        val coords = boundary["coordinates"]
-        if (coords == null || coords is JsonNull) {
-            throw CampgroundSearchRequestException("bad_boundary", "boundary has no coordinates")
-        }
-        return boundary
-    }
+    private fun validatedBoundary(boundary: BoundaryDto?): BoundaryDto =
+        boundary ?: throw CampgroundSearchRequestException(CampgroundSearchError.BAD_BOUNDARY, "boundary is required")
 
     private fun validatedFilter(filter: CampgroundFilterDto): CampgroundSearchFilter {
         filter.groupSize?.let {
             if (it < MIN_GROUP_SIZE) {
-                throw CampgroundSearchRequestException("bad_request", "group_size must be >= $MIN_GROUP_SIZE")
+                throw CampgroundSearchRequestException(CampgroundSearchError.BAD_REQUEST, "group_size must be >= $MIN_GROUP_SIZE")
             }
         }
         return CampgroundSearchFilter(siteType = filter.siteType, groupSize = filter.groupSize, amenities = filter.amenities)
