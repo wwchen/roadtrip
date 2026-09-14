@@ -3,7 +3,9 @@ package ca.floo.roadtrip.config
 /**
  * Caps for the campground search read: how many ids a boundary search may return,
  * how many summaries one details call may ask for, and how large a boundary the
- * search will run against PostGIS.
+ * search will run against PostGIS. Max results defaults high enough to return every
+ * matching id (ids are cheap on the wire; the frontend filters the map's pins by them
+ * and caps what it renders itself); the boundary-area cap is what bounds the work.
  */
 data class CampgroundSearchConfig(
     val maxResults: Int,
@@ -19,7 +21,7 @@ data class CampgroundSearchConfig(
     }
 
     companion object {
-        private const val DEFAULT_MAX_RESULTS = 200
+        private const val DEFAULT_MAX_RESULTS = 5000
         private const val DEFAULT_MAX_DETAIL_IDS = 50
         private const val DEFAULT_MAX_BOUNDARY_AREA_SQ_DEG = 500.0
 
