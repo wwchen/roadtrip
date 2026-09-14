@@ -10,6 +10,7 @@ import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
+import ca.floo.roadtrip.repo.CampgroundSearchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.DatabaseHealthRepo
 import ca.floo.roadtrip.repo.ImportRunRepo
@@ -64,6 +65,7 @@ val repoModule =
                 enabledDataProviders = get<AppConfig>().readPathProviders.enabledDataProviders,
             )
         }
+        single { CampgroundSearchRepo(get(), get<AppConfig>().readPathProviders.enabledDataProviders) }
 
         single { JooqUnitOfWork(get()) }
         single<UnitOfWork> { get<JooqUnitOfWork>() }
