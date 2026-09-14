@@ -4,7 +4,7 @@
 
 **Goal:** Two new backend endpoints, `POST /api/campgrounds/search` (campground POI ids inside a GeoJSON boundary that pass a filter) and `POST /api/campgrounds/details` (bulk campground summaries), backed by a per-campground site summary the campsite ETL maintains.
 
-**Architecture:** A new `campground_site_summary` table holds site counts by kind, the site total and the largest `max_people` per campground; `CampsiteRepo` refreshes the rows it touches inside the upsert transaction and the migration backfills the rest. `CampgroundSearchRepo` runs the boundary + filter query with PostGIS; `CampgroundRepo` gains a bulk summary read by POI id. `CampgroundSearchService` validates the boundary, applies the caps, and maps rows to DTOs, deciding `availability_supported` exactly as `CampgroundService` does. `CampgroundRoutes` is the HTTP shell. Two `ApiContract` rows publish the DTOs to TypeScript.
+**Architecture:** `campground_site_summary` is a SQL function over `campsites` (with a covering index) that returns site counts by kind, the site total and the largest `max_people` for one campground; Postgres inlines it as a LATERAL join, so nothing is cached or refreshed. (Task 1 below describes the table this started as; it was superseded on 2026-09-13.) `CampgroundSearchRepo` runs the boundary + filter query with PostGIS; `CampgroundRepo` gains a bulk summary read by POI id. `CampgroundSearchService` validates the boundary, applies the caps, and maps rows to DTOs, deciding `availability_supported` exactly as `CampgroundService` does. `CampgroundRoutes` is the HTTP shell. Two `ApiContract` rows publish the DTOs to TypeScript.
 
 **Tech Stack:** Kotlin, Ktor, jOOQ over PostgreSQL + PostGIS, kotlinx.serialization, Koin DI, JUnit 5 with a shared Testcontainers database (`SharedDbTest`), Flyway migrations, ktlint + detekt.
 
@@ -32,11 +32,11 @@
 
 | File | Change | Responsibility |
 |---|---|---|
-| `backend/src/main/resources/db/migration/V64__campground_site_summary.sql` | create | The summary table and its backfill. |
+| `backend/src/main/resources/db/migration/V64__campground_site_summary.sql` | create | The covering index and the on-read summary function (originally a table + backfill). |
 | `backend/src/main/kotlin/ca/floo/roadtrip/model/domain/CampgroundSiteSummary.kt` | create | Domain value: counts by kind, total, max people. |
 | `backend/src/main/kotlin/ca/floo/roadtrip/repo/CampsiteRepo.kt` | modify | Refresh the summary rows for the campgrounds an upsert batch touched. |
 | `backend/src/test/kotlin/ca/floo/roadtrip/repo/CanonicalCatalogFixtures.kt` | modify | `seedCampsite` gains `maxPeople`; `seedCampground`/`seedCatalogPoi` gain `amenitiesJson`. |
-| `backend/src/test/kotlin/ca/floo/roadtrip/repo/CampsiteRepoSummaryTest.kt` | create | Pins the refresh and the backfill. |
+| `backend/src/test/kotlin/ca/floo/roadtrip/repo/CampsiteRepoSummaryTest.kt` | create | Pins the aggregate semantics. |
 | `backend/src/main/kotlin/ca/floo/roadtrip/config/CampgroundSearchConfig.kt` | create | `maxResults`, `maxDetailIds`. |
 | `backend/src/main/kotlin/ca/floo/roadtrip/config/AppConfig.kt` | modify | Load the section. |
 | `backend/src/test/kotlin/ca/floo/roadtrip/config/CampgroundSearchConfigTest.kt` | create | Defaults and guards. |
