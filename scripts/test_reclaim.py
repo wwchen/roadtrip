@@ -22,9 +22,19 @@ printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$1" in
   image)
     case "$2" in
-      ls) [ "$3" = "roadtrip/backend" ] && cat "$FAKE_IMAGE_LS" 2>/dev/null; true ;;
-      inspect) echo "sha256:deadbeef" ;;
-      prune) printf 'Deleted Images:\\nsha256:deadbeef\\n\\nTotal reclaimed space: 42MB\\n' ;;
+      ls)
+        case "$*" in
+          *dangling=true*) cut -d' ' -f1 "$FAKE_DANGLING" 2>/dev/null; true ;;
+          *) [ "$3" = "roadtrip/backend" ] && cat "$FAKE_IMAGE_LS" 2>/dev/null; true ;;
+        esac
+        ;;
+      inspect)
+        case "$*" in
+          *Created*) grep "^$5 " "$FAKE_DANGLING" 2>/dev/null | cut -d' ' -f2; true ;;
+          *) echo "sha256:deadbeef" ;;
+        esac
+        ;;
+      rm) echo "Deleted: $3" ;;
     esac
     ;;
 esac
@@ -41,6 +51,8 @@ class ReclaimTestCase(unittest.TestCase):
         self.log = self.tmp / "docker.log"
         self.image_ls = self.tmp / "images.txt"
         self.image_ls.write_text("")
+        self.dangling = self.tmp / "dangling.txt"
+        self.dangling.write_text("")
         fake = self.bin / "docker"
         fake.write_text(FAKE_DOCKER)
         fake.chmod(0o755)
@@ -51,6 +63,7 @@ class ReclaimTestCase(unittest.TestCase):
         environ["PATH"] = f"{self.bin}{os.pathsep}{environ['PATH']}"
         environ["DOCKER_LOG"] = str(self.log)
         environ["FAKE_IMAGE_LS"] = str(self.image_ls)
+        environ["FAKE_DANGLING"] = str(self.dangling)
         environ.update(env)
         return subprocess.run(
             ["bash", str(RECLAIM), *args],
@@ -221,25 +234,51 @@ class PruneTest(ReclaimTestCase):
                    if c.startswith("image rm roadtrip/backend")]
         self.assertEqual(removed, [])
 
-    def test_image_prune_reports_its_total_instead_of_being_silenced(self) -> None:
-        # The sweep log used to have no way to show whether the dangling
-        # image prune freed anything, because that one call was routed
-        # through _docker_quiet. It now goes through _docker | tail -1,
-        # same as the volume and container prunes.
+    def _dangling(self, *rows: str) -> None:
+        self.dangling.write_text("".join(f"{r}\n" for r in rows))
+
+    def test_untagged_images_past_retention_are_removed_by_id(self) -> None:
+        # `docker image prune --filter until` left nine such images on the
+        # deploy host; the explicit list-and-rm pass must take them.
+        self._dangling("oldimg 2020-01-01T00:00:00.123456789Z")
         done = self.run_reclaim("prune", "--scope", "local")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertIn("Total reclaimed space: 42MB", done.stdout)
+        self.assertIn("image rm oldimg", self.docker_calls())
+        self.assertIn("Deleted: oldimg", done.stdout)
+        self.assertNotIn(" prune", "".join(c for c in self.docker_calls() if c.startswith("image")))
 
-    def test_image_prune_dry_run_still_prints_the_dry_run_line(self) -> None:
+    def test_untagged_images_inside_retention_survive(self) -> None:
+        recent = subprocess.run(
+            ["date", "-u", "+%Y-%m-%dT%H:%M:%SZ"], capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        self._dangling(f"newimg {recent}", "oldimg 2020-01-01T00:00:00Z")
+        done = self.run_reclaim("prune", "--scope", "local")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        removed = [c for c in self.docker_calls() if c.startswith("image rm ")]
+        self.assertEqual(removed, ["image rm oldimg"])
+
+    def test_untagged_image_pass_is_label_scoped(self) -> None:
+        self.run_reclaim("prune", "--scope", "local")
+        listing = [c for c in self.docker_calls() if c.startswith("image ls") and "dangling" in c]
+        self.assertTrue(listing)
+        self.assertIn("label=ca.floo.roadtrip.managed=true", listing[0])
+
+    def test_untagged_image_dry_run_announces_and_removes_nothing(self) -> None:
+        self._dangling("oldimg 2020-01-01T00:00:00Z")
         done = self.run_reclaim("prune", "--scope", "local", "--dry-run")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertIn("dry-run: docker image prune -f", done.stdout)
-        self.assertNotIn("Total reclaimed space", done.stdout)
+        self.assertIn("dry-run: docker image rm oldimg", done.stdout)
+        self.assertNotIn("image rm oldimg", self.docker_calls())
 
     def test_default_image_retention_is_72_hours(self) -> None:
         done = self.run_reclaim("prune", "--scope", "local", "--dry-run")
         self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertIn("until=72h", done.stdout)
+        self.assertIn("older than 72h", done.stdout)
+
+    def test_retention_must_be_whole_hours(self) -> None:
+        done = self.run_reclaim("prune", "--scope", "local", ROADTRIP_IMAGE_RETENTION="2d")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("whole hours", done.stderr)
 
 
 class DeployIntegrationTest(unittest.TestCase):
