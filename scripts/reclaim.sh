@@ -13,8 +13,9 @@ set -euo pipefail
 
 MANAGED_LABEL="ca.floo.roadtrip.managed=true"
 
-# Untagged managed digests only; rollback depth for tagged images is the
-# keep-N window below, so this just bounds how long dangling layers linger.
+# Untagged managed images only, in whole hours; rollback depth for tagged
+# images is the keep-N window below, so this just bounds how long dangling
+# layers linger.
 : "${ROADTRIP_IMAGE_RETENTION:=72h}"
 : "${RECLAIM_FREE_TARGET_GB:=20}"
 
@@ -171,9 +172,38 @@ _prune_images() {
         done
     done
 
-    _docker image prune -f \
-        --filter "label=${MANAGED_LABEL}" \
-        --filter "until=${ROADTRIP_IMAGE_RETENTION}" | tail -1
+    _prune_untagged_images
+}
+
+# Listed and removed by ID rather than `docker image prune --filter until`:
+# on the deploy host that prune returned 0B against nine unreferenced,
+# labelled images up to eleven days old, while `image rm` on the same IDs
+# took them all. `image rm` still refuses an image a container uses.
+_prune_untagged_images() {
+    local image_id created epoch cutoff
+    if [[ ! "${ROADTRIP_IMAGE_RETENTION}" =~ ^[0-9]+h$ ]]; then
+        echo "error: ROADTRIP_IMAGE_RETENTION must be whole hours such as 72h, got '${ROADTRIP_IMAGE_RETENTION}'" >&2
+        exit 2
+    fi
+    cutoff=$(( $(date -u +%s) - ${ROADTRIP_IMAGE_RETENTION%h} * 3600 ))
+    echo "==> pruning untagged Roadtrip images older than ${ROADTRIP_IMAGE_RETENTION}"
+    while IFS= read -r image_id; do
+        [[ -n "${image_id}" ]] || continue
+        created="$(docker image inspect --format '{{.Created}}' "${image_id}" 2>/dev/null || true)"
+        [[ -n "${created}" ]] || continue
+        epoch="$(_epoch_of "${created}" 2>/dev/null || true)"
+        if [[ -z "${epoch}" ]] || (( epoch > cutoff )); then continue; fi
+        _docker image rm "${image_id}" || true
+    done < <(docker image ls --filter dangling=true --filter "label=${MANAGED_LABEL}" -q)
+}
+
+# RFC 3339 from `docker inspect`, with or without fractional seconds, to a
+# Unix time. GNU date first, BSD date on the macOS host.
+_epoch_of() {
+    local stamp="${1%%.*}"
+    stamp="${stamp%Z}"
+    date -u -d "${stamp}" +%s 2>/dev/null \
+        || date -u -j -f '%Y-%m-%dT%H:%M:%S' "${stamp}" +%s
 }
 
 # One roadtrip-data-<sha> volume per data tree SHA, which the image prune never
