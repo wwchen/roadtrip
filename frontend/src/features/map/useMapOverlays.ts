@@ -11,7 +11,8 @@
 //   2. install     [map, styleEpoch]              — and reinstall after a basemap change
 //   3. paint       [map, styleEpoch, buckets]     — setData only, layers untouched
 //   4. visibility  [map, styleEpoch, hidden…]     — the legend's on/off toggles
-//   5. filter      [map, styleEpoch, hiddenAgencies] — the campground legend
+//   5. filter      [map, styleEpoch, hiddenAgencies, campgroundFilterIds] — the
+//                   campground legend and the topbar's active search filter
 //   6. handlers    [map, styleEpoch, …actions]    — clicks and the cursor
 //
 // `styleEpoch` is in every one of them because `setStyle({ diff: false })`
@@ -22,7 +23,7 @@ import type { FeatureCollection } from 'geojson';
 import type { MapLayerMouseEvent } from 'maplibre-gl';
 import { jsonGetOk } from '@/api/http';
 import { queryKeys } from '@/queries/keys';
-import { hiddenAgencyFilter } from '@/map/agencies';
+import { campgroundLayerFilter } from '@/map/agencies';
 import {
   POINT_OVERLAYS,
   firstInstalledPinLayerId,
@@ -44,6 +45,7 @@ export function useMapOverlays(pois: ViewportPois): void {
   const { map, styleEpoch } = useMapContext();
   const hiddenOverlays = useMapStore((s) => s.hiddenOverlays);
   const hiddenAgencies = useMapStore((s) => s.hiddenAgencies);
+  const campgroundFilterIds = useMapStore((s) => s.campgroundFilterIds);
   const selectPoi = useMapStore((s) => s.selectPoi);
   const clearSelectedPoi = useMapStore((s) => s.clearSelectedPoi);
 
@@ -82,8 +84,8 @@ export function useMapOverlays(pois: ViewportPois): void {
   // checkbox — so their legend is a filter instead of a visibility switch.
   useEffect(() => {
     if (!map || !styleEpoch) return;
-    setOverlayFilter(map, overlaySpec('cg'), hiddenAgencyFilter(hiddenAgencies));
-  }, [map, styleEpoch, hiddenAgencies]);
+    setOverlayFilter(map, overlaySpec('cg'), campgroundLayerFilter(hiddenAgencies, campgroundFilterIds));
+  }, [map, styleEpoch, hiddenAgencies, campgroundFilterIds]);
 
   useEffect(() => {
     if (!map || !styleEpoch) return;

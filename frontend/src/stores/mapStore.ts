@@ -61,6 +61,13 @@ export interface MapState {
    */
   viewportCampgrounds: PinFeature[];
   campgroundsRequested: boolean;
+  /**
+   * The ids the topbar's search matched, or null when no filter is active.
+   *
+   * Published by `features/trip`'s TopBar for the map feature's pin filter and
+   * legend counts.
+   */
+  campgroundFilterIds: ReadonlySet<number> | null;
   /** The POI whose drawer is open, or null when the drawer is closed. */
   selectedPoiId: string | number | null;
   /**
@@ -78,6 +85,7 @@ export interface MapState {
   toggleOverlay: (overlay: OverlayKey) => void;
   setAgencyHidden: (agency: string, hidden: boolean) => void;
   setViewportCampgrounds: (features: PinFeature[], requested: boolean) => void;
+  setCampgroundFilterIds: (ids: readonly number[] | null) => void;
   /** Open the drawer for a POI. */
   selectPoi: (id: string | number) => void;
   /** Close the drawer. */
@@ -95,6 +103,7 @@ const INITIAL_MAP = {
   hiddenAgencies: [],
   viewportCampgrounds: [],
   campgroundsRequested: false,
+  campgroundFilterIds: null,
   selectedPoiId: null,
   selectedRegion: null,
 } satisfies Omit<
@@ -105,6 +114,7 @@ const INITIAL_MAP = {
   | 'toggleOverlay'
   | 'setAgencyHidden'
   | 'setViewportCampgrounds'
+  | 'setCampgroundFilterIds'
   | 'selectPoi'
   | 'clearSelectedPoi'
   | 'selectRegion'
@@ -141,6 +151,8 @@ export const useMapStore = create<MapState>()((set) => ({
 
   setViewportCampgrounds: (viewportCampgrounds, campgroundsRequested) =>
     set({ viewportCampgrounds, campgroundsRequested }),
+
+  setCampgroundFilterIds: (ids) => set({ campgroundFilterIds: ids ? new Set(ids) : null }),
 
   selectPoi: (selectedPoiId) => set({ selectedPoiId }),
   clearSelectedPoi: () => set({ selectedPoiId: null }),

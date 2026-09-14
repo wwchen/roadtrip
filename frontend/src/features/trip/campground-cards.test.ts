@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { CampgroundSummary } from '@/api/campground-api';
-import { cardsFromSummaries, countLine } from './campground-cards';
+import { cardsFromSummaries, countLine, rankCards } from './campground-cards';
 
 const summary = (over: Partial<CampgroundSummary> & Pick<CampgroundSummary, 'id'>): CampgroundSummary => ({
   campground_id: over.id * 10,
@@ -65,5 +65,29 @@ describe('countLine', () => {
 
   test('renders nothing for an empty catalog', () => {
     expect(countLine(summary({ id: 1, site_counts: {}, site_total: 0 }), 'tent')).toBeNull();
+  });
+});
+
+describe('rankCards', () => {
+  const NO_FILTER = { siteType: null, groupSize: null, amenities: [] };
+  const TENT_FILTER = { siteType: 'tent' as const, groupSize: null, amenities: [] };
+
+  test('moves the no-data card below the known matches, nearest-first within each group', () => {
+    const byId = new Map([
+      // Unknown: no site data at all, so the tent facet reads no-data.
+      [1, summary({ id: 1, site_counts: {}, site_total: 0 })],
+      [2, summary({ id: 2 })],
+      [3, summary({ id: 3 })],
+    ]);
+    const cards = cardsFromSummaries([1, 2, 3], byId, null);
+
+    expect(rankCards(cards, TENT_FILTER).map((c) => c.id)).toEqual([2, 3, 1]);
+  });
+
+  test('returns the same array when no filter is active', () => {
+    const byId = new Map([[1, summary({ id: 1, site_counts: {}, site_total: 0 })], [2, summary({ id: 2 })]]);
+    const cards = cardsFromSummaries([1, 2], byId, null);
+
+    expect(rankCards(cards, NO_FILTER)).toBe(cards);
   });
 });

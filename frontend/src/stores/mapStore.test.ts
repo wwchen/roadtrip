@@ -165,3 +165,29 @@ describe('viewport campgrounds', () => {
     expect(map()).toMatchObject({ viewportCampgrounds: [], campgroundsRequested: false });
   });
 });
+
+describe('campground filter ids', () => {
+  test('starts null', () => {
+    expect(map().campgroundFilterIds).toBeNull();
+  });
+
+  test('set stores a Set', () => {
+    map().setCampgroundFilterIds([1, 2, 3]);
+
+    expect(map().campgroundFilterIds).toEqual(new Set([1, 2, 3]));
+  });
+
+  test('set(null) clears it', () => {
+    map().setCampgroundFilterIds([1, 2, 3]);
+    map().setCampgroundFilterIds(null);
+
+    expect(map().campgroundFilterIds).toBeNull();
+  });
+
+  test('reset clears it', () => {
+    map().setCampgroundFilterIds([1, 2, 3]);
+    map().reset();
+
+    expect(map().campgroundFilterIds).toBeNull();
+  });
+});

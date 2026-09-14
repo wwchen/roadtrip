@@ -81,3 +81,25 @@ export function hiddenAgencyFilter(hidden: readonly string[]): FilterSpecificati
   }
   return ['all', ...clauses];
 }
+
+/**
+ * The campground layer filter: hidden agencies combined with the active pin
+ * filter, if any.
+ *
+ * `matchingIds` null means no filter is active, so every pin the agency clause
+ * allows stays. Non-null, it also requires the feature's top-level `id` — the
+ * one MapLibre reads through `['id']` — to be in the set.
+ */
+export function campgroundLayerFilter(
+  hidden: readonly string[],
+  matchingIds: ReadonlySet<number> | null,
+): FilterSpecification | null {
+  const agencyFilter = hiddenAgencyFilter(hidden);
+  if (matchingIds === null) return agencyFilter;
+
+  const idClause: ExpressionSpecification = ['in', ['id'], ['literal', [...matchingIds]]];
+  // `hiddenAgencyFilter` always returns `['all', ...clauses]`, never a bare
+  // clause — flatten it rather than nesting an `all` inside this `all`.
+  const agencyClauses = (agencyFilter as unknown as ExpressionSpecification[] | null)?.slice(1) ?? [];
+  return ['all', ...agencyClauses, idClause];
+}

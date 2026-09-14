@@ -3,6 +3,7 @@ import type { PinFeature } from './pins';
 import {
   UNCATEGORIZED_AGENCY,
   agencyCounts,
+  campgroundLayerFilter,
   featureAgency,
   hiddenAgencyFilter,
   sortedAgencies,
@@ -101,6 +102,27 @@ describe('hiddenAgencyFilter', () => {
       'all',
       ['!', ['in', ['get', 'agency'], ['literal', ['BC Parks']]]],
       ['has', 'agency'],
+    ]);
+  });
+});
+
+describe('campgroundLayerFilter', () => {
+  test('no hidden agencies and no id filter means no filter', () => {
+    expect(campgroundLayerFilter([], null)).toBeNull();
+  });
+
+  test('an id filter with nothing hidden is just the in clause', () => {
+    expect(campgroundLayerFilter([], new Set([1, 2]))).toEqual([
+      'all',
+      ['in', ['id'], ['literal', [1, 2]]],
+    ]);
+  });
+
+  test('combines the hidden-agency clause and the id clause', () => {
+    expect(campgroundLayerFilter(['BC Parks'], new Set([1, 2]))).toEqual([
+      'all',
+      ['!', ['in', ['get', 'agency'], ['literal', ['BC Parks']]]],
+      ['in', ['id'], ['literal', [1, 2]]],
     ]);
   });
 });

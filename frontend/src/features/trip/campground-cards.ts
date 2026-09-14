@@ -5,6 +5,8 @@ import { distanceKm } from '@/lib/geo';
 import { filterCopy, inViewCopy } from '@/lib/strings';
 import { kindLabel } from '@/lib/campground-vocab';
 import type { MapCenter } from '@/map/viewport';
+import type { CampgroundFilterState } from '@/stores/campgroundFilterStore';
+import { facetsFor } from './facets';
 import type { TripCard } from './trip-cards';
 
 /** A card that carries the summary it was built from, for the count line and facets. */
@@ -43,6 +45,27 @@ export function cardsFromSummaries(
     });
   }
   return cards;
+}
+
+/**
+ * Known matches first, then cards with a no-data facet — nearest-first order
+ * kept within each group. Stable and allocation-free when nothing moves: the
+ * common case, with no filter active, returns the same array instance.
+ */
+export function rankCards(
+  cards: readonly InViewCard[],
+  filter: Pick<CampgroundFilterState, 'siteType' | 'groupSize' | 'amenities'>,
+): InViewCard[] {
+  const hasNoData = (card: InViewCard) =>
+    facetsFor(card.summary, filter).some((facet) => facet.state === 'no-data');
+
+  const known: InViewCard[] = [];
+  const unknown: InViewCard[] = [];
+  for (const card of cards) {
+    (hasNoData(card) ? unknown : known).push(card);
+  }
+  if (unknown.length === 0 || known.length === 0) return cards as InViewCard[];
+  return [...known, ...unknown];
 }
 
 /** The card's count line; null for an empty catalog. */

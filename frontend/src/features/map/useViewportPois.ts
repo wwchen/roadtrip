@@ -39,7 +39,7 @@ import { fetchViewportPois, type ViewportPoiCollection } from '@/api/poi-api';
 import { queryKeys } from '@/queries/keys';
 import { agencyCounts } from '@/map/agencies';
 import { POINT_OVERLAYS, bucketPins, type OverlayKey } from '@/map/overlays';
-import type { PinCollection, PinFeature } from '@/map/pins';
+import { pinFeatureId, type PinCollection, type PinFeature } from '@/map/pins';
 import { createViewportCache, type ViewportCache } from '@/map/viewport-cache';
 import {
   clipToBbox,
@@ -84,6 +84,24 @@ const EMPTY_RESPONSE: ViewportPoiCollection = {
  * at the call site reads worse than naming the placeholder.
  */
 const PENDING_VIEWPORT_KEY = queryKeys.pois.viewport([0, 0, 0, 0], 0, []);
+
+const CAMPGROUND_CATEGORY = 'campground';
+
+/**
+ * Drops campgrounds the active filter does not match; every other category
+ * rides along untouched. Null `filterIds` means no filter is active.
+ */
+function filterCampgrounds(
+  features: readonly PinFeature[],
+  filterIds: ReadonlySet<number> | null,
+): PinFeature[] {
+  if (filterIds === null) return [...features];
+  return features.filter((feature) => {
+    if (feature?.properties?.category !== CAMPGROUND_CATEGORY) return true;
+    const id = pinFeatureId(feature);
+    return typeof id === 'number' && filterIds.has(id);
+  });
+}
 
 function countPins(buckets: Record<OverlayKey, PinCollection>): Record<OverlayKey, number> {
   const counts = {} as Record<OverlayKey, number>;
@@ -213,7 +231,15 @@ export function useViewportPois(): ViewportPois {
   // these have to be exact, so pins are always clipped down to the bbox
   // actually being asked about before anything counts them. A route has no
   // bbox to clip to — its pins are the corridor's, not the viewport's.
-  const countedFeatures = !routeActive && request ? clipToBbox(features, request.bbox) : features;
+  const clippedFeatures = !routeActive && request ? clipToBbox(features, request.bbox) : features;
+  const campgroundFilterIds = useMapStore((s) => s.campgroundFilterIds);
+  // While a filter is active, campgrounds it does not match are dropped from the
+  // counts too — the legend counts only what the filter matches. Painting stays
+  // unfiltered above; `useMapOverlays`'s layer filter is what hides them on the map.
+  const countedFeatures = useMemo(
+    () => filterCampgrounds(clippedFeatures, campgroundFilterIds),
+    [clippedFeatures, campgroundFilterIds],
+  );
   const countedBuckets = useMemo(() => bucketPins(countedFeatures), [countedFeatures]);
   const counts = useMemo(() => countPins(countedBuckets), [countedBuckets]);
   const agencies = useMemo(() => agencyCounts(countedBuckets.cg.features), [countedBuckets]);

@@ -666,6 +666,31 @@ describe('the legend', () => {
     expect(poiRequests()).toHaveLength(before);
   });
 
+  test('a campground filter drops pins it does not match, on the map and in the counts', async () => {
+    poiResponses = [
+      collection([pin(8101, 'campground', 'BC Parks'), pin(8102, 'campground', 'BC Parks')]),
+    ];
+    await renderMap({ zoom: 8 });
+    await waitFor(() => expect(screen.getByLabelText(/BC Parks \(2\)/)).toBeInTheDocument());
+
+    await act(async () => {
+      useMapStore.getState().setCampgroundFilterIds([8101]);
+    });
+
+    const expected = ['all', ['in', ['id'], ['literal', [8101]]]];
+    expect(instance.layer('cg-points')?.filter).toEqual(expected);
+    expect(instance.layer('cg-points-hit')?.filter).toEqual(expected);
+    expect(screen.getByLabelText(/BC Parks \(1\)/)).toBeInTheDocument();
+    expect(useMapStore.getState().viewportCampgrounds).toHaveLength(1);
+
+    await act(async () => {
+      useMapStore.getState().setCampgroundFilterIds(null);
+    });
+
+    expect(instance.layer('cg-points')?.filter).toBeNull();
+    expect(screen.getByLabelText(/BC Parks \(2\)/)).toBeInTheDocument();
+  });
+
   test('collapses to a pop-out button and comes back', async () => {
     await renderMap();
 

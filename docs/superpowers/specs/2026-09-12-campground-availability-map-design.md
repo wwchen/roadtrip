@@ -188,7 +188,15 @@ table, no refresh, no staleness.
 - **Cards** render from `CampgroundSummaryDto`: name, region, agency, rating, count line,
   facets. Count line with a type selected: `"{site_counts[type]} {kindLabel} sites · {site_total}
   total"` when they differ, `"{site_total} {kindLabel} sites"` when equal; no type: M1's
-  `"{site_total} sites"`; zero total renders no line.
+  `"{site_total} sites"`; zero total renders no line. `rankCards` (M2c) then moves known
+  matches — no `no-data` facet — above cards with one, keeping nearest-first order within
+  each group.
+- **Pins follow the filter** (M2c). While a filter is active, `TopBar` publishes the search's
+  full matching id set (not the 50-card slice) to `mapStore.campgroundFilterIds`; `useMapOverlays`
+  folds it into the campground layer filter alongside the hidden-agency clause, so pins the
+  filter excludes disappear from the map, and `useViewportPois` drops the same pins before
+  counting, so the legend's campground and agency counts match what the filter matches. With
+  no filter active the id set is null and nothing about painting or counting changes.
 - **Facets** (`features/trip/facets.ts`, pure): one per active filter, one of three states —
   `match`, `miss`, or `no-data`. A miss should not reach the list, since the server already
   filters on the active facets; when one does anyway (a stale card, a filter changed after the
