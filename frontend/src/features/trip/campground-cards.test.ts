@@ -18,7 +18,9 @@ describe('cardsFromSummaries', () => {
   test('keeps the server order, skips ids without a summary, and hydrates the card', () => {
     const byId = new Map([
       [2, summary({ id: 2, name: 'Nevada Beach', region: 'NV', agency: 'USDA Forest Service', rating: { average: 4.6, count: 12 } })],
-      [1, summary({ id: 1, availability_supported: false })],
+      // 1 degree of latitude away from the map centre, ~111 km — far enough that
+      // a bug collapsing distance to the centre itself would not go unnoticed.
+      [1, summary({ id: 1, availability_supported: false, lat: 40 })],
     ]);
 
     const cards = cardsFromSummaries([2, 3, 1], byId, { lng: -120, lat: 39 });
@@ -35,6 +37,8 @@ describe('cardsFromSummaries', () => {
     });
     expect(cards[1]?.checkable).toBe(false);
     expect(cards[0]?.distKm).toBeCloseTo(0, 5);
+    expect(cards[1]?.distKm).toBeGreaterThan(100);
+    expect(cards[1]?.distKm).toBeLessThan(120);
   });
 });
 

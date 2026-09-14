@@ -20,17 +20,23 @@ const NO_SUMMARIES: ReadonlyMap<number, CampgroundSummary> = new Map();
 export interface CampgroundSummaries {
   byId: ReadonlyMap<number, CampgroundSummary>;
   isFetching: boolean;
+  /** True once the details request has failed. */
+  isError: boolean;
 }
 
 export function useCampgroundSummaries(ids: readonly number[]): CampgroundSummaries {
   const client = useQueryClient();
+  // The cap belongs here: whoever calls this hook may pass more ids than the
+  // details endpoint's `max-detail-ids` allows, so this is the one place that
+  // must never ask for more than the cap, regardless of what a caller slices.
+  const capped = ids.slice(0, MAX_IN_VIEW_CARDS);
 
   const query = useQuery({
-    queryKey: queryKeys.campgrounds.summaries(ids),
+    queryKey: queryKeys.campgrounds.summaries(capped),
     queryFn: async ({ signal }) => {
       const cached = new Map<number, CampgroundSummary>();
       const missing: number[] = [];
-      for (const id of ids) {
+      for (const id of capped) {
         const state = client.getQueryState<CampgroundSummary>(queryKeys.campgrounds.summary(id));
         if (state?.data && Date.now() - state.dataUpdatedAt < SUMMARY_STALE_MS) {
           cached.set(id, state.data);
@@ -47,11 +53,11 @@ export function useCampgroundSummaries(ids: readonly number[]): CampgroundSummar
       }
       return cached;
     },
-    enabled: ids.length > 0,
+    enabled: capped.length > 0,
     staleTime: SUMMARY_STALE_MS,
     placeholderData: (previous) => previous,
   });
 
   const byId = useMemo(() => query.data ?? NO_SUMMARIES, [query.data]);
-  return { byId: ids.length > 0 ? byId : NO_SUMMARIES, isFetching: query.isFetching };
+  return { byId: capped.length > 0 ? byId : NO_SUMMARIES, isFetching: query.isFetching, isError: query.isError };
 }

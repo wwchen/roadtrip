@@ -174,19 +174,25 @@ table, no refresh, no staleness.
 - **State.** `campgroundFilterStore` (Zustand, `frontend/src/stores/`): `siteType`, `groupSize`,
   `amenities`, `dateWindow`, `clearFilters`, `reset`. Session-only. Read by trip (M2), polling
   (M3), map (M4).
-- **Fetching.** `useCampgroundSearch(boundary, filter)` calls `search` on the debounced viewport
-  (same `VIEWPORT_DEBOUNCE_MS` as the pin loop) and takes the nearest `MAX_IN_VIEW_CARDS`.
-  `useCampgroundSummaries(ids)` calls `details` for the ids not already in the Query cache and
-  fans the response into per-id entries under `queryKeys.campgrounds.summary(id)`, staleness
-  matching the catalog's five minutes. The M1 detail + campsites pipeline for the in-view list
-  is retired; `useSiteCounts` goes with it. The route list keeps its own pipeline.
+- **Fetching.** `useCampgroundSearch({ paused })` reads the viewport and the active filter from
+  their stores and calls `search` on the debounced viewport (same `VIEWPORT_DEBOUNCE_MS` as the
+  pin loop), building the request from the viewport bbox as a GeoJSON polygon; `paused` is the
+  one gate for "something else already owns the list" (the caller decides — TopBar passes
+  whether a route does), on top of the hook's own zoom-threshold gate. `useCampgroundSummaries(ids)`
+  caps its ids at `MAX_IN_VIEW_CARDS`, then calls `details` for the ids not already in the Query
+  cache and fans the response into per-id entries under `queryKeys.campgrounds.summary(id)`,
+  staleness matching the catalog's five minutes. The M1 detail + campsites pipeline for the
+  in-view list is retired; `useSiteCounts` goes with it. The route list keeps its own pipeline.
 - **Cards** render from `CampgroundSummaryDto`: name, region, agency, rating, count line,
   facets. Count line with a type selected: `"{site_counts[type]} {kindLabel} sites · {site_total}
   total"` when they differ, `"{site_total} {kindLabel} sites"` when equal; no type: M1's
   `"{site_total} sites"`; zero total renders no line.
-- **Facets** (`features/trip/facets.ts`, pure): one per active filter, state `match` or
-  `no-data` (a miss never reaches the list). Labels: kind label; "Up to N" / "Group size";
-  amenity label from the DTO. Icons `check` / `help`; colours `--rt-text` / `--rt-faint`.
+- **Facets** (`features/trip/facets.ts`, pure): one per active filter, one of three states —
+  `match`, `miss`, or `no-data`. A miss should not reach the list, since the server already
+  filters on the active facets; when one does anyway (a stale card, a filter changed after the
+  search landed), the frontend renders it honestly rather than hiding the discrepancy — close
+  icon, `--rt-muted`. Labels: kind label; "Up to N" / "Group size"; amenity label from the DTO.
+  Match icon `check` (colour `--rt-text`); no-data icon `help` (colour `--rt-faint`).
 - **Heads.** Filter block: "Campgrounds" and `"{matching} of {total_in_boundary} in view"` when
   a filter is active, else `"{total_in_boundary} in view"`. List head as M1:
   `· N · M checkable online`.
@@ -195,10 +201,15 @@ table, no refresh, no staleness.
   (Any + `tent`/`rv`/`cabin` labels); `GroupSizeStepper` (two icon `Button`s, clamped
   2..12, below the minimum turns the filter off; Storybook story); `Chip` per exposed amenity
   (`toilets`, `showers`, `water`, `pets_allowed` in a named const); the **Check availability**
-  `Banner` whose **Add dates** reveals two `type="date"` fields with Save, writing
-  `dateWindow` only and collapsing to "Fri Sep 11 → Sun Sep 13 · 2 nights" with Edit and
-  Clear. Labels for kinds and amenities come from one table in `lib/campground-vocab.ts`
-  mirroring the backend enums.
+  `Banner` whose **Add dates** reveals two plain-text fields (`DateWindowFields`, Storybook
+  story) with ISO-only validation and a `YYYY-MM-DD` placeholder — not `type="date"`, because
+  `@lew-ds/lds-react`'s change wiring (`useChangeHandler` in `runtime.jsx`) fires on native
+  `input` events only for a fixed `TEXT_LIKE` set of input types, and `date` is in neither that
+  set nor the `change`-based one (select/checkbox/radio only), so a `type="date"` field would
+  never call `onChange`. A date-capable `@ui` field is a separate task. Save writes `dateWindow`
+  only and collapses to "Fri Sep 11 → Sun Sep 13 · 2 nights" with Edit and Clear. Labels for
+  kinds and amenities come from one table in `lib/campground-vocab.ts` mirroring the backend
+  enums.
 - Copy in `lib/strings.ts` (`filterCopy`); CSS in `features/trip/topbar.css`, tokens only.
 
 ### Viewport clipping (M1 follow-up, pins side)

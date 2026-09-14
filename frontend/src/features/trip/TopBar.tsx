@@ -10,7 +10,7 @@ import { TripResults } from './TripResults';
 import { MAX_SEARCH_RESULTS, type SearchResult } from './search-results';
 import { allStopsFilled, isLocated } from '@/domain/trip/stops';
 import { buildRouteIndex } from './route-index';
-import { bboxCenter, CG_ZOOM_THRESHOLD } from '@/map/viewport';
+import { bboxCenter } from '@/map/viewport';
 import { useMapStore } from '@/stores/mapStore';
 import { tripCardsFromFeatures } from './trip-cards';
 import { cardsFromSummaries } from './campground-cards';
@@ -84,12 +84,12 @@ export function TopBar({ alerts }: TopBarProps) {
   // summaries. Both stay idle while a route owns the list.
   const campgroundsRequested = useMapStore((s) => s.campgroundsRequested);
   const viewportBbox = useMapStore((s) => s.viewport?.bbox ?? null);
-  const viewportZoom = useMapStore((s) => s.viewport?.zoom ?? 0);
-  // The sticky flag never goes back to false once campgrounds have been
-  // requested once, so the zoom itself decides whether the hint still applies.
-  const zoomAllowsCampgrounds = viewportZoom >= CG_ZOOM_THRESHOLD;
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const search = useCampgroundSearch();
+  // `search.enabled` is the one gate: below the zoom threshold or while a route
+  // owns the list. The sticky `campgroundsRequested` flag never goes back to
+  // false once it flips, so `search.enabled` is what decides whether the zoom
+  // hint still applies.
+  const search = useCampgroundSearch({ paused: showRoute });
   const inViewIds = useMemo(() => search.ids.slice(0, MAX_IN_VIEW_CARDS), [search.ids]);
   const summaries = useCampgroundSummaries(inViewIds);
   const inViewCards = useMemo(
@@ -293,11 +293,11 @@ export function TopBar({ alerts }: TopBarProps) {
         <TripResults
           variant="viewport"
           cards={inViewCards}
-          campgroundsRequested={campgroundsRequested && zoomAllowsCampgrounds}
+          campgroundsRequested={campgroundsRequested && search.enabled}
           loading={inViewCards.length === 0 && (search.isFetching || summaries.isFetching)}
+          error={search.isError || summaries.isError}
           totalInBoundary={search.totalInBoundary}
           totalMatching={search.totalMatching}
-          truncated={search.truncated}
         />
       )}
     </div>

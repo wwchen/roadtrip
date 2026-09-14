@@ -2,7 +2,9 @@
 //
 // The viewport in the store is already debounced by the pin loop's publish, so
 // this hook adds none. Below the campground zoom gate it asks nothing, the same
-// gate the pins honour, and while a route owns the list it stays idle.
+// gate the pins honour, and while a route owns the list it stays idle — the
+// caller decides that with `paused`, since a route owning the list and a route
+// being merely fetch-eligible are different questions the caller already answers.
 import { useQuery } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
 import { searchCampgrounds } from '@/api/campground-api';
@@ -10,7 +12,6 @@ import { queryKeys } from '@/queries/keys';
 import { bboxBoundary, CG_ZOOM_THRESHOLD } from '@/map/viewport';
 import { selectFilterDto, useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
-import { selectRouteActive, useTripStore } from '@/stores/tripStore';
 
 /** A search answer changes only when the catalog does. */
 const SEARCH_STALE_MS = 60_000;
@@ -23,16 +24,22 @@ export interface CampgroundSearch {
   totalMatching: number;
   truncated: boolean;
   isFetching: boolean;
-  /** False below the zoom gate or while a route owns the list. */
+  /** True once the search request has failed. */
+  isError: boolean;
+  /** False below the zoom gate or while paused. */
   enabled: boolean;
 }
 
-export function useCampgroundSearch(): CampgroundSearch {
+export interface UseCampgroundSearchOptions {
+  /** True while something else (e.g. a route) already owns the list. */
+  paused: boolean;
+}
+
+export function useCampgroundSearch({ paused }: UseCampgroundSearchOptions): CampgroundSearch {
   const viewport = useMapStore((s) => s.viewport);
-  const routeActive = useTripStore(selectRouteActive);
   const filter = useCampgroundFilterStore(useShallow(selectFilterDto));
 
-  const enabled = viewport != null && viewport.zoom >= CG_ZOOM_THRESHOLD && !routeActive;
+  const enabled = viewport != null && viewport.zoom >= CG_ZOOM_THRESHOLD && !paused;
   const boundary = viewport ? bboxBoundary(viewport.bbox) : null;
 
   const query = useQuery({
@@ -50,6 +57,7 @@ export function useCampgroundSearch(): CampgroundSearch {
     totalMatching: enabled ? (query.data?.total_matching ?? 0) : 0,
     truncated: enabled ? (query.data?.truncated ?? false) : false,
     isFetching: query.isFetching,
+    isError: query.isError,
     enabled,
   };
 }

@@ -40,7 +40,7 @@ describe('useCampgroundSearch', () => {
     useMapStore.setState({ viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 9 } });
     useCampgroundFilterStore.getState().setSiteType('tent');
 
-    const { result } = renderHook(() => useCampgroundSearch(), { wrapper });
+    const { result } = renderHook(() => useCampgroundSearch({ paused: false }), { wrapper });
 
     await waitFor(() => expect(result.current.ids).toEqual([7, 9]));
     expect(result.current).toMatchObject({ totalInBoundary: 17, totalMatching: 9, truncated: true, enabled: true });
@@ -54,7 +54,7 @@ describe('useCampgroundSearch', () => {
   test('omits the filter when nothing is active', async () => {
     useMapStore.setState({ viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 9 } });
 
-    const { result } = renderHook(() => useCampgroundSearch(), { wrapper });
+    const { result } = renderHook(() => useCampgroundSearch({ paused: false }), { wrapper });
 
     await waitFor(() => expect(result.current.ids).toHaveLength(2));
     expect(requests[0]?.body).toEqual({ boundary: { type: 'Polygon', coordinates: TAHOE_RING } });
@@ -63,7 +63,7 @@ describe('useCampgroundSearch', () => {
   test('does nothing below the campground zoom gate', async () => {
     useMapStore.setState({ viewport: { bbox: [-130, 30, -110, 50], zoom: 4 } });
 
-    const { result } = renderHook(() => useCampgroundSearch(), { wrapper });
+    const { result } = renderHook(() => useCampgroundSearch({ paused: false }), { wrapper });
 
     expect(result.current.enabled).toBe(false);
     expect(result.current.ids).toEqual([]);
@@ -73,14 +73,16 @@ describe('useCampgroundSearch', () => {
 
   test('does nothing while a route owns the list', async () => {
     useMapStore.setState({ viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 9 } });
-    // selectRouteActive requires directions mode, a fetched route, and every stop filled.
+    // The caller (TopBar) decides ownership and pauses the hook; a pending stop
+    // still counts as "filled" for TopBar's own gate, which is exactly why the
+    // hook no longer reads the trip store itself.
     useTripStore.setState({
       mode: 'directions',
       stops: [{ name: 'Origin', lng: -120, lat: 39 }],
       route: { type: 'FeatureCollection', features: [] } as never,
     });
 
-    const { result } = renderHook(() => useCampgroundSearch(), { wrapper });
+    const { result } = renderHook(() => useCampgroundSearch({ paused: true }), { wrapper });
 
     expect(result.current.enabled).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -89,7 +91,7 @@ describe('useCampgroundSearch', () => {
 
   test('truncated is masked by enabled', async () => {
     useMapStore.setState({ viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 9 } });
-    const { result, rerender } = renderHook(() => useCampgroundSearch(), { wrapper });
+    const { result, rerender } = renderHook(() => useCampgroundSearch({ paused: false }), { wrapper });
 
     await waitFor(() => expect(result.current.truncated).toBe(true));
     expect(result.current.enabled).toBe(true);

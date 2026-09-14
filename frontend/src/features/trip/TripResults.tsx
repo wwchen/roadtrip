@@ -49,9 +49,10 @@ interface ViewportProps extends CommonProps {
   campgroundsRequested: boolean;
   /** True while the search or the summaries are in flight and the list is empty. */
   loading: boolean;
+  /** True once the search or the summaries have failed. */
+  error: boolean;
   totalInBoundary: number;
   totalMatching: number;
-  truncated: boolean;
 }
 
 export type TripResultsProps = RouteProps | ViewportProps;
@@ -69,7 +70,7 @@ export function TripResults(props: TripResultsProps) {
   // the two from disagreeing.
   const [collapsed, setCollapsed] = useState(() => !shouldAutoFocus());
 
-  const visible = visibleCards(cards, { hiddenAgencies, campgroundsHidden });
+  const visible = visibleCards<TripCard>(cards, { hiddenAgencies, campgroundsHidden });
   const total = cards.length;
   const emptyMessage = emptyCopy(props, total, campgroundsHidden);
 
@@ -127,7 +128,7 @@ export function TripResults(props: TripResultsProps) {
               <Card key={String(card.id)} card={card} onOpen={openCard} sub={card.sub} meta={<RouteMeta card={card} />} />
             ))
           ) : (
-            (visible as InViewCard[]).map((card) => (
+            visibleCards(props.cards, { hiddenAgencies, campgroundsHidden }).map((card) => (
               <Card
                 key={String(card.id)}
                 card={card}
@@ -201,6 +202,7 @@ function emptyCopy(props: TripResultsProps, total: number, campgroundsHidden: bo
     if (total === 0) return 'Pan the map or widen the corridor to find campgrounds.';
   } else {
     if (!props.campgroundsRequested) return inViewCopy.zoomIn;
+    if (props.error) return inViewCopy.failed;
     if (props.loading) return inViewCopy.loading;
     if (total === 0) return inViewCopy.none;
   }
@@ -236,11 +238,18 @@ function FacetRow({ card }: { card: InViewCard }) {
     <span className="tb-facets">
       {facets.map((facet) => {
         const appearance = FACET_APPEARANCE[facet.state];
+        const stateWord =
+          facet.state === 'match'
+            ? filterCopy.facetMatches
+            : facet.state === 'miss'
+              ? filterCopy.facetMisses
+              : filterCopy.noData;
         return (
           <span
             key={facet.key}
             className={appearance.className}
             title={facet.state === 'no-data' ? filterCopy.noData : undefined}
+            aria-label={`${facet.label}, ${stateWord}`}
           >
             <Icon name={appearance.icon} aria-hidden="true" />
             {facet.label}

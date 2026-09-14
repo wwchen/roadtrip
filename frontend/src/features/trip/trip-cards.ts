@@ -145,10 +145,10 @@ export interface CardFilter {
  * by agency only; the overlay check is new because 4b's legend can switch campgrounds
  * off wholesale, which the vanilla legend could not.
  */
-export function visibleCards(
-  cards: readonly TripCard[],
+export function visibleCards<T extends TripCard>(
+  cards: readonly T[],
   { hiddenAgencies, campgroundsHidden }: CardFilter,
-): TripCard[] {
+): T[] {
   if (campgroundsHidden) return [];
   if (hiddenAgencies.length === 0) return [...cards];
   const hidden = new Set(hiddenAgencies);

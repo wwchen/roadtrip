@@ -152,6 +152,7 @@ export const inViewCopy = {
   zoomIn: 'Zoom in to load campgrounds.',
   loading: 'Finding campgrounds in view…',
   none: 'No campgrounds in view — pan or zoom out to find some.',
+  failed: 'Could not load the campgrounds in view. Try panning the map.',
 } as const;
 
 /** The campground filter block under the search row, and the cards' facet row. */
@@ -177,6 +178,9 @@ export const filterCopy = {
   facetGroup: (maxPeople: number) => `Up to ${maxPeople}`,
   facetGroupNoData: 'Group size',
   noData: 'No data',
+  /** The state word in a facet's aria-label, e.g. "Tent, matches". */
+  facetMatches: 'matches',
+  facetMisses: 'does not match',
   /** The one gated step. */
   checkTitle: 'Check availability',
   checkBody: 'Add dates to see which of these have a site.',

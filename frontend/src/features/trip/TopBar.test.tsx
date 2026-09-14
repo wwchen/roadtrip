@@ -981,6 +981,29 @@ describe('the in-view list', () => {
 
     await waitFor(() => expect(screen.getByText('132 tent sites · 206 total')).toBeInTheDocument());
     expect(urls.filter((u) => u.startsWith('/api/campgrounds/search'))).toHaveLength(2);
+    // Both fixtures carry tent sites, so both facets read as a match.
+    expect(screen.getAllByLabelText('Tent, matches')).toHaveLength(2);
+  });
+
+  test('a failed search says so, not that the view is empty', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        urls.push(url);
+        if (url.startsWith('/api/campgrounds/search')) return json({ error: 'bad_boundary' }, 400);
+        return json({}, 404);
+      }),
+    );
+    withViewport();
+    mount();
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Could not load the campgrounds in view. Try panning the map.'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('No campgrounds in view — pan or zoom out to find some.')).toBeNull();
   });
 
   test('below the zoom gate nothing is asked and the hint shows', () => {

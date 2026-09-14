@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { createTestQueryClient } from '@/test/query-client';
 import type { CampgroundSummary } from '@/api/campground-api';
 import { queryKeys } from '@/queries/keys';
-import { SUMMARY_STALE_MS, useCampgroundSummaries } from './useCampgroundSummaries';
+import { MAX_IN_VIEW_CARDS, SUMMARY_STALE_MS, useCampgroundSummaries } from './useCampgroundSummaries';
 
 const json = (body: unknown): Response =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -91,5 +91,15 @@ describe('useCampgroundSummaries', () => {
 
     await waitFor(() => expect(result.current.byId.size).toBe(2));
     expect(bodies).toEqual([{ campground_ids: [7] }, { campground_ids: [7, 9] }]);
+  });
+
+  test('caps the request at MAX_IN_VIEW_CARDS regardless of how many ids come in', async () => {
+    const ids = Array.from({ length: 60 }, (_, i) => i + 1);
+
+    const { result } = renderHook(() => useCampgroundSummaries(ids), { wrapper });
+
+    await waitFor(() => expect(result.current.byId.size).toBe(MAX_IN_VIEW_CARDS));
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]?.campground_ids).toHaveLength(MAX_IN_VIEW_CARDS);
   });
 });

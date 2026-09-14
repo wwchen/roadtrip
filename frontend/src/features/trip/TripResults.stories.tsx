@@ -161,9 +161,9 @@ export const InViewZoomedOut: Story = {
         cards={[]}
         campgroundsRequested={false}
         loading={false}
+        error={false}
         totalInBoundary={0}
         totalMatching={0}
-        truncated={false}
       />
     </Panel>
   ),
@@ -178,9 +178,9 @@ export const InViewEmpty: Story = {
         cards={[]}
         campgroundsRequested
         loading={false}
+        error={false}
         totalInBoundary={0}
         totalMatching={0}
-        truncated={false}
       />
     </Panel>
   ),
@@ -195,9 +195,9 @@ export const InViewLoading: Story = {
         cards={[]}
         campgroundsRequested
         loading
+        error={false}
         totalInBoundary={3}
         totalMatching={3}
-        truncated={false}
       />
     </Panel>
   ),
@@ -212,9 +212,9 @@ export const InView: Story = {
         cards={IN_VIEW}
         campgroundsRequested
         loading={false}
+        error={false}
         totalInBoundary={3}
         totalMatching={3}
-        truncated={false}
       />
     </Panel>
   ),
@@ -229,9 +229,9 @@ export const InViewFiltered: Story = {
         cards={IN_VIEW}
         campgroundsRequested
         loading={false}
+        error={false}
         totalInBoundary={3}
         totalMatching={3}
-        truncated={false}
       />
     </FilteredPanel>
   ),
@@ -246,9 +246,9 @@ export const InViewCapped: Story = {
         cards={IN_VIEW}
         campgroundsRequested
         loading={false}
+        error={false}
         totalInBoundary={80}
         totalMatching={60}
-        truncated
       />
     </Panel>
   ),
