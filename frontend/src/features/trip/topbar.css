@@ -630,6 +630,9 @@
   background: var(--rt-brand-tint);
   color: var(--rt-brand-text);
   font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
 
 .tb-filters-body {

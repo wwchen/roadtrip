@@ -30,13 +30,20 @@ describe('FilterPanel', () => {
   test('the stepper turns the group filter on at the minimum and off again below it', () => {
     mount();
 
-    fireEvent.click(screen.getByRole('button', { name: 'More people' }));
-    expect(filters().groupSize).toBe(2);
+    expect(screen.getByRole('group', { name: 'Group size' })).toHaveTextContent('2');
 
     fireEvent.click(screen.getByRole('button', { name: 'More people' }));
     expect(filters().groupSize).toBe(3);
 
+    fireEvent.click(screen.getByRole('button', { name: 'More people' }));
+    expect(filters().groupSize).toBe(4);
+
     fireEvent.click(screen.getByRole('button', { name: 'Fewer people' }));
+    expect(filters().groupSize).toBe(3);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fewer people' }));
+    expect(filters().groupSize).toBe(2);
+
     fireEvent.click(screen.getByRole('button', { name: 'Fewer people' }));
     expect(filters().groupSize).toBeNull();
   });

@@ -40,8 +40,7 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching }: 
   return (
     <div className="tb-filters" id="tb-filters">
       <div className="tb-filters-pill-row">
-        <Button variant="secondary" size="sm" aria-expanded={open} aria-controls="tb-filters-body" onClick={onToggle}>
-          <Icon name="filter" aria-hidden="true" />
+        <Button variant="secondary" size="sm" iconStart={<Icon name="filter" aria-hidden="true" />} aria-expanded={open} aria-controls="tb-filters-body" onClick={onToggle}>
           {filterCopy.pill}
           {activeCount > 0 ? <span className="tb-filters-badge">{activeCount}</span> : null}
         </Button>

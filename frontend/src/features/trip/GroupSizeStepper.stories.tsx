@@ -6,7 +6,7 @@ import './topbar.css';
 const meta = {
   title: 'Trip/GroupSizeStepper',
   parameters: {
-    docs: { description: { component: 'Group size for the campground filter. Off until the first step; below the minimum it turns off again.' } },
+    docs: { description: { component: 'Party size for the campground filter, reading as 2 (no constraint) when off. Below the minimum it turns off again.' } },
   },
 } satisfies Meta;
 
