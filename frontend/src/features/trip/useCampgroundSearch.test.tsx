@@ -28,7 +28,7 @@ beforeEach(() => {
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       requests.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : null });
-      return json({ campground_ids: [7, 9], total_in_boundary: 17, total_matching: 9, truncated: false });
+      return json({ campground_ids: [7, 9], total_in_boundary: 17, total_matching: 9, truncated: true });
     }),
   );
 });
@@ -43,7 +43,7 @@ describe('useCampgroundSearch', () => {
     const { result } = renderHook(() => useCampgroundSearch(), { wrapper });
 
     await waitFor(() => expect(result.current.ids).toEqual([7, 9]));
-    expect(result.current).toMatchObject({ totalInBoundary: 17, totalMatching: 9, truncated: false, enabled: true });
+    expect(result.current).toMatchObject({ totalInBoundary: 17, totalMatching: 9, truncated: true, enabled: true });
     expect(requests[0]?.url).toBe('/api/campgrounds/search');
     expect(requests[0]?.body).toEqual({
       boundary: { type: 'Polygon', coordinates: TAHOE_RING },
@@ -85,5 +85,28 @@ describe('useCampgroundSearch', () => {
     expect(result.current.enabled).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(requests).toHaveLength(0);
+  });
+
+  test('truncated is masked by enabled', async () => {
+    useMapStore.setState({ viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 9 } });
+    const { result, rerender } = renderHook(() => useCampgroundSearch(), { wrapper });
+
+    await waitFor(() => expect(result.current.truncated).toBe(true));
+    expect(result.current.enabled).toBe(true);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : null });
+        return json({ campground_ids: [7, 9], total_in_boundary: 17, total_matching: 9, truncated: true });
+      }),
+    );
+
+    useMapStore.setState({ viewport: { bbox: [-130, 30, -110, 50], zoom: 4 } });
+    rerender();
+
+    expect(result.current.enabled).toBe(false);
+    expect(result.current.ids).toEqual([]);
+    expect(result.current.truncated).toBe(false);
   });
 });

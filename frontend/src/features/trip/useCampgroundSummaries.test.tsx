@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createTestQueryClient } from '@/test/query-client';
 import type { CampgroundSummary } from '@/api/campground-api';
-import { useCampgroundSummaries } from './useCampgroundSummaries';
+import { queryKeys } from '@/queries/keys';
+import { SUMMARY_STALE_MS, useCampgroundSummaries } from './useCampgroundSummaries';
 
 const json = (body: unknown): Response =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -75,5 +76,20 @@ describe('useCampgroundSummaries', () => {
     expect(result.current.byId.size).toBe(0);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(bodies).toHaveLength(0);
+  });
+
+  test('stale cached entries are refetched', async () => {
+    const first = renderHook(() => useCampgroundSummaries([7]), { wrapper });
+    await waitFor(() => expect(first.result.current.byId.size).toBe(1));
+
+    const summaryData = summary(7, 'Old');
+    client.setQueryData(queryKeys.campgrounds.summary(7), summaryData, {
+      updatedAt: Date.now() - SUMMARY_STALE_MS - 1,
+    });
+
+    const { result } = renderHook(() => useCampgroundSummaries([7, 9]), { wrapper });
+
+    await waitFor(() => expect(result.current.byId.size).toBe(2));
+    expect(bodies).toEqual([{ campground_ids: [7] }, { campground_ids: [7, 9] }]);
   });
 });

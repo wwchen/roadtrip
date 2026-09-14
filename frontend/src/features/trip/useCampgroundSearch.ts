@@ -48,7 +48,7 @@ export function useCampgroundSearch(): CampgroundSearch {
     ids: enabled ? (query.data?.campground_ids ?? NO_IDS) : NO_IDS,
     totalInBoundary: enabled ? (query.data?.total_in_boundary ?? 0) : 0,
     totalMatching: enabled ? (query.data?.total_matching ?? 0) : 0,
-    truncated: query.data?.truncated ?? false,
+    truncated: enabled ? (query.data?.truncated ?? false) : false,
     isFetching: query.isFetching,
     enabled,
   };

@@ -31,9 +31,12 @@ export function useCampgroundSummaries(ids: readonly number[]): CampgroundSummar
       const cached = new Map<number, CampgroundSummary>();
       const missing: number[] = [];
       for (const id of ids) {
-        const hit = client.getQueryData<CampgroundSummary>(queryKeys.campgrounds.summary(id));
-        if (hit) cached.set(id, hit);
-        else missing.push(id);
+        const state = client.getQueryState<CampgroundSummary>(queryKeys.campgrounds.summary(id));
+        if (state?.data && Date.now() - state.dataUpdatedAt < SUMMARY_STALE_MS) {
+          cached.set(id, state.data);
+        } else {
+          missing.push(id);
+        }
       }
       if (missing.length > 0) {
         const response = await fetchCampgroundSummaries(missing, { signal });
