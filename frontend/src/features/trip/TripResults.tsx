@@ -23,11 +23,11 @@ const FLY_SPEED = 1.6;
 const ROUTE_HEADING = 'Campgrounds along route';
 const RATING_PREFIX = '★';
 
-/** A facet's icon and class, keyed by state rather than chained ternaries. */
-const FACET_APPEARANCE: Record<FacetState, { icon: string; className: string }> = {
-  match: { icon: 'check', className: 'tb-facet' },
-  miss: { icon: 'close', className: 'tb-facet tb-facet--miss' },
-  'no-data': { icon: 'help', className: 'tb-facet tb-facet--no-data' },
+/** A facet's icon, class, and state word, keyed by state rather than chained ternaries. */
+const FACET_APPEARANCE: Record<FacetState, { icon: string; className: string; stateWord: string }> = {
+  match: { icon: 'check', className: 'tb-facet', stateWord: filterCopy.facetMatches },
+  miss: { icon: 'close', className: 'tb-facet tb-facet--miss', stateWord: filterCopy.facetMisses },
+  'no-data': { icon: 'help', className: 'tb-facet tb-facet--no-data', stateWord: filterCopy.noData },
 };
 
 interface CommonProps {
@@ -238,18 +238,12 @@ function FacetRow({ card }: { card: InViewCard }) {
     <span className="tb-facets">
       {facets.map((facet) => {
         const appearance = FACET_APPEARANCE[facet.state];
-        const stateWord =
-          facet.state === 'match'
-            ? filterCopy.facetMatches
-            : facet.state === 'miss'
-              ? filterCopy.facetMisses
-              : filterCopy.noData;
         return (
           <span
             key={facet.key}
             className={appearance.className}
             title={facet.state === 'no-data' ? filterCopy.noData : undefined}
-            aria-label={`${facet.label}, ${stateWord}`}
+            aria-label={`${facet.label}, ${appearance.stateWord}`}
           >
             <Icon name={appearance.icon} aria-hidden="true" />
             {facet.label}

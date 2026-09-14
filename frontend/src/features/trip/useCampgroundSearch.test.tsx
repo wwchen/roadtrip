@@ -111,4 +111,27 @@ describe('useCampgroundSearch', () => {
     expect(result.current.ids).toEqual([]);
     expect(result.current.truncated).toBe(false);
   });
+
+  test('a failed search empties the list', async () => {
+    useMapStore.setState({ viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 9 } });
+
+    const { result, rerender } = renderHook(() => useCampgroundSearch({ paused: false }), { wrapper });
+
+    await waitFor(() => expect(result.current.ids).toEqual([7, 9]));
+    expect(result.current.totalMatching).toBe(9);
+
+    (global.fetch as any).mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : null });
+        return json({ error: 'bad_boundary' }, 400);
+      },
+    );
+
+    useMapStore.setState({ viewport: { bbox: [-121, 39, -120, 40], zoom: 9 } });
+    rerender();
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.ids).toEqual([]);
+    expect(result.current.totalMatching).toBe(0);
+  });
 });

@@ -51,11 +51,12 @@ export function useCampgroundSearch({ paused }: UseCampgroundSearchOptions): Cam
     placeholderData: (previous) => previous,
   });
 
+  const live = enabled && !query.isError;
   return {
-    ids: enabled ? (query.data?.campground_ids ?? NO_IDS) : NO_IDS,
-    totalInBoundary: enabled ? (query.data?.total_in_boundary ?? 0) : 0,
-    totalMatching: enabled ? (query.data?.total_matching ?? 0) : 0,
-    truncated: enabled ? (query.data?.truncated ?? false) : false,
+    ids: live ? (query.data?.campground_ids ?? NO_IDS) : NO_IDS,
+    totalInBoundary: live ? (query.data?.total_in_boundary ?? 0) : 0,
+    totalMatching: live ? (query.data?.total_matching ?? 0) : 0,
+    truncated: live ? (query.data?.truncated ?? false) : false,
     isFetching: query.isFetching,
     isError: query.isError,
     enabled,
