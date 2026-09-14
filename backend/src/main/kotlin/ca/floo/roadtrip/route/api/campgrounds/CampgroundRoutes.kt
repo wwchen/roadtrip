@@ -50,7 +50,9 @@ internal fun Route.campgroundRoutes(
                 description =
                     "Body: { boundary: GeoJSON Polygon|MultiPolygon, filter?: { site_type?, group_size?, amenities? } }. " +
                         "Ids are pois.id, nearest the boundary's centre first, at most ${config.maxResults} " +
-                        "(truncated:true past that). A campground with no data for a filter field passes it.",
+                        "(truncated:true past that). A campground with no data for a filter field passes it. " +
+                        "Boundaries whose bounding box exceeds ${config.maxBoundaryAreaSqDeg} square degrees are " +
+                        "refused (bad_boundary).",
             ).access(RouteAccess.Anonymous)
 
             post("/details") {

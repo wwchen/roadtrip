@@ -14,6 +14,7 @@ import ca.floo.roadtrip.model.domain.CampgroundSearchError
 import ca.floo.roadtrip.model.domain.CampgroundSearchFilter
 import ca.floo.roadtrip.model.domain.CampgroundSummaryRow
 import ca.floo.roadtrip.model.domain.InvalidBoundaryException
+import ca.floo.roadtrip.model.domain.boundaryBboxAreaSqDeg
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampgroundSearchRepo
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
@@ -28,6 +29,7 @@ class CampgroundSearchRequestException(
 ) : IllegalArgumentException(message)
 
 private const val MIN_GROUP_SIZE = 1
+private const val BOUNDARY_TOO_LARGE_MESSAGE = "boundary covers too much of the map; zoom in"
 
 internal class CampgroundSearchService(
     private val searchRepo: CampgroundSearchRepo,
@@ -67,8 +69,15 @@ internal class CampgroundSearchService(
         return CampgroundDetailsResponseDto(campgrounds = campgroundRepo.findSummariesByPoiIds(ids).map(::summaryOf))
     }
 
-    private fun validatedBoundary(boundary: BoundaryDto?): BoundaryDto =
-        boundary ?: throw CampgroundSearchRequestException(CampgroundSearchError.BAD_BOUNDARY, "boundary is required")
+    private fun validatedBoundary(boundary: BoundaryDto?): BoundaryDto {
+        val boundaryDto =
+            boundary ?: throw CampgroundSearchRequestException(CampgroundSearchError.BAD_BOUNDARY, "boundary is required")
+        val area = boundaryBboxAreaSqDeg(boundaryDto.coordinates)
+        if (area != null && area > config.maxBoundaryAreaSqDeg) {
+            throw CampgroundSearchRequestException(CampgroundSearchError.BAD_BOUNDARY, BOUNDARY_TOO_LARGE_MESSAGE)
+        }
+        return boundaryDto
+    }
 
     private fun validatedFilter(filter: CampgroundFilterDto): CampgroundSearchFilter {
         filter.groupSize?.let {

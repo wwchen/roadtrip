@@ -33,6 +33,8 @@ import kotlin.test.assertTrue
 
 private const val TAHOE =
     """{"type":"Polygon","coordinates":[[[-120.4,38.7],[-119.6,38.7],[-119.6,39.4],[-120.4,39.4],[-120.4,38.7]]]}"""
+private const val WORLD =
+    """{"type":"Polygon","coordinates":[[[-180,-90],[180,-90],[180,90],[-180,90],[-180,-90]]]}"""
 
 class CampgroundSearchServiceTest : SharedDbTest() {
     private fun service(config: CampgroundSearchConfig = CampgroundSearchConfig.default) =
@@ -76,6 +78,25 @@ class CampgroundSearchServiceTest : SharedDbTest() {
     fun `a missing boundary is refused`() {
         val missing = assertFailsWith<CampgroundSearchRequestException> { service().search(CampgroundSearchRequestDto()) }
         assertEquals(CampgroundSearchError.BAD_BOUNDARY, missing.error)
+    }
+
+    @Test
+    fun `a boundary spanning the world is refused`() {
+        val error =
+            assertFailsWith<CampgroundSearchRequestException> {
+                service().search(CampgroundSearchRequestDto(boundary = boundary(WORLD)))
+            }
+        assertEquals(CampgroundSearchError.BAD_BOUNDARY, error.error)
+    }
+
+    @Test
+    fun `the Tahoe boundary is within the default area cap`() {
+        val tent = ctx.seedCatalogPoi(sourceId = "t", name = "Tent Flat", lon = -120.0, lat = 39.0)
+        ctx.seedCampsite(campgroundId = tent.campgroundId, vendorId = "1", kind = CampsiteKind.TENT.wire)
+
+        val response = service().search(CampgroundSearchRequestDto(boundary = boundary(TAHOE)))
+
+        assertEquals(listOf(tent.poiId), response.campgroundIds)
     }
 
     @Test
@@ -164,7 +185,7 @@ class CampgroundSearchServiceTest : SharedDbTest() {
     fun `details refuses more ids than the cap`() {
         val error =
             assertFailsWith<CampgroundSearchRequestException> {
-                service(CampgroundSearchConfig(maxResults = 10, maxDetailIds = 2))
+                service(CampgroundSearchConfig(maxResults = 10, maxDetailIds = 2, maxBoundaryAreaSqDeg = 500.0))
                     .details(CampgroundDetailsRequestDto(campgroundIds = listOf(1, 2, 3)))
             }
         assertEquals(CampgroundSearchError.TOO_MANY_IDS, error.error)

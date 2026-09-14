@@ -1,5 +1,39 @@
 package ca.floo.roadtrip.model.domain
 
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+
+/**
+ * The area (in square degrees) of the axis-aligned bounding box around every
+ * `[lng, lat]` position nested in a GeoJSON Polygon/MultiPolygon `coordinates`
+ * array, or null when the array holds no position. Non-finite coordinates are
+ * ignored rather than blowing up the bound.
+ */
+fun boundaryBboxAreaSqDeg(coordinates: JsonArray): Double? {
+    var minLng = Double.POSITIVE_INFINITY
+    var maxLng = Double.NEGATIVE_INFINITY
+    var minLat = Double.POSITIVE_INFINITY
+    var maxLat = Double.NEGATIVE_INFINITY
+    var found = false
+
+    fun visit(array: JsonArray) {
+        val lng = (array.getOrNull(0) as? JsonPrimitive)?.content?.toDoubleOrNull()
+        val lat = (array.getOrNull(1) as? JsonPrimitive)?.content?.toDoubleOrNull()
+        if (lng != null && lat != null && lng.isFinite() && lat.isFinite()) {
+            found = true
+            if (lng < minLng) minLng = lng
+            if (lng > maxLng) maxLng = lng
+            if (lat < minLat) minLat = lat
+            if (lat > maxLat) maxLat = lat
+        } else {
+            array.forEach { element -> if (element is JsonArray) visit(element) }
+        }
+    }
+    coordinates.forEach { element -> if (element is JsonArray) visit(element) }
+
+    return if (found) (maxLng - minLng) * (maxLat - minLat) else null
+}
+
 /** The campground search's wire error codes; [wire] is what the route writes into `respondApiError`. */
 enum class CampgroundSearchError(
     val wire: String,

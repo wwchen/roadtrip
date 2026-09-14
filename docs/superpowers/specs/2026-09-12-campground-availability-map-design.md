@@ -162,7 +162,9 @@ table, no refresh, no staleness.
 
 - `search`: results are ordered by distance from the boundary centroid and capped at a
   config-driven `CampgroundSearchConfig.maxResults`; `truncated = true` past it. An empty or
-  invalid boundary is `400`.
+  invalid boundary is `400`. A boundary whose bounding box exceeds
+  `CampgroundSearchConfig.maxBoundaryAreaSqDeg` (default 500 sq deg, well past a zoom-6 view) is
+  also `400 bad_boundary` — the map never legitimately sends more than that.
 - `details`: capped at `CampgroundSearchConfig.maxDetailIds` (same idea as
   `BulkAvailabilityConfig.maxPois`); more is `400` with a `too_many_ids` error. Unknown ids are
   omitted, not an error.
