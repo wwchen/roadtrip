@@ -29,7 +29,7 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("io.ktor.plugin") version "3.5.2"
-    id("org.flywaydb.flyway") version "13.4.0"
+    id("org.flywaydb.flyway") version "13.6.0"
     id("nu.studer.jooq") version "10.2.1"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
     id("dev.detekt") version "2.0.0-alpha.6"
@@ -116,13 +116,13 @@ repositories {
 }
 
 val ktorVersion = "3.5.2"
-val jooqVersion = "3.21.7"
+val jooqVersion = "3.21.8"
 val postgresVersion = "42.7.13"
 val flywayVersion = "13.2.0"
 val testcontainersVersion = "1.21.4"
 val bucket4jVersion = "8.10.1"
 val timeshapeVersion = "2026b.29"
-val resendVersion = "4.22.0"
+val resendVersion = "4.24.0"
 val nimbusJoseVersion = "10.9.1"
 val junitVersion = "6.1.3"
 val koinVersion = "4.2.2"
