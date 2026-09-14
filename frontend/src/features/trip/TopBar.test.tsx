@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createTestQueryClient } from '@/test/query-client';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
+import type { CampgroundSummary } from '@/api/campground-api';
+import type { CampgroundSearchResponseDto } from '@/api/generated/api-types';
 import { COPIED_STATE_MS, decodeRouteState, encodeRouteState } from '@/lib/share-links';
+import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
 import { FakeMap } from '@/test/fake-map';
@@ -36,6 +39,8 @@ const ROUTE_BODY = {
 let urls: string[];
 let poiResults: unknown[];
 let geocodeResults: unknown[];
+let campgroundSearch: CampgroundSearchResponseDto;
+let campgroundSummaries: Record<number, CampgroundSummary>;
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -44,6 +49,7 @@ beforeEach(() => {
   urls = [];
   fakeMap = new FakeMap();
   useTripStore.getState().reset();
+  useCampgroundFilterStore.getState().reset();
   // `hiddenAgencies`/`hiddenOverlays` too: the legend's state is app-wide, and the
   // results-list tests below hide agencies that would otherwise leak into the next test.
   useMapStore.setState({
@@ -62,15 +68,49 @@ beforeEach(() => {
   geocodeResults = [
     { id: 'g1', place_name: 'Seattle, WA', place_type: 'place', lng: -122.33, lat: 47.6 },
   ];
+  campgroundSearch = { campground_ids: [21, 22], total_in_boundary: 2, total_matching: 2, truncated: false };
+  campgroundSummaries = {
+    21: {
+      id: 21,
+      campground_id: 21,
+      name: 'Fallen Leaf',
+      region: 'CA',
+      agency: 'USFS',
+      lng: -120.05,
+      lat: 38.93,
+      availability_supported: true,
+      amenities: [],
+      site_counts: { tent: 132, rv: 74 },
+      site_total: 206,
+    },
+    22: {
+      id: 22,
+      campground_id: 22,
+      name: 'Zephyr Cove',
+      region: 'NV',
+      agency: 'Private',
+      lng: -119.95,
+      lat: 39.0,
+      availability_supported: false,
+      amenities: [],
+      site_counts: { rv: 110, tent: 60 },
+      site_total: 170,
+    },
+  };
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       urls.push(url);
       if (url.startsWith('/api/pois/search')) return json({ results: poiResults });
       if (url.startsWith('/api/geocode')) return json({ results: geocodeResults });
       if (url.startsWith('/api/route')) return json(ROUTE_BODY);
       if (url.startsWith('/api/pois/on-route')) return json({ type: 'FeatureCollection', features: [] });
+      if (url.startsWith('/api/campgrounds/search')) return json(campgroundSearch);
+      if (url.startsWith('/api/campgrounds/details')) {
+        const body = JSON.parse(String(init?.body)) as { campground_ids: number[] };
+        return json({ campgrounds: body.campground_ids.map((id) => campgroundSummaries[id]).filter(Boolean) });
+      }
       return json({}, 404);
     }),
   );
@@ -911,173 +951,90 @@ describe('the results list', () => {
 });
 
 describe('the in-view list', () => {
-  const IN_VIEW = [
-    {
-      type: 'Feature',
-      id: 11,
-      geometry: { type: 'Point', coordinates: [-122.64, 48.4] },
-      properties: { category: 'campground', agency: 'WA Parks' },
-    },
-    {
-      type: 'Feature',
-      id: 22,
-      geometry: { type: 'Point', coordinates: [-122.35, 47.7] },
-      properties: { category: 'campground', agency: 'USFS' },
-    },
-  ];
-
-  const DETAILS: Record<string, unknown> = {
-    11: {
-      type: 'Feature',
-      id: 11,
-      geometry: { type: 'Point', coordinates: [-122.64, 48.4] },
-      properties: {
-        name: 'Bowman Bay',
-        address: { state: 'WA' },
-        availability_supported: true,
-        rating: { average: 4.6, count: 12 },
-      },
-    },
-    22: {
-      type: 'Feature',
-      id: 22,
-      geometry: { type: 'Point', coordinates: [-122.35, 47.7] },
-      properties: { name: 'Denny Creek', country: 'US' },
-    },
-  };
-
-  const site = (id: number) => ({
-    id,
-    campground_id: 0,
-    name: `Site ${id}`,
-    kind: 'tent',
-    kind_label: 'Tent',
-    equipment: [],
-    attributes: [],
-    data_provider: 'recgov',
-    data_provider_ref: String(id),
-  });
-  const CAMPSITES: Record<string, unknown[]> = {
-    11: [site(1), site(2), site(3)],
-    22: [site(4)],
-  };
-
-  /** A viewport with two campgrounds in it, centred nearer Denny Creek. */
+  /** A viewport with two campgrounds in it, from the boundary search fixtures. */
   const withViewport = () => {
+    useMapStore.setState({
+      viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 9 },
+      campgroundsRequested: true,
+    });
+  };
+
+  test('lists the campgrounds in view from the bulk summaries', async () => {
+    withViewport();
+    mount();
+
+    await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+    expect(screen.getByText('Zephyr Cove')).toBeInTheDocument();
+    expect(screen.getByText('· 2 · 1 checkable online')).toBeInTheDocument();
+    expect(screen.getByText('Not checkable online')).toBeInTheDocument();
+    expect(urls.filter((u) => u.startsWith('/api/campgrounds/details'))).toHaveLength(1);
+    expect(urls.filter((u) => u.startsWith('/api/pois/'))).toHaveLength(0);
+  });
+
+  test('a site type filter re-searches with the filter and type-qualifies the count line', async () => {
+    withViewport();
+    mount();
+    await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Tent' }));
+
+    await waitFor(() => expect(screen.getByText('132 tent sites · 206 total')).toBeInTheDocument());
+    expect(urls.filter((u) => u.startsWith('/api/campgrounds/search'))).toHaveLength(2);
+    // Both fixtures carry tent sites, so both facets read as a match.
+    expect(screen.getAllByLabelText('Tent, matches')).toHaveLength(2);
+  });
+
+  test('a failed search says so, not that the view is empty', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
         urls.push(url);
-        const campsites = /\/api\/pois\/(\d+)\/campsites$/.exec(url);
-        if (campsites) return json({ campsites: CAMPSITES[campsites[1]!] });
-        const detail = /\/api\/pois\/(\d+)$/.exec(url);
-        if (detail) return json(DETAILS[detail[1]!]);
-        if (url.startsWith('/api/route')) return json(ROUTE_BODY);
-        if (url.startsWith('/api/pois/on-route')) return json({ type: 'FeatureCollection', features: [] });
-        return json({ results: [] });
+        if (url.startsWith('/api/campgrounds/search')) return json({ error: 'bad_boundary' }, 400);
+        return json({}, 404);
       }),
     );
-    useMapStore.setState({
-      viewport: { bbox: [-122.7, 47.5, -122.3, 48.0], zoom: 9 },
-      viewportCampgrounds: IN_VIEW as never,
-      campgroundsRequested: true,
-    });
-  };
-
-  test('lists the campgrounds in view without a route, nearest the centre first', async () => {
     withViewport();
     mount();
 
-    expect(screen.getByText('Campgrounds in view')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText('Bowman Bay')).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText('Denny Creek')).toBeInTheDocument());
-    const names = screen.getAllByRole('button', { name: /Denny Creek|Bowman Bay/ });
-    expect(names[0]).toHaveTextContent('Denny Creek');
+    await waitFor(() =>
+      expect(
+        screen.getByText('Could not load the campgrounds in view. Try panning the map.'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('No campgrounds in view — pan or zoom out to find some.')).toBeNull();
   });
 
-  test('says how many sites each has, its rating, and which cannot be checked online', async () => {
-    withViewport();
-    mount();
-
-    await waitFor(() => expect(screen.getByText('3 sites')).toBeInTheDocument());
-    expect(screen.getByText('1 site')).toBeInTheDocument();
-    expect(screen.getByText('★ 4.6')).toBeInTheDocument();
-    expect(screen.getAllByText('Not checkable online')).toHaveLength(1);
-    expect(screen.getByRole('button', { name: /Denny Creek/ })).toHaveTextContent('Not checkable online');
-  });
-
-  test('counts what is in view and how many can be checked', async () => {
-    withViewport();
-    mount();
-
-    await waitFor(() => expect(screen.getByText('· 2 · 1 checkable online')).toBeInTheDocument());
-  });
-
-  test('keeps the checkable count when an agency is hidden', async () => {
-    withViewport();
-    mount();
-
-    await waitFor(() => expect(screen.getByText('Bowman Bay')).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText('Denny Creek')).toBeInTheDocument());
-
-    act(() => {
-      useMapStore.getState().setAgencyHidden('USFS', true);
-    });
-
-    expect(screen.getByText('· 1 of 2 · 1 checkable online')).toBeInTheDocument();
-    expect(screen.queryByText('Denny Creek')).toBeNull();
-  });
-
-  test('says to zoom in before campgrounds are requested', () => {
-    withViewport();
-    useMapStore.setState({ viewportCampgrounds: [], campgroundsRequested: false });
+  test('below the zoom gate nothing is asked and the hint shows', () => {
+    useMapStore.setState({ viewport: { bbox: [-130, 30, -110, 50], zoom: 4 }, campgroundsRequested: false });
     mount();
 
     expect(screen.getByText('Zoom in to load campgrounds.')).toBeInTheDocument();
+    expect(urls.filter((u) => u.startsWith('/api/campgrounds'))).toHaveLength(0);
   });
 
-  test('says to zoom in again after zooming back out', () => {
-    // `campgroundsRequested` latches true forever once it flips — the zoom itself,
-    // not the sticky flag, is what should decide the hint.
+  test('Add dates stores the window and triggers no provider call', async () => {
     withViewport();
-    useMapStore.setState({
-      viewportCampgrounds: [],
-      viewport: { bbox: [-122.7, 47.5, -122.3, 48.0], zoom: 4 },
-    });
     mount();
+    await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
 
-    expect(screen.getByText('Zoom in to load campgrounds.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add dates' }));
+    fireEvent.input(screen.getByLabelText('Start date'), { target: { value: '2026-09-11' } });
+    fireEvent.input(screen.getByLabelText('End date'), { target: { value: '2026-09-13' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(useCampgroundFilterStore.getState().dateWindow).toEqual({ start: '2026-09-11', end: '2026-09-13' });
+    expect(urls.filter((u) => u.includes('availability'))).toHaveLength(0);
   });
 
-  test('the hidden-layer card gives way to the zoom hint', () => {
-    withViewport();
-    useMapStore.setState({ campgroundsRequested: false, hiddenOverlays: ['cg'] });
-    mount();
-
-    expect(screen.getByText('Zoom in to load campgrounds.')).toBeInTheDocument();
-    expect(screen.queryByText('Campgrounds are switched off')).toBeNull();
-  });
-
-  test('says so when the view holds none', () => {
-    withViewport();
-    useMapStore.setState({ viewportCampgrounds: [] });
-    mount();
-
-    expect(screen.getByText('No campgrounds in view — pan or zoom out to find some.')).toBeInTheDocument();
-  });
-
-  test('a card click flies to it and opens its drawer', async () => {
+  test('a capped list reports the rendered count against the matches', async () => {
+    campgroundSearch = { campground_ids: [21, 22], total_in_boundary: 80, total_matching: 60, truncated: true };
     withViewport();
     mount();
-    await waitFor(() => expect(screen.getByText('Bowman Bay')).toBeInTheDocument());
 
-    await act(async () => {
-      screen.getByRole('button', { name: /Bowman Bay/ }).click();
-    });
-
-    expect(fakeMap.flyToCalls.at(-1)).toMatchObject({ center: [-122.64, 48.4], zoom: 13 });
-    expect(useMapStore.getState().selectedPoiId).toBe(11);
+    await waitFor(() => expect(screen.getByText('· 2 of 60 · 1 checkable online')).toBeInTheDocument());
   });
 
   test('gives way to the route list once a trip is whole', async () => {
@@ -1095,36 +1052,76 @@ describe('the in-view list', () => {
     expect(screen.queryByText('Campgrounds in view')).toBeNull();
   });
 
-  test('caps the list and still counts the whole view', async () => {
-    // The server can return up to ~2000 pins at low zoom; each card fires two
-    // fetches, so the rendered list has to stay bounded regardless of view size.
-    const pins = Array.from({ length: 60 }, (_, i) => ({
-      type: 'Feature',
-      id: i + 1,
-      geometry: { type: 'Point', coordinates: [-122.5 + i * 0.001, 47.8] },
-      properties: { category: 'campground', agency: 'USFS' },
-    }));
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = String(input);
-        urls.push(url);
-        if (/\/api\/pois\/\d+\/campsites$/.test(url)) return json({ campsites: [] });
-        if (/\/api\/pois\/\d+$/.test(url)) return json({ type: 'Feature', properties: { name: 'Campground' } });
-        return json({ results: [] });
-      }),
-    );
+  test('hiding an agency removes its cards and updates the checkable count', async () => {
+    withViewport();
+    mount();
+    await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+    expect(screen.getByText('Zephyr Cove')).toBeInTheDocument();
+
+    act(() => {
+      useMapStore.setState({ hiddenAgencies: ['Private'] });
+    });
+
+    expect(screen.getByText('· 1 of 2 · 1 checkable online')).toBeInTheDocument();
+    expect(screen.queryByText('Zephyr Cove')).toBeNull();
+  });
+
+  test('the hidden-layer card gives way to the zoom hint', async () => {
     useMapStore.setState({
-      viewport: { bbox: [-122.7, 47.5, -122.3, 48.0], zoom: 9 },
-      viewportCampgrounds: pins as never,
+      viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 9 },
+      campgroundsRequested: true,
+      hiddenOverlays: ['cg'],
+    });
+    const above = mount();
+    await waitFor(() => expect(screen.getByText('Campgrounds are switched off')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Turn campgrounds back on' })).toBeInTheDocument();
+    above.unmount();
+
+    useMapStore.setState({
+      viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 4 },
+      campgroundsRequested: true,
+      hiddenOverlays: ['cg'],
+    });
+    mount();
+
+    expect(screen.getByText('Zoom in to load campgrounds.')).toBeInTheDocument();
+    expect(screen.queryByText('Campgrounds are switched off')).toBeNull();
+  });
+
+  test('a card click flies to it and opens its drawer', async () => {
+    withViewport();
+    mount();
+    await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+    await act(async () => {
+      screen.getByRole('button', { name: /Fallen Leaf/ }).click();
+    });
+
+    expect(fakeMap.flyToCalls.at(-1)).toMatchObject({ center: [-120.05, 38.93], zoom: 13 });
+    expect(useMapStore.getState().selectedPoiId).toBe(21);
+  });
+
+  test('says so when the view holds none', async () => {
+    campgroundSearch = { campground_ids: [], total_in_boundary: 0, total_matching: 0, truncated: false };
+    withViewport();
+    mount();
+
+    await waitFor(() =>
+      expect(screen.getByText('No campgrounds in view — pan or zoom out to find some.')).toBeInTheDocument(),
+    );
+    expect(screen.getByText('· 0')).toBeInTheDocument();
+  });
+
+  test('says to zoom in again after zooming back out', () => {
+    // `campgroundsRequested` latches true forever once it flips — the zoom itself,
+    // not the sticky flag, is what should decide the hint and whether a request goes out.
+    useMapStore.setState({
+      viewport: { bbox: [-120.4, 38.7, -119.6, 39.4], zoom: 4 },
       campgroundsRequested: true,
     });
     mount();
 
-    await waitFor(() => expect(document.querySelectorAll('.tb-card').length).toBe(50));
-    expect(screen.getByText(/50 of 60/)).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.getByText(/^· 50 of 60 · \d+ checkable online$/)).toBeInTheDocument(),
-    );
+    expect(screen.getByText('Zoom in to load campgrounds.')).toBeInTheDocument();
+    expect(urls.filter((u) => u.startsWith('/api/campgrounds'))).toHaveLength(0);
   });
 });

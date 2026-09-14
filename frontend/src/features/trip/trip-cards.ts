@@ -5,7 +5,6 @@
 // placeholder and gains its name, type and region when `GET /api/pois/{id}` lands.
 // Sorting, filtering and copy all have to work on both.
 import { distanceKm } from '@/lib/geo';
-import type { MapCenter } from '@/map/viewport';
 import { UNCATEGORIZED_AGENCY } from '@/map/agencies';
 import type { TripStop } from '@/stores/tripStore';
 import { distanceAlongRouteKm, type RouteIndex } from './route-index';
@@ -112,24 +111,6 @@ export function tripCardsFromFeatures(
   return cards.sort((a, b) => (a.routeKm ?? 0) - (b.routeKm ?? 0));
 }
 
-/**
- * Placeholder cards for the campgrounds in view, nearest the map centre first.
- * Without a centre (no viewport reported yet) the wire order stands.
- */
-export function viewportCardsFromFeatures(
-  features: readonly SlimFeature[] | null | undefined,
-  center: MapCenter | null,
-): TripCard[] {
-  const cards: TripCard[] = [];
-  for (const feature of features ?? []) {
-    const base = cardBaseOf(feature);
-    if (!base) continue;
-    const distKm = center ? distanceKm(center.lat, center.lng, base.lat, base.lng) : 0;
-    cards.push(placeholderCard(base, null, distKm));
-  }
-  return center ? cards.sort((a, b) => a.distKm - b.distKm) : cards;
-}
-
 /** Fold a hydrated POI's flattened properties into its placeholder card. */
 export function hydrateCard(
   card: TripCard,
@@ -164,10 +145,10 @@ export interface CardFilter {
  * by agency only; the overlay check is new because 4b's legend can switch campgrounds
  * off wholesale, which the vanilla legend could not.
  */
-export function visibleCards(
-  cards: readonly TripCard[],
+export function visibleCards<T extends TripCard>(
+  cards: readonly T[],
   { hiddenAgencies, campgroundsHidden }: CardFilter,
-): TripCard[] {
+): T[] {
   if (campgroundsHidden) return [];
   if (hiddenAgencies.length === 0) return [...cards];
   const hidden = new Set(hiddenAgencies);

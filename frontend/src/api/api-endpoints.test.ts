@@ -56,6 +56,8 @@ const CALLED_TODAY = [
   '/api/availability/runs',
   '/api/booking/add-to-cart',
   '/api/build-info',
+  '/api/campgrounds/details',
+  '/api/campgrounds/search',
   '/api/geocode',
   '/api/me',
   '/api/pois',

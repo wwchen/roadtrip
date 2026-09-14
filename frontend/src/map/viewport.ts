@@ -1,4 +1,5 @@
 import type { Geometry } from 'geojson';
+import type { BoundaryDto } from '@/api/generated/api-types';
 
 // What to ask `POST /api/pois` for, given where the map is looking.
 
@@ -113,6 +114,14 @@ export interface MapCenter {
 /** The midpoint of a bbox; what "nearest" means for a list with no route. */
 export function bboxCenter([west, south, east, north]: ViewportBbox): MapCenter {
   return { lng: (west + east) / 2, lat: (south + north) / 2 };
+}
+
+/** The viewport as the campground search wants it: one closed ring, west-south first. */
+export function bboxBoundary([west, south, east, north]: ViewportBbox): BoundaryDto {
+  return {
+    type: 'Polygon',
+    coordinates: [[[west, south], [east, south], [east, north], [west, north], [west, south]]],
+  };
 }
 
 /**

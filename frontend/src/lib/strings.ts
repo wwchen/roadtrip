@@ -150,5 +150,51 @@ export const inViewCopy = {
   checkableCount: (checkable: number) => `${checkable} checkable online`,
   notCheckable: 'Not checkable online',
   zoomIn: 'Zoom in to load campgrounds.',
+  loading: 'Finding campgrounds in view…',
   none: 'No campgrounds in view — pan or zoom out to find some.',
+  failed: 'Could not load the campgrounds in view. Try panning the map.',
+} as const;
+
+/** The campground filter block under the search row, and the cards' facet row. */
+export const filterCopy = {
+  pill: 'Filter campgrounds',
+  pillHint: 'Then check dates',
+  heading: 'Campgrounds',
+  /** The filter block's count: everything in view, or how many of it pass the filter. */
+  inView: (total: number) => `${total} in view`,
+  matching: (matching: number, total: number) => `${matching} of ${total} in view`,
+  siteType: 'Site type',
+  anySiteType: 'Any',
+  groupSize: 'Group size',
+  fewerPeople: 'Fewer people',
+  morePeople: 'More people',
+  /** The card's count line with a type selected: the kind's count, then the total when they differ. */
+  kindSites: (count: number, kindLabel: string, total: number) => {
+    const noun = kindLabel === kindLabel.toUpperCase() ? kindLabel : kindLabel.toLowerCase();
+    const kind = `${count} ${noun} ${count === 1 ? 'site' : 'sites'}`;
+    return count === total ? kind : `${kind} · ${total} total`;
+  },
+  /** Facet labels. */
+  facetGroup: (maxPeople: number) => `Up to ${maxPeople}`,
+  facetGroupNoData: 'Group size',
+  noData: 'No data',
+  /** The state word in a facet's aria-label, e.g. "Tent, matches". */
+  facetMatches: 'matches',
+  facetMisses: 'does not match',
+  /** The one gated step. */
+  checkTitle: 'Check availability',
+  checkBody: 'Add dates to see which of these have a site.',
+  addDates: 'Add dates',
+  startDate: 'Start date',
+  endDate: 'End date',
+  saveDates: 'Save',
+  cancelDates: 'Cancel',
+  editDates: 'Edit',
+  clearDates: 'Clear',
+  endBeforeStart: 'The end date must be after the start date.',
+  dateFormat: 'Enter dates as YYYY-MM-DD.',
+  nights: (nights: number) => (nights === 1 ? '1 night' : `${nights} nights`),
+  /** "Fri Sep 11 → Sun Sep 13 · 2 nights". */
+  dateSummary: (start: string, end: string, nights: number) =>
+    `${start} → ${end} · ${filterCopy.nights(nights)}`,
 } as const;

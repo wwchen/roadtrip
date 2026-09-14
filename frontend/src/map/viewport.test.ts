@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   BASE_VIEWPORT_CATEGORIES,
+  bboxBoundary,
   bboxCenter,
   CG_ZOOM_THRESHOLD,
   clipToBbox,
@@ -136,5 +137,14 @@ describe('clipToBbox', () => {
 
     expect(clipped).toEqual([inside]);
     expect(clipped).not.toBe([inside, outside]);
+  });
+});
+
+describe('bboxBoundary', () => {
+  test('is a closed GeoJSON polygon ring around the bbox', () => {
+    expect(bboxBoundary([-120.4, 38.7, -119.6, 39.4])).toEqual({
+      type: 'Polygon',
+      coordinates: [[[-120.4, 38.7], [-119.6, 38.7], [-119.6, 39.4], [-120.4, 39.4], [-120.4, 38.7]]],
+    });
   });
 });

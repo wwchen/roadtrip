@@ -2,6 +2,7 @@
 // selection; route, corridor, and search data live in their respective hooks.
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { Icon } from '@ui';
+import { FilterPanel } from './FilterPanel';
 import { RouteStatus } from './RouteStatus';
 import { SearchDropdown } from './SearchDropdown';
 import { StopRow } from './StopRow';
@@ -9,10 +10,12 @@ import { TripResults } from './TripResults';
 import { MAX_SEARCH_RESULTS, type SearchResult } from './search-results';
 import { allStopsFilled, isLocated } from '@/domain/trip/stops';
 import { buildRouteIndex } from './route-index';
-import { bboxCenter, CG_ZOOM_THRESHOLD } from '@/map/viewport';
+import { bboxCenter } from '@/map/viewport';
 import { useMapStore } from '@/stores/mapStore';
-import { tripCardsFromFeatures, viewportCardsFromFeatures, type TripCard } from './trip-cards';
-import { useSiteCounts } from './useSiteCounts';
+import { tripCardsFromFeatures } from './trip-cards';
+import { cardsFromSummaries } from './campground-cards';
+import { useCampgroundSearch } from './useCampgroundSearch';
+import { MAX_IN_VIEW_CARDS, useCampgroundSummaries } from './useCampgroundSummaries';
 import { useOnRoutePois } from './useOnRoutePois';
 import { useRoute } from './useRoute';
 import { useTripCards } from './useTripCards';
@@ -27,12 +30,6 @@ import './topbar.css';
 
 /** What the keyboard has selected before any arrow key is pressed. */
 const NO_ACTIVE_RESULT = -1;
-
-/** Stable empty, so the in-view pipeline does nothing while a route owns the list. */
-const NO_CARDS: TripCard[] = [];
-
-/** The list is nearest-first, so a cap keeps the useful end and bounds the per-card fetches. */
-const MAX_IN_VIEW_CARDS = 50;
 
 const COPY_LABEL = 'Copy trip link';
 const COPIED_LABEL = 'Trip link copied';
@@ -70,8 +67,8 @@ export function TopBar({ alerts }: TopBarProps) {
   const [draft, setDraft] = useState<{ row: number; text: string } | null>(null);
   const [activeResult, setActiveResult] = useState(NO_ACTIVE_RESULT);
 
-  const search = useSearchResults(draft?.text ?? '');
-  const results = search.results;
+  const placeSearch = useSearchResults(draft?.text ?? '');
+  const results = placeSearch.results;
   const isDirections = planner.mode === 'directions';
   const rowCount = Math.max(planner.stops.length, 1);
   // One gate, two consumers: the share button and the results section both mean
@@ -83,27 +80,22 @@ export function TopBar({ alerts }: TopBarProps) {
   // otherwise whatever is in view.
   const showRoute = shareable && !!route.route;
 
-  // The in-view list: the viewport loop's campground pins, hydrated the same way as
-  // the corridor's, plus one catalog fetch per card for the site count.
-  const viewportCampgrounds = useMapStore((s) => s.viewportCampgrounds);
+  // The in-view list: a boundary search for the ids, then a bulk read of their
+  // summaries. Both stay idle while a route owns the list.
   const campgroundsRequested = useMapStore((s) => s.campgroundsRequested);
   const viewportBbox = useMapStore((s) => s.viewport?.bbox ?? null);
-  const viewportZoom = useMapStore((s) => s.viewport?.zoom ?? 0);
-  // The sticky flag never goes back to false once campgrounds have been
-  // requested once, so the zoom itself decides whether the hint still applies.
-  const zoomAllowsCampgrounds = viewportZoom >= CG_ZOOM_THRESHOLD;
-  const inViewPlaceholders = useMemo(
-    () =>
-      showRoute
-        ? NO_CARDS
-        : viewportCardsFromFeatures(
-            viewportCampgrounds,
-            viewportBbox ? bboxCenter(viewportBbox) : null,
-          ).slice(0, MAX_IN_VIEW_CARDS),
-    [showRoute, viewportCampgrounds, viewportBbox],
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // `search.enabled` is the one gate: below the zoom threshold or while a route
+  // owns the list. The sticky `campgroundsRequested` flag never goes back to
+  // false once it flips, so `search.enabled` is what decides whether the zoom
+  // hint still applies.
+  const search = useCampgroundSearch({ paused: showRoute });
+  const inViewIds = useMemo(() => search.ids.slice(0, MAX_IN_VIEW_CARDS), [search.ids]);
+  const summaries = useCampgroundSummaries(inViewIds);
+  const inViewCards = useMemo(
+    () => cardsFromSummaries(inViewIds, summaries.byId, viewportBbox ? bboxCenter(viewportBbox) : null),
+    [inViewIds, summaries.byId, viewportBbox],
   );
-  const inViewCards = useTripCards(inViewPlaceholders);
-  const siteCounts = useSiteCounts(inViewCards);
 
   const pick = (result: SearchResult) => {
     planner.pickResult(draft?.row ?? 0, result);
@@ -259,6 +251,15 @@ export function TopBar({ alerts }: TopBarProps) {
         ) : null}
       </div>
 
+      {!showRoute ? (
+        <FilterPanel
+          open={filtersOpen}
+          onToggle={() => setFiltersOpen((open) => !open)}
+          totalInBoundary={search.totalInBoundary}
+          totalMatching={search.totalMatching}
+        />
+      ) : null}
+
       <SearchDropdown
         results={results.slice(0, MAX_SEARCH_RESULTS)}
         activeIndex={activeResult}
@@ -292,9 +293,11 @@ export function TopBar({ alerts }: TopBarProps) {
         <TripResults
           variant="viewport"
           cards={inViewCards}
-          siteCounts={siteCounts}
-          campgroundsRequested={campgroundsRequested && zoomAllowsCampgrounds}
-          totalInView={viewportCampgrounds.length}
+          campgroundsRequested={campgroundsRequested && search.enabled}
+          loading={inViewCards.length === 0 && (search.isFetching || summaries.isFetching)}
+          error={search.isError || summaries.isError}
+          totalInBoundary={search.totalInBoundary}
+          totalMatching={search.totalMatching}
         />
       )}
     </div>

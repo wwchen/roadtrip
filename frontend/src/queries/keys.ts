@@ -52,6 +52,15 @@ export const queryKeys = {
     forPoi: (poiId: string | number) => ['campsites', String(poiId)] as const,
   },
 
+  campgrounds: {
+    all: () => ['campgrounds'] as const,
+    search: (boundary: unknown, filter: unknown) => ['campgrounds', 'search', boundary, filter ?? null] as const,
+    /** One summary; what `summaries` fans a bulk response into. */
+    summary: (id: number) => ['campgrounds', 'summary', id] as const,
+    /** The bulk read for one id set, sorted so order does not split the cache. */
+    summaries: (ids: readonly number[]) => ['campgrounds', 'summaries', [...ids].sort((a, b) => a - b)] as const,
+  },
+
   availability: {
     all: () => ['availability'] as const,
     forPoi: (poiId: string | number, startDate?: string, endDate?: string, siteType?: string) =>
