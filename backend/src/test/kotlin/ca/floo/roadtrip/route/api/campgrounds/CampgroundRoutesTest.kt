@@ -31,6 +31,8 @@ import kotlin.test.assertEquals
 
 private const val TAHOE =
     """{"type":"Polygon","coordinates":[[[-120.4,38.7],[-119.6,38.7],[-119.6,39.4],[-120.4,39.4],[-120.4,38.7]]]}"""
+private const val WORLD =
+    """{"type":"Polygon","coordinates":[[[-180,-90],[180,-90],[180,90],[-180,90],[-180,-90]]]}"""
 
 class CampgroundRoutesTest : SharedDbTest() {
     private fun service(config: CampgroundSearchConfig = CampgroundSearchConfig.default) =
@@ -124,6 +126,21 @@ class CampgroundRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `search with a boundary spanning the world is a 400 bad_boundary`() =
+        testApplication {
+            application { routeTestApplication { campgroundRoutes(service(), CampgroundSearchConfig.default) } }
+
+            val resp =
+                client.post("/api/campgrounds/search") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"boundary":$WORLD}""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            assertEquals("bad_boundary", error(resp.bodyAsText()))
+        }
+
+    @Test
     fun `search without a boundary is a 400 naming the boundary`() =
         testApplication {
             application { routeTestApplication { campgroundRoutes(service(), CampgroundSearchConfig.default) } }
@@ -200,7 +217,7 @@ class CampgroundRoutesTest : SharedDbTest() {
     @Test
     fun `details over the cap is a 400 too_many_ids`() =
         testApplication {
-            val config = CampgroundSearchConfig(maxResults = 10, maxDetailIds = 1)
+            val config = CampgroundSearchConfig(maxResults = 10, maxDetailIds = 1, maxBoundaryAreaSqDeg = 500.0)
             application { routeTestApplication { campgroundRoutes(service(config), config) } }
 
             val resp =
