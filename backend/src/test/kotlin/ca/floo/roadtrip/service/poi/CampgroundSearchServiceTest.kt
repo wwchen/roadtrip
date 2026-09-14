@@ -75,6 +75,20 @@ class CampgroundSearchServiceTest : SharedDbTest() {
                 service().search(CampgroundSearchRequestDto(boundary = boundary("""{"type":"Point","coordinates":[0,0]}""")))
             }
         assertEquals("bad_boundary", point.code)
+
+        val nullCoordinates =
+            assertFailsWith<CampgroundSearchRequestException> {
+                service().search(CampgroundSearchRequestDto(boundary = boundary("""{"type":"Polygon","coordinates":null}""")))
+            }
+        assertEquals("bad_boundary", nullCoordinates.code)
+
+        val arrayType =
+            assertFailsWith<CampgroundSearchRequestException> {
+                service().search(
+                    CampgroundSearchRequestDto(boundary = boundary("""{"type":["Polygon"],"coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}""")),
+                )
+            }
+        assertEquals("bad_boundary", arrayType.code)
     }
 
     @Test

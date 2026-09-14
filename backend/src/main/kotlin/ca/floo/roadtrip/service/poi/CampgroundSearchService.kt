@@ -18,8 +18,9 @@ import ca.floo.roadtrip.repo.CampgroundSearchRepo
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.BookingIdentityResolver
 import ca.floo.roadtrip.service.poi.campground.CampgroundCta
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonPrimitive
 
 /** A request the caller can fix; [code] is the wire error code. */
 class CampgroundSearchRequestException(
@@ -63,11 +64,12 @@ internal class CampgroundSearchService(
 
     private fun validatedBoundary(boundary: JsonObject?): JsonObject {
         boundary ?: throw CampgroundSearchRequestException("bad_boundary", "boundary is required")
-        val type = boundary["type"]?.jsonPrimitive?.content
+        val type = (boundary["type"] as? JsonPrimitive)?.content
         if (type !in boundaryTypes) {
             throw CampgroundSearchRequestException("bad_boundary", "boundary must be a GeoJSON Polygon or MultiPolygon")
         }
-        if (boundary["coordinates"] == null) {
+        val coords = boundary["coordinates"]
+        if (coords == null || coords is JsonNull) {
             throw CampgroundSearchRequestException("bad_boundary", "boundary has no coordinates")
         }
         return boundary
