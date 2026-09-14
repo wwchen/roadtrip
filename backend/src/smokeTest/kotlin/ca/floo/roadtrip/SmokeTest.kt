@@ -277,7 +277,7 @@ class SmokeTest {
                             {
                               "type": "Feature",
                               "id": 8101,
-                              "geometry": { "type": "Point", "coordinates": [-123.00, 49.00] },
+                              "geometry": { "type": "Point", "coordinates": [-98.50, 39.50] },
                               "properties": {
                                 "category": "campground",
                                 "subcategory": "federal",
@@ -287,7 +287,7 @@ class SmokeTest {
                             {
                               "type": "Feature",
                               "id": 8102,
-                              "geometry": { "type": "Point", "coordinates": [-123.02, 49.02] },
+                              "geometry": { "type": "Point", "coordinates": [-98.52, 39.52] },
                               "properties": {
                                 "category": "campground",
                                 "subcategory": "federal",
@@ -297,7 +297,7 @@ class SmokeTest {
                             {
                               "type": "Feature",
                               "id": 8103,
-                              "geometry": { "type": "Point", "coordinates": [-123.04, 49.04] },
+                              "geometry": { "type": "Point", "coordinates": [-98.54, 39.54] },
                               "properties": {
                                 "category": "campground",
                                 "subcategory": "state",
