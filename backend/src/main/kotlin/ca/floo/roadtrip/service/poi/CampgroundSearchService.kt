@@ -9,10 +9,8 @@ import ca.floo.roadtrip.model.api.campground.CampgroundSearchResponseDto
 import ca.floo.roadtrip.model.api.campground.CampgroundSummaryDto
 import ca.floo.roadtrip.model.api.poi.AmenityDto
 import ca.floo.roadtrip.model.api.poi.RatingDto
-import ca.floo.roadtrip.model.domain.AmenityKey
 import ca.floo.roadtrip.model.domain.CampgroundSearchFilter
 import ca.floo.roadtrip.model.domain.CampgroundSummaryRow
-import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.InvalidBoundaryException
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampgroundSearchRepo
@@ -83,22 +81,12 @@ internal class CampgroundSearchService(
     }
 
     private fun validatedFilter(filter: CampgroundFilterDto): CampgroundSearchFilter {
-        val siteType =
-            filter.siteType?.let { wire ->
-                CampsiteKind.entries.firstOrNull { it.wire == wire }?.wire
-                    ?: throw CampgroundSearchRequestException("bad_request", "unknown site_type '$wire'")
-            }
         filter.groupSize?.let {
             if (it < MIN_GROUP_SIZE) {
                 throw CampgroundSearchRequestException("bad_request", "group_size must be >= $MIN_GROUP_SIZE")
             }
         }
-        val amenities =
-            filter.amenities.map { wire ->
-                AmenityKey.entries.firstOrNull { it.wire == wire }?.wire
-                    ?: throw CampgroundSearchRequestException("bad_request", "unknown amenity '$wire'")
-            }
-        return CampgroundSearchFilter(siteType = siteType, groupSize = filter.groupSize, amenities = amenities)
+        return CampgroundSearchFilter(siteType = filter.siteType, groupSize = filter.groupSize, amenities = filter.amenities)
     }
 
     /** The same decision `CampgroundService` makes for `availability_supported` and `booking_system`. */

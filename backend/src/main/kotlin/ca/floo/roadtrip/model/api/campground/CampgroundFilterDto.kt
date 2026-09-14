@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.model.api.campground
 
+import ca.floo.roadtrip.model.domain.AmenityKey
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -10,10 +12,10 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class CampgroundFilterDto(
-    /** A `CampsiteKind` wire value; null means any. */
-    @SerialName("site_type") val siteType: String? = null,
+    /** null means any. */
+    @SerialName("site_type") val siteType: CampsiteKind? = null,
     /** People count; passes when `max_people >= group_size` or `max_people` is unknown. */
     @SerialName("group_size") val groupSize: Int? = null,
-    /** `AmenityKey` wire values that must not be marked absent. */
-    val amenities: List<String> = emptyList(),
+    /** Amenities that must not be marked absent. */
+    val amenities: List<AmenityKey> = emptyList(),
 )

@@ -58,7 +58,10 @@ class CampgroundSearchServiceTest : SharedDbTest() {
 
         val response =
             service().search(
-                CampgroundSearchRequestDto(boundary = boundary(TAHOE), filter = CampgroundFilterDto(siteType = "tent")),
+                CampgroundSearchRequestDto(
+                    boundary = boundary(TAHOE),
+                    filter = CampgroundFilterDto(siteType = CampsiteKind.TENT),
+                ),
             )
 
         assertEquals(listOf(tent.poiId), response.campgroundIds)
@@ -93,17 +96,6 @@ class CampgroundSearchServiceTest : SharedDbTest() {
     }
 
     @Test
-    fun `an unknown site type is refused`() {
-        val error =
-            assertFailsWith<CampgroundSearchRequestException> {
-                service().search(
-                    CampgroundSearchRequestDto(boundary = boundary(TAHOE), filter = CampgroundFilterDto(siteType = "yurt")),
-                )
-            }
-        assertEquals("bad_request", error.code)
-    }
-
-    @Test
     fun `details maps the summary row onto the DTO`() {
         val poi =
             ctx.seedCatalogPoi(
@@ -126,7 +118,7 @@ class CampgroundSearchServiceTest : SharedDbTest() {
         assertEquals("Nevada Beach", summary.name)
         assertEquals("NV", summary.region)
         assertEquals("USDA Forest Service", summary.agency)
-        assertEquals(mapOf("tent" to 1), summary.siteCounts)
+        assertEquals(mapOf(CampsiteKind.TENT to 1), summary.siteCounts)
         assertEquals(1, summary.siteTotal)
         assertEquals(8, summary.maxPeople)
         assertEquals(listOf("toilets", "showers"), summary.amenities.map { it.key })

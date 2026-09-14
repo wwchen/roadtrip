@@ -2,9 +2,9 @@ package ca.floo.roadtrip.model.domain
 
 /** The search predicate as the repo applies it; mirrors the API's `CampgroundFilterDto`. */
 data class CampgroundSearchFilter(
-    val siteType: String?,
+    val siteType: CampsiteKind?,
     val groupSize: Int?,
-    val amenities: List<String>,
+    val amenities: List<AmenityKey>,
 )
 
 data class CampgroundSearchResult(

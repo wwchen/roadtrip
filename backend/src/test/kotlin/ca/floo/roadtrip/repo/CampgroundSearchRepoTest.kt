@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.fixtures.CatalogPoiFixture
+import ca.floo.roadtrip.model.domain.AmenityKey
 import ca.floo.roadtrip.model.domain.CampgroundSearchFilter
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.InvalidBoundaryException
@@ -74,7 +75,7 @@ class CampgroundSearchRepoTest : SharedDbTest() {
         site(rvOnly.campgroundId, "2", CampsiteKind.RV)
         val unknown = seed("unknown", -120.2, 39.0)
 
-        val result = repo().searchWithinBoundary(TAHOE, noFilter.copy(siteType = "tent"), limit = 10)
+        val result = repo().searchWithinBoundary(TAHOE, noFilter.copy(siteType = CampsiteKind.TENT), limit = 10)
 
         assertEquals(setOf(tent.poiId, unknown.poiId), result.poiIds.toSet())
         assertEquals(3, result.totalInBoundary)
@@ -101,7 +102,7 @@ class CampgroundSearchRepoTest : SharedDbTest() {
         val lacks = seed("lacks", -120.1, 39.0, amenitiesJson = """[{"key":"toilets","present":false}]""")
         val silent = seed("silent", -120.2, 39.0, amenitiesJson = """[{"key":"showers","present":true}]""")
 
-        val result = repo().searchWithinBoundary(TAHOE, noFilter.copy(amenities = listOf("toilets")), limit = 10)
+        val result = repo().searchWithinBoundary(TAHOE, noFilter.copy(amenities = listOf(AmenityKey.TOILETS)), limit = 10)
 
         assertEquals(setOf(has.poiId, silent.poiId), result.poiIds.toSet())
         assertTrue(lacks.poiId !in result.poiIds)

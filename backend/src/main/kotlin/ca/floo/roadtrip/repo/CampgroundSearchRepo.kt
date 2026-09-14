@@ -35,7 +35,7 @@ internal class CampgroundSearchRepo(
         val predicateArgs = mutableListOf<Any>()
         filter.siteType?.let {
             predicates += "(s.site_total IS NULL OR COALESCE((s.site_counts->>?)::int, 0) > 0)"
-            predicateArgs += it
+            predicateArgs += it.wire
         }
         filter.groupSize?.let {
             predicates += "(s.max_people IS NULL OR s.max_people >= ?)"
@@ -47,7 +47,7 @@ internal class CampgroundSearchRepo(
                      SELECT 1 FROM jsonb_array_elements(cg.amenities) a
                      WHERE a->>'key' = ? AND COALESCE((a->>'present')::boolean, true) = false
                    )"""
-            predicateArgs += key
+            predicateArgs += key.wire
         }
         val passes = if (predicates.isEmpty()) "true" else predicates.joinToString(" AND ")
         val providerPlaceholders = enabledDataProviders.joinToString(",") { "?" }

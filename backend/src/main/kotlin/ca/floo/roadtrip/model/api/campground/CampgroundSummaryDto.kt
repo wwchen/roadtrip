@@ -2,6 +2,7 @@ package ca.floo.roadtrip.model.api.campground
 
 import ca.floo.roadtrip.model.api.poi.AmenityDto
 import ca.floo.roadtrip.model.api.poi.RatingDto
+import ca.floo.roadtrip.model.domain.CampsiteKind
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -24,8 +25,8 @@ data class CampgroundSummaryDto(
     @SerialName("availability_supported") val availabilitySupported: Boolean,
     @SerialName("booking_system") val bookingSystem: String? = null,
     val amenities: List<AmenityDto>,
-    /** Live campsites per `CampsiteKind` wire value. */
-    @SerialName("site_counts") val siteCounts: Map<String, Int>,
+    /** Live campsites per kind. */
+    @SerialName("site_counts") val siteCounts: Map<CampsiteKind, Int>,
     @SerialName("site_total") val siteTotal: Int,
     /** The largest campsite `max_people`; absent when no site carries one. */
     @SerialName("max_people") val maxPeople: Int? = null,

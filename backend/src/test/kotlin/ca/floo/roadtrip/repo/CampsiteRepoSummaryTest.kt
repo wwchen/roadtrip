@@ -27,7 +27,7 @@ class CampsiteRepoSummaryTest : SharedDbTest() {
         repo.refreshSiteSummaries(listOf(campground))
 
         assertEquals(
-            CampgroundSiteSummary(siteTotal = 3, siteCounts = mapOf("tent" to 2, "rv" to 1), maxPeople = 8),
+            CampgroundSiteSummary(siteTotal = 3, siteCounts = mapOf(CampsiteKind.TENT to 2, CampsiteKind.RV to 1), maxPeople = 8),
             repo.findSiteSummary(campground),
         )
     }
@@ -40,7 +40,7 @@ class CampsiteRepoSummaryTest : SharedDbTest() {
         repo.refreshSiteSummaries(listOf(campground))
 
         assertEquals(
-            CampgroundSiteSummary(siteTotal = 1, siteCounts = mapOf("standard" to 1), maxPeople = null),
+            CampgroundSiteSummary(siteTotal = 1, siteCounts = mapOf(CampsiteKind.STANDARD to 1), maxPeople = null),
             repo.findSiteSummary(campground),
         )
     }
@@ -97,7 +97,7 @@ class CampsiteRepoSummaryTest : SharedDbTest() {
         assertEquals(2, upserted)
         assertEquals(0, skipped)
         assertEquals(
-            CampgroundSiteSummary(siteTotal = 2, siteCounts = mapOf("tent" to 1, "rv" to 1), maxPeople = 6),
+            CampgroundSiteSummary(siteTotal = 2, siteCounts = mapOf(CampsiteKind.TENT to 1, CampsiteKind.RV to 1), maxPeople = 6),
             repo.findSiteSummary(campground),
         )
     }

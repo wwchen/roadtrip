@@ -31,7 +31,7 @@ class CampgroundRepoSummaryReadTest : SharedDbTest() {
         assertEquals(-120.0, alpha.lng, 1e-6)
         assertEquals(39.0, alpha.lat, 1e-6)
         assertEquals(1, alpha.summary?.siteTotal)
-        assertEquals(mapOf("tent" to 1), alpha.summary?.siteCounts)
+        assertEquals(mapOf(CampsiteKind.TENT to 1), alpha.summary?.siteCounts)
         assertEquals(6, alpha.summary?.maxPeople)
         assertNull(rows.first().summary)
     }

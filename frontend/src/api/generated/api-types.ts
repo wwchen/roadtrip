@@ -55,6 +55,8 @@ export interface AmenityDto {
   detail?: string;
 }
 
+export type AmenityKey = 'camp_store' | 'dump_station' | 'electric_hookups' | 'fires_allowed' | 'pets_allowed' | 'sewer_hookups' | 'showers' | 'toilets' | 'trash' | 'water' | 'water_hookups' | 'wifi' | 'other';
+
 export interface ApiErrorSchema {
   error: string;
   detail?: string;
@@ -294,9 +296,9 @@ export interface CampgroundDetailsResponseDto {
 }
 
 export interface CampgroundFilterDto {
-  site_type?: string;
+  site_type?: CampsiteKind;
   group_size?: number;
-  amenities?: string[];
+  amenities?: AmenityKey[];
 }
 
 export interface CampgroundSearchRequestDto {
@@ -323,7 +325,7 @@ export interface CampgroundSummaryDto {
   availability_supported: boolean;
   booking_system?: string;
   amenities: AmenityDto[];
-  site_counts: Record<string, number>;
+  site_counts: Partial<Record<CampsiteKind, number>>;
   site_total: number;
   max_people?: number;
 }
@@ -363,6 +365,8 @@ export interface CampsiteDto {
   booking_provider?: string;
   booking_system?: string;
 }
+
+export type CampsiteKind = 'standard' | 'tent' | 'rv' | 'cabin' | 'group' | 'walk_in' | 'boat_in' | 'equestrian' | 'backcountry' | 'day_use' | 'other';
 
 export interface CarrierSignalDto {
   carrier: string;

@@ -464,7 +464,13 @@ class CampsiteRepo(
     }
 }
 
-internal fun decodeSiteCounts(json: String?): Map<String, Int> {
+/** Every stored `campsites.kind` is a [CampsiteKind] wire value; a key that matches none is dropped rather than thrown. */
+internal fun decodeSiteCounts(json: String?): Map<CampsiteKind, Int> {
     if (json.isNullOrBlank()) return emptyMap()
-    return Json.parseToJsonElement(json).jsonObject.mapValues { (_, value) -> value.jsonPrimitive.int }
+    return Json
+        .parseToJsonElement(json)
+        .jsonObject
+        .mapNotNull { (key, value) ->
+            CampsiteKind.entries.firstOrNull { it.wire == key }?.let { it to value.jsonPrimitive.int }
+        }.toMap()
 }

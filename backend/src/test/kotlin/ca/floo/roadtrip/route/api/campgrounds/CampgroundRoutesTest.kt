@@ -109,6 +109,21 @@ class CampgroundRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `search with an unknown site type is a 400 bad_request`() =
+        testApplication {
+            application { routeTestApplication { campgroundRoutes(service(), CampgroundSearchConfig.default) } }
+
+            val resp =
+                client.post("/api/campgrounds/search") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"boundary":$TAHOE,"filter":{"site_type":"yurt"}}""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            assertEquals("bad_request", error(resp.bodyAsText()))
+        }
+
+    @Test
     fun `search with an unparseable body is a 400`() =
         testApplication {
             application { routeTestApplication { campgroundRoutes(service(), CampgroundSearchConfig.default) } }
