@@ -3,8 +3,10 @@ import {
   BASE_VIEWPORT_CATEGORIES,
   bboxCenter,
   CG_ZOOM_THRESHOLD,
+  clipToBbox,
   readMapViewport,
   viewportRequestFor,
+  type ViewportBbox,
   type ViewportSource,
 } from './viewport';
 
@@ -78,5 +80,61 @@ describe('the cache key', () => {
 describe('bboxCenter', () => {
   test('is the midpoint of the box', () => {
     expect(bboxCenter([-124, 32, -114, 42])).toEqual({ lng: -119, lat: 37 });
+  });
+});
+
+describe('clipToBbox', () => {
+  const BAY_AREA: ViewportBbox = [-123, 37, -121, 38];
+
+  interface TestFeature {
+    id: number;
+    geometry?: { type: 'Point'; coordinates?: [number, number] } | null;
+  }
+
+  const point = (id: number, coordinates: [number, number]): TestFeature => ({
+    id,
+    geometry: { type: 'Point', coordinates },
+  });
+
+  test('keeps a feature inside the bbox', () => {
+    const inside = point(1, [-122, 37.5]);
+
+    expect(clipToBbox([inside], BAY_AREA)).toEqual([inside]);
+  });
+
+  test('keeps a feature exactly on the edge', () => {
+    const onEdge = point(1, [-123, 37]);
+
+    expect(clipToBbox([onEdge], BAY_AREA)).toEqual([onEdge]);
+  });
+
+  test('drops a feature outside the bbox', () => {
+    const outside = point(1, [-116, 40]);
+
+    expect(clipToBbox([outside], BAY_AREA)).toEqual([]);
+  });
+
+  test('drops a feature with no usable point geometry', () => {
+    const noGeometry: TestFeature = { id: 1 };
+    const nullGeometry: TestFeature = { id: 2, geometry: null };
+    const noCoordinates: TestFeature = { id: 3, geometry: { type: 'Point' } };
+
+    expect(clipToBbox([noGeometry, nullGeometry, noCoordinates], BAY_AREA)).toEqual([]);
+  });
+
+  test('returns the same array instance when nothing is dropped', () => {
+    const features = [point(1, [-122, 37.5]), point(2, [-121.5, 37.2])];
+
+    expect(clipToBbox(features, BAY_AREA)).toBe(features);
+  });
+
+  test('drops only the features outside, keeping array identity only when none are dropped', () => {
+    const inside = point(1, [-122, 37.5]);
+    const outside = point(2, [-116, 40]);
+
+    const clipped = clipToBbox([inside, outside], BAY_AREA);
+
+    expect(clipped).toEqual([inside]);
+    expect(clipped).not.toBe([inside, outside]);
   });
 });

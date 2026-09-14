@@ -17,7 +17,14 @@
 //                              queryFn. Query's own cache matches keys exactly,
 //                              so it cannot answer "I already fetched a bbox that
 //                              CONTAINS this one" — the two tiers do different
-//                              jobs. See that module's header.
+//                              jobs. See that module's header. A cache hit
+//                              returns the larger, older bbox's full response;
+//                              MapLibre paints that superset fine on its own,
+//                              but this hook always clips to the requested bbox
+//                              before anything COUNTS pins (the legend, the
+//                              in-view campground list) — a fresh fetch is
+//                              already scoped to its own bbox, so clipping it
+//                              is a no-op.
 //   route-mode suppression  -> `enabled: !routeActive`, plus painting the trip
 //                              corridor's own POIs instead. The vanilla code
 //                              aborted the in-flight fetch by hand at two call
@@ -35,6 +42,7 @@ import { POINT_OVERLAYS, bucketPins, type OverlayKey } from '@/map/overlays';
 import type { PinCollection, PinFeature } from '@/map/pins';
 import { createViewportCache, type ViewportCache } from '@/map/viewport-cache';
 import {
+  clipToBbox,
   VIEWPORT_DEBOUNCE_MS,
   readMapViewport,
   viewportRequestFor,
@@ -196,9 +204,19 @@ export function useViewportPois(): ViewportPois {
     ? (routePois as unknown as PinFeature[])
     : ((query.data?.features as PinFeature[] | undefined) ?? lastFetched.current);
 
+  // What `useMapOverlays` paints. Fine to leave as the cache's superset when
+  // the current response is a cache hit: MapLibre only draws what intersects
+  // the screen, so an off-viewport pin in the data is simply never shown.
   const buckets = useMemo(() => bucketPins(features), [features]);
-  const counts = useMemo(() => countPins(buckets), [buckets]);
-  const agencies = useMemo(() => agencyCounts(buckets.cg.features), [buckets]);
+
+  // What the legend and the in-view campground list count. Unlike painting,
+  // these have to be exact, so pins are always clipped down to the bbox
+  // actually being asked about before anything counts them. A route has no
+  // bbox to clip to — its pins are the corridor's, not the viewport's.
+  const countedFeatures = !routeActive && request ? clipToBbox(features, request.bbox) : features;
+  const countedBuckets = useMemo(() => bucketPins(countedFeatures), [countedFeatures]);
+  const counts = useMemo(() => countPins(countedBuckets), [countedBuckets]);
+  const agencies = useMemo(() => agencyCounts(countedBuckets.cg.features), [countedBuckets]);
 
   // A route supplies campgrounds whatever the zoom, so the topbar's in-view hint
   // would otherwise tell the user to zoom in while the route list already shows
@@ -209,8 +227,8 @@ export function useViewportPois(): ViewportPois {
   useEffect(() => {
     // The field means what it says: while a route owns the map, the corridor's
     // pins are not "in the viewport", so publish nothing rather than them.
-    setViewportCampgrounds(routeActive ? [] : buckets.cg.features, campgroundsRequested);
-  }, [routeActive, buckets, campgroundsRequested, setViewportCampgrounds]);
+    setViewportCampgrounds(routeActive ? [] : countedBuckets.cg.features, campgroundsRequested);
+  }, [routeActive, countedBuckets, campgroundsRequested, setViewportCampgrounds]);
 
   return { buckets, counts, agencies, campgroundsRequested };
 }
