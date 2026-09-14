@@ -606,3 +606,132 @@
     display: none;
   }
 }
+
+/* Campground filters (M2): the pill row, the controls block, the dates step. */
+.tb-filters {
+  padding: 0 6px 6px;
+}
+
+.tb-filters-pill-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tb-filters-hint {
+  font-size: 11px;
+  color: var(--rt-muted);
+}
+
+.tb-filters-badge {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--rt-brand-tint);
+  color: var(--rt-brand-text);
+  font-size: 11px;
+}
+
+.tb-filters-body {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--rt-border);
+  border-radius: 8px;
+  background: var(--rt-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tb-filters-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.tb-filters-heading {
+  font-weight: 600;
+  color: var(--rt-text);
+}
+
+.tb-filters-count {
+  color: var(--rt-muted);
+}
+
+.tb-filters-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tb-filters-chips {
+  flex-wrap: wrap;
+}
+
+.tb-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tb-stepper-value {
+  min-width: 2ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--rt-text);
+}
+
+.tb-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tb-dates-fields {
+  display: flex;
+  gap: 8px;
+}
+
+.tb-dates-error {
+  font-size: 11px;
+  color: var(--rt-error);
+}
+
+.tb-dates-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.tb-dates-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--rt-text);
+}
+
+/* The card's facet row: one entry per active filter, match, miss or no data. */
+.tb-facets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+.tb-facet {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--rt-text);
+}
+
+.tb-facet--miss {
+  color: var(--rt-muted);
+}
+
+.tb-facet--no-data {
+  color: var(--rt-faint);
+}
