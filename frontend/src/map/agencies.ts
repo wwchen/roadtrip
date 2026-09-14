@@ -55,10 +55,8 @@ export function sortedAgencies(counts: ReadonlyMap<string, number>): string[] {
 }
 
 /**
- * The campground layer filter for a set of switched-off agencies.
- *
- * Null means "no filter" — MapLibre wants the filter removed rather than set to a
- * tautology.
+ * Filter clauses to exclude the given agencies and, if requested, uncategorized
+ * campgrounds.
  *
  * The `Uncategorized` row needs its own clause because it is a sentinel, not a
  * value: MapLibre can only test properties that are present, so hiding it means
@@ -67,10 +65,9 @@ export function sortedAgencies(counts: ReadonlyMap<string, number>): string[] {
  * whitespace counts as `Uncategorized` in the legend (`featureAgency` trims) but
  * still satisfies `['has', 'agency']`, so hiding that row leaves it painted.
  */
-export function hiddenAgencyFilter(hidden: readonly string[]): FilterSpecification | null {
+function hiddenAgencyClauses(hidden: readonly string[]): ExpressionSpecification[] {
   const hideUncategorized = hidden.includes(UNCATEGORIZED_AGENCY);
   const namedHidden = hidden.filter((agency) => agency !== UNCATEGORIZED_AGENCY);
-  if (namedHidden.length === 0 && !hideUncategorized) return null;
 
   const clauses: ExpressionSpecification[] = [];
   if (namedHidden.length > 0) {
@@ -79,7 +76,18 @@ export function hiddenAgencyFilter(hidden: readonly string[]): FilterSpecificati
   if (hideUncategorized) {
     clauses.push(['has', 'agency']);
   }
-  return ['all', ...clauses];
+  return clauses;
+}
+
+/**
+ * The campground layer filter for a set of switched-off agencies.
+ *
+ * Null means "no filter" — MapLibre wants the filter removed rather than set to a
+ * tautology.
+ */
+export function hiddenAgencyFilter(hidden: readonly string[]): FilterSpecification | null {
+  const clauses = hiddenAgencyClauses(hidden);
+  return clauses.length === 0 ? null : ['all', ...clauses];
 }
 
 /**
@@ -94,12 +102,11 @@ export function campgroundLayerFilter(
   hidden: readonly string[],
   matchingIds: ReadonlySet<number> | null,
 ): FilterSpecification | null {
-  const agencyFilter = hiddenAgencyFilter(hidden);
-  if (matchingIds === null) return agencyFilter;
+  const clauses = [...hiddenAgencyClauses(hidden)];
 
-  const idClause: ExpressionSpecification = ['in', ['id'], ['literal', [...matchingIds]]];
-  // `hiddenAgencyFilter` always returns `['all', ...clauses]`, never a bare
-  // clause — flatten it rather than nesting an `all` inside this `all`.
-  const agencyClauses = (agencyFilter as unknown as ExpressionSpecification[] | null)?.slice(1) ?? [];
-  return ['all', ...agencyClauses, idClause];
+  if (matchingIds !== null) {
+    clauses.push(['in', ['id'], ['literal', [...matchingIds]]]);
+  }
+
+  return clauses.length === 0 ? null : ['all', ...clauses];
 }

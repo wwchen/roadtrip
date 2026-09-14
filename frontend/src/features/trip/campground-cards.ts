@@ -49,8 +49,7 @@ export function cardsFromSummaries(
 
 /**
  * Known matches first, then cards with a no-data facet — nearest-first order
- * kept within each group. Stable and allocation-free when nothing moves: the
- * common case, with no filter active, returns the same array instance.
+ * kept within each group. Returns the same array instance when one partition is empty.
  */
 export function rankCards(
   cards: readonly InViewCard[],
