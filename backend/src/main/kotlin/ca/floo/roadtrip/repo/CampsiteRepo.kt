@@ -464,13 +464,14 @@ class CampsiteRepo(
     }
 }
 
-/** Every stored `campsites.kind` is a [CampsiteKind] wire value; a key that matches none is dropped rather than thrown. */
+/** `campsites.kind` is CHECK-constrained to the [CampsiteKind] wire values, so an unknown key is corruption, not data. */
 internal fun decodeSiteCounts(json: String?): Map<CampsiteKind, Int> {
     if (json.isNullOrBlank()) return emptyMap()
     return Json
         .parseToJsonElement(json)
         .jsonObject
-        .mapNotNull { (key, value) ->
-            CampsiteKind.entries.firstOrNull { it.wire == key }?.let { it to value.jsonPrimitive.int }
+        .map { (key, value) ->
+            val kind = CampsiteKind.fromWire(key) ?: error("Unknown campsite kind in campground_site_summary: $key")
+            kind to value.jsonPrimitive.int
         }.toMap()
 }
