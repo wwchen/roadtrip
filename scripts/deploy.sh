@@ -302,6 +302,7 @@ _deploy_prod() {
     _require_sha "companion tree SHA" "${companion_sha}"
 
     _clear_stale_deploys
+    "${RECLAIM}" prune --scope host --no-include-anonymous
     "${RECLAIM}" check-disk --label "prod deploy" --scope host --min-gb "${ROADTRIP_MIN_FREE_DISK_GB:-${MIN_FREE_DISK_GB}}" || exit 1
 
     export ROADTRIP_BACKEND_IMAGE="ghcr.io/wwchen/roadtrip/backend:${app_sha}"
@@ -795,8 +796,10 @@ esac
 
 # ── Host health ───────────────────────────────────────────────────────────────
 # Sandboxes share the deploy host with prod, so a sandbox that fills the disk
-# deadlocks the daemon for prod too. Teardown is exempt: it frees space.
+# deadlocks the daemon for prod too. Preflight prunes first so policy-eligible
+# space is reclaimed before the check; teardown is exempt because it frees space.
 _clear_stale_deploys
+"${RECLAIM}" prune --scope host --no-include-anonymous
 "${RECLAIM}" check-disk --label "sandbox deploy" --scope host --min-gb "${ROADTRIP_MIN_FREE_DISK_GB:-${MIN_FREE_DISK_GB}}" || exit 1
 
 # ── Derive logical sandbox owner ──────────────────────────────────────────────

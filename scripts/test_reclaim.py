@@ -24,6 +24,7 @@ case "$1" in
     case "$2" in
       ls) [ "$3" = "roadtrip/backend" ] && cat "$FAKE_IMAGE_LS" 2>/dev/null; true ;;
       inspect) echo "sha256:deadbeef" ;;
+      prune) printf 'Deleted Images:\\nsha256:deadbeef\\n\\nTotal reclaimed space: 42MB\\n' ;;
     esac
     ;;
 esac
@@ -220,6 +221,26 @@ class PruneTest(ReclaimTestCase):
                    if c.startswith("image rm roadtrip/backend")]
         self.assertEqual(removed, [])
 
+    def test_image_prune_reports_its_total_instead_of_being_silenced(self) -> None:
+        # The sweep log used to have no way to show whether the dangling
+        # image prune freed anything, because that one call was routed
+        # through _docker_quiet. It now goes through _docker | tail -1,
+        # same as the volume and container prunes.
+        done = self.run_reclaim("prune", "--scope", "local")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("Total reclaimed space: 42MB", done.stdout)
+
+    def test_image_prune_dry_run_still_prints_the_dry_run_line(self) -> None:
+        done = self.run_reclaim("prune", "--scope", "local", "--dry-run")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("dry-run: docker image prune -f", done.stdout)
+        self.assertNotIn("Total reclaimed space", done.stdout)
+
+    def test_default_image_retention_is_72_hours(self) -> None:
+        done = self.run_reclaim("prune", "--scope", "local", "--dry-run")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("until=72h", done.stdout)
+
 
 class DeployIntegrationTest(unittest.TestCase):
     """deploy.sh must delegate reclaim, and must NOT lose the volume hold.
@@ -247,22 +268,41 @@ class DeployIntegrationTest(unittest.TestCase):
         self.assertIn('"${RECLAIM}" check-disk --label "prod deploy"', self.source)
         self.assertIn('"${RECLAIM}" check-disk --label "sandbox deploy"', self.source)
         self.assertIn("MIN_FREE_DISK_GB", self.source)
-        # Three call sites, not two: prod deploy, sandbox teardown, and the
-        # sandbox-up success path (top-level, after the health check passes).
-        # The original brief for this task said two; grepping the actual file
-        # showed a third at the end of the sandbox-up flow that the brief
-        # missed. All three must delegate or two of them would call deleted
-        # functions.
-        self.assertEqual(self.source.count('"${RECLAIM}" prune --scope host'), 3)
+        # Five call sites, not three: prod-deploy preflight and post-deploy,
+        # sandbox-preflight and teardown, and the sandbox-up success path
+        # (top-level, after the health check passes). Preflight now prunes
+        # before check-disk on both the prod and sandbox paths, so a host
+        # that dips under the free-space floor reclaims policy-eligible
+        # space immediately rather than waiting for the next scheduled sweep.
+        self.assertEqual(self.source.count('"${RECLAIM}" prune --scope host'), 5)
         # Pre-branch, only the 30-minute sweep pruned anonymous volumes;
-        # deploy.sh's own prune was label-scoped only. All three deploy.sh
+        # deploy.sh's own prune was label-scoped only. All five deploy.sh
         # call sites run far more often than the sweep (every prod deploy,
         # sandbox up, and sandbox down), so they must opt back out of
         # anonymous-volume pruning rather than inherit --scope host's default.
         self.assertEqual(
             self.source.count('"${RECLAIM}" prune --scope host --no-include-anonymous'),
-            3,
+            5,
         )
+
+    def test_preflight_prunes_before_it_checks_disk(self) -> None:
+        # A host under the free-space floor must reclaim policy-eligible
+        # space before check-disk measures it, not after a successful
+        # deploy -- otherwise nothing prunes until the next scheduled sweep.
+        prune_call = '"${RECLAIM}" prune --scope host --no-include-anonymous'
+        for label in ('prod deploy', 'sandbox deploy'):
+            check_call = f'"${{RECLAIM}}" check-disk --label "{label}"'
+            check_index = self.source.index(check_call)
+            preceding = self.source[:check_index]
+            self.assertIn(
+                prune_call, preceding,
+                f"{label} preflight must prune before check-disk",
+            )
+            # The prune is the line right before check-disk, so a stray
+            # command cannot slip in between reclaiming and measuring.
+            last_prune_index = preceding.rindex(prune_call)
+            between = preceding[last_prune_index + len(prune_call):check_index]
+            self.assertEqual(between.strip(), "", f"{label}: {between!r}")
 
     def test_volume_hold_survives(self) -> None:
         self.assertIn("_hold_data_volume() {", self.source)

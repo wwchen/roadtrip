@@ -13,7 +13,9 @@ set -euo pipefail
 
 MANAGED_LABEL="ca.floo.roadtrip.managed=true"
 
-: "${ROADTRIP_IMAGE_RETENTION:=336h}"
+# Untagged managed digests only; rollback depth for tagged images is the
+# keep-N window below, so this just bounds how long dangling layers linger.
+: "${ROADTRIP_IMAGE_RETENTION:=72h}"
 : "${RECLAIM_FREE_TARGET_GB:=20}"
 
 # Rollback depth on the host; pure disk pressure locally. A laptop keeps two
@@ -169,9 +171,9 @@ _prune_images() {
         done
     done
 
-    _docker_quiet image prune -f \
+    _docker image prune -f \
         --filter "label=${MANAGED_LABEL}" \
-        --filter "until=${ROADTRIP_IMAGE_RETENTION}"
+        --filter "until=${ROADTRIP_IMAGE_RETENTION}" | tail -1
 }
 
 # One roadtrip-data-<sha> volume per data tree SHA, which the image prune never
