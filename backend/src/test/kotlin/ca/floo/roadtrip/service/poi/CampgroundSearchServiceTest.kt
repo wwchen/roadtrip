@@ -1,0 +1,177 @@
+package ca.floo.roadtrip.service.poi
+
+import ca.floo.roadtrip.config.CampgroundSearchConfig
+import ca.floo.roadtrip.fixtures.RECGOV_DISPLAY_NAME
+import ca.floo.roadtrip.fixtures.shippedTenantRegistry
+import ca.floo.roadtrip.fixtures.testBookingHorizons
+import ca.floo.roadtrip.model.api.campground.BoundaryDto
+import ca.floo.roadtrip.model.api.campground.CampgroundDetailsRequestDto
+import ca.floo.roadtrip.model.api.campground.CampgroundFilterDto
+import ca.floo.roadtrip.model.api.campground.CampgroundSearchRequestDto
+import ca.floo.roadtrip.model.api.campground.GeoJsonBoundaryType
+import ca.floo.roadtrip.model.domain.CampgroundSearchError
+import ca.floo.roadtrip.model.domain.CampsiteKind
+import ca.floo.roadtrip.repo.CampgroundRepo
+import ca.floo.roadtrip.repo.CampgroundSearchRepo
+import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCampsite
+import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.service.availability.BookingIdentityResolver
+import ca.floo.roadtrip.service.poi.campground.CampgroundCta
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+private const val TAHOE =
+    """{"type":"Polygon","coordinates":[[[-120.4,38.7],[-119.6,38.7],[-119.6,39.4],[-120.4,39.4],[-120.4,38.7]]]}"""
+
+class CampgroundSearchServiceTest : SharedDbTest() {
+    private fun service(config: CampgroundSearchConfig = CampgroundSearchConfig.default) =
+        CampgroundSearchService(
+            searchRepo = CampgroundSearchRepo(ctx, enabledDataProviders = setOf("recgov", "campflare")),
+            campgroundRepo = CampgroundRepo(ctx),
+            bookingHorizons = testBookingHorizons(ctx, emptyList()),
+            identities = BookingIdentityResolver(shippedTenantRegistry()),
+            cta = CampgroundCta(shippedTenantRegistry()),
+            config = config,
+        )
+
+    private fun boundary(json: String) = Json.decodeFromString<BoundaryDto>(json)
+
+    @BeforeEach
+    fun cleanup() {
+        ctx.cleanCanonicalCatalogFixtures()
+    }
+
+    @Test
+    fun `search returns ids inside the boundary that pass the filter`() {
+        val tent = ctx.seedCatalogPoi(sourceId = "t", name = "Tent Flat", lon = -120.0, lat = 39.0)
+        ctx.seedCampsite(campgroundId = tent.campgroundId, vendorId = "1", kind = CampsiteKind.TENT.wire)
+        val rv = ctx.seedCatalogPoi(sourceId = "r", name = "RV Park", lon = -120.1, lat = 39.0)
+        ctx.seedCampsite(campgroundId = rv.campgroundId, vendorId = "2", kind = CampsiteKind.RV.wire)
+
+        val response =
+            service().search(
+                CampgroundSearchRequestDto(
+                    boundary = boundary(TAHOE),
+                    filter = CampgroundFilterDto(siteType = CampsiteKind.TENT),
+                ),
+            )
+
+        assertEquals(listOf(tent.poiId), response.campgroundIds)
+        assertEquals(2, response.totalInBoundary)
+        assertFalse(response.truncated)
+    }
+
+    @Test
+    fun `a missing boundary is refused`() {
+        val missing = assertFailsWith<CampgroundSearchRequestException> { service().search(CampgroundSearchRequestDto()) }
+        assertEquals(CampgroundSearchError.BAD_BOUNDARY, missing.error)
+    }
+
+    @Test
+    fun `details maps the summary row onto the DTO`() {
+        val poi =
+            ctx.seedCatalogPoi(
+                sourceId = "nb",
+                name = "Nevada Beach",
+                lon = -119.943,
+                lat = 38.976,
+                agency = "USDA Forest Service",
+                region = "NV",
+                amenitiesJson = """[{"key":"toilets","present":true},{"key":"showers","present":false}]""",
+            )
+        ctx.seedCampsite(campgroundId = poi.campgroundId, vendorId = "1", kind = CampsiteKind.TENT.wire, maxPeople = 8)
+
+        val response = service().details(CampgroundDetailsRequestDto(campgroundIds = listOf(poi.poiId)))
+
+        val summary = response.campgrounds.single()
+        assertEquals(poi.poiId, summary.id)
+        assertEquals(poi.campgroundId, summary.campgroundId)
+        assertEquals("Nevada Beach", summary.name)
+        assertEquals("NV", summary.region)
+        assertEquals("USDA Forest Service", summary.agency)
+        assertEquals(mapOf(CampsiteKind.TENT to 1), summary.siteCounts)
+        assertEquals(1, summary.siteTotal)
+        assertEquals(8, summary.maxPeople)
+        assertEquals(listOf("toilets", "showers"), summary.amenities.map { it.key })
+        assertFalse(summary.availabilitySupported)
+        assertNull(summary.bookingSystem)
+    }
+
+    @Test
+    fun `details reports availability_supported and booking_system for a bookable campground`() {
+        val poi =
+            ctx.seedCatalogPoi(
+                sourceId = "bookable",
+                name = "Bookable Beach",
+                lon = -119.9,
+                lat = 39.0,
+                bookingProvider = "recgov",
+                bookingProviderRef = "233623",
+            )
+
+        val summary = service().details(CampgroundDetailsRequestDto(campgroundIds = listOf(poi.poiId))).campgrounds.single()
+
+        assertTrue(summary.availabilitySupported)
+        assertEquals(RECGOV_DISPLAY_NAME, summary.bookingSystem)
+    }
+
+    @Test
+    fun `a boundary PostGIS rejects is refused as bad_boundary`() {
+        // Structurally a JsonArray, so it decodes fine as BoundaryDto; ST_GeomFromGeoJSON still
+        // rejects it because a Polygon's coordinates must nest into linear rings, not bare numbers.
+        val notARing =
+            BoundaryDto(
+                type = GeoJsonBoundaryType.POLYGON,
+                coordinates =
+                    buildJsonArray {
+                        add(JsonPrimitive(1))
+                        add(JsonPrimitive(2))
+                        add(JsonPrimitive(3))
+                    },
+            )
+
+        val error =
+            assertFailsWith<CampgroundSearchRequestException> {
+                service().search(CampgroundSearchRequestDto(boundary = notARing))
+            }
+
+        assertEquals(CampgroundSearchError.BAD_BOUNDARY, error.error)
+    }
+
+    @Test
+    fun `details without sites reports zero and no people count`() {
+        val poi = ctx.seedCatalogPoi(sourceId = "e", name = "Empty", lon = -120.0, lat = 39.0)
+
+        val summary = service().details(CampgroundDetailsRequestDto(campgroundIds = listOf(poi.poiId))).campgrounds.single()
+
+        assertEquals(0, summary.siteTotal)
+        assertTrue(summary.siteCounts.isEmpty())
+        assertNull(summary.maxPeople)
+    }
+
+    @Test
+    fun `details refuses more ids than the cap`() {
+        val error =
+            assertFailsWith<CampgroundSearchRequestException> {
+                service(CampgroundSearchConfig(maxResults = 10, maxDetailIds = 2))
+                    .details(CampgroundDetailsRequestDto(campgroundIds = listOf(1, 2, 3)))
+            }
+        assertEquals(CampgroundSearchError.TOO_MANY_IDS, error.error)
+    }
+
+    @Test
+    fun `details with no ids is an empty answer, not an error`() {
+        assertTrue(service().details(CampgroundDetailsRequestDto()).campgrounds.isEmpty())
+    }
+}

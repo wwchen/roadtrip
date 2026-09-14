@@ -16,6 +16,7 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
+import ca.floo.roadtrip.repo.CampgroundSearchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiRepo
@@ -71,6 +72,7 @@ import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
 import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
+import ca.floo.roadtrip.service.poi.CampgroundSearchService
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiReader
@@ -442,6 +444,16 @@ val serviceModule =
             )
         }
         single<PoiReader> { get<PoiService>() }
+        single {
+            CampgroundSearchService(
+                searchRepo = get<CampgroundSearchRepo>(),
+                campgroundRepo = get<CampgroundRepo>(),
+                bookingHorizons = get<BookingHorizonResolver>(),
+                identities = get<BookingIdentityResolver>(),
+                cta = get<CampgroundCta>(),
+                config = get<AppConfig>().campgroundSearch,
+            )
+        }
         single<ReadinessService> { ReadinessServiceImpl(databaseHealthRepo = get()) }
         single {
             PoisOnRouteService(

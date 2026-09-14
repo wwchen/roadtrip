@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.api.poi.PoiDetailPropertiesSchema
 import ca.floo.roadtrip.model.api.poi.PriceDto
 import ca.floo.roadtrip.model.api.poi.RatingDto
 import ca.floo.roadtrip.model.api.poi.ScheduleDto
+import ca.floo.roadtrip.model.domain.CAMPGROUND_POI_TYPE
 import ca.floo.roadtrip.model.domain.CatalogColumnJson
 import ca.floo.roadtrip.model.domain.bookingIdentities
 import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
@@ -117,7 +118,7 @@ internal class CampgroundService(
     }
 
     companion object {
-        const val POI_TYPE = "campground"
+        const val POI_TYPE = CAMPGROUND_POI_TYPE
         const val MIN_POI_ZOOM: Int = 6
     }
 }

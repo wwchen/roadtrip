@@ -1,10 +1,15 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.model.domain.CampgroundSiteSummary
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogColumnJson
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL
@@ -41,6 +46,20 @@ class CampsiteRepo(
             tx.bulkUpsertCampsitesTx(records)
         }
     }
+
+    fun findSiteSummary(campgroundId: Long): CampgroundSiteSummary? =
+        ctx
+            .fetchOne(
+                "SELECT site_total, site_counts::text AS site_counts_text, max_people FROM campground_site_summary(?)",
+                campgroundId,
+            )?.takeIf { it.get("site_total", Int::class.javaObjectType) != null }
+            ?.let { record ->
+                CampgroundSiteSummary(
+                    siteTotal = record.get("site_total", Int::class.java),
+                    siteCounts = decodeSiteCounts(record.get("site_counts_text", String::class.java)),
+                    maxPeople = record.get("max_people", Int::class.javaObjectType),
+                )
+            }
 
     private fun bulkUpsertCampsitesTx(records: List<CampsiteUpsertCandidate>): Pair<Int, Int> {
         if (records.isEmpty()) return 0 to 0
@@ -404,4 +423,16 @@ class CampsiteRepo(
             FROM campsites c
             """.trimIndent()
     }
+}
+
+/** `campsites.kind` is CHECK-constrained to the [CampsiteKind] wire values, so an unknown key is corruption, not data. */
+internal fun decodeSiteCounts(json: String?): Map<CampsiteKind, Int> {
+    if (json.isNullOrBlank()) return emptyMap()
+    return Json
+        .parseToJsonElement(json)
+        .jsonObject
+        .map { (key, value) ->
+            val kind = CampsiteKind.fromWire(key) ?: error("Unknown campsite kind in campground_site_summary: $key")
+            kind to value.jsonPrimitive.int
+        }.toMap()
 }

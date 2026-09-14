@@ -84,6 +84,7 @@ fun DSLContext.seedCatalogPoi(
     bookingProvider: String? = null,
     bookingProviderRef: String? = null,
     bookingAliasesJson: String = EMPTY_BOOKING_ALIASES,
+    amenitiesJson: String = "[]",
     refresh: Boolean = true,
 ): CatalogPoiFixture {
     val canonicalType = canonicalPoiType(poiType)
@@ -120,6 +121,7 @@ fun DSLContext.seedCatalogPoi(
                         bookingProvider = bookingProvider,
                         bookingProviderRef = bookingProviderRef,
                         bookingAliasesJson = bookingAliasesJson,
+                        amenitiesJson = amenitiesJson,
                         refresh = false,
                     )
                 execute("INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)", poiId, campgroundId)
@@ -199,17 +201,19 @@ fun DSLContext.seedCampground(
     bookingProvider: String? = null,
     bookingProviderRef: String? = null,
     bookingAliasesJson: String = EMPTY_BOOKING_ALIASES,
+    amenitiesJson: String = "[]",
     refresh: Boolean = true,
 ): Long =
     fetchOne(
         """
         INSERT INTO campgrounds (
           name, kind, data_provider, data_provider_ref, booking_provider, booking_provider_ref, booking_aliases,
-          location, management, source_payload
+          location, management, amenities, source_payload
         ) VALUES (
           ?, ?, ?, ?, ?, ?, ?::jsonb,
           jsonb_strip_nulls(jsonb_build_object('region', ?::text, 'country', ?::text)),
           jsonb_strip_nulls(jsonb_build_object('agency', ?::text)),
+          ?::jsonb,
           ?::jsonb
         )
         RETURNING id
@@ -224,6 +228,7 @@ fun DSLContext.seedCampground(
         region,
         country,
         agency,
+        amenitiesJson,
         providerRefJson ?: sourcePayloadJson,
     )!!
         .get("id", Long::class.java)
@@ -234,6 +239,7 @@ fun DSLContext.seedCampsite(
     vendorId: String,
     name: String = "Site $vendorId",
     kind: String = CampsiteKind.OTHER.wire,
+    maxPeople: Int? = null,
     loopName: String? = null,
     reservationUrl: String? = null,
     providerRefJson: String? = null,
@@ -246,16 +252,17 @@ fun DSLContext.seedCampsite(
     fetchOne(
         """
         INSERT INTO campsites (
-          campground_id, name, kind, data_provider, data_provider_ref,
+          campground_id, name, kind, max_people, data_provider, data_provider_ref,
           booking_provider, booking_provider_ref, booking_aliases, loop_name, reservation_url, source_payload
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?::jsonb
+          ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?::jsonb
         )
         RETURNING id
         """.trimIndent(),
         campgroundId,
         name,
         kind,
+        maxPeople,
         vendor,
         vendorId,
         bookingProvider,

@@ -1,5 +1,9 @@
 package ca.floo.roadtrip.model.api
 
+import ca.floo.roadtrip.model.api.campground.CampgroundDetailsRequestDto
+import ca.floo.roadtrip.model.api.campground.CampgroundDetailsResponseDto
+import ca.floo.roadtrip.model.api.campground.CampgroundSearchRequestDto
+import ca.floo.roadtrip.model.api.campground.CampgroundSearchResponseDto
 import ca.floo.roadtrip.model.api.poi.OnRouteRequestDto
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoiFeatureCollectionSchema
@@ -328,6 +332,23 @@ object ApiContract {
                         HTTP_NOT_IMPLEMENTED,
                         HTTP_SERVICE_UNAVAILABLE,
                     ).map { ApiBody(it, AvailabilityErrorDto::class) },
+            ),
+            ApiEndpoint(
+                ApiMethod.POST,
+                "/api/campgrounds/search",
+                CampgroundSearchRequestDto::class,
+                ApiBody(HTTP_OK, CampgroundSearchResponseDto::class),
+                // CampgroundRoutes.kt: an unparseable body, a missing or non-polygon boundary,
+                // or an unknown site_type / amenity.
+                apiErrors(HTTP_BAD_REQUEST),
+            ),
+            ApiEndpoint(
+                ApiMethod.POST,
+                "/api/campgrounds/details",
+                CampgroundDetailsRequestDto::class,
+                ApiBody(HTTP_OK, CampgroundDetailsResponseDto::class),
+                // CampgroundRoutes.kt: an unparseable body or more ids than max-detail-ids.
+                apiErrors(HTTP_BAD_REQUEST),
             ),
             ApiEndpoint(
                 ApiMethod.GET,

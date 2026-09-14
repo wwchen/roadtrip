@@ -55,6 +55,8 @@ export interface AmenityDto {
   detail?: string;
 }
 
+export type AmenityKey = 'camp_store' | 'dump_station' | 'electric_hookups' | 'fires_allowed' | 'pets_allowed' | 'sewer_hookups' | 'showers' | 'toilets' | 'trash' | 'water' | 'water_hookups' | 'wifi' | 'other';
+
 export interface ApiErrorSchema {
   error: string;
   detail?: string;
@@ -259,6 +261,11 @@ export interface BookingSettingsDto {
   recgov_username?: string;
 }
 
+export interface BoundaryDto {
+  type: GeoJsonBoundaryType;
+  coordinates: unknown[];
+}
+
 export interface BuildInfoDto {
   env: string;
   sha: string;
@@ -283,6 +290,49 @@ export interface BulkPoiAvailabilityDto {
   end_date?: string;
   campsites?: AvailabilityResponseDto[];
   error?: string;
+}
+
+export interface CampgroundDetailsRequestDto {
+  campground_ids?: number[];
+}
+
+export interface CampgroundDetailsResponseDto {
+  campgrounds: CampgroundSummaryDto[];
+}
+
+export interface CampgroundFilterDto {
+  site_type?: CampsiteKind;
+  group_size?: number;
+  amenities?: AmenityKey[];
+}
+
+export interface CampgroundSearchRequestDto {
+  boundary?: BoundaryDto;
+  filter?: CampgroundFilterDto;
+}
+
+export interface CampgroundSearchResponseDto {
+  campground_ids: number[];
+  total_in_boundary: number;
+  total_matching: number;
+  truncated: boolean;
+}
+
+export interface CampgroundSummaryDto {
+  id: number;
+  campground_id: number;
+  name: string;
+  region?: string;
+  agency?: string;
+  lng: number;
+  lat: number;
+  rating?: RatingDto;
+  availability_supported: boolean;
+  booking_system?: string;
+  amenities: AmenityDto[];
+  site_counts: Partial<Record<CampsiteKind, number>>;
+  site_total: number;
+  max_people?: number;
 }
 
 export interface CampsiteAttribute {
@@ -320,6 +370,8 @@ export interface CampsiteDto {
   booking_provider?: string;
   booking_system?: string;
 }
+
+export type CampsiteKind = 'standard' | 'tent' | 'rv' | 'cabin' | 'group' | 'walk_in' | 'boat_in' | 'equestrian' | 'backcountry' | 'day_use' | 'other';
 
 export interface CarrierSignalDto {
   carrier: string;
@@ -364,6 +416,8 @@ export interface FanOutResponseSchema {
   kind: string;
   outcomes: RunOutcomeSchema[];
 }
+
+export type GeoJsonBoundaryType = 'Polygon' | 'MultiPolygon';
 
 export interface GeocodeResponseDto {
   results: GeocodeResultDto[];
@@ -790,6 +844,8 @@ export const API_ENDPOINTS = [
   { method: 'GET', path: '/api/availability/runs', request: null, requestRequired: true, success: { status: 200, type: 'AvailabilityRunsListResponse' }, errors: [] },
   { method: 'POST', path: '/api/booking/add-to-cart', request: 'AddToCartRequestDto', requestRequired: true, success: { status: 200, type: 'AddToCartResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 403, type: 'ApiErrorSchema' }, { status: 409, type: 'ApiErrorSchema' }, { status: 422, type: 'ApiErrorSchema' }, { status: 502, type: 'ApiErrorSchema' }] },
   { method: 'GET', path: '/api/build-info', request: null, requestRequired: true, success: { status: 200, type: 'BuildInfoDto' }, errors: [] },
+  { method: 'POST', path: '/api/campgrounds/details', request: 'CampgroundDetailsRequestDto', requestRequired: true, success: { status: 200, type: 'CampgroundDetailsResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }] },
+  { method: 'POST', path: '/api/campgrounds/search', request: 'CampgroundSearchRequestDto', requestRequired: true, success: { status: 200, type: 'CampgroundSearchResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }] },
   { method: 'GET', path: '/api/geocode', request: null, requestRequired: true, success: { status: 200, type: 'GeocodeResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 503, type: 'ApiErrorSchema' }] },
   { method: 'GET', path: '/api/health', request: null, requestRequired: true, success: { status: 200, type: 'HealthResponseDto' }, errors: [] },
   { method: 'GET', path: '/api/health/ready', request: null, requestRequired: true, success: { status: 200, type: 'ReadinessResponseDto' }, errors: [{ status: 503, type: 'ReadinessResponseDto' }] },

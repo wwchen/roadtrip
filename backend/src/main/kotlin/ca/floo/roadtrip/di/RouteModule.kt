@@ -19,6 +19,7 @@ import ca.floo.roadtrip.route.api.availability.availabilityDashboardRoutes
 import ca.floo.roadtrip.route.api.availability.availabilityWatchRoutes
 import ca.floo.roadtrip.route.api.bookingRoutes
 import ca.floo.roadtrip.route.api.buildInfoRoutes
+import ca.floo.roadtrip.route.api.campgrounds.campgroundRoutes
 import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
 import ca.floo.roadtrip.route.api.health.healthRoutes
@@ -68,6 +69,7 @@ import ca.floo.roadtrip.service.booking.BookingActionService
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.geocode.GeocodeService
 import ca.floo.roadtrip.service.health.ReadinessService
+import ca.floo.roadtrip.service.poi.CampgroundSearchService
 import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.ref.RefResolver
@@ -106,6 +108,7 @@ internal fun Application.registerKoinRoutes() {
     val bookingIdentities: BookingIdentityResolver by inject()
     val failoverFetcher: FailoverAvailabilityFetcher by inject()
     val poiService: PoiReader by inject()
+    val campgroundSearchService: CampgroundSearchService by inject()
     val poisOnRouteService: PoisOnRouteService by inject()
     val routePlanService: RoutePlanService by inject()
     val routeResponseMapper: RouteResponseMapper by inject()
@@ -139,6 +142,7 @@ internal fun Application.registerKoinRoutes() {
         recgovSettingsRoutes(recgovCredentials)
         bookingRoutes(bookingActions)
         poiRoutes(poiService)
+        campgroundRoutes(campgroundSearchService, config.campgroundSearch)
         availabilityWatchRoutes(
             availabilityWatchController(campsiteRepo, watchRepo, userRepo, watchService, watchCapabilities),
         )
