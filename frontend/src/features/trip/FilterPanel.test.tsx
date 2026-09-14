@@ -80,4 +80,15 @@ describe('FilterPanel', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     expect(screen.getByText('The end date must be after the start date.')).toBeInTheDocument();
   });
+
+  test('non-ISO dates disable Save and show format hint', () => {
+    mount();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add dates' }));
+    fireEvent.input(screen.getByLabelText('Start date'), { target: { value: '9/11/2026' } });
+    fireEvent.input(screen.getByLabelText('End date'), { target: { value: '9/13/2026' } });
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.getByText('Enter dates as YYYY-MM-DD.')).toBeInTheDocument();
+  });
 });
