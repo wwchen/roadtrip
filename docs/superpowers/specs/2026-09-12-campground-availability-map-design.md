@@ -100,7 +100,7 @@ data that today costs two requests per card (detail + campsites, up to 100 round
 
 | Endpoint | Request | Response | Purpose |
 |---|---|---|---|
-| `POST /api/campgrounds/search` | `{ boundary: GeoJSON Polygon/MultiPolygon, filter?: CampgroundFilterDto }` | `{ campground_ids: number[], total_in_boundary: number, truncated: boolean }` | Which campgrounds inside a boundary satisfy the filter. |
+| `POST /api/campgrounds/search` | `{ boundary: GeoJSON Polygon/MultiPolygon, filter?: CampgroundFilterDto }` | `{ campground_ids: number[], total_in_boundary: number, total_matching: number, truncated: boolean }` | Which campgrounds inside a boundary satisfy the filter. |
 | `POST /api/campgrounds/details` | `{ campground_ids: number[] }` | `{ campgrounds: CampgroundSummaryDto[] }` | Bulk summaries for the ids the list will render. |
 
 Identity: `campground_ids` are **POI ids** (the `pois` row of category campground), because
@@ -121,7 +121,8 @@ both come from `make api-types`, never by hand.
 |---|---|---|
 | `id` | `Long` | POI id |
 | `campground_id` | `Long` | `campgrounds.id` |
-| `name`, `region`, `agency` | `String?` | as `GET /api/pois/{id}` |
+| `name` | `String` | as `GET /api/pois/{id}` |
+| `region`, `agency` | `String?` | as `GET /api/pois/{id}` |
 | `lng`, `lat` | `Double` | POI centroid |
 | `rating` | `RatingDto?` | as detail |
 | `availability_supported`, `booking_system` | `Boolean`, `String?` | as detail |

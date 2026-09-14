@@ -13,6 +13,7 @@ import ca.floo.roadtrip.model.domain.AmenityKey
 import ca.floo.roadtrip.model.domain.CampgroundSearchFilter
 import ca.floo.roadtrip.model.domain.CampgroundSummaryRow
 import ca.floo.roadtrip.model.domain.CampsiteKind
+import ca.floo.roadtrip.model.domain.InvalidBoundaryException
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampgroundSearchRepo
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
@@ -42,10 +43,16 @@ internal class CampgroundSearchService(
     fun search(request: CampgroundSearchRequestDto): CampgroundSearchResponseDto {
         val boundary = validatedBoundary(request.boundary)
         val filter = validatedFilter(request.filter ?: CampgroundFilterDto())
-        val result = searchRepo.searchWithinBoundary(boundary.toString(), filter, limit = config.maxResults)
+        val result =
+            try {
+                searchRepo.searchWithinBoundary(boundary.toString(), filter, limit = config.maxResults)
+            } catch (e: InvalidBoundaryException) {
+                throw CampgroundSearchRequestException("bad_boundary", "boundary is not valid GeoJSON geometry")
+            }
         return CampgroundSearchResponseDto(
             campgroundIds = result.poiIds,
             totalInBoundary = result.totalInBoundary,
+            totalMatching = result.totalMatching,
             truncated = result.truncated,
         )
     }

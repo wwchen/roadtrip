@@ -2,8 +2,10 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.CampgroundSearchFilter
 import ca.floo.roadtrip.model.domain.CampgroundSearchResult
+import ca.floo.roadtrip.model.domain.InvalidBoundaryException
 import ca.floo.roadtrip.support.TOPOLOGY_FAULT_EMPTY_RESULT
 import ca.floo.roadtrip.support.causeChain
+import ca.floo.roadtrip.support.isGeometryParseFault
 import ca.floo.roadtrip.support.isTopologyFault
 import org.jooq.DSLContext
 import org.jooq.exception.DataAccessException
@@ -26,7 +28,7 @@ internal class CampgroundSearchRepo(
         limit: Int,
     ): CampgroundSearchResult {
         if (enabledDataProviders.isEmpty()) {
-            return CampgroundSearchResult(emptyList(), totalInBoundary = 0, truncated = false)
+            return CampgroundSearchResult(emptyList(), totalInBoundary = 0, totalMatching = 0, truncated = false)
         }
 
         val predicates = mutableListOf<String>()
@@ -57,7 +59,10 @@ internal class CampgroundSearchRepo(
             ),
             inside AS (
               SELECT p.id AS poi_id,
-                     ST_Distance(ST_Centroid(p.geom), ST_Centroid(boundary.poly)) AS dist,
+                     ST_Distance(
+                       ST_Centroid(p.geom)::geography,
+                       ST_Centroid(boundary.poly)::geography
+                     ) AS dist,
                      ($passes) AS passes
               FROM pois p
               JOIN poi_campgrounds pc ON pc.poi_id = p.id
@@ -67,6 +72,7 @@ internal class CampgroundSearchRepo(
               WHERE p.deleted_at IS NULL
                 AND p.poi_type = 'campground'
                 AND cg.data_provider IN ($providerPlaceholders)
+                AND p.geom && boundary.poly
                 AND ST_Within(ST_Centroid(p.geom), boundary.poly)
             )
             SELECT poi_id,
@@ -87,9 +93,10 @@ internal class CampgroundSearchRepo(
             try {
                 ctx.fetch(sql, *args.toTypedArray())
             } catch (e: DataAccessException) {
+                if (isGeometryParseFault(e)) throw InvalidBoundaryException("boundary is not valid GeoJSON geometry", e)
                 if (!isTopologyFault(e)) throw e
                 campgroundSearchLog.warn(TOPOLOGY_FAULT_EMPTY_RESULT, causeChain(e))
-                return CampgroundSearchResult(emptyList(), totalInBoundary = 0, truncated = false)
+                return CampgroundSearchResult(emptyList(), totalInBoundary = 0, totalMatching = 0, truncated = false)
             }
         val passing = rows.filter { it.get("passes", Boolean::class.java) }
         val totalInBoundary = rows.firstOrNull()?.let { (it.get("total_in_boundary") as Number).toInt() } ?: 0
@@ -97,6 +104,7 @@ internal class CampgroundSearchRepo(
         return CampgroundSearchResult(
             poiIds = passing.map { (it.get("poi_id") as Number).toLong() },
             totalInBoundary = totalInBoundary,
+            totalMatching = totalPassing,
             truncated = totalPassing > passing.size,
         )
     }

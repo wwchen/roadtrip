@@ -3,9 +3,11 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.fixtures.CatalogPoiFixture
 import ca.floo.roadtrip.model.domain.CampgroundSearchFilter
 import ca.floo.roadtrip.model.domain.CampsiteKind
+import ca.floo.roadtrip.model.domain.InvalidBoundaryException
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -76,6 +78,7 @@ class CampgroundSearchRepoTest : SharedDbTest() {
 
         assertEquals(setOf(tent.poiId, unknown.poiId), result.poiIds.toSet())
         assertEquals(3, result.totalInBoundary)
+        assertEquals(2, result.totalMatching)
     }
 
     @Test
@@ -114,7 +117,17 @@ class CampgroundSearchRepoTest : SharedDbTest() {
 
         assertEquals(2, result.poiIds.size)
         assertEquals(3, result.totalInBoundary)
+        assertEquals(3, result.totalMatching)
         assertTrue(result.truncated)
+    }
+
+    @Test
+    fun `a structurally invalid boundary throws InvalidBoundaryException`() {
+        val nonArrayCoordinates = """{"type":"Polygon","coordinates":"nope"}"""
+
+        assertFailsWith<InvalidBoundaryException> {
+            repo().searchWithinBoundary(nonArrayCoordinates, noFilter, limit = 10)
+        }
     }
 
     @Test

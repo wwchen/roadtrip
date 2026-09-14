@@ -2,6 +2,8 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.CampgroundSiteSummary
 import ca.floo.roadtrip.model.domain.CampsiteKind
+import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -67,5 +69,36 @@ class CampsiteRepoSummaryTest : SharedDbTest() {
     @Test
     fun `a refresh with no ids is a no-op`() {
         repo.refreshSiteSummaries(emptyList())
+    }
+
+    @Test
+    fun `upserting a batch through the production path wires the summary refresh`() {
+        val campground = ctx.seedCampground(name = "Sunset Ridge", sourceId = "sunset-ridge")
+        val candidates =
+            listOf(
+                CampsiteUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = "sunset-ridge-1"),
+                    parentDataProviderRef = DataProviderRef.RecGov(id = "sunset-ridge"),
+                    name = "Site 1",
+                    kind = CampsiteKind.TENT,
+                    maxPeople = 4,
+                ),
+                CampsiteUpsertCandidate(
+                    dataProviderRef = DataProviderRef.RecGov(id = "sunset-ridge-2"),
+                    parentDataProviderRef = DataProviderRef.RecGov(id = "sunset-ridge"),
+                    name = "Site 2",
+                    kind = CampsiteKind.RV,
+                    maxPeople = 6,
+                ),
+            )
+
+        val (upserted, skipped) = repo.upsertCampsiteBatch(candidates)
+
+        assertEquals(2, upserted)
+        assertEquals(0, skipped)
+        assertEquals(
+            CampgroundSiteSummary(siteTotal = 2, siteCounts = mapOf("tent" to 1, "rv" to 1), maxPeople = 6),
+            repo.findSiteSummary(campground),
+        )
     }
 }

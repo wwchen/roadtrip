@@ -73,7 +73,24 @@ class CampgroundRoutesTest : SharedDbTest() {
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(listOf(tent.poiId), body["campground_ids"]!!.jsonArray.map { it.jsonPrimitive.content.toLong() })
             assertEquals(1, body["total_in_boundary"]!!.jsonPrimitive.content.toInt())
+            assertEquals(1, body["total_matching"]!!.jsonPrimitive.content.toInt())
             assertEquals("false", body["truncated"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `search with a structurally invalid boundary is a 400 bad_boundary`() =
+        testApplication {
+            application { routeTestApplication { campgroundRoutes(service(), CampgroundSearchConfig.default) } }
+            val nonArrayCoordinates = """{"type":"Polygon","coordinates":"nope"}"""
+
+            val resp =
+                client.post("/api/campgrounds/search") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"boundary":$nonArrayCoordinates}""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            assertEquals("bad_boundary", error(resp.bodyAsText()))
         }
 
     @Test

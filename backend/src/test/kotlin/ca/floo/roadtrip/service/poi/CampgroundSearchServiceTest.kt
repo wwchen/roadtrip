@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.poi
 
 import ca.floo.roadtrip.config.CampgroundSearchConfig
+import ca.floo.roadtrip.fixtures.RECGOV_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.testBookingHorizons
 import ca.floo.roadtrip.model.api.campground.CampgroundDetailsRequestDto
@@ -130,6 +131,37 @@ class CampgroundSearchServiceTest : SharedDbTest() {
         assertEquals(8, summary.maxPeople)
         assertEquals(listOf("toilets", "showers"), summary.amenities.map { it.key })
         assertFalse(summary.availabilitySupported)
+        assertNull(summary.bookingSystem)
+    }
+
+    @Test
+    fun `details reports availability_supported and booking_system for a bookable campground`() {
+        val poi =
+            ctx.seedCatalogPoi(
+                sourceId = "bookable",
+                name = "Bookable Beach",
+                lon = -119.9,
+                lat = 39.0,
+                bookingProvider = "recgov",
+                bookingProviderRef = "233623",
+            )
+
+        val summary = service().details(CampgroundDetailsRequestDto(campgroundIds = listOf(poi.poiId))).campgrounds.single()
+
+        assertTrue(summary.availabilitySupported)
+        assertEquals(RECGOV_DISPLAY_NAME, summary.bookingSystem)
+    }
+
+    @Test
+    fun `a structurally invalid boundary is refused as bad_boundary`() {
+        val nonArrayCoordinates = boundary("""{"type":"Polygon","coordinates":"nope"}""")
+
+        val error =
+            assertFailsWith<CampgroundSearchRequestException> {
+                service().search(CampgroundSearchRequestDto(boundary = nonArrayCoordinates))
+            }
+
+        assertEquals("bad_boundary", error.code)
     }
 
     @Test

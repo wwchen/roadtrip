@@ -307,6 +307,7 @@ export interface CampgroundSearchRequestDto {
 export interface CampgroundSearchResponseDto {
   campground_ids: number[];
   total_in_boundary: number;
+  total_matching: number;
   truncated: boolean;
 }
 
