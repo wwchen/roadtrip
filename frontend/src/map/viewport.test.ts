@@ -93,25 +93,25 @@ describe('clipToBbox', () => {
 
   const point = (id: number, coordinates: [number, number]): TestFeature => ({
     id,
-    geometry: { type: 'Point', coordinates },
+    geometry: { type: 'Point', coordinates } as any,
   });
 
   test('keeps a feature inside the bbox', () => {
     const inside = point(1, [-122, 37.5]);
 
-    expect(clipToBbox([inside], BAY_AREA)).toEqual([inside]);
+    expect(clipToBbox([inside] as any, BAY_AREA)).toEqual([inside]);
   });
 
   test('keeps a feature exactly on the edge', () => {
     const onEdge = point(1, [-123, 37]);
 
-    expect(clipToBbox([onEdge], BAY_AREA)).toEqual([onEdge]);
+    expect(clipToBbox([onEdge] as any, BAY_AREA)).toEqual([onEdge]);
   });
 
   test('drops a feature outside the bbox', () => {
     const outside = point(1, [-116, 40]);
 
-    expect(clipToBbox([outside], BAY_AREA)).toEqual([]);
+    expect(clipToBbox([outside] as any, BAY_AREA)).toEqual([]);
   });
 
   test('drops a feature with no usable point geometry', () => {
@@ -119,20 +119,20 @@ describe('clipToBbox', () => {
     const nullGeometry: TestFeature = { id: 2, geometry: null };
     const noCoordinates: TestFeature = { id: 3, geometry: { type: 'Point' } };
 
-    expect(clipToBbox([noGeometry, nullGeometry, noCoordinates], BAY_AREA)).toEqual([]);
+    expect(clipToBbox([noGeometry, nullGeometry, noCoordinates] as any, BAY_AREA)).toEqual([]);
   });
 
   test('returns the same array instance when nothing is dropped', () => {
     const features = [point(1, [-122, 37.5]), point(2, [-121.5, 37.2])];
 
-    expect(clipToBbox(features, BAY_AREA)).toBe(features);
+    expect(clipToBbox(features as any, BAY_AREA)).toBe(features);
   });
 
   test('drops only the features outside, keeping array identity only when none are dropped', () => {
     const inside = point(1, [-122, 37.5]);
     const outside = point(2, [-116, 40]);
 
-    const clipped = clipToBbox([inside, outside], BAY_AREA);
+    const clipped = clipToBbox([inside, outside] as any, BAY_AREA);
 
     expect(clipped).toEqual([inside]);
     expect(clipped).not.toBe([inside, outside]);
