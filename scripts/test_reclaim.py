@@ -298,11 +298,11 @@ class DeployIntegrationTest(unittest.TestCase):
                 prune_call, preceding,
                 f"{label} preflight must prune before check-disk",
             )
-            # The prune immediately precedes the check-disk call (only
-            # _clear_stale_deploys sits between them).
+            # The prune is the line right before check-disk, so a stray
+            # command cannot slip in between reclaiming and measuring.
             last_prune_index = preceding.rindex(prune_call)
             between = preceding[last_prune_index + len(prune_call):check_index]
-            self.assertNotIn(prune_call, between)
+            self.assertEqual(between.strip(), "", f"{label}: {between!r}")
 
     def test_volume_hold_survives(self) -> None:
         self.assertIn("_hold_data_volume() {", self.source)

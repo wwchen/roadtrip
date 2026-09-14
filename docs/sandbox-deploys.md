@@ -262,7 +262,10 @@ Docker's judgement rather than ours. Images are no longer pruned dangling-only
 in the sweep: since the sweep runs the same `reclaim.sh prune --scope host` as
 a prod deploy, it now also applies the host's keep-5-per-repository tag
 retention, deleting older tags by reference every 30 minutes rather than
-waiting for `deploy.sh` to run.
+waiting for `deploy.sh` to run. `deploy.sh` itself prunes twice: once in
+preflight, before it measures free space, and once after a successful deploy.
+Untagged managed digests expire after `ROADTRIP_IMAGE_RETENTION` (default
+**72h**); tagged images are governed by the keep-N window only.
 
 That is the one accepted behavior change from unifying the two: a rollback
 deploy that pulls an image old enough (by creation time) to fall outside the
