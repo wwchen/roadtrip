@@ -16,8 +16,8 @@ private val campgroundSearchLog = LoggerFactory.getLogger("CampgroundSearchRepo"
 
 /**
  * Campground POIs inside a boundary that pass a filter. One row per campground
- * thanks to `campground_site_summary`; a campground with no summary row has no
- * live sites and passes the site filters as "no data".
+ * thanks to the `campground_site_summary` function; a campground with no live
+ * sites returns a null row and passes the site filters as "no data".
  */
 internal class CampgroundSearchRepo(
     private val ctx: DSLContext,
@@ -73,7 +73,7 @@ internal class CampgroundSearchRepo(
               FROM pois p
               JOIN poi_campgrounds pc ON pc.poi_id = p.id
               JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL
-              LEFT JOIN campground_site_summary s ON s.campground_id = cg.id,
+              LEFT JOIN LATERAL campground_site_summary(cg.id) s ON true,
               boundary
               WHERE p.deleted_at IS NULL
                 AND p.poi_type = ?

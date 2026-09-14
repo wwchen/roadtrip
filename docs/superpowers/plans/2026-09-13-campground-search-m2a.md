@@ -59,6 +59,8 @@
 
 ### Task 1: The campsite ETL maintains a per-campground site summary
 
+> Superseded on 2026-09-13: the summary table became an on-read SQL function; see the spec's "Aggregates are computed on read".
+
 **Files:**
 - Create: `backend/src/main/resources/db/migration/V64__campground_site_summary.sql`
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/model/domain/CampgroundSiteSummary.kt`

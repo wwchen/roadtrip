@@ -19,8 +19,6 @@ private const val TAHOE =
 private val noFilter = CampgroundSearchFilter(siteType = null, groupSize = null, amenities = emptyList())
 
 class CampgroundSearchRepoTest : SharedDbTest() {
-    private val campsites by lazy { CampsiteRepo(ctx) }
-
     private fun repo() = CampgroundSearchRepo(ctx, enabledDataProviders = setOf("recgov", "campflare"))
 
     @BeforeEach
@@ -51,7 +49,6 @@ class CampgroundSearchRepoTest : SharedDbTest() {
         maxPeople: Int? = null,
     ) {
         ctx.seedCampsite(campgroundId = campgroundId, vendorId = vendorId, kind = kind.wire, maxPeople = maxPeople)
-        campsites.refreshSiteSummaries(listOf(campgroundId))
     }
 
     @Test

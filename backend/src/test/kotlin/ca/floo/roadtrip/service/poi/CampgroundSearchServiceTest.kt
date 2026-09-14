@@ -13,7 +13,6 @@ import ca.floo.roadtrip.model.domain.CampgroundSearchError
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampgroundSearchRepo
-import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -59,7 +58,6 @@ class CampgroundSearchServiceTest : SharedDbTest() {
         ctx.seedCampsite(campgroundId = tent.campgroundId, vendorId = "1", kind = CampsiteKind.TENT.wire)
         val rv = ctx.seedCatalogPoi(sourceId = "r", name = "RV Park", lon = -120.1, lat = 39.0)
         ctx.seedCampsite(campgroundId = rv.campgroundId, vendorId = "2", kind = CampsiteKind.RV.wire)
-        CampsiteRepo(ctx).refreshSiteSummaries(listOf(tent.campgroundId, rv.campgroundId))
 
         val response =
             service().search(
@@ -93,7 +91,6 @@ class CampgroundSearchServiceTest : SharedDbTest() {
                 amenitiesJson = """[{"key":"toilets","present":true},{"key":"showers","present":false}]""",
             )
         ctx.seedCampsite(campgroundId = poi.campgroundId, vendorId = "1", kind = CampsiteKind.TENT.wire, maxPeople = 8)
-        CampsiteRepo(ctx).refreshSiteSummaries(listOf(poi.campgroundId))
 
         val response = service().details(CampgroundDetailsRequestDto(campgroundIds = listOf(poi.poiId)))
 

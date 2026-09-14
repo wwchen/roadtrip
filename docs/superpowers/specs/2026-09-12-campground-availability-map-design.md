@@ -147,14 +147,16 @@ count below the group, a zero count for the kind) drops it. This is how the back
 the issue's "nothing drops out silently" rule reconcile: what is dropped is exactly what the
 data says does not fit, and the list head reports the drop ("9 of 17 in view match").
 
-### Aggregates are built by the ETL
+### Aggregates are computed on read
 
-`site_counts`, `site_total` and `max_people` are per-campground aggregates. They are written
-when the catalog loads, not grouped from `campsites` on every search, so the search is a
-filter over one row per campground. Storage: a `campground_summary` table (one row per
-`campgrounds.id`, refreshed by the campsite ETL step that already upserts the catalog) or
-columns on `campgrounds`; the plan picks whichever the existing bag/typed-jsonb pattern favours.
-A migration is required either way; existing applied migrations are never edited.
+`site_counts`, `site_total` and `max_people` come from a SQL function, `campground_site_summary`,
+that aggregates `campsites` per campground over a covering index rather than from a table
+refreshed on catalog load. Postgres inlines the function as a LATERAL join, so the aggregate
+stays correlated to one campground and walks the index instead of grouping the whole table; on
+the full local catalog (457k campsites) that measured 24 ms at the widest allowed view and under
+2 ms for a 50-id details read. A plain VIEW was rejected: the planner cannot push the join key
+through its `GROUP BY`, so it aggregates every campsite on every request, measured at 48 s. No
+table, no refresh, no staleness.
 
 ### Caps and errors
 

@@ -47,51 +47,13 @@ class CampsiteRepo(
         }
     }
 
-    /**
-     * Recompute `campground_site_summary` for [campgroundIds]. A campground left
-     * with no live sites loses its row, so "no summary" always means "no sites".
-     */
-    fun refreshSiteSummaries(campgroundIds: Collection<Long>) {
-        val ids = campgroundIds.distinct()
-        if (ids.isEmpty()) return
-        for (chunk in ids.chunked(BULK_CHUNK_SIZE)) {
-            val placeholders = chunk.joinToString(", ") { "?" }
-            ctx.execute(
-                "DELETE FROM campground_site_summary WHERE campground_id IN ($placeholders)",
-                *chunk.toTypedArray(),
-            )
-            ctx.execute(
-                """
-                INSERT INTO campground_site_summary (campground_id, site_total, site_counts, max_people, updated_at)
-                SELECT campground_id,
-                       SUM(kind_count)::int,
-                       jsonb_object_agg(kind, kind_count),
-                       MAX(max_people),
-                       now()
-                FROM (
-                  SELECT campground_id, kind, COUNT(*)::int AS kind_count, MAX(max_people) AS max_people
-                  FROM campsites
-                  WHERE deleted_at IS NULL
-                    AND campground_id IN ($placeholders)
-                  GROUP BY campground_id, kind
-                ) per_kind
-                GROUP BY campground_id
-                """.trimIndent(),
-                *chunk.toTypedArray(),
-            )
-        }
-    }
-
     fun findSiteSummary(campgroundId: Long): CampgroundSiteSummary? =
         ctx
             .fetchOne(
-                """
-                SELECT site_total, site_counts::text AS site_counts_text, max_people
-                FROM campground_site_summary
-                WHERE campground_id = ?
-                """.trimIndent(),
+                "SELECT site_total, site_counts::text AS site_counts_text, max_people FROM campground_site_summary(?)",
                 campgroundId,
-            )?.let { record ->
+            )?.takeIf { it.get("site_total", Int::class.javaObjectType) != null }
+            ?.let { record ->
                 CampgroundSiteSummary(
                     siteTotal = record.get("site_total", Int::class.java),
                     siteCounts = decodeSiteCounts(record.get("site_counts_text", String::class.java)),
@@ -134,7 +96,6 @@ class CampsiteRepo(
                 CampsiteBulkRow(record = record, campgroundId = campgroundId)
             }
         bulkUpsertCampsiteRows(campsiteRows)
-        refreshSiteSummaries(campsiteRows.map { it.campgroundId }.distinct())
 
         return campsiteRows.size to totalSkipped
     }

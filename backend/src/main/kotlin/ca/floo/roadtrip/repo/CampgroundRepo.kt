@@ -124,7 +124,7 @@ class CampgroundRepo(
                 FROM poi_campgrounds pc
                 JOIN pois p ON p.id = pc.poi_id
                 JOIN campgrounds cg ON cg.id = pc.campground_id
-                LEFT JOIN campground_site_summary s ON s.campground_id = cg.id
+                LEFT JOIN LATERAL campground_site_summary(cg.id) s ON true
                 WHERE pc.poi_id IN ($placeholders)
                   AND cg.deleted_at IS NULL
                   AND p.deleted_at IS NULL

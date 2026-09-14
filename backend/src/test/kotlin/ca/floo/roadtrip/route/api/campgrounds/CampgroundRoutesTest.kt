@@ -6,7 +6,6 @@ import ca.floo.roadtrip.fixtures.testBookingHorizons
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampgroundSearchRepo
-import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -60,7 +59,6 @@ class CampgroundRoutesTest : SharedDbTest() {
         testApplication {
             val tent = ctx.seedCatalogPoi(sourceId = "t", name = "Tent Flat", lon = -120.0, lat = 39.0)
             ctx.seedCampsite(campgroundId = tent.campgroundId, vendorId = "1", kind = CampsiteKind.TENT.wire)
-            CampsiteRepo(ctx).refreshSiteSummaries(listOf(tent.campgroundId))
             application { routeTestApplication { campgroundRoutes(service(), CampgroundSearchConfig.default) } }
 
             val resp =
@@ -175,7 +173,6 @@ class CampgroundRoutesTest : SharedDbTest() {
         testApplication {
             val poi = ctx.seedCatalogPoi(sourceId = "nb", name = "Nevada Beach", lon = -119.943, lat = 38.976, agency = "USFS")
             ctx.seedCampsite(campgroundId = poi.campgroundId, vendorId = "1", kind = CampsiteKind.TENT.wire, maxPeople = 6)
-            CampsiteRepo(ctx).refreshSiteSummaries(listOf(poi.campgroundId))
             application { routeTestApplication { campgroundRoutes(service(), CampgroundSearchConfig.default) } }
 
             val resp =

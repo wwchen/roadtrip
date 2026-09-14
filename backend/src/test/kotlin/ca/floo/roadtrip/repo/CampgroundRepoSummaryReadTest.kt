@@ -8,7 +8,6 @@ import kotlin.test.assertNull
 
 class CampgroundRepoSummaryReadTest : SharedDbTest() {
     private val repo by lazy { CampgroundRepo(ctx) }
-    private val campsites by lazy { CampsiteRepo(ctx) }
 
     @BeforeEach
     fun cleanup() {
@@ -20,7 +19,6 @@ class CampgroundRepoSummaryReadTest : SharedDbTest() {
         val a = ctx.seedCatalogPoi(sourceId = "a", name = "Alpha", lon = -120.0, lat = 39.0, agency = "USFS")
         val b = ctx.seedCatalogPoi(sourceId = "b", name = "Beta", lon = -120.1, lat = 39.1)
         ctx.seedCampsite(campgroundId = a.campgroundId, vendorId = "1", kind = CampsiteKind.TENT.wire, maxPeople = 6)
-        campsites.refreshSiteSummaries(listOf(a.campgroundId))
 
         val rows = repo.findSummariesByPoiIds(listOf(b.poiId, a.poiId, 999_999L))
 
