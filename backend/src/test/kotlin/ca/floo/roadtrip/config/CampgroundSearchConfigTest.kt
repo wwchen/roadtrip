@@ -7,7 +7,7 @@ import kotlin.test.assertFailsWith
 class CampgroundSearchConfigTest {
     @Test
     fun `defaults bound the search and the bulk read`() {
-        assertEquals(200, CampgroundSearchConfig.default.maxResults)
+        assertEquals(5000, CampgroundSearchConfig.default.maxResults)
         assertEquals(50, CampgroundSearchConfig.default.maxDetailIds)
         assertEquals(500.0, CampgroundSearchConfig.default.maxBoundaryAreaSqDeg)
     }
