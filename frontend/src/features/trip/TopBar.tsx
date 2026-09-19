@@ -11,6 +11,7 @@ import { TripResults } from './TripResults';
 import { MAX_SEARCH_RESULTS, type SearchResult } from './search-results';
 import { allStopsFilled, isLocated } from '@/domain/trip/stops';
 import { buildRouteIndex } from './route-index';
+import { hiddenAgencyPinIds, idsWithVisibleAgency } from '@/map/agencies';
 import { bboxCenter } from '@/map/viewport';
 import { useMapStore } from '@/stores/mapStore';
 import { tripCardsFromFeatures } from './trip-cards';
@@ -92,8 +93,25 @@ export function TopBar({ alerts }: TopBarProps) {
   // false once it flips, so `search.enabled` is what decides whether the zoom
   // hint still applies.
   const search = useCampgroundSearch({ paused: showRoute });
-  const inViewIds = useMemo(() => search.ids.slice(0, MAX_IN_VIEW_CARDS), [search.ids]);
+  // The legend's agency switches narrow the list before the card cap, not after:
+  // the search answers for every agency in view, so capping first and letting
+  // `visibleCards` drop the switched-off rows leaves a handful of cards whenever
+  // a hidden agency dominates the view.
+  const hiddenAgencies = useMapStore((s) => s.hiddenAgencies);
+  const viewportCampgrounds = useMapStore((s) => s.viewportCampgrounds);
+  const hiddenIds = useMemo(
+    () => hiddenAgencyPinIds(viewportCampgrounds, hiddenAgencies),
+    [viewportCampgrounds, hiddenAgencies],
+  );
+  const shownIds = useMemo(() => idsWithVisibleAgency(search.ids, hiddenIds), [search.ids, hiddenIds]);
+  const inViewIds = useMemo(() => shownIds.slice(0, MAX_IN_VIEW_CARDS), [shownIds]);
   const summaries = useCampgroundSummaries(inViewIds);
+  // Both counts say what the map is showing, so the head, the filter block and
+  // the legend agree. With nothing hidden the server's own counts are the honest
+  // ones — they survive a truncated search, which the id list does not; with
+  // something hidden, the switched-off pins come off them.
+  const totalShown = hiddenIds.size === 0 ? search.totalMatching : shownIds.length;
+  const totalShownInView = Math.max(search.totalInBoundary - hiddenIds.size, totalShown);
   const rankFilter = useCampgroundFilterStore(
     useShallow((s) => ({ siteType: s.siteType, groupSize: s.groupSize, amenities: s.amenities })),
   );
@@ -272,8 +290,8 @@ export function TopBar({ alerts }: TopBarProps) {
         <FilterPanel
           open={filtersOpen}
           onToggle={() => setFiltersOpen((open) => !open)}
-          totalInBoundary={search.totalInBoundary}
-          totalMatching={search.totalMatching}
+          totalInBoundary={totalShownInView}
+          totalMatching={totalShown}
         />
       ) : null}
 
@@ -313,8 +331,9 @@ export function TopBar({ alerts }: TopBarProps) {
           campgroundsRequested={campgroundsRequested && search.enabled}
           loading={inViewCards.length === 0 && (search.isFetching || summaries.isFetching)}
           error={search.isError || summaries.isError}
-          totalInBoundary={search.totalInBoundary}
-          totalMatching={search.totalMatching}
+          totalInBoundary={totalShownInView}
+          totalMatching={totalShown}
+          hiddenByAgency={shownIds.length === 0 && search.ids.length > 0}
         />
       )}
     </div>

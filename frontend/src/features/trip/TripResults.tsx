@@ -21,6 +21,8 @@ const CARD_FLY_ZOOM = 13;
 const FLY_SPEED = 1.6;
 
 const ROUTE_HEADING = 'Campgrounds along route';
+/** Every campground in the list belongs to an agency the legend has switched off. */
+const ALL_AGENCIES_HIDDEN = 'All campgrounds hidden — re-enable a category in the legend.';
 const RATING_PREFIX = '★';
 
 /** A facet's icon, class, and state word, keyed by state rather than chained ternaries. */
@@ -53,6 +55,13 @@ interface ViewportProps extends CommonProps {
   error: boolean;
   totalInBoundary: number;
   totalMatching: number;
+  /**
+   * True when the view holds campgrounds but the legend has switched every one
+   * of them off. The list is narrowed by agency before its card cap, so an
+   * all-hidden view arrives here with no cards at all — indistinguishable from
+   * an empty view unless the caller says which it is.
+   */
+  hiddenByAgency: boolean;
 }
 
 export type TripResultsProps = RouteProps | ViewportProps;
@@ -204,10 +213,14 @@ function emptyCopy(props: TripResultsProps, total: number, campgroundsHidden: bo
     if (!props.campgroundsRequested) return inViewCopy.zoomIn;
     if (props.error) return inViewCopy.failed;
     if (props.loading) return inViewCopy.loading;
-    if (total === 0) return inViewCopy.none;
+    // A genuinely empty view still outranks the layer-off card, as it always
+    // has. An all-hidden view does not: that card carries the switch that brings
+    // the pins back, which is more use than a sentence about the legend.
+    if (total === 0 && !props.hiddenByAgency) return inViewCopy.none;
+    if (total === 0 && !campgroundsHidden) return ALL_AGENCIES_HIDDEN;
   }
   if (campgroundsHidden) return null;
-  return 'All campgrounds hidden — re-enable a category in the legend.';
+  return ALL_AGENCIES_HIDDEN;
 }
 
 function RouteMeta({ card }: { card: TripCard }) {

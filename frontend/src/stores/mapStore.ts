@@ -56,7 +56,10 @@ export interface MapState {
    * The campground pins the viewport loop last returned, and whether campgrounds
    * were requested at all (false below the zoom gate). Published by
    * `features/map/useViewportPois` for the topbar's in-view list, which sits
-   * across the feature boundary. Empty while a route owns the map: the corridor's
+   * across the feature boundary and reads the agency off each pin to honour the
+   * legend's switches. Clipped to the viewport but NOT narrowed by
+   * `campgroundFilterIds` — the topbar applies its own filter and needs to see
+   * the campgrounds it excluded. Empty while a route owns the map: the corridor's
    * pins are not in the viewport, and the route list shows them instead.
    */
   viewportCampgrounds: PinFeature[];

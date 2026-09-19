@@ -8,6 +8,8 @@ import { COPIED_STATE_MS, decodeRouteState, encodeRouteState } from '@/lib/share
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
+import { MAX_IN_VIEW_CARDS } from './useCampgroundSummaries';
+import type { PinFeature } from '@/map/pins';
 import { FakeMap } from '@/test/fake-map';
 
 // The topbar reaches the camera through MapProvider's context; the fake records the
@@ -1105,6 +1107,111 @@ describe('the in-view list', () => {
 
     expect(screen.getByText('· 1 of 2 · 1 checkable online')).toBeInTheDocument();
     expect(screen.queryByText('Zephyr Cove')).toBeNull();
+  });
+
+  test('a switched-off agency is dropped before the card cap, not after', async () => {
+    // The reported shape: a view a switched-off agency dominates. The search
+    // answers for every agency, so narrowing only the hydrated 50 would leave a
+    // list of two showing none.
+    const campgroundPin = (id: number, agency: string): PinFeature => ({
+      type: 'Feature',
+      id,
+      geometry: { type: 'Point', coordinates: [-120.05, 38.93] },
+      properties: { category: 'campground', agency },
+    });
+    const forestIds = Array.from({ length: MAX_IN_VIEW_CARDS }, (_, i) => 100 + i);
+    for (const id of forestIds) {
+      campgroundSummaries[id] = { ...campgroundSummaries[21], id, campground_id: id, name: `Forest ${id}` };
+    }
+    campgroundSearch = {
+      campground_ids: [...forestIds, 21, 22],
+      total_in_boundary: forestIds.length + 2,
+      total_matching: forestIds.length + 2,
+      truncated: false,
+    };
+    withViewport();
+    useMapStore.setState({
+      hiddenAgencies: ['USFS'],
+      viewportCampgrounds: [
+        ...forestIds.map((id) => campgroundPin(id, 'USFS')),
+        campgroundPin(21, 'USFS'),
+        campgroundPin(22, 'Private'),
+      ],
+    });
+    mount();
+
+    await waitFor(() => expect(screen.getByText('Zephyr Cove')).toBeInTheDocument());
+    expect(screen.queryByText('Forest 100')).toBeNull();
+    // One row, and the count is against what the legend leaves visible — not the
+    // 52 the search matched.
+    expect(screen.getByText('· 1 · 0 checkable online')).toBeInTheDocument();
+  });
+
+  test('the filter block counts what the legend leaves visible', async () => {
+    withViewport();
+    useMapStore.setState({
+      hiddenAgencies: ['Private'],
+      viewportCampgrounds: [
+        {
+          type: 'Feature',
+          id: 21,
+          geometry: { type: 'Point', coordinates: [-120.05, 38.93] },
+          properties: { category: 'campground', agency: 'USFS' },
+        },
+        {
+          type: 'Feature',
+          id: 22,
+          geometry: { type: 'Point', coordinates: [-119.95, 39.0] },
+          properties: { category: 'campground', agency: 'Private' },
+        },
+      ],
+    });
+    mount();
+    await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
+
+    // One of the two is switched off, so the block says 1 rather than the
+    // search's agency-blind 2 — the same number the head shows.
+    expect(screen.getByText('1 in view')).toBeInTheDocument();
+    expect(screen.getByText('· 1 · 1 checkable online')).toBeInTheDocument();
+  });
+
+  test('switching every agency off says so, rather than that the view is empty', async () => {
+    withViewport();
+    useMapStore.setState({
+      hiddenAgencies: ['USFS', 'Private'],
+      viewportCampgrounds: [
+        {
+          type: 'Feature',
+          id: 21,
+          geometry: { type: 'Point', coordinates: [-120.05, 38.93] },
+          properties: { category: 'campground', agency: 'USFS' },
+        },
+        {
+          type: 'Feature',
+          id: 22,
+          geometry: { type: 'Point', coordinates: [-119.95, 39.0] },
+          properties: { category: 'campground', agency: 'Private' },
+        },
+      ],
+    });
+    mount();
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('All campgrounds hidden — re-enable a category in the legend.'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('No campgrounds in view — pan or zoom out to find some.')).toBeNull();
+
+    // With the whole layer off too, the card with the switch wins: it is more
+    // use than a sentence naming the legend.
+    await act(async () => {
+      useMapStore.getState().setOverlayHidden('cg', true);
+    });
+
+    expect(screen.getByRole('button', { name: 'Turn campgrounds back on' })).toBeInTheDocument();
   });
 
   test('the hidden-layer card gives way to the zoom hint', async () => {

@@ -164,6 +164,7 @@ export const InViewZoomedOut: Story = {
         error={false}
         totalInBoundary={0}
         totalMatching={0}
+        hiddenByAgency={false}
       />
     </Panel>
   ),
@@ -181,6 +182,7 @@ export const InViewEmpty: Story = {
         error={false}
         totalInBoundary={0}
         totalMatching={0}
+        hiddenByAgency={false}
       />
     </Panel>
   ),
@@ -198,6 +200,7 @@ export const InViewLoading: Story = {
         error={false}
         totalInBoundary={3}
         totalMatching={3}
+        hiddenByAgency={false}
       />
     </Panel>
   ),
@@ -215,6 +218,7 @@ export const InView: Story = {
         error={false}
         totalInBoundary={3}
         totalMatching={3}
+        hiddenByAgency={false}
       />
     </Panel>
   ),
@@ -232,8 +236,27 @@ export const InViewFiltered: Story = {
         error={false}
         totalInBoundary={3}
         totalMatching={3}
+        hiddenByAgency={false}
       />
     </FilteredPanel>
+  ),
+};
+
+/** Every campground in view belongs to an agency the legend has switched off. */
+export const InViewAllAgenciesHidden: Story = {
+  render: () => (
+    <Panel>
+      <TripResults
+        variant="viewport"
+        cards={[]}
+        campgroundsRequested
+        loading={false}
+        error={false}
+        totalInBoundary={0}
+        totalMatching={0}
+        hiddenByAgency
+      />
+    </Panel>
   ),
 };
 
@@ -249,6 +272,7 @@ export const InViewCapped: Story = {
         error={false}
         totalInBoundary={80}
         totalMatching={60}
+        hiddenByAgency={false}
       />
     </Panel>
   ),

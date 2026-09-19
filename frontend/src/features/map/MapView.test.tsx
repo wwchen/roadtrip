@@ -681,7 +681,10 @@ describe('the legend', () => {
     expect(instance.layer('cg-points')?.filter).toEqual(expected);
     expect(instance.layer('cg-points-hit')?.filter).toEqual(expected);
     expect(screen.getByLabelText(/BC Parks \(1\)/)).toBeInTheDocument();
-    expect(useMapStore.getState().viewportCampgrounds).toHaveLength(1);
+    // The published pins are the viewport's, not the filter's: the topbar reads
+    // the agency off them to honour the legend's switches, and a set this filter
+    // had already narrowed could not answer for the campground it excluded.
+    expect(useMapStore.getState().viewportCampgrounds).toHaveLength(2);
 
     await act(async () => {
       useMapStore.getState().setCampgroundFilterIds(null);

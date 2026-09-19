@@ -6,6 +6,8 @@ import {
   campgroundLayerFilter,
   featureAgency,
   hiddenAgencyFilter,
+  hiddenAgencyPinIds,
+  idsWithVisibleAgency,
   sortedAgencies,
 } from './agencies';
 
@@ -62,6 +64,65 @@ describe('agencyCounts', () => {
 
   test('an empty viewport has no rows', () => {
     expect(agencyCounts([]).size).toBe(0);
+  });
+});
+
+describe('hiddenAgencyPinIds and idsWithVisibleAgency', () => {
+  const pins = [
+    campground('US Forest Service', 1),
+    campground('US Forest Service', 2),
+    campground('BC Parks', 3),
+    campground(undefined, 4),
+  ];
+  const narrow = (ids: number[], hidden: string[]) =>
+    idsWithVisibleAgency(ids, hiddenAgencyPinIds(pins, hidden));
+
+  test('drops the ids whose agency is switched off', () => {
+    expect(narrow([1, 2, 3, 4], ['US Forest Service'])).toEqual([3, 4]);
+  });
+
+  test('the sentinel row switches off the campgrounds with no agency', () => {
+    expect(narrow([1, 2, 3, 4], [UNCATEGORIZED_AGENCY])).toEqual([1, 2, 3]);
+  });
+
+  test('an id with no pin stays — unknown is not hidden', () => {
+    expect(narrow([1, 99], ['US Forest Service'])).toEqual([99]);
+  });
+
+  test('narrows before any cap, so a dominant hidden agency cannot crowd the head', () => {
+    const forest = Array.from({ length: 50 }, (_, i) => campground('US Forest Service', i + 1));
+    const parks = [campground('BC Parks', 51), campground('BC Parks', 52)];
+    const inView = [...forest, ...parks];
+    const ids = inView.map((pin) => pin.id as number);
+
+    expect(idsWithVisibleAgency(ids, hiddenAgencyPinIds(inView, ['US Forest Service']))).toEqual([
+      51, 52,
+    ]);
+  });
+
+  test('nothing hidden is one empty set and the same array back', () => {
+    const ids = [1, 2, 3];
+    const hidden = hiddenAgencyPinIds(pins, []);
+
+    expect(hidden.size).toBe(0);
+    expect(hidden).toBe(hiddenAgencyPinIds([], []));
+    expect(idsWithVisibleAgency(ids, hidden)).toBe(ids);
+  });
+
+  test('a hidden agency that is not in view leaves the ids alone', () => {
+    const ids = [1, 2, 3];
+    expect(idsWithVisibleAgency(ids, hiddenAgencyPinIds(pins, ['Parks Canada']))).toBe(ids);
+  });
+
+  test('ignores anything that is not a campground', () => {
+    const supercharger = {
+      type: 'Feature',
+      id: 7,
+      geometry: { type: 'Point', coordinates: [-121, 40] },
+      properties: { category: 'tesla_supercharger', agency: 'US Forest Service' },
+    } as PinFeature;
+
+    expect(hiddenAgencyPinIds([supercharger], ['US Forest Service']).size).toBe(0);
   });
 });
 
