@@ -414,7 +414,11 @@ verified fact.
 The ledger is `:backend:test`'s declared output, so an up-to-date or cached test
 run still has a current one to verify, and the task is a finalizer on
 `:backend:test` as well as being named outright in `make test` and in CI's
-`Run backend tests + coverage + contract checks` step.
+`Run backend tests + coverage + contract checks` step. A filtered run — `--tests`,
+or an include or exclude pattern on the test filter — skips the gate: the route
+tests that write the ledger may not have run, so there is no suite to hold to the
+contract. Only an unfiltered `:backend:test` is gated, and there a missing ledger
+still fails.
 
 `:backend:generateApiTypes` walks `serializer(kclass).descriptor` from every row,
 transitively, and writes `frontend/src/api/generated/api-types.ts`;
