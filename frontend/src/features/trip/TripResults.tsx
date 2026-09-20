@@ -53,15 +53,17 @@ interface ViewportProps extends CommonProps {
   loading: boolean;
   /** True once the search or the summaries have failed. */
   error: boolean;
-  totalInBoundary: number;
   totalMatching: number;
   /**
-   * True when the view holds campgrounds but the legend has switched every one
-   * of them off. The list is narrowed by agency before its card cap, so an
-   * all-hidden view arrives here with no cards at all — indistinguishable from
-   * an empty view unless the caller says which it is.
+   * How many campgrounds in view belong to an agency the legend has switched
+   * off.
+   *
+   * The caller narrows by agency before its card cap, so an all-hidden view
+   * arrives here with no cards at all — the same shape as a view with nothing
+   * in it. This is the fact that tells the two apart; what to say about it is
+   * decided below, not by the caller.
    */
-  hiddenByAgency: boolean;
+  hiddenInView: number;
 }
 
 export type TripResultsProps = RouteProps | ViewportProps;
@@ -213,10 +215,11 @@ function emptyCopy(props: TripResultsProps, total: number, campgroundsHidden: bo
     if (!props.campgroundsRequested) return inViewCopy.zoomIn;
     if (props.error) return inViewCopy.failed;
     if (props.loading) return inViewCopy.loading;
-    // A genuinely empty view still outranks the layer-off card, as it always
-    // has. An all-hidden view does not: that card carries the switch that brings
-    // the pins back, which is more use than a sentence about the legend.
-    if (total === 0 && !props.hiddenByAgency) return inViewCopy.none;
+    // Which kind of empty this is: a view holding switched-off campgrounds is one
+    // legend click from results, and telling the user to pan would be wrong. A
+    // genuinely empty view still outranks the layer-off card, as it always has;
+    // an all-hidden view does not, because that card carries the switch itself.
+    if (total === 0 && props.hiddenInView === 0) return inViewCopy.none;
     if (total === 0 && !campgroundsHidden) return ALL_AGENCIES_HIDDEN;
   }
   if (campgroundsHidden) return null;

@@ -331,9 +331,8 @@ export function TopBar({ alerts }: TopBarProps) {
           campgroundsRequested={campgroundsRequested && search.enabled}
           loading={inViewCards.length === 0 && (search.isFetching || summaries.isFetching)}
           error={search.isError || summaries.isError}
-          totalInBoundary={totalShownInView}
           totalMatching={totalShown}
-          hiddenByAgency={shownIds.length === 0 && search.ids.length > 0}
+          hiddenInView={hiddenIds.size}
         />
       )}
     </div>

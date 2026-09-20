@@ -162,9 +162,8 @@ export const InViewZoomedOut: Story = {
         campgroundsRequested={false}
         loading={false}
         error={false}
-        totalInBoundary={0}
         totalMatching={0}
-        hiddenByAgency={false}
+        hiddenInView={0}
       />
     </Panel>
   ),
@@ -180,9 +179,8 @@ export const InViewEmpty: Story = {
         campgroundsRequested
         loading={false}
         error={false}
-        totalInBoundary={0}
         totalMatching={0}
-        hiddenByAgency={false}
+        hiddenInView={0}
       />
     </Panel>
   ),
@@ -198,9 +196,8 @@ export const InViewLoading: Story = {
         campgroundsRequested
         loading
         error={false}
-        totalInBoundary={3}
         totalMatching={3}
-        hiddenByAgency={false}
+        hiddenInView={0}
       />
     </Panel>
   ),
@@ -216,9 +213,8 @@ export const InView: Story = {
         campgroundsRequested
         loading={false}
         error={false}
-        totalInBoundary={3}
         totalMatching={3}
-        hiddenByAgency={false}
+        hiddenInView={0}
       />
     </Panel>
   ),
@@ -234,9 +230,8 @@ export const InViewFiltered: Story = {
         campgroundsRequested
         loading={false}
         error={false}
-        totalInBoundary={3}
         totalMatching={3}
-        hiddenByAgency={false}
+        hiddenInView={0}
       />
     </FilteredPanel>
   ),
@@ -252,9 +247,8 @@ export const InViewAllAgenciesHidden: Story = {
         campgroundsRequested
         loading={false}
         error={false}
-        totalInBoundary={0}
         totalMatching={0}
-        hiddenByAgency
+        hiddenInView={503}
       />
     </Panel>
   ),
@@ -270,9 +264,8 @@ export const InViewCapped: Story = {
         campgroundsRequested
         loading={false}
         error={false}
-        totalInBoundary={80}
         totalMatching={60}
-        hiddenByAgency={false}
+        hiddenInView={0}
       />
     </Panel>
   ),
