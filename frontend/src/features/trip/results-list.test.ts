@@ -41,6 +41,7 @@ const READY = {
   failed: false,
   loading: false,
   campgroundsHidden: false,
+  agenciesHidden: false,
   inBoundary: 2,
   matching: 2,
   inView: 2,
@@ -96,9 +97,19 @@ describe('inViewList', () => {
   });
 
   test('an all-hidden view names the legend rather than telling the user to pan', () => {
-    expect(inViewList({ ...READY, cards: [], total: 0 })).toEqual({
+    expect(inViewList({ ...READY, agenciesHidden: true, cards: [], total: 0 })).toEqual({
       kind: 'empty',
       message: listCopy.allAgenciesHidden,
+    });
+  });
+
+  test('with every agency switched on, an empty list is not the legend to blame', () => {
+    // Matches the search found, no cards built from them, and nothing switched
+    // off: the catalog moved under the two requests. Pointing at the legend
+    // would send the user to a panel that cannot help.
+    expect(inViewList({ ...READY, cards: [], total: 0 })).toEqual({
+      kind: 'empty',
+      message: inViewCopy.none,
     });
   });
 

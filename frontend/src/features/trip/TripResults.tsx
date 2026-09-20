@@ -53,9 +53,7 @@ interface ViewportProps {
 export type TripResultsProps = RouteProps | ViewportProps;
 
 export function TripResults(props: TripResultsProps) {
-  const { list } = props;
   const { map } = useMapContext();
-  const setOverlayHidden = useMapStore((s) => s.setOverlayHidden);
   const selectPoi = useMapStore((s) => s.selectPoi);
 
   // Collapsed on a phone, expanded where there is room. `shouldAutoFocus` answers the
@@ -97,39 +95,66 @@ export function TripResults(props: TripResultsProps) {
         ) : null}
 
         <div className="tb-results-cards" id="tb-results-cards">
-          {list.kind === 'empty' ? (
-            <div className="tb-card-empty">{list.message}</div>
-          ) : list.kind === 'layer-off' ? (
-            <EmptyState
-              icon="eye-off"
-              title={listCopy.layerOffTitle}
-              body={listCopy.layerOffBody(list.inView)}
-              actions={
-                <Button variant="primary" size="sm" onClick={() => setOverlayHidden('cg', false)}>
-                  {listCopy.layerOffAction}
-                </Button>
-              }
+          {props.variant === 'route' ? (
+            <ListBody
+              list={props.list}
+              renderCard={(card) => (
+                <Card key={String(card.id)} card={card} onOpen={openCard} sub={card.sub} meta={<RouteMeta card={card} />} />
+              )}
             />
-          ) : props.variant === 'route' ? (
-            (list.cards as readonly TripCard[]).map((card) => (
-              <Card key={String(card.id)} card={card} onOpen={openCard} sub={card.sub} meta={<RouteMeta card={card} />} />
-            ))
           ) : (
-            (list.cards as readonly InViewCard[]).map((card) => (
-              <Card
-                key={String(card.id)}
-                card={card}
-                onOpen={openCard}
-                sub={card.agency || card.sub}
-                meta={<ViewportMeta card={card} />}
-                facets={<FacetRow card={card} />}
-              />
-            ))
+            <ListBody
+              list={props.list}
+              renderCard={(card) => (
+                <Card
+                  key={String(card.id)}
+                  card={card}
+                  onOpen={openCard}
+                  sub={card.agency || card.sub}
+                  meta={<ViewportMeta card={card} />}
+                  facets={<FacetRow card={card} />}
+                />
+              )}
+            />
           )}
         </div>
       </div>
     </div>
   );
+}
+
+/**
+ * The three shapes a list can take.
+ *
+ * Generic over the card so each variant carries its own card type through the
+ * call. The alternative is to read `list.cards` where the props union is still
+ * open and cast it back — at exactly the point where a cast could be wrong.
+ */
+function ListBody<C extends TripCard>({
+  list,
+  renderCard,
+}: {
+  list: ResultsList<C>;
+  renderCard: (card: C) => ReactNode;
+}) {
+  const setOverlayHidden = useMapStore((s) => s.setOverlayHidden);
+
+  if (list.kind === 'empty') return <div className="tb-card-empty">{list.message}</div>;
+  if (list.kind === 'layer-off') {
+    return (
+      <EmptyState
+        icon="eye-off"
+        title={listCopy.layerOffTitle}
+        body={listCopy.layerOffBody(list.inView)}
+        actions={
+          <Button variant="primary" size="sm" onClick={() => setOverlayHidden('cg', false)}>
+            {listCopy.layerOffAction}
+          </Button>
+        }
+      />
+    );
+  }
+  return <>{list.cards.map(renderCard)}</>;
 }
 
 function Card({

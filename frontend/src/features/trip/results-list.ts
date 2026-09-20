@@ -41,10 +41,13 @@ export interface RouteListFacts extends CardFilter {
  * user did not ask.
  */
 export function routeList(facts: RouteListFacts): ResultsList<TripCard> {
-  const visible = visibleCards(facts.cards, facts);
   if (facts.loading && facts.cards.length === 0) return { kind: 'empty', message: routeListCopy.loading };
   if (facts.cards.length === 0) return { kind: 'empty', message: routeListCopy.none };
   if (facts.campgroundsHidden) return { kind: 'layer-off', inView: facts.cards.length };
+  // This list filters its own population in one step, so an empty result here
+  // is the legend's doing and nothing else's — unlike the viewport's, which
+  // filters twice against two sources.
+  const visible = visibleCards(facts.cards, facts);
   if (visible.length === 0) return { kind: 'empty', message: listCopy.allAgenciesHidden };
   return { kind: 'ready', cards: visible, total: facts.cards.length };
 }
@@ -58,6 +61,15 @@ export interface InViewListFacts {
   loading: boolean;
   /** True when the legend has switched the whole campground layer off. */
   campgroundsHidden: boolean;
+  /**
+   * True when the legend has at least one agency switched off.
+   *
+   * A switch that is ON, not a count of what it caught: the caller narrows by
+   * pin agency and again by summary agency, and in the window where the pins
+   * lag a pan it is the summaries that drop the last card — so a count of what
+   * the pins held back can be zero in exactly the case this has to recognise.
+   */
+  agenciesHidden: boolean;
   /** Campgrounds in the viewport, before any switch — the server's own count. */
   inBoundary: number;
   /** Those of them the campground filter matched, before any switch. */
@@ -85,6 +97,11 @@ export function inViewList(facts: InViewListFacts): ResultsList<InViewCard> {
   if (facts.loading && facts.cards.length === 0) return { kind: 'empty', message: inViewCopy.loading };
   if (facts.inBoundary === 0 || facts.matching === 0) return { kind: 'empty', message: inViewCopy.none };
   if (facts.campgroundsHidden) return { kind: 'layer-off', inView: facts.inView };
-  if (facts.cards.length === 0) return { kind: 'empty', message: listCopy.allAgenciesHidden };
+  // Matches exist but nothing is left to draw. The legend is the usual reason
+  // and the only actionable one; with every agency switched on it is not, and
+  // saying so would send the user to a panel that would not help.
+  if (facts.cards.length === 0) {
+    return { kind: 'empty', message: facts.agenciesHidden ? listCopy.allAgenciesHidden : inViewCopy.none };
+  }
   return { kind: 'ready', cards: facts.cards, total: facts.total };
 }
