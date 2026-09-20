@@ -10,12 +10,15 @@
 // `stores/mapStore`), so an agency nobody has seen before defaults to visible
 // and panning into a new region shows everything there.
 import type { ExpressionSpecification, FilterSpecification } from 'maplibre-gl';
-import type { PinFeature } from './pins';
+import { pinFeatureId, type PinFeature } from './pins';
 
 /** The row campgrounds with no agency are counted under. */
 export const UNCATEGORIZED_AGENCY = 'Uncategorized';
 
 const CAMPGROUND_CATEGORY = 'campground';
+
+/** Shared empty set, so "nothing hidden" is one stable identity for memo consumers. */
+const NO_HIDDEN_IDS: ReadonlySet<number> = new Set();
 
 /**
  * An agency name, or the sentinel when the pin carries none.
@@ -47,6 +50,50 @@ export function agencyCounts(features: readonly PinFeature[]): Map<string, numbe
     counts.set(agency, (counts.get(agency) ?? 0) + 1);
   }
   return counts;
+}
+
+/**
+ * The POI ids of the campground pins whose agency the legend has switched off.
+ *
+ * The switches are a view filter, not a search parameter: the boundary search
+ * answers for every agency, and the pins already carry the agency, so the
+ * narrowing happens on this side — see [idsWithVisibleAgency].
+ */
+export function hiddenAgencyPinIds(
+  features: readonly PinFeature[],
+  hidden: readonly string[],
+): ReadonlySet<number> {
+  if (hidden.length === 0) return NO_HIDDEN_IDS;
+  const hiddenAgencies = new Set(hidden);
+  const ids = new Set<number>();
+  for (const feature of features) {
+    if (feature?.properties?.category !== CAMPGROUND_CATEGORY) continue;
+    if (!hiddenAgencies.has(featureAgency(feature))) continue;
+    const id = pinFeatureId(feature);
+    // Numbers only, the same narrowing the map's own pin filter does: a POI id
+    // that came back as a string could never match a search id, and counting it
+    // would overstate how much the legend is holding back.
+    if (typeof id === 'number') ids.add(id);
+  }
+  return ids;
+}
+
+/**
+ * The ids left once the switched-off agencies are dropped.
+ *
+ * This has to run BEFORE a caller caps the list, or a view a switched-off agency
+ * dominates fills the cap with rows the caller then drops and shows a handful of
+ * results. An id with no pin in the set stays: the pin loop samples above its
+ * budget and lags a pan by one fetch, and "no agency known" is not the same
+ * answer as "an agency you switched off". The same array comes back when nothing
+ * is hidden, so a memo downstream does not churn.
+ */
+export function idsWithVisibleAgency(
+  ids: readonly number[],
+  hiddenIds: ReadonlySet<number>,
+): readonly number[] {
+  if (hiddenIds.size === 0) return ids;
+  return ids.filter((id) => !hiddenIds.has(id));
 }
 
 /** Legend row order: the agency names, alphabetically. */

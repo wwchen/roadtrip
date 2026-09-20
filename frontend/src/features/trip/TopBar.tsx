@@ -1,7 +1,6 @@
 // Trip-planner composition. Local state is limited to drafts, focus, and keyboard
 // selection; route, corridor, and search data live in their respective hooks.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { Icon } from '@ui';
 import { FilterPanel } from './FilterPanel';
 import { RouteStatus } from './RouteStatus';
@@ -11,13 +10,11 @@ import { TripResults } from './TripResults';
 import { MAX_SEARCH_RESULTS, type SearchResult } from './search-results';
 import { allStopsFilled, isLocated } from '@/domain/trip/stops';
 import { buildRouteIndex } from './route-index';
-import { bboxCenter } from '@/map/viewport';
 import { useMapStore } from '@/stores/mapStore';
 import { tripCardsFromFeatures } from './trip-cards';
-import { cardsFromSummaries, rankCards } from './campground-cards';
-import { useCampgroundSearch } from './useCampgroundSearch';
-import { MAX_IN_VIEW_CARDS, useCampgroundSummaries } from './useCampgroundSummaries';
+import { useInViewCampgrounds } from './useInViewCampgrounds';
 import { useOnRoutePois } from './useOnRoutePois';
+import { useRouteCampgrounds } from './useRouteCampgrounds';
 import { useRoute } from './useRoute';
 import { useTripCards } from './useTripCards';
 import { useSearchResults } from './useSearchResults';
@@ -82,25 +79,11 @@ export function TopBar({ alerts }: TopBarProps) {
   // otherwise whatever is in view.
   const showRoute = shareable && !!route.route;
 
-  // The in-view list: a boundary search for the ids, then a bulk read of their
-  // summaries. Both stay idle while a route owns the list.
-  const campgroundsRequested = useMapStore((s) => s.campgroundsRequested);
-  const viewportBbox = useMapStore((s) => s.viewport?.bbox ?? null);
+  // Both lists own their own contents — which campgrounds they hold, and why
+  // they are empty when they are. This composes them; `TripResults` draws them.
   const [filtersOpen, setFiltersOpen] = useState(false);
-  // `search.enabled` is the one gate: below the zoom threshold or while a route
-  // owns the list. The sticky `campgroundsRequested` flag never goes back to
-  // false once it flips, so `search.enabled` is what decides whether the zoom
-  // hint still applies.
-  const search = useCampgroundSearch({ paused: showRoute });
-  const inViewIds = useMemo(() => search.ids.slice(0, MAX_IN_VIEW_CARDS), [search.ids]);
-  const summaries = useCampgroundSummaries(inViewIds);
-  const rankFilter = useCampgroundFilterStore(
-    useShallow((s) => ({ siteType: s.siteType, groupSize: s.groupSize, amenities: s.amenities })),
-  );
-  const inViewCards = useMemo(() => {
-    const cards = cardsFromSummaries(inViewIds, summaries.byId, viewportBbox ? bboxCenter(viewportBbox) : null);
-    return rankCards(cards, rankFilter);
-  }, [inViewIds, summaries.byId, viewportBbox, rankFilter]);
+  const routeCampgrounds = useRouteCampgrounds(cards, corridor.isFetching);
+  const inView = useInViewCampgrounds({ paused: showRoute });
 
   // The map's pin filter and legend counts follow the same search this list
   // does — the full matching id set, not the 50-card slice — so the two
@@ -109,9 +92,9 @@ export function TopBar({ alerts }: TopBarProps) {
   const setCampgroundFilterIds = useMapStore((s) => s.setCampgroundFilterIds);
   const activeFilterCount = useCampgroundFilterStore(selectActiveFilterCount);
   useEffect(() => {
-    const filtered = activeFilterCount > 0 && search.enabled && !search.isError;
-    setCampgroundFilterIds(filtered ? search.ids : null);
-  }, [activeFilterCount, search.enabled, search.isError, search.ids, setCampgroundFilterIds]);
+    const filtered = activeFilterCount > 0 && inView.enabled && !inView.failed;
+    setCampgroundFilterIds(filtered ? inView.matchingIds : null);
+  }, [activeFilterCount, inView.enabled, inView.failed, inView.matchingIds, setCampgroundFilterIds]);
   useEffect(() => () => setCampgroundFilterIds(null), [setCampgroundFilterIds]);
 
   const pick = (result: SearchResult) => {
@@ -272,8 +255,8 @@ export function TopBar({ alerts }: TopBarProps) {
         <FilterPanel
           open={filtersOpen}
           onToggle={() => setFiltersOpen((open) => !open)}
-          totalInBoundary={search.totalInBoundary}
-          totalMatching={search.totalMatching}
+          totalInBoundary={inView.inView}
+          totalMatching={inView.matching}
         />
       ) : null}
 
@@ -301,20 +284,14 @@ export function TopBar({ alerts }: TopBarProps) {
       {showRoute ? (
         <TripResults
           variant="route"
-          cards={cards}
-          loading={corridor.isFetching}
+          list={routeCampgrounds}
           corridorMiles={planner.corridorMiles}
           onCorridorMilesChange={planner.setCorridorMiles}
         />
       ) : (
         <TripResults
           variant="viewport"
-          cards={inViewCards}
-          campgroundsRequested={campgroundsRequested && search.enabled}
-          loading={inViewCards.length === 0 && (search.isFetching || summaries.isFetching)}
-          error={search.isError || summaries.isError}
-          totalInBoundary={search.totalInBoundary}
-          totalMatching={search.totalMatching}
+          list={inView.list}
         />
       )}
     </div>

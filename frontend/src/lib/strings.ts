@@ -155,6 +155,28 @@ export const inViewCopy = {
   failed: 'Could not load the campgrounds in view. Try panning the map.',
 } as const;
 
+/**
+ * The topbar's corridor list, when a trip is routed.
+ *
+ * Separate from [inViewCopy] because the two lists answer different questions:
+ * this one is about a corridor the user can widen, that one about a viewport
+ * they can pan.
+ */
+export const routeListCopy = {
+  heading: 'Campgrounds along route',
+  loading: 'Looking for campgrounds along the route…',
+  none: 'Pan the map or widen the corridor to find campgrounds.',
+} as const;
+
+/** What both lists say when the legend, rather than the catalog, is what emptied them. */
+export const listCopy = {
+  allAgenciesHidden: 'All campgrounds hidden — re-enable a category in the legend.',
+  layerOffTitle: 'Campgrounds are switched off',
+  layerOffBody: (inView: number) =>
+    `There are ${inView} in view — the Campgrounds layer is turned off, so none are drawn.`,
+  layerOffAction: 'Turn campgrounds back on',
+} as const;
+
 /** The campground filter block under the search row, and the cards' facet row. */
 export const filterCopy = {
   pill: 'Filter campgrounds',

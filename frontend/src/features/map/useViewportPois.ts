@@ -243,6 +243,11 @@ export function useViewportPois(): ViewportPois {
   const countedBuckets = useMemo(() => bucketPins(countedFeatures), [countedFeatures]);
   const counts = useMemo(() => countPins(countedBuckets), [countedBuckets]);
   const agencies = useMemo(() => agencyCounts(countedBuckets.cg.features), [countedBuckets]);
+  // The topbar gets the campgrounds in view BEFORE its own filter narrows them:
+  // what it wants from this loop is the agency each pin carries, and a set the
+  // filter has already been applied to could not answer for a campground the
+  // filter excluded.
+  const clippedBuckets = useMemo(() => bucketPins(clippedFeatures), [clippedFeatures]);
 
   // A route supplies campgrounds whatever the zoom, so the topbar's in-view hint
   // would otherwise tell the user to zoom in while the route list already shows
@@ -253,8 +258,8 @@ export function useViewportPois(): ViewportPois {
   useEffect(() => {
     // The field means what it says: while a route owns the map, the corridor's
     // pins are not "in the viewport", so publish nothing rather than them.
-    setViewportCampgrounds(routeActive ? [] : countedBuckets.cg.features, campgroundsRequested);
-  }, [routeActive, countedBuckets, campgroundsRequested, setViewportCampgrounds]);
+    setViewportCampgrounds(routeActive ? [] : clippedBuckets.cg.features, campgroundsRequested);
+  }, [routeActive, clippedBuckets, campgroundsRequested, setViewportCampgrounds]);
 
   return { buckets, counts, agencies, campgroundsRequested };
 }

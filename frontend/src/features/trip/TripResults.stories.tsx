@@ -5,6 +5,8 @@ import { MapRuntimeContext, type MapContextValue } from '@/map/context';
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
 import { cardsFromSummaries, type InViewCard } from './campground-cards';
+import { inViewCopy, listCopy, routeListCopy } from '@/lib/strings';
+import type { ResultsList } from './results-list';
 import { TripResults } from './TripResults';
 import type { TripCard } from './trip-cards';
 import './topbar.css';
@@ -143,8 +145,7 @@ export const AlongRoute: Story = {
     <Panel>
       <TripResults
         variant="route"
-        cards={ALONG_ROUTE}
-        loading={false}
+        list={{ kind: 'ready', cards: ALONG_ROUTE, total: ALONG_ROUTE.length }}
         corridorMiles={5}
         onCorridorMilesChange={() => {}}
       />
@@ -152,104 +153,58 @@ export const AlongRoute: Story = {
   ),
 };
 
-/** Below the campground zoom gate the server sends no pins, so the list says what to do. */
-export const InViewZoomedOut: Story = {
+/** A routed trip whose corridor holds nothing: widen it, or move the route. */
+export const AlongRouteEmpty: Story = {
   render: () => (
     <Panel>
       <TripResults
-        variant="viewport"
-        cards={[]}
-        campgroundsRequested={false}
-        loading={false}
-        error={false}
-        totalInBoundary={0}
-        totalMatching={0}
+        variant="route"
+        list={{ kind: 'empty', message: routeListCopy.none }}
+        corridorMiles={5}
+        onCorridorMilesChange={() => {}}
       />
     </Panel>
   ),
 };
+
+/**
+ * Every state the viewport list can be in, as its owner hands them over. The
+ * component renders three shapes — a sentence, the layer-off card, or cards —
+ * and picks none of them itself.
+ */
+const inViewStory = (list: ResultsList<InViewCard>, wrap: (children: ReactNode) => ReactNode = (c) => <Panel>{c}</Panel>): Story => ({
+  render: () => <>{wrap(<TripResults variant="viewport" list={list} />)}</>,
+});
+
+/** Below the campground zoom gate the server sends no pins, so the list says what to do. */
+export const InViewZoomedOut = inViewStory({ kind: 'empty', message: inViewCopy.zoomIn });
 
 /** Zoomed in over nothing. */
-export const InViewEmpty: Story = {
-  render: () => (
-    <Panel>
-      <TripResults
-        variant="viewport"
-        cards={[]}
-        campgroundsRequested
-        loading={false}
-        error={false}
-        totalInBoundary={0}
-        totalMatching={0}
-      />
-    </Panel>
-  ),
-};
+export const InViewEmpty = inViewStory({ kind: 'empty', message: inViewCopy.none });
 
 /** The search has answered but the summaries have not landed yet. */
-export const InViewLoading: Story = {
-  render: () => (
-    <Panel>
-      <TripResults
-        variant="viewport"
-        cards={[]}
-        campgroundsRequested
-        loading
-        error={false}
-        totalInBoundary={3}
-        totalMatching={3}
-      />
-    </Panel>
-  ),
-};
+export const InViewLoading = inViewStory({ kind: 'empty', message: inViewCopy.loading });
+
+/** The search itself failed: not the same answer as an empty view. */
+export const InViewFailed = inViewStory({ kind: 'empty', message: inViewCopy.failed });
+
+/** Every campground in view belongs to an agency the legend has switched off. */
+export const InViewAllAgenciesHidden = inViewStory({
+  kind: 'empty',
+  message: listCopy.allAgenciesHidden,
+});
+
+/** The Campgrounds layer itself is off: the one empty state that carries its own switch. */
+export const InViewLayerOff = inViewStory({ kind: 'layer-off', inView: 503 });
 
 /** The settled list: agency line, count line, rating where the catalog has one, and the not-checkable tag. */
-export const InView: Story = {
-  render: () => (
-    <Panel>
-      <TripResults
-        variant="viewport"
-        cards={IN_VIEW}
-        campgroundsRequested
-        loading={false}
-        error={false}
-        totalInBoundary={3}
-        totalMatching={3}
-      />
-    </Panel>
-  ),
-};
+export const InView = inViewStory({ kind: 'ready', cards: IN_VIEW, total: IN_VIEW.length });
 
 /** An agency switched off in the legend: the head reads "2 of 3" and the checkable count survives. */
-export const InViewFiltered: Story = {
-  render: () => (
-    <FilteredPanel>
-      <TripResults
-        variant="viewport"
-        cards={IN_VIEW}
-        campgroundsRequested
-        loading={false}
-        error={false}
-        totalInBoundary={3}
-        totalMatching={3}
-      />
-    </FilteredPanel>
-  ),
-};
+export const InViewFiltered = inViewStory(
+  { kind: 'ready', cards: IN_VIEW.slice(0, 2), total: 3 },
+  (children) => <FilteredPanel>{children}</FilteredPanel>,
+);
 
 /** A dense view: only the nearest cards render, and the head still counts every match. */
-export const InViewCapped: Story = {
-  render: () => (
-    <Panel>
-      <TripResults
-        variant="viewport"
-        cards={IN_VIEW}
-        campgroundsRequested
-        loading={false}
-        error={false}
-        totalInBoundary={80}
-        totalMatching={60}
-      />
-    </Panel>
-  ),
-};
+export const InViewCapped = inViewStory({ kind: 'ready', cards: IN_VIEW, total: 60 });
