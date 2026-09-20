@@ -1,11 +1,19 @@
 // The campgrounds list: along the route when there is one, in view when there is not.
 //
+// Presentational. Which campgrounds a list holds, and why it is empty when it
+// is, are decided by whoever owns the list (`useInViewCampgrounds`,
+// `useRouteCampgrounds`) and arrive here as a `ResultsList` — this file renders
+// the three shapes one can take and nothing else. It filtered the cards itself
+// until the viewport list began narrowing by agency before its card cap, at
+// which point "no cards" stopped telling it which kind of empty it was looking
+// at.
+//
 // Collapse state stays local and defaults closed on phones so results do not cover
 // the route immediately after it is computed.
 import { useState, type ReactNode } from 'react';
 import { Button, EmptyState, Icon } from '@ui';
 import { token } from '@tokens';
-import { filterCopy, inViewCopy } from '@/lib/strings';
+import { filterCopy, inViewCopy, listCopy, routeListCopy } from '@/lib/strings';
 import { useMapContext } from '@/map/context';
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
@@ -13,16 +21,14 @@ import { countLine as facetCountLine, type InViewCard } from './campground-cards
 import { CorridorSlider } from './CorridorSlider';
 import { facetsFor, type FacetState } from './facets';
 import { formatDistanceAlongRoute } from './route-summary';
-import { visibleCards, type TripCard } from './trip-cards';
+import type { ResultsList } from './results-list';
+import type { TripCard } from './trip-cards';
 import { shouldAutoFocus } from '@/domain/trip/viewport';
 
 /** Where a card click puts the camera: tight enough to see the pin, wide enough to place it. */
 const CARD_FLY_ZOOM = 13;
 const FLY_SPEED = 1.6;
 
-const ROUTE_HEADING = 'Campgrounds along route';
-/** Every campground in the list belongs to an agency the legend has switched off. */
-const ALL_AGENCIES_HIDDEN = 'All campgrounds hidden — re-enable a category in the legend.';
 const RATING_PREFIX = '★';
 
 /** A facet's icon, class, and state word, keyed by state rather than chained ternaries. */
@@ -32,47 +38,23 @@ const FACET_APPEARANCE: Record<FacetState, { icon: string; className: string; st
   'no-data': { icon: 'help', className: 'tb-facet tb-facet--no-data', stateWord: filterCopy.noData },
 };
 
-interface CommonProps {
-  cards: readonly TripCard[];
-}
-
-interface RouteProps extends CommonProps {
+interface RouteProps {
   variant: 'route';
-  /** True while the corridor request is in flight, for the count line. */
-  loading: boolean;
+  list: ResultsList<TripCard>;
   corridorMiles: number;
   onCorridorMilesChange: (miles: number) => void;
 }
 
-interface ViewportProps extends CommonProps {
+interface ViewportProps {
   variant: 'viewport';
-  cards: readonly InViewCard[];
-  /** False below the zoom gate, where nothing is asked. */
-  campgroundsRequested: boolean;
-  /** True while the search or the summaries are in flight and the list is empty. */
-  loading: boolean;
-  /** True once the search or the summaries have failed. */
-  error: boolean;
-  totalMatching: number;
-  /**
-   * How many campgrounds in view belong to an agency the legend has switched
-   * off.
-   *
-   * The caller narrows by agency before its card cap, so an all-hidden view
-   * arrives here with no cards at all — the same shape as a view with nothing
-   * in it. This is the fact that tells the two apart; what to say about it is
-   * decided below, not by the caller.
-   */
-  hiddenInView: number;
+  list: ResultsList<InViewCard>;
 }
 
 export type TripResultsProps = RouteProps | ViewportProps;
 
 export function TripResults(props: TripResultsProps) {
-  const { cards } = props;
+  const { list } = props;
   const { map } = useMapContext();
-  const hiddenAgencies = useMapStore((s) => s.hiddenAgencies);
-  const campgroundsHidden = useMapStore((s) => s.hiddenOverlays.includes('cg'));
   const setOverlayHidden = useMapStore((s) => s.setOverlayHidden);
   const selectPoi = useMapStore((s) => s.selectPoi);
 
@@ -80,10 +62,6 @@ export function TripResults(props: TripResultsProps) {
   // same question — "is this a desktop" — and having one reader of the breakpoint keeps
   // the two from disagreeing.
   const [collapsed, setCollapsed] = useState(() => !shouldAutoFocus());
-
-  const visible = visibleCards<TripCard>(cards, { hiddenAgencies, campgroundsHidden });
-  const total = cards.length;
-  const emptyMessage = emptyCopy(props, total, campgroundsHidden);
 
   const openCard = (card: TripCard) => {
     // Fly, then select. The drawer reads `selectedPoiId` and hydrates from the id.
@@ -105,8 +83,8 @@ export function TripResults(props: TripResultsProps) {
           setCollapsed((current) => !current);
         }}
       >
-        {props.variant === 'route' ? ROUTE_HEADING : inViewCopy.heading}
-        <span className="tb-results-count">{countLine(props, visible)}</span>
+        {props.variant === 'route' ? routeListCopy.heading : inViewCopy.heading}
+        <span className="tb-results-count">{countLine(props)}</span>
         {/* Points up when expanded; `.tb-results.collapsed` rotates it. */}
         <Icon name="chevron-up" className="tb-results-chevron" aria-hidden="true" />
       </div>
@@ -119,27 +97,25 @@ export function TripResults(props: TripResultsProps) {
         ) : null}
 
         <div className="tb-results-cards" id="tb-results-cards">
-          {visible.length === 0 ? (
-            emptyMessage === null ? (
-              <EmptyState
-                icon="eye-off"
-                title="Campgrounds are switched off"
-                body={`There are ${total} in view — the Campgrounds layer is turned off, so none are drawn.`}
-                actions={
-                  <Button variant="primary" size="sm" onClick={() => setOverlayHidden('cg', false)}>
-                    Turn campgrounds back on
-                  </Button>
-                }
-              />
-            ) : (
-              <div className="tb-card-empty">{emptyMessage}</div>
-            )
+          {list.kind === 'empty' ? (
+            <div className="tb-card-empty">{list.message}</div>
+          ) : list.kind === 'layer-off' ? (
+            <EmptyState
+              icon="eye-off"
+              title={listCopy.layerOffTitle}
+              body={listCopy.layerOffBody(list.inView)}
+              actions={
+                <Button variant="primary" size="sm" onClick={() => setOverlayHidden('cg', false)}>
+                  {listCopy.layerOffAction}
+                </Button>
+              }
+            />
           ) : props.variant === 'route' ? (
-            visible.map((card) => (
+            (list.cards as readonly TripCard[]).map((card) => (
               <Card key={String(card.id)} card={card} onOpen={openCard} sub={card.sub} meta={<RouteMeta card={card} />} />
             ))
           ) : (
-            visibleCards(props.cards, { hiddenAgencies, campgroundsHidden }).map((card) => (
+            (list.cards as readonly InViewCard[]).map((card) => (
               <Card
                 key={String(card.id)}
                 card={card}
@@ -185,45 +161,18 @@ function Card({
   );
 }
 
-/** "3 of 12" only while something is filtered out or capped — otherwise the second number is noise. */
-function countLine(props: TripResultsProps, visible: readonly TripCard[]): string {
-  if (props.variant === 'route') {
-    const total = props.cards.length;
-    const count = visible.length === total ? String(total) : `${visible.length} of ${total}`;
-    return `· ${count}`;
-  }
-  // All viewport cards are hydrated now, so the count is against the search's total.
-  const denominator = props.totalMatching;
-  const count = visible.length === denominator ? String(denominator) : `${visible.length} of ${denominator}`;
-  if (visible.length === 0) return `· ${count}`;
-  const checkable = visible.filter((card) => card.checkable).length;
-  return `· ${count} · ${inViewCopy.checkableCount(checkable)}`;
-}
-
 /**
- * The empty-list copy, or null when the hidden-campgrounds card should render instead.
- *
- * Precedence: a computing/empty route or an unrequested/loading/empty viewport
- * outranks the layer-off card, because those states explain themselves better than
- * "turn it back on" does. Only once neither applies does a hidden layer get its own card.
+ * "3 of 12" only while something is held back or capped — otherwise the second
+ * number is noise. A list that is not `ready` has nothing to count.
  */
-function emptyCopy(props: TripResultsProps, total: number, campgroundsHidden: boolean): string | null {
-  if (props.variant === 'route') {
-    if (props.loading) return 'Looking for campgrounds along the route…';
-    if (total === 0) return 'Pan the map or widen the corridor to find campgrounds.';
-  } else {
-    if (!props.campgroundsRequested) return inViewCopy.zoomIn;
-    if (props.error) return inViewCopy.failed;
-    if (props.loading) return inViewCopy.loading;
-    // Which kind of empty this is: a view holding switched-off campgrounds is one
-    // legend click from results, and telling the user to pan would be wrong. A
-    // genuinely empty view still outranks the layer-off card, as it always has;
-    // an all-hidden view does not, because that card carries the switch itself.
-    if (total === 0 && props.hiddenInView === 0) return inViewCopy.none;
-    if (total === 0 && !campgroundsHidden) return ALL_AGENCIES_HIDDEN;
-  }
-  if (campgroundsHidden) return null;
-  return ALL_AGENCIES_HIDDEN;
+function countLine(props: TripResultsProps): string {
+  const { list } = props;
+  if (list.kind !== 'ready') return '· 0';
+  const shown = list.cards.length;
+  const count = shown === list.total ? String(list.total) : `${shown} of ${list.total}`;
+  if (props.variant === 'route') return `· ${count}`;
+  const checkable = list.cards.filter((card) => card.checkable).length;
+  return `· ${count} · ${inViewCopy.checkableCount(checkable)}`;
 }
 
 function RouteMeta({ card }: { card: TripCard }) {
