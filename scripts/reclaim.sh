@@ -19,10 +19,9 @@ MANAGED_LABEL="ca.floo.roadtrip.managed=true"
 : "${ROADTRIP_IMAGE_RETENTION:=72h}"
 : "${RECLAIM_FREE_TARGET_GB:=20}"
 
-# Seconds any one read in a failed disk check's diagnosis may take. The
-# diagnosis runs exactly when free space is short, and a full disk wedges the
-# daemon so that `docker` accepts the connection and never answers: left
-# unbounded, the read meant to explain a failed deploy would hang it instead.
+# Seconds any one read in a failed disk check's diagnosis may take. A full disk
+# wedges the daemon so `docker` never answers, and that is exactly when the
+# diagnosis runs — unbounded, it would hang the deploy it meant to explain.
 : "${RECLAIM_DIAGNOSIS_TIMEOUT_S:=15}"
 
 # Rollback depth on the host; pure disk pressure locally. A laptop keeps two
@@ -236,10 +235,9 @@ cmd_prune() {
     _prune_volumes
 }
 
-# Runs "$@", giving up after RECLAIM_DIAGNOSIS_TIMEOUT_S. The deploy host is
-# macOS, which ships no `timeout`, so the watchdog is by hand. Its output goes
-# nowhere so an orphaned `sleep` cannot hold a caller's pipe open, and it never
-# fails: a diagnosis that cannot be read is reported, not fatal.
+# Runs "$@" with a deadline. macOS ships no `timeout`, so the watchdog is by
+# hand; its output goes nowhere so an orphaned `sleep` cannot hold a caller's
+# pipe open. Never fails: an unreadable diagnosis is reported, not fatal.
 _bounded() {
     local pid watchdog status=0
     "$@" &
@@ -255,11 +253,9 @@ _bounded() {
     return 0
 }
 
-# Where the space went, in the buckets prune cannot empty. A disk check that
-# failed after prune reclaimed nothing used to stop at "found 11GB", which
-# names the symptom and none of the five places the shortfall can live: the
-# rollback copies prune keeps on purpose, other stacks on the shared host,
-# anonymous volumes, build cache, or files outside Docker entirely.
+# Where the space went, in the buckets prune cannot empty: the rollback copies
+# it keeps on purpose, other stacks on the shared host, anonymous volumes,
+# build cache, or files outside Docker. "found 11GB" named none of them.
 _diagnose_disk() {
     local repository keep index line
 
@@ -271,8 +267,7 @@ _diagnose_disk() {
         index=0
         while IFS= read -r line; do
             [[ -n "${line}" ]] || continue
-            # Scope decides the keep depth; without one the depth is not known,
-            # so say nothing rather than print the wrong number.
+            # No scope, no known keep depth: say nothing rather than a wrong number.
             if [[ -n "${SCOPE}" ]] && (( index < keep )); then
                 echo "    ${line}  (kept for rollback: newest ${keep})"
             else
