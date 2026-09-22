@@ -109,6 +109,97 @@ groups:
                     type: last
                     params: []
 
+      # Retention and compaction both act on the blocklist, never on the
+      # directory, so a failed poll silences both without an error of their own —
+      # twice now, ending in a full disk (see grafana/tempo/tempo.yml). A corrupt
+      # block fails every retry, so this clears only when someone deletes it.
+      # Threshold rather than > 0: a failed poll adds ~2 and polls run every 5m,
+      # so a real failure reads ~12 over 30m where one bad cycle reads ~2.
+      - uid: roadtrip-tempo-blocklist-poll-failing
+        title: Tempo blocklist poll failing
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Tempo cannot rebuild its blocklist — retention and compaction are both stalled and the disk will fill. Find the unreadable block: docker logs roadtrip-tempo-1 | grep "failed to poll"'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(tempodb_blocklist_tenant_index_errors_total[30m])) or vector(0)
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [4]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
+      # The effect rather than the cause, so a stall this stack has not seen yet
+      # is caught too. Blocks are cut every ~30s against 168h retention; a stack
+      # ingesting nothing is roadtrip-backend-telemetry-silent's job.
+      - uid: roadtrip-tempo-retention-stalled
+        title: Tempo retention deleting nothing
+        condition: C
+        for: 1h
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'No trace blocks deleted in 24h — blocks are accumulating faster than retention removes them.'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(tempodb_retention_deleted_total[24h])) or vector(0)
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
   - orgId: 1
     name: backend-health
     folder: Roadtrip
