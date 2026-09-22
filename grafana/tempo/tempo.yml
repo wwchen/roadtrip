@@ -32,26 +32,17 @@ storage:
 #   curl -s localhost:3200/metrics | grep 'limit_name="block_retention"'
 # 168h reads as 6.048e+14 (nanoseconds); 0 means retention is off.
 #
-# That check is necessary and NOT sufficient — it went on reading 6.048e+14
-# through a second pile-up, 35GB across 68,900 blocks, because a live limit
-# still has to reach a block. Retention and compaction both act on the
-# blocklist, and the blocklist is rebuilt by a poll that reads every block's
-# meta.json. The first incident killed Tempo mid-write and left two blocks whose
-# files were all zero bytes; an empty meta.json parses as "unexpected end of
-# JSON input", and the poller fails the whole tenant poll if ANY block errors.
-# So the blocklist was never rebuilt, retention ran 192 times and deleted
-# nothing, and the disk filled again — the first incident seeding the second.
-#
-# blocklist_poll_tolerate_consecutive_errors does not protect against this: it
-# retries the whole tenant poll rather than skipping the block, and a corrupt
-# block fails every retry. No setting quarantines one. The fix is to delete the
-# block, which the log names:
+# Necessary, not sufficient: it went on reading 6.048e+14 through a second
+# pile-up of 35GB, because a live limit still has to reach a block. Retention
+# and compaction both act on the blocklist, which a poll rebuilds by reading
+# every block's meta.json — and the first incident left two blocks of zero
+# bytes, whose empty meta.json fails the whole tenant poll. Nothing was deleted
+# for 26 days. blocklist_poll_tolerate_consecutive_errors does not help: it
+# retries the poll rather than skipping the block, and nothing quarantines one.
+# Find it and delete it:
 #   docker logs roadtrip-tempo-1 | grep 'failed to poll'
 #   docker run --rm -v roadtrip_tempo-data:/v alpine \
 #     find /v/blocks/single-tenant -name meta.json -size 0
-# What makes that a ten-minute job rather than a month is the alert on
-# tempodb_blocklist_tenant_index_errors_total (provisioning/alerting/roadtrip.yml):
-# it was rising, unread, for 26 days.
 backend_scheduler:
   provider:
     compaction:

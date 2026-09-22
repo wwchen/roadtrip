@@ -109,27 +109,12 @@ groups:
                     type: last
                     params: []
 
-      # Tempo's blocklist poll is the single point every block passes through:
-      # retention and compaction both act on the blocklist, never on the
-      # directory. When the poll fails the blocklist is never rebuilt, both go
-      # quiet with no error of their own, and blocks accumulate until the disk
-      # fills and deadlocks the Docker daemon — which has now happened twice
-      # (see grafana/tempo/tempo.yml). The second time, two zero-byte meta.json
-      # files left by the first incident failed every poll for 26 days while
-      # `tempodb_retention_marked_for_deletion_total` sat at 0 and 35GB piled
-      # up. This counter was rising the whole time and nothing read it.
-      #
-      # A corrupt block fails every retry deterministically
-      # (blocklist_poll_tolerate_consecutive_errors retries the whole tenant
-      # poll, it does not skip the block), so any sustained increase is a human
-      # job: find the unreadable block and remove it.
-      #
-      # Threshold, not `> 0`: a failed poll contributes about 2 to this counter
-      # and the poll runs every 5m, so a real failure reads ~12 over 30m while a
-      # single bad cycle reads ~2. Above 4 means at least two consecutive failed
-      # cycles — ten minutes without a blocklist, which is not a blip. `> 0`
-      # also keeps firing for 30m after the block is deleted, paging about a
-      # problem already fixed.
+      # Retention and compaction both act on the blocklist, never on the
+      # directory, so a failed poll silences both without an error of their own —
+      # twice now, ending in a full disk (see grafana/tempo/tempo.yml). A corrupt
+      # block fails every retry, so this clears only when someone deletes it.
+      # Threshold rather than > 0: a failed poll adds ~2 and polls run every 5m,
+      # so a real failure reads ~12 over 30m where one bad cycle reads ~2.
       - uid: roadtrip-tempo-blocklist-poll-failing
         title: Tempo blocklist poll failing
         condition: C
@@ -171,11 +156,9 @@ groups:
                     type: last
                     params: []
 
-      # The effect, not the cause, so it catches a stall this stack has not seen
-      # yet. Blocks are cut every ~30s here and retention is 168h, so a day
-      # without a single deletion means nothing is ageing out. A stack ingesting
-      # no traces at all would also be silent here — that is what
-      # `roadtrip-backend-telemetry-silent` above is for.
+      # The effect rather than the cause, so a stall this stack has not seen yet
+      # is caught too. Blocks are cut every ~30s against 168h retention; a stack
+      # ingesting nothing is roadtrip-backend-telemetry-silent's job.
       - uid: roadtrip-tempo-retention-stalled
         title: Tempo retention deleting nothing
         condition: C
