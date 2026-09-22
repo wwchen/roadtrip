@@ -19,6 +19,12 @@ MANAGED_LABEL="ca.floo.roadtrip.managed=true"
 : "${ROADTRIP_IMAGE_RETENTION:=72h}"
 : "${RECLAIM_FREE_TARGET_GB:=20}"
 
+# Seconds any one read in a failed disk check's diagnosis may take. The
+# diagnosis runs exactly when free space is short, and a full disk wedges the
+# daemon so that `docker` accepts the connection and never answers: left
+# unbounded, the read meant to explain a failed deploy would hang it instead.
+: "${RECLAIM_DIAGNOSIS_TIMEOUT_S:=15}"
+
 # Rollback depth on the host; pure disk pressure locally. A laptop keeps two
 # because Tilt rewrites a tag per build and four tags already sit inside a
 # keep-5 window, which would free nothing.
@@ -230,6 +236,56 @@ cmd_prune() {
     _prune_volumes
 }
 
+# Runs "$@", giving up after RECLAIM_DIAGNOSIS_TIMEOUT_S. The deploy host is
+# macOS, which ships no `timeout`, so the watchdog is by hand. Its output goes
+# nowhere so an orphaned `sleep` cannot hold a caller's pipe open, and it never
+# fails: a diagnosis that cannot be read is reported, not fatal.
+_bounded() {
+    local pid watchdog status=0
+    "$@" &
+    pid=$!
+    ( sleep "${RECLAIM_DIAGNOSIS_TIMEOUT_S}"; kill -TERM "${pid}" 2>/dev/null ) >/dev/null 2>&1 &
+    watchdog=$!
+    wait "${pid}" 2>/dev/null || status=$?
+    kill "${watchdog}" 2>/dev/null || true
+    wait "${watchdog}" 2>/dev/null || true
+    if (( status > 128 )); then
+        echo "    (gave up after ${RECLAIM_DIAGNOSIS_TIMEOUT_S}s: '$*' did not answer; the Docker daemon may already be wedged)"
+    fi
+    return 0
+}
+
+# Where the space went, in the buckets prune cannot empty. A disk check that
+# failed after prune reclaimed nothing used to stop at "found 11GB", which
+# names the symptom and none of the five places the shortfall can live: the
+# rollback copies prune keeps on purpose, other stacks on the shared host,
+# anonymous volumes, build cache, or files outside Docker entirely.
+_diagnose_disk() {
+    local repository keep index line
+
+    echo "==> where the space is"
+    echo "    Roadtrip images, newest first:"
+    for repository in ${ROADTRIP_REPOSITORIES}; do
+        keep="${ROADTRIP_IMAGE_KEEP}"
+        [[ "${repository}" == "${NEVER_KEEP_REPOSITORY}" ]] && keep=0
+        index=0
+        while IFS= read -r line; do
+            [[ -n "${line}" ]] || continue
+            # Scope decides the keep depth; without one the depth is not known,
+            # so say nothing rather than print the wrong number.
+            if [[ -n "${SCOPE}" ]] && (( index < keep )); then
+                echo "    ${line}  (kept for rollback: newest ${keep})"
+            else
+                echo "    ${line}"
+            fi
+            index=$(( index + 1 ))
+        done < <(_bounded docker image ls "${repository}" --format '{{.Repository}}:{{.Tag}}  {{.Size}}  {{.CreatedSince}}')
+    done
+    echo "    Docker as a whole, including other stacks on this host, volumes and build cache:"
+    _bounded docker system df | sed 's/^/    /'
+    echo "    If Docker's total is small next to the shortfall, the space is outside Docker."
+}
+
 cmd_report() {
     DRY_RUN=1
     cmd_prune
@@ -247,7 +303,10 @@ cmd_check_disk() {
     if (( free_gb < MIN_GB )); then
         echo "error: ${LABEL} needs ${MIN_GB}GB free on ${DISK_PATH}, found ${free_gb}GB" >&2
         echo "       a full disk deadlocks the Docker daemon; reclaim space before deploying" >&2
-        echo "       (run 'scripts/reclaim.sh prune', or 'docker image prune -f' on the host)" >&2
+        # Never an unscoped `docker ... prune`: other stacks share this host,
+        # and it is the one call here that would reach past the label.
+        echo "       see what prune would remove: scripts/reclaim.sh report --scope ${SCOPE:-host}" >&2
+        _diagnose_disk >&2
         return 1
     fi
     echo "==> disk check: ${free_gb}GB free on ${DISK_PATH} (minimum ${MIN_GB}GB)"

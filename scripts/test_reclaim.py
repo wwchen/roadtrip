@@ -121,6 +121,93 @@ class CheckDiskTest(ReclaimTestCase):
         self.assertIn("requires a value", done.stderr)
 
 
+# The deploy host's shape: a daemon that accepts the connection and never
+# answers, which is what a full disk does to Docker. `sleep` is exec'd so the
+# watchdog's TERM lands on the process that is actually blocking.
+HUNG_DOCKER = """#!/bin/sh
+printf '%s\\n' "$*" >> "$DOCKER_LOG"
+exec sleep 60
+"""
+
+
+class DiskCheckDiagnosisTest(ReclaimTestCase):
+    """A failed disk check says where the space is, not just how little is left."""
+
+    def check_under_the_floor(self, **env: str) -> subprocess.CompletedProcess:
+        return self.run_reclaim(
+            "check-disk", "--label", "prod deploy", "--scope", "host",
+            "--min-gb", "999999999", "--path", str(self.tmp), **env,
+        )
+
+    def test_names_the_roadtrip_images_and_docker_as_a_whole(self) -> None:
+        self.image_ls.write_text("roadtrip/backend:v1  1.2GB  2 days ago\n")
+        done = self.check_under_the_floor()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("where the space is", done.stderr)
+        self.assertIn("roadtrip/backend:v1", done.stderr)
+        self.assertIn("system df", self.docker_calls())
+
+    def test_marks_the_rollback_copies_prune_keeps_on_purpose(self) -> None:
+        # The five newest per repository are exactly what prune will never
+        # take, so they are the likeliest place a 0B prune leaves the space.
+        self.image_ls.write_text(FOUR_TAGS)
+        done = self.check_under_the_floor()
+        self.assertEqual(done.stderr.count("kept for rollback: newest 5"), 4)
+
+    def test_without_a_scope_it_does_not_guess_the_keep_depth(self) -> None:
+        self.image_ls.write_text(FOUR_TAGS)
+        done = self.run_reclaim(
+            "check-disk", "--label", "unit test", "--min-gb", "999999999",
+            "--path", str(self.tmp),
+        )
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("roadtrip/backend:latest", done.stderr)
+        self.assertNotIn("kept for rollback", done.stderr)
+
+    def test_advice_is_scoped_and_never_an_unscoped_docker_prune(self) -> None:
+        # The old hint recommended `docker image prune -f` -- the one command
+        # that reaches past the label on a host shared with other stacks --
+        # and `reclaim.sh prune` with no --scope, which is a usage error.
+        done = self.check_under_the_floor()
+        self.assertIn("scripts/reclaim.sh report --scope host", done.stderr)
+        self.assertNotIn("docker image prune", done.stderr)
+        self.assertNotIn("docker volume prune", done.stderr)
+
+    def test_diagnosis_never_prunes(self) -> None:
+        self.image_ls.write_text(FOUR_TAGS)
+        self.check_under_the_floor()
+        destructive = [c for c in self.docker_calls()
+                       if " prune" in c or c.startswith(("image rm", "volume rm"))]
+        self.assertEqual(destructive, [])
+
+    def test_a_passing_check_asks_docker_nothing(self) -> None:
+        done = self.run_reclaim(
+            "check-disk", "--label", "unit test", "--min-gb", "0",
+            "--path", str(self.tmp),
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(self.docker_calls(), [])
+
+    def test_a_wedged_daemon_bounds_the_diagnosis_instead_of_hanging_the_deploy(self) -> None:
+        (self.bin / "docker").write_text(HUNG_DOCKER)
+        # Every call hangs: one per repository plus `system df`, each given up
+        # on after a second. Well inside the budget, and nowhere near 60s each.
+        calls = len(RECLAIM.read_text().split("ROADTRIP_REPOSITORIES=\"")[1]
+                    .split("\"")[0].split()) + 1
+        done = subprocess.run(
+            ["bash", str(RECLAIM), "check-disk", "--label", "prod deploy",
+             "--scope", "host", "--min-gb", "999999999", "--path", str(self.tmp)],
+            capture_output=True, text=True, check=False, timeout=calls * 1 + 20,
+            env={**os.environ,
+                 "PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}",
+                 "DOCKER_LOG": str(self.log),
+                 "RECLAIM_DIAGNOSIS_TIMEOUT_S": "1"},
+        )
+        self.assertEqual(done.returncode, 1, "a hung read must not turn the failure into anything else")
+        self.assertIn("gave up after 1s", done.stderr)
+        self.assertIn("may already be wedged", done.stderr)
+
+
 FOUR_TAGS = "\n".join([
     "roadtrip/backend:tilt-aaaa",
     "roadtrip/backend:tilt-bbbb",
