@@ -235,13 +235,8 @@ FOUR_COMPANION_TAGS = "\n".join([
 
 
 class CompanionKeepDepthTest(ReclaimTestCase):
-    """The companion carries its own rollback depth.
-
-    A copy is ~3.5GB against a backend's ~0.7GB, and on the deploy host three
-    of them held 10.6GB while the disk check wanted 20GB free. Every deploy
-    re-pulls, and `last-good-release` names one release to fall back to, so
-    current + previous is the whole of what a rollback can reach.
-    """
+    """The companion carries its own rollback depth: a copy is ~3.5GB against a
+    backend's ~0.7GB, and a rollback reaches one release back."""
 
     def companion_removals(self) -> list:
         return [c for c in self.docker_calls() if c.startswith(f"image rm {COMPANION}")]

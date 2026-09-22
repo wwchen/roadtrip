@@ -134,8 +134,7 @@ _apply_scope_defaults() {
         : "${ROADTRIP_IMAGE_KEEP:=${LOCAL_IMAGE_KEEP}}"
         [[ -n "${INCLUDE_ANONYMOUS}" ]] || INCLUDE_ANONYMOUS=0
     fi
-    # Defaulted from the scope's own depth so a shallower scope is never
-    # deepened for the companion; an explicit override is taken as given.
+    # Never deeper than the scope itself; an explicit override is taken as given.
     if (( ROADTRIP_IMAGE_KEEP < COMPANION_IMAGE_KEEP )); then
         : "${ROADTRIP_COMPANION_IMAGE_KEEP:=${ROADTRIP_IMAGE_KEEP}}"
     else
@@ -144,9 +143,8 @@ _apply_scope_defaults() {
     : "${MIN_GB:=${ROADTRIP_MIN_FREE_DISK_GB:-${RECLAIM_FREE_TARGET_GB}}}"
 }
 
-# How many tags of a repository prune keeps, newest first. One reader of the
-# per-repository exceptions, so prune and the failed-check diagnosis cannot
-# disagree about what is kept and why.
+# Tags kept per repository, newest first. One reader of the exceptions, so prune
+# and the failed-check diagnosis cannot disagree about what is kept.
 _keep_for() {
     case "$1" in
         "${NEVER_KEEP_REPOSITORY}") echo 0 ;;
