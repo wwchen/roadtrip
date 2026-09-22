@@ -25,7 +25,12 @@ case "$1" in
       ls)
         case "$*" in
           *dangling=true*) cut -d' ' -f1 "$FAKE_DANGLING" 2>/dev/null; true ;;
-          *) [ "$3" = "roadtrip/backend" ] && cat "$FAKE_IMAGE_LS" 2>/dev/null; true ;;
+          *)
+            case "$3" in
+              roadtrip/backend) cat "$FAKE_IMAGE_LS" 2>/dev/null ;;
+              ghcr.io/wwchen/roadtrip/recgov-companion) cat "$FAKE_COMPANION_LS" 2>/dev/null ;;
+            esac
+            true ;;
         esac
         ;;
       inspect)
@@ -53,6 +58,8 @@ class ReclaimTestCase(unittest.TestCase):
         self.image_ls.write_text("")
         self.dangling = self.tmp / "dangling.txt"
         self.dangling.write_text("")
+        self.companion_ls = self.tmp / "companion.txt"
+        self.companion_ls.write_text("")
         fake = self.bin / "docker"
         fake.write_text(FAKE_DOCKER)
         fake.chmod(0o755)
@@ -64,6 +71,7 @@ class ReclaimTestCase(unittest.TestCase):
         environ["DOCKER_LOG"] = str(self.log)
         environ["FAKE_IMAGE_LS"] = str(self.image_ls)
         environ["FAKE_DANGLING"] = str(self.dangling)
+        environ["FAKE_COMPANION_LS"] = str(self.companion_ls)
         environ.update(env)
         return subprocess.run(
             ["bash", str(RECLAIM), *args],
@@ -214,6 +222,90 @@ FOUR_TAGS = "\n".join([
     "roadtrip/backend:latest",
     "roadtrip/backend:tilt-cccc",
 ]) + "\n"
+
+
+COMPANION = "ghcr.io/wwchen/roadtrip/recgov-companion"
+
+FOUR_COMPANION_TAGS = "\n".join([
+    f"{COMPANION}:newest",
+    f"{COMPANION}:previous",
+    f"{COMPANION}:older",
+    f"{COMPANION}:oldest",
+]) + "\n"
+
+
+class CompanionKeepDepthTest(ReclaimTestCase):
+    """The companion carries its own rollback depth.
+
+    A copy is ~3.5GB against a backend's ~0.7GB, and on the deploy host three
+    of them held 10.6GB while the disk check wanted 20GB free. Every deploy
+    re-pulls, and `last-good-release` names one release to fall back to, so
+    current + previous is the whole of what a rollback can reach.
+    """
+
+    def companion_removals(self) -> list:
+        return [c for c in self.docker_calls() if c.startswith(f"image rm {COMPANION}")]
+
+    def test_host_scope_keeps_two_companions_while_backend_keeps_five(self) -> None:
+        self.companion_ls.write_text(FOUR_COMPANION_TAGS)
+        self.image_ls.write_text(FOUR_TAGS)
+        done = self.run_reclaim("prune", "--scope", "host")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(
+            self.companion_removals(),
+            [f"image rm {COMPANION}:older", f"image rm {COMPANION}:oldest"],
+        )
+        # Same run, same depth as before for the small image.
+        self.assertEqual(
+            [c for c in self.docker_calls() if c.startswith("image rm roadtrip/backend")], [],
+        )
+
+    def test_local_scope_is_already_two_and_is_not_deepened(self) -> None:
+        self.companion_ls.write_text(FOUR_COMPANION_TAGS)
+        done = self.run_reclaim("prune", "--scope", "local")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(
+            self.companion_removals(),
+            [f"image rm {COMPANION}:older", f"image rm {COMPANION}:oldest"],
+        )
+
+    def test_a_shallower_scope_is_never_deepened_for_the_companion(self) -> None:
+        # ROADTRIP_IMAGE_KEEP=1 asks for one copy of everything; the companion
+        # default must not quietly hold a second.
+        self.companion_ls.write_text(FOUR_COMPANION_TAGS)
+        self.run_reclaim("prune", "--scope", "host", ROADTRIP_IMAGE_KEEP="1")
+        self.assertEqual(
+            self.companion_removals(),
+            [f"image rm {COMPANION}:previous",
+             f"image rm {COMPANION}:older",
+             f"image rm {COMPANION}:oldest"],
+        )
+
+    def test_a_deeper_scope_does_not_deepen_the_companion(self) -> None:
+        self.companion_ls.write_text(FOUR_COMPANION_TAGS)
+        self.run_reclaim("prune", "--scope", "host", ROADTRIP_IMAGE_KEEP="10")
+        self.assertEqual(
+            self.companion_removals(),
+            [f"image rm {COMPANION}:older", f"image rm {COMPANION}:oldest"],
+        )
+
+    def test_an_explicit_override_is_taken_as_given(self) -> None:
+        self.companion_ls.write_text(FOUR_COMPANION_TAGS)
+        self.run_reclaim("prune", "--scope", "host", ROADTRIP_COMPANION_IMAGE_KEEP="3")
+        self.assertEqual(self.companion_removals(), [f"image rm {COMPANION}:oldest"])
+
+    def test_the_diagnosis_marks_the_depth_it_actually_keeps(self) -> None:
+        # The failed-check diagnosis and prune read the same function, so the
+        # log cannot claim to keep five of an image prune keeps two of.
+        self.companion_ls.write_text(FOUR_COMPANION_TAGS)
+        done = self.run_reclaim(
+            "check-disk", "--label", "prod deploy", "--scope", "host",
+            "--min-gb", "999999999", "--path", str(self.tmp),
+        )
+        self.assertEqual(done.returncode, 1)
+        self.assertIn(f"{COMPANION}:newest  (kept for rollback: newest 2)", done.stderr)
+        self.assertIn(f"{COMPANION}:older", done.stderr)
+        self.assertNotIn(f"{COMPANION}:older  (kept", done.stderr)
 
 
 class PruneTest(ReclaimTestCase):

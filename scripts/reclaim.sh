@@ -31,6 +31,16 @@ MANAGED_LABEL="ca.floo.roadtrip.managed=true"
 HOST_IMAGE_KEEP=5
 LOCAL_IMAGE_KEEP=2
 
+# Rollback depth is disk traded for a rollback that need not wait on a
+# registry, and the trade is not the same for every image: a recgov-companion
+# copy is ~3.5GB, five backend copies' worth, and on the deploy host three of
+# them held 10.6GB while the disk check wanted 20GB free. Two is all a rollback
+# can reach anyway — every deploy re-pulls its images, and `last-good-release`
+# names exactly one release to fall back to, so current + previous covers a
+# rollback even with the registry down. Override per host with
+# ROADTRIP_COMPANION_IMAGE_KEEP.
+COMPANION_IMAGE_KEEP=2
+
 # Repository list rather than a label filter. The keep-N window is a
 # per-repository idea, and the explicit allowlist is itself the safety
 # boundary for these `image rm` calls — they take a bare reference, so
@@ -124,7 +134,25 @@ _apply_scope_defaults() {
         : "${ROADTRIP_IMAGE_KEEP:=${LOCAL_IMAGE_KEEP}}"
         [[ -n "${INCLUDE_ANONYMOUS}" ]] || INCLUDE_ANONYMOUS=0
     fi
+    # Defaulted from the scope's own depth so a shallower scope is never
+    # deepened for the companion; an explicit override is taken as given.
+    if (( ROADTRIP_IMAGE_KEEP < COMPANION_IMAGE_KEEP )); then
+        : "${ROADTRIP_COMPANION_IMAGE_KEEP:=${ROADTRIP_IMAGE_KEEP}}"
+    else
+        : "${ROADTRIP_COMPANION_IMAGE_KEEP:=${COMPANION_IMAGE_KEEP}}"
+    fi
     : "${MIN_GB:=${ROADTRIP_MIN_FREE_DISK_GB:-${RECLAIM_FREE_TARGET_GB}}}"
+}
+
+# How many tags of a repository prune keeps, newest first. One reader of the
+# per-repository exceptions, so prune and the failed-check diagnosis cannot
+# disagree about what is kept and why.
+_keep_for() {
+    case "$1" in
+        "${NEVER_KEEP_REPOSITORY}") echo 0 ;;
+        */recgov-companion) echo "${ROADTRIP_COMPANION_IMAGE_KEEP}" ;;
+        *) echo "${ROADTRIP_IMAGE_KEEP}" ;;
+    esac
 }
 
 # A full disk does not fail a Docker call, it deadlocks the daemon: Docker
@@ -155,10 +183,9 @@ _prune_images() {
     local repository reference image_id index repository_keep
     local references
 
-    echo "==> pruning unused Roadtrip images (keep ${ROADTRIP_IMAGE_KEEP} tags per active repository)"
+    echo "==> pruning unused Roadtrip images (keep ${ROADTRIP_IMAGE_KEEP} tags per active repository, ${ROADTRIP_COMPANION_IMAGE_KEEP} for the companion)"
     for repository in ${ROADTRIP_REPOSITORIES}; do
-        repository_keep="${ROADTRIP_IMAGE_KEEP}"
-        [[ "${repository}" == "${NEVER_KEEP_REPOSITORY}" ]] && repository_keep=0
+        repository_keep="$(_keep_for "${repository}")"
         references=()
         while IFS= read -r reference; do
             [[ -n "${reference}" ]] && references+=("${reference}")
@@ -266,8 +293,7 @@ _diagnose_disk() {
     echo "==> where the space is"
     echo "    Roadtrip images, newest first:"
     for repository in ${ROADTRIP_REPOSITORIES}; do
-        keep="${ROADTRIP_IMAGE_KEEP}"
-        [[ "${repository}" == "${NEVER_KEEP_REPOSITORY}" ]] && keep=0
+        keep="$(_keep_for "${repository}")"
         index=0
         while IFS= read -r line; do
             [[ -n "${line}" ]] || continue
