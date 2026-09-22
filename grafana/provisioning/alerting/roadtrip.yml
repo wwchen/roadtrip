@@ -109,6 +109,107 @@ groups:
                     type: last
                     params: []
 
+      # Tempo's blocklist poll is the single point every block passes through:
+      # retention and compaction both act on the blocklist, never on the
+      # directory. When the poll fails the blocklist is never rebuilt, both go
+      # quiet with no error of their own, and blocks accumulate until the disk
+      # fills and deadlocks the Docker daemon — which has now happened twice
+      # (see grafana/tempo/tempo.yml). The second time, two zero-byte meta.json
+      # files left by the first incident failed every poll for 26 days while
+      # `tempodb_retention_marked_for_deletion_total` sat at 0 and 35GB piled
+      # up. This counter was rising the whole time and nothing read it.
+      #
+      # A corrupt block fails every retry deterministically
+      # (blocklist_poll_tolerate_consecutive_errors retries the whole tenant
+      # poll, it does not skip the block), so any sustained increase is a human
+      # job: find the unreadable block and remove it.
+      - uid: roadtrip-tempo-blocklist-poll-failing
+        title: Tempo blocklist poll failing
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Tempo cannot rebuild its blocklist — retention and compaction are both stalled and the disk will fill. Find the unreadable block: docker logs roadtrip-tempo-1 | grep "failed to poll"'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(tempodb_blocklist_tenant_index_errors_total[30m])) or vector(0)
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
+      # The effect, not the cause, so it catches a stall this stack has not seen
+      # yet. Blocks are cut every ~30s here and retention is 168h, so a day
+      # without a single deletion means nothing is ageing out. A stack ingesting
+      # no traces at all would also be silent here — that is what
+      # `roadtrip-backend-telemetry-silent` above is for.
+      - uid: roadtrip-tempo-retention-stalled
+        title: Tempo retention deleting nothing
+        condition: C
+        for: 1h
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'No trace blocks deleted in 24h — blocks are accumulating faster than retention removes them.'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(tempodb_retention_deleted_total[24h])) or vector(0)
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
   - orgId: 1
     name: backend-health
     folder: Roadtrip
