@@ -101,6 +101,15 @@ tasks.register<JavaExec>("checkApiTypes") {
 val contractLedgerFile = layout.buildDirectory.file("contract-ledger/exercised.tsv")
 val contractLedgerProperty = "roadtrip.contractLedger"
 
+// `--tests` lands in the filter's command-line patterns, which the public
+// TestFilter does not expose, so the invocation is where it is read.
+val testsOption = "--tests"
+val testsOptionAssignment = "$testsOption="
+val testRunFilteredByCommandLine =
+    gradle.startParameter.taskRequests.any { request ->
+        request.args.any { it == testsOption || it.startsWith(testsOptionAssignment) }
+    }
+
 // The secret registry is authored once at secrets/registry.yaml and copied into
 // the jar so SecretsBootstrap can enforce `required_in` at boot. Copied rather
 // than duplicated: a second checked-in copy is exactly the drift this whole
@@ -502,6 +511,12 @@ tasks.register<JavaExec>("contractLedgerCheck") {
         // untyped read makes `== null` look dead to the compiler.
         val testFailure: Throwable? = testState.failure
         testFailure == null
+    }
+    // A filtered run leaves route tests unrun and the ledger partial or absent,
+    // so only an unfiltered run is held to the contract.
+    onlyIf("the :backend:test run was not filtered (`--tests` or a test filter)") {
+        val filter = tasks.test.get().filter
+        !testRunFilteredByCommandLine && filter.includePatterns.isEmpty() && filter.excludePatterns.isEmpty()
     }
 }
 
