@@ -9,9 +9,9 @@ const meta = {
     docs: {
       description: {
         component:
-          'The Check availability step\'s date entry. One `MonthCalendar` picks both ' +
-          'ends, and the Start/End control above it says which end the next pick sets: ' +
-          'picking walks start → end → start, and choosing End first changes only the end.',
+          'The date window\'s two fields. The calendar shows only while a field is ' +
+          'selected; each pick fills that end and moves on to the one still missing, and ' +
+          'the window is reported as soon as both are set.',
       },
     },
   },
@@ -21,7 +21,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Empty: Story = {
-  render: () => <DateWindowFields initial={null} onSave={() => {}} onCancel={() => {}} />,
+  render: () => <DateWindowFields initial={null} onChange={() => {}} />,
 };
 
 /** Days from today, so the window is never in the calendar's disabled past. */
@@ -31,8 +31,7 @@ export const Prefilled: Story = {
   render: () => (
     <DateWindowFields
       initial={{ start: fromToday(10), end: fromToday(12) }}
-      onSave={() => {}}
-      onCancel={() => {}}
+      onChange={() => {}}
     />
   ),
 };

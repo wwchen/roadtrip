@@ -203,23 +203,17 @@ export const filterCopy = {
   /** The state word in a facet's aria-label, e.g. "Tent, matches". */
   facetMatches: 'matches',
   facetMisses: 'does not match',
-  /** The one gated step. */
-  checkTitle: 'Check availability',
-  checkBody: 'Add dates to see which of these have a site.',
-  addDates: 'Add dates',
-  /** The Start/End control's group name: it says which end the next calendar pick sets. */
-  datePicking: 'Date to set',
-  /** "Start · Fri Sep 11", or "Start · not set". */
-  startSlot: (date: string | null) => `Start · ${date ?? 'not set'}`,
-  endSlot: (date: string | null) => `End · ${date ?? 'not set'}`,
-  saveDates: 'Save',
-  cancelDates: 'Cancel',
-  editDates: 'Edit',
+  /** The date window. */
+  startDate: 'Start date',
+  endDate: 'End date',
+  /** What an empty date field shows. */
+  noDate: 'Add date',
+  /** A date field's accessible name: "Start date, Fri Sep 11", or "Start date, not set". */
+  dateField: (label: string, date: string | null) => `${label}, ${date ?? 'not set'}`,
+  /** The hint under the fields while nothing is picked. */
+  datesPurpose: 'Add dates to see which of these have a site.',
   clearDates: 'Clear',
   pickStart: 'Pick a start date',
   pickEnd: 'Pick an end date',
   nights: (nights: number) => (nights === 1 ? '1 night' : `${nights} nights`),
-  /** "Fri Sep 11 → Sun Sep 13 · 2 nights". */
-  dateSummary: (start: string, end: string, nights: number) =>
-    `${start} → ${end} · ${filterCopy.nights(nights)}`,
 } as const;

@@ -210,13 +210,15 @@ table, no refresh, no staleness.
   with hint "Then check dates" and an active-count badge; `SegmentedControl` for site type
   (Any + `tent`/`rv`/`cabin` labels); `GroupSizeStepper` (two icon `Button`s, clamped
   2..12, below the minimum turns the filter off; Storybook story); `Chip` per exposed amenity
-  (`toilets`, `showers`, `water`, `pets_allowed` in a named const); the **Check availability**
-  `Banner` whose **Add dates** reveals `DateWindowFields` (Storybook story): a Start/End
-  `SegmentedControl` over one `MonthCalendar` range picker from `@ui`. Picking walks start →
-  end → start, choosing End first changes only the end, and days before today are disabled.
-  (It first shipped as two plain-text `YYYY-MM-DD` fields, because `@lew-ds/lds-react` never
-  calls `onChange` for `type="date"`; `@ui`'s `TextField` now relays those types.) Save writes
-  `dateWindow` only and collapses to "Fri Sep 11 → Sun Sep 13 · 2 nights" with Edit and Clear. Labels for
+  (`toilets`, `showers`, `water`, `pets_allowed` in a named const); and `DateWindowFields`
+  (Storybook story): Start date and End date fields with a `MonthCalendar` from `@ui` that shows
+  only while a field is selected. Each pick fills that end and moves on to the one still
+  missing; the calendar closes once both are set, and days before today are disabled. Like the
+  other filters it applies as it changes — `dateWindow` is written as soon as both ends are set
+  and cleared while either is missing — with "N nights" and a Clear. (It first shipped as a
+  **Check availability** `Banner` with **Add dates**, two plain-text `YYYY-MM-DD` fields and
+  Save, because `@lew-ds/lds-react` never calls `onChange` for `type="date"`; `@ui`'s
+  `TextField` now relays those types.) Labels for
   kinds and amenities come from one table in `lib/campground-vocab.ts` mirroring the backend
   enums.
 - Copy in `lib/strings.ts` (`filterCopy`); CSS in `features/trip/topbar.css`, tokens only.

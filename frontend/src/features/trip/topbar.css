@@ -691,13 +691,72 @@
   gap: 6px;
 }
 
-/* Shrinks to the calendar's own width, so the Start/End control spans exactly
-   the grid it sets — the calendar owns that width, nothing here restates it. */
 .tb-dates-picker {
   display: flex;
   flex-direction: column;
+  gap: 6px;
+}
+
+.tb-dates-fields {
+  display: flex;
   gap: 8px;
-  width: min-content;
+}
+
+.tb-dates-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tb-dates-field label {
+  font-size: 11px;
+  color: var(--rt-muted);
+}
+
+/* A button drawn as a field: it shows the date and opens the calendar. */
+.tb-dates-field-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-r-xl);
+  background: var(--rt-surface-inset);
+  color: var(--rt-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tb-dates-field-box:hover {
+  border-color: var(--rt-muted);
+}
+
+.tb-dates-field-box.tb-dates-field-open {
+  border-color: var(--rt-brand);
+  box-shadow: 0 0 0 3px var(--rt-brand-tint);
+}
+
+.tb-dates-field-box .tb-dates-unset {
+  color: var(--rt-faint);
+}
+
+/* The calendar opens under the field it is setting. It owns its own width. */
+.tb-dates-calendar {
+  align-self: flex-start;
+  padding: 8px;
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-r-lg);
+  background: var(--rt-surface-inset);
+}
+
+.tb-dates-calendar.tb-dates-calendar-end {
+  align-self: flex-end;
 }
 
 .tb-dates-actions {
@@ -711,14 +770,6 @@
   margin-right: auto;
   font-size: 12px;
   color: var(--rt-muted);
-}
-
-.tb-dates-summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--rt-text);
 }
 
 /* The card's facet row: one entry per active filter, match, miss or no data. */

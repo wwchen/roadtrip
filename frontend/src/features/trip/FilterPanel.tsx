@@ -1,13 +1,13 @@
 // The filter block under the search row: the pill, the three local filters, and
-// the one gated step (dates). Filter state lives in the store; only "is the block
-// open" and "are the date fields showing" are local.
-import { useState } from 'react';
-import { Banner, Button, Chip, Icon, SegmentedControl } from '@ui';
+// the date window. Filter state lives in the store, and every control writes it
+// as it changes — the dates included, once both ends are picked; only "is the
+// block open" is local.
+import { Button, Chip, Icon, SegmentedControl } from '@ui';
 import type { CampsiteKind } from '@/api/generated/api-types';
 import { FILTER_AMENITIES, FILTER_SITE_TYPES } from '@/lib/campground-vocab';
 import { filterCopy } from '@/lib/strings';
 import { selectActiveFilterCount, useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
-import { DateWindowFields, formatDateShort, nightsBetween } from './DateWindowFields';
+import { DateWindowFields } from './DateWindowFields';
 import { GroupSizeStepper } from './GroupSizeStepper';
 
 const ANY_VALUE = 'any';
@@ -33,7 +33,6 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching }: 
   const setGroupSize = useCampgroundFilterStore((s) => s.setGroupSize);
   const toggleAmenity = useCampgroundFilterStore((s) => s.toggleAmenity);
   const setDateWindow = useCampgroundFilterStore((s) => s.setDateWindow);
-  const [editingDates, setEditingDates] = useState(false);
 
   const count = activeCount > 0 ? filterCopy.matching(totalMatching, totalInBoundary) : filterCopy.inView(totalInBoundary);
 
@@ -72,39 +71,7 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching }: 
             ))}
           </div>
 
-          {editingDates ? (
-            <DateWindowFields
-              initial={dateWindow}
-              onSave={(next) => {
-                setDateWindow(next);
-                setEditingDates(false);
-              }}
-              onCancel={() => setEditingDates(false)}
-            />
-          ) : dateWindow ? (
-            <div className="tb-dates-summary">
-              <Icon name="calendar" aria-hidden="true" />
-              <span>{filterCopy.dateSummary(formatDateShort(dateWindow.start), formatDateShort(dateWindow.end), nightsBetween(dateWindow.start, dateWindow.end))}</span>
-              <Button variant="tertiary" size="sm" onClick={() => setEditingDates(true)}>
-                {filterCopy.editDates}
-              </Button>
-              <Button variant="tertiary" size="sm" onClick={() => setDateWindow(null)}>
-                {filterCopy.clearDates}
-              </Button>
-            </div>
-          ) : (
-            <Banner
-              icon={<Icon name="calendar" aria-hidden="true" />}
-              title={filterCopy.checkTitle}
-              actions={
-                <Button variant="primary" size="sm" onClick={() => setEditingDates(true)}>
-                  {filterCopy.addDates}
-                </Button>
-              }
-            >
-              {filterCopy.checkBody}
-            </Banner>
-          )}
+          <DateWindowFields initial={dateWindow} onChange={setDateWindow} />
         </div>
       ) : null}
     </div>
