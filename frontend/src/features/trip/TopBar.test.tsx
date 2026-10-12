@@ -1057,7 +1057,7 @@ describe('the in-view list', () => {
     expect(urls.filter((u) => u.startsWith('/api/campgrounds'))).toHaveLength(0);
   });
 
-  test('Add dates stores the window and triggers no provider call', async () => {
+  test('picking dates stores the window and triggers no provider call', async () => {
     // Only `Date`, so the calendar opens on September 2026 while `waitFor` keeps
     // its real timers.
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -1068,10 +1068,9 @@ describe('the in-view list', () => {
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
 
       fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
-      fireEvent.click(screen.getByRole('button', { name: 'Add dates' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Start date, not set' }));
       fireEvent.click(screen.getByRole('button', { name: 'Friday, September 11, 2026' }));
       fireEvent.click(screen.getByRole('button', { name: 'Sunday, September 13, 2026' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
       expect(useCampgroundFilterStore.getState().dateWindow).toEqual({ start: '2026-09-11', end: '2026-09-13' });
       expect(urls.filter((u) => u.includes('availability'))).toHaveLength(0);
