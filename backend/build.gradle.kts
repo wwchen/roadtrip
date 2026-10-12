@@ -177,6 +177,8 @@ dependencies {
     implementation("io.ktor:ktor-server-compression:$ktorVersion")
     implementation("io.ktor:ktor-server-caching-headers:$ktorVersion")
     implementation("io.ktor:ktor-server-conditional-headers:$ktorVersion")
+    // XForwardedHeaders: the caller's address from the proxy in front, for per-caller limits.
+    implementation("io.ktor:ktor-server-forwarded-header:$ktorVersion")
     implementation("io.ktor:ktor-server-html-builder:$ktorVersion")
     // SSE for /api/campsite/events stream.
     implementation("io.ktor:ktor-server-sse:$ktorVersion")

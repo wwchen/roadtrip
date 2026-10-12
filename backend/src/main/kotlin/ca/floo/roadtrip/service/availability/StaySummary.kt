@@ -27,9 +27,18 @@ internal fun List<Campsite>.fittingGroup(groupSize: Int?): List<Campsite> {
  * A campsite is open for the stay when every night of the window is bookable
  * online — `first_come` is not, because nobody can reserve it. The status is
  * decided here rather than in a browser, from the same per-night statuses the
- * week grid fuses: open, few left, or, with nothing open, closed for the season
- * (every site closed every night, the fused week's own rule), no data (the
- * provider answered for no night of any site), or full.
+ * week grid fuses: open, or few left. With nothing open, only the campsites the
+ * provider said anything about are judged — one it said nothing about is not in
+ * the answer — and the stay is:
+ *
+ * - closed for the season, when every one of them is closed every night (the
+ *   fused week's own rule);
+ * - full, when every one of them has a night that rules it out — taken, closed,
+ *   walk-up only;
+ * - otherwise no data: some site has nights the provider left unanswered and no
+ *   night against it, so it may well be open. A stay that runs into a month the
+ *   provider did not return is the usual case, and calling it full would be a
+ *   guess.
  */
 internal fun PoiAvailabilitySlice.staySummary(): BulkPoiSummaryDto {
     val batch = batch
@@ -42,14 +51,16 @@ internal fun PoiAvailabilitySlice.staySummary(): BulkPoiSummaryDto {
             campsiteWindowStatuses(startDate, endDate, observationsByCampsite[campsite.id].orEmpty())
         }
     val openSites = streams.count { nights -> nights.all { it.isOnlineBookable } }
+    val answered = streams.filter { nights -> nights.any { it != AvailabilityStatus.UNKNOWN } }
     val status =
         when {
             openSites > FEW_LEFT_MAX_SITES -> StayAvailabilityStatus.OPEN
             openSites > 0 -> StayAvailabilityStatus.FEW_LEFT
-            streams.all { classifyStreamWindowState(it) == StreamWindowState.CLOSED_FOR_SEASON } ->
+            answered.isEmpty() -> StayAvailabilityStatus.NO_DATA
+            answered.all { classifyStreamWindowState(it) == StreamWindowState.CLOSED_FOR_SEASON } ->
                 StayAvailabilityStatus.CLOSED_FOR_SEASON
-            streams.all { nights -> nights.all { it == AvailabilityStatus.UNKNOWN } } -> StayAvailabilityStatus.NO_DATA
-            else -> StayAvailabilityStatus.FULL
+            answered.all { nights -> nights.any { it.rulesOutStay } } -> StayAvailabilityStatus.FULL
+            else -> StayAvailabilityStatus.NO_DATA
         }
     return BulkPoiSummaryDto(
         status = status,
@@ -58,3 +69,7 @@ internal fun PoiAvailabilitySlice.staySummary(): BulkPoiSummaryDto {
         cache = batch.cacheBlock,
     )
 }
+
+/** A night the provider answered that no booking can get past. */
+private val AvailabilityStatus.rulesOutStay: Boolean
+    get() = this != AvailabilityStatus.UNKNOWN && !isOnlineBookable

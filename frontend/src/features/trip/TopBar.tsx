@@ -303,6 +303,7 @@ export function TopBar({ alerts }: TopBarProps) {
         <TripResults
           variant="viewport"
           list={inView.list}
+          stayCheck={inView.stayCheck}
         />
       )}
     </div>

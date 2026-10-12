@@ -74,6 +74,33 @@ class StaySummaryTest {
     }
 
     @Test
+    fun `a stay answered for only some nights is no data, not full`() {
+        // Bookable the first night, unanswered the second — the month the provider did not return.
+        val partly = listOf(AvailabilityStatus.AVAILABLE)
+        val summary = slice(site(1) to partly, site(2) to partly).staySummary()
+
+        assertEquals(0, summary.openSites)
+        assertEquals(StayAvailabilityStatus.NO_DATA, summary.status)
+    }
+
+    @Test
+    fun `a site the provider said nothing about does not stop the rest reading full`() {
+        val taken = listOf(AvailabilityStatus.RESERVED, AvailabilityStatus.RESERVED)
+        val summary = slice(site(1) to taken, site(2) to taken, site(3) to emptyList()).staySummary()
+
+        assertEquals(StayAvailabilityStatus.FULL, summary.status)
+        assertEquals(3, summary.checkedSites)
+    }
+
+    @Test
+    fun `one ruled-out night is enough to count a site as full`() {
+        val summary =
+            slice(site(1) to listOf(AvailabilityStatus.AVAILABLE, AvailabilityStatus.RESERVED)).staySummary()
+
+        assertEquals(StayAvailabilityStatus.FULL, summary.status)
+    }
+
+    @Test
     fun `no campsites to check is no data`() {
         val summary = slice().staySummary()
 

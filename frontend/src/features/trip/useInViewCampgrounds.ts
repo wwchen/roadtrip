@@ -34,7 +34,7 @@ import { rankByStay } from './stay-check';
 import { visibleCards } from './trip-cards';
 import { useCampgroundSearch } from './useCampgroundSearch';
 import { MAX_IN_VIEW_CARDS, useCampgroundSummaries } from './useCampgroundSummaries';
-import { useCurrentStayCheck } from './useStayCheck';
+import { useCurrentStayCheck, type CurrentStayCheck } from './useStayCheck';
 
 export interface InViewCampgrounds {
   /** What the results section renders. */
@@ -49,6 +49,12 @@ export interface InViewCampgrounds {
   enabled: boolean;
   /** True once the search has failed, so the caller can stop publishing a stale filter. */
   failed: boolean;
+  /**
+   * The availability check of the current stay, the same read the cards were
+   * ordered by — so each card's answer and the order it sits in cannot come from
+   * two reads; null when there is none.
+   */
+  stayCheck: CurrentStayCheck | null;
 }
 
 export interface UseInViewCampgroundsOptions {
@@ -120,5 +126,5 @@ export function useInViewCampgrounds({ paused }: UseInViewCampgroundsOptions): I
     ],
   );
 
-  return { list, inView, matching, matchingIds: search.ids, enabled: search.enabled, failed };
+  return { list, inView, matching, matchingIds: search.ids, enabled: search.enabled, failed, stayCheck };
 }

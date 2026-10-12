@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { checkStays } from '@/api/availability-api';
 import { HttpError } from '@/api/http';
+import { useNow } from '@/lib/use-now';
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import {
   sameStayQuery,
@@ -21,6 +22,15 @@ import { batchesOf, MAX_REQUESTS_PER_CHECK, observedAtOf, resultsOf } from './st
 
 /** The bulk endpoint's code for a caller over its per-IP limit. */
 const THROTTLED_CODE = 'ip_throttled';
+
+/**
+ * How long a throttled check waits before it may run again — the endpoint's
+ * limit refills over a minute, and a check needs several requests' worth.
+ */
+const THROTTLE_COOLDOWN_MS = 60_000;
+
+/** How often the cooldown is re-read while it runs, so the button comes back on time. */
+const COOLDOWN_TICK_MS = 1_000;
 
 /** The question a check would ask now: null until both dates are set. */
 export function useCurrentStayQuery(): StayQuery | null {
@@ -62,7 +72,10 @@ export function useCurrentStayCheck(): CurrentStayCheck | null {
 }
 
 export interface StayCheckControl {
-  /** True when there is a stay to ask about and something in view that can be checked. */
+  /**
+   * True when there is a stay to ask about, something in view that can be
+   * checked, and no throttle still cooling down.
+   */
   canCheck: boolean;
   running: boolean;
   /** True once a check of the current question has come back, whole or not. */
@@ -76,6 +89,9 @@ export function useStayCheck(checkableIds: readonly number[]): StayCheckControl 
   const { begin, record, finish, reset } = useStayCheckStore(
     useShallow((s) => ({ begin: s.begin, record: s.record, finish: s.finish, reset: s.reset })),
   );
+  const retryAt = useStayCheckStore((s) => s.retryAt);
+  const now = useNow(COOLDOWN_TICK_MS, retryAt !== null);
+  const coolingDown = retryAt !== null && now < retryAt;
   const inFlight = useRef<AbortController | null>(null);
 
   // New dates or site filters make a running check's answers about nothing.
@@ -112,14 +128,18 @@ export function useStayCheck(checkableIds: readonly number[]): StayCheckControl 
       finish(null);
     } catch (error) {
       if (controller.signal.aborted) return;
-      finish(error instanceof HttpError && error.code === THROTTLED_CODE ? 'throttled' : 'failed');
+      if (error instanceof HttpError && error.code === THROTTLED_CODE) {
+        finish('throttled', Date.now() + THROTTLE_COOLDOWN_MS);
+      } else {
+        finish('failed');
+      }
     } finally {
       if (inFlight.current === controller) inFlight.current = null;
     }
   }, [query, checkableIds, begin, record, finish]);
 
   return {
-    canCheck: query !== null && checkableIds.length > 0,
+    canCheck: query !== null && checkableIds.length > 0 && !coolingDown,
     running: current?.running ?? false,
     checked: current !== null && !current.running,
     check: () => void run(),

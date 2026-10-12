@@ -9,6 +9,7 @@ import { inViewCopy, listCopy, routeListCopy } from '@/lib/strings';
 import type { ResultsList } from './results-list';
 import { TripResults } from './TripResults';
 import type { TripCard } from './trip-cards';
+import type { CurrentStayCheck } from './useStayCheck';
 import './topbar.css';
 
 /** The panel is fixed to the map's corner in the app; the catalog pins it in flow at its real width. */
@@ -172,8 +173,12 @@ export const AlongRouteEmpty: Story = {
  * component renders three shapes — a sentence, the layer-off card, or cards —
  * and picks none of them itself.
  */
-const inViewStory = (list: ResultsList<InViewCard>, wrap: (children: ReactNode) => ReactNode = (c) => <Panel>{c}</Panel>): Story => ({
-  render: () => <>{wrap(<TripResults variant="viewport" list={list} />)}</>,
+const inViewStory = (
+  list: ResultsList<InViewCard>,
+  wrap: (children: ReactNode) => ReactNode = (c) => <Panel>{c}</Panel>,
+  stayCheck: CurrentStayCheck | null = null,
+): Story => ({
+  render: () => <>{wrap(<TripResults variant="viewport" list={list} stayCheck={stayCheck} />)}</>,
 });
 
 /** Below the campground zoom gate the server sends no pins, so the list says what to do. */
@@ -208,3 +213,20 @@ export const InViewFiltered = inViewStory(
 
 /** A dense view: only the nearest cards render, and the head still counts every match. */
 export const InViewCapped = inViewStory({ kind: 'ready', cards: IN_VIEW, total: 60 });
+
+/** An availability check of the stay, back: each checked card's answer, a refusal, and the head's sums. */
+export const InViewChecked = inViewStory(
+  { kind: 'ready', cards: IN_VIEW, total: IN_VIEW.length },
+  undefined,
+  {
+    query: { start: '2026-09-11', end: '2026-09-13', siteType: null, groupSize: null },
+    asked: [1, 2],
+    results: {
+      1: { kind: 'summary', summary: { status: 'open', open_sites: 8, checked_sites: 40 } },
+      2: { kind: 'error', code: 'beyond_booking_horizon' },
+    },
+    running: false,
+    observedAt: new Date().toISOString(),
+    failure: null,
+  },
+);

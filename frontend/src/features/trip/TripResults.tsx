@@ -15,6 +15,7 @@ import { Button, EmptyState, Icon } from '@ui';
 import { token } from '@tokens';
 import type { StayAvailabilityStatus } from '@/api/availability-api';
 import { filterCopy, inViewCopy, listCopy, routeListCopy, stayCopy } from '@/lib/strings';
+import { useNow } from '@/lib/use-now';
 import { relativeTime } from '@/lib/watch-format';
 import { useMapContext } from '@/map/context';
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
@@ -27,7 +28,7 @@ import { formatDistanceAlongRoute } from './route-summary';
 import type { ResultsList } from './results-list';
 import { stayTallies } from './stay-check';
 import type { TripCard } from './trip-cards';
-import { useCurrentStayCheck } from './useStayCheck';
+import type { CurrentStayCheck } from './useStayCheck';
 import { shouldAutoFocus } from '@/domain/trip/viewport';
 
 /** Where a card click puts the camera: tight enough to see the pin, wide enough to place it. */
@@ -35,6 +36,9 @@ const CARD_FLY_ZOOM = 13;
 const FLY_SPEED = 1.6;
 
 const RATING_PREFIX = '★';
+
+/** How often "Checked 4m ago" is re-read, so it ages on screen rather than when something else re-renders. */
+const CHECKED_AGO_TICK_MS = 30_000;
 
 /** A facet's icon, class, and state word, keyed by state rather than chained ternaries. */
 const FACET_APPEARANCE: Record<FacetState, { icon: string; className: string; stateWord: string }> = {
@@ -62,6 +66,8 @@ interface RouteProps {
 interface ViewportProps {
   variant: 'viewport';
   list: ResultsList<InViewCard>;
+  /** The availability check of the current stay, the one the cards were ordered by; null when there is none. */
+  stayCheck: CurrentStayCheck | null;
 }
 
 export type TripResultsProps = RouteProps | ViewportProps;
@@ -106,9 +112,9 @@ export function TripResults(props: TripResultsProps) {
           <div className="tb-results-controls">
             <CorridorSlider miles={props.corridorMiles} onChange={props.onCorridorMilesChange} />
           </div>
-        ) : (
-          <StayStatus />
-        )}
+        ) : props.stayCheck ? (
+          <StayStatus check={props.stayCheck} />
+        ) : null}
 
         <div className="tb-results-cards" id="tb-results-cards">
           {props.variant === 'route' ? (
@@ -127,7 +133,7 @@ export function TripResults(props: TripResultsProps) {
                   card={card}
                   onOpen={openCard}
                   sub={card.agency || card.sub}
-                  meta={<ViewportMeta card={card} />}
+                  meta={<ViewportMeta card={card} stayCheck={props.stayCheck} />}
                   facets={<FacetRow card={card} />}
                 />
               )}
@@ -222,12 +228,12 @@ function RouteMeta({ card }: { card: TripCard }) {
   ) : null;
 }
 
-function ViewportMeta({ card }: { card: InViewCard }) {
+function ViewportMeta({ card, stayCheck }: { card: InViewCard; stayCheck: CurrentStayCheck | null }) {
   const siteType = useCampgroundFilterStore((s) => s.siteType);
   const line = facetCountLine(card.summary, siteType);
   return (
     <>
-      <StayLine card={card} />
+      {stayCheck ? <StayLine id={card.summary.id} check={stayCheck} /> : null}
       {line ? <span>{line}</span> : null}
       {card.rating != null ? <span>{`${RATING_PREFIX} ${card.rating.toFixed(1)}`}</span> : null}
       {!card.checkable ? <span>{inViewCopy.notCheckable}</span> : null}
@@ -263,12 +269,10 @@ function FacetRow({ card }: { card: InViewCard }) {
 
 /**
  * The availability check, above the in-view cards: how far it has got while it
- * runs, then what it found and how old that is. Nothing before a check of the
- * current stay.
+ * runs, then what it found and how old that is.
  */
-function StayStatus() {
-  const check = useCurrentStayCheck();
-  if (!check) return null;
+function StayStatus({ check }: { check: CurrentStayCheck }) {
+  const now = useNow(CHECKED_AGO_TICK_MS, check.observedAt !== null);
   const tallies = stayTallies(check.asked, check.results);
   const parts = check.running
     ? [stayCopy.progress(tallies.answered, check.asked.length)]
@@ -279,7 +283,7 @@ function StayStatus() {
           tallies.full,
         ),
         ...(tallies.unknown > 0 ? [stayCopy.unknown(tallies.unknown)] : []),
-        ...(check.observedAt ? [stayCopy.checkedAgo(relativeTime(check.observedAt))] : []),
+        ...(check.observedAt ? [stayCopy.checkedAgo(relativeTime(check.observedAt, now))] : []),
       ];
   return (
     <div className="tb-results-controls tb-stay-status" aria-live="polite">
@@ -292,13 +296,14 @@ function StayStatus() {
 }
 
 /** One card's answer from the check; nothing for a card the check did not ask about. */
-function StayLine({ card }: { card: InViewCard }) {
-  const check = useCurrentStayCheck();
-  const id = card.summary.id;
-  if (!check || !check.asked.includes(id)) return null;
+function StayLine({ id, check }: { id: number; check: CurrentStayCheck }) {
   const result = check.results[id];
-  if (!result) return check.running ? <span className="tb-stay tb-stay--unknown">{stayCopy.pending}</span> : null;
-  if (result.kind === 'error') return <span className="tb-stay tb-stay--unknown">{stayCopy.error}</span>;
+  if (!result) {
+    return check.running && check.asked.includes(id) ? (
+      <span className="tb-stay tb-stay--unknown">{stayCopy.pending}</span>
+    ) : null;
+  }
+  if (result.kind === 'error') return <span className="tb-stay tb-stay--unknown">{stayCopy.errorFor(result.code)}</span>;
   const { status, open_sites: openSites } = result.summary;
   return <span className={STAY_CLASS[status]}>{stayCopy.result[status](openSites)}</span>;
 }

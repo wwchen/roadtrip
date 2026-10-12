@@ -26,6 +26,7 @@ import io.ktor.server.plugins.compression.matchContentType
 import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.forwardedheaders.XForwardedHeaders
 import io.ktor.server.plugins.requestvalidation.RequestValidation
 import io.ktor.server.plugins.requestvalidation.RequestValidationException
 import io.ktor.server.plugins.statuspages.StatusPages
@@ -54,6 +55,17 @@ private val accessLog = LoggerFactory.getLogger("Application")
 private val requestStartNanosKey = AttributeKey<Long>(REQUEST_START_NANOS_ATTRIBUTE)
 
 internal fun Application.installRoadtripPlugins() {
+    // Behind a proxy the socket's peer is the proxy, the same for every caller,
+    // and the per-caller limits on the anonymous availability endpoints would be
+    // one shared limit. The proxy in front appends the address that connected to
+    // it to X-Forwarded-For, so the LAST entry is the one a caller cannot write:
+    // anything a client sends itself sits to its left. `origin` reads from here;
+    // `request.local` stays the socket. Sound only while every request comes in
+    // through such a proxy — a directly reachable port would let a caller pick
+    // the last entry, and so its own rate-limit key.
+    install(XForwardedHeaders) {
+        useLastProxy()
+    }
     install(ContentNegotiation) {
         json(roadtripApiJson)
     }

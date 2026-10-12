@@ -179,6 +179,15 @@ export const listCopy = {
   layerOffAction: 'Turn campgrounds back on',
 } as const;
 
+/**
+ * What a card says when its campground refused the stay itself, by the code it
+ * refused with. A code not listed here is an outage, and reads as `stayCopy.error`.
+ */
+const STAY_REFUSAL_COPY: Readonly<Record<string, string>> = {
+  beyond_booking_horizon: 'Not bookable this far ahead yet',
+  start_before_earliest: 'Too soon to book online',
+};
+
 /** The availability check (M3): its button, its progress, and each card's answer. */
 export const stayCopy = {
   check: 'Check availability',
@@ -198,6 +207,8 @@ export const stayCopy = {
   pending: 'Checking…',
   /** A card whose campground could not be asked. */
   error: "Couldn't check",
+  /** A card's line for a failed answer: why, when the code says, else `error`. */
+  errorFor: (code: string) => STAY_REFUSAL_COPY[code] ?? stayCopy.error,
   /** A card's answer, by status; `open` is the count of sites open every night. */
   result: {
     open: (open: number) => `${open} sites open`,

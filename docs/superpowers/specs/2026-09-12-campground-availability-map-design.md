@@ -262,10 +262,19 @@ Under `summary` each entry carries `summary: BulkPoiSummaryDto` instead of `camp
 | `checked_sites` | campsites the answer is over: the requested type, fitting the group |
 | `cache` | the batch's cache block, so the client can say how old the answer is |
 
-With nothing open, the status is `closed_for_season` when every site is closed every night
-(the fused week's own rule), `no_data` when the provider answered for no night of any site or
-no site matched, else `full`. `StaySummary.kt` decides it from the same per-night statuses the
-week grid fuses; the browser renders the word it is given.
+With nothing open, only the campsites the provider said anything about are judged: the status
+is `closed_for_season` when every one is closed every night (the fused week's own rule),
+`full` when every one has a night that rules it out (taken, closed, walk-up only), and
+otherwise `no_data` — some site has unanswered nights and none against it, so it may be open
+(a stay running into a month the provider did not return). No site matched, or no night
+answered at all, is `no_data` too. `StaySummary.kt` decides it from the same per-night statuses
+the week grid fuses; the browser renders the word it is given.
+
+The endpoint's per-IP limit (10/min) keys on `origin.remoteHost`, which behind a proxy would be
+the proxy for every caller. Ktor's `XForwardedHeaders` plugin (`useLastProxy`) makes it the last
+`X-Forwarded-For` entry — the one the proxy in front appended, which a caller cannot write. The
+backend names no proxy or vendor; it relies only on every request arriving through a proxy that
+appends the caller, which holds while no backend port is published.
 
 ### Frontend
 
@@ -274,7 +283,9 @@ week grid fuses; the browser renders the word it is given.
   `MAX_REQUESTS_PER_CHECK` = 4 sequential requests, so cards fill in batch by batch and a
   check stays well inside the endpoint's per-IP limit. Sequential, because the backend fans
   each request out against a small connection pool. A throttled request (`ip_throttled`)
-  stops the check and says so; what landed stays.
+  stops the check and says so; what landed stays, and the button stays disabled for a
+  minute (`THROTTLE_COOLDOWN_MS`), through a change of dates too, since the limit is per
+  caller.
 - **State** (`stores/stayCheckStore.ts`): the question asked (`StayQuery`: dates, site
   type, group size), the ids asked, each answer, whether it is running, and when the
   oldest answer was observed. Answers show only while the question matches the current
@@ -286,7 +297,12 @@ week grid fuses; the browser renders the word it is given.
   arrival order (`rankByStay`), and the head reads "Fri Sep 11 → Sun Sep 13 · 8 with a site
   · 5 full · 2 unknown · Checked 4m ago" — the age is the stalest answer's, not the click's.
 - **Card lines**: "8 sites open", "2 sites left", "Full", "Closed for the season", "No data
-  for these dates", "Couldn't check", coloured by the `--rt-stay-*` roles.
+  for these dates", coloured by the `--rt-stay-*` roles. A per-POI refusal says why when its
+  code does ("Not bookable this far ahead yet" for `beyond_booking_horizon`, "Too soon to book
+  online" for `start_before_earliest`); any other error is "Couldn't check".
+- **One read.** `useInViewCampgrounds` reads the check once, orders the cards by it and hands
+  the same value to `TripResults`, so a card's line and its place cannot disagree. The head's
+  "Checked 4m ago" re-reads the clock every 30 s (`useNow`).
 
 ## Out of scope for the issue
 

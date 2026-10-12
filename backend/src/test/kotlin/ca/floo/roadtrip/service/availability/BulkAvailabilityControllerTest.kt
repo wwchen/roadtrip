@@ -105,7 +105,8 @@ class BulkAvailabilityControllerTest {
     fun `the summary view answers with the stay's summary instead of the campsites`() {
         runBlocking {
             // POI 1's three sites are bookable for runs of 1, 5 and 3 nights from the
-            // window's start, so none is open for every night of the seven-night window.
+            // window's start and unanswered after, so none is open for every night of the
+            // seven-night window and nothing rules any out: no data, not full.
             val entry =
                 bulkController()
                     .availabilityForPois(request(poiIds = listOf(1L), view = BulkAvailabilityView.SUMMARY))
@@ -113,7 +114,7 @@ class BulkAvailabilityControllerTest {
                     .single()
             assertNull(entry.campsites)
             val summary = assertNotNull(entry.summary)
-            assertEquals(StayAvailabilityStatus.FULL, summary.status)
+            assertEquals(StayAvailabilityStatus.NO_DATA, summary.status)
             assertEquals(0, summary.openSites)
             assertEquals(3, summary.checkedSites)
             assertEquals(windowStart.toString(), entry.startDate)

@@ -45,7 +45,7 @@ let geocodeResults: unknown[];
 let campgroundSearch: CampgroundSearchResponseDto;
 let campgroundSummaries: Record<number, CampgroundSummary>;
 /** What the bulk availability stub answers a request body with. */
-let bulkAvailability: (body: { poi_ids: number[] }) => Response;
+let bulkAvailability: (body: { poi_ids: number[] }) => Response | Promise<Response>;
 let bulkBodies: Array<Record<string, unknown>>;
 
 const json = (body: unknown, status = 200): Response =>
@@ -1152,7 +1152,7 @@ describe('the in-view list', () => {
       expect(bulkBodies.map((body) => body.poi_ids)).toEqual([[21], [22]]);
     });
 
-    test('a throttled check says so and keeps what had landed', async () => {
+    test('a throttled check says so, and Check again waits out the minute', async () => {
       bulkAvailability = () => json({ error: 'ip_throttled' }, 503);
       withViewport();
       mount();
@@ -1164,7 +1164,71 @@ describe('the in-view list', () => {
       await waitFor(() =>
         expect(screen.getByText('Too many checks in a row — try again in a minute.')).toBeInTheDocument(),
       );
-      expect(screen.getByRole('button', { name: 'Check again' })).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Check again' })).toBeDisabled();
+
+      // Past the cooldown, the next tick of its clock brings the button back.
+      vi.setSystemTime(new Date(2026, 8, 1, 0, 1, 1));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Check again' })).not.toBeDisabled(), {
+        timeout: 2_000,
+      });
+    });
+
+    test('a campground that refuses the dates says why', async () => {
+      bulkAvailability = () => json({ pois: [{ poi_id: 21, error: 'beyond_booking_horizon' }] });
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+
+      await waitFor(() => expect(screen.getByText('Not bookable this far ahead yet')).toBeInTheDocument());
+    });
+
+    test('new site filters mid-check stop it, and its late answers land nowhere', async () => {
+      let answer!: (response: Response) => void;
+      bulkAvailability = () => new Promise<Response>((resolve) => (answer = resolve));
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+      await waitFor(() => expect(screen.getByText('Checking 0 of 1…')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByRole('radio', { name: 'Tent' }));
+      expect(screen.queryByText('Checking 0 of 1…')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Check availability' })).toBeInTheDocument();
+
+      await act(async () => {
+        answer(json({ pois: [{ poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 132 } }] }));
+      });
+      expect(useStayCheckStore.getState().results).toEqual({});
+      expect(screen.queryByText('8 sites open')).toBeNull();
+    });
+
+    test('leaving mid-check stops it and keeps what had landed, finished', async () => {
+      campgroundSummaries[22] = { ...campgroundSummaries[22]!, availability_supported: true };
+      let answerSecond!: (response: Response) => void;
+      bulkAvailability = ({ poi_ids }) =>
+        poi_ids[0] === 21
+          ? json({ pois: [{ poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 132 } }] })
+          : new Promise<Response>((resolve) => (answerSecond = resolve));
+      withViewport();
+      const { unmount } = mount();
+      await waitFor(() => expect(screen.getByText('Zephyr Cove')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+      await waitFor(() => expect(screen.getByText('8 sites open')).toBeInTheDocument());
+
+      unmount();
+      expect(useStayCheckStore.getState().running).toBe(false);
+
+      await act(async () => {
+        answerSecond(json({ pois: [{ poi_id: 22, summary: { status: 'full', open_sites: 0, checked_sites: 170 } }] }));
+      });
+      expect(Object.keys(useStayCheckStore.getState().results)).toEqual(['21']);
     });
 
     test('new dates leave the old answers behind', async () => {

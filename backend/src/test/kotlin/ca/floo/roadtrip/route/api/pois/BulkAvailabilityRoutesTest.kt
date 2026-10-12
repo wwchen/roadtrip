@@ -35,6 +35,7 @@ import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -60,6 +61,7 @@ private const val TEST_FAN_OUT_CONCURRENCY = 4
 private const val TEST_IP_RATE_LIMIT_PER_MINUTE = 10
 private const val RATE_LIMITED_POI_ID = 100L
 private const val UNKNOWN_CAMPSITE_POI_ID = 999_999L
+private const val FORWARDED_FOR_HEADER = "X-Forwarded-For"
 
 /** [FakePoiAvailabilitySliceLookup]'s campsite id is derived from the poi id by this factor. */
 private const val FAKE_SLICE_CAMPSITE_ID_MULTIPLIER = 1000L
@@ -402,6 +404,30 @@ class BulkAvailabilityRoutesTest {
             assertEquals(HttpStatusCode.ServiceUnavailable, second.status)
             val body = Json.parseToJsonElement(second.bodyAsText()).jsonObject
             assertEquals("ip_throttled", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `behind a proxy each caller is throttled on its own, by the address the proxy appended`() =
+        testApplication {
+            application {
+                routeTestApplication {
+                    // One token each, frozen clock. Every request shares one socket peer, as
+                    // every visitor does behind a proxy; X-Forwarded-For tells them apart.
+                    bulkAvailabilityRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 1, nowMs = { 0L }))
+                }
+            }
+
+            suspend fun postVia(forwardedFor: String) =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    header(FORWARDED_FOR_HEADER, forwardedFor)
+                    setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+
+            assertEquals(HttpStatusCode.OK, postVia("203.0.113.7").status)
+            assertEquals(HttpStatusCode.OK, postVia("198.51.100.4").status)
+            // A caller that writes its own entry still lands on the one the proxy appended.
+            assertEquals(HttpStatusCode.ServiceUnavailable, postVia("192.0.2.99, 203.0.113.7").status)
         }
 
     private fun Route.bulkAvailabilityRoutesUnderTest(

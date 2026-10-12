@@ -8,6 +8,12 @@ import type { StayResult } from '@/stores/stayCheckStore';
 const MS_PER_SECOND = 1000;
 
 /**
+ * The code an entry carrying neither a summary nor an error is recorded under:
+ * the backend's own for a failure it could not classify (`AvailabilityProviderError.Unknown`).
+ */
+const UNCLASSIFIED_ERROR = 'unknown';
+
+/**
  * At most this many requests per check. Each request answers a batch at once, so
  * more requests fill the cards in sooner, one batch at a time; fewer keep a check
  * well inside the endpoint's per-IP limit, which a second check soon after has to
@@ -30,7 +36,7 @@ export function resultsOf(response: BulkAvailabilityResponseDto): Record<number,
   for (const entry of response.pois) {
     results[entry.poi_id] = entry.summary
       ? { kind: 'summary', summary: entry.summary }
-      : { kind: 'error', code: entry.error ?? 'unknown' };
+      : { kind: 'error', code: entry.error ?? UNCLASSIFIED_ERROR };
   }
   return results;
 }
