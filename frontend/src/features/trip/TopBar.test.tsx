@@ -56,7 +56,9 @@ beforeEach(() => {
   fakeMap = new FakeMap();
   useTripStore.getState().reset();
   useCampgroundFilterStore.getState().reset();
+  // `reset` keeps a throttle's cooldown on purpose (it is the caller's, not the stay's); a test starts clean.
   useStayCheckStore.getState().reset();
+  useStayCheckStore.setState({ retryAt: null });
   bulkBodies = [];
   bulkAvailability = () => json({}, 404);
   // `hiddenAgencies`/`hiddenOverlays` too: the legend's state is app-wide, and the
@@ -1152,7 +1154,7 @@ describe('the in-view list', () => {
       expect(bulkBodies.map((body) => body.poi_ids)).toEqual([[21], [22]]);
     });
 
-    test('a throttled check says so, and Check again waits out the minute', async () => {
+    test('a throttled check says so beside the button, which waits out the minute even for new dates', async () => {
       bulkAvailability = () => json({ error: 'ip_throttled' }, 503);
       withViewport();
       mount();
@@ -1162,15 +1164,27 @@ describe('the in-view list', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
 
       await waitFor(() =>
-        expect(screen.getByText('Too many checks in a row — try again in a minute.')).toBeInTheDocument(),
+        expect(screen.getByRole('status')).toHaveTextContent('Too many checks in a row — try again in a minute.'),
       );
       expect(screen.getByRole('button', { name: 'Check again' })).toBeDisabled();
 
-      // Past the cooldown, the next tick of its clock brings the button back.
-      vi.setSystemTime(new Date(2026, 8, 1, 0, 1, 1));
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Check again' })).not.toBeDisabled(), {
-        timeout: 2_000,
-      });
+      // New dates drop the old answers, not the cooldown: the limit is the caller's.
+      fireEvent.click(screen.getByRole('button', { name: 'End date, Sun Sep 13' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Monday, September 14, 2026' }));
+      expect(screen.getByRole('button', { name: 'Check availability' })).toBeDisabled();
+      expect(screen.getByRole('status')).toHaveTextContent('Too many checks in a row — try again in a minute.');
+    });
+
+    test('with nothing in view checkable, the button says why it is off', async () => {
+      campgroundSummaries[21] = { ...campgroundSummaries[21]!, availability_supported: false };
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+      pickStay();
+
+      expect(screen.getByRole('button', { name: 'Check availability' })).toBeDisabled();
+      expect(screen.getByRole('status')).toHaveTextContent('None of the campgrounds in view can be checked online.');
     });
 
     test('a campground that refuses the dates says why', async () => {

@@ -86,7 +86,7 @@ describe('rankByStay', () => {
 });
 
 describe('stayTallies', () => {
-  test('counts somewhere to stay, full, and unknown over the ids asked about', () => {
+  test('counts somewhere to stay, full, closed and unknown over the ids asked about', () => {
     const results: Record<number, StayResult> = {
       1: summary('open', 5),
       2: summary('few_left', 1),
@@ -97,6 +97,6 @@ describe('stayTallies', () => {
       99: summary('open', 3),
     };
 
-    expect(stayTallies([1, 2, 3, 4, 5, 6, 7], results)).toEqual({ withSite: 2, full: 2, unknown: 2, answered: 6 });
+    expect(stayTallies([1, 2, 3, 4, 5, 6, 7], results)).toEqual({ withSite: 2, full: 1, closed: 1, unknown: 2, answered: 6 });
   });
 });

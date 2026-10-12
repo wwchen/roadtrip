@@ -302,6 +302,25 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
+    fun `the summary view refuses a min_nights it would otherwise ignore`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """{"poi_ids":[1],"view":"summary","min_nights":2,""" +
+                            """"start_date":"$windowStart","end_date":"$windowEnd"}""",
+                    )
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_min_nights", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `rejects a non-positive group_size`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
@@ -407,7 +426,7 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
-    fun `behind a proxy each caller is throttled on its own, by the address the proxy appended`() =
+    fun `behind a proxy each caller is throttled on its own, by the address the edge appended`() =
         testApplication {
             application {
                 routeTestApplication {
@@ -426,8 +445,9 @@ class BulkAvailabilityRoutesTest {
 
             assertEquals(HttpStatusCode.OK, postVia("203.0.113.7").status)
             assertEquals(HttpStatusCode.OK, postVia("198.51.100.4").status)
-            // A caller that writes its own entry still lands on the one the proxy appended.
-            assertEquals(HttpStatusCode.ServiceUnavailable, postVia("192.0.2.99, 203.0.113.7").status)
+            // A caller that writes its own entry, behind an inner hop that appends its
+            // own private address, still lands on the one the edge appended.
+            assertEquals(HttpStatusCode.ServiceUnavailable, postVia("192.0.2.99, 203.0.113.7, 172.18.0.5").status)
         }
 
     private fun Route.bulkAvailabilityRoutesUnderTest(

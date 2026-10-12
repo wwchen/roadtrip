@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { checkStays } from '@/api/availability-api';
 import { HttpError } from '@/api/http';
-import { useNow } from '@/lib/use-now';
+import { useBefore } from '@/lib/use-now';
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import {
   sameStayQuery,
@@ -28,9 +28,6 @@ const THROTTLED_CODE = 'ip_throttled';
  * limit refills over a minute, and a check needs several requests' worth.
  */
 const THROTTLE_COOLDOWN_MS = 60_000;
-
-/** How often the cooldown is re-read while it runs, so the button comes back on time. */
-const COOLDOWN_TICK_MS = 1_000;
 
 /** The question a check would ask now: null until both dates are set. */
 export function useCurrentStayQuery(): StayQuery | null {
@@ -80,6 +77,12 @@ export interface StayCheckControl {
   running: boolean;
   /** True once a check of the current question has come back, whole or not. */
   checked: boolean;
+  /** True while a throttled check's cooldown runs — through new dates too. */
+  coolingDown: boolean;
+  /** Why the current question's check stopped early, if it did. */
+  failure: StayCheckFailure | null;
+  /** True when there is a stay to ask about but nothing in view a provider can answer for. */
+  nothingToCheck: boolean;
   check: () => void;
 }
 
@@ -90,8 +93,7 @@ export function useStayCheck(checkableIds: readonly number[]): StayCheckControl 
     useShallow((s) => ({ begin: s.begin, record: s.record, finish: s.finish, reset: s.reset })),
   );
   const retryAt = useStayCheckStore((s) => s.retryAt);
-  const now = useNow(COOLDOWN_TICK_MS, retryAt !== null);
-  const coolingDown = retryAt !== null && now < retryAt;
+  const coolingDown = useBefore(retryAt);
   const inFlight = useRef<AbortController | null>(null);
 
   // New dates or site filters make a running check's answers about nothing.
@@ -142,6 +144,9 @@ export function useStayCheck(checkableIds: readonly number[]): StayCheckControl 
     canCheck: query !== null && checkableIds.length > 0 && !coolingDown,
     running: current?.running ?? false,
     checked: current !== null && !current.running,
+    coolingDown,
+    failure: current?.failure ?? null,
+    nothingToCheck: query !== null && checkableIds.length === 0,
     check: () => void run(),
   };
 }

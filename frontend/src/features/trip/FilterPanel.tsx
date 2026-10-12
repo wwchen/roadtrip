@@ -94,6 +94,8 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching, ch
               ) : null
             }
           />
+          {/* Beside the button it explains, so a folded results list cannot hide why it is off. */}
+          <CheckNote control={stayCheck} />
         </div>
       ) : null}
     </div>
@@ -104,4 +106,16 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching, ch
 function checkLabel({ running, checked }: StayCheckControl): string {
   if (running) return stayCopy.checking;
   return checked ? stayCopy.checkAgain : stayCopy.check;
+}
+
+/**
+ * Why the check button is off, or why the last check stopped — red when a check
+ * stopped or must wait, muted when there is simply nothing to ask about.
+ */
+function CheckNote({ control: { running, coolingDown, failure, nothingToCheck } }: { control: StayCheckControl }) {
+  if (running) return null;
+  if (coolingDown || failure === 'throttled') return <span className="tb-check-note tb-check-note--error" role="status">{stayCopy.throttled}</span>;
+  if (failure === 'failed') return <span className="tb-check-note tb-check-note--error" role="status">{stayCopy.failed}</span>;
+  if (nothingToCheck) return <span className="tb-check-note" role="status">{stayCopy.noneCheckable}</span>;
+  return null;
 }

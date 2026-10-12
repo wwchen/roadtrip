@@ -8,6 +8,11 @@ data class BulkAvailabilityRequestDto(
     @SerialName("poi_ids") val poiIds: List<Long> = emptyList(),
     @SerialName("start_date") val startDate: String? = null,
     @SerialName("end_date") val endDate: String? = null,
+    /**
+     * The campsites view keeps campsites with a bookable run at least this long. The
+     * summary view always asks about every night of the window, so it refuses any
+     * value but the default rather than ignore it.
+     */
     @SerialName("min_nights") val minNights: Int = 1,
     /** `CampsiteKind` wire values; the route rejects anything else as `bad_request`. */
     @SerialName("site_type") val siteTypes: List<String> = emptyList(),

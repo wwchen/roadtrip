@@ -5,6 +5,7 @@ import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.service.settings.SettingsError
 import ca.floo.roadtrip.support.cacheOptionsFor
+import ca.floo.roadtrip.support.callerFromForwardedFor
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -57,14 +58,21 @@ private val requestStartNanosKey = AttributeKey<Long>(REQUEST_START_NANOS_ATTRIB
 internal fun Application.installRoadtripPlugins() {
     // Behind a proxy the socket's peer is the proxy, the same for every caller,
     // and the per-caller limits on the anonymous availability endpoints would be
-    // one shared limit. The proxy in front appends the address that connected to
-    // it to X-Forwarded-For, so the LAST entry is the one a caller cannot write:
-    // anything a client sends itself sits to its left. `origin` reads from here;
-    // `request.local` stays the socket. Sound only while every request comes in
-    // through such a proxy — a directly reachable port would let a caller pick
-    // the last entry, and so its own rate-limit key.
+    // one shared limit. So `origin.remoteHost` is the caller X-Forwarded-For names
+    // (`callerFromForwardedFor`: the rightmost entry past private-network hops,
+    // which a caller cannot write); `request.local` stays the socket. Only the
+    // address is taken — scheme, host and port stay the connection's own, since
+    // nothing needs them and wherever no proxy overwrites the headers a caller
+    // would choose them. Sound only while every request comes in through a proxy
+    // that appends its peer: a directly reachable port lets a caller pick its own
+    // rate-limit key, which outside production is fine.
     install(XForwardedHeaders) {
-        useLastProxy()
+        extractEdgeProxy { origin, values ->
+            callerFromForwardedFor(values.forHeader)?.let { caller ->
+                origin.remoteHost = caller
+                origin.remoteAddress = caller
+            }
+        }
     }
     install(ContentNegotiation) {
         json(roadtripApiJson)

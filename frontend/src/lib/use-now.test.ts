@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
-import { useNow } from './use-now';
+import { useBefore, useNow } from './use-now';
 
 const TICK_MS = 1_000;
 
@@ -31,5 +31,31 @@ describe('useNow', () => {
     });
 
     expect(result.current).toBe(first);
+  });
+});
+
+describe('useBefore', () => {
+  test('is true until the deadline, then false, with no timer left behind', () => {
+    const deadline = Date.now() + 60_000;
+    const { result } = renderHook(() => useBefore(deadline));
+    expect(result.current).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(59_999);
+    });
+    expect(result.current).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(result.current).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('no deadline, or one already past, is false', () => {
+    expect(renderHook(() => useBefore(null)).result.current).toBe(false);
+    const past = renderHook(() => useBefore(Date.now() - 1));
+    expect(past.result.current).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

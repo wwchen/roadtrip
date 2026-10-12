@@ -271,10 +271,16 @@ answered at all, is `no_data` too. `StaySummary.kt` decides it from the same per
 the week grid fuses; the browser renders the word it is given.
 
 The endpoint's per-IP limit (10/min) keys on `origin.remoteHost`, which behind a proxy would be
-the proxy for every caller. Ktor's `XForwardedHeaders` plugin (`useLastProxy`) makes it the last
-`X-Forwarded-For` entry — the one the proxy in front appended, which a caller cannot write. The
-backend names no proxy or vendor; it relies only on every request arriving through a proxy that
-appends the caller, which holds while no backend port is published.
+the proxy for every caller. Ktor's `XForwardedHeaders` plugin, with a handler that takes only the
+address, makes it `callerFromForwardedFor`: the rightmost `X-Forwarded-For` entry past
+private-network hops — what the edge proxy appended, however many inner hops follow it, and never
+anything a caller wrote. Scheme, host and port are not taken from the headers. The backend names
+no proxy or vendor; it relies only on every request arriving through a proxy that appends its
+peer, which holds while no backend port is published (outside production a bypassable limit is
+fine).
+
+Under `view: summary`, `min_nights` other than its default (1) is refused as `bad_min_nights`:
+the summary is about every night of the window, so a shorter run would be a different question.
 
 ### Frontend
 
@@ -283,9 +289,11 @@ appends the caller, which holds while no backend port is published.
   `MAX_REQUESTS_PER_CHECK` = 4 sequential requests, so cards fill in batch by batch and a
   check stays well inside the endpoint's per-IP limit. Sequential, because the backend fans
   each request out against a small connection pool. A throttled request (`ip_throttled`)
-  stops the check and says so; what landed stays, and the button stays disabled for a
-  minute (`THROTTLE_COOLDOWN_MS`), through a change of dates too, since the limit is per
-  caller.
+  stops the check; what landed stays, and the button stays disabled for a minute
+  (`THROTTLE_COOLDOWN_MS`, one timer at the deadline — `useBefore`), through a change of dates
+  too, since the limit is per caller. Why the button is off — that cooldown, a check that
+  stopped, or nothing in view a provider can answer for — is said beside it, so a folded list
+  cannot hide it.
 - **State** (`stores/stayCheckStore.ts`): the question asked (`StayQuery`: dates, site
   type, group size), the ids asked, each answer, whether it is running, and when the
   oldest answer was observed. Answers show only while the question matches the current
@@ -295,7 +303,8 @@ appends the caller, which holds while no backend port is published.
   its answer); the head reads "Checking 5 of 13…". Once back, cards sort by status (open,
   few left, full, closed, no data, couldn't check, not asked), then most open sites, then
   arrival order (`rankByStay`), and the head reads "Fri Sep 11 → Sun Sep 13 · 8 with a site
-  · 5 full · 2 unknown · Checked 4m ago" — the age is the stalest answer's, not the click's.
+  · 1 full · 4 closed for the season · 2 unknown · Checked 4m ago" — closed counted apart from
+  booked up, and the age is the stalest answer's, not the click's.
 - **Card lines**: "8 sites open", "2 sites left", "Full", "Closed for the season", "No data
   for these dates", coloured by the `--rt-stay-*` roles. A per-POI refusal says why when its
   code does ("Not bookable this far ahead yet" for `beyond_booking_horizon`, "Too soon to book

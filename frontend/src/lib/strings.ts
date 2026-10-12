@@ -197,11 +197,13 @@ export const stayCopy = {
   progress: (answered: number, asked: number) => `Checking ${answered} of ${asked}…`,
   /** "Mon Oct 12 → Wed Oct 14", from the two dates already formatted. */
   range: (start: string, end: string) => `${start} → ${end}`,
-  /** The list head once it is back: "Mon Oct 12 → Wed Oct 14 · 8 with a site · 5 full". */
+  /** The list head once it is back: "Mon Oct 12 → Wed Oct 14 · 8 with a site · 5 full", then any closed and unknown. */
   summary: (range: string, withSite: number, full: number) => `${range} · ${withSite} with a site · ${full} full`,
+  closed: (count: number) => `${count} closed for the season`,
   unknown: (count: number) => `${count} unknown`,
   checkedAgo: (ago: string) => `Checked ${ago}`,
   throttled: 'Too many checks in a row — try again in a minute.',
+  noneCheckable: 'None of the campgrounds in view can be checked online.',
   failed: 'The check stopped part way. Try again.',
   /** A card still waiting for its batch. */
   pending: 'Checking…',

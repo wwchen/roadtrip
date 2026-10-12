@@ -553,9 +553,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.tb-stay-failure {
-  color: var(--rt-error);
-}
 
 .tb-card-empty {
   padding: 14px 12px;
@@ -797,6 +794,16 @@
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
+}
+
+/* Why the availability check is off or stopped, under the button it explains. */
+.tb-check-note {
+  font-size: 11px;
+  color: var(--rt-muted);
+}
+
+.tb-check-note--error {
+  color: var(--rt-error);
 }
 
 .tb-dates-hint {

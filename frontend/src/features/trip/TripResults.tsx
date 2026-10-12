@@ -282,15 +282,13 @@ function StayStatus({ check }: { check: CurrentStayCheck }) {
           tallies.withSite,
           tallies.full,
         ),
+        ...(tallies.closed > 0 ? [stayCopy.closed(tallies.closed)] : []),
         ...(tallies.unknown > 0 ? [stayCopy.unknown(tallies.unknown)] : []),
         ...(check.observedAt ? [stayCopy.checkedAgo(relativeTime(check.observedAt, now))] : []),
       ];
   return (
     <div className="tb-results-controls tb-stay-status" aria-live="polite">
       <span>{parts.join(' · ')}</span>
-      {check.failure ? (
-        <span className="tb-stay-failure">{check.failure === 'throttled' ? stayCopy.throttled : stayCopy.failed}</span>
-      ) : null}
     </div>
   );
 }

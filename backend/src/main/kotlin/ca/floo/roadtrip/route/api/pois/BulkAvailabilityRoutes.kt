@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route.api.pois
 
 import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.model.api.BulkAvailabilityRequestDto
+import ca.floo.roadtrip.model.api.BulkAvailabilityView
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.BAD_REQUEST_ERROR
@@ -27,6 +28,9 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import java.time.LocalDate
+
+/** `min_nights` when a request leaves it out: one night, i.e. no run-length filter. */
+private const val DEFAULT_MIN_NIGHTS = 1
 
 /**
  * Every wire code [validated] can throw via `require`/`error`. A
@@ -98,9 +102,10 @@ internal fun Route.bulkAvailabilityRoutes(
                         "`longest_run_nights >= min_nights` and sorted descending; under `view: summary` " +
                         "it carries how the stay looks there (`open`, `few_left`, `full`, " +
                         "`closed_for_season` or `no_data`) and how many sites are open every night of " +
-                        "it. Either way an entry can instead carry an error code: a POI failing never " +
-                        "fails the request. `group_size` keeps campsites that sleep at least that many, " +
-                        "and those with no stated capacity. `site_type` accepts: $siteTypeWireList.",
+                        "it, and `min_nights` other than 1 is refused as `bad_min_nights`. Either way " +
+                        "an entry can instead carry an error code: a POI failing never fails the request. " +
+                        "`group_size` keeps campsites that sleep at least that many, and those with no " +
+                        "stated capacity. `site_type` accepts: $siteTypeWireList.",
             ).access(RouteAccess.Anonymous)
         }
     }
@@ -113,6 +118,8 @@ private fun BulkAvailabilityRequestDto.validated(
     require(poiIds.isNotEmpty()) { BAD_REQUEST_ERROR }
     require(poiIds.size <= config.maxPois) { "too_many_pois" }
     require(minNights >= 1) { "bad_min_nights" }
+    // A stay's summary is over every night of it; a shorter run would be a different question.
+    require(view != BulkAvailabilityView.SUMMARY || minNights == DEFAULT_MIN_NIGHTS) { "bad_min_nights" }
     require(groupSize == null || groupSize >= 1) { "bad_group_size" }
     // Both dates are required: with either left null each POI would resolve its own
     // default window from its own centroid timezone, so run lengths would no longer

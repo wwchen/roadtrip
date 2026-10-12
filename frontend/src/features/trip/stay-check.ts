@@ -95,8 +95,10 @@ export function rankByStay<C extends { summary: { id: number } }>(
 export interface StayTallies {
   /** Open or few left: somewhere to stay. */
   withSite: number;
-  /** Full or closed for the season. */
+  /** Booked up. */
   full: number;
+  /** Shut for the season — a different message from booked up, so counted apart. */
+  closed: number;
   /** No data, or the check failed for it. */
   unknown: number;
   /** How many of the asked ids have answered. */
@@ -108,14 +110,15 @@ export function stayTallies(
   asked: readonly number[],
   results: Readonly<Record<number, StayResult>>,
 ): StayTallies {
-  const tallies: StayTallies = { withSite: 0, full: 0, unknown: 0, answered: 0 };
+  const tallies: StayTallies = { withSite: 0, full: 0, closed: 0, unknown: 0, answered: 0 };
   for (const id of asked) {
     const result = results[id];
     if (!result) continue;
     tallies.answered += 1;
     if (result.kind === 'error') tallies.unknown += 1;
     else if (result.summary.status === 'open' || result.summary.status === 'few_left') tallies.withSite += 1;
-    else if (result.summary.status === 'full' || result.summary.status === 'closed_for_season') tallies.full += 1;
+    else if (result.summary.status === 'full') tallies.full += 1;
+    else if (result.summary.status === 'closed_for_season') tallies.closed += 1;
     else tallies.unknown += 1;
   }
   return tallies;
