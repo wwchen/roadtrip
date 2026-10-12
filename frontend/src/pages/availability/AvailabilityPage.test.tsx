@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { QueryClient } from '@tanstack/react-query';
 import { createTestQueryClient } from '@/test/query-client';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
 import type {
@@ -605,6 +605,17 @@ describe('changes tab', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
     await waitFor(() => expect(window.location.search).toBe('?tab=changes&poi_id=42'));
+  });
+
+  test('applying a picked target date asks for it and keeps it in the URL', async () => {
+    stubApi(changeList(change()), changesSummary(stats()));
+    renderPage('?tab=changes&poi_id=42');
+
+    fireEvent.input(screen.getByLabelText('Target Date'), { target: { value: '2026-07-08' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    await waitFor(() => expect(window.location.search).toBe('?tab=changes&poi_id=42&target_date=2026-07-08'));
+    await waitFor(() => expect(asked('target_date=2026-07-08')).toBeTruthy());
   });
 
   test('a change with no campsite name falls back to its id', async () => {

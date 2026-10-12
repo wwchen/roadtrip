@@ -134,7 +134,6 @@
   z-index: var(--rt-z-inline-popover);
 }
 .cg-cal-popover {
-  width: 280px;
   background: var(--rt-surface);
   border: 1px solid var(--rt-border-strong);
   border-radius: var(--rt-r-xl);

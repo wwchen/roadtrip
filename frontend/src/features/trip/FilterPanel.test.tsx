@@ -5,9 +5,7 @@ import { FilterPanel } from './FilterPanel';
 
 const filters = () => useCampgroundFilterStore.getState();
 
-// The calendar opens on today's month and disables the days before it. September
-// 2026's grid also shows Aug 30–31 and Oct 1–10, so day numbers past 10 are the
-// unambiguous ones to click.
+// The calendar opens on today's month and disables the days before it.
 const TODAY = new Date(2026, 8, 1);
 
 beforeEach(() => {
@@ -18,7 +16,9 @@ beforeEach(() => {
 
 afterEach(() => vi.useRealTimers());
 
-const day = (dayOfMonth: number) => screen.getByRole('button', { name: String(dayOfMonth) });
+const day = (name: string) => screen.getByRole('button', { name });
+const slot = (name: string) => screen.getByRole('radio', { name });
+const save = () => screen.getByRole('button', { name: 'Save' });
 
 const mount = (open = true) =>
   render(<FilterPanel open={open} onToggle={() => {}} totalInBoundary={17} totalMatching={17} />);
@@ -82,33 +82,37 @@ describe('FilterPanel', () => {
     mount();
 
     fireEvent.click(screen.getByRole('button', { name: 'Add dates' }));
-    expect(screen.getByText('September 2026')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'September 2026' })).toBeInTheDocument();
+    expect(slot('Start · not set')).toBeChecked();
     expect(screen.getByText('Pick a start date')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(save()).toBeDisabled();
 
-    fireEvent.click(day(11));
+    fireEvent.click(day('Friday, September 11, 2026'));
+    expect(slot('End · not set')).toBeChecked();
     expect(screen.getByText('Pick an end date')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(save()).toBeDisabled();
 
-    fireEvent.click(day(13));
+    fireEvent.click(day('Sunday, September 13, 2026'));
+    expect(slot('Start · Fri Sep 11')).toBeChecked();
+    expect(slot('End · Sun Sep 13')).toBeInTheDocument();
     expect(screen.getByText('2 nights')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(save());
 
     expect(filters().dateWindow).toEqual({ start: '2026-09-11', end: '2026-09-13' });
     expect(screen.getByText('Fri Sep 11 → Sun Sep 13 · 2 nights')).toBeInTheDocument();
   });
 
-  test('a click on or before the start begins the window again', () => {
+  test('an end pick on or before the start begins the window again', () => {
     mount();
 
     fireEvent.click(screen.getByRole('button', { name: 'Add dates' }));
-    fireEvent.click(day(13));
-    fireEvent.click(day(11));
+    fireEvent.click(day('Sunday, September 13, 2026'));
+    fireEvent.click(day('Friday, September 11, 2026'));
 
-    expect(screen.getByText('Fri Sep 11')).toBeInTheDocument();
-    expect(screen.getByText('Not set')).toBeInTheDocument();
+    expect(slot('Start · Fri Sep 11')).toBeInTheDocument();
+    expect(slot('End · not set')).toBeChecked();
     expect(screen.getByText('Pick an end date')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(save()).toBeDisabled();
   });
 
   test('days before today cannot be picked', () => {
@@ -117,8 +121,8 @@ describe('FilterPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Add dates' }));
 
-    expect(day(14)).toBeDisabled();
-    expect(day(15)).not.toBeDisabled();
+    expect(day('Monday, September 14, 2026')).toBeDisabled();
+    expect(day('Tuesday, September 15, 2026')).not.toBeDisabled();
   });
 
   test('Edit reopens the calendar on the saved window', () => {
@@ -127,10 +131,38 @@ describe('FilterPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
 
-    expect(screen.getByText('October 2026')).toBeInTheDocument();
-    expect(screen.getByText('Fri Oct 16')).toBeInTheDocument();
-    expect(screen.getByText('Mon Oct 19')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'October 2026' })).toBeInTheDocument();
+    expect(slot('Start · Fri Oct 16')).toBeChecked();
+    expect(slot('End · Mon Oct 19')).toBeInTheDocument();
     expect(screen.getByText('3 nights')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
+    expect(save()).not.toBeDisabled();
+  });
+
+  test('choosing End first moves only the end of a saved window', () => {
+    filters().setDateWindow({ start: '2026-10-16', end: '2026-10-19' });
+    mount();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(slot('End · Mon Oct 19'));
+    fireEvent.click(day('Tuesday, October 20, 2026'));
+    fireEvent.click(save());
+
+    expect(filters().dateWindow).toEqual({ start: '2026-10-16', end: '2026-10-20' });
+  });
+
+  test('a saved window that has begun reopens without its passed start, and cannot be saved as it was', () => {
+    vi.setSystemTime(new Date(2026, 9, 18));
+    filters().setDateWindow({ start: '2026-10-16', end: '2026-10-19' });
+    mount();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(slot('Start · not set')).toBeChecked();
+    expect(slot('End · Mon Oct 19')).toBeInTheDocument();
+    expect(save()).toBeDisabled();
+
+    fireEvent.click(day('Sunday, October 18, 2026'));
+    fireEvent.click(save());
+    expect(filters().dateWindow).toEqual({ start: '2026-10-18', end: '2026-10-19' });
   });
 });

@@ -1,17 +1,18 @@
 // Start and end date entry for the Check availability step. M2 stores the window
 // only; M3 polls with it.
 //
-// One calendar picks both ends (`nextDraft`): the first click is the start, the
-// next later click is the end, and a click on or before the start — or any click
-// once both are set — starts over. Every window it can produce is two real dates
-// in order, so Save checks only that both ends are there.
+// One calendar picks both ends, and a Start/End control above it says which end
+// the next pick sets (`nextDraft`). Picking walks start → end → start, so two
+// clicks make a fresh window; choosing End first changes only the end, which is
+// how a saved stay gains or loses a night. A pick that leaves the end on or
+// before the start drops the end, and an end pick on or before the start becomes
+// the new start, so every window Save can see is two dates in order.
 //
-// A calendar rather than `type="date"` fields: `@lew-ds/lds-react`'s change
-// wiring (`useChangeHandler` in `runtime.jsx`) fires on native `input` events only
-// for a fixed `TEXT_LIKE` set of input types, and `date` is not in it — so an LDS
-// `TextField type="date"` never calls `onChange` at all.
-import { useState } from 'react';
-import { Button, MonthCalendar } from '@ui';
+// A calendar rather than two `type="date"` fields because a stay is a range: one
+// grid shows both ends and the nights between them, and keeps the start from
+// being placed after the end.
+import { useEffect, useRef, useState } from 'react';
+import { Button, MonthCalendar, SegmentedControl } from '@ui';
 import { localToday, localYmd } from '@/lib/local-date';
 import { filterCopy } from '@/lib/strings';
 import type { DateWindow } from '@/stores/campgroundFilterStore';
@@ -21,11 +22,6 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const shortDate = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 
-/** Check if a string is in ISO date format and a valid date. */
-export function isIsoDate(value: string): boolean {
-  return ISO_DATE.test(value) && !Number.isNaN(Date.parse(value));
-}
-
 /** Whole nights between two ISO dates; 0 or less means the window is not valid. */
 export function nightsBetween(start: string, end: string): number {
   return Math.round((Date.parse(end) - Date.parse(start)) / MS_PER_DAY);
@@ -33,25 +29,46 @@ export function nightsBetween(start: string, end: string): number {
 
 /**
  * "Fri Sep 11" from "2026-09-11"; UTC so the calendar date never shifts.
- * Returns input unchanged if not a valid ISO date to prevent throwing.
- * `en-US`'s weekday+month+day format inserts a comma after the weekday
- * ("Fri, Sep 11") — stripped here since the wanted form has none.
+ * Returns input unchanged if not a valid ISO date, since `Intl` throws on an
+ * invalid `Date`. `en-US`'s weekday+month+day format inserts a comma after the
+ * weekday ("Fri, Sep 11") — stripped here since the wanted form has none.
  */
 export function formatDateShort(iso: string): string {
-  if (!isIsoDate(iso)) return iso;
-  return shortDate.format(new Date(`${iso}T00:00:00Z`)).replace(',', '');
+  const date = new Date(`${iso}T00:00:00Z`);
+  if (!ISO_DATE.test(iso) || Number.isNaN(date.getTime())) return iso;
+  return shortDate.format(date).replace(',', '');
 }
+
+/** Which end of the window the next pick sets. */
+export type DateEnd = 'start' | 'end';
 
 /** A window part-way through picking: either end may still be missing. */
 export interface DateDraft {
   start: string | null;
   end: string | null;
+  picking: DateEnd;
+}
+
+/**
+ * The draft an editor opens on. A saved end that is not after today has passed,
+ * and a saved start before today has too; neither is offered back, because the
+ * calendar would draw it on a day it will not let anyone pick, and Save would
+ * write a stay that has already begun.
+ */
+export function seedDraft(initial: DateWindow | null, today: string): DateDraft {
+  return {
+    start: initial !== null && initial.start >= today ? initial.start : null,
+    end: initial !== null && initial.end > today ? initial.end : null,
+    picking: 'start',
+  };
 }
 
 /** The draft after a click on `day`; the file comment has the rule. */
 export function nextDraft(draft: DateDraft, day: string): DateDraft {
-  if (draft.start === null || draft.end !== null || day <= draft.start) return { start: day, end: null };
-  return { start: draft.start, end: day };
+  if (draft.picking === 'end' && draft.start !== null && day > draft.start) {
+    return { start: draft.start, end: day, picking: 'start' };
+  }
+  return { start: day, end: draft.end !== null && draft.end > day ? draft.end : null, picking: 'end' };
 }
 
 /** What the next click does, or how long the picked window is. */
@@ -68,16 +85,34 @@ export interface DateWindowFieldsProps {
 }
 
 export function DateWindowFields({ initial, onSave, onCancel }: DateWindowFieldsProps) {
-  const [draft, setDraft] = useState<DateDraft>({ start: initial?.start ?? null, end: initial?.end ?? null });
   const [today] = useState(() => localYmd(localToday()));
-  const { start, end } = draft;
+  const [draft, setDraft] = useState(() => seedDraft(initial, today));
+  const rootRef = useRef<HTMLDivElement>(null);
+  const { start, end, picking } = draft;
+
+  // The panel above the map is height-capped and scrolls, and the filters sit
+  // above this step, so on a short viewport the calendar opens partly below the
+  // fold. Bring the whole editor, Save included, into view once when it opens.
+  // Optional call: jsdom has no `scrollIntoView`.
+  useEffect(() => {
+    rootRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, []);
+
   return (
-    <div className="tb-dates">
-      <dl className="tb-dates-ends">
-        <DateEnd label={filterCopy.startDate} value={start} />
-        <DateEnd label={filterCopy.endDate} value={end} />
-      </dl>
-      <div className="tb-dates-calendar">
+    <div className="tb-dates" ref={rootRef}>
+      <div className="tb-dates-picker">
+        <SegmentedControl
+          size="sm"
+          full
+          name="date_window_end"
+          label={filterCopy.datePicking}
+          options={[
+            { value: 'start', label: filterCopy.startSlot(start === null ? null : formatDateShort(start)) },
+            { value: 'end', label: filterCopy.endSlot(end === null ? null : formatDateShort(end)) },
+          ]}
+          value={picking}
+          onChange={(next) => setDraft((current) => ({ ...current, picking: next as DateEnd }))}
+        />
         <MonthCalendar
           initialMonth={start ?? today}
           today={today}
@@ -88,7 +123,9 @@ export function DateWindowFields({ initial, onSave, onCancel }: DateWindowFields
         />
       </div>
       <div className="tb-dates-actions">
-        <span className="tb-dates-hint">{draftHint(draft)}</span>
+        <span className="tb-dates-hint" aria-live="polite">
+          {draftHint(draft)}
+        </span>
         <Button variant="tertiary" size="sm" onClick={onCancel}>
           {filterCopy.cancelDates}
         </Button>
@@ -103,15 +140,6 @@ export function DateWindowFields({ initial, onSave, onCancel }: DateWindowFields
           {filterCopy.saveDates}
         </Button>
       </div>
-    </div>
-  );
-}
-
-function DateEnd({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="tb-dates-end">
-      <dt>{label}</dt>
-      <dd className={value === null ? 'tb-dates-unset' : undefined}>{value === null ? filterCopy.noDate : formatDateShort(value)}</dd>
     </div>
   );
 }

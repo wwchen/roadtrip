@@ -10,12 +10,13 @@ const meta = {
         component:
           'A month of days with month paging. Dates in and out are `YYYY-MM-DD`; the ' +
           'parent owns the selection, so the same grid serves a single-day pick (the ' +
-          'availability week jump) and a range (the trip panel’s date window). It draws ' +
-          'no surface — its caller supplies the box.',
+          'availability week jump) and a range (the trip panel’s date window). It sizes ' +
+          'itself but draws no surface — its caller supplies the box. The grid is one Tab ' +
+          'stop: arrows move by day and week, Home/End to the week’s ends, PageUp/PageDown ' +
+          'by month and, with Shift, by year.',
       },
     },
   },
-  decorators: [(Story) => <div style={{ width: 280 }}><Story /></div>],
 } satisfies Meta;
 
 export default meta;

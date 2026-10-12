@@ -1069,8 +1069,8 @@ describe('the in-view list', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
       fireEvent.click(screen.getByRole('button', { name: 'Add dates' }));
-      fireEvent.click(screen.getByRole('button', { name: '11' }));
-      fireEvent.click(screen.getByRole('button', { name: '13' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Friday, September 11, 2026' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Sunday, September 13, 2026' }));
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
       expect(useCampgroundFilterStore.getState().dateWindow).toEqual({ start: '2026-09-11', end: '2026-09-13' });

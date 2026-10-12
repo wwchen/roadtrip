@@ -35,6 +35,15 @@ export { LinkButton, type LinkButtonProps } from './LinkButton';
 export { MonthCalendar, type MonthCalendarProps } from './MonthCalendar';
 
 // ---------------------------------------------------------------------------
+// Behaviour corrections.
+//
+// An LDS component whose runtime drops something its props promise. The export
+// shadows the star export above, so every `@ui` import gets the corrected one.
+// ---------------------------------------------------------------------------
+
+export { TextField } from './TextField';
+
+// ---------------------------------------------------------------------------
 // Type corrections.
 //
 // Narrow gaps where `@lew-ds/lds-react`'s declarations are stricter than the

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { WEEKDAY_LABELS } from '@/lib/format';
 import {
   addLocalDays,
@@ -7,10 +7,18 @@ import {
   parseLocalYmd,
   startOfLocalMonth,
 } from '@/lib/local-date';
+import { inBounds, inMonth, keyTarget, tabStop } from './month-calendar-nav';
 import './month-calendar.css';
 
 /** Six weeks, so the grid never changes height as you page months. */
 const GRID_CELLS = 42;
+
+/**
+ * "Thursday, October 22, 2026" — each day button's accessible name. The visible
+ * number alone cannot say which month a padding day belongs to, and the weekday
+ * headers are hidden from assistive tech because this carries the weekday too.
+ */
+const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
 export interface MonthCalendarProps {
   /** Any `YYYY-MM-DD` in the month to open on. Paging after that is the calendar's own. */
@@ -38,8 +46,12 @@ export interface MonthCalendarProps {
  *
  * It only reports a pick: the selection belongs to the parent, so one primitive
  * serves both a single-day pick and a range. The view month is the calendar's
- * own, so the arrows page without the parent hearing about it. It draws no
- * surface of its own either — a popover or a panel puts it in a box.
+ * own, so the arrows page without the parent hearing about it. It sizes itself
+ * but draws no surface — a popover or a panel puts it in a box.
+ *
+ * The grid is one Tab stop. Arrow keys, Home/End and PageUp/PageDown (Shift for a
+ * year) move the focus between days (`month-calendar-nav.ts`), paging the month
+ * when the focus leaves it, and Enter or Space picks the focused day.
  */
 export function MonthCalendar({
   initialMonth,
@@ -51,7 +63,32 @@ export function MonthCalendar({
   onPick,
 }: MonthCalendarProps) {
   const [month, setMonth] = useState(() => startOfLocalMonth(parseLocalYmd(initialMonth)));
+  const [focused, setFocused] = useState<string | null>(null);
+  // Set by a key move and spent by the effect below, so a click or a parent
+  // re-render never pulls focus into the grid.
+  const focusPending = useRef(false);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
   const title = month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const stop = tabStop(month, [focused, selectedStart, today], min, max);
+
+  useEffect(() => {
+    if (!focusPending.current || focused === null) return;
+    focusPending.current = false;
+    gridRef.current?.querySelector<HTMLButtonElement>(`[data-date="${focused}"]`)?.focus();
+  }, [focused, month]);
+
+  const onGridKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const from = (event.target as HTMLElement).dataset.date;
+    const to = from ? keyTarget(from, event.key, event.shiftKey) : null;
+    if (to === null) return;
+    // Arrows and paging keys would otherwise scroll whatever holds the calendar.
+    event.preventDefault();
+    if (!inBounds(to, min, max)) return;
+    focusPending.current = true;
+    setFocused(to);
+    if (!inMonth(to, month)) setMonth(startOfLocalMonth(parseLocalYmd(to)));
+  };
 
   return (
     <div className="rt-cal">
@@ -64,7 +101,9 @@ export function MonthCalendar({
         >
           ‹
         </button>
-        <div className="rt-cal-title">{title}</div>
+        <div className="rt-cal-title" id={titleId} aria-live="polite">
+          {title}
+        </div>
         <button
           type="button"
           className="rt-cal-next"
@@ -74,9 +113,9 @@ export function MonthCalendar({
           ›
         </button>
       </div>
-      <div className="rt-cal-grid">
+      <div className="rt-cal-grid" role="group" aria-labelledby={titleId} ref={gridRef} onKeyDown={onGridKeyDown}>
         {WEEKDAY_LABELS.map((label) => (
-          <div className="rt-cal-head" key={label}>
+          <div className="rt-cal-head" key={label} aria-hidden="true">
             {label}
           </div>
         ))}
@@ -100,8 +139,15 @@ export function MonthCalendar({
               className={classes}
               key={iso}
               data-date={iso}
-              disabled={(min !== null && iso < min) || (max !== null && iso > max)}
-              onClick={() => onPick(iso)}
+              aria-label={dayName.format(date)}
+              aria-pressed={isEnd || inRange}
+              aria-current={iso === today ? 'date' : undefined}
+              tabIndex={iso === stop ? 0 : -1}
+              disabled={!inBounds(iso, min, max)}
+              onClick={() => {
+                setFocused(iso);
+                onPick(iso);
+              }}
             >
               {date.getDate()}
             </button>

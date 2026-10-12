@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { QueryClient } from '@tanstack/react-query';
 import { createTestQueryClient } from '@/test/query-client';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Watch } from '@/api/watches-api';
 import { AppProviders } from '@/app/AppProviders';
@@ -257,6 +257,20 @@ describe('create', () => {
       trigger_kinds: ['slack_notify'],
       stop_when_triggered: true,
     });
+  });
+
+  test('posts the dates picked in the date fields', async () => {
+    stubApi(watchList(), createOk());
+    renderPage();
+    await screen.findByText('No watches yet');
+
+    await userEvent.type(screen.getByLabelText('POI ID'), '42');
+    fireEvent.input(screen.getByLabelText('Start date'), { target: { value: '2026-09-11' } });
+    fireEvent.input(screen.getByLabelText('End date'), { target: { value: '2026-09-13' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => expect(postedTo('/api/watches')).toBeTruthy());
+    expect(postedTo('/api/watches')!.body).toMatchObject({ start_date: '2026-09-11', end_date: '2026-09-13' });
   });
 
   test('confirms with a banner and resets the form', async () => {

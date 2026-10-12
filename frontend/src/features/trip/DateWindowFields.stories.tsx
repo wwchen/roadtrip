@@ -10,8 +10,8 @@ const meta = {
       description: {
         component:
           'The Check availability step\'s date entry. One `MonthCalendar` picks both ' +
-          'ends: the first click is the start, the next later click is the end, and a ' +
-          'click on or before the start begins again.',
+          'ends, and the Start/End control above it says which end the next pick sets: ' +
+          'picking walks start → end → start, and choosing End first changes only the end.',
       },
     },
   },

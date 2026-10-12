@@ -5,8 +5,18 @@
    the week-jump popover. It moved here when the trip panel's date window needed
    the same grid as a range picker; LDS has no calendar primitive. The popover's
    box (`.cg-cal-popover`) and its anchoring (`.cg-cal-host`) stayed behind: this
-   draws no surface, so it fills whatever box its caller puts it in.
+   draws no surface.
+
+   It does own its size, so no caller restates it: the popover shrink-wraps it
+   and the trip panel lines its Start/End control up against it. Rows are a fixed
+   height rather than square cells, because a square grid is as tall as it is
+   wide and the trip panel is height-capped — the calendar would push its own
+   Save button below the fold.
    --------------------------------------------------------------------------- */
+.rt-cal {
+  width: 256px;
+  max-width: 100%;
+}
 .rt-cal-head-row {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 10px;
@@ -36,7 +46,7 @@
   padding: 4px 0;
 }
 .rt-cal-day {
-  aspect-ratio: 1;
+  height: 30px;
   display: flex; align-items: center; justify-content: center;
   font-size: 12px;
   border: 0;
@@ -47,6 +57,10 @@
   cursor: pointer;
 }
 .rt-cal-day:hover:not(:disabled) { background: var(--rt-fill-hover); }
+.rt-cal-day:focus-visible {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: 1px;
+}
 .rt-cal-day:disabled { color: var(--rt-faint); cursor: not-allowed; }
 .rt-cal-day.rt-cal-faint { color: var(--rt-faint); }
 .rt-cal-day.rt-cal-today {
