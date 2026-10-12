@@ -34,8 +34,11 @@ roadtrip:
       # A streamed stay check finishes only when every campground has answered;
       # one that takes longer than this answers `timeout` instead.
       per-poi-timeout: 45s
+      # And the whole check may take this long; whoever has not answered by then
+      # answers `timeout`, so a provider outage cannot hold a check open.
+      stream-timeout: 120s
       # A quiet stream writes a keep-alive this often, inside the idle timeouts of
-      # the proxies in front of it.
+      # the proxies in front of it and of the client (at most 20s).
       stream-heartbeat: 15s
       ip-rate-limit-per-minute: 10
     campsite:

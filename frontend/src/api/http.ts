@@ -35,14 +35,15 @@ export class HttpError extends Error {
   }
 }
 
-export function jsonPost(
-  url: string,
-  body: unknown,
-  { signal }: RequestOptions = {},
-): Promise<Response> {
+export function jsonPost(url: string, body: unknown, options: RequestOptions = {}): Promise<Response> {
+  return postJson(url, body, options);
+}
+
+/** The one JSON POST every helper here sends; [accept] names what the caller reads back, when it is not JSON. */
+function postJson(url: string, body: unknown, { signal }: RequestOptions, accept?: string): Promise<Response> {
   return fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(accept ? { Accept: accept } : {}) },
     body: JSON.stringify(body),
     credentials: CREDENTIALS,
     signal,
@@ -80,17 +81,12 @@ export async function jsonPostOk<T = unknown>(
 export async function jsonPostStream(
   url: string,
   body: unknown,
-  { signal }: RequestOptions = {},
+  options: RequestOptions = {},
 ): Promise<ReadableStream<Uint8Array>> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: EVENT_STREAM_ACCEPT },
-    body: JSON.stringify(body),
-    credentials: CREDENTIALS,
-    signal,
-  });
+  const response = await postJson(url, body, options, EVENT_STREAM_ACCEPT);
   if (!response.ok) throw await attachErrorCode(new HttpError(url, response.status), response);
-  if (!response.body) throw new HttpError(url, response.status);
+  // Only a bodiless status (204, 205, 304) answers without one — never a stream.
+  if (!response.body) throw new Error(`${url}: HTTP ${response.status} carried no body to stream`);
   return response.body;
 }
 

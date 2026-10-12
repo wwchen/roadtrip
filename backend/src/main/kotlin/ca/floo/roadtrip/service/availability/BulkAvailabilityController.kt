@@ -10,8 +10,10 @@ import ca.floo.roadtrip.support.causeChain
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -21,11 +23,15 @@ import org.slf4j.LoggerFactory
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.toKotlinDuration
 
 private val log = LoggerFactory.getLogger("BulkAvailabilityController")
 
-/** The answer a campground gives when it outlives [BulkAvailabilityConfig.perPoiTimeout]. */
+/**
+ * The answer a campground gives when it outlives [BulkAvailabilityConfig.perPoiTimeout],
+ * or is still waiting when the stream reaches [BulkAvailabilityConfig.streamTimeout].
+ */
 internal const val STAY_TIMEOUT_ERROR = "timeout"
 
 internal data class BulkAvailabilityRequest(
@@ -131,30 +137,56 @@ internal class BulkAvailabilityController(
     }
 
     /**
-     * One answer per requested POI, each as it lands. POIs start in request
-     * order — the caller sends the nearest first — at most
-     * [BulkAvailabilityConfig.fanOutConcurrency] at a time, and one that outlives
-     * [BulkAvailabilityConfig.perPoiTimeout] answers [STAY_TIMEOUT_ERROR], so the
-     * flow always completes. Cancelling the collector cancels every read in flight.
+     * One answer per requested POI, each as it lands, and never fewer. POIs start
+     * in request order — the caller sends the nearest first — at most
+     * [BulkAvailabilityConfig.fanOutConcurrency] at a time. One that outlives
+     * [BulkAvailabilityConfig.perPoiTimeout] answers [STAY_TIMEOUT_ERROR], and once
+     * the whole stream reaches [BulkAvailabilityConfig.streamTimeout] so does every
+     * POI yet to answer; a read that ended without an answer at all answers the
+     * unclassified failure. So the flow always completes, with every POI in it.
+     * Cancelling the collector cancels every read in flight.
+     *
+     * The timeouts land at a read's next suspension: a blocking database call in
+     * progress finishes first, bounded by the pool's connection timeout and the
+     * query itself.
      */
     fun stayAnswers(request: StayCheckRequest): Flow<StayAnswerDto> =
         channelFlow {
             val query = SliceQuery(request.siteTypes, request.startDate, request.endDate, request.groupSize, freshAtOrAfter(request.fresh))
             val gate = Semaphore(config.fanOutConcurrency)
-            val timeout = config.perPoiTimeout.toKotlinDuration()
-            request.poiIds.forEach { poiId ->
-                launch {
-                    gate.withPermit {
-                        val read = withTimeoutOrNull(timeout) { read(poiId, query) } ?: PoiRead.Failed(STAY_TIMEOUT_ERROR)
-                        send(
-                            when (read) {
-                                is PoiRead.Resolved -> StayAnswerDto(poiId = poiId, summary = read.slice.staySummary())
-                                is PoiRead.Failed -> StayAnswerDto(poiId = poiId, error = read.error)
-                            },
-                        )
+            val perPoiTimeout = config.perPoiTimeout.toKotlinDuration()
+            val answered = ConcurrentHashMap.newKeySet<Int>()
+            val finished =
+                withTimeoutOrNull(config.streamTimeout.toKotlinDuration()) {
+                    coroutineScope {
+                        request.poiIds.forEachIndexed { index, poiId ->
+                            launch {
+                                val read =
+                                    gate.withPermit { withTimeoutOrNull(perPoiTimeout) { read(poiId, query) } }
+                                        ?: PoiRead.Failed(STAY_TIMEOUT_ERROR)
+                                // The channel is unbounded, so this never suspends: an answer
+                                // sent is an answer marked, with no cancellation between.
+                                send(answerOf(poiId, read))
+                                answered += index
+                            }
+                        }
                     }
                 }
+            // Whoever has not answered still does: past the deadline it ran out of
+            // time; otherwise its read ended without a result (a stray cancellation).
+            val unanswered = if (finished == null) STAY_TIMEOUT_ERROR else AvailabilityProviderError.Unknown.CODE
+            request.poiIds.forEachIndexed { index, poiId ->
+                if (index !in answered) send(StayAnswerDto(poiId = poiId, error = unanswered))
             }
+        }.buffer(Channel.UNLIMITED)
+
+    private fun answerOf(
+        poiId: Long,
+        read: PoiRead,
+    ): StayAnswerDto =
+        when (read) {
+            is PoiRead.Resolved -> StayAnswerDto(poiId = poiId, summary = read.slice.staySummary())
+            is PoiRead.Failed -> StayAnswerDto(poiId = poiId, error = read.error)
         }
 
     private fun freshAtOrAfter(fresh: Boolean): Instant = Instant.now(clock).minus(if (fresh) config.freshTolerance else config.tolerance)

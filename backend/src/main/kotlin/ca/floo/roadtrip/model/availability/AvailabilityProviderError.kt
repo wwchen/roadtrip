@@ -83,5 +83,10 @@ sealed class AvailabilityProviderError(
      */
     class Unknown(
         cause: Throwable,
-    ) : AvailabilityProviderError("unknown", cause = cause)
+    ) : AvailabilityProviderError(CODE, cause = cause) {
+        companion object {
+            /** The wire code, for a caller that has to answer it without a cause in hand. */
+            const val CODE = "unknown"
+        }
+    }
 }

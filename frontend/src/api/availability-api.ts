@@ -41,6 +41,11 @@ export const STAY_STREAM_URL = '/api/pois/availability/bulk/stream';
 export const STAY_ANSWER_EVENT = 'answer';
 export const STAY_DONE_EVENT = 'done';
 
+export interface StayStreamOptions extends RequestOptions {
+  /** Called whenever the stream sends anything, keep-alives included: it is still alive. */
+  onActivity?: () => void;
+}
+
 /** One event of the stay stream: a campground's answer, or the end of the check. */
 export type StayStreamEvent = { kind: 'answer'; answer: StayAnswerDto } | { kind: 'done'; done: StayCheckDoneDto };
 
@@ -112,7 +117,7 @@ export interface StayCheckRequest {
  */
 export async function* streamStays(
   { poiIds, start, end, siteType, groupSize, fresh }: StayCheckRequest,
-  { signal }: RequestOptions = {},
+  { signal, onActivity }: StayStreamOptions = {},
 ): AsyncGenerator<StayStreamEvent> {
   const body = await jsonPostStream(
     STAY_STREAM_URL,
@@ -126,7 +131,7 @@ export async function* streamStays(
     },
     { signal },
   );
-  for await (const event of readEventStream(body)) {
+  for await (const event of readEventStream(body, { onActivity })) {
     if (event.event === STAY_ANSWER_EVENT) yield { kind: 'answer', answer: JSON.parse(event.data) as StayAnswerDto };
     else if (event.event === STAY_DONE_EVENT) yield { kind: 'done', done: JSON.parse(event.data) as StayCheckDoneDto };
   }

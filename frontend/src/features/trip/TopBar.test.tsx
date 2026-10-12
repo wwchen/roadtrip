@@ -1168,6 +1168,30 @@ describe('the in-view list', () => {
       expect(stayBodies.map((body) => body.poi_ids)).toEqual([[21, 22]]);
     });
 
+    test('Check again asks in the list\'s own order, not the order the answers sorted it into', async () => {
+      campgroundSummaries[22] = { ...campgroundSummaries[22]!, availability_supported: true };
+      stayStream = () =>
+        eventStreamResponse([
+          answer(21, { status: 'full', open_sites: 0, checked_sites: 206 }),
+          answer(22, { status: 'open', open_sites: 9, checked_sites: 170 }),
+          done(2),
+        ]);
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Zephyr Cove')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+      await waitFor(() => expect(cardNames()).toEqual(['Zephyr Cove', 'Fallen Leaf']));
+      fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+
+      await waitFor(() => expect(stayBodies).toHaveLength(2));
+      expect(stayBodies.map((body) => body.poi_ids)).toEqual([
+        [21, 22],
+        [21, 22],
+      ]);
+    });
+
     test("each answered card's dot takes the colour of its answer", async () => {
       campgroundSummaries[22] = { ...campgroundSummaries[22]!, availability_supported: true };
       stayStream = () =>

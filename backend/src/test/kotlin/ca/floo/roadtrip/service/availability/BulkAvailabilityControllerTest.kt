@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.CampsiteKind
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
@@ -28,8 +29,10 @@ private const val UNKNOWN_POI_ID = 101L
 private const val NO_SITES_POI_ID = 103L
 private const val CRASHING_POI_ID = 104L
 private const val SLOW_POI_ID = 105L
+private const val STRAY_CANCELLATION_POI_ID = 106L
 private const val SLOW_SLICE_DELAY_MS = 300L
 private const val TEST_PER_POI_TIMEOUT_MS = 100L
+private const val TEST_STREAM_TIMEOUT_MS = 100L
 private const val TEST_GENEROUS_TIMEOUT_SECONDS = 30L
 
 private const val TEST_MAX_POIS = 50
@@ -148,6 +151,29 @@ class BulkAvailabilityControllerTest {
     }
 
     @Test
+    fun `past the stream's deadline every poi yet to answer answers timeout, and the stream still ends`() {
+        runBlocking {
+            val answers =
+                bulkController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
+                    .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L, SLOW_POI_ID)))
+                    .toList()
+
+            assertEquals(listOf(2L, SLOW_POI_ID, SLOW_POI_ID), answers.map { it.poiId })
+            assertEquals(listOf(STAY_TIMEOUT_ERROR, STAY_TIMEOUT_ERROR), answers.filter { it.poiId == SLOW_POI_ID }.map { it.error })
+        }
+    }
+
+    @Test
+    fun `a read that ends without an answer still answers, as the unclassified failure`() {
+        runBlocking {
+            val answers = bulkController().stayAnswers(stayRequest(listOf(STRAY_CANCELLATION_POI_ID, 2L))).toList()
+
+            assertEquals(setOf(STRAY_CANCELLATION_POI_ID, 2L), answers.map { it.poiId }.toSet())
+            assertEquals(AvailabilityProviderError.Unknown.CODE, answers.single { it.poiId == STRAY_CANCELLATION_POI_ID }.error)
+        }
+    }
+
+    @Test
     fun `the stay stream never runs more pois at once than the configured fan out`() {
         runBlocking {
             val meter = ConcurrencyMeter()
@@ -231,6 +257,7 @@ private fun bulkController(
     recorder: CutoffRecorder? = null,
     meter: ConcurrencyMeter? = null,
     perPoiTimeout: Duration = Duration.ofSeconds(TEST_GENEROUS_TIMEOUT_SECONDS),
+    streamTimeout: Duration = Duration.ofSeconds(TEST_GENEROUS_TIMEOUT_SECONDS),
 ): BulkAvailabilityController =
     BulkAvailabilityController(
         sliceLookup = FakePoiAvailabilitySliceLookup(recorder, meter),
@@ -241,6 +268,7 @@ private fun bulkController(
                 tolerance = Duration.ZERO,
                 ipRateLimitPerMinute = TEST_IP_RATE_LIMIT_PER_MINUTE,
                 perPoiTimeout = perPoiTimeout,
+                streamTimeout = streamTimeout,
             ),
         clock = Clock.systemUTC(),
     )
@@ -327,6 +355,8 @@ private class FakePoiAvailabilitySliceLookup(
             RATE_LIMITED_POI_ID -> throw AvailabilityProviderError.RateLimited()
             UNKNOWN_POI_ID -> throw AvailabilityServiceError.NotFound
             CRASHING_POI_ID -> throw RuntimeException("boom: unmapped failure")
+            // A cancellation nobody asked for — what a provider's own `withTimeout` throws.
+            STRAY_CANCELLATION_POI_ID -> throw CancellationException("not this read's caller")
             SLOW_POI_ID -> {
                 delay(SLOW_SLICE_DELAY_MS)
                 simpleSlice(poiId)

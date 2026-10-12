@@ -14,6 +14,18 @@ class BulkAvailabilityConfigTest {
         assertEquals(Duration.ofHours(2), config.tolerance)
         assertEquals(10, config.ipRateLimitPerMinute)
         assertEquals(Duration.ofMinutes(1), config.freshTolerance)
+        assertEquals(Duration.ofSeconds(45), config.perPoiTimeout)
+        assertEquals(Duration.ofMinutes(2), config.streamTimeout)
+        assertEquals(Duration.ofSeconds(15), config.streamHeartbeat)
+    }
+
+    @Test
+    fun `a stream's heartbeat may not be slower than a client waits for a sign of life`() {
+        val atCeiling = Duration.ofSeconds(BulkAvailabilityConfig.MAX_STREAM_HEARTBEAT_SECONDS)
+        assertEquals(atCeiling, BulkAvailabilityConfig.default.copy(streamHeartbeat = atCeiling).streamHeartbeat)
+        assertFailsWith<IllegalArgumentException> {
+            BulkAvailabilityConfig.default.copy(streamHeartbeat = atCeiling.plusSeconds(1))
+        }
     }
 
     @Test

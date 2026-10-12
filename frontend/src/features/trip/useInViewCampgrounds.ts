@@ -55,6 +55,14 @@ export interface InViewCampgrounds {
    * two reads; null when there is none.
    */
   stayCheck: CurrentStayCheck | null;
+  /**
+   * What an availability check asks about: the cards on screen that a provider
+   * can answer for, in the list's own order — nearest first, as the stream wants
+   * them — never the order a previous check's answers sorted them into. Null
+   * until the list is ready, so a list still loading does not read as "nothing
+   * checkable".
+   */
+  checkableIds: readonly number[] | null;
 }
 
 export interface UseInViewCampgroundsOptions {
@@ -83,11 +91,11 @@ export function useInViewCampgrounds({ paused }: UseInViewCampgroundsOptions): I
   const cappedIds = useMemo(() => shownIds.slice(0, MAX_IN_VIEW_CARDS), [shownIds]);
   const summaries = useCampgroundSummaries(cappedIds);
 
-  const cards = useMemo(() => {
+  const ranked = useMemo(() => {
     const built = cardsFromSummaries(cappedIds, summaries.byId, viewportBbox ? bboxCenter(viewportBbox) : null);
-    const ranked = rankCards(visibleCards(built, { hiddenAgencies, campgroundsHidden }), rankFilter);
-    return stayResults ? rankByStay(ranked, stayResults) : ranked;
-  }, [cappedIds, summaries.byId, viewportBbox, rankFilter, hiddenAgencies, campgroundsHidden, stayResults]);
+    return rankCards(visibleCards(built, { hiddenAgencies, campgroundsHidden }), rankFilter);
+  }, [cappedIds, summaries.byId, viewportBbox, rankFilter, hiddenAgencies, campgroundsHidden]);
+  const cards = useMemo(() => (stayResults ? rankByStay(ranked, stayResults) : ranked), [ranked, stayResults]);
 
   // With nothing hidden the server's own counts are the honest ones — they
   // survive a truncated search, which the id list does not. With something
@@ -126,5 +134,11 @@ export function useInViewCampgrounds({ paused }: UseInViewCampgroundsOptions): I
     ],
   );
 
-  return { list, inView, matching, matchingIds: search.ids, enabled: search.enabled, failed, stayCheck };
+  // The rendered cards are `ranked` in another order, so its order is the one asked in.
+  const checkableIds = useMemo(
+    () => (list.kind === 'ready' ? ranked.filter((card) => card.checkable).map((card) => card.summary.id) : null),
+    [list.kind, ranked],
+  );
+
+  return { list, inView, matching, matchingIds: search.ids, enabled: search.enabled, failed, stayCheck, checkableIds };
 }

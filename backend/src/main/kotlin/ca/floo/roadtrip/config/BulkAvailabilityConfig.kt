@@ -26,8 +26,16 @@ data class BulkAvailabilityConfig(
      */
     val perPoiTimeout: Duration = Duration.ofSeconds(DEFAULT_PER_POI_TIMEOUT_SECONDS),
     /**
+     * How long a whole streamed stay check may take. Past it, every campground yet
+     * to answer answers `timeout` and the stream ends — without it, a provider
+     * outage across the view would keep a check open for a per-POI timeout per
+     * fan-out round.
+     */
+    val streamTimeout: Duration = Duration.ofSeconds(DEFAULT_STREAM_TIMEOUT_SECONDS),
+    /**
      * How often a stream with nothing to send writes a keep-alive comment, so a
-     * proxy in front does not take a quiet stream for a dead one.
+     * proxy in front does not take a quiet stream for a dead one — and so a
+     * client can: at most [MAX_STREAM_HEARTBEAT_SECONDS].
      */
     val streamHeartbeat: Duration = Duration.ofSeconds(DEFAULT_STREAM_HEARTBEAT_SECONDS),
 ) {
@@ -42,7 +50,10 @@ data class BulkAvailabilityConfig(
             "bulk fresh-tolerance must be between 0 and tolerance ($tolerance) (got $freshTolerance)"
         }
         require(perPoiTimeout.isPositive) { "bulk per-poi-timeout must be positive (got $perPoiTimeout)" }
-        require(streamHeartbeat.isPositive) { "bulk stream-heartbeat must be positive (got $streamHeartbeat)" }
+        require(streamTimeout.isPositive) { "bulk stream-timeout must be positive (got $streamTimeout)" }
+        require(streamHeartbeat.isPositive && streamHeartbeat <= Duration.ofSeconds(MAX_STREAM_HEARTBEAT_SECONDS)) {
+            "bulk stream-heartbeat must be between 0 and ${MAX_STREAM_HEARTBEAT_SECONDS}s (got $streamHeartbeat)"
+        }
     }
 
     companion object {
@@ -57,7 +68,17 @@ data class BulkAvailabilityConfig(
         private const val DEFAULT_IP_RATE_LIMIT_PER_MINUTE = 10
         private const val DEFAULT_FRESH_TOLERANCE_SECONDS = 60L
         private const val DEFAULT_PER_POI_TIMEOUT_SECONDS = 45L
+        private const val DEFAULT_STREAM_TIMEOUT_SECONDS = 120L
         private const val DEFAULT_STREAM_HEARTBEAT_SECONDS = 15L
+
+        /**
+         * The longest a stream may go without writing anything. A client takes a
+         * stream silent for a minute as a lost connection (the map's check,
+         * `CHECK_IDLE_TIMEOUT_MS` in `frontend/src/features/trip/stay-check.ts`),
+         * so the heartbeat has to beat well inside that — and the providers' pace
+         * stays the backend's own business, bounded by the timeouts above.
+         */
+        const val MAX_STREAM_HEARTBEAT_SECONDS = 20L
 
         val default =
             BulkAvailabilityConfig(
@@ -78,6 +99,7 @@ data class BulkAvailabilityConfig(
                         ?: default.ipRateLimitPerMinute,
                 freshTolerance = config.duration("fresh-tolerance", default.freshTolerance),
                 perPoiTimeout = config.duration("per-poi-timeout", default.perPoiTimeout),
+                streamTimeout = config.duration("stream-timeout", default.streamTimeout),
                 streamHeartbeat = config.duration("stream-heartbeat", default.streamHeartbeat),
             )
     }

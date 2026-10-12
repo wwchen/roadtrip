@@ -3,8 +3,9 @@
 //
 // A check is one request whose answer streams (`streamStays`): the backend
 // answers each campground as its provider does, so cards fill in one by one and
-// the head counts them as they land. The check ends at the stream's `done`; one
-// that ends without it, or goes quiet for `CHECK_IDLE_TIMEOUT_MS`, stopped early.
+// the head counts them as they land. The check ends at the stream's `done`, with
+// every campground answered; one that ends otherwise, or goes quiet — not even a
+// keep-alive — for `CHECK_IDLE_TIMEOUT_MS`, stopped early.
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { streamStays } from '@/api/availability-api';
@@ -132,10 +133,10 @@ export function useStayCheck(checkableIds: readonly number[] | null): StayCheckC
     try {
       const completed = await withIdleTimeout(
         async (signal, alive) => {
-          for await (const event of streamStays({ ...query, poiIds: [...checkableIds], fresh }, { signal })) {
+          const request = { ...query, poiIds: [...checkableIds], fresh };
+          for await (const event of streamStays(request, { signal, onActivity: alive })) {
             // An event already read when the check was cancelled answers nothing now.
             if (controller.signal.aborted) return false;
-            alive();
             if (event.kind === 'done') return true;
             record({ [event.answer.poi_id]: resultOf(event.answer) }, observedAtOf(event.answer, Date.now()));
           }
@@ -145,8 +146,11 @@ export function useStayCheck(checkableIds: readonly number[] | null): StayCheckC
         CHECK_IDLE_TIMEOUT_MS,
       );
       if (controller.signal.aborted) return;
-      // A stream that closes before `done` was cut off — by a proxy, a restart — part way.
-      finish(completed ? null : 'failed');
+      // A stream that closes before `done` was cut off — by a proxy, a restart — part
+      // way. The backend answers for every campground before `done`; one it did not is
+      // a check that did not finish either, rather than a card left blank.
+      const { results } = useStayCheckStore.getState();
+      finish(completed && checkableIds.every((id) => id in results) ? null : 'failed');
     } catch (error) {
       if (controller.signal.aborted) return;
       if (error instanceof HttpError && error.code === THROTTLED_CODE) {

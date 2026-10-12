@@ -80,6 +80,22 @@ describe('readEventStream', () => {
     expect(await eventsOf(bodyOf('\uFEFFdata: x\n\n'))).toEqual([{ event: 'message', data: 'x' }]);
   });
 
+  test('a `\r` that ends the stream ends its line, so a final blank line still dispatches', async () => {
+    expect(await eventsOf(bodyOf('event: done\rdata: {}\r', '\r'))).toEqual([{ event: 'done', data: '{}' }]);
+  });
+
+  test('reports every chunk as activity, a keep-alive with no event in it included', async () => {
+    let chunks = 0;
+    const events: ServerEvent[] = [];
+
+    for await (const event of readEventStream(bodyOf(': keep-alive\n\n', 'data: x', '\n\n'), { onActivity: () => (chunks += 1) })) {
+      events.push(event);
+    }
+
+    expect(chunks).toBe(3);
+    expect(events).toEqual([{ event: 'message', data: 'x' }]);
+  });
+
   test('discards an event the stream ends in the middle of', async () => {
     expect(await eventsOf(bodyOf('data: whole\n\nevent: answer\ndata: {"poi_id"'))).toEqual([
       { event: 'message', data: 'whole' },

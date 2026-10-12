@@ -345,10 +345,17 @@ summary view did, with no `min_nights` — and answers `text/event-stream`:
 | `done` | `StayCheckDoneDto`: `answered` | once, last; the stream then closes |
 
 `BulkAvailabilityController.stayAnswers` starts the POIs in request order — the client sends
-the nearest first — at most `bulk.fan-out-concurrency` at a time, and a POI that outlives
-`bulk.per-poi-timeout` (45 s) answers `timeout`, so the stream always reaches `done`. A quiet
-stream writes a keep-alive comment every `bulk.stream-heartbeat` (15 s), inside the idle
-timeouts of the proxies in front of it. A refused request (`400`, `503 ip_throttled`) answers
+them in the list's own order, nearest first, never the order a previous check sorted them into
+— at most `bulk.fan-out-concurrency` at a time. A POI that outlives `bulk.per-poi-timeout`
+(45 s) answers `timeout`, and once the whole stream reaches `bulk.stream-timeout` (2 min) so does
+every POI yet to answer; a read that ends with no answer at all (a stray cancellation) answers
+`unknown`. So every requested POI answers, and the stream always reaches `done`. The timeouts
+land at a read's next suspension — a vendor call's await is one, which is why
+`VendorHttpTransport` hands a caller's cancellation back rather than wrapping it as the vendor's
+failure — so a blocking database call in progress finishes first, bounded by the pool's
+connection timeout. A quiet stream writes a keep-alive comment every `bulk.stream-heartbeat`
+(15 s, at most `MAX_STREAM_HEARTBEAT_SECONDS` = 20 s), inside the idle timeouts of the proxies
+in front of it and of the client. A refused request (`400`, `503 ip_throttled`) answers
 JSON before any event; the stream shares the scan's per-IP limit, and a check is one request
 against it. The client hanging up cancels every read still in flight.
 
@@ -363,16 +370,17 @@ The event-stream wiring is generic and knows nothing of stays: `route/common/Eve
 ### Frontend
 
 - **Library.** `lib/event-stream.ts`'s `readEventStream` parses any `text/event-stream` body
-  the way `EventSource` does — which cannot POST — and `lib/deadline.ts`'s `withIdleTimeout`
+  the way `EventSource` does — which cannot POST — reporting every chunk to `onActivity`, and `lib/deadline.ts`'s `withIdleTimeout`
   cuts a task off after a stretch of silence rather than a total, for work whose length is
   open-ended. `api/http.ts`'s `jsonPostStream` POSTs JSON and hands back the body, throwing an
   `HttpError` with the envelope's code on a refusal.
 - **Client.** `api/availability-api.ts`'s `streamStays` yields each `answer`, then `done`, and
   skips an event it does not know.
 - **The check** (`useStayCheck`) is one stream. Each answer is recorded as it lands and `done`
-  finishes it. A stream that closes before `done` stopped part way (`failed`); one that goes
-  `CHECK_IDLE_TIMEOUT_MS` (60 s, above the backend's per-POI timeout) without an answer is
-  `timed_out`. The throttle and its cooldown, Check again's `fresh`, the store and the list are
+  finishes it, with every campground answered. A stream that closes before `done`, or reaches it
+  with one unanswered, stopped part way (`failed`). One that writes nothing at all — not even a
+  keep-alive — for `CHECK_IDLE_TIMEOUT_MS` (60 s) has lost its connection and is `timed_out`;
+  keep-alives count as life, so how long the providers take stays the backend's to bound. The throttle and its cooldown, Check again's `fresh`, the store and the list are
   M3's.
 - **Card dots** take the status colour once the card's answer lands (`stayToneOf`): open, few
   left, full — closed for the season too, since there is nowhere to stay either way and the line

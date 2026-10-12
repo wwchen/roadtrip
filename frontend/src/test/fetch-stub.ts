@@ -46,6 +46,7 @@ export interface StubEvent {
 }
 
 const EVENT_STREAM_HEADERS = { 'Content-Type': 'text/event-stream' };
+const KEEP_ALIVE_FRAME = ': keep-alive\n\n';
 
 function frameOf({ event, data }: StubEvent): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -60,6 +61,8 @@ export interface OpenEventStream {
   response: Response;
   /** Writes [event] to the stream; a no-op once it has closed or been aborted. */
   send: (event: StubEvent) => void;
+  /** Writes a keep-alive comment, as a server with nothing to say does; a no-op once closed. */
+  ping: () => void;
   /** Ends the stream where it is — after `done` or, to play a cut connection, before it. */
   close: () => void;
 }
@@ -79,11 +82,13 @@ export function openEventStream(signal?: AbortSignal | null): OpenEventStream {
     open = false;
     controller.error(new DOMException('The operation was aborted.', 'AbortError'));
   });
+  const write = (text: string): void => {
+    if (open) controller.enqueue(encoder.encode(text));
+  };
   return {
     response: new Response(body, { status: 200, headers: EVENT_STREAM_HEADERS }),
-    send: (event) => {
-      if (open) controller.enqueue(encoder.encode(frameOf(event)));
-    },
+    send: (event) => write(frameOf(event)),
+    ping: () => write(KEEP_ALIVE_FRAME),
     close: () => {
       if (!open) return;
       open = false;

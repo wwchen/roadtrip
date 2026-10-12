@@ -84,17 +84,10 @@ export function TopBar({ alerts }: TopBarProps) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const routeCampgrounds = useRouteCampgrounds(cards, corridor.isFetching);
   const inView = useInViewCampgrounds({ paused: showRoute });
-  // What the availability check asks about: the cards on screen that a provider
-  // can answer for. The 50-card slice, not every match — those are what the user
-  // is looking at, and what the endpoint's per-request cap allows. Null until the
-  // list is ready, so a list still loading does not read as "nothing checkable".
-  const checkableIds = useMemo(
-    () =>
-      inView.list.kind === 'ready'
-        ? inView.list.cards.filter((card) => card.checkable).map((card) => card.summary.id)
-        : null,
-    [inView.list],
-  );
+  // What the availability check asks about: the 50-card slice, not every match —
+  // those are what the user is looking at, and what the endpoint's per-request cap
+  // allows (`InViewCampgrounds.checkableIds`).
+  const checkableIds = inView.checkableIds;
 
   // The map's pin filter and legend counts follow the same search this list
   // does — the full matching id set, not the 50-card slice — so the two

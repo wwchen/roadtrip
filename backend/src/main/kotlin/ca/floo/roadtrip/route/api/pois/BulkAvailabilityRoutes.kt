@@ -97,7 +97,8 @@ internal fun Route.bulkAvailabilityRoutes(
                         "(`open`, `few_left`, `full`, `closed_for_season` or `no_data`, and how many sites " +
                         "are open every night from start_date up to end_date) or an error code, then one " +
                         "`${StayCheckDoneDto.EVENT}` event, and the stream closes. A POI that takes longer " +
-                        "than ${config.perPoiTimeout} answers `$STAY_TIMEOUT_ERROR`; a quiet stream sends a " +
+                        "than ${config.perPoiTimeout} answers `$STAY_TIMEOUT_ERROR`, and so does every POI yet " +
+                        "to answer once the stream reaches ${config.streamTimeout}; a quiet stream sends a " +
                         "keep-alive comment every ${config.streamHeartbeat}. A refused request answers " +
                         "JSON with the status, as before any event is sent. `site_type` accepts: " +
                         "$siteTypeWireList.",
