@@ -263,6 +263,13 @@
   --rt-first-come:     var(--rt-c-amber-400);
   --rt-first-come-bg:  rgba(var(--rt-c-amber-400-rgb), 0.14);
   --rt-reserved:       var(--rt-c-grey-500);
+
+  /* A stay's outcome at one campground, from the availability check: a card's
+     result line now, the campground pins in M4. No data and a failed check use
+     --rt-faint, the role that already means "nothing to go on". */
+  --rt-stay-open:      var(--rt-c-green-400);
+  --rt-stay-few:       var(--rt-c-amber-400);
+  --rt-stay-full:      var(--rt-c-grey-500);
   --rt-watching:       var(--rt-c-blue-500);
   --rt-paused:         var(--rt-c-grey-450);
 

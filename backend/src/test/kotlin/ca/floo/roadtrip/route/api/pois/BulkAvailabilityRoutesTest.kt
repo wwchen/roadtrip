@@ -35,6 +35,7 @@ import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -60,6 +61,7 @@ private const val TEST_FAN_OUT_CONCURRENCY = 4
 private const val TEST_IP_RATE_LIMIT_PER_MINUTE = 10
 private const val RATE_LIMITED_POI_ID = 100L
 private const val UNKNOWN_CAMPSITE_POI_ID = 999_999L
+private const val FORWARDED_FOR_HEADER = "X-Forwarded-For"
 
 /** [FakePoiAvailabilitySliceLookup]'s campsite id is derived from the poi id by this factor. */
 private const val FAKE_SLICE_CAMPSITE_ID_MULTIPLIER = 1000L
@@ -272,6 +274,85 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
+    fun `the summary view answers each poi with its stay summary and keeps a failing one's error`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """{"poi_ids":[1,$RATE_LIMITED_POI_ID],"view":"summary",""" +
+                            """"start_date":"$windowStart","end_date":"$windowEnd"}""",
+                    )
+                }
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val pois = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["pois"]!!.jsonArray
+            // The one campsite is bookable the first night and taken the second, so
+            // nothing is open for the whole window and the provider did answer.
+            val first = pois[0].jsonObject
+            assertTrue("campsites" !in first)
+            val summary = first["summary"]!!.jsonObject
+            assertEquals("full", summary["status"]!!.jsonPrimitive.content)
+            assertEquals(0, summary["open_sites"]!!.jsonPrimitive.content.toInt())
+            assertEquals(1, summary["checked_sites"]!!.jsonPrimitive.content.toInt())
+            assertEquals("rate_limited", pois[1].jsonObject["error"]!!.jsonPrimitive.content)
+            assertTrue("summary" !in pois[1].jsonObject)
+        }
+
+    @Test
+    fun `the summary view refuses a min_nights it would otherwise ignore`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """{"poi_ids":[1],"view":"summary","min_nights":2,""" +
+                            """"start_date":"$windowStart","end_date":"$windowEnd"}""",
+                    )
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_min_nights", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `rejects a non-positive group_size`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1],"group_size":0,"start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_group_size", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `rejects a view outside the vocabulary`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1],"view":"cells","start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_request", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `a reserved cell is watchable when the provider can be polled`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
@@ -342,6 +423,31 @@ class BulkAvailabilityRoutesTest {
             assertEquals(HttpStatusCode.ServiceUnavailable, second.status)
             val body = Json.parseToJsonElement(second.bodyAsText()).jsonObject
             assertEquals("ip_throttled", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `behind a proxy each caller is throttled on its own, by the address the edge appended`() =
+        testApplication {
+            application {
+                routeTestApplication {
+                    // One token each, frozen clock. Every request shares one socket peer, as
+                    // every visitor does behind a proxy; X-Forwarded-For tells them apart.
+                    bulkAvailabilityRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 1, nowMs = { 0L }))
+                }
+            }
+
+            suspend fun postVia(forwardedFor: String) =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    header(FORWARDED_FOR_HEADER, forwardedFor)
+                    setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+
+            assertEquals(HttpStatusCode.OK, postVia("203.0.113.7").status)
+            assertEquals(HttpStatusCode.OK, postVia("198.51.100.4").status)
+            // A caller that writes its own entry, behind an inner hop that appends its
+            // own private address, still lands on the one the edge appended.
+            assertEquals(HttpStatusCode.ServiceUnavailable, postVia("192.0.2.99, 203.0.113.7, 172.18.0.5").status)
         }
 
     private fun Route.bulkAvailabilityRoutesUnderTest(

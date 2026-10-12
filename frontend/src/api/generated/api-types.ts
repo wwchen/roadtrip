@@ -278,18 +278,31 @@ export interface BulkAvailabilityRequestDto {
   end_date?: string;
   min_nights?: number;
   site_type?: string[];
+  group_size?: number;
+  view?: BulkAvailabilityView;
+  fresh?: boolean;
 }
 
 export interface BulkAvailabilityResponseDto {
   pois: BulkPoiAvailabilityDto[];
 }
 
+export type BulkAvailabilityView = 'campsites' | 'summary';
+
 export interface BulkPoiAvailabilityDto {
   poi_id: number;
   start_date?: string;
   end_date?: string;
   campsites?: AvailabilityResponseDto[];
+  summary?: BulkPoiSummaryDto;
   error?: string;
+}
+
+export interface BulkPoiSummaryDto {
+  status: StayAvailabilityStatus;
+  open_sites: number;
+  checked_sites: number;
+  cache?: AvailabilityCacheBlock;
 }
 
 export interface CampgroundDetailsRequestDto {
@@ -800,6 +813,8 @@ export interface SlimPoiPropertiesSchema {
 export interface StatusResponseSchema {
   targets: TargetStatusSchema[];
 }
+
+export type StayAvailabilityStatus = 'open' | 'few_left' | 'full' | 'closed_for_season' | 'no_data';
 
 export interface TargetStatusSchema {
   target: string;

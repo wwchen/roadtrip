@@ -19,6 +19,8 @@
 // Anything that varies is a function, so a caller cannot assemble a sentence out
 // of fragments and get the word order wrong.
 
+import type { StayAvailabilityStatus, StayRefusalCode } from '@/api/availability-api';
+
 /**
  * What we call recreation.gov to users — the one name, matching the vendor's own
  * branding and the `booking_system` the backend serves. Two names for one vendor
@@ -177,6 +179,50 @@ export const listCopy = {
   layerOffAction: 'Turn campgrounds back on',
 } as const;
 
+/**
+ * What a card says when its campground refused the stay itself, by the code it
+ * refused with. Any other code is an outage, and reads as `stayCopy.error`.
+ */
+const STAY_REFUSAL_COPY: Readonly<Record<StayRefusalCode, string>> = {
+  beyond_booking_horizon: 'Not bookable this far ahead yet',
+  start_before_earliest: 'Too soon to book online',
+};
+
+/** The availability check (M3): its button, its progress, and each card's answer. */
+export const stayCopy = {
+  check: 'Check availability',
+  checkAgain: 'Check again',
+  checking: 'Checking…',
+  /** The list head while a check runs: "Checking 5 of 13…". */
+  progress: (answered: number, asked: number) => `Checking ${answered} of ${asked}…`,
+  /** "Mon Oct 12 → Wed Oct 14", from the two dates already formatted. */
+  range: (start: string, end: string) => `${start} → ${end}`,
+  /** The list head once it is back: "Mon Oct 12 → Wed Oct 14 · 8 with a site · 5 full", then any closed and unknown. */
+  summary: (range: string, withSite: number, full: number) => `${range} · ${withSite} with a site · ${full} full`,
+  closed: (count: number) => `${count} closed for the season`,
+  refused: (count: number) => `${count} not bookable for these dates`,
+  unknown: (count: number) => `${count} unknown`,
+  checkedAgo: (ago: string) => `Checked ${ago}`,
+  throttled: 'Too many checks in a row — try again in a minute.',
+  noneCheckable: 'None of the campgrounds in view can be checked online.',
+  failed: 'The check stopped part way. Try again.',
+  timedOut: 'The booking sites took too long to answer. Try again.',
+  /** A card still waiting for its batch. */
+  pending: 'Checking…',
+  /** A card whose campground could not be asked. */
+  error: "Couldn't check",
+  /** A card's line for a failed answer: why, when the code says, else `error`. */
+  errorFor: (code: string) => (code in STAY_REFUSAL_COPY ? STAY_REFUSAL_COPY[code as StayRefusalCode] : stayCopy.error),
+  /** A card's answer, by status; `open` is the count of sites open every night. */
+  result: {
+    open: (open: number) => `${open} sites open`,
+    few_left: (open: number) => (open === 1 ? '1 site left' : `${open} sites left`),
+    full: () => 'Full',
+    closed_for_season: () => 'Closed for the season',
+    no_data: () => 'No data for these dates',
+  } satisfies Record<StayAvailabilityStatus, (open: number) => string>,
+} as const;
+
 /** The campground filter block under the search row, and the cards' facet row. */
 export const filterCopy = {
   pill: 'Filter campgrounds',
@@ -203,23 +249,17 @@ export const filterCopy = {
   /** The state word in a facet's aria-label, e.g. "Tent, matches". */
   facetMatches: 'matches',
   facetMisses: 'does not match',
-  /** The one gated step. */
-  checkTitle: 'Check availability',
-  checkBody: 'Add dates to see which of these have a site.',
-  addDates: 'Add dates',
-  /** The Start/End control's group name: it says which end the next calendar pick sets. */
-  datePicking: 'Date to set',
-  /** "Start · Fri Sep 11", or "Start · not set". */
-  startSlot: (date: string | null) => `Start · ${date ?? 'not set'}`,
-  endSlot: (date: string | null) => `End · ${date ?? 'not set'}`,
-  saveDates: 'Save',
-  cancelDates: 'Cancel',
-  editDates: 'Edit',
+  /** The date window. */
+  startDate: 'Start date',
+  endDate: 'End date',
+  /** What an empty date field shows. */
+  noDate: 'Add date',
+  /** A date field's accessible name: "Start date, Fri Sep 11", or "Start date, not set". */
+  dateField: (label: string, date: string | null) => `${label}, ${date ?? 'not set'}`,
+  /** The hint under the fields while nothing is picked. */
+  datesPurpose: 'Add dates to see which of these have a site.',
   clearDates: 'Clear',
   pickStart: 'Pick a start date',
   pickEnd: 'Pick an end date',
   nights: (nights: number) => (nights === 1 ? '1 night' : `${nights} nights`),
-  /** "Fri Sep 11 → Sun Sep 13 · 2 nights". */
-  dateSummary: (start: string, end: string, nights: number) =>
-    `${start} → ${end} · ${filterCopy.nights(nights)}`,
 } as const;

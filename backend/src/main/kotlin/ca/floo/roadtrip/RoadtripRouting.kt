@@ -5,6 +5,7 @@ import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.service.settings.SettingsError
 import ca.floo.roadtrip.support.cacheOptionsFor
+import ca.floo.roadtrip.support.callerFromForwardedFor
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
@@ -26,6 +27,7 @@ import io.ktor.server.plugins.compression.matchContentType
 import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.forwardedheaders.XForwardedHeaders
 import io.ktor.server.plugins.requestvalidation.RequestValidation
 import io.ktor.server.plugins.requestvalidation.RequestValidationException
 import io.ktor.server.plugins.statuspages.StatusPages
@@ -54,6 +56,24 @@ private val accessLog = LoggerFactory.getLogger("Application")
 private val requestStartNanosKey = AttributeKey<Long>(REQUEST_START_NANOS_ATTRIBUTE)
 
 internal fun Application.installRoadtripPlugins() {
+    // Behind a proxy the socket's peer is the proxy, the same for every caller,
+    // and the per-caller limits on the anonymous availability endpoints would be
+    // one shared limit. So `origin.remoteHost` is the caller X-Forwarded-For names
+    // (`callerFromForwardedFor`: the rightmost entry past private-network hops,
+    // which a caller cannot write); `request.local` stays the socket. Only the
+    // address is taken — scheme, host and port stay the connection's own, since
+    // nothing needs them and wherever no proxy overwrites the headers a caller
+    // would choose them. Sound only while every request comes in through a proxy
+    // that appends its peer: a directly reachable port lets a caller pick its own
+    // rate-limit key, which outside production is fine.
+    install(XForwardedHeaders) {
+        extractEdgeProxy { origin, values ->
+            callerFromForwardedFor(values.forHeader)?.let { caller ->
+                origin.remoteHost = caller
+                origin.remoteAddress = caller
+            }
+        }
+    }
     install(ContentNegotiation) {
         json(roadtripApiJson)
     }

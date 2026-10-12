@@ -1,13 +1,15 @@
-// The filter block under the search row: the pill, the three local filters, and
-// the one gated step (dates). Filter state lives in the store; only "is the block
-// open" and "are the date fields showing" are local.
-import { useState } from 'react';
-import { Banner, Button, Chip, Icon, SegmentedControl } from '@ui';
+// The filter block under the search row: the pill, the three local filters, the
+// date window, and the availability check over it. Filter state lives in the
+// store, and every control writes it as it changes — the dates included, once
+// both ends are picked; only "is the block open" is local. The check is the one
+// thing that waits for a click, because it is the one that asks the providers.
+import { Button, Chip, Icon, SegmentedControl } from '@ui';
 import type { CampsiteKind } from '@/api/generated/api-types';
 import { FILTER_AMENITIES, FILTER_SITE_TYPES } from '@/lib/campground-vocab';
-import { filterCopy } from '@/lib/strings';
+import { filterCopy, stayCopy } from '@/lib/strings';
 import { selectActiveFilterCount, useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
-import { DateWindowFields, formatDateShort, nightsBetween } from './DateWindowFields';
+import { DateWindowFields } from './DateWindowFields';
+import { useStayCheck, type StayCheckControl } from './useStayCheck';
 import { GroupSizeStepper } from './GroupSizeStepper';
 
 const ANY_VALUE = 'any';
@@ -21,9 +23,11 @@ export interface FilterPanelProps {
   onToggle: () => void;
   totalInBoundary: number;
   totalMatching: number;
+  /** The campgrounds in view that can be checked online, or null while the list is not ready. */
+  checkableIds: readonly number[] | null;
 }
 
-export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching }: FilterPanelProps) {
+export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching, checkableIds }: FilterPanelProps) {
   const siteType = useCampgroundFilterStore((s) => s.siteType);
   const groupSize = useCampgroundFilterStore((s) => s.groupSize);
   const amenities = useCampgroundFilterStore((s) => s.amenities);
@@ -33,7 +37,9 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching }: 
   const setGroupSize = useCampgroundFilterStore((s) => s.setGroupSize);
   const toggleAmenity = useCampgroundFilterStore((s) => s.toggleAmenity);
   const setDateWindow = useCampgroundFilterStore((s) => s.setDateWindow);
-  const [editingDates, setEditingDates] = useState(false);
+  // Here rather than under the dates, so a running check outlives the block being
+  // folded away.
+  const stayCheck = useStayCheck(checkableIds);
 
   const count = activeCount > 0 ? filterCopy.matching(totalMatching, totalInBoundary) : filterCopy.inView(totalInBoundary);
 
@@ -72,41 +78,46 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching }: 
             ))}
           </div>
 
-          {editingDates ? (
-            <DateWindowFields
-              initial={dateWindow}
-              onSave={(next) => {
-                setDateWindow(next);
-                setEditingDates(false);
-              }}
-              onCancel={() => setEditingDates(false)}
-            />
-          ) : dateWindow ? (
-            <div className="tb-dates-summary">
-              <Icon name="calendar" aria-hidden="true" />
-              <span>{filterCopy.dateSummary(formatDateShort(dateWindow.start), formatDateShort(dateWindow.end), nightsBetween(dateWindow.start, dateWindow.end))}</span>
-              <Button variant="tertiary" size="sm" onClick={() => setEditingDates(true)}>
-                {filterCopy.editDates}
-              </Button>
-              <Button variant="tertiary" size="sm" onClick={() => setDateWindow(null)}>
-                {filterCopy.clearDates}
-              </Button>
-            </div>
-          ) : (
-            <Banner
-              icon={<Icon name="calendar" aria-hidden="true" />}
-              title={filterCopy.checkTitle}
-              actions={
-                <Button variant="primary" size="sm" onClick={() => setEditingDates(true)}>
-                  {filterCopy.addDates}
+          <DateWindowFields
+            initial={dateWindow}
+            onChange={setDateWindow}
+            actions={
+              dateWindow ? (
+                <Button
+                  variant={stayCheck.checked ? 'secondary' : 'primary'}
+                  size="sm"
+                  disabled={!stayCheck.canCheck || stayCheck.running}
+                  onClick={stayCheck.check}
+                >
+                  {checkLabel(stayCheck)}
                 </Button>
-              }
-            >
-              {filterCopy.checkBody}
-            </Banner>
-          )}
+              ) : null
+            }
+          />
+          {/* Beside the button it explains, so a folded results list cannot hide why it is off;
+              with no dates there is no button, and nothing to explain. */}
+          {dateWindow ? <CheckNote control={stayCheck} /> : null}
         </div>
       ) : null}
     </div>
   );
+}
+
+/** The check button's word: what pressing it does now. */
+function checkLabel({ running, checked }: StayCheckControl): string {
+  if (running) return stayCopy.checking;
+  return checked ? stayCopy.checkAgain : stayCopy.check;
+}
+
+/**
+ * Why the check button is off, or why the last check stopped — red when a check
+ * stopped or must wait, muted when there is simply nothing to ask about.
+ */
+function CheckNote({ control: { running, coolingDown, failure, nothingToCheck } }: { control: StayCheckControl }) {
+  if (running) return null;
+  if (coolingDown || failure === 'throttled') return <span className="tb-check-note tb-check-note--error" role="status">{stayCopy.throttled}</span>;
+  if (failure === 'timed_out') return <span className="tb-check-note tb-check-note--error" role="status">{stayCopy.timedOut}</span>;
+  if (failure === 'failed') return <span className="tb-check-note tb-check-note--error" role="status">{stayCopy.failed}</span>;
+  if (nothingToCheck) return <span className="tb-check-note" role="status">{stayCopy.noneCheckable}</span>;
+  return null;
 }

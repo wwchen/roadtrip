@@ -469,6 +469,13 @@ per campsite with the same `cells` shape (a single cell per day, that campsite's
 and the same watchable predicate — the two endpoints share the mapping so they
 cannot answer it differently.
 
+The bulk endpoint's `view: summary` reduces each campground to how one stay looks
+there — `open`, `few_left`, `full`, `closed_for_season` or `no_data`, plus how many
+campsites are bookable every night of it — for the map view's availability check.
+It reads the same slice and the same per-night statuses as the rest of this
+section (`service/availability/StaySummary.kt`), so the status is decided once,
+here, and never in a browser.
+
 ## Capabilities
 
 Every `AvailabilityProvider` serves availability. Capability flags only describe

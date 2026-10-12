@@ -29,6 +29,8 @@ roadtrip:
       # connection through AvailabilityRepo.recordObservations.
       fan-out-concurrency: 3
       tolerance: 2h
+      # The same, for a request asking for fresh data (the map's Check again).
+      fresh-tolerance: 1m
       ip-rate-limit-per-minute: 10
     campsite:
       # Per-IP ceiling on the single-POI availability read. Higher than bulk's

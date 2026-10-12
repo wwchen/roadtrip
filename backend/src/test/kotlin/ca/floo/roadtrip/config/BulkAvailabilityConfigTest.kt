@@ -13,6 +13,20 @@ class BulkAvailabilityConfigTest {
         assertEquals(3, config.fanOutConcurrency)
         assertEquals(Duration.ofHours(2), config.tolerance)
         assertEquals(10, config.ipRateLimitPerMinute)
+        assertEquals(Duration.ofMinutes(1), config.freshTolerance)
+    }
+
+    @Test
+    fun `fresh tolerance may not exceed the usual tolerance`() {
+        assertFailsWith<IllegalArgumentException> {
+            BulkAvailabilityConfig(
+                maxPois = 50,
+                fanOutConcurrency = 3,
+                tolerance = Duration.ofMinutes(5),
+                ipRateLimitPerMinute = 10,
+                freshTolerance = Duration.ofMinutes(10),
+            )
+        }
     }
 
     @Test
