@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Capture per-campsite catalog data from rec.gov's monthly availability API.
 
-Reads the existing recgov-campgrounds capture (RIDB facilities) for
-FacilityID values, then walks each one calling
+Reads the newest capture of the paired RIDB campgrounds data_source
+(--campgrounds-slug) for FacilityID values, then walks each one calling
   /api/camps/availability/campground/{id}/month?start_date=<current-month>
 
 …to harvest the campsite-level catalog (id, site, loop, campsite_type,
@@ -18,7 +18,8 @@ between calls and use long backoffs on 429, honoring Retry-After when the
 server provides it.
 
 Run:
-  python3 scripts/fetch_recgov_campsites.py --slug recgov-campsites
+  python3 scripts/fetch_recgov_campsites.py --slug recgov-campsites-raw \\
+      --campgrounds-slug recgov-campgrounds-raw
 """
 from __future__ import annotations
 
@@ -55,15 +56,16 @@ RETRY_DELAYS_S = (15.0, 60.0, 180.0, 300.0)
 TIMEOUT_S = 30
 
 
-def _facility_ids_from_recgov_campgrounds(*, reservable_only: bool) -> list[str]:
-    """Walk the newest recgov-campgrounds capture, collect every FacilityID.
+def _facility_ids_from_recgov_campgrounds(
+    upstream_slug: str, *, reservable_only: bool
+) -> list[str]:
+    """Walk the newest capture of `upstream_slug`, collect every FacilityID.
 
     The capture is the multi-part RIDB /facilities pages this slug's sibling
     fetcher already wrote. We assume that fetcher has run; if its capture
     dir is empty, this script returns an empty list (and logs a clear
     error).
     """
-    upstream_slug = "recgov-campgrounds"
     upstream = load_source(upstream_slug)
     capture_root: Path = upstream.output_dir_prefix
     if not capture_root.is_dir():
@@ -173,6 +175,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--slug", required=True, help="data_source slug from poi-registry.yaml")
     parser.add_argument(
+        "--campgrounds-slug",
+        required=True,
+        help="paired RIDB campgrounds data_source slug we read FacilityIDs from",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=0,
@@ -203,7 +210,7 @@ def main() -> int:
 
     src = load_source(args.slug)
     facility_ids = _facility_ids_from_recgov_campgrounds(
-        reservable_only=not args.include_non_reservable
+        args.campgrounds_slug, reservable_only=not args.include_non_reservable
     )
     if args.limit:
         facility_ids = facility_ids[: args.limit]

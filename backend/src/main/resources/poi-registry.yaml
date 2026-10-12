@@ -123,7 +123,10 @@ data_sources:
     fetcher:
       executor: python3
       filename: scripts/fetch_recgov_campground_enrichment.py
-      args: { slug: recgov-campground-enrichment, resume: "true" }
+      args:
+        slug: recgov-campground-enrichment
+        campgrounds-slug: recgov-campgrounds-raw
+        resume: "true"
       timeout_sec: 7200
       output_dir_prefix: data/raw/recgov-campground-enrichment
 
@@ -209,7 +212,7 @@ data_sources:
       output_dir_prefix: data/raw/aspira-dictionaries-pc
 
   # --- Federal campsites (rec.gov per-facility catalog, RFC 0008) -----------
-  # Walks the recgov-campgrounds capture for FacilityIDs and calls rec.gov's
+  # Walks the recgov-campgrounds-raw capture for FacilityIDs and calls rec.gov's
   # /api/camps/availability/campground/{id}/month per facility. The body's
   # `campsites` field is the catalog (id, site, loop, equipment_types, ...).
   # Per-day availability data is in the same response but not stored here —
@@ -222,8 +225,11 @@ data_sources:
     fetcher:
       executor: python3
       filename: scripts/fetch_recgov_campsites.py
-      args: { slug: recgov-campsites-raw }
+      args:
+        slug: recgov-campsites-raw
+        campgrounds-slug: recgov-campgrounds-raw
       output_dir_prefix: data/raw/recgov-campsites
+    depends_on: [recgov-campgrounds-raw]
 
   # --- Alberta provincial parks ----------------------------------------------
   - slug: reserveamerica-abpp

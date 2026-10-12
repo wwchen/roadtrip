@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Capture rec.gov campground rating and cell coverage aggregates.
 
-Reads the newest recgov-campgrounds RIDB capture for FacilityID values,
+Reads the newest capture of the paired RIDB campgrounds data_source
+(--campgrounds-slug) for FacilityID values,
 then calls the Recreation.gov browser aggregate endpoint:
 
   /api/ratingreview/aggregate?location_id=<FacilityID>&location_type=Campground
@@ -10,7 +11,8 @@ Multi-part output: one envelope per facility under
   data/raw/recgov-campground-enrichment/<UTC-ts>/facility-<FacilityID>.json
 
 Run:
-  python3 scripts/fetch_recgov_campground_enrichment.py --slug recgov-campground-enrichment
+  python3 scripts/fetch_recgov_campground_enrichment.py --slug recgov-campground-enrichment \\
+      --campgrounds-slug recgov-campgrounds-raw
 """
 from __future__ import annotations
 
@@ -47,8 +49,9 @@ def _is_reservable(rec: dict) -> bool:
     return raw is True or (isinstance(raw, str) and raw.lower() == "true")
 
 
-def _facility_ids_from_recgov_campgrounds(*, reservable_only: bool) -> list[str]:
-    upstream_slug = "recgov-campgrounds"
+def _facility_ids_from_recgov_campgrounds(
+    upstream_slug: str, *, reservable_only: bool
+) -> list[str]:
     upstream = load_source(upstream_slug)
     capture_root: Path = upstream.output_dir_prefix
     if not capture_root.is_dir():
@@ -163,6 +166,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--slug", required=True, help="data_source slug from poi-registry.yaml")
     parser.add_argument(
+        "--campgrounds-slug",
+        required=True,
+        help="paired RIDB campgrounds data_source slug we read FacilityIDs from",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=0,
@@ -199,7 +207,7 @@ def main() -> int:
 
     src = load_source(args.slug)
     facility_ids = _facility_ids_from_recgov_campgrounds(
-        reservable_only=not args.include_non_reservable
+        args.campgrounds_slug, reservable_only=not args.include_non_reservable
     )
     if args.limit:
         facility_ids = facility_ids[: args.limit]
