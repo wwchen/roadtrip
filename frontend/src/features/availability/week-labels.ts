@@ -5,10 +5,9 @@
 // date, not an instant, and parsing it in the browser's zone makes `2026-08-11`
 // render as "Aug 10" for every user west of Greenwich. Pinning `timeZone: 'UTC'`
 // keeps the rendered label equal to the source string.
-const UTC = 'UTC';
+import { WEEKDAY_LABELS } from '@/lib/format';
 
-/** Column headers, indexed by `Date#getUTCDay`. */
-export const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+const UTC = 'UTC';
 
 const utcDate = (iso: string): Date => new Date(`${iso}T00:00:00Z`);
 
@@ -18,7 +17,7 @@ const format = (date: Date, options: Intl.DateTimeFormatOptions): string =>
 /** "Tue" for a date's column header. */
 export function dowLabel(iso: string): string {
   const day = utcDate(iso).getUTCDay();
-  return DOW_LABELS[day] ?? '';
+  return WEEKDAY_LABELS[day] ?? '';
 }
 
 /** The day-of-month for a column header, or the raw string if it will not parse. */

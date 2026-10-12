@@ -1,24 +1,15 @@
 // Month calendar for jumping the visible week.
 //
-// It keeps its own view month, so the
-// arrows page months without closing, while the parent owns the selection — the
-// popover only reports a pick.
+// The grid and its month paging are `MonthCalendar` from `@ui`; this is the
+// popover around it. The parent owns the selection — the popover only reports a
+// pick.
 //
 // Dismissal is `@/lib/use-dismiss`. Paging can detach the clicked button, so the
 // inner stopPropagation guard stays on top of the hook's containment test.
-import { useRef, useState } from 'react';
-import {
-  addLocalDays,
-  addLocalMonths,
-  localYmd,
-  parseLocalYmd,
-  startOfLocalMonth,
-} from '@/lib/local-date';
+import { useRef } from 'react';
+import { MonthCalendar } from '@ui';
+import { localYmd, parseLocalYmd } from '@/lib/local-date';
 import { useDismiss } from '@/lib/use-dismiss';
-import { DOW_LABELS } from './week-labels';
-
-/** Six weeks, so the grid never changes height as you page months. */
-const GRID_CELLS = 42;
 
 export interface CalendarPopoverProps {
   /** The month to open on — the visible week's start. */
@@ -41,15 +32,11 @@ export function CalendarPopover({
   onPick,
   onClose,
 }: CalendarPopoverProps) {
-  const [month, setMonth] = useState(() => startOfLocalMonth(viewMonth));
   const hostRef = useRef<HTMLDivElement>(null);
 
   useDismiss(hostRef, onClose);
 
   const todayIso = localYmd(today);
-  const selectedIso = selectedDate ? localYmd(selectedDate) : null;
-  const maxIso = maxDate ? localYmd(maxDate) : null;
-  const title = month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
     <div
@@ -61,67 +48,15 @@ export function CalendarPopover({
       onClick={(event) => event.stopPropagation()}
     >
       <div className="cg-cal-popover" role="dialog" aria-label="Pick a week">
-        <div className="cg-cal-head-row">
-          <button
-            type="button"
-            className="cg-cal-prev"
-            aria-label="Previous month"
-            onClick={() => setMonth((current) => addLocalMonths(current, -1))}
-          >
-            ‹
-          </button>
-          <div className="cg-cal-title">{title}</div>
-          <button
-            type="button"
-            className="cg-cal-next"
-            aria-label="Next month"
-            onClick={() => setMonth((current) => addLocalMonths(current, 1))}
-          >
-            ›
-          </button>
-        </div>
-        <div className="cg-cal-grid">
-          {DOW_LABELS.map((label) => (
-            <div className="cg-cal-head" key={label}>
-              {label}
-            </div>
-          ))}
-          {monthCells(month).map((date) => {
-            const iso = localYmd(date);
-            const classes = [
-              'cg-cal-cell',
-              'cg-cal-day',
-              date.getMonth() === month.getMonth() ? '' : 'cg-cal-faint',
-              iso === todayIso ? 'cg-cal-today' : '',
-              iso === selectedIso ? 'cg-cal-selected' : '',
-            ]
-              .filter(Boolean)
-              .join(' ');
-            return (
-              <button
-                type="button"
-                className={classes}
-                key={iso}
-                data-date={iso}
-                disabled={iso < todayIso || (maxIso !== null && iso > maxIso)}
-                onClick={() => onPick(parseLocalYmd(iso))}
-              >
-                {date.getDate()}
-              </button>
-            );
-          })}
-        </div>
+        <MonthCalendar
+          initialMonth={localYmd(viewMonth)}
+          today={todayIso}
+          min={todayIso}
+          max={maxDate ? localYmd(maxDate) : null}
+          selectedStart={selectedDate ? localYmd(selectedDate) : null}
+          onPick={(iso) => onPick(parseLocalYmd(iso))}
+        />
       </div>
     </div>
   );
-}
-
-/**
- * Six rows of seven local dates covering the month, padded with the surrounding
- * days so the calendar reads like a wall calendar.
- */
-function monthCells(month: Date): Date[] {
-  const first = startOfLocalMonth(month);
-  const gridStart = addLocalDays(first, -first.getDay());
-  return Array.from({ length: GRID_CELLS }, (_, index) => addLocalDays(gridStart, index));
 }

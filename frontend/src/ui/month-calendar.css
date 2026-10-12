@@ -1,0 +1,63 @@
+/* ---------------------------------------------------------------------------
+   `MonthCalendar` — month paging and a grid of days to pick.
+
+   It was `.cg-cal-*` in `features/availability/availability.css`, drawn inside
+   the week-jump popover. It moved here when the trip panel's date window needed
+   the same grid as a range picker; LDS has no calendar primitive. The popover's
+   box (`.cg-cal-popover`) and its anchoring (`.cg-cal-host`) stayed behind: this
+   draws no surface, so it fills whatever box its caller puts it in.
+   --------------------------------------------------------------------------- */
+.rt-cal-head-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.rt-cal-head-row button {
+  width: 26px; height: 26px;
+  border-radius: var(--rt-r-sm);
+  border: 1px solid var(--rt-border-strong);
+  background: var(--rt-fill-subtle); color: var(--rt-text);
+  font-size: 14px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.rt-cal-head-row button:hover { background: var(--rt-fill-hover); }
+.rt-cal-title {
+  font-size: 13px; font-weight: 600; color: var(--rt-text);
+  letter-spacing: -0.005em;
+}
+.rt-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.rt-cal-head {
+  text-align: center;
+  font-size: 10px; font-weight: 600; color: var(--rt-faint);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 4px 0;
+}
+.rt-cal-day {
+  aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  border: 0;
+  border-radius: var(--rt-r-sm);
+  background: transparent;
+  color: var(--rt-text);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.rt-cal-day:hover:not(:disabled) { background: var(--rt-fill-hover); }
+.rt-cal-day:disabled { color: var(--rt-faint); cursor: not-allowed; }
+.rt-cal-day.rt-cal-faint { color: var(--rt-faint); }
+.rt-cal-day.rt-cal-today {
+  box-shadow: inset 0 0 0 1px var(--rt-brand);
+  /* --rt-brand-text for the text, --rt-brand stays for the ring — see the
+     role comment in roadtrip-zion-bridge.css. */
+  color: var(--rt-brand-text); font-weight: 600;
+}
+.rt-cal-day.rt-cal-in-range { background: var(--rt-brand-tint); }
+.rt-cal-day.rt-cal-selected {
+  background: var(--rt-brand);
+  color: var(--rt-on-accent);
+}
+.rt-cal-day.rt-cal-selected:hover { background: var(--rt-brand-hover); }

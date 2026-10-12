@@ -213,8 +213,9 @@ export const filterCopy = {
   cancelDates: 'Cancel',
   editDates: 'Edit',
   clearDates: 'Clear',
-  endBeforeStart: 'The end date must be after the start date.',
-  dateFormat: 'Enter dates as YYYY-MM-DD.',
+  noDate: 'Not set',
+  pickStart: 'Pick a start date',
+  pickEnd: 'Pick an end date',
   nights: (nights: number) => (nights === 1 ? '1 night' : `${nights} nights`),
   /** "Fri Sep 11 → Sun Sep 13 · 2 nights". */
   dateSummary: (start: string, end: string, nights: number) =>

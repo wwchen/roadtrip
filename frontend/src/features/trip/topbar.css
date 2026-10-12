@@ -691,20 +691,53 @@
   gap: 6px;
 }
 
-.tb-dates-fields {
+.tb-dates-ends {
   display: flex;
   gap: 8px;
+  margin: 0;
 }
 
-.tb-dates-error {
+.tb-dates-end {
+  flex: 1;
+  min-width: 0;
+}
+
+.tb-dates-end dt {
   font-size: 11px;
-  color: var(--rt-error);
+  color: var(--rt-muted);
+}
+
+.tb-dates-end dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rt-text);
+}
+
+.tb-dates-end dd.tb-dates-unset {
+  font-weight: 400;
+  color: var(--rt-faint);
+}
+
+/* The grid's cells are square, so its width sets its height: capped, the panel
+   keeps room for the filters above it. The ends share the cap so each label
+   sits over its half of the grid. */
+.tb-dates-ends,
+.tb-dates-calendar {
+  max-width: 280px;
 }
 
 .tb-dates-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.tb-dates-hint {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--rt-muted);
 }
 
 .tb-dates-summary {

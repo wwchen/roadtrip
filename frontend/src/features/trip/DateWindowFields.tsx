@@ -1,22 +1,22 @@
 // Start and end date entry for the Check availability step. M2 stores the window
-// only; M3 polls with it. The fields are conditionally rendered, so they seed
-// through `SeededTextField` and mirror into local state for the Save payload.
+// only; M3 polls with it.
 //
-// `type="text"` rather than `date`: `@lew-ds/lds-react`'s change wiring
-// (`useChangeHandler` in `runtime.jsx`) fires on native `input` events only for
-// a fixed `TEXT_LIKE` set of input types, and `date` is not in it (nor is it in
-// the `change`-based set, which is select/checkbox/radio only) — so a
-// `type="date"` field here would never call `onChange` at all. Values are still
-// plain `YYYY-MM-DD` strings; only the native date-picker affordance is lost.
+// One calendar picks both ends (`nextDraft`): the first click is the start, the
+// next later click is the end, and a click on or before the start — or any click
+// once both are set — starts over. Every window it can produce is two real dates
+// in order, so Save checks only that both ends are there.
+//
+// A calendar rather than `type="date"` fields: `@lew-ds/lds-react`'s change
+// wiring (`useChangeHandler` in `runtime.jsx`) fires on native `input` events only
+// for a fixed `TEXT_LIKE` set of input types, and `date` is not in it — so an LDS
+// `TextField type="date"` never calls `onChange` at all.
 import { useState } from 'react';
-import { Button, SeededTextField } from '@ui';
+import { Button, MonthCalendar } from '@ui';
+import { localToday, localYmd } from '@/lib/local-date';
 import { filterCopy } from '@/lib/strings';
 import type { DateWindow } from '@/stores/campgroundFilterStore';
 
 const MS_PER_DAY = 86_400_000;
-const START_ID = 'tb-dates-start';
-const END_ID = 'tb-dates-end';
-const DATE_PLACEHOLDER = 'YYYY-MM-DD';
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const shortDate = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -42,7 +42,24 @@ export function formatDateShort(iso: string): string {
   return shortDate.format(new Date(`${iso}T00:00:00Z`)).replace(',', '');
 }
 
-const valueOf = (event: Event): string => (event.target as HTMLInputElement).value;
+/** A window part-way through picking: either end may still be missing. */
+export interface DateDraft {
+  start: string | null;
+  end: string | null;
+}
+
+/** The draft after a click on `day`; the file comment has the rule. */
+export function nextDraft(draft: DateDraft, day: string): DateDraft {
+  if (draft.start === null || draft.end !== null || day <= draft.start) return { start: day, end: null };
+  return { start: draft.start, end: day };
+}
+
+/** What the next click does, or how long the picked window is. */
+function draftHint({ start, end }: DateDraft): string {
+  if (start === null) return filterCopy.pickStart;
+  if (end === null) return filterCopy.pickEnd;
+  return filterCopy.nights(nightsBetween(start, end));
+}
 
 export interface DateWindowFieldsProps {
   initial: DateWindow | null;
@@ -51,30 +68,50 @@ export interface DateWindowFieldsProps {
 }
 
 export function DateWindowFields({ initial, onSave, onCancel }: DateWindowFieldsProps) {
-  const [start, setStart] = useState(initial?.start ?? '');
-  const [end, setEnd] = useState(initial?.end ?? '');
-  const filled = start !== '' && end !== '';
-  const startIsIso = isIsoDate(start);
-  const endIsIso = isIsoDate(end);
-  const validIso = startIsIso && endIsIso;
-  const inverted = validIso && nightsBetween(start, end) <= 0;
-  const nonIsoError = filled && !validIso;
+  const [draft, setDraft] = useState<DateDraft>({ start: initial?.start ?? null, end: initial?.end ?? null });
+  const [today] = useState(() => localYmd(localToday()));
+  const { start, end } = draft;
   return (
     <div className="tb-dates">
-      <div className="tb-dates-fields">
-        <SeededTextField id={START_ID} name="start_date" type="text" label={filterCopy.startDate} placeholder={DATE_PLACEHOLDER} seed={start} onChange={(e) => setStart(valueOf(e))} />
-        <SeededTextField id={END_ID} name="end_date" type="text" label={filterCopy.endDate} placeholder={DATE_PLACEHOLDER} seed={end} onChange={(e) => setEnd(valueOf(e))} />
+      <dl className="tb-dates-ends">
+        <DateEnd label={filterCopy.startDate} value={start} />
+        <DateEnd label={filterCopy.endDate} value={end} />
+      </dl>
+      <div className="tb-dates-calendar">
+        <MonthCalendar
+          initialMonth={start ?? today}
+          today={today}
+          min={today}
+          selectedStart={start}
+          selectedEnd={end}
+          onPick={(day) => setDraft((current) => nextDraft(current, day))}
+        />
       </div>
-      {inverted ? <span className="tb-dates-error">{filterCopy.endBeforeStart}</span> : null}
-      {nonIsoError ? <span className="tb-dates-error">{filterCopy.dateFormat}</span> : null}
       <div className="tb-dates-actions">
+        <span className="tb-dates-hint">{draftHint(draft)}</span>
         <Button variant="tertiary" size="sm" onClick={onCancel}>
           {filterCopy.cancelDates}
         </Button>
-        <Button variant="primary" size="sm" disabled={!filled || !validIso || inverted} onClick={() => onSave({ start, end })}>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={start === null || end === null}
+          onClick={() => {
+            if (start !== null && end !== null) onSave({ start, end });
+          }}
+        >
           {filterCopy.saveDates}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function DateEnd({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="tb-dates-end">
+      <dt>{label}</dt>
+      <dd className={value === null ? 'tb-dates-unset' : undefined}>{value === null ? filterCopy.noDate : formatDateShort(value)}</dd>
     </div>
   );
 }

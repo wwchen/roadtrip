@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { isIsoDate, formatDateShort } from './DateWindowFields';
+import { isIsoDate, formatDateShort, nextDraft } from './DateWindowFields';
 
 describe('isIsoDate', () => {
   test('accepts valid ISO date', () => {
@@ -34,5 +34,29 @@ describe('formatDateShort', () => {
 
   test('returns input unchanged for empty string', () => {
     expect(formatDateShort('')).toBe('');
+  });
+});
+
+describe('nextDraft', () => {
+  const EMPTY = { start: null, end: null };
+
+  test('the first pick is the start', () => {
+    expect(nextDraft(EMPTY, '2026-09-11')).toEqual({ start: '2026-09-11', end: null });
+  });
+
+  test('a later pick is the end', () => {
+    expect(nextDraft({ start: '2026-09-11', end: null }, '2026-09-13')).toEqual({ start: '2026-09-11', end: '2026-09-13' });
+  });
+
+  test('a pick on the start begins again, so a window is never zero nights', () => {
+    expect(nextDraft({ start: '2026-09-11', end: null }, '2026-09-11')).toEqual({ start: '2026-09-11', end: null });
+  });
+
+  test('a pick before the start begins again from there', () => {
+    expect(nextDraft({ start: '2026-09-11', end: null }, '2026-09-09')).toEqual({ start: '2026-09-09', end: null });
+  });
+
+  test('a pick once both ends are set begins again', () => {
+    expect(nextDraft({ start: '2026-09-11', end: '2026-09-13' }, '2026-09-20')).toEqual({ start: '2026-09-20', end: null });
   });
 });

@@ -1058,18 +1058,26 @@ describe('the in-view list', () => {
   });
 
   test('Add dates stores the window and triggers no provider call', async () => {
-    withViewport();
-    mount();
-    await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+    // Only `Date`, so the calendar opens on September 2026 while `waitFor` keeps
+    // its real timers.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 8, 1));
+    try {
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Add dates' }));
-    fireEvent.input(screen.getByLabelText('Start date'), { target: { value: '2026-09-11' } });
-    fireEvent.input(screen.getByLabelText('End date'), { target: { value: '2026-09-13' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Add dates' }));
+      fireEvent.click(screen.getByRole('button', { name: '11' }));
+      fireEvent.click(screen.getByRole('button', { name: '13' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(useCampgroundFilterStore.getState().dateWindow).toEqual({ start: '2026-09-11', end: '2026-09-13' });
-    expect(urls.filter((u) => u.includes('availability'))).toHaveLength(0);
+      expect(useCampgroundFilterStore.getState().dateWindow).toEqual({ start: '2026-09-11', end: '2026-09-13' });
+      expect(urls.filter((u) => u.includes('availability'))).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('a capped list reports the rendered count against the matches', async () => {

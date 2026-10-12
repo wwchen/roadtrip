@@ -1,7 +1,8 @@
 // Display formatters for the availability dashboard.
 import { parseLocalYmd } from './local-date';
 
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+/** Weekday abbreviations, indexed by `Date#getDay` (and `getUTCDay`). */
+export const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
 /**
  * Time units, exported because the dashboard's relative-time labels need the same
