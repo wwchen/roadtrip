@@ -39,7 +39,7 @@ export interface StayCheckState {
   /** When a throttled check may be tried again, in epoch ms; null when nothing is cooling down. */
   retryAt: number | null;
   begin: (query: StayQuery, ids: readonly number[]) => void;
-  /** Adds a batch of answers, observed no later than [observedAt]. */
+  /** Adds answers as they land, observed no later than [observedAt]. */
   record: (results: Readonly<Record<number, StayResult>>, observedAt: string) => void;
   finish: (failure: StayCheckFailure | null, retryAt?: number | null) => void;
   reset: () => void;

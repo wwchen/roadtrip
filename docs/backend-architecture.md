@@ -380,6 +380,23 @@ JSON is drift rather than a skip: the row's claim is that the status carries tha
 DTO. A status the row declares body-less, or does not declare at all, is skipped,
 which is what leaves Slack's empty `text/plain` acks alone.
 
+A row's 2xx may be an event stream instead of a body: `ApiBody(status, events =
+listOf(ApiEvent(name, Dto::class), …))` declares a `text/event-stream` answer and
+the class each named event's `data` carries. A body and events are exclusive, and
+names are unique. Such a route answers through `route/common/EventStreams.kt`
+(`respondEventStream`, over Ktor's SSE plugin), which encodes each event's data
+with `roadtripApiJson` and writes a keep-alive comment while the stream is quiet; a
+refusal still answers JSON, because it is sent before any event. The generated row
+carries `events: { name: 'Type' }`, and the document publishes the status under
+`text/event-stream` as a `oneOf` of the events' schemas. The body check cannot
+rewrite a stream to `599` — its 200 is on the wire before any drift shows — so it
+tees it: every byte reaches the client as written, a copy is kept, and once the
+stream closes each event's name is checked against the row and its data
+strict-decoded into that event's class, the same comparison as a body. A drift is
+recorded as a ledger violation, which fails `:backend:contractLedgerCheck`; a clean
+stream records the row as exercised, with its events. A stream at a status the row
+declares no events for is refused before anything is sent.
+
 The bodies a `StatusPages` handler writes are checked too — the `SettingsError`
 vocabulary among them. Ktor catches a handler's throw on the engine call, which
 carries no matched route, so the plugin stashes the matched leaf in the call's

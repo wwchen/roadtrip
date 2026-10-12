@@ -8,6 +8,9 @@
 // URL would leak.
 export const CREDENTIALS: RequestCredentials = 'same-origin';
 
+/** What a streaming route answers: its events, or the JSON refusal it sends before any. */
+const EVENT_STREAM_ACCEPT = 'text/event-stream, application/json';
+
 export interface RequestOptions {
   signal?: AbortSignal;
 }
@@ -66,6 +69,29 @@ export async function jsonPostOk<T = unknown>(
   const response = await jsonPost(url, body, options);
   if (!response.ok) throw await attachErrorCode(new HttpError(url, response.status), response);
   return response.json() as Promise<T>;
+}
+
+/**
+ * POST [body] as JSON and hand back the answer's body as a stream, for a route
+ * that answers `text/event-stream`. A refusal — any non-2xx, which such a route
+ * sends as JSON before it starts streaming — throws an `HttpError` carrying the
+ * envelope's `code`, as `jsonPostOk` does.
+ */
+export async function jsonPostStream(
+  url: string,
+  body: unknown,
+  { signal }: RequestOptions = {},
+): Promise<ReadableStream<Uint8Array>> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: EVENT_STREAM_ACCEPT },
+    body: JSON.stringify(body),
+    credentials: CREDENTIALS,
+    signal,
+  });
+  if (!response.ok) throw await attachErrorCode(new HttpError(url, response.status), response);
+  if (!response.body) throw new HttpError(url, response.status);
+  return response.body;
 }
 
 export async function jsonPutOk<T = unknown>(

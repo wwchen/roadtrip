@@ -31,6 +31,12 @@ roadtrip:
       tolerance: 2h
       # The same, for a request asking for fresh data (the map's Check again).
       fresh-tolerance: 1m
+      # A streamed stay check finishes only when every campground has answered;
+      # one that takes longer than this answers `timeout` instead.
+      per-poi-timeout: 45s
+      # A quiet stream writes a keep-alive this often, inside the idle timeouts of
+      # the proxies in front of it.
+      stream-heartbeat: 15s
       ip-rate-limit-per-minute: 10
     campsite:
       # Per-IP ceiling on the single-POI availability read. Higher than bulk's

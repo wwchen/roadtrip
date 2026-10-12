@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
-import type { BulkAvailabilityResponseDto, StayAvailabilityStatus } from '@/api/generated/api-types';
+import { describe, expect, test } from 'vitest';
+import type { StayAvailabilityStatus } from '@/api/generated/api-types';
 import type { StayResult } from '@/stores/stayCheckStore';
-import { batchesOf, observedAtOf, rankByStay, resultsOf, StayCheckTimeout, stayTallies, withDeadline } from './stay-check';
+import { observedAtOf, rankByStay, resultOf, stayTallies, stayToneOf } from './stay-check';
 
 const summary = (status: StayAvailabilityStatus, openSites = 0): StayResult => ({
   kind: 'summary',
@@ -10,53 +10,43 @@ const summary = (status: StayAvailabilityStatus, openSites = 0): StayResult => (
 const failure: StayResult = { kind: 'error', code: 'rate_limited' };
 const card = (id: number) => ({ summary: { id } });
 
-describe('batchesOf', () => {
-  test('splits into at most the given number of near-equal runs, in order', () => {
-    expect(batchesOf([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 4)).toEqual([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10]]);
-  });
-
-  test('fewer ids than batches is one id per batch', () => {
-    expect(batchesOf([1, 2], 4)).toEqual([[1], [2]]);
-  });
-
-  test('no ids is no batches', () => {
-    expect(batchesOf([], 4)).toEqual([]);
-  });
-});
-
-describe('resultsOf', () => {
-  test('keys each entry by its POI, as a summary or an error', () => {
-    const response: BulkAvailabilityResponseDto = {
-      pois: [
-        { poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 40 } },
-        { poi_id: 22, error: 'rate_limited' },
-      ],
-    };
-
-    expect(resultsOf(response)).toEqual({
-      21: { kind: 'summary', summary: { status: 'open', open_sites: 8, checked_sites: 40 } },
-      22: { kind: 'error', code: 'rate_limited' },
+describe('resultOf', () => {
+  test('is the answer\'s summary, or its error code', () => {
+    expect(resultOf({ poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 40 } })).toEqual({
+      kind: 'summary',
+      summary: { status: 'open', open_sites: 8, checked_sites: 40 },
     });
+    expect(resultOf({ poi_id: 22, error: 'rate_limited' })).toEqual({ kind: 'error', code: 'rate_limited' });
+  });
+
+  test('an answer carrying neither is the backend\'s unclassified failure', () => {
+    expect(resultOf({ poi_id: 23 })).toEqual({ kind: 'error', code: 'unknown' });
   });
 });
 
 describe('observedAtOf', () => {
-  test('backs the time off by the stalest cache age in the response', () => {
-    const now = Date.parse('2026-10-12T12:00:00Z');
-    const response: BulkAvailabilityResponseDto = {
-      pois: [
-        { poi_id: 1, summary: { status: 'full', open_sites: 0, checked_sites: 3, cache: { hit: true, age_seconds: 60, ttl_seconds: 600 } } },
-        { poi_id: 2, summary: { status: 'open', open_sites: 5, checked_sites: 9, cache: { hit: true, age_seconds: 240, ttl_seconds: 600 } } },
-        { poi_id: 3, error: 'rate_limited' },
-      ],
+  const now = Date.parse('2026-10-12T12:00:00Z');
+
+  test('backs the time off by the cache age the answer reports', () => {
+    const answer = {
+      poi_id: 2,
+      summary: { status: 'open' as const, open_sites: 5, checked_sites: 9, cache: { hit: true, age_seconds: 240, ttl_seconds: 600 } },
     };
 
-    expect(observedAtOf(response, now)).toBe('2026-10-12T11:56:00.000Z');
+    expect(observedAtOf(answer, now)).toBe('2026-10-12T11:56:00.000Z');
   });
 
-  test('is now when nothing reports an age', () => {
-    const now = Date.parse('2026-10-12T12:00:00Z');
-    expect(observedAtOf({ pois: [{ poi_id: 1, error: 'not_found' }] }, now)).toBe('2026-10-12T12:00:00.000Z');
+  test('is now when the answer reports no age', () => {
+    expect(observedAtOf({ poi_id: 1, error: 'not_found' }, now)).toBe('2026-10-12T12:00:00.000Z');
+  });
+});
+
+describe('stayToneOf', () => {
+  test('reads each status, with closed for the season as full and a failure as unknown', () => {
+    const statuses: StayAvailabilityStatus[] = ['open', 'few_left', 'full', 'closed_for_season', 'no_data'];
+
+    expect(statuses.map((status) => stayToneOf(summary(status)))).toEqual(['open', 'few', 'full', 'full', 'unknown']);
+    expect(stayToneOf(failure)).toBe('unknown');
   });
 });
 
@@ -105,44 +95,5 @@ describe('stayTallies', () => {
       unknown: 2,
       answered: 7,
     });
-  });
-});
-
-describe('withDeadline', () => {
-  afterEach(() => vi.useRealTimers());
-
-  /** A request that never answers, and rejects the way fetch does once its signal aborts. */
-  const stalled = (signal: AbortSignal) =>
-    new Promise<never>((_, reject) =>
-      signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))),
-    );
-
-  test('a request that outlives the deadline is aborted and reported as a timeout', async () => {
-    vi.useFakeTimers();
-    const pending = withDeadline(stalled, new AbortController().signal, 1_000);
-    const outcome = pending.catch((error: unknown) => error);
-
-    await vi.advanceTimersByTimeAsync(1_000);
-
-    expect(await outcome).toBeInstanceOf(StayCheckTimeout);
-  });
-
-  test("a cancel is the caller's own abort, not a timeout", async () => {
-    vi.useFakeTimers();
-    const parent = new AbortController();
-    const outcome = withDeadline(stalled, parent.signal, 1_000).catch((error: unknown) => error);
-
-    parent.abort();
-
-    const error = await outcome;
-    expect(error).not.toBeInstanceOf(StayCheckTimeout);
-    expect((error as DOMException).name).toBe('AbortError');
-  });
-
-  test('an answer in time is returned, and leaves no timer behind', async () => {
-    vi.useFakeTimers();
-
-    await expect(withDeadline(async () => 'answer', new AbortController().signal, 1_000)).resolves.toBe('answer');
-    expect(vi.getTimerCount()).toBe(0);
   });
 });

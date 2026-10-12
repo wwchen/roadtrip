@@ -34,6 +34,7 @@ import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.routing.IgnoreTrailingSlash
+import io.ktor.server.sse.SSE
 import io.ktor.util.AttributeKey
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
@@ -74,6 +75,8 @@ internal fun Application.installRoadtripPlugins() {
             }
         }
     }
+    // Streams written with `respondEventStream`: the server-sent-events runtime Ktor ships.
+    install(SSE)
     install(ContentNegotiation) {
         json(roadtripApiJson)
     }

@@ -19,10 +19,20 @@ internal data class TsEnum(
     val values: List<String>,
 )
 
-/** One declared body in an emitted `API_ENDPOINTS` row: the status, and the type it carries. */
+/** One event of a streamed body: its `event:` name, and the type its data decodes to. */
+internal data class TsEvent(
+    val name: String,
+    val type: String,
+)
+
+/**
+ * One declared body in an emitted `API_ENDPOINTS` row: the status, and the type
+ * it carries — or, for a `text/event-stream`, the [events] it carries instead.
+ */
 internal data class TsBody(
     val status: Int,
     val type: String?,
+    val events: List<TsEvent> = emptyList(),
 )
 
 /**

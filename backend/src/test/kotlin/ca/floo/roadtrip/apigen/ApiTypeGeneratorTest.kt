@@ -2,6 +2,7 @@ package ca.floo.roadtrip.apigen
 
 import ca.floo.roadtrip.model.api.ApiBody
 import ca.floo.roadtrip.model.api.ApiEndpoint
+import ca.floo.roadtrip.model.api.ApiEvent
 import ca.floo.roadtrip.model.api.ApiMethod
 import ca.floo.roadtrip.model.api.HTTP_BAD_REQUEST
 import ca.floo.roadtrip.model.api.HTTP_CONFLICT
@@ -207,6 +208,34 @@ class ApiTypeGeneratorTest {
             """.trimIndent(),
         )
         assertTrue(ts.contains("export type FixtureFlavour = 'sweet' | 'sour';"), ts)
+    }
+
+    @Test
+    fun `an event stream row names its events, and each event's data type is declared`() {
+        val ts =
+            generateApiTypes(
+                listOf(
+                    ApiEndpoint(
+                        ApiMethod.POST,
+                        "/api/fixture/stream",
+                        success = ApiBody(HTTP_OK, events = listOf(ApiEvent("tick", FixtureScalars::class))),
+                        errors = emptyList(),
+                    ),
+                ),
+            )
+
+        assertTrue("export interface FixtureScalars {" in ts, ts)
+        assertTrue("success: { status: 200, type: null, events: { tick: 'FixtureScalars' } }" in ts, ts)
+    }
+
+    @Test
+    fun `a body is JSON or an event stream, never both`() {
+        assertFailsWith<IllegalArgumentException> {
+            ApiBody(HTTP_OK, FixtureScalars::class, events = listOf(ApiEvent("tick", FixtureScalars::class)))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            ApiBody(HTTP_OK, events = listOf(ApiEvent("tick", FixtureScalars::class), ApiEvent("tick", FixtureShapes::class)))
+        }
     }
 
     @Test

@@ -10,8 +10,7 @@ data class BulkAvailabilityResponseDto(
 )
 
 /**
- * One requested POI. Exactly one of [campsites], [summary] and [error] is set —
- * [campsites] under the `campsites` view, [summary] under `summary`. An empty
+ * One requested POI. Exactly one of [campsites] and [error] is set: an empty
  * [campsites] list means the POI resolved but no site met `min_nights`.
  */
 @Serializable
@@ -20,7 +19,6 @@ data class BulkPoiAvailabilityDto(
     @SerialName("start_date") val startDate: String? = null,
     @SerialName("end_date") val endDate: String? = null,
     val campsites: List<AvailabilityResponseDto>? = null,
-    val summary: BulkPoiSummaryDto? = null,
     val error: String? = null,
 )
 

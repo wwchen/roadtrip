@@ -274,50 +274,86 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
-    fun `the summary view answers each poi with its stay summary and keeps a failing one's error`() =
+    fun `the stream answers each poi as an event, then says it is done`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk") {
+                client.post("/api/pois/availability/bulk/stream") {
                     contentType(ContentType.Application.Json)
                     setBody(
-                        """{"poi_ids":[1,$RATE_LIMITED_POI_ID],"view":"summary",""" +
+                        """{"poi_ids":[1,$RATE_LIMITED_POI_ID],""" +
                             """"start_date":"$windowStart","end_date":"$windowEnd"}""",
                     )
                 }
 
             assertEquals(HttpStatusCode.OK, resp.status)
-            val pois = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["pois"]!!.jsonArray
+            assertEquals(ContentType.Text.EventStream, resp.contentType()?.withoutParameters())
+            val events = streamEvents(resp.bodyAsText())
+            assertEquals(listOf("answer", "answer", "done"), events.map { it.first })
+            val answers = events.filter { it.first == "answer" }.map { Json.parseToJsonElement(it.second).jsonObject }
             // The one campsite is bookable the first night and taken the second, so
             // nothing is open for the whole window and the provider did answer.
-            val first = pois[0].jsonObject
-            assertTrue("campsites" !in first)
+            val first = answers.single { it["poi_id"]!!.jsonPrimitive.content == "1" }
             val summary = first["summary"]!!.jsonObject
             assertEquals("full", summary["status"]!!.jsonPrimitive.content)
             assertEquals(0, summary["open_sites"]!!.jsonPrimitive.content.toInt())
             assertEquals(1, summary["checked_sites"]!!.jsonPrimitive.content.toInt())
-            assertEquals("rate_limited", pois[1].jsonObject["error"]!!.jsonPrimitive.content)
-            assertTrue("summary" !in pois[1].jsonObject)
+            val failed = answers.single { it["poi_id"]!!.jsonPrimitive.content == "$RATE_LIMITED_POI_ID" }
+            assertEquals("rate_limited", failed["error"]!!.jsonPrimitive.content)
+            assertTrue("summary" !in failed)
+            assertEquals(
+                2,
+                Json
+                    .parseToJsonElement(events.last().second)
+                    .jsonObject["answered"]!!
+                    .jsonPrimitive.content
+                    .toInt(),
+            )
         }
 
     @Test
-    fun `the summary view refuses a min_nights it would otherwise ignore`() =
+    fun `the stream refuses a bad request with JSON, before any event`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk") {
+                client.post("/api/pois/availability/bulk/stream") {
                     contentType(ContentType.Application.Json)
-                    setBody(
-                        """{"poi_ids":[1],"view":"summary","min_nights":2,""" +
-                            """"start_date":"$windowStart","end_date":"$windowEnd"}""",
-                    )
+                    setBody("""{"poi_ids":[1],"start_date":"$windowStart"}""")
                 }
 
             assertEquals(HttpStatusCode.BadRequest, resp.status)
+            assertEquals(ContentType.Application.Json, resp.contentType()?.withoutParameters())
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("bad_min_nights", body["error"]!!.jsonPrimitive.content)
+            assertEquals("bad_date_window", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `the stream and the scan share one per-caller limit`() =
+        testApplication {
+            application {
+                routeTestApplication {
+                    bulkAvailabilityRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 1, nowMs = { 0L }))
+                }
+            }
+            val body = """{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}"""
+
+            val scan =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            assertEquals(HttpStatusCode.OK, scan.status)
+
+            val stream =
+                client.post("/api/pois/availability/bulk/stream") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            assertEquals(HttpStatusCode.ServiceUnavailable, stream.status)
+            val refused = Json.parseToJsonElement(stream.bodyAsText()).jsonObject
+            assertEquals("ip_throttled", refused["error"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -334,22 +370,6 @@ class BulkAvailabilityRoutesTest {
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("bad_group_size", body["error"]!!.jsonPrimitive.content)
-        }
-
-    @Test
-    fun `rejects a view outside the vocabulary`() =
-        testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
-
-            val resp =
-                client.post("/api/pois/availability/bulk") {
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"poi_ids":[1],"view":"cells","start_date":"$windowStart","end_date":"$windowEnd"}""")
-                }
-
-            assertEquals(HttpStatusCode.BadRequest, resp.status)
-            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("bad_request", body["error"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -543,6 +563,18 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
         )
     }
 }
+
+/**
+ * A stream body's `(event, data)` pairs, in order; keep-alive comments and blank
+ * lines dropped. Lines may end `\r\n` — Ktor's writer ends them so, which the
+ * format allows.
+ */
+private fun streamEvents(body: String): List<Pair<String, String>> =
+    body.replace("\r\n", "\n").split("\n\n").mapNotNull { block ->
+        val lines = block.lines().filter { it.isNotEmpty() && !it.startsWith(":") }
+        val event = lines.firstOrNull { it.startsWith("event:") }?.removePrefix("event:")?.trim() ?: return@mapNotNull null
+        event to lines.filter { it.startsWith("data:") }.joinToString("\n") { it.removePrefix("data:").removePrefix(" ") }
+    }
 
 /**
  * Stands in for [CampsiteAvailabilityController.poiAvailabilitySlice] without

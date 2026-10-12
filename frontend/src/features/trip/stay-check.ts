@@ -1,98 +1,57 @@
-// The pure half of the availability check: how the asked ids are split into
-// requests, how a response becomes answers, and how answered cards are ordered
-// and counted. `useStayCheck` runs it; the list and the head read the results.
-import type { BulkAvailabilityResponseDto } from '@/api/generated/api-types';
-import { isStayRefusal, type StayAvailabilityStatus } from '@/api/availability-api';
+// The pure half of the availability check: how a campground's answer becomes
+// its result, and how answered cards are ordered and counted. `useStayCheck`
+// runs the check; the list and the head read the results.
+import { isStayRefusal, type StayAnswer, type StayAvailabilityStatus } from '@/api/availability-api';
 import type { StayResult } from '@/stores/stayCheckStore';
 
 const MS_PER_SECOND = 1000;
 
 /**
- * The code an entry carrying neither a summary nor an error is recorded under:
+ * The code an answer carrying neither a summary nor an error is recorded under:
  * the backend's own for a failure it could not classify (`AvailabilityProviderError.Unknown`).
  */
 const UNCLASSIFIED_ERROR = 'unknown';
 
 /**
- * At most this many requests per check. Each request answers a batch at once, so
- * more requests fill the cards in sooner, one batch at a time; fewer keep a check
- * well inside the endpoint's per-IP limit, which a second check soon after has to
- * fit in too.
+ * The longest a check may go without a campground answering. The backend gives
+ * each campground 45s (`availability.bulk.per-poi-timeout`) before answering
+ * `timeout` for it, so a quiet stream longer than this has stalled somewhere
+ * between — and without a limit the check, and its button, would stay running
+ * until the page was reloaded. Keep it above the backend's per-POI timeout.
  */
-export const MAX_REQUESTS_PER_CHECK = 4;
+export const CHECK_IDLE_TIMEOUT_MS = 60_000;
 
-/**
- * The longest one request of a check may take. The backend gives a provider's
- * call no deadline the browser can see, so without one a stalled provider would
- * leave the check running, and its button off, until the page was reloaded.
- */
-export const CHECK_REQUEST_TIMEOUT_MS = 60_000;
-
-/** A request of a check that ran out of time, as opposed to one the caller cancelled. */
-export class StayCheckTimeout extends Error {
-  constructor() {
-    super('availability check request timed out');
-    this.name = 'StayCheckTimeout';
-  }
+/** A campground's answer: its summary, else its error code. */
+export function resultOf(answer: StayAnswer): StayResult {
+  return answer.summary
+    ? { kind: 'summary', summary: answer.summary }
+    : { kind: 'error', code: answer.error ?? UNCLASSIFIED_ERROR };
 }
 
 /**
- * [request], given a signal that aborts when [parent] does or after [timeoutMs].
- * Rejects with `StayCheckTimeout` when it was the time that ran out, and with the
- * request's own error otherwise — a cancel included.
+ * When [answer] was observed: [now] less the cache age it reports. The backend
+ * serves recent observations without asking the provider again, so "checked
+ * just now" would be wrong for an answer read from an hour-old poll.
  */
-export async function withDeadline<T>(
-  request: (signal: AbortSignal) => Promise<T>,
-  parent: AbortSignal,
-  timeoutMs: number,
-): Promise<T> {
-  const controller = new AbortController();
-  let timedOut = false;
-  const cancel = (): void => controller.abort();
-  parent.addEventListener('abort', cancel);
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-  try {
-    return await request(controller.signal);
-  } catch (error) {
-    throw timedOut && !parent.aborted ? new StayCheckTimeout() : error;
-  } finally {
-    clearTimeout(timer);
-    parent.removeEventListener('abort', cancel);
-  }
+export function observedAtOf(answer: StayAnswer, now: number): string {
+  return new Date(now - (answer.summary?.cache?.age_seconds ?? 0) * MS_PER_SECOND).toISOString();
 }
 
-/** The ids split into at most [maxBatches] runs of near-equal size, order kept. */
-export function batchesOf(ids: readonly number[], maxBatches: number): number[][] {
-  if (ids.length === 0) return [];
-  const size = Math.ceil(ids.length / maxBatches);
-  const batches: number[][] = [];
-  for (let start = 0; start < ids.length; start += size) batches.push(ids.slice(start, start + size));
-  return batches;
-}
+/** How a result reads at a glance — the colour its line and its card's dot take. */
+export type StayTone = 'open' | 'few' | 'full' | 'unknown';
 
-/** One answer per entry: its summary, else its error code. */
-export function resultsOf(response: BulkAvailabilityResponseDto): Record<number, StayResult> {
-  const results: Record<number, StayResult> = {};
-  for (const entry of response.pois) {
-    results[entry.poi_id] = entry.summary
-      ? { kind: 'summary', summary: entry.summary }
-      : { kind: 'error', code: entry.error ?? UNCLASSIFIED_ERROR };
-  }
-  return results;
-}
+/** Closed for the season reads as full: there is nowhere to stay either way, and the line says which. */
+const STATUS_TONE: Record<StayAvailabilityStatus, StayTone> = {
+  open: 'open',
+  few_left: 'few',
+  full: 'full',
+  closed_for_season: 'full',
+  no_data: 'unknown',
+};
 
-/**
- * When the response's oldest answer was observed: [now] less the stalest cache
- * age it reports. The backend serves recent observations without asking the
- * provider again, so "checked just now" would be wrong for an answer read from
- * an hour-old poll.
- */
-export function observedAtOf(response: BulkAvailabilityResponseDto, now: number): string {
-  const stalest = Math.max(0, ...response.pois.map((entry) => entry.summary?.cache?.age_seconds ?? 0));
-  return new Date(now - stalest * MS_PER_SECOND).toISOString();
+/** A summary's tone by its status; a failed answer could not tell. */
+export function stayToneOf(result: StayResult): StayTone {
+  return result.kind === 'summary' ? STATUS_TONE[result.summary.status] : 'unknown';
 }
 
 /** Where a status sorts once a check is back: bookable first, then the ones that say why not. */

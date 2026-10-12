@@ -47,11 +47,6 @@ class WireVocabularyTest {
     }
 
     @Test
-    fun `the bulk availability view vocabulary keeps its wire strings`() {
-        assertEquals(listOf("campsites", "summary"), serialNames(BulkAvailabilityView.serializer()))
-    }
-
-    @Test
     fun `the stay status vocabulary keeps its wire strings`() {
         assertEquals(
             listOf("open", "few_left", "full", "closed_for_season", "no_data"),

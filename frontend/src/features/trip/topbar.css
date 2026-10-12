@@ -460,7 +460,25 @@
   height: 10px;
   margin-top: 5px;
   border-radius: 50%;
+  background: var(--rt-layer-cg);
   box-shadow: 0 0 0 1px var(--rt-border-strong);
+}
+
+/* Once the check answers for a card, its dot says how the stay looks; hollow when it could not tell. */
+.tb-card-dot--open {
+  background: var(--rt-stay-open);
+}
+
+.tb-card-dot--few {
+  background: var(--rt-stay-few);
+}
+
+.tb-card-dot--full {
+  background: var(--rt-stay-full);
+}
+
+.tb-card-dot--unknown {
+  background: transparent;
 }
 
 .tb-card-body {

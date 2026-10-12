@@ -1,14 +1,15 @@
 // Runs the availability check for the campgrounds in view, and reads its
 // answers back for the question being asked now.
 //
-// A check is a few requests in a row, not one: each answers a batch of
-// campgrounds (`batchesOf`), so cards fill in as their batch lands and the head
-// can count them. Requests go one at a time because the backend fans each one
-// out against a small connection pool; overlapping them would only queue there.
+// A check is one request whose answer streams (`streamStays`): the backend
+// answers each campground as its provider does, so cards fill in one by one and
+// the head counts them as they land. The check ends at the stream's `done`; one
+// that ends without it, or goes quiet for `CHECK_IDLE_TIMEOUT_MS`, stopped early.
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { checkStays } from '@/api/availability-api';
+import { streamStays } from '@/api/availability-api';
 import { HttpError } from '@/api/http';
+import { DeadlineExceeded, withIdleTimeout } from '@/lib/deadline';
 import { useBefore } from '@/lib/use-now';
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import {
@@ -18,23 +19,12 @@ import {
   type StayQuery,
   type StayResult,
 } from '@/stores/stayCheckStore';
-import {
-  batchesOf,
-  CHECK_REQUEST_TIMEOUT_MS,
-  MAX_REQUESTS_PER_CHECK,
-  observedAtOf,
-  resultsOf,
-  StayCheckTimeout,
-  withDeadline,
-} from './stay-check';
+import { CHECK_IDLE_TIMEOUT_MS, observedAtOf, resultOf } from './stay-check';
 
-/** The bulk endpoint's code for a caller over its per-IP limit. */
+/** The stay stream's code for a caller over its per-IP limit. */
 const THROTTLED_CODE = 'ip_throttled';
 
-/**
- * How long a throttled check waits before it may run again — the endpoint's
- * limit refills over a minute, and a check needs several requests' worth.
- */
+/** How long a throttled check waits before it may run again — the endpoint's limit refills over a minute. */
 const THROTTLE_COOLDOWN_MS = 60_000;
 
 /** The question a check would ask now: null until both dates are set. */
@@ -122,7 +112,7 @@ export function useStayCheck(checkableIds: readonly number[] | null): StayCheckC
     reset();
   }, [query, reset]);
 
-  // Leaving stops the requests but keeps what landed, marked finished.
+  // Leaving stops the stream but keeps what landed, marked finished.
   useEffect(
     () => () => {
       const controller = inFlight.current;
@@ -140,22 +130,29 @@ export function useStayCheck(checkableIds: readonly number[] | null): StayCheckC
     inFlight.current = controller;
     begin(query, checkableIds);
     try {
-      for (const batch of batchesOf(checkableIds, MAX_REQUESTS_PER_CHECK)) {
-        const response = await withDeadline(
-          (signal) => checkStays({ ...query, poiIds: batch, fresh }, { signal }),
-          controller.signal,
-          CHECK_REQUEST_TIMEOUT_MS,
-        );
-        if (controller.signal.aborted) return;
-        record(resultsOf(response), observedAtOf(response, Date.now()));
-      }
-      finish(null);
+      const completed = await withIdleTimeout(
+        async (signal, alive) => {
+          for await (const event of streamStays({ ...query, poiIds: [...checkableIds], fresh }, { signal })) {
+            // An event already read when the check was cancelled answers nothing now.
+            if (controller.signal.aborted) return false;
+            alive();
+            if (event.kind === 'done') return true;
+            record({ [event.answer.poi_id]: resultOf(event.answer) }, observedAtOf(event.answer, Date.now()));
+          }
+          return false;
+        },
+        controller.signal,
+        CHECK_IDLE_TIMEOUT_MS,
+      );
+      if (controller.signal.aborted) return;
+      // A stream that closes before `done` was cut off — by a proxy, a restart — part way.
+      finish(completed ? null : 'failed');
     } catch (error) {
       if (controller.signal.aborted) return;
       if (error instanceof HttpError && error.code === THROTTLED_CODE) {
         finish('throttled', Date.now() + THROTTLE_COOLDOWN_MS);
       } else {
-        finish(error instanceof StayCheckTimeout ? 'timed_out' : 'failed');
+        finish(error instanceof DeadlineExceeded ? 'timed_out' : 'failed');
       }
     } finally {
       if (inFlight.current === controller) inFlight.current = null;

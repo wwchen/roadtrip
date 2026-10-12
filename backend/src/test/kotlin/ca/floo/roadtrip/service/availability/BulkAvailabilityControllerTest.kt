@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.fixtures.campsiteFixture
-import ca.floo.roadtrip.model.api.BulkAvailabilityView
 import ca.floo.roadtrip.model.api.StayAvailabilityStatus
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
@@ -11,6 +10,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import java.time.Clock
@@ -27,6 +27,10 @@ private const val RATE_LIMITED_POI_ID = 100L
 private const val UNKNOWN_POI_ID = 101L
 private const val NO_SITES_POI_ID = 103L
 private const val CRASHING_POI_ID = 104L
+private const val SLOW_POI_ID = 105L
+private const val SLOW_SLICE_DELAY_MS = 300L
+private const val TEST_PER_POI_TIMEOUT_MS = 100L
+private const val TEST_GENEROUS_TIMEOUT_SECONDS = 30L
 
 private const val TEST_MAX_POIS = 50
 private const val TEST_FAN_OUT_CONCURRENCY = 8
@@ -103,40 +107,57 @@ class BulkAvailabilityControllerTest {
     }
 
     @Test
-    fun `the summary view answers with the stay's summary instead of the campsites`() {
+    fun `the stay stream answers every poi once, with its summary or its error`() {
         runBlocking {
             // POI 1's three sites are bookable for runs of 1, 5 and 3 nights from the
             // window's start and unanswered after, so none is open for every night of the
             // seven-night window and nothing rules any out: no data, not full.
-            val entry =
-                bulkController()
-                    .availabilityForPois(request(poiIds = listOf(1L), view = BulkAvailabilityView.SUMMARY))
-                    .pois
-                    .single()
-            assertNull(entry.campsites)
-            val summary = assertNotNull(entry.summary)
+            val answers = bulkController().stayAnswers(stayRequest(listOf(1L, RATE_LIMITED_POI_ID))).toList()
+
+            assertEquals(setOf(1L, RATE_LIMITED_POI_ID), answers.map { it.poiId }.toSet())
+            val summary = assertNotNull(answers.single { it.poiId == 1L }.summary)
             assertEquals(StayAvailabilityStatus.NO_DATA, summary.status)
             assertEquals(0, summary.openSites)
             assertEquals(3, summary.checkedSites)
-            assertEquals(windowStart.toString(), entry.startDate)
+            val failed = answers.single { it.poiId == RATE_LIMITED_POI_ID }
+            assertEquals("rate_limited", failed.error)
+            assertNull(failed.summary)
         }
     }
 
     @Test
-    fun `a failing poi still reports its error under the summary view`() {
+    fun `stay answers arrive as they land, not in request order`() {
         runBlocking {
-            val entry =
-                bulkController()
-                    .availabilityForPois(request(poiIds = listOf(RATE_LIMITED_POI_ID), view = BulkAvailabilityView.SUMMARY))
-                    .pois
-                    .single()
-            assertEquals("rate_limited", entry.error)
-            assertNull(entry.summary)
+            val answers = bulkController().stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L))).toList()
+
+            assertEquals(listOf(2L, SLOW_POI_ID), answers.map { it.poiId })
         }
     }
 
     @Test
-    fun `a group size leaves out the campsites too small for it, in either view`() {
+    fun `a poi that outlives the per-poi timeout answers timeout, and the stream still ends`() {
+        runBlocking {
+            val answers =
+                bulkController(perPoiTimeout = Duration.ofMillis(TEST_PER_POI_TIMEOUT_MS))
+                    .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L)))
+                    .toList()
+
+            assertEquals(STAY_TIMEOUT_ERROR, answers.single { it.poiId == SLOW_POI_ID }.error)
+            assertNotNull(answers.single { it.poiId == 2L }.summary)
+        }
+    }
+
+    @Test
+    fun `the stay stream never runs more pois at once than the configured fan out`() {
+        runBlocking {
+            val meter = ConcurrencyMeter()
+            bulkController(fanOutConcurrency = 2, meter = meter).stayAnswers(stayRequest((1L..8L).toList())).toList()
+            assertEquals(2, meter.peak)
+        }
+    }
+
+    @Test
+    fun `a group size leaves out the campsites too small for it, in both reads`() {
         runBlocking {
             // POI 1's long-run site sleeps 2; the other two state no capacity.
             val campsites =
@@ -149,8 +170,8 @@ class BulkAvailabilityControllerTest {
 
             val summary =
                 bulkController()
-                    .availabilityForPois(request(poiIds = listOf(1L), groupSize = 4, view = BulkAvailabilityView.SUMMARY))
-                    .pois
+                    .stayAnswers(stayRequest(listOf(1L), groupSize = 4))
+                    .toList()
                     .single()
                     .summary
             assertEquals(2, assertNotNull(summary).checkedSites)
@@ -209,6 +230,7 @@ private fun bulkController(
     fanOutConcurrency: Int = TEST_FAN_OUT_CONCURRENCY,
     recorder: CutoffRecorder? = null,
     meter: ConcurrencyMeter? = null,
+    perPoiTimeout: Duration = Duration.ofSeconds(TEST_GENEROUS_TIMEOUT_SECONDS),
 ): BulkAvailabilityController =
     BulkAvailabilityController(
         sliceLookup = FakePoiAvailabilitySliceLookup(recorder, meter),
@@ -218,6 +240,7 @@ private fun bulkController(
                 fanOutConcurrency = fanOutConcurrency,
                 tolerance = Duration.ZERO,
                 ipRateLimitPerMinute = TEST_IP_RATE_LIMIT_PER_MINUTE,
+                perPoiTimeout = perPoiTimeout,
             ),
         clock = Clock.systemUTC(),
     )
@@ -227,7 +250,6 @@ private fun request(
     minNights: Int = 1,
     siteTypes: List<CampsiteKind> = emptyList(),
     groupSize: Int? = null,
-    view: BulkAvailabilityView = BulkAvailabilityView.CAMPSITES,
     fresh: Boolean = false,
 ): BulkAvailabilityRequest =
     BulkAvailabilityRequest(
@@ -237,8 +259,19 @@ private fun request(
         minNights = minNights,
         siteTypes = siteTypes,
         groupSize = groupSize,
-        view = view,
         fresh = fresh,
+    )
+
+private fun stayRequest(
+    poiIds: List<Long>,
+    groupSize: Int? = null,
+): StayCheckRequest =
+    StayCheckRequest(
+        poiIds = poiIds,
+        startDate = windowStart,
+        endDate = windowEnd,
+        siteTypes = emptyList(),
+        groupSize = groupSize,
     )
 
 /** Captures each `freshAtOrAfter` the controller hands to the fake, one per POI resolved. */
@@ -294,6 +327,10 @@ private class FakePoiAvailabilitySliceLookup(
             RATE_LIMITED_POI_ID -> throw AvailabilityProviderError.RateLimited()
             UNKNOWN_POI_ID -> throw AvailabilityServiceError.NotFound
             CRASHING_POI_ID -> throw RuntimeException("boom: unmapped failure")
+            SLOW_POI_ID -> {
+                delay(SLOW_SLICE_DELAY_MS)
+                simpleSlice(poiId)
+            }
             NO_SITES_POI_ID -> noSitesSlice(poiId)
             RANKED_POI_ID -> {
                 delay(NORMAL_SLICE_DELAY_MS)

@@ -207,7 +207,7 @@ export const stayCopy = {
   noneCheckable: 'None of the campgrounds in view can be checked online.',
   failed: 'The check stopped part way. Try again.',
   timedOut: 'The booking sites took too long to answer. Try again.',
-  /** A card still waiting for its batch. */
+  /** A card still waiting for its answer. */
   pending: 'Checking…',
   /** A card whose campground could not be asked. */
   error: "Couldn't check",

@@ -19,6 +19,17 @@ data class BulkAvailabilityConfig(
      * provider twice; never longer than [tolerance], which it defaults down to.
      */
     val freshTolerance: Duration = minOf(tolerance, Duration.ofSeconds(DEFAULT_FRESH_TOLERANCE_SECONDS)),
+    /**
+     * How long one campground of a streamed stay check may take before it answers
+     * `timeout`. The stream can only finish when every campground has answered,
+     * and a provider can stall indefinitely.
+     */
+    val perPoiTimeout: Duration = Duration.ofSeconds(DEFAULT_PER_POI_TIMEOUT_SECONDS),
+    /**
+     * How often a stream with nothing to send writes a keep-alive comment, so a
+     * proxy in front does not take a quiet stream for a dead one.
+     */
+    val streamHeartbeat: Duration = Duration.ofSeconds(DEFAULT_STREAM_HEARTBEAT_SECONDS),
 ) {
     init {
         require(maxPois >= 1) { "bulk max-pois must be >= 1 (got $maxPois)" }
@@ -30,6 +41,8 @@ data class BulkAvailabilityConfig(
         require(!freshTolerance.isNegative && freshTolerance <= tolerance) {
             "bulk fresh-tolerance must be between 0 and tolerance ($tolerance) (got $freshTolerance)"
         }
+        require(perPoiTimeout.isPositive) { "bulk per-poi-timeout must be positive (got $perPoiTimeout)" }
+        require(streamHeartbeat.isPositive) { "bulk stream-heartbeat must be positive (got $streamHeartbeat)" }
     }
 
     companion object {
@@ -43,6 +56,8 @@ data class BulkAvailabilityConfig(
         private const val DEFAULT_TOLERANCE_HOURS = 2L
         private const val DEFAULT_IP_RATE_LIMIT_PER_MINUTE = 10
         private const val DEFAULT_FRESH_TOLERANCE_SECONDS = 60L
+        private const val DEFAULT_PER_POI_TIMEOUT_SECONDS = 45L
+        private const val DEFAULT_STREAM_HEARTBEAT_SECONDS = 15L
 
         val default =
             BulkAvailabilityConfig(
@@ -62,6 +77,8 @@ data class BulkAvailabilityConfig(
                     config.value("ip-rate-limit-per-minute")?.toInt()
                         ?: default.ipRateLimitPerMinute,
                 freshTolerance = config.duration("fresh-tolerance", default.freshTolerance),
+                perPoiTimeout = config.duration("per-poi-timeout", default.perPoiTimeout),
+                streamHeartbeat = config.duration("stream-heartbeat", default.streamHeartbeat),
             )
     }
 }
