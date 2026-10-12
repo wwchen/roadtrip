@@ -349,15 +349,21 @@ them in the list's own order, nearest first, never the order a previous check so
 — at most `bulk.fan-out-concurrency` at a time. A POI that outlives `bulk.per-poi-timeout`
 (45 s) answers `timeout`, and once the whole stream reaches `bulk.stream-timeout` (2 min) so does
 every POI yet to answer; a read that ends with no answer at all (a stray cancellation) answers
-`unknown`. So every requested POI answers, and the stream always reaches `done`. The timeouts
-land at a read's next suspension — a vendor call's await is one, which is why
-`VendorHttpTransport` hands a caller's cancellation back rather than wrapping it as the vendor's
-failure — so a blocking database call in progress finishes first, bounded by the pool's
-connection timeout. A quiet stream writes a keep-alive comment every `bulk.stream-heartbeat`
+`unknown`. So every requested POI answers, and the stream reaches `done` by its deadline. A
+per-POI timeout lands at a read's next suspension — a vendor call's await is one, which is why
+`VendorHttpTransport`, Aspira's client and `FailoverAvailabilityFetcher` hand a caller's
+cancellation back rather than reporting it as a provider failure (failover would otherwise go on
+to ask the next provider) — so a read stuck in a blocking call, a database lock wait, outlives
+it. The reads are therefore not the flow's children: at the deadline the stream answers for a
+stuck one and ends, and the read, cancelled, finishes on its own with its late answer dropped.
+A quiet stream writes a keep-alive comment every `bulk.stream-heartbeat`
 (15 s, at most `MAX_STREAM_HEARTBEAT_SECONDS` = 20 s), inside the idle timeouts of the proxies
 in front of it and of the client. A refused request (`400`, `503 ip_throttled`) answers
-JSON before any event; the stream shares the scan's per-IP limit, and a check is one request
-against it. The client hanging up cancels every read still in flight.
+JSON before any event. The per-IP limit is charged per campground, not per request
+(`bulk.ip-poi-limit-per-minute`, 150 — three full checks a minute), shared by the stream and the
+scan, and checked once a request is known valid: one request fans out to an upstream call per
+POI, so counting requests would let a caller's upstream load grow with the request size. The
+client hanging up cancels every read still in flight.
 
 There is no run id and nothing is stored: the stream is the run, and a reload starts a new
 check. The per-campsite scan (`POST /api/pois/availability/bulk`) keeps its row, without `view`
@@ -370,7 +376,8 @@ The event-stream wiring is generic and knows nothing of stays: `route/common/Eve
 ### Frontend
 
 - **Library.** `lib/event-stream.ts`'s `readEventStream` parses any `text/event-stream` body
-  the way `EventSource` does — which cannot POST — reporting every chunk to `onActivity`, and `lib/deadline.ts`'s `withIdleTimeout`
+  the way `EventSource` does — which cannot POST — reporting every chunk to `onActivity`, and
+  `lib/deadline.ts`'s `withIdleTimeout`
   cuts a task off after a stretch of silence rather than a total, for work whose length is
   open-ended. `api/http.ts`'s `jsonPostStream` POSTs JSON and hands back the body, throwing an
   `HttpError` with the envelope's code on a refusal.
@@ -380,8 +387,12 @@ The event-stream wiring is generic and knows nothing of stays: `route/common/Eve
   finishes it, with every campground answered. A stream that closes before `done`, or reaches it
   with one unanswered, stopped part way (`failed`). One that writes nothing at all — not even a
   keep-alive — for `CHECK_IDLE_TIMEOUT_MS` (60 s) has lost its connection and is `timed_out`;
-  keep-alives count as life, so how long the providers take stays the backend's to bound. The throttle and its cooldown, Check again's `fresh`, the store and the list are
-  M3's.
+  keep-alives count as life, so how long the providers take stays the backend's to bound — its
+  stream deadline holds even for a read that cannot be cancelled. The throttle and its
+  cooldown, Check again's `fresh`, the store and the list are M3's.
+- **Ran out of time** is said apart from couldn't check: a `timeout` card reads "Too slow to
+  answer — check again", and the head counts them ("1 too slow to answer") apart from the
+  unknowns, since asking again may well answer.
 - **Card dots** take the status colour once the card's answer lands (`stayToneOf`): open, few
   left, full — closed for the season too, since there is nowhere to stay either way and the line
   says which — and hollow for no data or couldn't check. Until then, and in the route list, the

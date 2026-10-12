@@ -87,13 +87,20 @@ describe('stayTallies', () => {
       99: summary('open', 3),
     };
 
-    expect(stayTallies([1, 2, 3, 4, 5, 6, 7, 8], { ...results, 8: { kind: 'error', code: 'beyond_booking_horizon' } })).toEqual({
+    expect(
+      stayTallies([1, 2, 3, 4, 5, 6, 7, 8, 9], {
+        ...results,
+        8: { kind: 'error', code: 'beyond_booking_horizon' },
+        9: { kind: 'error', code: 'timeout' },
+      }),
+    ).toEqual({
       withSite: 2,
       full: 1,
       closed: 1,
       refused: 1,
+      timedOut: 1,
       unknown: 2,
-      answered: 7,
+      answered: 8,
     });
   });
 });

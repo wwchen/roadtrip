@@ -62,6 +62,13 @@ export function isStayRefusal(code: string): code is StayRefusalCode {
 }
 
 /**
+ * The code a campground answers when it ran out of time — its own per-POI limit,
+ * or the check's — rather than failing (`STAY_TIMEOUT_ERROR` in the backend's
+ * `BulkAvailabilityController`). Unlike other failures it may well answer if asked again.
+ */
+export const STAY_TIMEOUT_CODE = 'timeout';
+
+/**
  * The provider's season block rides the wire unparsed, so `reopens_on` is
  * narrowed here rather than asserted at the one call site that reads it.
  */

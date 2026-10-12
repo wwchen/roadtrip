@@ -58,7 +58,7 @@ import kotlin.test.assertTrue
 
 private const val TEST_MAX_POIS = 5
 private const val TEST_FAN_OUT_CONCURRENCY = 4
-private const val TEST_IP_RATE_LIMIT_PER_MINUTE = 10
+private const val TEST_IP_POI_LIMIT_PER_MINUTE = 1_000
 private const val RATE_LIMITED_POI_ID = 100L
 private const val UNKNOWN_CAMPSITE_POI_ID = 999_999L
 private const val FORWARDED_FOR_HEADER = "X-Forwarded-For"
@@ -446,6 +446,51 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
+    fun `a request is charged for every campground it asks about`() =
+        testApplication {
+            application {
+                routeTestApplication {
+                    bulkAvailabilityRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 3, nowMs = { 0L }))
+                }
+            }
+
+            suspend fun streamOf(poiIds: String) =
+                client.post("/api/pois/availability/bulk/stream") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[$poiIds],"start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+
+            assertEquals(HttpStatusCode.OK, streamOf("1,2").status)
+            // One left: a second pair would be four campgrounds' upstream calls in the minute.
+            assertEquals(HttpStatusCode.ServiceUnavailable, streamOf("1,2").status)
+            assertEquals(HttpStatusCode.OK, streamOf("1").status)
+        }
+
+    @Test
+    fun `a malformed request is refused for what it is, and spends none of the caller's budget`() =
+        testApplication {
+            application {
+                routeTestApplication {
+                    bulkAvailabilityRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 1, nowMs = { 0L }))
+                }
+            }
+
+            val malformed =
+                client.post("/api/pois/availability/bulk/stream") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[],"start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, malformed.status)
+
+            val valid =
+                client.post("/api/pois/availability/bulk/stream") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+            assertEquals(HttpStatusCode.OK, valid.status)
+        }
+
+    @Test
     fun `behind a proxy each caller is throttled on its own, by the address the edge appended`() =
         testApplication {
             application {
@@ -479,7 +524,7 @@ class BulkAvailabilityRoutesTest {
                 maxPois = TEST_MAX_POIS,
                 fanOutConcurrency = TEST_FAN_OUT_CONCURRENCY,
                 tolerance = Duration.ZERO,
-                ipRateLimitPerMinute = TEST_IP_RATE_LIMIT_PER_MINUTE,
+                ipPoiLimitPerMinute = TEST_IP_POI_LIMIT_PER_MINUTE,
             )
         val controller =
             BulkAvailabilityController(

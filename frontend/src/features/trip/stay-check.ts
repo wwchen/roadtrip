@@ -1,7 +1,7 @@
 // The pure half of the availability check: how a campground's answer becomes
 // its result, and how answered cards are ordered and counted. `useStayCheck`
 // runs the check; the list and the head read the results.
-import { isStayRefusal, type StayAnswer, type StayAvailabilityStatus } from '@/api/availability-api';
+import { isStayRefusal, STAY_TIMEOUT_CODE, type StayAnswer, type StayAvailabilityStatus } from '@/api/availability-api';
 import type { StayResult } from '@/stores/stayCheckStore';
 
 const MS_PER_SECOND = 1000;
@@ -105,6 +105,8 @@ export interface StayTallies {
   closed: number;
   /** Refused the dates themselves: past their booking horizon, or too soon. */
   refused: number;
+  /** Ran out of time to answer — worth a Check again, unlike the unknowns. */
+  timedOut: number;
   /** No data, or the check failed for it. */
   unknown: number;
   /** How many of the asked ids have answered. */
@@ -116,13 +118,14 @@ export function stayTallies(
   asked: readonly number[],
   results: Readonly<Record<number, StayResult>>,
 ): StayTallies {
-  const tallies: StayTallies = { withSite: 0, full: 0, closed: 0, refused: 0, unknown: 0, answered: 0 };
+  const tallies: StayTallies = { withSite: 0, full: 0, closed: 0, refused: 0, timedOut: 0, unknown: 0, answered: 0 };
   for (const id of asked) {
     const result = results[id];
     if (!result) continue;
     tallies.answered += 1;
     if (result.kind === 'error') {
       if (isStayRefusal(result.code)) tallies.refused += 1;
+      else if (result.code === STAY_TIMEOUT_CODE) tallies.timedOut += 1;
       else tallies.unknown += 1;
     }
     else if (result.summary.status === 'open' || result.summary.status === 'few_left') tallies.withSite += 1;

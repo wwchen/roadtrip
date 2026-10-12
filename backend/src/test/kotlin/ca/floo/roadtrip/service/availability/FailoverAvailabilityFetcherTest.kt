@@ -11,7 +11,11 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonNull
 import java.time.Duration
 import java.time.Instant
@@ -23,6 +27,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+
+private const val CALLER_TIMEOUT_MS = 50L
 
 class FailoverAvailabilityFetcherTest {
     private val window = ResolvedDateWindow(LocalDate.parse("2026-07-17"), LocalDate.parse("2026-07-31"))
@@ -59,6 +65,11 @@ class FailoverAvailabilityFetcherTest {
             data class Throw(
                 val error: Throwable,
             ) : Behaviour()
+
+            /** Never answers; once the caller cancels, reports it as [error] — as an adapter wrapping it would. */
+            data class StallThenThrow(
+                val error: Throwable,
+            ) : Behaviour()
         }
 
         override val capabilities: AvailabilityProviderCapabilities =
@@ -88,6 +99,12 @@ class FailoverAvailabilityFetcherTest {
             return when (next) {
                 is Behaviour.ReturnBatch -> next.batch
                 is Behaviour.Throw -> throw next.error
+                is Behaviour.StallThenThrow ->
+                    try {
+                        awaitCancellation()
+                    } catch (e: CancellationException) {
+                        throw next.error
+                    }
             }
         }
 
@@ -97,6 +114,10 @@ class FailoverAvailabilityFetcherTest {
 
         fun scriptThrows(error: Throwable) {
             script += Behaviour.Throw(error)
+        }
+
+        fun scriptStallsThenThrows(error: Throwable) {
+            script += Behaviour.StallThenThrow(error)
         }
     }
 
@@ -163,6 +184,43 @@ class FailoverAvailabilityFetcherTest {
         tracker: ProviderCooldownTracker,
         clock: FakeClock,
     ): FailoverAvailabilityFetcher = FailoverAvailabilityFetcher(cooldowns = tracker, clock = { clock.now })
+
+    @Test
+    fun `a caller that times out is handed its cancellation, and no other provider is asked`() =
+        runTest {
+            val clock = FakeClock()
+            // Reported as retryable, which would fail over — if the caller still wanted an answer.
+            val stalled =
+                ScriptedProvider(BookingProvider.RECGOV).apply {
+                    scriptStallsThenThrows(AvailabilityProviderError.RateLimited(RuntimeException("wrapped cancellation")))
+                }
+            val next = ScriptedProvider(BookingProvider.CAMPFLARE).apply { scriptReturns(emptyBatch("campflare")) }
+
+            val result =
+                withTimeoutOrNull(CALLER_TIMEOUT_MS) {
+                    fetcherWith(trackerWith(clock), clock).fetch(listOf(stalled, next), testCampground, listOf(campsite(1L)), window)
+                }
+
+            assertNull(result)
+            assertEquals(0, next.calls)
+        }
+
+    @Test
+    fun `a cancellation reported as an unmapped failure still reaches the caller`() =
+        runTest {
+            val clock = FakeClock()
+            val stalled =
+                ScriptedProvider(
+                    BookingProvider.RECGOV,
+                ).apply { scriptStallsThenThrows(RuntimeException("wrapped cancellation")) }
+
+            val result =
+                withTimeoutOrNull(CALLER_TIMEOUT_MS) {
+                    fetcherWith(trackerWith(clock), clock).fetch(listOf(stalled), testCampground, listOf(campsite(1L)), window)
+                }
+
+            assertNull(result, "an OTHER attempt would have answered; the cancellation should have")
+        }
 
     @Test
     fun `first candidate succeeds — single attempt, servedBy first`() =

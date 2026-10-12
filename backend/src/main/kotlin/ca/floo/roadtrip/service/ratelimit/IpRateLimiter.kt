@@ -16,7 +16,9 @@ private const val MAX_KEYS = 10_000
 /**
  * In-memory per-key token bucket, refilled continuously at [perMinute] tokens
  * per minute up to a burst capacity of [perMinute]. Keys are typically caller
- * IPs; each key gets its own bucket.
+ * IPs; each key gets its own bucket. A call costs one token unless it says
+ * otherwise — a request that fans out to many upstream calls can be charged for
+ * each of them.
  *
  * Unlike [VendorRateLimiter] (durable, Postgres-backed, guards *outbound*
  * vendor budgets), this limiter is process-local and guards *inbound* abuse on
@@ -37,7 +39,12 @@ class IpRateLimiter(
     private val refillPerMs = perMinute / MILLIS_PER_MINUTE
     private val lastSweepMs = AtomicLong(nowMs())
 
-    fun allow(key: String): Boolean {
+    /** Whether [key] may spend [cost] tokens now; spends them when it may. Never more than [perMinute] at once. */
+    fun allow(
+        key: String,
+        cost: Int = 1,
+    ): Boolean {
+        require(cost in 1..perMinute) { "a call costs between 1 and the bucket's $perMinute tokens (got $cost)" }
         val now = nowMs()
         evictStale(now)
         val bucket =
@@ -49,8 +56,8 @@ class IpRateLimiter(
                 b
             }!!
         return synchronized(bucket) {
-            if (bucket.tokens >= 1.0) {
-                bucket.tokens -= 1.0
+            if (bucket.tokens >= cost) {
+                bucket.tokens -= cost
                 true
             } else {
                 false

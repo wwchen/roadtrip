@@ -293,6 +293,7 @@ function StayStatus({ check }: { check: CurrentStayCheck }) {
         ),
         ...(tallies.closed > 0 ? [stayCopy.closed(tallies.closed)] : []),
         ...(tallies.refused > 0 ? [stayCopy.refused(tallies.refused)] : []),
+        ...(tallies.timedOut > 0 ? [stayCopy.timedOutCount(tallies.timedOut)] : []),
         ...(tallies.unknown > 0 ? [stayCopy.unknown(tallies.unknown)] : []),
         ...(check.observedAt ? [stayCopy.checkedAgo(relativeTime(check.observedAt, now))] : []),
       ];

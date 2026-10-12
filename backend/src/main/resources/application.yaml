@@ -40,7 +40,9 @@ roadtrip:
       # A quiet stream writes a keep-alive this often, inside the idle timeouts of
       # the proxies in front of it and of the client (at most 20s).
       stream-heartbeat: 15s
-      ip-rate-limit-per-minute: 10
+      # Campgrounds one caller may ask about per minute, across both bulk reads:
+      # each one is an upstream call. At least max-pois.
+      ip-poi-limit-per-minute: 150
     campsite:
       # Per-IP ceiling on the single-POI availability read. Higher than bulk's
       # because one call is one POI, not a fan-out — but still an anonymous

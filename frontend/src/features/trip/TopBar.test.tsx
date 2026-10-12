@@ -1279,6 +1279,21 @@ describe('the in-view list', () => {
       expect(screen.queryByText(/unknown/)).toBeNull();
     });
 
+    test('a campground that ran out of time says so, and is counted apart as worth asking again', async () => {
+      stayStream = () =>
+        eventStreamResponse([{ event: STAY_ANSWER_EVENT, data: { poi_id: 21, error: 'timeout' } }, done(1)]);
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+
+      await waitFor(() => expect(screen.getByText('Too slow to answer — check again')).toBeInTheDocument());
+      expect(screen.getByText(/· 1 too slow to answer/)).toBeInTheDocument();
+      expect(screen.queryByText(/unknown/)).toBeNull();
+    });
+
     test('Check again asks the providers afresh; the first check does not', async () => {
       stayStream = () => eventStreamResponse([answer(21, { status: 'full', open_sites: 0, checked_sites: 132 }), done(1)]);
       withViewport();

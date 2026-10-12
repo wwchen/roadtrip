@@ -46,15 +46,15 @@ private val bulkValidationErrorCodes =
 internal fun Route.bulkAvailabilityRoutes(
     controller: BulkAvailabilityController,
     config: BulkAvailabilityConfig,
-    rateLimit: IpRateLimiter = IpRateLimiter(perMinute = config.ipRateLimitPerMinute),
+    rateLimit: IpRateLimiter = IpRateLimiter(perMinute = config.ipPoiLimitPerMinute),
 ) {
     route("/api") {
         route("/pois") {
             post("/availability/bulk") {
-                if (throttled(rateLimit)) return@post
                 val dto = call.receiveJsonBody<BulkAvailabilityRequestDto>().orRefuse(call) ?: return@post
                 val siteTypes = call.siteTypesOrRefuse(dto.siteTypes) ?: return@post
                 val request = validatedOrRefuse(call) { dto.validated(config, siteTypes) } ?: return@post
+                if (throttled(rateLimit, request.poiIds.size)) return@post
 
                 call.respondEncodedJson(controller.availabilityForPois(request), HttpStatusCode.OK)
             }.describeApi(
@@ -69,14 +69,16 @@ internal fun Route.bulkAvailabilityRoutes(
                         "`group_size` keeps campsites that sleep at least that many, and those with no " +
                         "stated capacity. `fresh: true` answers only from observations at most " +
                         "${config.freshTolerance} old, asking the providers again for the rest. " +
+                        "Each requested POI is charged against the caller's ${config.ipPoiLimitPerMinute} a " +
+                        "minute, shared with the stay stream; over it answers 503 `ip_throttled`. " +
                         "`site_type` accepts: $siteTypeWireList.",
             ).access(RouteAccess.Anonymous)
 
             post("/availability/bulk/stream") {
-                if (throttled(rateLimit)) return@post
                 val dto = call.receiveJsonBody<StayCheckRequestDto>().orRefuse(call) ?: return@post
                 val siteTypes = call.siteTypesOrRefuse(dto.siteTypes) ?: return@post
                 val request = validatedOrRefuse(call) { dto.validated(config, siteTypes) } ?: return@post
+                if (throttled(rateLimit, request.poiIds.size)) return@post
 
                 call.respondEventStream(config.streamHeartbeat) {
                     var answered = 0
@@ -100,16 +102,25 @@ internal fun Route.bulkAvailabilityRoutes(
                         "than ${config.perPoiTimeout} answers `$STAY_TIMEOUT_ERROR`, and so does every POI yet " +
                         "to answer once the stream reaches ${config.streamTimeout}; a quiet stream sends a " +
                         "keep-alive comment every ${config.streamHeartbeat}. A refused request answers " +
-                        "JSON with the status, as before any event is sent. `site_type` accepts: " +
-                        "$siteTypeWireList.",
+                        "JSON with the status, as before any event is sent. Each requested POI is charged " +
+                        "against the caller's ${config.ipPoiLimitPerMinute} a minute, shared with the scan; " +
+                        "over it answers 503 `ip_throttled`. `site_type` accepts: $siteTypeWireList.",
             ).access(RouteAccess.Anonymous)
         }
     }
 }
 
-/** Refuses with 503 when the caller is over the endpoints' per-caller limit; true when it did. */
-private suspend fun RoutingContext.throttled(rateLimit: IpRateLimiter): Boolean {
-    if (rateLimit.allow(call.request.origin.remoteHost)) return false
+/**
+ * Refuses with 503 when asking about [poiCount] more campgrounds would put the
+ * caller over the endpoints' shared per-caller budget; true when it did. Checked
+ * once the request is known valid, since what it costs is its size — a refused
+ * malformed body never reaches a provider, so it spends nothing.
+ */
+private suspend fun RoutingContext.throttled(
+    rateLimit: IpRateLimiter,
+    poiCount: Int,
+): Boolean {
+    if (rateLimit.allow(call.request.origin.remoteHost, cost = poiCount)) return false
     call.respondBulkError("ip_throttled", HttpStatusCode.ServiceUnavailable)
     return true
 }

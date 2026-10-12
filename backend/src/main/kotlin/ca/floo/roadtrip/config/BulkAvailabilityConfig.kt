@@ -12,7 +12,13 @@ data class BulkAvailabilityConfig(
     val fanOutConcurrency: Int,
     /** How old a stored observation may be and still answer, rather than asking the provider again. */
     val tolerance: Duration,
-    val ipRateLimitPerMinute: Int,
+    /**
+     * How many campgrounds one caller may ask about per minute, across both bulk
+     * reads. Charged per POI, not per request: one request fans out to an upstream
+     * call per POI, so a request count would let a caller's upstream load grow with
+     * the request size. At least [maxPois], so a request the cap allows can pass.
+     */
+    val ipPoiLimitPerMinute: Int,
     /**
      * [tolerance] for a request that asks for fresh data (`fresh: true`, the map's
      * Check again). Short rather than zero, so a double-click does not ask every
@@ -43,8 +49,8 @@ data class BulkAvailabilityConfig(
         require(maxPois >= 1) { "bulk max-pois must be >= 1 (got $maxPois)" }
         require(fanOutConcurrency >= 1) { "bulk fan-out-concurrency must be >= 1 (got $fanOutConcurrency)" }
         require(!tolerance.isNegative) { "bulk tolerance must not be negative (got $tolerance)" }
-        require(ipRateLimitPerMinute >= 1) {
-            "bulk ip-rate-limit-per-minute must be >= 1 (got $ipRateLimitPerMinute)"
+        require(ipPoiLimitPerMinute >= maxPois) {
+            "bulk ip-poi-limit-per-minute must be at least max-pois ($maxPois) (got $ipPoiLimitPerMinute)"
         }
         require(!freshTolerance.isNegative && freshTolerance <= tolerance) {
             "bulk fresh-tolerance must be between 0 and tolerance ($tolerance) (got $freshTolerance)"
@@ -65,7 +71,9 @@ data class BulkAvailabilityConfig(
         // guarantees Hikari connection-acquisition timeouts.
         private const val DEFAULT_FAN_OUT_CONCURRENCY = 3
         private const val DEFAULT_TOLERANCE_HOURS = 2L
-        private const val DEFAULT_IP_RATE_LIMIT_PER_MINUTE = 10
+
+        /** Three full checks a minute — near what the batched check allowed (10 requests of ~13 POIs). */
+        private const val DEFAULT_IP_POI_LIMIT_PER_MINUTE = 150
         private const val DEFAULT_FRESH_TOLERANCE_SECONDS = 60L
         private const val DEFAULT_PER_POI_TIMEOUT_SECONDS = 45L
         private const val DEFAULT_STREAM_TIMEOUT_SECONDS = 120L
@@ -85,7 +93,7 @@ data class BulkAvailabilityConfig(
                 maxPois = DEFAULT_MAX_POIS,
                 fanOutConcurrency = DEFAULT_FAN_OUT_CONCURRENCY,
                 tolerance = Duration.ofHours(DEFAULT_TOLERANCE_HOURS),
-                ipRateLimitPerMinute = DEFAULT_IP_RATE_LIMIT_PER_MINUTE,
+                ipPoiLimitPerMinute = DEFAULT_IP_POI_LIMIT_PER_MINUTE,
                 freshTolerance = Duration.ofSeconds(DEFAULT_FRESH_TOLERANCE_SECONDS),
             )
 
@@ -94,9 +102,9 @@ data class BulkAvailabilityConfig(
                 maxPois = config.value("max-pois")?.toInt() ?: default.maxPois,
                 fanOutConcurrency = config.value("fan-out-concurrency")?.toInt() ?: default.fanOutConcurrency,
                 tolerance = config.duration("tolerance", default.tolerance),
-                ipRateLimitPerMinute =
-                    config.value("ip-rate-limit-per-minute")?.toInt()
-                        ?: default.ipRateLimitPerMinute,
+                ipPoiLimitPerMinute =
+                    config.value("ip-poi-limit-per-minute")?.toInt()
+                        ?: default.ipPoiLimitPerMinute,
                 freshTolerance = config.duration("fresh-tolerance", default.freshTolerance),
                 perPoiTimeout = config.duration("per-poi-timeout", default.perPoiTimeout),
                 streamTimeout = config.duration("stream-timeout", default.streamTimeout),

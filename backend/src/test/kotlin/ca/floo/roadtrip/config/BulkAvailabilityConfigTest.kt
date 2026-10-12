@@ -12,7 +12,7 @@ class BulkAvailabilityConfigTest {
         assertEquals(50, config.maxPois)
         assertEquals(3, config.fanOutConcurrency)
         assertEquals(Duration.ofHours(2), config.tolerance)
-        assertEquals(10, config.ipRateLimitPerMinute)
+        assertEquals(150, config.ipPoiLimitPerMinute)
         assertEquals(Duration.ofMinutes(1), config.freshTolerance)
         assertEquals(Duration.ofSeconds(45), config.perPoiTimeout)
         assertEquals(Duration.ofMinutes(2), config.streamTimeout)
@@ -29,13 +29,20 @@ class BulkAvailabilityConfigTest {
     }
 
     @Test
+    fun `the per-caller budget covers at least one request of the largest size`() {
+        assertFailsWith<IllegalArgumentException> {
+            BulkAvailabilityConfig(maxPois = 50, fanOutConcurrency = 3, tolerance = Duration.ofHours(2), ipPoiLimitPerMinute = 49)
+        }
+    }
+
+    @Test
     fun `fresh tolerance may not exceed the usual tolerance`() {
         assertFailsWith<IllegalArgumentException> {
             BulkAvailabilityConfig(
                 maxPois = 50,
                 fanOutConcurrency = 3,
                 tolerance = Duration.ofMinutes(5),
-                ipRateLimitPerMinute = 10,
+                ipPoiLimitPerMinute = 150,
                 freshTolerance = Duration.ofMinutes(10),
             )
         }
@@ -48,7 +55,7 @@ class BulkAvailabilityConfigTest {
                 maxPois = 0,
                 fanOutConcurrency = 8,
                 tolerance = Duration.ofHours(2),
-                ipRateLimitPerMinute = 10,
+                ipPoiLimitPerMinute = 150,
             )
         }
     }
@@ -60,7 +67,7 @@ class BulkAvailabilityConfigTest {
                 maxPois = 50,
                 fanOutConcurrency = 0,
                 tolerance = Duration.ofHours(2),
-                ipRateLimitPerMinute = 10,
+                ipPoiLimitPerMinute = 150,
             )
         }
     }

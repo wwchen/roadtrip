@@ -8,6 +8,9 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.support.causeChain
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
@@ -15,6 +18,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -143,12 +147,14 @@ internal class BulkAvailabilityController(
      * [BulkAvailabilityConfig.perPoiTimeout] answers [STAY_TIMEOUT_ERROR], and once
      * the whole stream reaches [BulkAvailabilityConfig.streamTimeout] so does every
      * POI yet to answer; a read that ended without an answer at all answers the
-     * unclassified failure. So the flow always completes, with every POI in it.
-     * Cancelling the collector cancels every read in flight.
+     * unclassified failure. So the flow completes by its deadline, with every POI
+     * in it. Cancelling the collector cancels every read in flight.
      *
-     * The timeouts land at a read's next suspension: a blocking database call in
-     * progress finishes first, bounded by the pool's connection timeout and the
-     * query itself.
+     * The reads are deliberately not the flow's children. A per-POI timeout lands
+     * at a read's next suspension, so a read stuck in a blocking call — a database
+     * lock wait — outlives it; as a child it would hold the stream open with it.
+     * Instead the stream answers for it at the deadline and ends, and the read,
+     * cancelled, finishes on its own, its late answer dropped.
      */
     fun stayAnswers(request: StayCheckRequest): Flow<StayAnswerDto> =
         channelFlow {
@@ -156,27 +162,34 @@ internal class BulkAvailabilityController(
             val gate = Semaphore(config.fanOutConcurrency)
             val perPoiTimeout = config.perPoiTimeout.toKotlinDuration()
             val answered = ConcurrentHashMap.newKeySet<Int>()
-            val finished =
-                withTimeoutOrNull(config.streamTimeout.toKotlinDuration()) {
-                    coroutineScope {
-                        request.poiIds.forEachIndexed { index, poiId ->
-                            launch {
-                                val read =
-                                    gate.withPermit { withTimeoutOrNull(perPoiTimeout) { read(poiId, query) } }
-                                        ?: PoiRead.Failed(STAY_TIMEOUT_ERROR)
-                                // The channel is unbounded, so this never suspends: an answer
-                                // sent is an answer marked, with no cancellation between.
-                                send(answerOf(poiId, read))
-                                answered += index
-                            }
-                        }
+
+            // Exactly once per POI, whoever gets there first: its read, or the sweep below.
+            // The channel is unbounded, so the send never suspends and never fails while open.
+            fun answer(
+                index: Int,
+                answer: StayAnswerDto,
+            ) {
+                if (answered.add(index)) trySend(answer)
+            }
+
+            val reads = SupervisorJob()
+            val readScope = CoroutineScope(coroutineContext.minusKey(Job) + reads)
+            try {
+                request.poiIds.forEachIndexed { index, poiId ->
+                    readScope.launch {
+                        val read =
+                            gate.withPermit { withTimeoutOrNull(perPoiTimeout) { read(poiId, query) } }
+                                ?: PoiRead.Failed(STAY_TIMEOUT_ERROR)
+                        answer(index, answerOf(poiId, read))
                     }
                 }
-            // Whoever has not answered still does: past the deadline it ran out of
-            // time; otherwise its read ended without a result (a stray cancellation).
-            val unanswered = if (finished == null) STAY_TIMEOUT_ERROR else AvailabilityProviderError.Unknown.CODE
-            request.poiIds.forEachIndexed { index, poiId ->
-                if (index !in answered) send(StayAnswerDto(poiId = poiId, error = unanswered))
+                val finished = withTimeoutOrNull(config.streamTimeout.toKotlinDuration()) { reads.children.toList().joinAll() }
+                // Whoever has not answered still does: past the deadline it ran out of
+                // time; otherwise its read ended without a result (a stray cancellation).
+                val unanswered = if (finished == null) STAY_TIMEOUT_ERROR else AvailabilityProviderError.Unknown.CODE
+                request.poiIds.forEachIndexed { index, poiId -> answer(index, StayAnswerDto(poiId = poiId, error = unanswered)) }
+            } finally {
+                reads.cancel()
             }
         }.buffer(Channel.UNLIMITED)
 

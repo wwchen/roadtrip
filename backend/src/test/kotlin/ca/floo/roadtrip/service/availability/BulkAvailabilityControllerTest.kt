@@ -10,9 +10,13 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Test
 import java.time.Clock
 import java.time.Duration
@@ -30,6 +34,10 @@ private const val NO_SITES_POI_ID = 103L
 private const val CRASHING_POI_ID = 104L
 private const val SLOW_POI_ID = 105L
 private const val STRAY_CANCELLATION_POI_ID = 106L
+private const val STUCK_POI_ID = 107L
+
+/** How long the stuck POI's read takes, deaf to cancellation: far past any deadline under test. */
+private const val STUCK_READ_MS = 600_000L
 private const val SLOW_SLICE_DELAY_MS = 300L
 private const val TEST_PER_POI_TIMEOUT_MS = 100L
 private const val TEST_STREAM_TIMEOUT_MS = 100L
@@ -37,7 +45,7 @@ private const val TEST_GENEROUS_TIMEOUT_SECONDS = 30L
 
 private const val TEST_MAX_POIS = 50
 private const val TEST_FAN_OUT_CONCURRENCY = 8
-private const val TEST_IP_RATE_LIMIT_PER_MINUTE = 10
+private const val TEST_IP_POI_LIMIT_PER_MINUTE = 1_000
 private const val NORMAL_SLICE_DELAY_MS = 20L
 
 private val windowStart: LocalDate = LocalDate.of(2026, 9, 1)
@@ -51,7 +59,7 @@ private val observedAt: Instant = Instant.parse("2026-08-20T00:00:00Z")
 class BulkAvailabilityControllerTest {
     @Test
     fun `response entries mirror the requested poi ids in order including duplicates`() {
-        runBlocking {
+        runTest {
             val response = bulkController().availabilityForPois(request(poiIds = listOf(3L, 1L, 3L)))
             assertEquals(listOf(3L, 1L, 3L), response.pois.map { it.poiId })
         }
@@ -59,7 +67,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `campsites below min nights are dropped and the rest sort by run descending`() {
-        runBlocking {
+        runTest {
             // POI 1 has three sites with longest runs of 1, 5 and 3 nights.
             val response = bulkController().availabilityForPois(request(poiIds = listOf(1L), minNights = 3))
             val campsites = response.pois.single().campsites
@@ -70,7 +78,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `a poi whose provider fails reports an error and does not fail its neighbours`() {
-        runBlocking {
+        runTest {
             val response = bulkController().availabilityForPois(request(poiIds = listOf(1L, RATE_LIMITED_POI_ID)))
             assertNotNull(response.pois[0].campsites)
             assertEquals("rate_limited", response.pois[1].error)
@@ -80,7 +88,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `a poi whose lookup throws an unmapped exception reports unknown and does not fail its neighbours`() {
-        runBlocking {
+        runTest {
             val response =
                 bulkController().availabilityForPois(request(poiIds = listOf(1L, CRASHING_POI_ID, 2L)))
             assertNotNull(response.pois[0].campsites)
@@ -92,7 +100,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `an unknown poi reports not_found`() {
-        runBlocking {
+        runTest {
             val response = bulkController().availabilityForPois(request(poiIds = listOf(UNKNOWN_POI_ID)))
             assertEquals("not_found", response.pois.single().error)
         }
@@ -100,7 +108,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `a poi with no matching campsites resolves with an empty list not an error`() {
-        runBlocking {
+        runTest {
             val response = bulkController().availabilityForPois(request(poiIds = listOf(NO_SITES_POI_ID)))
             val campsites = response.pois.single().campsites
             assertNotNull(campsites)
@@ -111,7 +119,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `the stay stream answers every poi once, with its summary or its error`() {
-        runBlocking {
+        runTest {
             // POI 1's three sites are bookable for runs of 1, 5 and 3 nights from the
             // window's start and unanswered after, so none is open for every night of the
             // seven-night window and nothing rules any out: no data, not full.
@@ -130,7 +138,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `stay answers arrive as they land, not in request order`() {
-        runBlocking {
+        runTest {
             val answers = bulkController().stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L))).toList()
 
             assertEquals(listOf(2L, SLOW_POI_ID), answers.map { it.poiId })
@@ -139,7 +147,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `a poi that outlives the per-poi timeout answers timeout, and the stream still ends`() {
-        runBlocking {
+        runTest {
             val answers =
                 bulkController(perPoiTimeout = Duration.ofMillis(TEST_PER_POI_TIMEOUT_MS))
                     .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L)))
@@ -152,7 +160,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `past the stream's deadline every poi yet to answer answers timeout, and the stream still ends`() {
-        runBlocking {
+        runTest {
             val answers =
                 bulkController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
                     .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L, SLOW_POI_ID)))
@@ -163,9 +171,24 @@ class BulkAvailabilityControllerTest {
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a read that cannot be cancelled does not hold the stream past its deadline`() {
+        runTest {
+            val answers =
+                bulkController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
+                    .stayAnswers(stayRequest(listOf(STUCK_POI_ID, 2L)))
+                    .toList()
+
+            assertEquals(STAY_TIMEOUT_ERROR, answers.single { it.poiId == STUCK_POI_ID }.error)
+            assertNotNull(answers.single { it.poiId == 2L }.summary)
+            assertEquals(TEST_STREAM_TIMEOUT_MS, currentTime, "the stream ended at its deadline, not when the read did")
+        }
+    }
+
     @Test
     fun `a read that ends without an answer still answers, as the unclassified failure`() {
-        runBlocking {
+        runTest {
             val answers = bulkController().stayAnswers(stayRequest(listOf(STRAY_CANCELLATION_POI_ID, 2L))).toList()
 
             assertEquals(setOf(STRAY_CANCELLATION_POI_ID, 2L), answers.map { it.poiId }.toSet())
@@ -175,7 +198,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `the stay stream never runs more pois at once than the configured fan out`() {
-        runBlocking {
+        runTest {
             val meter = ConcurrencyMeter()
             bulkController(fanOutConcurrency = 2, meter = meter).stayAnswers(stayRequest((1L..8L).toList())).toList()
             assertEquals(2, meter.peak)
@@ -184,7 +207,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `a group size leaves out the campsites too small for it, in both reads`() {
-        runBlocking {
+        runTest {
             // POI 1's long-run site sleeps 2; the other two state no capacity.
             val campsites =
                 bulkController()
@@ -206,14 +229,14 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `a fresh request only reuses observations younger than the fresh tolerance`() {
-        runBlocking {
+        runTest {
             val now = Instant.parse("2026-10-12T12:00:00Z")
             val config =
                 BulkAvailabilityConfig(
                     maxPois = TEST_MAX_POIS,
                     fanOutConcurrency = TEST_FAN_OUT_CONCURRENCY,
                     tolerance = Duration.ofHours(2),
-                    ipRateLimitPerMinute = TEST_IP_RATE_LIMIT_PER_MINUTE,
+                    ipPoiLimitPerMinute = TEST_IP_POI_LIMIT_PER_MINUTE,
                     freshTolerance = Duration.ofMinutes(1),
                 )
             val recorder = CutoffRecorder()
@@ -233,7 +256,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `every poi in one fan out is measured against the same freshness cutoff`() {
-        runBlocking {
+        runTest {
             val recorder = CutoffRecorder()
             bulkController(recorder = recorder)
                 .availabilityForPois(request(poiIds = listOf(1L, 2L, 3L)))
@@ -243,7 +266,7 @@ class BulkAvailabilityControllerTest {
 
     @Test
     fun `concurrent poi resolution never exceeds the configured fan out`() {
-        runBlocking {
+        runTest {
             val meter = ConcurrencyMeter()
             bulkController(fanOutConcurrency = 2, meter = meter)
                 .availabilityForPois(request(poiIds = (1L..8L).toList()))
@@ -266,7 +289,7 @@ private fun bulkController(
                 maxPois = TEST_MAX_POIS,
                 fanOutConcurrency = fanOutConcurrency,
                 tolerance = Duration.ZERO,
-                ipRateLimitPerMinute = TEST_IP_RATE_LIMIT_PER_MINUTE,
+                ipPoiLimitPerMinute = TEST_IP_POI_LIMIT_PER_MINUTE,
                 perPoiTimeout = perPoiTimeout,
                 streamTimeout = streamTimeout,
             ),
@@ -357,6 +380,11 @@ private class FakePoiAvailabilitySliceLookup(
             CRASHING_POI_ID -> throw RuntimeException("boom: unmapped failure")
             // A cancellation nobody asked for — what a provider's own `withTimeout` throws.
             STRAY_CANCELLATION_POI_ID -> throw CancellationException("not this read's caller")
+            // A blocking call in progress: nothing the caller does can cut it short.
+            STUCK_POI_ID -> {
+                withContext(NonCancellable) { delay(STUCK_READ_MS) }
+                simpleSlice(poiId)
+            }
             SLOW_POI_ID -> {
                 delay(SLOW_SLICE_DELAY_MS)
                 simpleSlice(poiId)

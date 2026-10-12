@@ -5,7 +5,9 @@ import ca.floo.roadtrip.client.VendorHttpDefaults
 import ca.floo.roadtrip.client.VendorHttpTransport
 import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.support.AspiraException
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -134,6 +136,9 @@ class HttpAspiraAvailabilityClient(
                 try {
                     httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
                 } catch (e: Exception) {
+                    // A caller that timed out or went away gets its cancellation back,
+                    // not an Aspira failure (VendorHttpTransport does the same).
+                    currentCoroutineContext().ensureActive()
                     throw AspiraException(
                         "aspira $label request failed for $target host=$host: ${e.javaClass.name}: ${e.message}",
                         httpStatus = null,

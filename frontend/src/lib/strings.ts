@@ -19,7 +19,7 @@
 // Anything that varies is a function, so a caller cannot assemble a sentence out
 // of fragments and get the word order wrong.
 
-import type { StayAvailabilityStatus, StayRefusalCode } from '@/api/availability-api';
+import { STAY_TIMEOUT_CODE, type StayAvailabilityStatus, type StayRefusalCode } from '@/api/availability-api';
 
 /**
  * What we call recreation.gov to users — the one name, matching the vendor's own
@@ -201,6 +201,7 @@ export const stayCopy = {
   summary: (range: string, withSite: number, full: number) => `${range} · ${withSite} with a site · ${full} full`,
   closed: (count: number) => `${count} closed for the season`,
   refused: (count: number) => `${count} not bookable for these dates`,
+  timedOutCount: (count: number) => `${count} too slow to answer`,
   unknown: (count: number) => `${count} unknown`,
   checkedAgo: (ago: string) => `Checked ${ago}`,
   throttled: 'Too many checks in a row — try again in a minute.',
@@ -211,8 +212,13 @@ export const stayCopy = {
   pending: 'Checking…',
   /** A card whose campground could not be asked. */
   error: "Couldn't check",
+  /** A card whose campground ran out of time: unlike `error`, asking again may well answer. */
+  timedOutLine: 'Too slow to answer — check again',
   /** A card's line for a failed answer: why, when the code says, else `error`. */
-  errorFor: (code: string) => (code in STAY_REFUSAL_COPY ? STAY_REFUSAL_COPY[code as StayRefusalCode] : stayCopy.error),
+  errorFor: (code: string) => {
+    if (code in STAY_REFUSAL_COPY) return STAY_REFUSAL_COPY[code as StayRefusalCode];
+    return code === STAY_TIMEOUT_CODE ? stayCopy.timedOutLine : stayCopy.error;
+  },
   /** A card's answer, by status; `open` is the count of sites open every night. */
   result: {
     open: (open: number) => `${open} sites open`,
