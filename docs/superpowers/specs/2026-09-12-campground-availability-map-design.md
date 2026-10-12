@@ -211,13 +211,12 @@ table, no refresh, no staleness.
   (Any + `tent`/`rv`/`cabin` labels); `GroupSizeStepper` (two icon `Button`s, clamped
   2..12, below the minimum turns the filter off; Storybook story); `Chip` per exposed amenity
   (`toilets`, `showers`, `water`, `pets_allowed` in a named const); the **Check availability**
-  `Banner` whose **Add dates** reveals two plain-text fields (`DateWindowFields`, Storybook
-  story) with ISO-only validation and a `YYYY-MM-DD` placeholder — not `type="date"`, because
-  `@lew-ds/lds-react`'s change wiring (`useChangeHandler` in `runtime.jsx`) fires on native
-  `input` events only for a fixed `TEXT_LIKE` set of input types, and `date` is in neither that
-  set nor the `change`-based one (select/checkbox/radio only), so a `type="date"` field would
-  never call `onChange`. A date-capable `@ui` field is a separate task. Save writes `dateWindow`
-  only and collapses to "Fri Sep 11 → Sun Sep 13 · 2 nights" with Edit and Clear. Labels for
+  `Banner` whose **Add dates** reveals `DateWindowFields` (Storybook story): a Start/End
+  `SegmentedControl` over one `MonthCalendar` range picker from `@ui`. Picking walks start →
+  end → start, choosing End first changes only the end, and days before today are disabled.
+  (It first shipped as two plain-text `YYYY-MM-DD` fields, because `@lew-ds/lds-react` never
+  calls `onChange` for `type="date"`; `@ui`'s `TextField` now relays those types.) Save writes
+  `dateWindow` only and collapses to "Fri Sep 11 → Sun Sep 13 · 2 nights" with Edit and Clear. Labels for
   kinds and amenities come from one table in `lib/campground-vocab.ts` mirroring the backend
   enums.
 - Copy in `lib/strings.ts` (`filterCopy`); CSS in `features/trip/topbar.css`, tokens only.

@@ -207,14 +207,17 @@ export const filterCopy = {
   checkTitle: 'Check availability',
   checkBody: 'Add dates to see which of these have a site.',
   addDates: 'Add dates',
-  startDate: 'Start date',
-  endDate: 'End date',
+  /** The Start/End control's group name: it says which end the next calendar pick sets. */
+  datePicking: 'Date to set',
+  /** "Start · Fri Sep 11", or "Start · not set". */
+  startSlot: (date: string | null) => `Start · ${date ?? 'not set'}`,
+  endSlot: (date: string | null) => `End · ${date ?? 'not set'}`,
   saveDates: 'Save',
   cancelDates: 'Cancel',
   editDates: 'Edit',
   clearDates: 'Clear',
-  endBeforeStart: 'The end date must be after the start date.',
-  dateFormat: 'Enter dates as YYYY-MM-DD.',
+  pickStart: 'Pick a start date',
+  pickEnd: 'Pick an end date',
   nights: (nights: number) => (nights === 1 ? '1 night' : `${nights} nights`),
   /** "Fri Sep 11 → Sun Sep 13 · 2 nights". */
   dateSummary: (start: string, end: string, nights: number) =>

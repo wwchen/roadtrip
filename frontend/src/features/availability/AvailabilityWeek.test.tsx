@@ -578,7 +578,7 @@ describe('the calendar popover', () => {
       screen.getByRole('button', { name: 'Pick a date' }).click();
     });
     await act(async () => {
-      screen.getByRole('button', { name: '24' }).click();
+      screen.getByRole('button', { name: 'Monday, August 24, 2026' }).click();
     });
 
     await waitFor(() =>
@@ -594,8 +594,8 @@ describe('the calendar popover', () => {
       screen.getByRole('button', { name: 'Pick a date' }).click();
     });
 
-    expect(screen.getByRole('button', { name: '9' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '11' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Sunday, August 9, 2026' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Tuesday, August 11, 2026' })).not.toBeDisabled();
   });
 
   // The ceiling is the provider's real horizon — 180 days on Recreation.gov, 183 on
@@ -612,9 +612,9 @@ describe('the calendar popover', () => {
       screen.getByRole('button', { name: 'Pick a date' }).click();
     });
 
-    expect(screen.getByRole('button', { name: '13' })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: '14' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '20' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Thursday, August 13, 2026' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Friday, August 14, 2026' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Thursday, August 20, 2026' })).toBeDisabled();
   });
 
   test('uses the POI detail’s horizon until the week lands, and none without either', async () => {
@@ -627,8 +627,8 @@ describe('the calendar popover', () => {
     await act(async () => {
       screen.getByRole('button', { name: 'Pick a date' }).click();
     });
-    expect(screen.getByRole('button', { name: '13' })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: '14' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Thursday, August 13, 2026' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Friday, August 14, 2026' })).toBeDisabled();
     unmount();
 
     render(
@@ -640,7 +640,7 @@ describe('the calendar popover', () => {
       screen.getByRole('button', { name: 'Pick a date' }).click();
     });
     // No horizon stated anywhere: an invented ceiling would be a guess.
-    expect(screen.getByRole('button', { name: '21' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Friday, August 21, 2026' })).not.toBeDisabled();
   });
 
   // A horizon less than a week past the earliest date puts the raw ceiling
@@ -655,8 +655,8 @@ describe('the calendar popover', () => {
       screen.getByRole('button', { name: 'Pick a date' }).click();
     });
 
-    expect(screen.getByRole('button', { name: '10' })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: '11' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Monday, August 10, 2026' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Tuesday, August 11, 2026' })).toBeDisabled();
   });
 });
 

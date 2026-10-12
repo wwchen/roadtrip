@@ -233,6 +233,13 @@ Non-negotiable, and the plan's Gotchas section has the full detail. The short ve
   none`. Read state from it; click the **label**. Browser drivers time out on the input.
 - An LDS toggle's visible `label` is a sibling of the switch, not the checkbox's
   accessible label. Always pass a matching `aria-label` to `Toggle`.
+- LDS never calls `onChange` for the date and time input types (`date`, `time`,
+  `datetime-local`, `month`, `week`): its change wiring relays only a fixed set of
+  text-like types. `@ui`'s `TextField` shadows the LDS one and relays those itself,
+  so import it from `@ui` — never from `@lew-ds/lds-react` — or a date pick is
+  silently dropped by the form mirroring it.
+- For a date *range*, use `MonthCalendar` from `@ui` (see
+  `features/trip/DateWindowFields.tsx`) rather than two date fields.
 
 ## Page shells
 

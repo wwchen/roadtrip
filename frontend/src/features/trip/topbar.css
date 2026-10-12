@@ -691,20 +691,26 @@
   gap: 6px;
 }
 
-.tb-dates-fields {
+/* Shrinks to the calendar's own width, so the Start/End control spans exactly
+   the grid it sets — the calendar owns that width, nothing here restates it. */
+.tb-dates-picker {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-}
-
-.tb-dates-error {
-  font-size: 11px;
-  color: var(--rt-error);
+  width: min-content;
 }
 
 .tb-dates-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.tb-dates-hint {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--rt-muted);
 }
 
 .tb-dates-summary {
