@@ -36,6 +36,18 @@ export type StayEntry = BulkPoiAvailabilityDto;
 export const BULK_AVAILABILITY_URL = '/api/pois/availability/bulk';
 
 /**
+ * The per-POI error codes that are a campground refusing the dates themselves —
+ * past its booking horizon, or before its first bookable day — rather than a
+ * failure to ask. The backend's `AvailabilityServiceError.BadDateWindow` codes.
+ */
+export const STAY_REFUSAL_CODES = ['beyond_booking_horizon', 'start_before_earliest'] as const;
+export type StayRefusalCode = (typeof STAY_REFUSAL_CODES)[number];
+
+export function isStayRefusal(code: string): code is StayRefusalCode {
+  return (STAY_REFUSAL_CODES as readonly string[]).includes(code);
+}
+
+/**
  * The provider's season block rides the wire unparsed, so `reopens_on` is
  * narrowed here rather than asserted at the one call site that reads it.
  */
@@ -77,6 +89,8 @@ export interface StayCheckRequest {
   end: string;
   siteType: CampsiteKind | null;
   groupSize: number | null;
+  /** Ask the providers again rather than answer from recent observations: a re-check. */
+  fresh: boolean;
 }
 
 /**
@@ -86,7 +100,7 @@ export interface StayCheckRequest {
  * `code` is `ip_throttled`.
  */
 export function checkStays(
-  { poiIds, start, end, siteType, groupSize }: StayCheckRequest,
+  { poiIds, start, end, siteType, groupSize, fresh }: StayCheckRequest,
   { signal }: RequestOptions = {},
 ): Promise<BulkAvailabilityResponseDto> {
   return jsonPostOk<BulkAvailabilityResponseDto>(
@@ -98,6 +112,7 @@ export function checkStays(
       site_type: siteType ? [siteType] : [],
       ...(groupSize ? { group_size: groupSize } : {}),
       view: 'summary',
+      ...(fresh ? { fresh: true } : {}),
     },
     { signal },
   );

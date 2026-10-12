@@ -2,7 +2,7 @@
 // requests, how a response becomes answers, and how answered cards are ordered
 // and counted. `useStayCheck` runs it; the list and the head read the results.
 import type { BulkAvailabilityResponseDto } from '@/api/generated/api-types';
-import type { StayAvailabilityStatus } from '@/api/availability-api';
+import { isStayRefusal, type StayAvailabilityStatus } from '@/api/availability-api';
 import type { StayResult } from '@/stores/stayCheckStore';
 
 const MS_PER_SECOND = 1000;
@@ -20,6 +20,49 @@ const UNCLASSIFIED_ERROR = 'unknown';
  * fit in too.
  */
 export const MAX_REQUESTS_PER_CHECK = 4;
+
+/**
+ * The longest one request of a check may take. The backend gives a provider's
+ * call no deadline the browser can see, so without one a stalled provider would
+ * leave the check running, and its button off, until the page was reloaded.
+ */
+export const CHECK_REQUEST_TIMEOUT_MS = 60_000;
+
+/** A request of a check that ran out of time, as opposed to one the caller cancelled. */
+export class StayCheckTimeout extends Error {
+  constructor() {
+    super('availability check request timed out');
+    this.name = 'StayCheckTimeout';
+  }
+}
+
+/**
+ * [request], given a signal that aborts when [parent] does or after [timeoutMs].
+ * Rejects with `StayCheckTimeout` when it was the time that ran out, and with the
+ * request's own error otherwise — a cancel included.
+ */
+export async function withDeadline<T>(
+  request: (signal: AbortSignal) => Promise<T>,
+  parent: AbortSignal,
+  timeoutMs: number,
+): Promise<T> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const cancel = (): void => controller.abort();
+  parent.addEventListener('abort', cancel);
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  try {
+    return await request(controller.signal);
+  } catch (error) {
+    throw timedOut && !parent.aborted ? new StayCheckTimeout() : error;
+  } finally {
+    clearTimeout(timer);
+    parent.removeEventListener('abort', cancel);
+  }
+}
 
 /** The ids split into at most [maxBatches] runs of near-equal size, order kept. */
 export function batchesOf(ids: readonly number[], maxBatches: number): number[][] {
@@ -99,6 +142,8 @@ export interface StayTallies {
   full: number;
   /** Shut for the season — a different message from booked up, so counted apart. */
   closed: number;
+  /** Refused the dates themselves: past their booking horizon, or too soon. */
+  refused: number;
   /** No data, or the check failed for it. */
   unknown: number;
   /** How many of the asked ids have answered. */
@@ -110,12 +155,15 @@ export function stayTallies(
   asked: readonly number[],
   results: Readonly<Record<number, StayResult>>,
 ): StayTallies {
-  const tallies: StayTallies = { withSite: 0, full: 0, closed: 0, unknown: 0, answered: 0 };
+  const tallies: StayTallies = { withSite: 0, full: 0, closed: 0, refused: 0, unknown: 0, answered: 0 };
   for (const id of asked) {
     const result = results[id];
     if (!result) continue;
     tallies.answered += 1;
-    if (result.kind === 'error') tallies.unknown += 1;
+    if (result.kind === 'error') {
+      if (isStayRefusal(result.code)) tallies.refused += 1;
+      else tallies.unknown += 1;
+    }
     else if (result.summary.status === 'open' || result.summary.status === 'few_left') tallies.withSite += 1;
     else if (result.summary.status === 'full') tallies.full += 1;
     else if (result.summary.status === 'closed_for_season') tallies.closed += 1;

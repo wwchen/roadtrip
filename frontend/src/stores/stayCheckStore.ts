@@ -24,7 +24,7 @@ export interface StayQuery {
 export type StayResult = { kind: 'summary'; summary: StaySummary } | { kind: 'error'; code: string };
 
 /** Why a check stopped before every campground answered. */
-export type StayCheckFailure = 'throttled' | 'failed';
+export type StayCheckFailure = 'throttled' | 'timed_out' | 'failed';
 
 export interface StayCheckState {
   /** The question the answers below belong to; null before any check. */

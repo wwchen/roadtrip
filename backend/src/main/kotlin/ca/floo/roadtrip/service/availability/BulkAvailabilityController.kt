@@ -29,6 +29,8 @@ internal data class BulkAvailabilityRequest(
     /** Campsites that sleep fewer are left out; null leaves capacity unchecked. */
     val groupSize: Int? = null,
     val view: BulkAvailabilityView = BulkAvailabilityView.CAMPSITES,
+    /** Answer only from observations [BulkAvailabilityConfig.freshTolerance] old or younger. */
+    val fresh: Boolean = false,
 )
 
 /**
@@ -67,7 +69,7 @@ internal class BulkAvailabilityController(
     )
 
     suspend fun availabilityForPois(request: BulkAvailabilityRequest): BulkAvailabilityResponseDto {
-        val freshAtOrAfter = Instant.now(clock).minus(config.tolerance)
+        val freshAtOrAfter = Instant.now(clock).minus(if (request.fresh) config.freshTolerance else config.tolerance)
         val gate = Semaphore(config.fanOutConcurrency)
 
         val entries =

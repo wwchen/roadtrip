@@ -17,6 +17,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -157,6 +158,33 @@ class BulkAvailabilityControllerTest {
     }
 
     @Test
+    fun `a fresh request only reuses observations younger than the fresh tolerance`() {
+        runBlocking {
+            val now = Instant.parse("2026-10-12T12:00:00Z")
+            val config =
+                BulkAvailabilityConfig(
+                    maxPois = TEST_MAX_POIS,
+                    fanOutConcurrency = TEST_FAN_OUT_CONCURRENCY,
+                    tolerance = Duration.ofHours(2),
+                    ipRateLimitPerMinute = TEST_IP_RATE_LIMIT_PER_MINUTE,
+                    freshTolerance = Duration.ofMinutes(1),
+                )
+            val recorder = CutoffRecorder()
+            val controller =
+                BulkAvailabilityController(
+                    sliceLookup = FakePoiAvailabilitySliceLookup(recorder),
+                    config = config,
+                    clock = Clock.fixed(now, ZoneOffset.UTC),
+                )
+
+            controller.availabilityForPois(request(poiIds = listOf(2L)))
+            controller.availabilityForPois(request(poiIds = listOf(2L), fresh = true))
+
+            assertEquals(listOf(now.minus(Duration.ofHours(2)), now.minus(Duration.ofMinutes(1))), recorder.cutoffs)
+        }
+    }
+
+    @Test
     fun `every poi in one fan out is measured against the same freshness cutoff`() {
         runBlocking {
             val recorder = CutoffRecorder()
@@ -200,6 +228,7 @@ private fun request(
     siteTypes: List<CampsiteKind> = emptyList(),
     groupSize: Int? = null,
     view: BulkAvailabilityView = BulkAvailabilityView.CAMPSITES,
+    fresh: Boolean = false,
 ): BulkAvailabilityRequest =
     BulkAvailabilityRequest(
         poiIds = poiIds,
@@ -209,6 +238,7 @@ private fun request(
         siteTypes = siteTypes,
         groupSize = groupSize,
         view = view,
+        fresh = fresh,
     )
 
 /** Captures each `freshAtOrAfter` the controller hands to the fake, one per POI resolved. */

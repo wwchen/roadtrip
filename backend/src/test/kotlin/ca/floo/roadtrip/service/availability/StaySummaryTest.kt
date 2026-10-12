@@ -65,6 +65,23 @@ class StaySummaryTest {
     }
 
     @Test
+    fun `a stay that runs into the season's closure is closed, not full`() {
+        // Taken the first night, closed from the second: the campground shuts mid-stay.
+        val closing = listOf(AvailabilityStatus.RESERVED, AvailabilityStatus.CLOSED)
+        assertEquals(
+            StayAvailabilityStatus.CLOSED_FOR_SEASON,
+            slice(site(1) to closing, site(2) to closing).staySummary().status,
+        )
+    }
+
+    @Test
+    fun `one site closed among taken ones is full, not a season closure`() {
+        val taken = listOf(AvailabilityStatus.RESERVED, AvailabilityStatus.RESERVED)
+        val closed = listOf(AvailabilityStatus.CLOSED, AvailabilityStatus.CLOSED)
+        assertEquals(StayAvailabilityStatus.FULL, slice(site(1) to taken, site(2) to closed).staySummary().status)
+    }
+
+    @Test
     fun `a stay the provider answered for no night of is no data, not full`() {
         // An unobserved night reads as unknown, the same as one observed unknown.
         val summary = slice(site(1) to emptyList(), site(2) to listOf(AvailabilityStatus.UNKNOWN)).staySummary()

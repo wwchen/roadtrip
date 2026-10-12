@@ -1173,6 +1173,10 @@ describe('the in-view list', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Monday, September 14, 2026' }));
       expect(screen.getByRole('button', { name: 'Check availability' })).toBeDisabled();
       expect(screen.getByRole('status')).toHaveTextContent('Too many checks in a row — try again in a minute.');
+
+      // With the dates cleared there is no button, and so nothing for the note to explain.
+      fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+      expect(screen.queryByRole('status')).toBeNull();
     });
 
     test('with nothing in view checkable, the button says why it is off', async () => {
@@ -1197,6 +1201,35 @@ describe('the in-view list', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
 
       await waitFor(() => expect(screen.getByText('Not bookable this far ahead yet')).toBeInTheDocument());
+      // Counted as a refusal in the head, not lumped in with the unknowns.
+      expect(screen.getByText(/· 1 not bookable for these dates/)).toBeInTheDocument();
+      expect(screen.queryByText(/unknown/)).toBeNull();
+    });
+
+    test('Check again asks the providers afresh; the first check does not', async () => {
+      bulkAvailability = () => json({ pois: [{ poi_id: 21, summary: { status: 'full', open_sites: 0, checked_sites: 132 } }] });
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+
+      await waitFor(() => expect(bulkBodies).toHaveLength(2));
+      expect(bulkBodies[0]).not.toHaveProperty('fresh');
+      expect(bulkBodies[1]).toMatchObject({ fresh: true });
+    });
+
+    test('below the zoom gate the button waits without claiming nothing is checkable', () => {
+      useMapStore.setState({ viewport: { bbox: [-130, 30, -110, 50], zoom: 4 }, campgroundsRequested: false });
+      mount();
+
+      pickStay();
+
+      expect(screen.getByRole('button', { name: 'Check availability' })).toBeDisabled();
+      expect(screen.queryByRole('status')).toBeNull();
     });
 
     test('new site filters mid-check stop it, and its late answers land nowhere', async () => {

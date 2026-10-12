@@ -1,7 +1,7 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { BulkAvailabilityResponseDto, StayAvailabilityStatus } from '@/api/generated/api-types';
 import type { StayResult } from '@/stores/stayCheckStore';
-import { batchesOf, observedAtOf, rankByStay, resultsOf, stayTallies } from './stay-check';
+import { batchesOf, observedAtOf, rankByStay, resultsOf, StayCheckTimeout, stayTallies, withDeadline } from './stay-check';
 
 const summary = (status: StayAvailabilityStatus, openSites = 0): StayResult => ({
   kind: 'summary',
@@ -97,6 +97,52 @@ describe('stayTallies', () => {
       99: summary('open', 3),
     };
 
-    expect(stayTallies([1, 2, 3, 4, 5, 6, 7], results)).toEqual({ withSite: 2, full: 1, closed: 1, unknown: 2, answered: 6 });
+    expect(stayTallies([1, 2, 3, 4, 5, 6, 7, 8], { ...results, 8: { kind: 'error', code: 'beyond_booking_horizon' } })).toEqual({
+      withSite: 2,
+      full: 1,
+      closed: 1,
+      refused: 1,
+      unknown: 2,
+      answered: 7,
+    });
+  });
+});
+
+describe('withDeadline', () => {
+  afterEach(() => vi.useRealTimers());
+
+  /** A request that never answers, and rejects the way fetch does once its signal aborts. */
+  const stalled = (signal: AbortSignal) =>
+    new Promise<never>((_, reject) =>
+      signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))),
+    );
+
+  test('a request that outlives the deadline is aborted and reported as a timeout', async () => {
+    vi.useFakeTimers();
+    const pending = withDeadline(stalled, new AbortController().signal, 1_000);
+    const outcome = pending.catch((error: unknown) => error);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(await outcome).toBeInstanceOf(StayCheckTimeout);
+  });
+
+  test("a cancel is the caller's own abort, not a timeout", async () => {
+    vi.useFakeTimers();
+    const parent = new AbortController();
+    const outcome = withDeadline(stalled, parent.signal, 1_000).catch((error: unknown) => error);
+
+    parent.abort();
+
+    const error = await outcome;
+    expect(error).not.toBeInstanceOf(StayCheckTimeout);
+    expect((error as DOMException).name).toBe('AbortError');
+  });
+
+  test('an answer in time is returned, and leaves no timer behind', async () => {
+    vi.useFakeTimers();
+
+    await expect(withDeadline(async () => 'answer', new AbortController().signal, 1_000)).resolves.toBe('answer');
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

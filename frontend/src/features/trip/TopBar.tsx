@@ -86,12 +86,13 @@ export function TopBar({ alerts }: TopBarProps) {
   const inView = useInViewCampgrounds({ paused: showRoute });
   // What the availability check asks about: the cards on screen that a provider
   // can answer for. The 50-card slice, not every match — those are what the user
-  // is looking at, and what the endpoint's per-request cap allows.
+  // is looking at, and what the endpoint's per-request cap allows. Null until the
+  // list is ready, so a list still loading does not read as "nothing checkable".
   const checkableIds = useMemo(
     () =>
       inView.list.kind === 'ready'
         ? inView.list.cards.filter((card) => card.checkable).map((card) => card.summary.id)
-        : [],
+        : null,
     [inView.list],
   );
 

@@ -4,9 +4,7 @@ import ca.floo.roadtrip.model.api.BulkPoiSummaryDto
 import ca.floo.roadtrip.model.api.StayAvailabilityStatus
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.Campsite
-import ca.floo.roadtrip.service.api.StreamWindowState
 import ca.floo.roadtrip.service.api.campsiteWindowStatuses
-import ca.floo.roadtrip.service.api.classifyStreamWindowState
 
 /** A campground with at most this many campsites open for the whole stay reads as "few left". */
 internal const val FEW_LEFT_MAX_SITES = 2
@@ -31,8 +29,10 @@ internal fun List<Campsite>.fittingGroup(groupSize: Int?): List<Campsite> {
  * provider said anything about are judged — one it said nothing about is not in
  * the answer — and the stay is:
  *
- * - closed for the season, when every one of them is closed every night (the
- *   fused week's own rule);
+ * - closed for the season, when every one of them is closed on at least one
+ *   night: the season ends, or has not begun, within the stay. A stay that runs
+ *   into the closure cannot be had whole, and "full" would send someone hunting
+ *   for a cancellation that will never come;
  * - full, when every one of them has a night that rules it out — taken, closed,
  *   walk-up only;
  * - otherwise no data: some site has nights the provider left unanswered and no
@@ -57,8 +57,7 @@ internal fun PoiAvailabilitySlice.staySummary(): BulkPoiSummaryDto {
             openSites > FEW_LEFT_MAX_SITES -> StayAvailabilityStatus.OPEN
             openSites > 0 -> StayAvailabilityStatus.FEW_LEFT
             answered.isEmpty() -> StayAvailabilityStatus.NO_DATA
-            answered.all { classifyStreamWindowState(it) == StreamWindowState.CLOSED_FOR_SEASON } ->
-                StayAvailabilityStatus.CLOSED_FOR_SEASON
+            answered.all { nights -> AvailabilityStatus.CLOSED in nights } -> StayAvailabilityStatus.CLOSED_FOR_SEASON
             answered.all { nights -> nights.any { it.rulesOutStay } } -> StayAvailabilityStatus.FULL
             else -> StayAvailabilityStatus.NO_DATA
         }

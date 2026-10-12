@@ -10,8 +10,15 @@ import java.time.Duration
 data class BulkAvailabilityConfig(
     val maxPois: Int,
     val fanOutConcurrency: Int,
+    /** How old a stored observation may be and still answer, rather than asking the provider again. */
     val tolerance: Duration,
     val ipRateLimitPerMinute: Int,
+    /**
+     * [tolerance] for a request that asks for fresh data (`fresh: true`, the map's
+     * Check again). Short rather than zero, so a double-click does not ask every
+     * provider twice; never longer than [tolerance], which it defaults down to.
+     */
+    val freshTolerance: Duration = minOf(tolerance, Duration.ofSeconds(DEFAULT_FRESH_TOLERANCE_SECONDS)),
 ) {
     init {
         require(maxPois >= 1) { "bulk max-pois must be >= 1 (got $maxPois)" }
@@ -19,6 +26,9 @@ data class BulkAvailabilityConfig(
         require(!tolerance.isNegative) { "bulk tolerance must not be negative (got $tolerance)" }
         require(ipRateLimitPerMinute >= 1) {
             "bulk ip-rate-limit-per-minute must be >= 1 (got $ipRateLimitPerMinute)"
+        }
+        require(!freshTolerance.isNegative && freshTolerance <= tolerance) {
+            "bulk fresh-tolerance must be between 0 and tolerance ($tolerance) (got $freshTolerance)"
         }
     }
 
@@ -32,6 +42,7 @@ data class BulkAvailabilityConfig(
         private const val DEFAULT_FAN_OUT_CONCURRENCY = 3
         private const val DEFAULT_TOLERANCE_HOURS = 2L
         private const val DEFAULT_IP_RATE_LIMIT_PER_MINUTE = 10
+        private const val DEFAULT_FRESH_TOLERANCE_SECONDS = 60L
 
         val default =
             BulkAvailabilityConfig(
@@ -39,6 +50,7 @@ data class BulkAvailabilityConfig(
                 fanOutConcurrency = DEFAULT_FAN_OUT_CONCURRENCY,
                 tolerance = Duration.ofHours(DEFAULT_TOLERANCE_HOURS),
                 ipRateLimitPerMinute = DEFAULT_IP_RATE_LIMIT_PER_MINUTE,
+                freshTolerance = Duration.ofSeconds(DEFAULT_FRESH_TOLERANCE_SECONDS),
             )
 
         fun fromConfig(config: ConfigSection): BulkAvailabilityConfig =
@@ -49,6 +61,7 @@ data class BulkAvailabilityConfig(
                 ipRateLimitPerMinute =
                     config.value("ip-rate-limit-per-minute")?.toInt()
                         ?: default.ipRateLimitPerMinute,
+                freshTolerance = config.duration("fresh-tolerance", default.freshTolerance),
             )
     }
 }

@@ -251,6 +251,7 @@ one control that talks to booking providers, and a date tweak should not fan out
 |---|---|---|
 | `view` | `BulkAvailabilityView`: `campsites` (default) \| `summary` | what each entry carries |
 | `group_size` | `Int?` | keep campsites with `max_people >= group_size` **or no stated capacity** (no data is not a miss, as in the M2 filter); applies to both views; `< 1` is `400 bad_group_size` |
+| `fresh` | `Boolean` (default false) | answer only from observations at most `bulk.fresh-tolerance` (1 m) old instead of `bulk.tolerance` (2 h), asking the providers again for the rest — the map's Check again |
 
 Under `summary` each entry carries `summary: BulkPoiSummaryDto` instead of `campsites`
 (an error entry still carries only `error`):
@@ -263,7 +264,9 @@ Under `summary` each entry carries `summary: BulkPoiSummaryDto` instead of `camp
 | `cache` | the batch's cache block, so the client can say how old the answer is |
 
 With nothing open, only the campsites the provider said anything about are judged: the status
-is `closed_for_season` when every one is closed every night (the fused week's own rule),
+is `closed_for_season` when every one is closed on at least one night (the season ends, or has
+not begun, within the stay — it cannot be had whole, and "full" would send someone hunting for a
+cancellation),
 `full` when every one has a night that rules it out (taken, closed, walk-up only), and
 otherwise `no_data` — some site has unanswered nights and none against it, so it may be open
 (a stay running into a month the provider did not return). No site matched, or no night
@@ -273,8 +276,8 @@ the week grid fuses; the browser renders the word it is given.
 The endpoint's per-IP limit (10/min) keys on `origin.remoteHost`, which behind a proxy would be
 the proxy for every caller. Ktor's `XForwardedHeaders` plugin, with a handler that takes only the
 address, makes it `callerFromForwardedFor`: the rightmost `X-Forwarded-For` entry past
-private-network hops — what the edge proxy appended, however many inner hops follow it, and never
-anything a caller wrote. Scheme, host and port are not taken from the headers. The backend names
+private-network hops, compared without a port — what the edge proxy appended, however many inner
+hops follow it, and never anything a caller wrote. Scheme, host and port are not taken from the headers. The backend names
 no proxy or vendor; it relies only on every request arriving through a proxy that appends its
 peer, which holds while no backend port is published (outside production a bypassable limit is
 fine).
@@ -286,14 +289,17 @@ the summary is about every night of the window, so a shorter run would be a diff
 
 - **The check** (`features/trip/useStayCheck.ts`, pure half in `stay-check.ts`). It asks
   about the in-view cards (the ≤50 rendered) that are `availability_supported`, in at most
-  `MAX_REQUESTS_PER_CHECK` = 4 sequential requests, so cards fill in batch by batch and a
-  check stays well inside the endpoint's per-IP limit. Sequential, because the backend fans
+  `MAX_REQUESTS_PER_CHECK` = 4 sequential requests, each given `CHECK_REQUEST_TIMEOUT_MS`
+  (60 s) before the check stops as timed out. The first check answers from recent
+  observations; **Check again** of the same question sends `fresh: true`. Batching fills the
+  cards in batch by batch and keeps a check well inside the endpoint's per-IP limit. Sequential, because the backend fans
   each request out against a small connection pool. A throttled request (`ip_throttled`)
   stops the check; what landed stays, and the button stays disabled for a minute
   (`THROTTLE_COOLDOWN_MS`, one timer at the deadline — `useBefore`), through a change of dates
   too, since the limit is per caller. Why the button is off — that cooldown, a check that
-  stopped, or nothing in view a provider can answer for — is said beside it, so a folded list
-  cannot hide it.
+  stopped or timed out, or nothing in the loaded list a provider can answer for (not said
+  while the list is still loading or zoomed out) — is said beside it, so a folded list cannot
+  hide it; with no dates there is no button and no note.
 - **State** (`stores/stayCheckStore.ts`): the question asked (`StayQuery`: dates, site
   type, group size), the ids asked, each answer, whether it is running, and when the
   oldest answer was observed. Answers show only while the question matches the current
@@ -303,8 +309,9 @@ the summary is about every night of the window, so a shorter run would be a diff
   its answer); the head reads "Checking 5 of 13…". Once back, cards sort by status (open,
   few left, full, closed, no data, couldn't check, not asked), then most open sites, then
   arrival order (`rankByStay`), and the head reads "Fri Sep 11 → Sun Sep 13 · 8 with a site
-  · 1 full · 4 closed for the season · 2 unknown · Checked 4m ago" — closed counted apart from
-  booked up, and the age is the stalest answer's, not the click's.
+  · 1 full · 4 closed for the season · 3 not bookable for these dates · 2 unknown · Checked 4m
+  ago" — closed counted apart from booked up, refusals (`STAY_REFUSAL_CODES`) apart from
+  outages, and the age is the stalest answer's, not the click's.
 - **Card lines**: "8 sites open", "2 sites left", "Full", "Closed for the season", "No data
   for these dates", coloured by the `--rt-stay-*` roles. A per-POI refusal says why when its
   code does ("Not bookable this far ahead yet" for `beyond_booking_horizon`, "Too soon to book

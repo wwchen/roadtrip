@@ -18,7 +18,15 @@ import {
   type StayQuery,
   type StayResult,
 } from '@/stores/stayCheckStore';
-import { batchesOf, MAX_REQUESTS_PER_CHECK, observedAtOf, resultsOf } from './stay-check';
+import {
+  batchesOf,
+  CHECK_REQUEST_TIMEOUT_MS,
+  MAX_REQUESTS_PER_CHECK,
+  observedAtOf,
+  resultsOf,
+  StayCheckTimeout,
+  withDeadline,
+} from './stay-check';
 
 /** The bulk endpoint's code for a caller over its per-IP limit. */
 const THROTTLED_CODE = 'ip_throttled';
@@ -81,12 +89,22 @@ export interface StayCheckControl {
   coolingDown: boolean;
   /** Why the current question's check stopped early, if it did. */
   failure: StayCheckFailure | null;
-  /** True when there is a stay to ask about but nothing in view a provider can answer for. */
+  /**
+   * True when there is a stay to ask about and the list in view has loaded, but
+   * nothing in it a provider can answer for. False while the list is still on its
+   * way, or zoomed out past it — that is not "nothing checkable".
+   */
   nothingToCheck: boolean;
   check: () => void;
 }
 
-export function useStayCheck(checkableIds: readonly number[]): StayCheckControl {
+/**
+ * [checkableIds] is null while the in-view list is not ready (loading, zoomed
+ * out, or switched off), and the ids of its cards a provider can answer for once
+ * it is. Checking again — the same question, already answered — asks the
+ * providers afresh rather than answering from recent observations.
+ */
+export function useStayCheck(checkableIds: readonly number[] | null): StayCheckControl {
   const query = useCurrentStayQuery();
   const current = useCurrentStayCheck();
   const { begin, record, finish, reset } = useStayCheckStore(
@@ -115,15 +133,19 @@ export function useStayCheck(checkableIds: readonly number[]): StayCheckControl 
     [],
   );
 
-  const run = useCallback(async () => {
-    if (query === null || checkableIds.length === 0) return;
+  const run = useCallback(async (fresh: boolean) => {
+    if (query === null || checkableIds === null || checkableIds.length === 0) return;
     inFlight.current?.abort();
     const controller = new AbortController();
     inFlight.current = controller;
     begin(query, checkableIds);
     try {
       for (const batch of batchesOf(checkableIds, MAX_REQUESTS_PER_CHECK)) {
-        const response = await checkStays({ ...query, poiIds: batch }, { signal: controller.signal });
+        const response = await withDeadline(
+          (signal) => checkStays({ ...query, poiIds: batch, fresh }, { signal }),
+          controller.signal,
+          CHECK_REQUEST_TIMEOUT_MS,
+        );
         if (controller.signal.aborted) return;
         record(resultsOf(response), observedAtOf(response, Date.now()));
       }
@@ -133,20 +155,21 @@ export function useStayCheck(checkableIds: readonly number[]): StayCheckControl 
       if (error instanceof HttpError && error.code === THROTTLED_CODE) {
         finish('throttled', Date.now() + THROTTLE_COOLDOWN_MS);
       } else {
-        finish('failed');
+        finish(error instanceof StayCheckTimeout ? 'timed_out' : 'failed');
       }
     } finally {
       if (inFlight.current === controller) inFlight.current = null;
     }
   }, [query, checkableIds, begin, record, finish]);
 
+  const checked = current !== null && !current.running;
   return {
-    canCheck: query !== null && checkableIds.length > 0 && !coolingDown,
+    canCheck: query !== null && checkableIds !== null && checkableIds.length > 0 && !coolingDown,
     running: current?.running ?? false,
-    checked: current !== null && !current.running,
+    checked,
     coolingDown,
     failure: current?.failure ?? null,
-    nothingToCheck: query !== null && checkableIds.length === 0,
-    check: () => void run(),
+    nothingToCheck: query !== null && checkableIds !== null && checkableIds.length === 0,
+    check: () => void run(checked),
   };
 }

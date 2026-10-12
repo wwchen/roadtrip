@@ -19,12 +19,30 @@ private const val ULA_FIRST_BYTE = 0xFC
  * on what the edge saw however many inner hops there are, and never on anything
  * a caller wrote to the left of it. With no edge in front — local, tests —
  * there is no such entry, and the caller is the socket's peer.
+ *
+ * Entries are compared without a port (`hostAddressOf`), so a proxy that writes
+ * `10.0.0.2:51234` is still skipped as private, and a caller's key does not
+ * change with every connection's source port.
  */
 fun callerFromForwardedFor(chain: String?): String? =
     chain
         ?.split(',')
-        ?.map { it.trim() }
+        ?.map { hostAddressOf(it.trim()) }
         ?.lastOrNull { it.isNotEmpty() && !isPrivateNetworkLiteral(it) }
+
+/**
+ * [entry] without a port: `[2001:db8::1]:443` → `2001:db8::1`, `203.0.113.7:4711`
+ * → `203.0.113.7`. A bare IPv6 literal has several colons and no port to strip,
+ * and anything else is returned as it was.
+ */
+fun hostAddressOf(entry: String): String {
+    if (entry.startsWith('[')) {
+        val close = entry.indexOf(']')
+        return if (close > 0) entry.substring(1, close) else entry
+    }
+    val colon = entry.indexOf(':')
+    return if (colon > 0 && colon == entry.lastIndexOf(':')) entry.substring(0, colon) else entry
+}
 
 /**
  * Whether [value] is an IP address literal in a loopback, private, link-local or

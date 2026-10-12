@@ -18,7 +18,7 @@ enum class StayAvailabilityStatus {
     @SerialName("full")
     FULL,
 
-    /** Every site is closed for every night: the campground is shut for the season. */
+    /** Every site is closed on some night of the stay: the season ends, or has not begun, within it. */
     @SerialName("closed_for_season")
     CLOSED_FOR_SEASON,
 

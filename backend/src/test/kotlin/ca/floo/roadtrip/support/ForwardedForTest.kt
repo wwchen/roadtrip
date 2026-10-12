@@ -16,6 +16,20 @@ class ForwardedForTest {
     }
 
     @Test
+    fun `ports are dropped, so a private hop with one is still skipped and a caller keeps one key`() {
+        assertEquals("203.0.113.7", callerFromForwardedFor("203.0.113.7:4711, 10.0.0.2:51234"))
+        assertEquals("2001:db8::7", callerFromForwardedFor("[2001:db8::7]:443, [fd00::1]:8080"))
+    }
+
+    @Test
+    fun `an entry's port is dropped and a bare IPv6 literal is left alone`() {
+        assertEquals("203.0.113.7", hostAddressOf("203.0.113.7:4711"))
+        assertEquals("2001:db8::1", hostAddressOf("[2001:db8::1]:443"))
+        assertEquals("2001:db8::1", hostAddressOf("2001:db8::1"))
+        assertEquals("unknown", hostAddressOf("unknown"))
+    }
+
+    @Test
     fun `with only private hops, or no header, there is no forwarded caller`() {
         assertNull(callerFromForwardedFor("10.0.0.2, 192.168.1.4"))
         assertNull(callerFromForwardedFor(" , "))

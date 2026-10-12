@@ -19,7 +19,7 @@
 // Anything that varies is a function, so a caller cannot assemble a sentence out
 // of fragments and get the word order wrong.
 
-import type { StayAvailabilityStatus } from '@/api/availability-api';
+import type { StayAvailabilityStatus, StayRefusalCode } from '@/api/availability-api';
 
 /**
  * What we call recreation.gov to users — the one name, matching the vendor's own
@@ -181,9 +181,9 @@ export const listCopy = {
 
 /**
  * What a card says when its campground refused the stay itself, by the code it
- * refused with. A code not listed here is an outage, and reads as `stayCopy.error`.
+ * refused with. Any other code is an outage, and reads as `stayCopy.error`.
  */
-const STAY_REFUSAL_COPY: Readonly<Record<string, string>> = {
+const STAY_REFUSAL_COPY: Readonly<Record<StayRefusalCode, string>> = {
   beyond_booking_horizon: 'Not bookable this far ahead yet',
   start_before_earliest: 'Too soon to book online',
 };
@@ -200,17 +200,19 @@ export const stayCopy = {
   /** The list head once it is back: "Mon Oct 12 → Wed Oct 14 · 8 with a site · 5 full", then any closed and unknown. */
   summary: (range: string, withSite: number, full: number) => `${range} · ${withSite} with a site · ${full} full`,
   closed: (count: number) => `${count} closed for the season`,
+  refused: (count: number) => `${count} not bookable for these dates`,
   unknown: (count: number) => `${count} unknown`,
   checkedAgo: (ago: string) => `Checked ${ago}`,
   throttled: 'Too many checks in a row — try again in a minute.',
   noneCheckable: 'None of the campgrounds in view can be checked online.',
   failed: 'The check stopped part way. Try again.',
+  timedOut: 'The booking sites took too long to answer. Try again.',
   /** A card still waiting for its batch. */
   pending: 'Checking…',
   /** A card whose campground could not be asked. */
   error: "Couldn't check",
   /** A card's line for a failed answer: why, when the code says, else `error`. */
-  errorFor: (code: string) => STAY_REFUSAL_COPY[code] ?? stayCopy.error,
+  errorFor: (code: string) => (code in STAY_REFUSAL_COPY ? STAY_REFUSAL_COPY[code as StayRefusalCode] : stayCopy.error),
   /** A card's answer, by status; `open` is the count of sites open every night. */
   result: {
     open: (open: number) => `${open} sites open`,

@@ -29,9 +29,6 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import java.time.LocalDate
 
-/** `min_nights` when a request leaves it out: one night, i.e. no run-length filter. */
-private const val DEFAULT_MIN_NIGHTS = 1
-
 /**
  * Every wire code [validated] can throw via `require`/`error`. A
  * [RouteBodyResult.Invalid] whose detail isn't one of these came from
@@ -105,7 +102,9 @@ internal fun Route.bulkAvailabilityRoutes(
                         "it, and `min_nights` other than 1 is refused as `bad_min_nights`. Either way " +
                         "an entry can instead carry an error code: a POI failing never fails the request. " +
                         "`group_size` keeps campsites that sleep at least that many, and those with no " +
-                        "stated capacity. `site_type` accepts: $siteTypeWireList.",
+                        "stated capacity. `fresh: true` answers only from observations at most " +
+                        "${config.freshTolerance} old, asking the providers again for the rest. " +
+                        "`site_type` accepts: $siteTypeWireList.",
             ).access(RouteAccess.Anonymous)
         }
     }
@@ -119,7 +118,9 @@ private fun BulkAvailabilityRequestDto.validated(
     require(poiIds.size <= config.maxPois) { "too_many_pois" }
     require(minNights >= 1) { "bad_min_nights" }
     // A stay's summary is over every night of it; a shorter run would be a different question.
-    require(view != BulkAvailabilityView.SUMMARY || minNights == DEFAULT_MIN_NIGHTS) { "bad_min_nights" }
+    require(view != BulkAvailabilityView.SUMMARY || minNights == BulkAvailabilityRequestDto.DEFAULT_MIN_NIGHTS) {
+        "bad_min_nights"
+    }
     require(groupSize == null || groupSize >= 1) { "bad_group_size" }
     // Both dates are required: with either left null each POI would resolve its own
     // default window from its own centroid timezone, so run lengths would no longer
@@ -139,6 +140,7 @@ private fun BulkAvailabilityRequestDto.validated(
         siteTypes = siteTypes,
         groupSize = groupSize,
         view = view,
+        fresh = fresh,
     )
 }
 

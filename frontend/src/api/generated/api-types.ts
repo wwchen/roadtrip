@@ -280,6 +280,7 @@ export interface BulkAvailabilityRequestDto {
   site_type?: string[];
   group_size?: number;
   view?: BulkAvailabilityView;
+  fresh?: boolean;
 }
 
 export interface BulkAvailabilityResponseDto {

@@ -23,8 +23,8 @@ export interface FilterPanelProps {
   onToggle: () => void;
   totalInBoundary: number;
   totalMatching: number;
-  /** The campgrounds in view that can be checked online: what the check asks about. */
-  checkableIds: readonly number[];
+  /** The campgrounds in view that can be checked online, or null while the list is not ready. */
+  checkableIds: readonly number[] | null;
 }
 
 export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching, checkableIds }: FilterPanelProps) {
@@ -94,8 +94,9 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching, ch
               ) : null
             }
           />
-          {/* Beside the button it explains, so a folded results list cannot hide why it is off. */}
-          <CheckNote control={stayCheck} />
+          {/* Beside the button it explains, so a folded results list cannot hide why it is off;
+              with no dates there is no button, and nothing to explain. */}
+          {dateWindow ? <CheckNote control={stayCheck} /> : null}
         </div>
       ) : null}
     </div>
@@ -115,6 +116,7 @@ function checkLabel({ running, checked }: StayCheckControl): string {
 function CheckNote({ control: { running, coolingDown, failure, nothingToCheck } }: { control: StayCheckControl }) {
   if (running) return null;
   if (coolingDown || failure === 'throttled') return <span className="tb-check-note tb-check-note--error" role="status">{stayCopy.throttled}</span>;
+  if (failure === 'timed_out') return <span className="tb-check-note tb-check-note--error" role="status">{stayCopy.timedOut}</span>;
   if (failure === 'failed') return <span className="tb-check-note tb-check-note--error" role="status">{stayCopy.failed}</span>;
   if (nothingToCheck) return <span className="tb-check-note" role="status">{stayCopy.noneCheckable}</span>;
   return null;
