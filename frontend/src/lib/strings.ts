@@ -19,6 +19,8 @@
 // Anything that varies is a function, so a caller cannot assemble a sentence out
 // of fragments and get the word order wrong.
 
+import type { StayAvailabilityStatus } from '@/api/availability-api';
+
 /**
  * What we call recreation.gov to users — the one name, matching the vendor's own
  * branding and the `booking_system` the backend serves. Two names for one vendor
@@ -175,6 +177,35 @@ export const listCopy = {
   layerOffBody: (inView: number) =>
     `There are ${inView} in view — the Campgrounds layer is turned off, so none are drawn.`,
   layerOffAction: 'Turn campgrounds back on',
+} as const;
+
+/** The availability check (M3): its button, its progress, and each card's answer. */
+export const stayCopy = {
+  check: 'Check availability',
+  checkAgain: 'Check again',
+  checking: 'Checking…',
+  /** The list head while a check runs: "Checking 5 of 13…". */
+  progress: (answered: number, asked: number) => `Checking ${answered} of ${asked}…`,
+  /** "Mon Oct 12 → Wed Oct 14", from the two dates already formatted. */
+  range: (start: string, end: string) => `${start} → ${end}`,
+  /** The list head once it is back: "Mon Oct 12 → Wed Oct 14 · 8 with a site · 5 full". */
+  summary: (range: string, withSite: number, full: number) => `${range} · ${withSite} with a site · ${full} full`,
+  unknown: (count: number) => `${count} unknown`,
+  checkedAgo: (ago: string) => `Checked ${ago}`,
+  throttled: 'Too many checks in a row — try again in a minute.',
+  failed: 'The check stopped part way. Try again.',
+  /** A card still waiting for its batch. */
+  pending: 'Checking…',
+  /** A card whose campground could not be asked. */
+  error: "Couldn't check",
+  /** A card's answer, by status; `open` is the count of sites open every night. */
+  result: {
+    open: (open: number) => `${open} sites open`,
+    few_left: (open: number) => (open === 1 ? '1 site left' : `${open} sites left`),
+    full: () => 'Full',
+    closed_for_season: () => 'Closed for the season',
+    no_data: () => 'No data for these dates',
+  } satisfies Record<StayAvailabilityStatus, (open: number) => string>,
 } as const;
 
 /** The campground filter block under the search row, and the cards' facet row. */

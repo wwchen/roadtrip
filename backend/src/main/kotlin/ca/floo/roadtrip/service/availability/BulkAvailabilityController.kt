@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.model.api.BulkAvailabilityResponseDto
+import ca.floo.roadtrip.model.api.BulkAvailabilityView
 import ca.floo.roadtrip.model.api.BulkPoiAvailabilityDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.CampsiteKind
@@ -25,6 +26,9 @@ internal data class BulkAvailabilityRequest(
     val endDate: LocalDate?,
     val minNights: Int,
     val siteTypes: List<CampsiteKind>,
+    /** Campsites that sleep fewer are left out; null leaves capacity unchecked. */
+    val groupSize: Int? = null,
+    val view: BulkAvailabilityView = BulkAvailabilityView.CAMPSITES,
 )
 
 /**
@@ -81,16 +85,20 @@ internal class BulkAvailabilityController(
         freshAtOrAfter: Instant,
     ): BulkPoiAvailabilityDto =
         try {
-            rank(
+            val slice =
                 sliceLookup.poiAvailabilitySlice(
                     poiId = poiId,
                     siteTypes = request.siteTypes,
                     startDate = request.startDate,
                     endDate = request.endDate,
                     freshAtOrAfter = freshAtOrAfter,
-                ),
-                request.minNights,
-            )
+                )
+            // Narrowed once, here, so both views answer over the same campsites.
+            val fitting = slice.copy(campsites = slice.campsites.fittingGroup(request.groupSize))
+            when (request.view) {
+                BulkAvailabilityView.CAMPSITES -> rank(fitting, request.minNights)
+                BulkAvailabilityView.SUMMARY -> summarize(fitting)
+            }
         } catch (e: CancellationException) {
             // Coroutine cancellation (e.g. a sibling POI's failure, or the caller
             // disconnecting) must propagate, not be reported as this POI's error.
@@ -105,6 +113,14 @@ internal class BulkAvailabilityController(
             log.error("bulk availability poi={} failed: {}", poiId, causeChain(e), e)
             BulkPoiAvailabilityDto(poiId = poiId, error = AvailabilityProviderError.Unknown(e).code)
         }
+
+    private fun summarize(slice: PoiAvailabilitySlice): BulkPoiAvailabilityDto =
+        BulkPoiAvailabilityDto(
+            poiId = slice.poiId,
+            startDate = slice.startDate.toString(),
+            endDate = slice.endDate.toString(),
+            summary = slice.staySummary(),
+        )
 
     private fun rank(
         slice: PoiAvailabilitySlice,

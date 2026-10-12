@@ -23,7 +23,7 @@ const calendar = () => screen.queryByRole('group', { name: /\d{4}$/ });
 const nextTick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
 const mount = (open = true) =>
-  render(<FilterPanel open={open} onToggle={() => {}} totalInBoundary={17} totalMatching={17} />);
+  render(<FilterPanel open={open} onToggle={() => {}} totalInBoundary={17} totalMatching={17} checkableIds={[]} />);
 
 describe('FilterPanel', () => {
   test('closed, it is the pill with its hint', () => {
@@ -75,7 +75,7 @@ describe('FilterPanel', () => {
 
   test('the head reports matches against the view once a filter is active', () => {
     filters().setSiteType('tent');
-    render(<FilterPanel open onToggle={() => {}} totalInBoundary={17} totalMatching={9} />);
+    render(<FilterPanel open onToggle={() => {}} totalInBoundary={17} totalMatching={9} checkableIds={[]} />);
 
     expect(screen.getByText('9 of 17 in view')).toBeInTheDocument();
   });
@@ -196,6 +196,18 @@ describe('FilterPanel', () => {
 
     expect(field('End date, not set')).toHaveAttribute('aria-expanded', 'true');
     expect(filters().dateWindow).toBeNull();
+  });
+
+  test('the check button appears with both dates, and waits for something checkable', () => {
+    mount();
+    expect(screen.queryByRole('button', { name: 'Check availability' })).toBeNull();
+
+    fireEvent.click(field('Start date, not set'));
+    fireEvent.click(day('Friday, September 11, 2026'));
+    fireEvent.click(day('Sunday, September 13, 2026'));
+
+    // Nothing in view can be checked online in this mount.
+    expect(screen.getByRole('button', { name: 'Check availability' })).toBeDisabled();
   });
 
   test('Clear empties both fields and the stored window', () => {

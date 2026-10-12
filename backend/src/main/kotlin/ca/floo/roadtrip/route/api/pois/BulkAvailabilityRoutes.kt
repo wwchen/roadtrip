@@ -35,7 +35,7 @@ import java.time.LocalDate
  * raw `kotlinx.serialization` exception text — never safe to put on the wire.
  */
 private val bulkValidationErrorCodes =
-    setOf(BAD_REQUEST_ERROR, "too_many_pois", "bad_min_nights", "bad_date_window", "end_before_start")
+    setOf(BAD_REQUEST_ERROR, "too_many_pois", "bad_min_nights", "bad_group_size", "bad_date_window", "end_before_start")
 
 internal fun Route.bulkAvailabilityRoutes(
     controller: BulkAvailabilityController,
@@ -92,11 +92,15 @@ internal fun Route.bulkAvailabilityRoutes(
                 summary = "Per-campsite availability across many campground POIs",
                 description =
                     "Body: { poi_ids: [pois.id, ...1..${config.maxPois}], start_date, end_date, " +
-                        "min_nights?, site_type? }. Returns one entry per requested POI, in request " +
-                        "order. Each entry carries either its campsites — one envelope per campsite, " +
-                        "each day a single cell — filtered to `longest_run_nights >= min_nights` and " +
-                        "sorted descending, or an error code. A POI failing never fails the request. " +
-                        "`site_type` accepts: $siteTypeWireList.",
+                        "min_nights?, site_type?, group_size?, view? }. Returns one entry per requested " +
+                        "POI, in request order. Under `view: campsites` (the default) each entry carries " +
+                        "its campsites — one envelope per campsite, each day a single cell — filtered to " +
+                        "`longest_run_nights >= min_nights` and sorted descending; under `view: summary` " +
+                        "it carries how the stay looks there (`open`, `few_left`, `full`, " +
+                        "`closed_for_season` or `no_data`) and how many sites are open every night of " +
+                        "it. Either way an entry can instead carry an error code: a POI failing never " +
+                        "fails the request. `group_size` keeps campsites that sleep at least that many, " +
+                        "and those with no stated capacity. `site_type` accepts: $siteTypeWireList.",
             ).access(RouteAccess.Anonymous)
         }
     }
@@ -109,6 +113,7 @@ private fun BulkAvailabilityRequestDto.validated(
     require(poiIds.isNotEmpty()) { BAD_REQUEST_ERROR }
     require(poiIds.size <= config.maxPois) { "too_many_pois" }
     require(minNights >= 1) { "bad_min_nights" }
+    require(groupSize == null || groupSize >= 1) { "bad_group_size" }
     // Both dates are required: with either left null each POI would resolve its own
     // default window from its own centroid timezone, so run lengths would no longer
     // be comparable across POIs — defeating the endpoint's purpose (see spec Decision 5).
@@ -125,6 +130,8 @@ private fun BulkAvailabilityRequestDto.validated(
         endDate = end,
         minNights = minNights,
         siteTypes = siteTypes,
+        groupSize = groupSize,
+        view = view,
     )
 }
 

@@ -1,13 +1,15 @@
-// The filter block under the search row: the pill, the three local filters, and
-// the date window. Filter state lives in the store, and every control writes it
-// as it changes — the dates included, once both ends are picked; only "is the
-// block open" is local.
+// The filter block under the search row: the pill, the three local filters, the
+// date window, and the availability check over it. Filter state lives in the
+// store, and every control writes it as it changes — the dates included, once
+// both ends are picked; only "is the block open" is local. The check is the one
+// thing that waits for a click, because it is the one that asks the providers.
 import { Button, Chip, Icon, SegmentedControl } from '@ui';
 import type { CampsiteKind } from '@/api/generated/api-types';
 import { FILTER_AMENITIES, FILTER_SITE_TYPES } from '@/lib/campground-vocab';
-import { filterCopy } from '@/lib/strings';
+import { filterCopy, stayCopy } from '@/lib/strings';
 import { selectActiveFilterCount, useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { DateWindowFields } from './DateWindowFields';
+import { useStayCheck, type StayCheckControl } from './useStayCheck';
 import { GroupSizeStepper } from './GroupSizeStepper';
 
 const ANY_VALUE = 'any';
@@ -21,9 +23,11 @@ export interface FilterPanelProps {
   onToggle: () => void;
   totalInBoundary: number;
   totalMatching: number;
+  /** The campgrounds in view that can be checked online: what the check asks about. */
+  checkableIds: readonly number[];
 }
 
-export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching }: FilterPanelProps) {
+export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching, checkableIds }: FilterPanelProps) {
   const siteType = useCampgroundFilterStore((s) => s.siteType);
   const groupSize = useCampgroundFilterStore((s) => s.groupSize);
   const amenities = useCampgroundFilterStore((s) => s.amenities);
@@ -33,6 +37,9 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching }: 
   const setGroupSize = useCampgroundFilterStore((s) => s.setGroupSize);
   const toggleAmenity = useCampgroundFilterStore((s) => s.toggleAmenity);
   const setDateWindow = useCampgroundFilterStore((s) => s.setDateWindow);
+  // Here rather than under the dates, so a running check outlives the block being
+  // folded away.
+  const stayCheck = useStayCheck(checkableIds);
 
   const count = activeCount > 0 ? filterCopy.matching(totalMatching, totalInBoundary) : filterCopy.inView(totalInBoundary);
 
@@ -71,9 +78,30 @@ export function FilterPanel({ open, onToggle, totalInBoundary, totalMatching }: 
             ))}
           </div>
 
-          <DateWindowFields initial={dateWindow} onChange={setDateWindow} />
+          <DateWindowFields
+            initial={dateWindow}
+            onChange={setDateWindow}
+            actions={
+              dateWindow ? (
+                <Button
+                  variant={stayCheck.checked ? 'secondary' : 'primary'}
+                  size="sm"
+                  disabled={!stayCheck.canCheck || stayCheck.running}
+                  onClick={stayCheck.check}
+                >
+                  {checkLabel(stayCheck)}
+                </Button>
+              ) : null
+            }
+          />
         </div>
       ) : null}
     </div>
   );
+}
+
+/** The check button's word: what pressing it does now. */
+function checkLabel({ running, checked }: StayCheckControl): string {
+  if (running) return stayCopy.checking;
+  return checked ? stayCopy.checkAgain : stayCopy.check;
 }

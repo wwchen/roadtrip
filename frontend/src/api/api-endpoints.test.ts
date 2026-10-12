@@ -43,8 +43,8 @@ const GENERATED_TYPES = join(API_DIR, 'generated/api-types.ts');
  * Every contract row these clients reach. A row that stops being reached is a
  * client that stopped working, and a row renamed in the backend disappears from
  * here, so the set is pinned rather than merely non-empty. Not all 46 rows
- * appear: the admin surface, the bulk endpoint and the Slack webhook have no
- * client in this directory.
+ * appear: the admin surface and the Slack webhook have no client in this
+ * directory.
  */
 const CALLED_TODAY = [
   '/api/availability/changes',
@@ -61,6 +61,7 @@ const CALLED_TODAY = [
   '/api/geocode',
   '/api/me',
   '/api/pois',
+  '/api/pois/availability/bulk',
   '/api/pois/on-route',
   '/api/pois/search',
   '/api/pois/{id}',

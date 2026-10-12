@@ -20,7 +20,7 @@
 // LDS drops `onClick`/`onFocus`/`onKeyDown` on its template components and
 // rebuilds their DOM on every prop change, so a field that toggles
 // `aria-expanded` would lose focus the moment it opened.
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { Button, Icon, MonthCalendar } from '@ui';
 import { localToday, localYmd } from '@/lib/local-date';
 import { filterCopy } from '@/lib/strings';
@@ -110,9 +110,11 @@ export interface DateWindowFieldsProps {
   initial: DateWindow | null;
   /** Called with the window whenever it changes, and with null when it is incomplete or cleared. */
   onChange: (window: DateWindow | null) => void;
+  /** What acts on the window, after Clear in the actions row: the availability check. */
+  actions?: ReactNode;
 }
 
-export function DateWindowFields({ initial, onChange }: DateWindowFieldsProps) {
+export function DateWindowFields({ initial, onChange, actions }: DateWindowFieldsProps) {
   const [today] = useState(() => localYmd(localToday()));
   const [draft, setDraft] = useState(() => seedDraft(initial, today));
   const rootRef = useRef<HTMLDivElement>(null);
@@ -212,6 +214,7 @@ export function DateWindowFields({ initial, onChange }: DateWindowFieldsProps) {
             {filterCopy.clearDates}
           </Button>
         ) : null}
+        {actions}
       </div>
     </div>
   );

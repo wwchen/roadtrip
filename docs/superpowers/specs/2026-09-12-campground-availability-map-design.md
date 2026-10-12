@@ -78,8 +78,8 @@ catalog season data and is a follow-up.
 1. **M1** — campgrounds-in-view list without a route, cards hydrated from the detail endpoint,
    site count line, "checkable online" tag. Frontend only.
 2. **M2** — local filters with match / miss / no-data facets; Add dates stores the window only.
-3. **M3** — Add dates polls the in-view set via the bulk endpoint (new summary mode), checking
-   state, re-sorted result list.
+3. **M3** — Check availability polls the in-view set via the bulk endpoint (new summary view),
+   checking state, re-sorted result list. See "M3 design" below.
 4. **M4** — pins recolour by status, legend colour key with counts, Only ones we can check.
 5. **M5** — mobile parity (bottom sheet, folded filter summary, status strip, progress bar).
 
@@ -236,6 +236,57 @@ request bbox before `bucketPins`. The list no longer reads that cache once it mo
   repos, routes, contract rows, route tests, `make api-types`.
 - **M2b (frontend):** store, hooks, cards on summaries, facets, controls, banner, retiring the
   per-card pipeline for the in-view list.
+
+## M3 design (2026-10-12)
+
+The dates apply like the other filters (see M2's controls), so the check is a separate,
+explicit **Check availability** button beside them, shown once both dates are set: it is the
+one control that talks to booking providers, and a date tweak should not fan out to them.
+
+### Backend: the bulk endpoint's `summary` view
+
+`POST /api/pois/availability/bulk` takes two more request fields, and keeps its contract row:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `view` | `BulkAvailabilityView`: `campsites` (default) \| `summary` | what each entry carries |
+| `group_size` | `Int?` | keep campsites with `max_people >= group_size` **or no stated capacity** (no data is not a miss, as in the M2 filter); applies to both views; `< 1` is `400 bad_group_size` |
+
+Under `summary` each entry carries `summary: BulkPoiSummaryDto` instead of `campsites`
+(an error entry still carries only `error`):
+
+| Field | Meaning |
+|---|---|
+| `status` | `StayAvailabilityStatus`: `open` (more than `FEW_LEFT_MAX_SITES` = 2 open), `few_left` (1–2), `full`, `closed_for_season`, `no_data` |
+| `open_sites` | campsites bookable online (`available`, not `first_come`) every night from `start_date` up to, not including, `end_date` |
+| `checked_sites` | campsites the answer is over: the requested type, fitting the group |
+| `cache` | the batch's cache block, so the client can say how old the answer is |
+
+With nothing open, the status is `closed_for_season` when every site is closed every night
+(the fused week's own rule), `no_data` when the provider answered for no night of any site or
+no site matched, else `full`. `StaySummary.kt` decides it from the same per-night statuses the
+week grid fuses; the browser renders the word it is given.
+
+### Frontend
+
+- **The check** (`features/trip/useStayCheck.ts`, pure half in `stay-check.ts`). It asks
+  about the in-view cards (the ≤50 rendered) that are `availability_supported`, in at most
+  `MAX_REQUESTS_PER_CHECK` = 4 sequential requests, so cards fill in batch by batch and a
+  check stays well inside the endpoint's per-IP limit. Sequential, because the backend fans
+  each request out against a small connection pool. A throttled request (`ip_throttled`)
+  stops the check and says so; what landed stays.
+- **State** (`stores/stayCheckStore.ts`): the question asked (`StayQuery`: dates, site
+  type, group size), the ids asked, each answer, whether it is running, and when the
+  oldest answer was observed. Answers show only while the question matches the current
+  filter store (`sameStayQuery`); new dates or site filters stop a running check and drop
+  its answers. Read by the list now and by the pins in M4.
+- **The list.** While running, every card keeps its place and fills in ("Checking…", then
+  its answer); the head reads "Checking 5 of 13…". Once back, cards sort by status (open,
+  few left, full, closed, no data, couldn't check, not asked), then most open sites, then
+  arrival order (`rankByStay`), and the head reads "Fri Sep 11 → Sun Sep 13 · 8 with a site
+  · 5 full · 2 unknown · Checked 4m ago" — the age is the stalest answer's, not the click's.
+- **Card lines**: "8 sites open", "2 sites left", "Full", "Closed for the season", "No data
+  for these dates", "Couldn't check", coloured by the `--rt-stay-*` roles.
 
 ## Out of scope for the issue
 

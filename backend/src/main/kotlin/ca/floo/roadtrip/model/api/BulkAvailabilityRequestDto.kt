@@ -11,4 +11,10 @@ data class BulkAvailabilityRequestDto(
     @SerialName("min_nights") val minNights: Int = 1,
     /** `CampsiteKind` wire values; the route rejects anything else as `bad_request`. */
     @SerialName("site_type") val siteTypes: List<String> = emptyList(),
+    /**
+     * Only campsites that sleep at least this many count. A campsite with no stated
+     * capacity still counts — no data is not a miss, as in the campground filter.
+     */
+    @SerialName("group_size") val groupSize: Int? = null,
+    val view: BulkAvailabilityView = BulkAvailabilityView.CAMPSITES,
 )

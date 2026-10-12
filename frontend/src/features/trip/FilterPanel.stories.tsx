@@ -24,7 +24,7 @@ function Panel({ seed, open: initialOpen = true }: { seed?: () => void; open?: b
   if (!seeded) return null;
   return (
     <div className="tb-panel" style={{ position: 'relative', inset: 'auto', width: PANEL_WIDTH }}>
-      <FilterPanel open={open} onToggle={() => setOpen((o) => !o)} totalInBoundary={17} totalMatching={13} />
+      <FilterPanel open={open} onToggle={() => setOpen((o) => !o)} totalInBoundary={17} totalMatching={13} checkableIds={[]} />
     </div>
   );
 }

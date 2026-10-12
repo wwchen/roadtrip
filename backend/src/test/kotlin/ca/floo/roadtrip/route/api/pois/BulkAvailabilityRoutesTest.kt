@@ -272,6 +272,66 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
+    fun `the summary view answers each poi with its stay summary and keeps a failing one's error`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """{"poi_ids":[1,$RATE_LIMITED_POI_ID],"view":"summary",""" +
+                            """"start_date":"$windowStart","end_date":"$windowEnd"}""",
+                    )
+                }
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val pois = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["pois"]!!.jsonArray
+            // The one campsite is bookable the first night and taken the second, so
+            // nothing is open for the whole window and the provider did answer.
+            val first = pois[0].jsonObject
+            assertTrue("campsites" !in first)
+            val summary = first["summary"]!!.jsonObject
+            assertEquals("full", summary["status"]!!.jsonPrimitive.content)
+            assertEquals(0, summary["open_sites"]!!.jsonPrimitive.content.toInt())
+            assertEquals(1, summary["checked_sites"]!!.jsonPrimitive.content.toInt())
+            assertEquals("rate_limited", pois[1].jsonObject["error"]!!.jsonPrimitive.content)
+            assertTrue("summary" !in pois[1].jsonObject)
+        }
+
+    @Test
+    fun `rejects a non-positive group_size`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1],"group_size":0,"start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_group_size", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `rejects a view outside the vocabulary`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1],"view":"cells","start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_request", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `a reserved cell is watchable when the provider can be polled`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }

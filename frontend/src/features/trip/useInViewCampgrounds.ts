@@ -18,6 +18,10 @@
 //      not: an id the pin loop had not returned yet, or a pan it still lags.
 //
 // Step 1 decides which 50 are worth fetching; step 2 decides what is true.
+//
+// Once an availability check of the current stay is back, the cards are ordered
+// by its answers (`rankByStay`). Not before: while it runs every card keeps its
+// place and fills in, so nothing moves under the pointer.
 import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { hiddenAgencyPinIds, idsWithVisibleAgency } from '@/map/agencies';
@@ -26,9 +30,11 @@ import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
 import { cardsFromSummaries, rankCards, type InViewCard } from './campground-cards';
 import { inViewList, type ResultsList } from './results-list';
+import { rankByStay } from './stay-check';
 import { visibleCards } from './trip-cards';
 import { useCampgroundSearch } from './useCampgroundSearch';
 import { MAX_IN_VIEW_CARDS, useCampgroundSummaries } from './useCampgroundSummaries';
+import { useCurrentStayCheck } from './useStayCheck';
 
 export interface InViewCampgrounds {
   /** What the results section renders. */
@@ -57,6 +63,8 @@ export function useInViewCampgrounds({ paused }: UseInViewCampgroundsOptions): I
   const campgroundsHidden = useMapStore((s) => s.hiddenOverlays.includes('cg'));
   const hiddenAgencies = useMapStore((s) => s.hiddenAgencies);
   const viewportCampgrounds = useMapStore((s) => s.viewportCampgrounds);
+  const stayCheck = useCurrentStayCheck();
+  const stayResults = stayCheck && !stayCheck.running ? stayCheck.results : null;
   const rankFilter = useCampgroundFilterStore(
     useShallow((s) => ({ siteType: s.siteType, groupSize: s.groupSize, amenities: s.amenities })),
   );
@@ -71,8 +79,9 @@ export function useInViewCampgrounds({ paused }: UseInViewCampgroundsOptions): I
 
   const cards = useMemo(() => {
     const built = cardsFromSummaries(cappedIds, summaries.byId, viewportBbox ? bboxCenter(viewportBbox) : null);
-    return rankCards(visibleCards(built, { hiddenAgencies, campgroundsHidden }), rankFilter);
-  }, [cappedIds, summaries.byId, viewportBbox, rankFilter, hiddenAgencies, campgroundsHidden]);
+    const ranked = rankCards(visibleCards(built, { hiddenAgencies, campgroundsHidden }), rankFilter);
+    return stayResults ? rankByStay(ranked, stayResults) : ranked;
+  }, [cappedIds, summaries.byId, viewportBbox, rankFilter, hiddenAgencies, campgroundsHidden, stayResults]);
 
   // With nothing hidden the server's own counts are the honest ones — they
   // survive a truncated search, which the id list does not. With something

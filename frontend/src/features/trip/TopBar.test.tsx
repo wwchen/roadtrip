@@ -7,6 +7,7 @@ import type { CampgroundSearchResponseDto } from '@/api/generated/api-types';
 import { COPIED_STATE_MS, decodeRouteState, encodeRouteState } from '@/lib/share-links';
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
+import { useStayCheckStore } from '@/stores/stayCheckStore';
 import { useTripStore } from '@/stores/tripStore';
 import { MAX_IN_VIEW_CARDS } from './useCampgroundSummaries';
 import type { PinFeature } from '@/map/pins';
@@ -43,6 +44,9 @@ let poiResults: unknown[];
 let geocodeResults: unknown[];
 let campgroundSearch: CampgroundSearchResponseDto;
 let campgroundSummaries: Record<number, CampgroundSummary>;
+/** What the bulk availability stub answers a request body with. */
+let bulkAvailability: (body: { poi_ids: number[] }) => Response;
+let bulkBodies: Array<Record<string, unknown>>;
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -52,6 +56,9 @@ beforeEach(() => {
   fakeMap = new FakeMap();
   useTripStore.getState().reset();
   useCampgroundFilterStore.getState().reset();
+  useStayCheckStore.getState().reset();
+  bulkBodies = [];
+  bulkAvailability = () => json({}, 404);
   // `hiddenAgencies`/`hiddenOverlays` too: the legend's state is app-wide, and the
   // results-list tests below hide agencies that would otherwise leak into the next test.
   useMapStore.setState({
@@ -109,6 +116,11 @@ beforeEach(() => {
       if (url.startsWith('/api/route')) return json(ROUTE_BODY);
       if (url.startsWith('/api/pois/on-route')) return json({ type: 'FeatureCollection', features: [] });
       if (url.startsWith('/api/campgrounds/search')) return json(campgroundSearch);
+      if (url.startsWith('/api/pois/availability/bulk')) {
+        const body = JSON.parse(String(init?.body)) as { poi_ids: number[] } & Record<string, unknown>;
+        bulkBodies.push(body);
+        return bulkAvailability(body);
+      }
       if (url.startsWith('/api/campgrounds/details')) {
         const body = JSON.parse(String(init?.body)) as { campground_ids: number[] };
         return json({ campgrounds: body.campground_ids.map((id) => campgroundSummaries[id]).filter(Boolean) });
@@ -1077,6 +1089,101 @@ describe('the in-view list', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe('checking availability', () => {
+    // Only `Date`, so the calendar opens on September 2026 while `waitFor` keeps
+    // its real timers.
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(2026, 8, 1));
+    });
+    afterEach(() => vi.useRealTimers());
+
+    const pickStay = () => {
+      fireEvent.click(screen.getByRole('button', { name: /Filter campgrounds/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Start date, not set' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Friday, September 11, 2026' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Sunday, September 13, 2026' }));
+    };
+    const cardNames = () => [...document.querySelectorAll('.tb-card-name')].map((el) => el.textContent);
+
+    test('asks about the checkable cards for the stay and shows each one its answer', async () => {
+      bulkAvailability = () =>
+        json({ pois: [{ poi_id: 21, start_date: '2026-09-11', end_date: '2026-09-13', summary: { status: 'open', open_sites: 8, checked_sites: 132 } }] });
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+
+      await waitFor(() => expect(screen.getByText('8 sites open')).toBeInTheDocument());
+      // Zephyr Cove is not checkable online, so it is not asked about.
+      expect(bulkBodies).toEqual([
+        { poi_ids: [21], start_date: '2026-09-11', end_date: '2026-09-13', site_type: [], view: 'summary' },
+      ]);
+      expect(screen.getByText('Fri Sep 11 → Sun Sep 13 · 1 with a site · 0 full · Checked just now')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument();
+    });
+
+    test('re-sorts the list by the answers once every one is back', async () => {
+      campgroundSummaries[22] = { ...campgroundSummaries[22]!, availability_supported: true };
+      bulkAvailability = ({ poi_ids }) =>
+        json({
+          pois: poi_ids.map((id) =>
+            id === 21
+              ? { poi_id: 21, summary: { status: 'full', open_sites: 0, checked_sites: 206 } }
+              : { poi_id: 22, summary: { status: 'few_left', open_sites: 2, checked_sites: 170 } },
+          ),
+        });
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Zephyr Cove')).toBeInTheDocument());
+      expect(cardNames()).toEqual(['Fallen Leaf', 'Zephyr Cove']);
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+
+      await waitFor(() => expect(screen.getByText('2 sites left')).toBeInTheDocument());
+      expect(screen.getByText('Full')).toBeInTheDocument();
+      expect(cardNames()).toEqual(['Zephyr Cove', 'Fallen Leaf']);
+      // One request per campground here: two ids fit in two batches.
+      expect(bulkBodies.map((body) => body.poi_ids)).toEqual([[21], [22]]);
+    });
+
+    test('a throttled check says so and keeps what had landed', async () => {
+      bulkAvailability = () => json({ error: 'ip_throttled' }, 503);
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+
+      await waitFor(() =>
+        expect(screen.getByText('Too many checks in a row — try again in a minute.')).toBeInTheDocument(),
+      );
+      expect(screen.getByRole('button', { name: 'Check again' })).not.toBeDisabled();
+    });
+
+    test('new dates leave the old answers behind', async () => {
+      bulkAvailability = () => json({ pois: [{ poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 132 } }] });
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+      await waitFor(() => expect(screen.getByText('8 sites open')).toBeInTheDocument());
+
+      fireEvent.click(screen.getByRole('button', { name: 'End date, Sun Sep 13' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Monday, September 14, 2026' }));
+
+      expect(screen.queryByText('8 sites open')).toBeNull();
+      expect(screen.queryByText(/with a site/)).toBeNull();
+      expect(screen.getByRole('button', { name: 'Check availability' })).toBeInTheDocument();
+    });
   });
 
   test('a capped list reports the rendered count against the matches', async () => {

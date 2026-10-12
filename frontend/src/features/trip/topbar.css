@@ -524,6 +524,39 @@
   font-weight: 500;
 }
 
+/* The availability check's answer on a card, and its status row above the cards. */
+.tb-stay {
+  font-weight: 600;
+}
+
+.tb-stay--open {
+  color: var(--rt-stay-open);
+}
+
+.tb-stay--few {
+  color: var(--rt-stay-few);
+}
+
+.tb-stay--full {
+  color: var(--rt-stay-full);
+}
+
+.tb-stay--unknown {
+  color: var(--rt-faint);
+  font-weight: 400;
+}
+
+.tb-stay-status {
+  gap: 4px;
+  font-size: 12px;
+  color: var(--rt-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tb-stay-failure {
+  color: var(--rt-error);
+}
+
 .tb-card-empty {
   padding: 14px 12px;
   color: var(--rt-muted);
