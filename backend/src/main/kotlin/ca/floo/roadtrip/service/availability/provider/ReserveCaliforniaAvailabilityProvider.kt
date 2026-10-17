@@ -74,7 +74,9 @@ class ReserveCaliforniaAvailabilityProvider(
                 .toMap()
         val dates = dates(startDate, endDate)
         val observations =
-            scope.answerFor.flatMap { campsite ->
+            // The grids come per facility id off the campground's ref, not per
+            // campsite, so every covered campsite's cells are already here.
+            scope.covered.flatMap { campsite ->
                 val found = byUnit[campsite.reserveCaliforniaVendorId()]
                 observationsForReservable(
                     campsiteId = campsite.id,

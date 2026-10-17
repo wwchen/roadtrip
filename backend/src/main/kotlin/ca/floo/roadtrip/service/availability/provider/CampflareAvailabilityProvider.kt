@@ -86,7 +86,10 @@ class CampflareAvailabilityProvider(
                 .associateBy { it.campsiteId }
         val days = dates(startDate, endDate)
         val observations =
-            scope.answerFor.flatMap { campsite ->
+            // One bulk call per campground, so every covered campsite's cells
+            // are already in this response: keying them costs nothing and saves
+            // the next, wider request a refetch.
+            scope.covered.flatMap { campsite ->
                 observationsForReservable(
                     campsiteId = campsite.id,
                     byDate = byCampsiteId[vendorSiteIdFor(campsite)]?.availability.orEmpty(),

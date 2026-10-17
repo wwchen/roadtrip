@@ -94,20 +94,9 @@ class AspiraAvailabilityProvider(
         var fellBackToParentMap = 0
         val targets =
             scope.answerFor.map { campsite ->
-                val ref = campsite.dataProviderRef
                 val campsiteMapId = campsite.aspiraBookingRef(aspiraRef.tenant)?.mapId?.toIntInRangeOrNull()
                 if (campsiteMapId == null) fellBackToParentMap++
-                AspiraCatalogCampsite(
-                    campsiteId = campsite.id,
-                    resourceId = campsite.aspiraResourceId(),
-                    mapId = campsiteMapId ?: parentMapId,
-                    resourceLocationId =
-                        when (ref) {
-                            is DataProviderRef.AspiraCampsite -> ref.resourceLocationId.toInt()
-                            is DataProviderRef.BcParksCampsite -> ref.resourceLocationId.toInt()
-                            else -> null
-                        },
-                )
+                aspiraTarget(campsite, campsiteMapId ?: parentMapId)
             }
         if (fellBackToParentMap > 0) {
             log.warn(
@@ -120,16 +109,26 @@ class AspiraAvailabilityProvider(
                 parentMapId,
             )
         }
+        // The answered campsites alone decide this. A wider list can turn one
+        // resource location into several, and `singleOrNull` would then move a
+        // filtered read off the occupancy path onto the per-map fetches — a
+        // different classification source for the same question.
         val resourceLocationId =
             aspiraRef.resourceLocationId?.let { intOrThrow("resourceLocationId", it) }
                 ?: targets.mapNotNull { it.resourceLocationId }.distinct().singleOrNull()
+        // Aspira fetches per map and per resource location, so unlike the
+        // campground-wide vendors it cannot cover the rest of the campground for
+        // free. It keys the extras its chosen call already answers for and
+        // leaves the rest to the request that asks about them: a map or location
+        // nobody asked about would cost another upstream call, which is not what
+        // `alsoCover` buys.
         return runWithErrorMapping {
             if (occupancyEnabled && resourceLocationId != null) {
                 fetchCatalogOccupancy(
                     scope = aspiraRef,
                     host = tenant.host,
                     resourceLocationId = resourceLocationId,
-                    campsites = targets,
+                    campsites = targets + alsoCoveredAtLocation(scope, aspiraRef, parentMapId, resourceLocationId),
                     today = startDate,
                     days = ChronoUnit.DAYS.between(startDate, endDate).toInt(),
                 )
@@ -137,13 +136,57 @@ class AspiraAvailabilityProvider(
                 fetchCatalog(
                     scope = aspiraRef,
                     host = tenant.host,
-                    campsites = targets,
+                    campsites = targets + alsoCoveredOnMaps(scope, aspiraRef, parentMapId, targets.map { it.mapId }.toSet()),
                     startDate = startDate,
                     endDate = endDate,
                 )
             }
         }
     }
+
+    /** Covered campsites on a map the answered ones already put in the fetch plan. */
+    private fun alsoCoveredOnMaps(
+        scope: CatalogAvailabilityScope,
+        aspiraRef: BookingProviderRef.Aspira,
+        parentMapId: Int,
+        fetchedMapIds: Set<Int>,
+    ): List<AspiraCatalogCampsite> =
+        scope.alsoCover
+            .map { aspiraTarget(it, aspiraMapIdFor(it, aspiraRef, parentMapId)) }
+            .filter { it.mapId in fetchedMapIds }
+
+    /** Covered campsites under the resource location the occupancy call asks about. */
+    private fun alsoCoveredAtLocation(
+        scope: CatalogAvailabilityScope,
+        aspiraRef: BookingProviderRef.Aspira,
+        parentMapId: Int,
+        resourceLocationId: Int,
+    ): List<AspiraCatalogCampsite> =
+        scope.alsoCover
+            .map { aspiraTarget(it, aspiraMapIdFor(it, aspiraRef, parentMapId)) }
+            .filter { it.resourceLocationId == resourceLocationId }
+
+    private fun aspiraMapIdFor(
+        campsite: Campsite,
+        aspiraRef: BookingProviderRef.Aspira,
+        parentMapId: Int,
+    ): Int = campsite.aspiraBookingRef(aspiraRef.tenant)?.mapId?.toIntInRangeOrNull() ?: parentMapId
+
+    private fun aspiraTarget(
+        campsite: Campsite,
+        mapId: Int,
+    ): AspiraCatalogCampsite =
+        AspiraCatalogCampsite(
+            campsiteId = campsite.id,
+            resourceId = campsite.aspiraResourceId(),
+            mapId = mapId,
+            resourceLocationId =
+                when (val ref = campsite.dataProviderRef) {
+                    is DataProviderRef.AspiraCampsite -> ref.resourceLocationId.toInt()
+                    is DataProviderRef.BcParksCampsite -> ref.resourceLocationId.toInt()
+                    else -> null
+                },
+        )
 
     override fun vendorSiteIdFor(campsite: Campsite): String = campsite.aspiraResourceId()
 

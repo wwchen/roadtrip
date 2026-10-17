@@ -62,7 +62,7 @@ class RecGovAvailabilityProvider(
             return availability(campground, startDate, endDate)
         }
         val recgovId = recgovIdOrThrow(campground)
-        val campsiteIdByVendorId = scope.answerFor.associate { vendorSiteIdFor(it) to it.id }
+        val campsiteIdByVendorId = scope.covered.associate { vendorSiteIdFor(it) to it.id }
         return runWithErrorMapping {
             catalogBatch(recgovId, campsiteIdByVendorId, startDate, endDate)
         }
@@ -125,7 +125,15 @@ class RecGovAvailabilityProvider(
                 startDate = startDate,
                 endDate = endDate,
                 observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, campsiteIdByVendorId),
-                seasonBlock = inferReopenDate(catalogSites, startDate),
+                // Per campsite, not one date for the batch: the facility-month
+                // payload covers every campsite this call keys a cell for, and
+                // which of those the answer is about is not this adapter's
+                // question. `catalogAvailability` reduces it over the answer
+                // scope.
+                reopensOnByCampsite =
+                    earliestBookableBySite(catalogSites, startDate)
+                        .mapNotNull { (siteId, date) -> campsiteIdByVendorId[siteId]?.let { it to date } }
+                        .toMap(),
                 cacheBlock = directFetchCacheBlock(),
                 scope = BookingProviderRef.RecGov(facilityId = recgovId),
             )
@@ -222,20 +230,35 @@ private fun classifyRecgovStatus(raw: String?): AvailabilityStatus {
     }
 }
 
+/**
+ * Per vendor site id, the earliest date from [today] on that the facility-month
+ * payload shows bookable. The payload reaches to the end of the months the
+ * window touches, so this can name a date past the window — which is the useful
+ * part of a reopen date.
+ */
+private fun earliestBookableBySite(
+    merged: Map<String, Map<String, String>>,
+    today: LocalDate,
+): Map<String, LocalDate> =
+    merged
+        .mapNotNull { (siteId, byDate) ->
+            byDate
+                .filterValues { classifyRecgovStatus(it).isOnlineBookable }
+                .keys
+                .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
+                .filter { !it.isBefore(today) }
+                .minOrNull()
+                ?.let { siteId to it }
+        }.toMap()
+
+/** The campground as one stream: no campsite to key a date to, so one date for the facility. */
 private fun inferReopenDate(
     merged: Map<String, Map<String, String>>,
     today: LocalDate,
-): AvailabilitySeasonBlock? {
-    val candidates =
-        merged.values
-            .flatMap { it.entries }
-            .filter { (_, status) ->
-                classifyRecgovStatus(status).isOnlineBookable
-            }.mapNotNull { (date, _) ->
-                runCatching { LocalDate.parse(date) }.getOrNull()
-            }.filter { !it.isBefore(today) }
-    val earliest = candidates.minOrNull() ?: return null
-    return AvailabilitySeasonBlock(reopensOn = earliest.toString())
-}
+): AvailabilitySeasonBlock? =
+    earliestBookableBySite(merged, today)
+        .values
+        .minOrNull()
+        ?.let { AvailabilitySeasonBlock(reopensOn = it.toString()) }
 
 private fun directFetchCacheBlock(): AvailabilityCacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L)

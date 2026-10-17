@@ -85,7 +85,9 @@ class ReserveAmericaAvailabilityProvider(
         val tenant = tenantForRef(reserveAmericaRef)
         val data = fetch(tenant, reserveAmericaRef.parkId, startDate, endDate)
         val observations =
-            scope.answerFor.flatMap { campsite ->
+            // One park matrix per call, so every covered campsite's cells are
+            // already in this response: keying them costs nothing.
+            scope.covered.flatMap { campsite ->
                 observationsForReservable(
                     campsiteId = campsite.id,
                     byDate = data.statuses[campsite.reserveAmericaVendorId()].orEmpty(),
