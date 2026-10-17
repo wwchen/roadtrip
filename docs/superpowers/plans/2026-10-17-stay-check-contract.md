@@ -401,9 +401,19 @@ Expected: PASS, including `:backend:checkApiTypes`, `:backend:contractLedgerChec
 
 ```bash
 make api-types
-git add -A backend/src frontend/src
+git add backend/src/main/kotlin/ca/floo/roadtrip/route/api/pois/BulkAvailabilityRoutes.kt \
+        backend/src/main/kotlin/ca/floo/roadtrip/model/api/ \
+        backend/src/main/kotlin/ca/floo/roadtrip/service/availability/BulkAvailabilityController.kt \
+        backend/src/test/kotlin/ca/floo/roadtrip/ \
+        frontend/src/api/
+git add -u backend/src/main/kotlin/ca/floo/roadtrip/service/availability/AvailabilityRunLengths.kt \
+           backend/src/test/kotlin/ca/floo/roadtrip/service/availability/AvailabilityRunLengthsTest.kt
 git commit -m "feat(availability)!: the stay check moves to /api/pois/availability/stays, and the per-campsite scan goes"
 ```
+
+Stage explicit paths, never `git add -A`: this task deletes files across
+`backend/src`, and a blanket add would sweep up anything else in the working
+tree that is not this task's.
 
 ---
 
