@@ -9,13 +9,12 @@ import ca.floo.roadtrip.model.api.StayOutcome
  *
  * [retryable] is null where it carries no information: a [StayOutcome.REFUSED]
  * is never worth retrying and a [StayOutcome.TIMED_OUT] always is, so only
- * [StayOutcome.FAILED] answers it. [reason] is only meaningful for REFUSED and
- * FAILED; a timeout has none, and carries [StayFailureReason.UNKNOWN] as a
- * placeholder the wire mapping must not emit.
+ * [StayOutcome.FAILED] answers it. [reason] is likewise null for a timeout, which
+ * has none, so no placeholder reason exists that a caller could emit by mistake.
  */
 internal data class StayFailure(
     val outcome: StayOutcome,
-    val reason: StayFailureReason,
+    val reason: StayFailureReason?,
     val retryable: Boolean?,
 )
 
@@ -45,7 +44,7 @@ private fun retryable(reason: StayFailureReason) = StayFailure(StayOutcome.FAILE
 
 private fun terminal(reason: StayFailureReason) = StayFailure(StayOutcome.FAILED, reason, retryable = false)
 
-private val timedOutFailure = StayFailure(StayOutcome.TIMED_OUT, StayFailureReason.UNKNOWN, retryable = null)
+private val timedOutFailure = StayFailure(StayOutcome.TIMED_OUT, reason = null, retryable = null)
 
 /**
  * Classifies the wire code of a per-campground failure — an
@@ -58,8 +57,10 @@ private val timedOutFailure = StayFailure(StayOutcome.TIMED_OUT, StayFailureReas
  * the route refuses them for the whole request before any fan-out, so they cannot
  * reach a per-campground answer. So does any code this function has never heard
  * of; UNKNOWN is not retryable because nothing says asking again would help.
- * `unknown_campground` is a campground the catalog cannot serve, which reads to
- * the caller the same as an unknown POI.
+ * `not_found` (no campground row is linked to the POI id) and `unknown_campground`
+ * (the campground resolved but no provider claims it) stay separate reasons: the
+ * UI renders both the same way, but collapsing them would tell a caller a POI does
+ * not exist when it does.
  */
 internal fun stayFailureOf(code: String): StayFailure =
     when (code) {
@@ -73,6 +74,7 @@ internal fun stayFailureOf(code: String): StayFailure =
         StayFailureCode.UPSTREAM_UNREACHABLE -> retryable(StayFailureReason.UPSTREAM_UNREACHABLE)
         StayFailureCode.PROVIDER_MISCONFIGURED -> terminal(StayFailureReason.PROVIDER_MISCONFIGURED)
         StayFailureCode.UNSUPPORTED -> terminal(StayFailureReason.UNSUPPORTED)
-        StayFailureCode.NOT_FOUND, StayFailureCode.UNKNOWN_CAMPGROUND -> terminal(StayFailureReason.NOT_FOUND)
+        StayFailureCode.NOT_FOUND -> terminal(StayFailureReason.NOT_FOUND)
+        StayFailureCode.UNKNOWN_CAMPGROUND -> terminal(StayFailureReason.UNKNOWN_CAMPGROUND)
         else -> terminal(StayFailureReason.UNKNOWN)
     }

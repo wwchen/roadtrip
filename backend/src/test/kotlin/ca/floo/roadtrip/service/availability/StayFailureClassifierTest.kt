@@ -26,6 +26,7 @@ class StayFailureClassifierTest {
     @Test fun `the timeout code is its own outcome with no reason-bearing retryable`() {
         assertEquals(StayOutcome.TIMED_OUT, stayFailureOf(STAY_TIMEOUT_ERROR).outcome)
         assertNull(stayFailureOf(STAY_TIMEOUT_ERROR).retryable)
+        assertNull(stayFailureOf(STAY_TIMEOUT_ERROR).reason)
     }
 
     @Test fun `an upstream failure is failed and retryable`() {
@@ -69,7 +70,7 @@ class StayFailureClassifierTest {
                 "beyond_booking_horizon" to StayFailure(StayOutcome.REFUSED, StayFailureReason.BEYOND_BOOKING_HORIZON, null),
                 // The rest of AvailabilityServiceError.
                 "not_found" to StayFailure(StayOutcome.FAILED, StayFailureReason.NOT_FOUND, false),
-                "unknown_campground" to StayFailure(StayOutcome.FAILED, StayFailureReason.NOT_FOUND, false),
+                "unknown_campground" to StayFailure(StayOutcome.FAILED, StayFailureReason.UNKNOWN_CAMPGROUND, false),
                 // AvailabilityProviderError.
                 "rate_limited" to StayFailure(StayOutcome.FAILED, StayFailureReason.RATE_LIMITED, true),
                 "upstream_blocked" to StayFailure(StayOutcome.FAILED, StayFailureReason.UPSTREAM_BLOCKED, true),

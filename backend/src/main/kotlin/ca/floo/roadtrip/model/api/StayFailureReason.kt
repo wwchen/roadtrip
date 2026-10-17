@@ -43,8 +43,17 @@ enum class StayFailureReason {
     @SerialName("unsupported")
     UNSUPPORTED,
 
+    /** No campground row is linked to the POI id, so the POI itself is not one we can check. */
     @SerialName("not_found")
     NOT_FOUND,
+
+    /**
+     * The campground resolved, but no provider claims it. Kept apart from
+     * [NOT_FOUND] so a caller is never told a POI does not exist when it does;
+     * the UI renders both the same way, but the distinction is worth keeping in logs.
+     */
+    @SerialName("unknown_campground")
+    UNKNOWN_CAMPGROUND,
 
     @SerialName("unknown")
     UNKNOWN,
