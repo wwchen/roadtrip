@@ -92,6 +92,7 @@ internal class CampsiteAvailabilityController(
             availabilityService.fetchAvailability(
                 campground = campground,
                 campsites = campsites,
+                campgroundCampsites = allCampsites,
                 startDate = startDate,
                 endDate = endDate,
                 dateContext = dateContext,

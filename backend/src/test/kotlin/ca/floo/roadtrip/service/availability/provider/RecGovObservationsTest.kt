@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.recgov.Campsite
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.fixtures.availableCellIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.catalogAvailability
 import ca.floo.roadtrip.fixtures.cellStatuses
 import ca.floo.roadtrip.model.api.AvailabilityResponseDto
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch

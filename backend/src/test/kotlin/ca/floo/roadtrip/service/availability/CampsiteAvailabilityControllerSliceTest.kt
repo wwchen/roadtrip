@@ -22,6 +22,7 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.CatalogAvailabilityScope
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -298,7 +299,7 @@ private class CannedBatchFetcher : FailoverAvailabilityFetcher(cooldowns = Provi
     override suspend fun fetch(
         providers: List<AvailabilityProvider>,
         campground: Campground,
-        campsites: List<Campsite>,
+        scope: CatalogAvailabilityScope,
         window: ResolvedDateWindow,
     ): FailoverResult {
         val observedAt = Instant.parse("2026-07-30T12:00:00Z")
@@ -308,7 +309,7 @@ private class CannedBatchFetcher : FailoverAvailabilityFetcher(cooldowns = Provi
                 startDate = window.startDate,
                 endDate = window.endDate,
                 observations =
-                    campsites.map { campsite ->
+                    scope.answerFor.map { campsite ->
                         CampsiteDayObservation(campsite.id, window.startDate, observedAt, AvailabilityStatus.AVAILABLE)
                     },
                 cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),

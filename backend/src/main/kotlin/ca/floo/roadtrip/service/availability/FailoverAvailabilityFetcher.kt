@@ -4,10 +4,11 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campground
-import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.CatalogAvailabilityScope
+import ca.floo.roadtrip.service.availability.provider.catalogAvailability
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.time.Instant
@@ -34,7 +35,7 @@ internal open class FailoverAvailabilityFetcher(
     open suspend fun fetch(
         providers: List<AvailabilityProvider>,
         campground: Campground,
-        campsites: List<Campsite>,
+        scope: CatalogAvailabilityScope,
         window: ResolvedDateWindow,
     ): FailoverResult {
         val sorted = cooldowns.sortHealthyFirst(providers) { it.id }
@@ -46,7 +47,7 @@ internal open class FailoverAvailabilityFetcher(
             // provider is not asked — however the last one reported the cancellation.
             currentCoroutineContext().ensureActive()
             val begin = clock()
-            val attempt = attemptFetch(provider, campground, campsites, window)
+            val attempt = attemptFetch(provider, campground, scope, window)
             val durationMs = elapsedMs(begin, clock())
 
             attempts +=
@@ -88,14 +89,14 @@ internal open class FailoverAvailabilityFetcher(
     private suspend fun attemptFetch(
         provider: AvailabilityProvider,
         campground: Campground,
-        campsites: List<Campsite>,
+        scope: CatalogAvailabilityScope,
         window: ResolvedDateWindow,
     ): Attempt =
         try {
             val batch =
                 provider.catalogAvailability(
                     campground = campground,
-                    campsites = campsites,
+                    scope = scope,
                     startDate = window.startDate,
                     endDate = window.endDate,
                 )

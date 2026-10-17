@@ -14,6 +14,7 @@ import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.availabilityProviderErrorFromAttempt
+import ca.floo.roadtrip.service.availability.provider.CatalogAvailabilityScope
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
@@ -123,7 +124,10 @@ internal class AvailabilityPollExecutor(
         return failoverFetcher.fetch(
             providers = first.candidates,
             campground = first.campground,
-            campsites = rows.map { it.campsite },
+            // The poller answers for exactly the campsites its watches put in
+            // this group and asks for nothing more: a wider write would be work
+            // no watch is waiting on, charged to a cadence tick.
+            scope = CatalogAvailabilityScope.of(rows.map { it.campsite }),
             window = fetchWindow,
         )
     }

@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.CatalogAvailabilityScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
@@ -87,14 +88,14 @@ class FailoverAvailabilityFetcherTest {
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 
-        override suspend fun catalogAvailability(
+        override suspend fun fetchCatalogAvailability(
             campground: Campground,
-            campsites: List<Campsite>,
+            scope: CatalogAvailabilityScope,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch {
             calls++
-            lastCampsites = campsites
+            lastCampsites = scope.answerFor
             val next = script.removeAt(0)
             return when (next) {
                 is Behaviour.ReturnBatch -> next.batch
@@ -198,7 +199,10 @@ class FailoverAvailabilityFetcherTest {
 
             val result =
                 withTimeoutOrNull(CALLER_TIMEOUT_MS) {
-                    fetcherWith(trackerWith(clock), clock).fetch(listOf(stalled, next), testCampground, listOf(campsite(1L)), window)
+                    fetcherWith(
+                        trackerWith(clock),
+                        clock,
+                    ).fetch(listOf(stalled, next), testCampground, CatalogAvailabilityScope.of(listOf(campsite(1L))), window)
                 }
 
             assertNull(result)
@@ -216,7 +220,10 @@ class FailoverAvailabilityFetcherTest {
 
             val result =
                 withTimeoutOrNull(CALLER_TIMEOUT_MS) {
-                    fetcherWith(trackerWith(clock), clock).fetch(listOf(stalled), testCampground, listOf(campsite(1L)), window)
+                    fetcherWith(
+                        trackerWith(clock),
+                        clock,
+                    ).fetch(listOf(stalled), testCampground, CatalogAvailabilityScope.of(listOf(campsite(1L))), window)
                 }
 
             assertNull(result, "an OTHER attempt would have answered; the cancellation should have")
@@ -232,7 +239,7 @@ class FailoverAvailabilityFetcherTest {
                 fetcherWith(tracker, clock).fetch(
                     providers = listOf(provider),
                     campground = testCampground,
-                    campsites = listOf(campsite(1L)),
+                    scope = CatalogAvailabilityScope.of(listOf(campsite(1L))),
                     window = window,
                 )
 
@@ -258,7 +265,7 @@ class FailoverAvailabilityFetcherTest {
                 fetcherWith(tracker, clock).fetch(
                     providers = listOf(cooling, healthy),
                     campground = testCampground,
-                    campsites = listOf(campsite(1L)),
+                    scope = CatalogAvailabilityScope.of(listOf(campsite(1L))),
                     window = window,
                 )
 
@@ -293,7 +300,7 @@ class FailoverAvailabilityFetcherTest {
                 fetcherWith(tracker, clock).fetch(
                     providers = listOf(a, b, c),
                     campground = testCampground,
-                    campsites = listOf(campsite(1L)),
+                    scope = CatalogAvailabilityScope.of(listOf(campsite(1L))),
                     window = window,
                 )
 
@@ -324,7 +331,7 @@ class FailoverAvailabilityFetcherTest {
                 fetcherWith(tracker, clock).fetch(
                     providers = listOf(first, second),
                     campground = testCampground,
-                    campsites = listOf(campsite(1L)),
+                    scope = CatalogAvailabilityScope.of(listOf(campsite(1L))),
                     window = window,
                 )
 
@@ -351,7 +358,7 @@ class FailoverAvailabilityFetcherTest {
                 fetcherWith(tracker, clock).fetch(
                     providers = listOf(provider),
                     campground = testCampground,
-                    campsites = listOf(campsite(1L)),
+                    scope = CatalogAvailabilityScope.of(listOf(campsite(1L))),
                     window = window,
                 )
 
@@ -371,7 +378,7 @@ class FailoverAvailabilityFetcherTest {
                 fetcherWith(tracker, clock).fetch(
                     providers = emptyList(),
                     campground = testCampground,
-                    campsites = emptyList(),
+                    scope = CatalogAvailabilityScope.of(emptyList()),
                     window = window,
                 )
 
@@ -395,7 +402,7 @@ class FailoverAvailabilityFetcherTest {
                 fetcherWith(tracker, clock).fetch(
                     providers = listOf(provider),
                     campground = testCampground,
-                    campsites = listOf(campsite(1L)),
+                    scope = CatalogAvailabilityScope.of(listOf(campsite(1L))),
                     window = window,
                 )
 
@@ -417,14 +424,14 @@ class FailoverAvailabilityFetcherTest {
                         scriptReturns(emptyBatch())
                     }
 
-                    override suspend fun catalogAvailability(
+                    override suspend fun fetchCatalogAvailability(
                         campground: Campground,
-                        campsites: List<Campsite>,
+                        scope: CatalogAvailabilityScope,
                         startDate: LocalDate,
                         endDate: LocalDate,
                     ): AvailabilityObservationBatch {
                         clock.advance(125)
-                        return super.catalogAvailability(campground, campsites, startDate, endDate)
+                        return super.fetchCatalogAvailability(campground, scope, startDate, endDate)
                     }
                 }
 
@@ -432,7 +439,7 @@ class FailoverAvailabilityFetcherTest {
                 fetcherWith(tracker, clock).fetch(
                     providers = listOf(provider),
                     campground = testCampground,
-                    campsites = listOf(campsite(1L)),
+                    scope = CatalogAvailabilityScope.of(listOf(campsite(1L))),
                     window = window,
                 )
 

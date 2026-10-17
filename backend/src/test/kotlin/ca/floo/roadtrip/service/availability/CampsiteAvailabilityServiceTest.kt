@@ -21,6 +21,7 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.CatalogAvailabilityScope
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -285,12 +286,12 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
         override suspend fun fetch(
             providers: List<AvailabilityProvider>,
             campground: Campground,
-            campsites: List<Campsite>,
+            scope: CatalogAvailabilityScope,
             window: ResolvedDateWindow,
         ): FailoverResult {
             capturedProviders = providers
             capturedWindow = window
-            val campsiteId = campsites.first().id
+            val campsiteId = scope.answerFor.first().id
             val observedAt = Instant.parse("2026-07-30T12:00:00Z")
             val batch =
                 AvailabilityObservationBatch(

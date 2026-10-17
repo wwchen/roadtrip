@@ -50,6 +50,7 @@ import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchNotificationTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.CatalogAvailabilityScope
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
 import ca.floo.roadtrip.service.availability.resolveCadenceSec
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
@@ -531,19 +532,19 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 
-        override suspend fun catalogAvailability(
+        override suspend fun fetchCatalogAvailability(
             campground: Campground,
-            campsites: List<Campsite>,
+            scope: CatalogAvailabilityScope,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch {
             calls++
             lastStart = startDate
             lastEnd = endDate
-            lastReservableCount = campsites.size
+            lastReservableCount = scope.answerFor.size
             mdcRunIdDuringCall = MDC.get("run_id")
             val observations =
-                campsites.map { campsite ->
+                scope.answerFor.map { campsite ->
                     CampsiteDayObservation(
                         campsiteId = campsite.id,
                         date = observationDate ?: startDate,
@@ -583,9 +584,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 
-        override suspend fun catalogAvailability(
+        override suspend fun fetchCatalogAvailability(
             campground: Campground,
-            campsites: List<Campsite>,
+            scope: CatalogAvailabilityScope,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw AvailabilityProviderError.RateLimited(RuntimeException("429"))
@@ -1578,7 +1579,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             override suspend fun fetch(
                 providers: List<AvailabilityProvider>,
                 campground: Campground,
-                campsites: List<Campsite>,
+                scope: CatalogAvailabilityScope,
                 window: ResolvedDateWindow,
             ): FailoverAvailabilityFetcher.FailoverResult =
                 FailoverAvailabilityFetcher.FailoverResult(

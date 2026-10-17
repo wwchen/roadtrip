@@ -79,9 +79,9 @@ class AspiraAvailabilityProvider(
         }
     }
 
-    override suspend fun catalogAvailability(
+    override suspend fun fetchCatalogAvailability(
         campground: Campground,
-        campsites: List<Campsite>,
+        scope: CatalogAvailabilityScope,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -93,7 +93,7 @@ class AspiraAvailabilityProvider(
         // back to the parent is what the bug looked like, hence the count.
         var fellBackToParentMap = 0
         val targets =
-            campsites.map { campsite ->
+            scope.answerFor.map { campsite ->
                 val ref = campsite.dataProviderRef
                 val campsiteMapId = campsite.aspiraBookingRef(aspiraRef.tenant)?.mapId?.toIntInRangeOrNull()
                 if (campsiteMapId == null) fellBackToParentMap++
@@ -114,7 +114,7 @@ class AspiraAvailabilityProvider(
                 "aspira campsites without a usable own map id, using parent map instead: " +
                     "count={} of {} campground={} tenant={} parentMapId={}",
                 fellBackToParentMap,
-                campsites.size,
+                scope.answerFor.size,
                 campground.id,
                 aspiraRef.tenant,
                 parentMapId,

@@ -12,6 +12,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.CatalogAvailabilityScope
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -38,9 +39,18 @@ internal class CampsiteAvailabilityService(
 ) {
     private val availabilityLoader = AvailabilityLoader(availabilityRepo, clock)
 
+    /**
+     * One campground's availability for [campsites].
+     *
+     * [campgroundCampsites] is the campground's whole campsite list, which is
+     * not the same question: the answer is about [campsites], while the stored
+     * cells worth keeping are every cell the one upstream call already paid for.
+     * Defaults to [campsites] for callers whose filter is the campground.
+     */
     suspend fun fetchAvailability(
         campground: Campground,
         campsites: List<Campsite>,
+        campgroundCampsites: List<Campsite> = campsites,
         startDate: LocalDate?,
         endDate: LocalDate?,
         dateContext: PoiDateContext,
@@ -86,7 +96,7 @@ internal class CampsiteAvailabilityService(
                     failoverFetcher.fetch(
                         providers = supportingProviders,
                         campground = campground,
-                        campsites = campsites,
+                        scope = CatalogAvailabilityScope.of(answerFor = campsites, campgroundCampsites = campgroundCampsites),
                         window = ResolvedDateWindow(windows.fetch.startDate, windows.fetch.endDate),
                     )
                 result.batch ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())

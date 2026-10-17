@@ -75,9 +75,9 @@ class ReserveAmericaAvailabilityProvider(
         )
     }
 
-    override suspend fun catalogAvailability(
+    override suspend fun fetchCatalogAvailability(
         campground: Campground,
-        campsites: List<Campsite>,
+        scope: CatalogAvailabilityScope,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -85,7 +85,7 @@ class ReserveAmericaAvailabilityProvider(
         val tenant = tenantForRef(reserveAmericaRef)
         val data = fetch(tenant, reserveAmericaRef.parkId, startDate, endDate)
         val observations =
-            campsites.flatMap { campsite ->
+            scope.answerFor.flatMap { campsite ->
                 observationsForReservable(
                     campsiteId = campsite.id,
                     byDate = data.statuses[campsite.reserveAmericaVendorId()].orEmpty(),

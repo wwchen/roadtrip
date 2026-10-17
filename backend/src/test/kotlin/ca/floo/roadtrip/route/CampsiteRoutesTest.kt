@@ -11,7 +11,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
-import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.metadata.registry.TenantRegistry
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -35,6 +34,7 @@ import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.CampflareAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.CatalogAvailabilityScope
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
 import io.ktor.client.request.get
@@ -750,9 +750,9 @@ private class ServingRecgovProvider(
         endDate: LocalDate,
     ): AvailabilityObservationBatch = throw UnsupportedOperationException("catalogAvailability is the read-slice entry point")
 
-    override suspend fun catalogAvailability(
+    override suspend fun fetchCatalogAvailability(
         campground: Campground,
-        campsites: List<Campsite>,
+        scope: CatalogAvailabilityScope,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -763,7 +763,7 @@ private class ServingRecgovProvider(
             startDate = startDate,
             endDate = endDate,
             observations =
-                campsites.flatMap { campsite ->
+                scope.answerFor.flatMap { campsite ->
                     (0 until days).map { offset ->
                         CampsiteDayObservation(
                             campsiteId = campsite.id,

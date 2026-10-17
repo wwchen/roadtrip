@@ -52,19 +52,19 @@ class RecGovAvailabilityProvider(
         }
     }
 
-    override suspend fun catalogAvailability(
+    override suspend fun fetchCatalogAvailability(
         campground: Campground,
-        campsites: List<Campsite>,
+        scope: CatalogAvailabilityScope,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        if (campsites.isEmpty()) {
+        if (scope.answerFor.isEmpty()) {
             return availability(campground, startDate, endDate)
         }
         val recgovId = recgovIdOrThrow(campground)
-        val campsiteIdByVendorId = campsites.associate { vendorSiteIdFor(it) to it.id }
+        val campsiteIdByVendorId = scope.answerFor.associate { vendorSiteIdFor(it) to it.id }
         return runWithErrorMapping {
-            fetchCatalogAvailability(recgovId, campsiteIdByVendorId, startDate, endDate)
+            catalogBatch(recgovId, campsiteIdByVendorId, startDate, endDate)
         }
     }
 
@@ -101,7 +101,7 @@ class RecGovAvailabilityProvider(
             )
         }
 
-    private suspend fun fetchCatalogAvailability(
+    private suspend fun catalogBatch(
         recgovId: String,
         campsiteIdByVendorId: Map<String, Long>,
         startDate: LocalDate,

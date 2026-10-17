@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability.provider
 import ca.floo.roadtrip.client.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.catalogAvailability
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.model.domain.provider.BookingProvider

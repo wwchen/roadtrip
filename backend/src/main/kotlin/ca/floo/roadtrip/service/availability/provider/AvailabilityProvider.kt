@@ -71,14 +71,22 @@ interface AvailabilityProvider {
     ): AvailabilityObservationBatch
 
     /**
-     * POI-scoped availability narrowed to the campsites linked to the POI.
+     * POI-scoped availability for [scope]. Adapters override this; callers use
+     * the [catalogAvailability] entry point instead, which is what turns the
+     * batch's per-campsite material into the answer-level facts.
+     *
+     * An override answers for `scope.answerFor` and may key cells for anything
+     * in `scope.covered` that its upstream response already carries — never for
+     * a campsite it did not ask the vendor about, because a cell written on no
+     * question claims coverage the store will later serve.
+     *
      * Most providers can answer from the campground-level endpoint, so the
      * default delegates to [availability]. Providers with a parent/child map
      * split can override this to classify the actual linked resources.
      */
-    suspend fun catalogAvailability(
+    suspend fun fetchCatalogAvailability(
         campground: Campground,
-        campsites: List<Campsite>,
+        scope: CatalogAvailabilityScope,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch = availability(campground, startDate, endDate)
@@ -110,4 +118,30 @@ interface AvailabilityProvider {
         reservationUrlTemplate(campsite, parentRef)?.let {
             ReservationUrlTemplate.fill(it, date, date.plusDays(1))
         }
+}
+
+/**
+ * Catalog availability for [scope] — the entry point every caller uses.
+ *
+ * Deliberately not a member of [AvailabilityProvider]: no adapter can override
+ * it, so no adapter decides for itself what its answer says about the campsites
+ * the caller filtered out. The season block is reduced here, from the
+ * per-campsite material the batch carries, over `scope.answerFor` — so a batch
+ * that covers a whole campground cannot tell a caller asking about cabins when
+ * the tents reopen.
+ *
+ * @throws ca.floo.roadtrip.model.availability.AvailabilityProviderError on upstream failure.
+ */
+suspend fun AvailabilityProvider.catalogAvailability(
+    campground: Campground,
+    scope: CatalogAvailabilityScope,
+    startDate: LocalDate,
+    endDate: LocalDate,
+): AvailabilityObservationBatch {
+    val batch = fetchCatalogAvailability(campground, scope, startDate, endDate)
+    // No per-campsite material means the adapter told campsites apart nowhere —
+    // the campground-wide answer the default delegate gives — so the block it
+    // came back with is the only one there is.
+    if (batch.reopensOnByCampsite.isEmpty()) return batch
+    return batch.copy(seasonBlock = scope.seasonBlockFrom(batch.reopensOnByCampsite))
 }

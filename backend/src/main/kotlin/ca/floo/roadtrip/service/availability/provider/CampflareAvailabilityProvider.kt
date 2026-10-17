@@ -67,13 +67,13 @@ class CampflareAvailabilityProvider(
         )
     }
 
-    override suspend fun catalogAvailability(
+    override suspend fun fetchCatalogAvailability(
         campground: Campground,
-        campsites: List<Campsite>,
+        scope: CatalogAvailabilityScope,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        if (campsites.isEmpty()) {
+        if (scope.answerFor.isEmpty()) {
             return availability(campground, startDate, endDate)
         }
         val campgroundId = campflareIdOrThrow(campground)
@@ -86,7 +86,7 @@ class CampflareAvailabilityProvider(
                 .associateBy { it.campsiteId }
         val days = dates(startDate, endDate)
         val observations =
-            campsites.flatMap { campsite ->
+            scope.answerFor.flatMap { campsite ->
                 observationsForReservable(
                     campsiteId = campsite.id,
                     byDate = byCampsiteId[vendorSiteIdFor(campsite)]?.availability.orEmpty(),
