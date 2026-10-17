@@ -7,8 +7,9 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
-import ca.floo.roadtrip.service.availability.hasFullCoverage
-import ca.floo.roadtrip.service.availability.isFreshAsOf
+import ca.floo.roadtrip.service.availability.AvailabilityCell
+import ca.floo.roadtrip.service.availability.requiredCells
+import ca.floo.roadtrip.service.availability.unansweredCells
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -50,11 +51,15 @@ class AvailabilityLoader(
         if (repo == null || request.targets.isEmpty()) return sliceToTarget(fetch(), request)
 
         val dates = datesInWindow(request.startDate, request.endDate)
-        val dbIds = request.targets.map { it.dbId }
+        val dbIds = request.targets.map { it.dbId }.distinct()
+        val required = requiredCells(dbIds, dates)
         val cached = repo.readCurrent(dbIds, dates)
-        if (hasFullCoverage(request.targets.size, dates.size, cached.size) &&
-            isFreshAsOf(cached.map { it.observedAt.toInstant() }, request.freshAtOrAfter)
-        ) {
+        // Per cell, not per batch: the store answers this request when every
+        // cell it asked about has a current observation that is fresh enough.
+        // The upstream call cannot be narrowed below a campground window behind
+        // `AvailabilityProvider`, so one unanswered cell still costs one
+        // provider call — but a window whose cells are all answered costs none.
+        if (unansweredCells(required, observedAtByCell(cached), request.freshAtOrAfter).isEmpty()) {
             return batchFromLatest(request, cached, hit = true)
         }
 
@@ -62,7 +67,7 @@ class AvailabilityLoader(
         recordFetched(repo, request, fetched)
 
         val latest = repo.readCurrent(dbIds, dates)
-        return if (hasFullCoverage(request.targets.size, dates.size, latest.size)) {
+        return if (cellsOf(latest).containsAll(required)) {
             batchFromLatest(
                 request = request.copy(metadata = metadataFromBatch(fetched, request.metadata)),
                 rows = latest,
@@ -165,6 +170,12 @@ class AvailabilityLoader(
             scope = batch.scope ?: fallback.scope,
             campsiteId = batch.campsiteId ?: fallback.campsiteId,
         )
+
+    private fun observedAtByCell(rows: List<AvailabilityRepo.CurrentCell>): Map<AvailabilityCell, Instant> =
+        rows.associate { AvailabilityCell(it.campsiteId, it.targetDate) to it.observedAt.toInstant() }
+
+    private fun cellsOf(rows: List<AvailabilityRepo.CurrentCell>): Set<AvailabilityCell> =
+        rows.mapTo(mutableSetOf()) { AvailabilityCell(it.campsiteId, it.targetDate) }
 
     private fun maxAgeSeconds(
         rows: List<AvailabilityRepo.CurrentCell>,

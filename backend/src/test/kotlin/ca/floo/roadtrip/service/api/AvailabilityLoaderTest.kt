@@ -103,6 +103,56 @@ class AvailabilityLoaderTest : SharedDbTest() {
     }
 
     @Test
+    fun `a target repeated in the request does not defeat stored coverage`() {
+        // Coverage is a question about cells, not about how many times the
+        // caller named a campsite: the request below needs the same four cells
+        // the fresh store already answers.
+        seedStoredWindow(AvailabilityStatus.RESERVED, observedAt = fixedNow.minusSeconds(60))
+
+        val result =
+            runBlocking {
+                loader.loadOrFetch(request(targets = listOf(siteA, siteB, siteA))) {
+                    fail("every requested cell is stored and fresh; a repeated target must not force a fetch")
+                }
+            }
+
+        assertTrue(result.cacheBlock.hit)
+        assertEquals(4, result.observations.size)
+    }
+
+    @Test
+    fun `one stale cell in an otherwise fresh window costs exactly one fetch`() {
+        seedStoredWindow(AvailabilityStatus.RESERVED, observedAt = fixedNow.minusSeconds(60))
+        repo.recordObservations(
+            null,
+            listOf(
+                AvailabilityRepo.Observation(
+                    siteB,
+                    windowStart.plusDays(1),
+                    AvailabilityStatus.RESERVED,
+                    fixedNow.minus(snapshotTtl).minusSeconds(60),
+                ),
+            ),
+        )
+
+        var fetchCount = 0
+        val result =
+            runBlocking {
+                loader.loadOrFetch(request()) {
+                    fetchCount++
+                    batch(
+                        listOf(siteA, siteB).flatMap { site ->
+                            windowDates().map { date -> observation(site, date) }
+                        },
+                    )
+                }
+            }
+
+        assertEquals(1, fetchCount)
+        assertFalse(result.cacheBlock.hit)
+    }
+
+    @Test
     fun `empty store fetches live and records the observations`() {
         var fetchCount = 0
         val result =
