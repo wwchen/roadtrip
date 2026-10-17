@@ -23,7 +23,7 @@ class StayFailureClassifierTest {
         )
     }
 
-    @Test fun `the timeout code is its own outcome with no reason-bearing retryable`() {
+    @Test fun `the timeout is its own outcome with no reason and no retryable`() {
         assertEquals(StayOutcome.TIMED_OUT, stayFailureOf(STAY_TIMEOUT_ERROR).outcome)
         assertNull(stayFailureOf(STAY_TIMEOUT_ERROR).retryable)
         assertNull(stayFailureOf(STAY_TIMEOUT_ERROR).reason)
@@ -58,31 +58,47 @@ class StayFailureClassifierTest {
     }
 
     @Test fun `every provider and service error code classifies`() {
-        // Literal on purpose: the expected map is the vocabulary, and the codes the live classes
-        // carry are checked against it below, so a provider error added without a branch in
-        // stayFailureOf fails here instead of quietly answering UNKNOWN.
+        // The expected map is the vocabulary, spelled out literally. It pins what every code in
+        // both hierarchies resolves to today.
         val expected =
             mapOf(
                 // AvailabilityServiceError.BadDateWindow. The two the route refuses for the whole
                 // request before any fan-out (end_before_start, bad_date_window) are absent on purpose.
-                "start_before_earliest" to StayFailure(StayOutcome.REFUSED, StayFailureReason.START_BEFORE_EARLIEST, null),
-                "window_too_long" to StayFailure(StayOutcome.REFUSED, StayFailureReason.WINDOW_TOO_LONG, null),
-                "beyond_booking_horizon" to StayFailure(StayOutcome.REFUSED, StayFailureReason.BEYOND_BOOKING_HORIZON, null),
+                "start_before_earliest" to
+                    StayFailure(StayOutcome.REFUSED, StayFailureReason.START_BEFORE_EARLIEST, null),
+                "window_too_long" to
+                    StayFailure(StayOutcome.REFUSED, StayFailureReason.WINDOW_TOO_LONG, null),
+                "beyond_booking_horizon" to
+                    StayFailure(StayOutcome.REFUSED, StayFailureReason.BEYOND_BOOKING_HORIZON, null),
                 // The rest of AvailabilityServiceError.
-                "not_found" to StayFailure(StayOutcome.FAILED, StayFailureReason.NOT_FOUND, false),
-                "unknown_campground" to StayFailure(StayOutcome.FAILED, StayFailureReason.UNKNOWN_CAMPGROUND, false),
+                "not_found" to
+                    StayFailure(StayOutcome.FAILED, StayFailureReason.NOT_FOUND, false),
+                "unknown_campground" to
+                    StayFailure(StayOutcome.FAILED, StayFailureReason.UNKNOWN_CAMPGROUND, false),
                 // AvailabilityProviderError.
-                "rate_limited" to StayFailure(StayOutcome.FAILED, StayFailureReason.RATE_LIMITED, true),
-                "upstream_blocked" to StayFailure(StayOutcome.FAILED, StayFailureReason.UPSTREAM_BLOCKED, true),
-                "upstream_5xx" to StayFailure(StayOutcome.FAILED, StayFailureReason.UPSTREAM_5XX, true),
-                "upstream_unreachable" to StayFailure(StayOutcome.FAILED, StayFailureReason.UPSTREAM_UNREACHABLE, true),
-                "provider_misconfigured" to StayFailure(StayOutcome.FAILED, StayFailureReason.PROVIDER_MISCONFIGURED, false),
-                "unsupported" to StayFailure(StayOutcome.FAILED, StayFailureReason.UNSUPPORTED, false),
+                "rate_limited" to
+                    StayFailure(StayOutcome.FAILED, StayFailureReason.RATE_LIMITED, true),
+                "upstream_blocked" to
+                    StayFailure(StayOutcome.FAILED, StayFailureReason.UPSTREAM_BLOCKED, true),
+                "upstream_5xx" to
+                    StayFailure(StayOutcome.FAILED, StayFailureReason.UPSTREAM_5XX, true),
+                "upstream_unreachable" to
+                    StayFailure(StayOutcome.FAILED, StayFailureReason.UPSTREAM_UNREACHABLE, true),
+                "provider_misconfigured" to
+                    StayFailure(StayOutcome.FAILED, StayFailureReason.PROVIDER_MISCONFIGURED, false),
+                "unsupported" to
+                    StayFailure(StayOutcome.FAILED, StayFailureReason.UNSUPPORTED, false),
                 // The one code the classifier names UNKNOWN on purpose.
-                AvailabilityProviderError.Unknown.CODE to StayFailure(StayOutcome.FAILED, StayFailureReason.UNKNOWN, false),
+                AvailabilityProviderError.Unknown.CODE to
+                    StayFailure(StayOutcome.FAILED, StayFailureReason.UNKNOWN, false),
             )
         expected.forEach { (code, failure) -> assertEquals(failure, stayFailureOf(code), "code $code") }
 
+        // Hand-maintained. This list is NOT derived from the sealed hierarchies, so a new
+        // AvailabilityProviderError or AvailabilityServiceError subclass is simply absent from it:
+        // this test keeps passing and the new code silently classifies as `unknown`. Whoever adds
+        // such a subclass must add a constructor call here and a row to `expected` above by hand,
+        // along with a branch in stayFailureOf.
         val carried =
             listOf(
                 AvailabilityProviderError.RateLimited().code,
