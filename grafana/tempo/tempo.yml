@@ -31,6 +31,18 @@ storage:
 # keep the two in sync. Verify the limit is live, not just configured:
 #   curl -s localhost:3200/metrics | grep 'limit_name="block_retention"'
 # 168h reads as 6.048e+14 (nanoseconds); 0 means retention is off.
+#
+# Necessary, not sufficient: it went on reading 6.048e+14 through a second
+# pile-up of 35GB, because a live limit still has to reach a block. Retention
+# and compaction both act on the blocklist, which a poll rebuilds by reading
+# every block's meta.json — and the first incident left two blocks of zero
+# bytes, whose empty meta.json fails the whole tenant poll. Nothing was deleted
+# for 26 days. blocklist_poll_tolerate_consecutive_errors does not help: it
+# retries the poll rather than skipping the block, and nothing quarantines one.
+# Find it and delete it:
+#   docker logs roadtrip-tempo-1 | grep 'failed to poll'
+#   docker run --rm -v roadtrip_tempo-data:/v alpine \
+#     find /v/blocks/single-tenant -name meta.json -size 0
 backend_scheduler:
   provider:
     compaction:
