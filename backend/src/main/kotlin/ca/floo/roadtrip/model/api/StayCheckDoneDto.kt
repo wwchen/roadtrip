@@ -2,11 +2,10 @@ package ca.floo.roadtrip.model.api
 
 import kotlinx.serialization.Serializable
 
-/** The last event of a stay check's stream: every requested POI has answered. */
+/** The last event of a stay check's stream: every requested POI has answered, and [outcome] says how the check ended. */
 @Serializable
 data class StayCheckDoneDto(
-    /** How many answers the stream carried — one per requested POI. */
-    val answered: Int,
+    val outcome: StayCheckOutcome,
 ) {
     companion object {
         /** The `event:` name this is sent under. */

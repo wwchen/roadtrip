@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.api.ApiErrorSchema
 import ca.floo.roadtrip.model.api.BuildInfoDto
 import ca.floo.roadtrip.model.api.StayAnswerDto
 import ca.floo.roadtrip.model.api.StayCheckDoneDto
+import ca.floo.roadtrip.model.api.StayCheckOutcome
 import ca.floo.roadtrip.model.api.StayFailureReason
 import ca.floo.roadtrip.model.api.StayOutcome
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
@@ -286,7 +287,8 @@ class ContractBodyCheckTest {
                                     retryable = true,
                                 )
                             send(StayAnswerDto.EVENT, StayAnswerDto.serializer(), failed)
-                            send(StayCheckDoneDto.EVENT, StayCheckDoneDto.serializer(), StayCheckDoneDto(answered = 1))
+                            val done = StayCheckDoneDto(outcome = StayCheckOutcome.COMPLETE)
+                            send(StayCheckDoneDto.EVENT, StayCheckDoneDto.serializer(), done)
                         }
                     }.access(RouteAccess.Anonymous)
                 }

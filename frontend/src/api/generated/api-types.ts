@@ -814,8 +814,10 @@ export interface StayAnswerDto {
 export type StayAvailabilityStatus = 'open' | 'few_left' | 'full' | 'closed_for_season' | 'no_data';
 
 export interface StayCheckDoneDto {
-  answered: number;
+  outcome: StayCheckOutcome;
 }
+
+export type StayCheckOutcome = 'complete' | 'deadline_reached';
 
 export interface StayCheckRequestDto {
   poi_ids?: number[];

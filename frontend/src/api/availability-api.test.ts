@@ -20,7 +20,7 @@ describe('streamStays', () => {
       eventStreamResponse([
         { event: STAY_ANSWER_EVENT, data: { poi_id: 22, error: 'rate_limited' } },
         { event: STAY_ANSWER_EVENT, data: { poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 40 } } },
-        { event: STAY_DONE_EVENT, data: { answered: 2 } },
+        { event: STAY_DONE_EVENT, data: { outcome: 'complete' } },
       ]),
     );
 
@@ -40,12 +40,12 @@ describe('streamStays', () => {
     expect(events).toEqual([
       { kind: 'answer', answer: { poi_id: 22, error: 'rate_limited' } },
       { kind: 'answer', answer: { poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 40 } } },
-      { kind: 'done', done: { answered: 2 } },
+      { kind: 'done', done: { outcome: 'complete' } },
     ]);
   });
 
   test('leaves the optional fields out when the stay does not set them', async () => {
-    const fetchStub = stubFetch(eventStreamResponse([{ event: STAY_DONE_EVENT, data: { answered: 0 } }]));
+    const fetchStub = stubFetch(eventStreamResponse([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]));
 
     await eventsOf(streamStays(STAY));
 
@@ -56,11 +56,11 @@ describe('streamStays', () => {
     stubFetch(
       eventStreamResponse([
         { event: 'progress', data: { percent: 50 } },
-        { event: STAY_DONE_EVENT, data: { answered: 0 } },
+        { event: STAY_DONE_EVENT, data: { outcome: 'complete' } },
       ]),
     );
 
-    expect(await eventsOf(streamStays(STAY))).toEqual([{ kind: 'done', done: { answered: 0 } }]);
+    expect(await eventsOf(streamStays(STAY))).toEqual([{ kind: 'done', done: { outcome: 'complete' } }]);
   });
 
   test('a refusal throws before any event, carrying its code', async () => {

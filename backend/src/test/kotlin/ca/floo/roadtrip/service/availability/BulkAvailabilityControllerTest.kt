@@ -2,7 +2,9 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.model.api.StayAnswerDto
 import ca.floo.roadtrip.model.api.StayAvailabilityStatus
+import ca.floo.roadtrip.model.api.StayCheckOutcome
 import ca.floo.roadtrip.model.api.StayFailureReason
 import ca.floo.roadtrip.model.api.StayOutcome
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
@@ -15,8 +17,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Test
@@ -28,6 +34,7 @@ import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private const val RANKED_POI_ID = 1L
 private const val RATE_LIMITED_POI_ID = 100L
@@ -38,9 +45,14 @@ private const val SLOW_POI_ID = 105L
 private const val STRAY_CANCELLATION_POI_ID = 106L
 private const val STUCK_POI_ID = 107L
 private const val BEYOND_HORIZON_POI_ID = 108L
+private const val BLOCKED_POI_ID = 109L
 
 /** How long the stuck POI's read takes, deaf to cancellation: far past any deadline under test. */
 private const val STUCK_READ_MS = 600_000L
+
+/** How long the blocked POI's read takes: far past any deadline under test. */
+private const val BLOCKED_READ_MS = 600_000L
+
 private const val SLOW_SLICE_DELAY_MS = 300L
 private const val TEST_PER_POI_TIMEOUT_MS = 100L
 private const val TEST_STREAM_TIMEOUT_MS = 100L
@@ -126,7 +138,7 @@ class BulkAvailabilityControllerTest {
             // POI 1's three sites are bookable for runs of 1, 5 and 3 nights from the
             // window's start and unanswered after, so none is open for every night of the
             // seven-night window and nothing rules any out: no data, not full.
-            val answer = bulkController().stayAnswers(stayRequest(listOf(1L))).toList().single()
+            val answer = bulkController().stayAnswers(stayRequest(listOf(1L))).answers().single()
 
             assertEquals(1L, answer.poiId)
             assertEquals(StayOutcome.ANSWERED, answer.outcome)
@@ -143,7 +155,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `a rate-limited poi answers failed, rate_limited, retryable`() {
         runTest {
-            val answers = bulkController().stayAnswers(stayRequest(listOf(1L, RATE_LIMITED_POI_ID))).toList()
+            val answers = bulkController().stayAnswers(stayRequest(listOf(1L, RATE_LIMITED_POI_ID))).answers()
 
             assertEquals(setOf(1L, RATE_LIMITED_POI_ID), answers.map { it.poiId }.toSet())
             val failed = answers.single { it.poiId == RATE_LIMITED_POI_ID }
@@ -157,7 +169,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `a poi past its booking horizon answers refused with no retryable`() {
         runTest {
-            val answer = bulkController().stayAnswers(stayRequest(listOf(BEYOND_HORIZON_POI_ID))).toList().single()
+            val answer = bulkController().stayAnswers(stayRequest(listOf(BEYOND_HORIZON_POI_ID))).answers().single()
 
             assertEquals(StayOutcome.REFUSED, answer.outcome)
             assertEquals(StayFailureReason.BEYOND_BOOKING_HORIZON, answer.reason)
@@ -169,7 +181,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `duplicate poi ids each get their own answer`() {
         runTest {
-            val answers = bulkController().stayAnswers(stayRequest(listOf(7L, 7L))).toList()
+            val answers = bulkController().stayAnswers(stayRequest(listOf(7L, 7L))).answers()
 
             assertEquals(listOf(7L, 7L), answers.map { it.poiId })
             assertEquals(listOf(StayOutcome.ANSWERED, StayOutcome.ANSWERED), answers.map { it.outcome })
@@ -179,7 +191,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `stay answers arrive as they land, not in request order`() {
         runTest {
-            val answers = bulkController().stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L))).toList()
+            val answers = bulkController().stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L))).answers()
 
             assertEquals(listOf(2L, SLOW_POI_ID), answers.map { it.poiId })
         }
@@ -191,7 +203,7 @@ class BulkAvailabilityControllerTest {
             val answers =
                 bulkController(perPoiTimeout = Duration.ofMillis(TEST_PER_POI_TIMEOUT_MS))
                     .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L)))
-                    .toList()
+                    .answers()
 
             val timedOut = answers.single { it.poiId == SLOW_POI_ID }
             assertEquals(StayOutcome.TIMED_OUT, timedOut.outcome)
@@ -208,13 +220,88 @@ class BulkAvailabilityControllerTest {
             val answers =
                 bulkController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
                     .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L, SLOW_POI_ID)))
-                    .toList()
+                    .answers()
 
             assertEquals(listOf(2L, SLOW_POI_ID, SLOW_POI_ID), answers.map { it.poiId })
             assertEquals(
                 listOf(StayOutcome.TIMED_OUT, StayOutcome.TIMED_OUT),
                 answers.filter { it.poiId == SLOW_POI_ID }.map { it.outcome },
             )
+        }
+    }
+
+    @Test
+    fun `a check where every poi answers in time ends complete`() {
+        runTest {
+            val items = bulkController().stayAnswers(stayRequest(listOf(1L, RATE_LIMITED_POI_ID, 2L))).toList()
+
+            assertEquals(StayStreamItem.Done(StayCheckOutcome.COMPLETE), items.last())
+            assertEquals(1, items.count { it is StayStreamItem.Done }, "exactly one terminal item")
+            assertEquals(3, items.filterIsInstance<StayStreamItem.Answer>().size)
+        }
+    }
+
+    @Test
+    fun `a poi that outlives only its own timeout does not make the check deadline_reached`() {
+        runTest {
+            // The slow POI times out on its own clock, well inside a generous stream deadline:
+            // that is an answer the campground gave, not a check cut short.
+            val items =
+                bulkController(perPoiTimeout = Duration.ofMillis(TEST_PER_POI_TIMEOUT_MS))
+                    .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L)))
+                    .toList()
+
+            assertEquals(StayOutcome.TIMED_OUT, items.answers().single { it.poiId == SLOW_POI_ID }.outcome)
+            assertEquals(StayStreamItem.Done(StayCheckOutcome.COMPLETE), items.last())
+        }
+    }
+
+    @Test
+    fun `a check that hits the stream deadline ends deadline_reached`() {
+        runTest {
+            val items =
+                bulkController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
+                    .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L)))
+                    .toList()
+
+            // Every poi still answers — the stalled one as timed_out — yet the check says it was cut short.
+            val answers = items.answers()
+            assertEquals(setOf(SLOW_POI_ID, 2L), answers.map { it.poiId }.toSet())
+            assertEquals(StayOutcome.TIMED_OUT, answers.single { it.poiId == SLOW_POI_ID }.outcome)
+            assertEquals(StayOutcome.ANSWERED, answers.single { it.poiId == 2L }.outcome)
+            assertEquals(StayStreamItem.Done(StayCheckOutcome.DEADLINE_REACHED), items.last())
+            assertEquals(1, items.count { it is StayStreamItem.Done }, "exactly one terminal item")
+        }
+    }
+
+    @Test
+    fun `a read that finishes after the stream deadline sends nothing`() {
+        runTest {
+            val blockedReads = BlockedReadLog()
+            val items = mutableListOf<StayStreamItem>()
+            val stream =
+                launch {
+                    bulkController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS), blockedReads = blockedReads)
+                        .stayAnswers(stayRequest(listOf(BLOCKED_POI_ID, 2L)))
+                        .collect { items += it }
+                }
+
+            advanceTimeBy(TEST_STREAM_TIMEOUT_MS + 1)
+            runCurrent()
+            assertTrue(stream.isCompleted, "the stream ended at its deadline")
+            assertEquals(0, blockedReads.returned, "the blocked read is still blocked at the deadline")
+            val atDone = items.toList()
+            assertEquals(StayStreamItem.Done(StayCheckOutcome.DEADLINE_REACHED), atDone.last())
+            assertEquals(StayOutcome.TIMED_OUT, atDone.answers().single { it.poiId == BLOCKED_POI_ID }.outcome)
+
+            // Release the read well after the deadline. It returns a real slice, which would
+            // answer the poi a second time — as answered — if the stream let it.
+            advanceTimeBy(BLOCKED_READ_MS)
+            runCurrent()
+
+            assertEquals(1, blockedReads.returned, "the read was released after the deadline, not skipped")
+            assertEquals(atDone, items, "nothing follows done")
+            assertEquals(1, items.answers().count { it.poiId == BLOCKED_POI_ID }, "one answer for the poi that was cut off")
         }
     }
 
@@ -225,7 +312,7 @@ class BulkAvailabilityControllerTest {
             val answers =
                 bulkController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
                     .stayAnswers(stayRequest(listOf(STUCK_POI_ID, 2L)))
-                    .toList()
+                    .answers()
 
             assertEquals(StayOutcome.TIMED_OUT, answers.single { it.poiId == STUCK_POI_ID }.outcome)
             assertEquals(StayOutcome.ANSWERED, answers.single { it.poiId == 2L }.outcome)
@@ -236,7 +323,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `a read that ends without an answer still answers, as the unclassified failure`() {
         runTest {
-            val answers = bulkController().stayAnswers(stayRequest(listOf(STRAY_CANCELLATION_POI_ID, 2L))).toList()
+            val answers = bulkController().stayAnswers(stayRequest(listOf(STRAY_CANCELLATION_POI_ID, 2L))).answers()
 
             assertEquals(setOf(STRAY_CANCELLATION_POI_ID, 2L), answers.map { it.poiId }.toSet())
             val unanswered = answers.single { it.poiId == STRAY_CANCELLATION_POI_ID }
@@ -250,7 +337,7 @@ class BulkAvailabilityControllerTest {
     fun `the stay stream never runs more pois at once than the configured fan out`() {
         runTest {
             val meter = ConcurrencyMeter()
-            bulkController(fanOutConcurrency = 2, meter = meter).stayAnswers(stayRequest((1L..8L).toList())).toList()
+            bulkController(fanOutConcurrency = 2, meter = meter).stayAnswers(stayRequest((1L..8L).toList())).answers()
             assertEquals(2, meter.peak)
         }
     }
@@ -270,7 +357,7 @@ class BulkAvailabilityControllerTest {
             val stay =
                 bulkController()
                     .stayAnswers(stayRequest(listOf(1L), groupSize = 4))
-                    .toList()
+                    .answers()
                     .single()
                     .stay
             assertEquals(2, assertNotNull(stay).checkedSites)
@@ -331,9 +418,10 @@ private fun bulkController(
     meter: ConcurrencyMeter? = null,
     perPoiTimeout: Duration = Duration.ofSeconds(TEST_GENEROUS_TIMEOUT_SECONDS),
     streamTimeout: Duration = Duration.ofSeconds(TEST_GENEROUS_TIMEOUT_SECONDS),
+    blockedReads: BlockedReadLog? = null,
 ): BulkAvailabilityController =
     BulkAvailabilityController(
-        sliceLookup = FakePoiAvailabilitySliceLookup(recorder, meter),
+        sliceLookup = FakePoiAvailabilitySliceLookup(recorder, meter, blockedReads),
         config =
             BulkAvailabilityConfig(
                 maxPois = TEST_MAX_POIS,
@@ -345,6 +433,12 @@ private fun bulkController(
             ),
         clock = Clock.systemUTC(),
     )
+
+/** The answers in a stay stream's items, in the order they arrived. */
+private fun List<StayStreamItem>.answers(): List<StayAnswerDto> = filterIsInstance<StayStreamItem.Answer>().map { it.answer }
+
+/** The stream's answers; its terminal item is checked by the tests that care about it. */
+private suspend fun Flow<StayStreamItem>.answers(): List<StayAnswerDto> = toList().answers()
 
 private fun request(
     poiIds: List<Long>,
@@ -374,6 +468,11 @@ private fun stayRequest(
         siteTypes = emptyList(),
         groupSize = groupSize,
     )
+
+/** Counts blocked reads that came back with a slice, so a test proves it released one rather than assuming it did. */
+private class BlockedReadLog {
+    var returned = 0
+}
 
 /** Captures each `freshAtOrAfter` the controller hands to the fake, one per POI resolved. */
 private class CutoffRecorder {
@@ -411,6 +510,7 @@ private class ConcurrencyMeter {
 private class FakePoiAvailabilitySliceLookup(
     private val recorder: CutoffRecorder? = null,
     private val meter: ConcurrencyMeter? = null,
+    private val blockedReads: BlockedReadLog? = null,
 ) : PoiAvailabilitySliceLookup {
     override suspend fun poiAvailabilitySlice(
         poiId: Long,
@@ -434,6 +534,17 @@ private class FakePoiAvailabilitySliceLookup(
             // A blocking call in progress: nothing the caller does can cut it short.
             STUCK_POI_ID -> {
                 withContext(NonCancellable) { delay(STUCK_READ_MS) }
+                simpleSlice(poiId)
+            }
+            // A read blocked in a call that, once it ends, returns a slice whatever became of
+            // its caller meanwhile — a JDBC wait, say: the cancellation it missed is not thrown.
+            BLOCKED_POI_ID -> {
+                try {
+                    withContext(NonCancellable) { delay(BLOCKED_READ_MS) }
+                } catch (_: CancellationException) {
+                    // Raised on the way out of the blocked call: the read is already cancelled.
+                }
+                blockedReads?.let { it.returned += 1 }
                 simpleSlice(poiId)
             }
             SLOW_POI_ID -> {

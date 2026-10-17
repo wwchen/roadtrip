@@ -23,6 +23,7 @@ import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.BulkAvailabilityRequest
 import ca.floo.roadtrip.service.availability.StayCheckRequest
+import ca.floo.roadtrip.service.availability.StayStreamItem
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -80,12 +81,13 @@ internal fun Route.bulkAvailabilityRoutes(
                 if (throttled(rateLimit, request.poiIds.size)) return@post
 
                 call.respondEventStream(config.streamHeartbeat) {
-                    var answered = 0
-                    controller.stayAnswers(request).collect { answer ->
-                        send(StayAnswerDto.EVENT, StayAnswerDto.serializer(), answer)
-                        answered += 1
+                    controller.stayAnswers(request).collect { item ->
+                        when (item) {
+                            is StayStreamItem.Answer -> send(StayAnswerDto.EVENT, StayAnswerDto.serializer(), item.answer)
+                            is StayStreamItem.Done ->
+                                send(StayCheckDoneDto.EVENT, StayCheckDoneDto.serializer(), StayCheckDoneDto(item.outcome))
+                        }
                     }
-                    send(StayCheckDoneDto.EVENT, StayCheckDoneDto.serializer(), StayCheckDoneDto(answered = answered))
                 }
             }.describeApi(
                 tag = "availability",
@@ -99,7 +101,9 @@ internal fun Route.bulkAvailabilityRoutes(
                         "`closed_for_season` or `no_data`, and how many sites are open every night from " +
                         "start_date up to end_date); `refused`, the dates cannot work there, with a " +
                         "`reason`; `failed`, with a `reason` and whether asking again can help " +
-                        "(`retryable`); or `timed_out`. Then one `${StayCheckDoneDto.EVENT}` event, and " +
+                        "(`retryable`); or `timed_out`. Then one `${StayCheckDoneDto.EVENT}` event, whose " +
+                        "`outcome` is `complete`, or `deadline_reached` when the stream's deadline cut the " +
+                        "check short and the server answered `timed_out` for the POIs still waiting; then " +
                         "the stream closes. A POI that takes longer than ${config.perPoiTimeout} answers " +
                         "`timed_out`, and so does every POI yet " +
                         "to answer once the stream reaches ${config.streamTimeout}; a quiet stream sends a " +

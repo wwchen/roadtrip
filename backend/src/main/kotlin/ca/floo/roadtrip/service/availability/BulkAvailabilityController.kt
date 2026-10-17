@@ -4,6 +4,7 @@ import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.model.api.BulkAvailabilityResponseDto
 import ca.floo.roadtrip.model.api.BulkPoiAvailabilityDto
 import ca.floo.roadtrip.model.api.StayAnswerDto
+import ca.floo.roadtrip.model.api.StayCheckOutcome
 import ca.floo.roadtrip.model.api.StayOutcome
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.CampsiteKind
@@ -153,13 +154,22 @@ internal class BulkAvailabilityController(
      * its deadline, with every POI in it. Cancelling the collector cancels every
      * read in flight.
      *
+     * The flow ends with exactly one [StayStreamItem.Done], after every answer: it
+     * says [StayCheckOutcome.DEADLINE_REACHED] when the stream's deadline fired, and
+     * [StayCheckOutcome.COMPLETE] otherwise. That is the same decision the sweep
+     * below makes to pick its error code, emitted once rather than derived a second
+     * way — every POI answers either way, so only the server can say which answers
+     * are real. A read that merely ended without a result still completes the check:
+     * the stream did not run out of time. Nothing follows `Done`: the sweep leaves
+     * no POI unanswered, so a late read finds its answer already given.
+     *
      * The reads are deliberately not the flow's children. A per-POI timeout lands
      * at a read's next suspension, so a read stuck in a blocking call — a database
      * lock wait — outlives it; as a child it would hold the stream open with it.
      * Instead the stream answers for it at the deadline and ends, and the read,
      * cancelled, finishes on its own, its late answer dropped.
      */
-    fun stayAnswers(request: StayCheckRequest): Flow<StayAnswerDto> =
+    fun stayAnswers(request: StayCheckRequest): Flow<StayStreamItem> =
         channelFlow {
             val query = SliceQuery(request.siteTypes, request.startDate, request.endDate, request.groupSize, freshAtOrAfter(request.fresh))
             val gate = Semaphore(config.fanOutConcurrency)
@@ -172,7 +182,7 @@ internal class BulkAvailabilityController(
                 index: Int,
                 answer: StayAnswerDto,
             ) {
-                if (answered.add(index)) trySend(answer)
+                if (answered.add(index)) trySend(StayStreamItem.Answer(answer))
             }
 
             val reads = SupervisorJob()
@@ -191,6 +201,7 @@ internal class BulkAvailabilityController(
                 // time; otherwise its read ended without a result (a stray cancellation).
                 val unanswered = if (finished == null) STAY_TIMEOUT_ERROR else AvailabilityProviderError.Unknown.CODE
                 request.poiIds.forEachIndexed { index, poiId -> answer(index, answerOf(poiId, PoiRead.Failed(unanswered))) }
+                trySend(StayStreamItem.Done(if (finished == null) StayCheckOutcome.DEADLINE_REACHED else StayCheckOutcome.COMPLETE))
             } finally {
                 reads.cancel()
             }

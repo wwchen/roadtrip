@@ -63,6 +63,14 @@ class WireVocabularyTest {
     }
 
     @Test
+    fun `the stay check outcome vocabulary keeps its wire strings`() {
+        assertEquals(
+            listOf("complete", "deadline_reached"),
+            serialNames(StayCheckOutcome.serializer()),
+        )
+    }
+
+    @Test
     fun `the stay failure reason vocabulary keeps its wire strings`() {
         assertEquals(
             listOf(

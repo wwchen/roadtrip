@@ -45,6 +45,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.routing.Route
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
@@ -62,6 +63,12 @@ private const val TEST_FAN_OUT_CONCURRENCY = 4
 private const val TEST_IP_POI_LIMIT_PER_MINUTE = 1_000
 private const val RATE_LIMITED_POI_ID = 100L
 private const val BEYOND_HORIZON_POI_ID = 101L
+
+/** A POI whose read never ends, so only the stream's own deadline can end the check. */
+private const val STALLED_POI_ID = 102L
+
+/** Short enough to keep the test quick; the stalled read never returns, so it always fires. */
+private const val TEST_STREAM_TIMEOUT_MS = 200L
 private const val UNKNOWN_CAMPSITE_POI_ID = 999_999L
 private const val FORWARDED_FOR_HEADER = "X-Forwarded-For"
 
@@ -307,14 +314,36 @@ class BulkAvailabilityRoutesTest {
             val failed = answers.single { it["poi_id"]!!.jsonPrimitive.content == "$RATE_LIMITED_POI_ID" }
             assertEquals("failed", failed["outcome"]!!.jsonPrimitive.content)
             assertEquals("rate_limited", failed["reason"]!!.jsonPrimitive.content)
-            assertEquals(
-                2,
-                Json
-                    .parseToJsonElement(events.last().second)
-                    .jsonObject["answered"]!!
-                    .jsonPrimitive.content
-                    .toInt(),
-            )
+            val done = Json.parseToJsonElement(events.last().second).jsonObject
+            assertEquals("complete", done["outcome"]!!.jsonPrimitive.content)
+            assertTrue("answered" !in done, "the count is gone: the outcome is what the server alone can say")
+        }
+
+    @Test
+    fun `a stream cut short by its deadline still answers every poi, and done says deadline_reached`() =
+        testApplication {
+            application {
+                routeTestApplication {
+                    bulkAvailabilityRoutesUnderTest(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
+                }
+            }
+
+            val resp =
+                client.post("/api/pois/availability/bulk/stream") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1,$STALLED_POI_ID],"start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+
+            val events = streamEvents(resp.bodyAsText())
+            assertEquals(listOf("answer", "answer", "done"), events.map { it.first })
+            val stalled =
+                events
+                    .filter { it.first == "answer" }
+                    .map { Json.parseToJsonElement(it.second).jsonObject }
+                    .single { it["poi_id"]!!.jsonPrimitive.content == "$STALLED_POI_ID" }
+            assertEquals("timed_out", stalled["outcome"]!!.jsonPrimitive.content)
+            val done = Json.parseToJsonElement(events.last().second).jsonObject
+            assertEquals("deadline_reached", done["outcome"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -563,6 +592,7 @@ class BulkAvailabilityRoutesTest {
     private fun Route.bulkAvailabilityRoutesUnderTest(
         rateLimit: IpRateLimiter? = null,
         pollingSupported: Boolean = true,
+        streamTimeout: Duration = BulkAvailabilityConfig.default.streamTimeout,
     ) {
         val config =
             BulkAvailabilityConfig(
@@ -570,6 +600,7 @@ class BulkAvailabilityRoutesTest {
                 fanOutConcurrency = TEST_FAN_OUT_CONCURRENCY,
                 tolerance = Duration.ZERO,
                 ipPoiLimitPerMinute = TEST_IP_POI_LIMIT_PER_MINUTE,
+                streamTimeout = streamTimeout,
             )
         val controller =
             BulkAvailabilityController(
@@ -683,6 +714,7 @@ private class FakePoiAvailabilitySliceLookup(
         freshAtOrAfter: Instant?,
     ): PoiAvailabilitySlice {
         if (poiId == RATE_LIMITED_POI_ID) throw AvailabilityProviderError.RateLimited()
+        if (poiId == STALLED_POI_ID) awaitCancellation()
         if (poiId == BEYOND_HORIZON_POI_ID) {
             throw AvailabilityServiceError.BadDateWindow.BeyondBookingHorizon(windowStart.plusDays(BOOKING_HORIZON_DAYS))
         }

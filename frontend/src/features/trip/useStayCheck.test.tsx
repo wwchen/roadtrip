@@ -78,15 +78,36 @@ describe('useStayCheck', () => {
     await act(async () => {
       stream.send(answer(21));
       stream.send(answer(22));
-      stream.send({ event: STAY_DONE_EVENT, data: { answered: 2 } });
+      stream.send({ event: STAY_DONE_EVENT, data: { outcome: 'complete' } });
       stream.close();
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(useStayCheckStore.getState()).toMatchObject({ running: false, failure: null });
   });
 
-  test('done with a campground left unanswered is a check that stopped part way', async () => {
-    stubStream(() => eventStreamResponse([answer(21), { event: STAY_DONE_EVENT, data: { answered: 1 } }]));
+  test('reports a deadline-reached check as timed out even though every campground answered', async () => {
+    // The server answers `timed_out` for whoever was still waiting when its deadline fired, so
+    // every campground has an answer — a count or a gap check would read this as a clean finish.
+    stubStream(() =>
+      eventStreamResponse([
+        answer(21),
+        { event: STAY_ANSWER_EVENT, data: { poi_id: 22, outcome: 'timed_out' } },
+        { event: STAY_DONE_EVENT, data: { outcome: 'deadline_reached' } },
+      ]),
+    );
+    const { result } = renderHook(() => useStayCheck(ASKED));
+
+    await act(async () => {
+      result.current.check();
+      await vi.waitFor(() => expect(useStayCheckStore.getState().running).toBe(false));
+    });
+
+    expect(useStayCheckStore.getState().failure).toBe('timed_out');
+    expect(Object.keys(useStayCheckStore.getState().results)).toEqual(['21', '22']);
+  });
+
+  test('a stream that closes before done was cut off, whatever had answered', async () => {
+    stubStream(() => eventStreamResponse([answer(21), answer(22)]));
     const { result } = renderHook(() => useStayCheck(ASKED));
 
     await act(async () => {
@@ -95,7 +116,6 @@ describe('useStayCheck', () => {
     });
 
     expect(useStayCheckStore.getState().failure).toBe('failed');
-    expect(Object.keys(useStayCheckStore.getState().results)).toEqual(['21']);
   });
 
   test('dates the check by the instant the server says its oldest answer was observed', async () => {
@@ -103,7 +123,7 @@ describe('useStayCheck', () => {
       eventStreamResponse([
         answer(21, '2026-10-12T11:56:00Z'),
         answer(22, '2026-10-12T11:30:00Z'),
-        { event: STAY_DONE_EVENT, data: { answered: 2 } },
+        { event: STAY_DONE_EVENT, data: { outcome: 'complete' } },
       ]),
     );
     const { result } = renderHook(() => useStayCheck(ASKED));
@@ -124,7 +144,7 @@ describe('useStayCheck', () => {
       eventStreamResponse([
         answer(21, null),
         { event: STAY_ANSWER_EVENT, data: { poi_id: 22, outcome: 'timed_out' } },
-        { event: STAY_DONE_EVENT, data: { answered: 2 } },
+        { event: STAY_DONE_EVENT, data: { outcome: 'complete' } },
       ]),
     );
     const { result } = renderHook(() => useStayCheck(ASKED));

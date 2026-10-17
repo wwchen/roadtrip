@@ -115,7 +115,8 @@ export interface StayCheckRequest {
 
 /**
  * How a stay looks at each of these campgrounds, as each answers: one `answer`
- * per POI — its summary or its error code — in the order they land, then `done`.
+ * per POI — its summary or its error code — in the order they land, then `done`,
+ * whose `outcome` says whether the check ran to its end or hit the server's deadline.
  * The POIs start in the order given, so pass the nearest first. A refused
  * request throws before any event: a throttled caller gets an `HttpError` whose
  * `code` is `ip_throttled`. An event this client does not know is skipped, so the
