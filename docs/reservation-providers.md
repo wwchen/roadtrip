@@ -477,6 +477,45 @@ It reads the same slice and the same per-night statuses as the rest of this
 section (`service/availability/StaySummary.kt`), so the status is decided once,
 here, and never in a browser.
 
+## Fetch scope vs answer scope
+
+`catalogAvailability` takes a `CatalogAvailabilityScope`, not a campsite list,
+because the campsites a call *answers for* and the campsites whose cells are
+worth *keeping* are two different sets whenever a `site_type` filter is in play.
+`answerFor` is the first; `alsoCover` is the rest of the campground, disjoint
+from it. The upstream call covers the campground whatever the filter, so the
+cells of the campsites a filter dropped are already paid for — and dropping them
+is what used to leave the next, wider check refetching a campground just
+fetched. `AvailabilityLoader` stores every cell a batch carries and answers from
+the request's own targets, so a wider batch never widens a response.
+
+Two rules keep a wider batch from making an answer wrong:
+
+- **An adapter widens only where its upstream shape makes it free.** rec.gov's
+  facility-month payloads, Campflare's bulk campground call, ReserveAmerica's
+  park matrix and ReserveCalifornia's per-facility grids already carry every
+  covered campsite, so those four key `scope.covered` in full. Aspira fetches per
+  map and per resource location, so it keys only the extras its chosen call
+  already answers for; a map nobody asked about would cost another upstream call,
+  which is not what `alsoCover` buys. An adapter must never emit a cell for a
+  campsite it did not ask the vendor about — a cell written on no question claims
+  coverage the store will later serve.
+- **Answer-level facts are derived above the adapters.** A batch carries
+  `reopensOnByCampsite`, a per-campsite fact; the final `catalogAvailability`
+  extension reduces it over `scope.answerFor` into the batch's season block. That
+  is why the reduction is not a member of the port: an adapter cannot override it
+  and so cannot compute it over the cells it merely covered. On a campground whose
+  cabins are shut for the winter and whose tents open tomorrow, a
+  `site_type=cabin` request is told nothing, not told the tents' date. Aspira's
+  `resourceLocationId` and its occupancy-path choice are answer-level for the same
+  reason: a wider list can turn one resource location into several, and
+  `singleOrNull` would then move a filtered read onto the per-map path and a
+  different classifier.
+
+The poller passes `CatalogAvailabilityScope.of(targets)` — it answers for exactly
+the campsites its watches named and asks for nothing more, because a wider write
+is work no watch is waiting on, charged to a cadence tick.
+
 ## Capabilities
 
 Every `AvailabilityProvider` serves availability. Capability flags only describe
@@ -507,7 +546,7 @@ every vendor. A request past `latest_date` is a `beyond_booking_horizon`
 | Action | Required interface | Notes |
 |---|---|---|
 | Per-day availability for a window | `AvailabilityProvider.availability(ref, startDate, endDate)` | Drives provider-level availability. Adapters fetch upstream directly; the decision to serve stored data or call the adapter live is handled above it by `AvailabilityLoader`, reading current state from the `availability` interval table. |
-| Catalog availability for linked campsites | `AvailabilityProvider.catalogAvailability(ref, campsites, startDate, endDate)` | The POI/campsite catalog path uses this so returned availability is narrowed to known catalog rows. |
+| Catalog availability for linked campsites | `AvailabilityProvider.catalogAvailability(ref, scope, startDate, endDate)` | The POI/campsite catalog path uses this so returned availability is narrowed to known catalog rows. `scope` is a [`CatalogAvailabilityScope`](#fetch-scope-vs-answer-scope), not a campsite list. |
 | Capability probe | `AvailabilityProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
 | Record availability history | poller writes status-run rows to the `availability` interval table | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |

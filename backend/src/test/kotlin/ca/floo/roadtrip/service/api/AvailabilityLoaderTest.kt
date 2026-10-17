@@ -241,12 +241,10 @@ class AvailabilityLoaderTest : SharedDbTest() {
         // outside the request's targets means the next wider check pays again
         // for a campground already called.
         //
-        // No shipping adapter exercises this yet — each one keys its
-        // observations off the campsite list it was handed, so a filtered
-        // request's batch is already narrow. Widening that list is a port
-        // change (fetch scope vs answer scope) and is not this commit; see the
-        // `catalogAvailability` kdoc. This holds the loader to the right side
-        // of that seam in the meantime.
+        // This is the loader's half of the fetch-scope / answer-scope seam. The
+        // adapters' half is `CatalogAvailabilityScope`, and the two together
+        // are what `FilteredThenUnfilteredCheckTest` measures as one provider
+        // call for a filtered check and the unfiltered one after it.
         var fetchCount = 0
         runBlocking {
             loader.loadOrFetch(request(targets = listOf(siteA))) {
