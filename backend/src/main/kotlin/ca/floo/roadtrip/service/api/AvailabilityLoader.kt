@@ -84,10 +84,17 @@ class AvailabilityLoader(
         request: Request,
     ): AvailabilityObservationBatch {
         val targetDates = datesInWindow(request.startDate, request.endDate).toSet()
+        val targetIds = request.targets.mapTo(mutableSetOf()) { it.dbId }
         return fetched.copy(
             startDate = request.startDate,
             endDate = request.endDate,
-            observations = fetched.observations.filter { it.date in targetDates },
+            // The batch covers the whole campground; the response is only about
+            // the campsites this request named. With no targets there is nothing
+            // to narrow to, so the batch stands as fetched.
+            observations =
+                fetched.observations.filter {
+                    it.date in targetDates && (targetIds.isEmpty() || it.campsiteId in targetIds)
+                },
             cacheBlock =
                 AvailabilityCacheBlock(
                     hit = false,
@@ -102,21 +109,29 @@ class AvailabilityLoader(
         request: Request,
         batch: AvailabilityObservationBatch,
     ) {
-        val targetIds = request.targets.mapTo(mutableSetOf()) { it.dbId }
         val dates = datesInWindow(batch.startDate, batch.endDate)
         val observedAtByDate =
             batch.observations.groupBy { it.date }.mapValues { (_, observations) -> observations.maxOf { it.observedAt } }
         val fallbackObservedAt = batch.observations.maxOfOrNull { it.observedAt } ?: Instant.now(clock)
-        val covered = mutableSetOf<Pair<Long, LocalDate>>()
+        val covered = mutableSetOf<AvailabilityCell>()
         val observations = mutableListOf<AvailabilityRepo.Observation>()
+        // Every cell the vendor answered, whether or not this request's filter
+        // asked about it. The upstream call covered the campground and we paid
+        // for it; narrowing the write to the filtered targets is what left the
+        // next unfiltered check with a hole to refetch.
         for (observation in batch.observations) {
-            val campsiteId = observation.campsiteId?.takeIf { it in targetIds } ?: continue
-            covered += campsiteId to observation.date
+            val campsiteId = observation.campsiteId ?: continue
+            covered += AvailabilityCell(campsiteId, observation.date)
             observations += AvailabilityRepo.Observation(campsiteId, observation.date, observation.status, observation.observedAt)
         }
+        // The UNKNOWN back-fill stays with this request's own targets. Those are
+        // the cells it promised an answer for, so "the vendor was asked and said
+        // nothing" is true of them. Writing UNKNOWN for a campsite the request
+        // never targeted would claim coverage on the strength of a question
+        // nobody put.
         for (target in request.targets) {
             for (date in dates) {
-                if (target.dbId to date in covered) continue
+                if (AvailabilityCell(target.dbId, date) in covered) continue
                 observations +=
                     AvailabilityRepo.Observation(
                         target.dbId,
