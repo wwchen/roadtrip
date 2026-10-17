@@ -319,7 +319,9 @@ function StayLine({ id, check }: { id: number; check: CurrentStayCheck }) {
     ) : null;
   }
   const className = STAY_LINE_CLASS[stayToneOf(result)];
-  if (result.kind === 'error') return <span className={className}>{stayCopy.errorFor(result.code)}</span>;
+  if (result.kind === 'error') return <span className={className}>{stayCopy.errorFor(result.outcome, result.reason)}</span>;
   const { status, open_sites: openSites } = result.summary;
-  return <span className={className}>{stayCopy.result[status](openSites)}</span>;
+  // A status a newer server added reads as no data, matching its tone.
+  const line = Object.hasOwn(stayCopy.result, status) ? stayCopy.result[status] : stayCopy.result.no_data;
+  return <span className={className}>{line(openSites)}</span>;
 }

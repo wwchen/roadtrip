@@ -20,6 +20,7 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.route.routeTestApplication
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
@@ -60,6 +61,7 @@ private const val TEST_MAX_POIS = 5
 private const val TEST_FAN_OUT_CONCURRENCY = 4
 private const val TEST_IP_POI_LIMIT_PER_MINUTE = 1_000
 private const val RATE_LIMITED_POI_ID = 100L
+private const val BEYOND_HORIZON_POI_ID = 101L
 private const val UNKNOWN_CAMPSITE_POI_ID = 999_999L
 private const val FORWARDED_FOR_HEADER = "X-Forwarded-For"
 
@@ -295,13 +297,16 @@ class BulkAvailabilityRoutesTest {
             // The one campsite is bookable the first night and taken the second, so
             // nothing is open for the whole window and the provider did answer.
             val first = answers.single { it["poi_id"]!!.jsonPrimitive.content == "1" }
-            val summary = first["summary"]!!.jsonObject
-            assertEquals("full", summary["status"]!!.jsonPrimitive.content)
-            assertEquals(0, summary["open_sites"]!!.jsonPrimitive.content.toInt())
-            assertEquals(1, summary["checked_sites"]!!.jsonPrimitive.content.toInt())
+            assertEquals("answered", first["outcome"]!!.jsonPrimitive.content)
+            val stay = first["stay"]!!.jsonObject
+            assertEquals("full", stay["status"]!!.jsonPrimitive.content)
+            assertEquals(0, stay["open_sites"]!!.jsonPrimitive.content.toInt())
+            assertEquals(1, stay["checked_sites"]!!.jsonPrimitive.content.toInt())
+            assertEquals(observedAt.toString(), stay["observed_at"]!!.jsonPrimitive.content)
+            assertEquals(false, stay["from_cache"]!!.jsonPrimitive.boolean)
             val failed = answers.single { it["poi_id"]!!.jsonPrimitive.content == "$RATE_LIMITED_POI_ID" }
-            assertEquals("rate_limited", failed["error"]!!.jsonPrimitive.content)
-            assertTrue("summary" !in failed)
+            assertEquals("failed", failed["outcome"]!!.jsonPrimitive.content)
+            assertEquals("rate_limited", failed["reason"]!!.jsonPrimitive.content)
             assertEquals(
                 2,
                 Json
@@ -310,6 +315,46 @@ class BulkAvailabilityRoutesTest {
                     .jsonPrimitive.content
                     .toInt(),
             )
+        }
+
+    @Test
+    fun `an answer event carries outcome and omits the fields that do not apply`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk/stream") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """{"poi_ids":[1,$BEYOND_HORIZON_POI_ID,$RATE_LIMITED_POI_ID],""" +
+                            """"start_date":"$windowStart","end_date":"$windowEnd"}""",
+                    )
+                }
+
+            val answers =
+                streamEvents(resp.bodyAsText())
+                    .filter { it.first == "answer" }
+                    .associate { (_, data) ->
+                        val answer = Json.parseToJsonElement(data).jsonObject
+                        answer["poi_id"]!!.jsonPrimitive.content.toLong() to answer
+                    }
+            val answered = answers.getValue(1L)
+            assertEquals("answered", answered["outcome"]!!.jsonPrimitive.content)
+            assertTrue("stay" in answered)
+            assertTrue("reason" !in answered)
+            assertTrue("retryable" !in answered)
+
+            val refused = answers.getValue(BEYOND_HORIZON_POI_ID)
+            assertEquals("refused", refused["outcome"]!!.jsonPrimitive.content)
+            assertEquals("beyond_booking_horizon", refused["reason"]!!.jsonPrimitive.content)
+            assertTrue("stay" !in refused)
+            assertTrue("retryable" !in refused)
+
+            val failed = answers.getValue(RATE_LIMITED_POI_ID)
+            assertEquals("failed", failed["outcome"]!!.jsonPrimitive.content)
+            assertEquals("rate_limited", failed["reason"]!!.jsonPrimitive.content)
+            assertEquals(true, failed["retryable"]!!.jsonPrimitive.boolean)
+            assertTrue("stay" !in failed)
         }
 
     @Test
@@ -638,6 +683,9 @@ private class FakePoiAvailabilitySliceLookup(
         freshAtOrAfter: Instant?,
     ): PoiAvailabilitySlice {
         if (poiId == RATE_LIMITED_POI_ID) throw AvailabilityProviderError.RateLimited()
+        if (poiId == BEYOND_HORIZON_POI_ID) {
+            throw AvailabilityServiceError.BadDateWindow.BeyondBookingHorizon(windowStart.plusDays(BOOKING_HORIZON_DAYS))
+        }
         val campsite = campsiteFixture(id = poiId * FAKE_SLICE_CAMPSITE_ID_MULTIPLIER, campgroundId = poiId)
         val observations =
             listOf(

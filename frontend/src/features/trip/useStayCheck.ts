@@ -20,7 +20,7 @@ import {
   type StayQuery,
   type StayResult,
 } from '@/stores/stayCheckStore';
-import { CHECK_IDLE_TIMEOUT_MS, observedAtOf, resultOf } from './stay-check';
+import { CHECK_IDLE_TIMEOUT_MS, resultOf } from './stay-check';
 
 /** The stay stream's code for a caller over its per-IP limit. */
 const THROTTLED_CODE = 'ip_throttled';
@@ -138,7 +138,10 @@ export function useStayCheck(checkableIds: readonly number[] | null): StayCheckC
             // An event already read when the check was cancelled answers nothing now.
             if (controller.signal.aborted) return false;
             if (event.kind === 'done') return true;
-            record({ [event.answer.poi_id]: resultOf(event.answer) }, observedAtOf(event.answer, Date.now()));
+            // The server dates an answer by its oldest observation. With no campsite
+            // checked there is nothing to date it by, and now is when we looked.
+            const observedAt = event.answer.stay?.observed_at ?? new Date().toISOString();
+            record({ [event.answer.poi_id]: resultOf(event.answer) }, observedAt);
           }
           return false;
         },

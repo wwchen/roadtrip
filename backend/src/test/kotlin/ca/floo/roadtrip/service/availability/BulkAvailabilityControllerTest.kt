@@ -3,6 +3,8 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.api.StayAvailabilityStatus
+import ca.floo.roadtrip.model.api.StayFailureReason
+import ca.floo.roadtrip.model.api.StayOutcome
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
@@ -35,6 +37,7 @@ private const val CRASHING_POI_ID = 104L
 private const val SLOW_POI_ID = 105L
 private const val STRAY_CANCELLATION_POI_ID = 106L
 private const val STUCK_POI_ID = 107L
+private const val BEYOND_HORIZON_POI_ID = 108L
 
 /** How long the stuck POI's read takes, deaf to cancellation: far past any deadline under test. */
 private const val STUCK_READ_MS = 600_000L
@@ -118,21 +121,58 @@ class BulkAvailabilityControllerTest {
     }
 
     @Test
-    fun `the stay stream answers every poi once, with its summary or its error`() {
+    fun `a resolved poi answers with outcome answered and a stay`() {
         runTest {
             // POI 1's three sites are bookable for runs of 1, 5 and 3 nights from the
             // window's start and unanswered after, so none is open for every night of the
             // seven-night window and nothing rules any out: no data, not full.
+            val answer = bulkController().stayAnswers(stayRequest(listOf(1L))).toList().single()
+
+            assertEquals(1L, answer.poiId)
+            assertEquals(StayOutcome.ANSWERED, answer.outcome)
+            val stay = assertNotNull(answer.stay)
+            assertEquals(StayAvailabilityStatus.NO_DATA, stay.status)
+            assertEquals(0, stay.openSites)
+            assertEquals(3, stay.checkedSites)
+            assertEquals(observedAt.toString(), stay.observedAt)
+            assertNull(answer.reason)
+            assertNull(answer.retryable)
+        }
+    }
+
+    @Test
+    fun `a rate-limited poi answers failed, rate_limited, retryable`() {
+        runTest {
             val answers = bulkController().stayAnswers(stayRequest(listOf(1L, RATE_LIMITED_POI_ID))).toList()
 
             assertEquals(setOf(1L, RATE_LIMITED_POI_ID), answers.map { it.poiId }.toSet())
-            val summary = assertNotNull(answers.single { it.poiId == 1L }.summary)
-            assertEquals(StayAvailabilityStatus.NO_DATA, summary.status)
-            assertEquals(0, summary.openSites)
-            assertEquals(3, summary.checkedSites)
             val failed = answers.single { it.poiId == RATE_LIMITED_POI_ID }
-            assertEquals("rate_limited", failed.error)
-            assertNull(failed.summary)
+            assertEquals(StayOutcome.FAILED, failed.outcome)
+            assertEquals(StayFailureReason.RATE_LIMITED, failed.reason)
+            assertEquals(true, failed.retryable)
+            assertNull(failed.stay)
+        }
+    }
+
+    @Test
+    fun `a poi past its booking horizon answers refused with no retryable`() {
+        runTest {
+            val answer = bulkController().stayAnswers(stayRequest(listOf(BEYOND_HORIZON_POI_ID))).toList().single()
+
+            assertEquals(StayOutcome.REFUSED, answer.outcome)
+            assertEquals(StayFailureReason.BEYOND_BOOKING_HORIZON, answer.reason)
+            assertNull(answer.retryable)
+            assertNull(answer.stay)
+        }
+    }
+
+    @Test
+    fun `duplicate poi ids each get their own answer`() {
+        runTest {
+            val answers = bulkController().stayAnswers(stayRequest(listOf(7L, 7L))).toList()
+
+            assertEquals(listOf(7L, 7L), answers.map { it.poiId })
+            assertEquals(listOf(StayOutcome.ANSWERED, StayOutcome.ANSWERED), answers.map { it.outcome })
         }
     }
 
@@ -146,15 +186,19 @@ class BulkAvailabilityControllerTest {
     }
 
     @Test
-    fun `a poi that outlives the per-poi timeout answers timeout, and the stream still ends`() {
+    fun `a poi that outlives the per-poi timeout answers timed_out with no reason`() {
         runTest {
             val answers =
                 bulkController(perPoiTimeout = Duration.ofMillis(TEST_PER_POI_TIMEOUT_MS))
                     .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L)))
                     .toList()
 
-            assertEquals(STAY_TIMEOUT_ERROR, answers.single { it.poiId == SLOW_POI_ID }.error)
-            assertNotNull(answers.single { it.poiId == 2L }.summary)
+            val timedOut = answers.single { it.poiId == SLOW_POI_ID }
+            assertEquals(StayOutcome.TIMED_OUT, timedOut.outcome)
+            assertNull(timedOut.reason)
+            assertNull(timedOut.retryable)
+            assertNull(timedOut.stay)
+            assertEquals(StayOutcome.ANSWERED, answers.single { it.poiId == 2L }.outcome)
         }
     }
 
@@ -167,7 +211,10 @@ class BulkAvailabilityControllerTest {
                     .toList()
 
             assertEquals(listOf(2L, SLOW_POI_ID, SLOW_POI_ID), answers.map { it.poiId })
-            assertEquals(listOf(STAY_TIMEOUT_ERROR, STAY_TIMEOUT_ERROR), answers.filter { it.poiId == SLOW_POI_ID }.map { it.error })
+            assertEquals(
+                listOf(StayOutcome.TIMED_OUT, StayOutcome.TIMED_OUT),
+                answers.filter { it.poiId == SLOW_POI_ID }.map { it.outcome },
+            )
         }
     }
 
@@ -180,8 +227,8 @@ class BulkAvailabilityControllerTest {
                     .stayAnswers(stayRequest(listOf(STUCK_POI_ID, 2L)))
                     .toList()
 
-            assertEquals(STAY_TIMEOUT_ERROR, answers.single { it.poiId == STUCK_POI_ID }.error)
-            assertNotNull(answers.single { it.poiId == 2L }.summary)
+            assertEquals(StayOutcome.TIMED_OUT, answers.single { it.poiId == STUCK_POI_ID }.outcome)
+            assertEquals(StayOutcome.ANSWERED, answers.single { it.poiId == 2L }.outcome)
             assertEquals(TEST_STREAM_TIMEOUT_MS, currentTime, "the stream ended at its deadline, not when the read did")
         }
     }
@@ -192,7 +239,10 @@ class BulkAvailabilityControllerTest {
             val answers = bulkController().stayAnswers(stayRequest(listOf(STRAY_CANCELLATION_POI_ID, 2L))).toList()
 
             assertEquals(setOf(STRAY_CANCELLATION_POI_ID, 2L), answers.map { it.poiId }.toSet())
-            assertEquals(AvailabilityProviderError.Unknown.CODE, answers.single { it.poiId == STRAY_CANCELLATION_POI_ID }.error)
+            val unanswered = answers.single { it.poiId == STRAY_CANCELLATION_POI_ID }
+            assertEquals(StayOutcome.FAILED, unanswered.outcome)
+            assertEquals(StayFailureReason.UNKNOWN, unanswered.reason)
+            assertEquals(false, unanswered.retryable)
         }
     }
 
@@ -217,13 +267,13 @@ class BulkAvailabilityControllerTest {
                     .campsites
             assertEquals(listOf(3, 1), assertNotNull(campsites).map { it.longestRunNights })
 
-            val summary =
+            val stay =
                 bulkController()
                     .stayAnswers(stayRequest(listOf(1L), groupSize = 4))
                     .toList()
                     .single()
-                    .summary
-            assertEquals(2, assertNotNull(summary).checkedSites)
+                    .stay
+            assertEquals(2, assertNotNull(stay).checkedSites)
         }
     }
 
@@ -377,6 +427,7 @@ private class FakePoiAvailabilitySliceLookup(
         when (poiId) {
             RATE_LIMITED_POI_ID -> throw AvailabilityProviderError.RateLimited()
             UNKNOWN_POI_ID -> throw AvailabilityServiceError.NotFound
+            BEYOND_HORIZON_POI_ID -> throw AvailabilityServiceError.BadDateWindow.BeyondBookingHorizon(windowLatest)
             CRASHING_POI_ID -> throw RuntimeException("boom: unmapped failure")
             // A cancellation nobody asked for — what a provider's own `withTimeout` throws.
             STRAY_CANCELLATION_POI_ID -> throw CancellationException("not this read's caller")

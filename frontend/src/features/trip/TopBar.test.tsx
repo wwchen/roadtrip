@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { AppProviders } from '@/app/AppProviders';
 import { STAY_ANSWER_EVENT, STAY_DONE_EVENT, STAY_STREAM_URL } from '@/api/availability-api';
 import type { CampgroundSummary } from '@/api/campground-api';
-import type { BulkPoiSummaryDto, CampgroundSearchResponseDto } from '@/api/generated/api-types';
+import type { CampgroundSearchResponseDto, StaySummaryDto } from '@/api/generated/api-types';
 import { COPIED_STATE_MS, decodeRouteState, encodeRouteState } from '@/lib/share-links';
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
@@ -1113,9 +1113,10 @@ describe('the in-view list', () => {
     const cardNames = () => [...document.querySelectorAll('.tb-card-name')].map((el) => el.textContent);
     const dotOf = (name: string) =>
       screen.getByText(name).closest('.tb-card')!.querySelector('.tb-card-dot') as HTMLElement;
-    const answer = (poiId: number, summary: BulkPoiSummaryDto): StubEvent => ({
+    /** An answered stay, observed just now (no `observed_at`) and not from the cache. */
+    const answer = (poiId: number, stay: Pick<StaySummaryDto, 'status' | 'open_sites' | 'checked_sites'>): StubEvent => ({
       event: STAY_ANSWER_EVENT,
-      data: { poi_id: poiId, summary },
+      data: { poi_id: poiId, outcome: 'answered', stay: { ...stay, from_cache: false } },
     });
     const done = (answered: number): StubEvent => ({ event: STAY_DONE_EVENT, data: { answered } });
 
@@ -1197,7 +1198,7 @@ describe('the in-view list', () => {
       stayStream = () =>
         eventStreamResponse([
           answer(21, { status: 'open', open_sites: 8, checked_sites: 132 }),
-          { event: STAY_ANSWER_EVENT, data: { poi_id: 22, error: 'rate_limited' } },
+          { event: STAY_ANSWER_EVENT, data: { poi_id: 22, outcome: 'failed', reason: 'rate_limited', retryable: true } },
           done(2),
         ]);
       withViewport();
@@ -1265,7 +1266,7 @@ describe('the in-view list', () => {
 
     test('a campground that refuses the dates says why', async () => {
       stayStream = () =>
-        eventStreamResponse([{ event: STAY_ANSWER_EVENT, data: { poi_id: 21, error: 'beyond_booking_horizon' } }, done(1)]);
+        eventStreamResponse([{ event: STAY_ANSWER_EVENT, data: { poi_id: 21, outcome: 'refused', reason: 'beyond_booking_horizon' } }, done(1)]);
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
@@ -1281,7 +1282,7 @@ describe('the in-view list', () => {
 
     test('a campground that ran out of time says so, and is counted apart as worth asking again', async () => {
       stayStream = () =>
-        eventStreamResponse([{ event: STAY_ANSWER_EVENT, data: { poi_id: 21, error: 'timeout' } }, done(1)]);
+        eventStreamResponse([{ event: STAY_ANSWER_EVENT, data: { poi_id: 21, outcome: 'timed_out' } }, done(1)]);
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());

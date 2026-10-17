@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.model.api.BulkPoiSummaryDto
 import ca.floo.roadtrip.model.api.StayAvailabilityStatus
+import ca.floo.roadtrip.model.api.StaySummaryDto
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.service.api.campsiteWindowStatuses
@@ -39,11 +39,23 @@ internal fun List<Campsite>.fittingGroup(groupSize: Int?): List<Campsite> {
  *   night against it, so it may well be open. A stay that runs into a month the
  *   provider did not return is the usual case, and calling it full would be a
  *   guess.
+ *
+ * The answer is dated by the oldest observation behind it, as an instant: a
+ * stay is only as fresh as its stalest night, and the loader's own cache age is
+ * relative to a clock the browser never saw. It is absent when no campsite was
+ * checked — the site type left none, or the group size did — because a stay
+ * over no campsites was never observed.
  */
-internal fun PoiAvailabilitySlice.staySummary(): BulkPoiSummaryDto {
+internal fun PoiAvailabilitySlice.staySummary(): StaySummaryDto {
     val batch = batch
     if (batch == null || campsites.isEmpty()) {
-        return BulkPoiSummaryDto(status = StayAvailabilityStatus.NO_DATA, openSites = 0, checkedSites = campsites.size)
+        return StaySummaryDto(
+            status = StayAvailabilityStatus.NO_DATA,
+            openSites = 0,
+            checkedSites = campsites.size,
+            observedAt = null,
+            fromCache = false,
+        )
     }
     val observationsByCampsite = batch.observations.groupBy { it.campsiteId }
     val streams =
@@ -61,11 +73,12 @@ internal fun PoiAvailabilitySlice.staySummary(): BulkPoiSummaryDto {
             answered.all { nights -> nights.any { it.rulesOutStay } } -> StayAvailabilityStatus.FULL
             else -> StayAvailabilityStatus.NO_DATA
         }
-    return BulkPoiSummaryDto(
+    return StaySummaryDto(
         status = status,
         openSites = openSites,
         checkedSites = campsites.size,
-        cache = batch.cacheBlock,
+        observedAt = batch.observations.minOfOrNull { it.observedAt }?.toString(),
+        fromCache = batch.cacheBlock.hit,
     )
 }
 

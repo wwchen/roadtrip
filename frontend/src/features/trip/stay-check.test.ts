@@ -1,43 +1,65 @@
 import { describe, expect, test } from 'vitest';
-import type { StayAvailabilityStatus } from '@/api/generated/api-types';
+import type { StayAnswer } from '@/api/availability-api';
+import type { StayAvailabilityStatus, StayOutcome, StaySummaryDto } from '@/api/generated/api-types';
 import type { StayResult } from '@/stores/stayCheckStore';
-import { observedAtOf, rankByStay, resultOf, stayTallies, stayToneOf } from './stay-check';
+import { rankByStay, resultOf, stayTallies, stayToneOf } from './stay-check';
 
+const stay = (status: StayAvailabilityStatus, openSites = 0): StaySummaryDto => ({
+  status,
+  open_sites: openSites,
+  checked_sites: 10,
+  observed_at: '2026-10-12T11:56:00Z',
+  from_cache: true,
+});
 const summary = (status: StayAvailabilityStatus, openSites = 0): StayResult => ({
   kind: 'summary',
-  summary: { status, open_sites: openSites, checked_sites: 10 },
+  summary: stay(status, openSites),
 });
-const failure: StayResult = { kind: 'error', code: 'rate_limited' };
+const failure: StayResult = { kind: 'error', outcome: 'failed', reason: 'rate_limited', retryable: true };
+const refusal: StayResult = { kind: 'error', outcome: 'refused', reason: 'beyond_booking_horizon', retryable: null };
+const timeout: StayResult = { kind: 'error', outcome: 'timed_out', reason: null, retryable: null };
+/** An outcome a newer server might send that this build has never heard of. */
+const future: StayResult = { kind: 'error', outcome: 'some_future_outcome' as StayOutcome, reason: null, retryable: null };
 const card = (id: number) => ({ summary: { id } });
 
 describe('resultOf', () => {
-  test('is the answer\'s summary, or its error code', () => {
-    expect(resultOf({ poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 40 } })).toEqual({
+  test('an answered stay is its summary', () => {
+    expect(resultOf({ poi_id: 21, outcome: 'answered', stay: stay('open', 8) })).toEqual({
       kind: 'summary',
-      summary: { status: 'open', open_sites: 8, checked_sites: 40 },
+      summary: stay('open', 8),
     });
-    expect(resultOf({ poi_id: 22, error: 'rate_limited' })).toEqual({ kind: 'error', code: 'rate_limited' });
   });
 
-  test('an answer carrying neither is the backend\'s unclassified failure', () => {
-    expect(resultOf({ poi_id: 23 })).toEqual({ kind: 'error', code: 'unknown' });
-  });
-});
-
-describe('observedAtOf', () => {
-  const now = Date.parse('2026-10-12T12:00:00Z');
-
-  test('backs the time off by the cache age the answer reports', () => {
-    const answer = {
-      poi_id: 2,
-      summary: { status: 'open' as const, open_sites: 5, checked_sites: 9, cache: { hit: true, age_seconds: 240, ttl_seconds: 600 } },
-    };
-
-    expect(observedAtOf(answer, now)).toBe('2026-10-12T11:56:00.000Z');
+  test('reads a refused answer from its outcome, not from a code list', () => {
+    // `window_too_long` was never in the browser's own list of refusals; the server says it is one.
+    expect(resultOf({ poi_id: 22, outcome: 'refused', reason: 'window_too_long' })).toEqual({
+      kind: 'error',
+      outcome: 'refused',
+      reason: 'window_too_long',
+      retryable: null,
+    });
   });
 
-  test('is now when the answer reports no age', () => {
-    expect(observedAtOf({ poi_id: 1, error: 'not_found' }, now)).toBe('2026-10-12T12:00:00.000Z');
+  test('reads retryability from the server rather than inferring it', () => {
+    const answer = (retryable: boolean): StayAnswer => ({ poi_id: 1, outcome: 'failed', reason: 'unknown', retryable });
+
+    // `unknown` is not retryable and `rate_limited` is: whichever the server says is what the result carries.
+    expect(resultOf(answer(false))).toMatchObject({ retryable: false });
+    expect(resultOf(answer(true))).toMatchObject({ retryable: true });
+    expect(resultOf({ poi_id: 2, outcome: 'timed_out' })).toEqual({
+      kind: 'error',
+      outcome: 'timed_out',
+      reason: null,
+      retryable: null,
+    });
+  });
+
+  test('an outcome it has never seen is an error result, not a throw', () => {
+    expect(resultOf({ poi_id: 1, outcome: 'some_future_outcome' as StayOutcome })).toEqual(future);
+  });
+
+  test('an answered outcome without its stay is not a summary', () => {
+    expect(resultOf({ poi_id: 1, outcome: 'answered' })).toMatchObject({ kind: 'error', outcome: 'answered' });
   });
 });
 
@@ -47,6 +69,21 @@ describe('stayToneOf', () => {
 
     expect(statuses.map((status) => stayToneOf(summary(status)))).toEqual(['open', 'few', 'full', 'full', 'unknown']);
     expect(stayToneOf(failure)).toBe('unknown');
+  });
+});
+
+describe('an unrecognised outcome or status', () => {
+  test('ranks and tones as unknown, behind every known status and ahead of the unasked', () => {
+    expect(stayToneOf(future)).toBe('unknown');
+    // A status a newer server added: neither lookup may come back undefined.
+    const newStatus = summary('brand_new' as StayAvailabilityStatus, 3);
+    expect(stayToneOf(newStatus)).toBe('unknown');
+
+    const cards = [card(1), card(2), card(3), card(4), card(5)];
+    const results = { 1: future, 2: newStatus, 3: summary('no_data'), 4: summary('open', 1) };
+
+    // 5 was never asked about; 1 and 2 are the unrecognised pair, kept in arrival order.
+    expect(rankByStay(cards, results).map((c) => c.summary.id)).toEqual([4, 3, 2, 1, 5]);
   });
 });
 
@@ -76,6 +113,20 @@ describe('rankByStay', () => {
 });
 
 describe('stayTallies', () => {
+  test('tallies an outcome it has never seen as unknown', () => {
+    const results = { 1: future, 2: summary('open', 1), 3: { ...future, outcome: 'answered' as StayOutcome } };
+
+    expect(stayTallies([1, 2, 3], results)).toEqual({
+      withSite: 1,
+      full: 0,
+      closed: 0,
+      refused: 0,
+      timedOut: 0,
+      unknown: 2,
+      answered: 3,
+    });
+  });
+
   test('counts somewhere to stay, full, closed and unknown over the ids asked about', () => {
     const results: Record<number, StayResult> = {
       1: summary('open', 5),
@@ -90,8 +141,8 @@ describe('stayTallies', () => {
     expect(
       stayTallies([1, 2, 3, 4, 5, 6, 7, 8, 9], {
         ...results,
-        8: { kind: 'error', code: 'beyond_booking_horizon' },
-        9: { kind: 'error', code: 'timeout' },
+        8: refusal,
+        9: timeout,
       }),
     ).toEqual({
       withSite: 2,

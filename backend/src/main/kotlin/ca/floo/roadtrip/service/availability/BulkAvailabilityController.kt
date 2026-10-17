@@ -4,6 +4,7 @@ import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.model.api.BulkAvailabilityResponseDto
 import ca.floo.roadtrip.model.api.BulkPoiAvailabilityDto
 import ca.floo.roadtrip.model.api.StayAnswerDto
+import ca.floo.roadtrip.model.api.StayOutcome
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.support.causeChain
@@ -144,11 +145,13 @@ internal class BulkAvailabilityController(
      * One answer per requested POI, each as it lands, and never fewer. POIs start
      * in request order — the caller sends the nearest first — at most
      * [BulkAvailabilityConfig.fanOutConcurrency] at a time. One that outlives
-     * [BulkAvailabilityConfig.perPoiTimeout] answers [STAY_TIMEOUT_ERROR], and once
-     * the whole stream reaches [BulkAvailabilityConfig.streamTimeout] so does every
-     * POI yet to answer; a read that ended without an answer at all answers the
-     * unclassified failure. So the flow completes by its deadline, with every POI
-     * in it. Cancelling the collector cancels every read in flight.
+     * [BulkAvailabilityConfig.perPoiTimeout] answers [STAY_TIMEOUT_ERROR] — outcome
+     * `timed_out` — and once the whole stream reaches [BulkAvailabilityConfig.streamTimeout]
+     * so does every POI yet to answer; a read that ended without an answer at all
+     * answers the unclassified failure. Each failure is classified by [stayFailureOf]
+     * into the answer's outcome, reason and retryability. So the flow completes by
+     * its deadline, with every POI in it. Cancelling the collector cancels every
+     * read in flight.
      *
      * The reads are deliberately not the flow's children. A per-POI timeout lands
      * at a read's next suspension, so a read stuck in a blocking call — a database
@@ -187,7 +190,7 @@ internal class BulkAvailabilityController(
                 // Whoever has not answered still does: past the deadline it ran out of
                 // time; otherwise its read ended without a result (a stray cancellation).
                 val unanswered = if (finished == null) STAY_TIMEOUT_ERROR else AvailabilityProviderError.Unknown.CODE
-                request.poiIds.forEachIndexed { index, poiId -> answer(index, StayAnswerDto(poiId = poiId, error = unanswered)) }
+                request.poiIds.forEachIndexed { index, poiId -> answer(index, answerOf(poiId, PoiRead.Failed(unanswered))) }
             } finally {
                 reads.cancel()
             }
@@ -198,8 +201,11 @@ internal class BulkAvailabilityController(
         read: PoiRead,
     ): StayAnswerDto =
         when (read) {
-            is PoiRead.Resolved -> StayAnswerDto(poiId = poiId, summary = read.slice.staySummary())
-            is PoiRead.Failed -> StayAnswerDto(poiId = poiId, error = read.error)
+            is PoiRead.Resolved -> StayAnswerDto(poiId = poiId, outcome = StayOutcome.ANSWERED, stay = read.slice.staySummary())
+            is PoiRead.Failed ->
+                stayFailureOf(read.error).let { failure ->
+                    StayAnswerDto(poiId = poiId, outcome = failure.outcome, reason = failure.reason, retryable = failure.retryable)
+                }
         }
 
     private fun freshAtOrAfter(fresh: Boolean): Instant = Instant.now(clock).minus(if (fresh) config.freshTolerance else config.tolerance)

@@ -4,6 +4,8 @@ import ca.floo.roadtrip.model.api.ApiErrorSchema
 import ca.floo.roadtrip.model.api.BuildInfoDto
 import ca.floo.roadtrip.model.api.StayAnswerDto
 import ca.floo.roadtrip.model.api.StayCheckDoneDto
+import ca.floo.roadtrip.model.api.StayFailureReason
+import ca.floo.roadtrip.model.api.StayOutcome
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.encodeApiJson
@@ -276,7 +278,14 @@ class ContractBodyCheckTest {
                 routeTestApplication(fixture = true) {
                     post(STAY_STREAM) {
                         call.respondEventStream(Duration.ofSeconds(STREAM_HEARTBEAT_SECONDS)) {
-                            send(StayAnswerDto.EVENT, StayAnswerDto.serializer(), StayAnswerDto(poiId = 1, error = "rate_limited"))
+                            val failed =
+                                StayAnswerDto(
+                                    poiId = 1,
+                                    outcome = StayOutcome.FAILED,
+                                    reason = StayFailureReason.RATE_LIMITED,
+                                    retryable = true,
+                                )
+                            send(StayAnswerDto.EVENT, StayAnswerDto.serializer(), failed)
                             send(StayCheckDoneDto.EVENT, StayCheckDoneDto.serializer(), StayCheckDoneDto(answered = 1))
                         }
                     }.access(RouteAccess.Anonymous)

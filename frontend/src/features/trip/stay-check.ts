@@ -1,16 +1,8 @@
 // The pure half of the availability check: how a campground's answer becomes
 // its result, and how answered cards are ordered and counted. `useStayCheck`
 // runs the check; the list and the head read the results.
-import { isStayRefusal, STAY_TIMEOUT_CODE, type StayAnswer, type StayAvailabilityStatus } from '@/api/availability-api';
+import { isAnswered, type StayAnswer, type StayAvailabilityStatus } from '@/api/availability-api';
 import type { StayResult } from '@/stores/stayCheckStore';
-
-const MS_PER_SECOND = 1000;
-
-/**
- * The code an answer carrying neither a summary nor an error is recorded under:
- * the backend's own for a failure it could not classify (`AvailabilityProviderError.Unknown`).
- */
-const UNCLASSIFIED_ERROR = 'unknown';
 
 /**
  * The longest a check's stream may go without sending anything — an answer, or
@@ -19,24 +11,33 @@ const UNCLASSIFIED_ERROR = 'unknown';
  * has lost its connection; without a limit the check, and its button, would stay
  * running until the page was reloaded. How long the providers take is not this
  * limit's business: the backend bounds that itself (`availability.bulk.per-poi-timeout`
- * and `stream-timeout`) and says `timeout` for whoever ran out.
+ * and `stream-timeout`) and answers `timed_out` for whoever ran out.
  */
 export const CHECK_IDLE_TIMEOUT_MS = 60_000;
 
-/** A campground's answer: its summary, else its error code. */
+/**
+ * A campground's answer: its summary when it answered, else the outcome the server
+ * classified it as. Anything that is not an answered stay lands on the error arm,
+ * an outcome this build has never heard of included, so a newer server adding one
+ * degrades to "couldn't check" rather than breaking the list.
+ */
 export function resultOf(answer: StayAnswer): StayResult {
-  return answer.summary
-    ? { kind: 'summary', summary: answer.summary }
-    : { kind: 'error', code: answer.error ?? UNCLASSIFIED_ERROR };
+  if (isAnswered(answer)) return { kind: 'summary', summary: answer.stay };
+  return {
+    kind: 'error',
+    outcome: answer.outcome,
+    reason: answer.reason ?? null,
+    retryable: answer.retryable ?? null,
+  };
 }
 
 /**
- * When [answer] was observed: [now] less the cache age it reports. The backend
- * serves recent observations without asking the provider again, so "checked
- * just now" would be wrong for an answer read from an hour-old poll.
+ * [table]'s entry for [key], or undefined for a key it has never heard of: a
+ * status a newer server added. A typed lookup cannot say so, and an unrecognised
+ * answer must still sort and colour, not throw or compare as NaN.
  */
-export function observedAtOf(answer: StayAnswer, now: number): string {
-  return new Date(now - (answer.summary?.cache?.age_seconds ?? 0) * MS_PER_SECOND).toISOString();
+function entryOf<V>(table: Readonly<Record<string, V>>, key: string): V | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined;
 }
 
 /** How a result reads at a glance — the colour its line and its card's dot take. */
@@ -51,9 +52,10 @@ const STATUS_TONE: Record<StayAvailabilityStatus, StayTone> = {
   no_data: 'unknown',
 };
 
-/** A summary's tone by its status; a failed answer could not tell. */
+/** A summary's tone by its status; a failed answer, or a status it does not know, could not tell. */
 export function stayToneOf(result: StayResult): StayTone {
-  return result.kind === 'summary' ? STATUS_TONE[result.summary.status] : 'unknown';
+  if (result.kind !== 'summary') return 'unknown';
+  return entryOf(STATUS_TONE, result.summary.status) ?? 'unknown';
 }
 
 /** Where a status sorts once a check is back: bookable first, then the ones that say why not. */
@@ -69,7 +71,8 @@ const UNCHECKED_RANK = ERROR_RANK + 1;
 
 function rankOf(result: StayResult | undefined): number {
   if (!result) return UNCHECKED_RANK;
-  return result.kind === 'summary' ? STATUS_RANK[result.summary.status] : ERROR_RANK;
+  if (result.kind !== 'summary') return ERROR_RANK;
+  return entryOf(STATUS_RANK, result.summary.status) ?? ERROR_RANK;
 }
 
 function openSitesOf(result: StayResult | undefined): number {
@@ -107,7 +110,7 @@ export interface StayTallies {
   refused: number;
   /** Ran out of time to answer — worth a Check again, unlike the unknowns. */
   timedOut: number;
-  /** No data, or the check failed for it. */
+  /** No data, or the check failed for it, or an outcome this build does not know. */
   unknown: number;
   /** How many of the asked ids have answered. */
   answered: number;
@@ -124,11 +127,10 @@ export function stayTallies(
     if (!result) continue;
     tallies.answered += 1;
     if (result.kind === 'error') {
-      if (isStayRefusal(result.code)) tallies.refused += 1;
-      else if (result.code === STAY_TIMEOUT_CODE) tallies.timedOut += 1;
+      if (result.outcome === 'refused') tallies.refused += 1;
+      else if (result.outcome === 'timed_out') tallies.timedOut += 1;
       else tallies.unknown += 1;
-    }
-    else if (result.summary.status === 'open' || result.summary.status === 'few_left') tallies.withSite += 1;
+    } else if (result.summary.status === 'open' || result.summary.status === 'few_left') tallies.withSite += 1;
     else if (result.summary.status === 'full') tallies.full += 1;
     else if (result.summary.status === 'closed_for_season') tallies.closed += 1;
     else tallies.unknown += 1;

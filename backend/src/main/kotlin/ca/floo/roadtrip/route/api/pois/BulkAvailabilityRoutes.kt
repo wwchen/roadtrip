@@ -22,7 +22,6 @@ import ca.floo.roadtrip.route.common.unknownSiteTypeDetail
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.BulkAvailabilityRequest
-import ca.floo.roadtrip.service.availability.STAY_TIMEOUT_ERROR
 import ca.floo.roadtrip.service.availability.StayCheckRequest
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
 import io.ktor.http.HttpStatusCode
@@ -95,11 +94,14 @@ internal fun Route.bulkAvailabilityRoutes(
                     "Body: { poi_ids: [pois.id, ...1..${config.maxPois}], start_date, end_date, " +
                         "site_type?, group_size?, fresh? }. Answers 200 as a text/event-stream: one " +
                         "`${StayAnswerDto.EVENT}` event per requested POI as it lands — POIs start in " +
-                        "request order, so send the nearest first — carrying how the stay looks there " +
-                        "(`open`, `few_left`, `full`, `closed_for_season` or `no_data`, and how many sites " +
-                        "are open every night from start_date up to end_date) or an error code, then one " +
-                        "`${StayCheckDoneDto.EVENT}` event, and the stream closes. A POI that takes longer " +
-                        "than ${config.perPoiTimeout} answers `$STAY_TIMEOUT_ERROR`, and so does every POI yet " +
+                        "request order, so send the nearest first — each with an `outcome`: `answered`, " +
+                        "with `stay` saying how the stay looks there (`open`, `few_left`, `full`, " +
+                        "`closed_for_season` or `no_data`, and how many sites are open every night from " +
+                        "start_date up to end_date); `refused`, the dates cannot work there, with a " +
+                        "`reason`; `failed`, with a `reason` and whether asking again can help " +
+                        "(`retryable`); or `timed_out`. Then one `${StayCheckDoneDto.EVENT}` event, and " +
+                        "the stream closes. A POI that takes longer than ${config.perPoiTimeout} answers " +
+                        "`timed_out`, and so does every POI yet " +
                         "to answer once the stream reaches ${config.streamTimeout}; a quiet stream sends a " +
                         "keep-alive comment every ${config.streamHeartbeat}. A refused request answers " +
                         "JSON with the status, as before any event is sent. Each requested POI is charged " +

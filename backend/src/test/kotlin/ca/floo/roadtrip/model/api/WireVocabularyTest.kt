@@ -55,6 +55,35 @@ class WireVocabularyTest {
     }
 
     @Test
+    fun `the stay outcome vocabulary keeps its wire strings`() {
+        assertEquals(
+            listOf("answered", "refused", "timed_out", "failed"),
+            serialNames(StayOutcome.serializer()),
+        )
+    }
+
+    @Test
+    fun `the stay failure reason vocabulary keeps its wire strings`() {
+        assertEquals(
+            listOf(
+                "start_before_earliest",
+                "beyond_booking_horizon",
+                "window_too_long",
+                "rate_limited",
+                "upstream_blocked",
+                "upstream_5xx",
+                "upstream_unreachable",
+                "provider_misconfigured",
+                "unsupported",
+                "not_found",
+                "unknown_campground",
+                "unknown",
+            ),
+            serialNames(StayFailureReason.serializer()),
+        )
+    }
+
+    @Test
     fun `the booking action vocabulary keeps its wire string`() {
         val wire = listOf("completed")
         assertEquals(wire, serialNames(BookingActionStatus.serializer()))

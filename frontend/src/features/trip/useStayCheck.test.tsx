@@ -11,9 +11,21 @@ const ASKED = [21, 22];
 /** Short of the idle limit, so a sign of life inside it keeps the check going. */
 const MOSTLY_IDLE_MS = CHECK_IDLE_TIMEOUT_MS - 1_000;
 
-const answer = (poiId: number) => ({
+const OBSERVED_AT = '2026-10-12T11:56:00Z';
+
+const answer = (poiId: number, observedAt: string | null = OBSERVED_AT) => ({
   event: STAY_ANSWER_EVENT,
-  data: { poi_id: poiId, summary: { status: 'open', open_sites: 3, checked_sites: 9 } },
+  data: {
+    poi_id: poiId,
+    outcome: 'answered',
+    stay: {
+      status: 'open',
+      open_sites: 3,
+      checked_sites: 9,
+      from_cache: false,
+      ...(observedAt === null ? {} : { observed_at: observedAt }),
+    },
+  },
 });
 
 /** The check's stream: the next request answers with whatever [respond] builds from its signal. */
@@ -84,5 +96,46 @@ describe('useStayCheck', () => {
 
     expect(useStayCheckStore.getState().failure).toBe('failed');
     expect(Object.keys(useStayCheckStore.getState().results)).toEqual(['21']);
+  });
+
+  test('dates the check by the instant the server says its oldest answer was observed', async () => {
+    stubStream(() =>
+      eventStreamResponse([
+        answer(21, '2026-10-12T11:56:00Z'),
+        answer(22, '2026-10-12T11:30:00Z'),
+        { event: STAY_DONE_EVENT, data: { answered: 2 } },
+      ]),
+    );
+    const { result } = renderHook(() => useStayCheck(ASKED));
+
+    await act(async () => {
+      result.current.check();
+      await vi.waitFor(() => expect(useStayCheckStore.getState().running).toBe(false));
+    });
+
+    expect(useStayCheckStore.getState().observedAt).toBe('2026-10-12T11:30:00Z');
+  });
+
+  test('an answer with no observation to date it by is dated now', async () => {
+    stubStream(() =>
+      eventStreamResponse([
+        answer(21, null),
+        { event: STAY_ANSWER_EVENT, data: { poi_id: 22, outcome: 'timed_out' } },
+        { event: STAY_DONE_EVENT, data: { answered: 2 } },
+      ]),
+    );
+    const { result } = renderHook(() => useStayCheck(ASKED));
+
+    const before = Date.now();
+    await act(async () => {
+      result.current.check();
+      await vi.waitFor(() => expect(useStayCheckStore.getState().running).toBe(false));
+    });
+    const after = Date.now();
+
+    const { failure, observedAt } = useStayCheckStore.getState();
+    expect(failure).toBeNull();
+    expect(Date.parse(observedAt ?? '')).toBeGreaterThanOrEqual(before);
+    expect(Date.parse(observedAt ?? '')).toBeLessThanOrEqual(after);
   });
 });

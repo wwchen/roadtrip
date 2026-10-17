@@ -12,11 +12,11 @@ import type {
   AvailabilityCellDto,
   AvailabilityDayDto,
   AvailabilityWatchCapabilitiesDto,
-  BulkPoiSummaryDto,
   CampsiteKind,
   PoiCampsitesAvailabilityResponseDto,
   StayAnswerDto,
   StayCheckDoneDto,
+  StaySummaryDto,
 } from './generated/api-types';
 import { readEventStream } from '@/lib/event-stream';
 import { CREDENTIALS, jsonPostStream, type RequestOptions } from './http';
@@ -25,14 +25,20 @@ const START_DATE_PARAM = 'start_date';
 const END_DATE_PARAM = 'end_date';
 const SITE_TYPE_PARAM = 'site_type';
 
-export type { AddToCartState, AvailabilityWindowState, StayAvailabilityStatus } from './generated/api-types';
+export type {
+  AddToCartState,
+  AvailabilityWindowState,
+  StayAvailabilityStatus,
+  StayFailureReason,
+  StayOutcome,
+  StaySummaryDto,
+} from './generated/api-types';
 
 export type AvailabilityCell = AvailabilityCellDto;
 export type AvailabilityDay = AvailabilityDayDto;
 export type AvailabilityCache = AvailabilityCacheBlock;
 export type WatchCapabilities = AvailabilityWatchCapabilitiesDto;
 export type PoiCampsitesAvailabilityResponse = PoiCampsitesAvailabilityResponseDto;
-export type StaySummary = BulkPoiSummaryDto;
 export type StayAnswer = StayAnswerDto;
 
 export const STAY_STREAM_URL = '/api/pois/availability/bulk/stream';
@@ -49,24 +55,17 @@ export interface StayStreamOptions extends RequestOptions {
 /** One event of the stay stream: a campground's answer, or the end of the check. */
 export type StayStreamEvent = { kind: 'answer'; answer: StayAnswerDto } | { kind: 'done'; done: StayCheckDoneDto };
 
-/**
- * The per-POI error codes that are a campground refusing the dates themselves —
- * past its booking horizon, or before its first bookable day — rather than a
- * failure to ask. The backend's `AvailabilityServiceError.BadDateWindow` codes.
- */
-export const STAY_REFUSAL_CODES = ['beyond_booking_horizon', 'start_before_earliest'] as const;
-export type StayRefusalCode = (typeof STAY_REFUSAL_CODES)[number];
+/** An answer whose outcome is `answered`: the one that carries a stay summary. */
+export type AnsweredStay = StayAnswerDto & { outcome: 'answered'; stay: StaySummaryDto };
 
-export function isStayRefusal(code: string): code is StayRefusalCode {
-  return (STAY_REFUSAL_CODES as readonly string[]).includes(code);
+/**
+ * Whether [answer] is an answered stay. Checks the summary itself as well as the
+ * outcome, so an answer claiming one without the other — or an outcome a newer
+ * server added — is not read as a summary it does not carry.
+ */
+export function isAnswered(answer: StayAnswerDto): answer is AnsweredStay {
+  return answer.outcome === 'answered' && answer.stay !== undefined;
 }
-
-/**
- * The code a campground answers when it ran out of time — its own per-POI limit,
- * or the check's — rather than failing (`STAY_TIMEOUT_ERROR` in the backend's
- * `BulkAvailabilityController`). Unlike other failures it may well answer if asked again.
- */
-export const STAY_TIMEOUT_CODE = 'timeout';
 
 /**
  * The provider's season block rides the wire unparsed, so `reopens_on` is

@@ -19,7 +19,7 @@
 // Anything that varies is a function, so a caller cannot assemble a sentence out
 // of fragments and get the word order wrong.
 
-import { STAY_TIMEOUT_CODE, type StayAvailabilityStatus, type StayRefusalCode } from '@/api/availability-api';
+import type { StayAvailabilityStatus, StayFailureReason, StayOutcome } from '@/api/availability-api';
 
 /**
  * What we call recreation.gov to users — the one name, matching the vendor's own
@@ -180,12 +180,13 @@ export const listCopy = {
 } as const;
 
 /**
- * What a card says when its campground refused the stay itself, by the code it
- * refused with. Any other code is an outage, and reads as `stayCopy.error`.
+ * What a card says when its campground refused the stay itself, by the reason it
+ * refused with. A refusal for a reason not listed reads as `stayCopy.refusedLine`.
  */
-const STAY_REFUSAL_COPY: Readonly<Record<StayRefusalCode, string>> = {
+const STAY_REFUSAL_COPY: Readonly<Partial<Record<StayFailureReason, string>>> = {
   beyond_booking_horizon: 'Not bookable this far ahead yet',
   start_before_earliest: 'Too soon to book online',
+  window_too_long: 'Too long a stay to book online',
 };
 
 /** The availability check (M3): its button, its progress, and each card's answer. */
@@ -214,10 +215,17 @@ export const stayCopy = {
   error: "Couldn't check",
   /** A card whose campground ran out of time: unlike `error`, asking again may well answer. */
   timedOutLine: 'Too slow to answer — check again',
-  /** A card's line for a failed answer: why, when the code says, else `error`. */
-  errorFor: (code: string) => {
-    if (code in STAY_REFUSAL_COPY) return STAY_REFUSAL_COPY[code as StayRefusalCode];
-    return code === STAY_TIMEOUT_CODE ? stayCopy.timedOutLine : stayCopy.error;
+  /** A card whose campground refused the stay for a reason with no copy of its own. */
+  refusedLine: 'Not bookable for these dates',
+  /**
+   * A card's line for an answer that is not a stay, by the outcome the server gave
+   * it: a refusal says why, a timeout says to ask again, and anything else — a
+   * failure, or an outcome this build has never heard of — is `error`.
+   */
+  errorFor: (outcome: StayOutcome, reason: StayFailureReason | null) => {
+    if (outcome === 'timed_out') return stayCopy.timedOutLine;
+    if (outcome !== 'refused') return stayCopy.error;
+    return (reason && STAY_REFUSAL_COPY[reason]) || stayCopy.refusedLine;
   },
   /** A card's answer, by status; `open` is the count of sites open every night. */
   result: {

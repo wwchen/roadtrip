@@ -294,13 +294,6 @@ export interface BulkPoiAvailabilityDto {
   error?: string;
 }
 
-export interface BulkPoiSummaryDto {
-  status: StayAvailabilityStatus;
-  open_sites: number;
-  checked_sites: number;
-  cache?: AvailabilityCacheBlock;
-}
-
 export interface CampgroundDetailsRequestDto {
   campground_ids?: number[];
 }
@@ -812,8 +805,10 @@ export interface StatusResponseSchema {
 
 export interface StayAnswerDto {
   poi_id: number;
-  summary?: BulkPoiSummaryDto;
-  error?: string;
+  outcome: StayOutcome;
+  stay?: StaySummaryDto;
+  reason?: StayFailureReason;
+  retryable?: boolean;
 }
 
 export type StayAvailabilityStatus = 'open' | 'few_left' | 'full' | 'closed_for_season' | 'no_data';
@@ -829,6 +824,18 @@ export interface StayCheckRequestDto {
   site_type?: string[];
   group_size?: number;
   fresh?: boolean;
+}
+
+export type StayFailureReason = 'start_before_earliest' | 'beyond_booking_horizon' | 'window_too_long' | 'rate_limited' | 'upstream_blocked' | 'upstream_5xx' | 'upstream_unreachable' | 'provider_misconfigured' | 'unsupported' | 'not_found' | 'unknown_campground' | 'unknown';
+
+export type StayOutcome = 'answered' | 'refused' | 'timed_out' | 'failed';
+
+export interface StaySummaryDto {
+  status: StayAvailabilityStatus;
+  open_sites: number;
+  checked_sites: number;
+  observed_at?: string;
+  from_cache: boolean;
 }
 
 export interface TargetStatusSchema {
