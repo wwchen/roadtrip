@@ -21,8 +21,9 @@ internal data class StayFailure(
 /**
  * The wire codes the classifier reads, named once. They are the strings
  * [ca.floo.roadtrip.model.availability.AvailabilityProviderError] and
- * [AvailabilityServiceError] already carry; the classifier test pins that the
- * two sets agree.
+ * [AvailabilityServiceError] already carry. The classifier test pins the codes
+ * it lists, by hand: a new subclass of either hierarchy has to be added there, and
+ * to [stayFailureOf], or it classifies as unknown.
  */
 internal object StayFailureCode {
     const val START_BEFORE_EARLIEST = "start_before_earliest"

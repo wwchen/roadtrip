@@ -58,8 +58,8 @@ class StayFailureClassifierTest {
     }
 
     @Test fun `every provider and service error code classifies`() {
-        // The expected map is the vocabulary, spelled out literally. It pins what every code in
-        // both hierarchies resolves to today.
+        // The expected map is the vocabulary, spelled out literally. It pins what every code
+        // the map lists resolves to today.
         val expected =
             mapOf(
                 // AvailabilityServiceError.BadDateWindow. The two the route refuses for the whole
