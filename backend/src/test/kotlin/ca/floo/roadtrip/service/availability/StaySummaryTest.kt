@@ -163,7 +163,7 @@ class StaySummaryTest {
     }
 
     @Test
-    fun `observed_at is absent exactly when no campsite was checked`() {
+    fun `observed_at is absent when no observation backs the answer`() {
         val served = listOf(AvailabilityStatus.AVAILABLE, AvailabilityStatus.AVAILABLE)
         val resolved = slice(site(1) to served)
 
@@ -179,6 +179,16 @@ class StaySummaryTest {
             assertEquals(StayAvailabilityStatus.NO_DATA, summary.status)
         }
         assertEquals(observedAt.toString(), resolved.staySummary().observedAt)
+    }
+
+    @Test
+    fun `observed_at is absent when campsites were checked but the provider returned nothing`() {
+        // The batch is there and the site is in the answer, but not one night was observed.
+        val summary = slice(site(1) to emptyList()).staySummary()
+
+        assertEquals(1, summary.checkedSites)
+        assertNull(summary.observedAt)
+        assertEquals(StayAvailabilityStatus.NO_DATA, summary.status)
     }
 
     @Test

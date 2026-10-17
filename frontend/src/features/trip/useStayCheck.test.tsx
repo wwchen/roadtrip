@@ -116,6 +116,9 @@ describe('useStayCheck', () => {
     expect(useStayCheckStore.getState().observedAt).toBe('2026-10-12T11:30:00Z');
   });
 
+  // A regression guard, not a test that drove the code: the old `observedAtOf` also
+  // answered now when an answer reported no age, so this passed before it was written.
+  // It pins that behaviour across the move to `stay.observed_at`.
   test('an answer with no observation to date it by is dated now', async () => {
     stubStream(() =>
       eventStreamResponse([

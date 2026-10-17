@@ -42,9 +42,10 @@ internal fun List<Campsite>.fittingGroup(groupSize: Int?): List<Campsite> {
  *
  * The answer is dated by the oldest observation behind it, as an instant: a
  * stay is only as fresh as its stalest night, and the loader's own cache age is
- * relative to a clock the browser never saw. It is absent when no campsite was
- * checked — the site type left none, or the group size did — because a stay
- * over no campsites was never observed.
+ * relative to a clock the browser never saw. It is absent when no observation
+ * backs the answer: no campsite was checked (the site type left none, or the
+ * group size did), or campsites were but the provider returned nothing for the
+ * window.
  */
 internal fun PoiAvailabilitySlice.staySummary(): StaySummaryDto {
     val batch = batch

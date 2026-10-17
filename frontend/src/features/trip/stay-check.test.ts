@@ -113,6 +113,9 @@ describe('rankByStay', () => {
 });
 
 describe('stayTallies', () => {
+  // A regression guard, not a test that drove the code: under the old string-matching
+  // an unfamiliar value fell to `unknown` too, so this was true before it was written.
+  // It pins that forward-compatibility property across the move to `outcome`.
   test('tallies an outcome it has never seen as unknown', () => {
     const results = { 1: future, 2: summary('open', 1), 3: { ...future, outcome: 'answered' as StayOutcome } };
 

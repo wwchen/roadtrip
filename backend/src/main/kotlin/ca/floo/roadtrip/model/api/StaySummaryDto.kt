@@ -17,8 +17,11 @@ data class StaySummaryDto(
     @SerialName("checked_sites") val checkedSites: Int,
     /**
      * When the oldest observation behind the answer was made, ISO-8601; absent
-     * exactly when no campsite was checked, so nothing was read to date it by.
-     * An instant rather than an age, so it means the same to a browser whose
+     * when no observation backs the answer, so there is nothing to date it by.
+     * That happens two ways, which read differently: no campsite matched the
+     * filters (`checked_sites` is 0), or campsites matched but the provider
+     * returned nothing for the window (`checked_sites` is above 0, and the
+     * status is `no_data`). An instant rather than an age, so it means the same to a browser whose
      * clock and the server's disagree, and a replayed answer does not look new.
      */
     @SerialName("observed_at") val observedAt: String? = null,
