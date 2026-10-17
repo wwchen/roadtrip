@@ -40,10 +40,12 @@ internal fun List<Campsite>.fittingGroup(groupSize: Int?): List<Campsite> {
  *   provider did not return is the usual case, and calling it full would be a
  *   guess.
  *
- * The answer is dated by the oldest observation behind it, as an instant: a
- * stay is only as fresh as its stalest night, and the loader's own cache age is
- * relative to a clock the browser never saw. It is absent when no observation
- * backs the answer: no campsite was checked (the site type left none, or the
+ * The answer is dated by the oldest observation in the batch behind it, as an
+ * instant: a stay is only as fresh as its stalest night, and the loader's own
+ * cache age is relative to a clock the browser never saw. The batch is read
+ * whole, so a campsite the group size left out, or a night outside the stay,
+ * can date it too; that errs stale, never fresh. It is absent when no
+ * observation backs the answer: no campsite was checked (the site type left none, or the
  * group size did), or campsites were but the provider returned nothing for the
  * window.
  */

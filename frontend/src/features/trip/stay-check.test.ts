@@ -76,14 +76,15 @@ describe('an unrecognised outcome or status', () => {
   test('ranks and tones as unknown, behind every known status and ahead of the unasked', () => {
     expect(stayToneOf(future)).toBe('unknown');
     // A status a newer server added: neither lookup may come back undefined.
-    const newStatus = summary('brand_new' as StayAvailabilityStatus, 3);
+    const newStatus = summary('brand_new' as StayAvailabilityStatus, 0);
     expect(stayToneOf(newStatus)).toBe('unknown');
 
     const cards = [card(1), card(2), card(3), card(4), card(5)];
     const results = { 1: future, 2: newStatus, 3: summary('no_data'), 4: summary('open', 1) };
 
-    // 5 was never asked about; 1 and 2 are the unrecognised pair, kept in arrival order.
-    expect(rankByStay(cards, results).map((c) => c.summary.id)).toEqual([4, 3, 2, 1, 5]);
+    // 5 was never asked about. 1 and 2 are the unrecognised pair: the same rank and no open
+    // sites each, so they keep the order they arrived in.
+    expect(rankByStay(cards, results).map((c) => c.summary.id)).toEqual([4, 3, 1, 2, 5]);
   });
 });
 

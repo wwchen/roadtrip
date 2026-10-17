@@ -2,6 +2,7 @@
 // its result, and how answered cards are ordered and counted. `useStayCheck`
 // runs the check; the list and the head read the results.
 import { isAnswered, type StayAnswer, type StayAvailabilityStatus } from '@/api/availability-api';
+import { entryOf } from '@/lib/entry-of';
 import type { StayResult } from '@/stores/stayCheckStore';
 
 /**
@@ -29,15 +30,6 @@ export function resultOf(answer: StayAnswer): StayResult {
     reason: answer.reason ?? null,
     retryable: answer.retryable ?? null,
   };
-}
-
-/**
- * [table]'s entry for [key], or undefined for a key it has never heard of: a
- * status a newer server added. A typed lookup cannot say so, and an unrecognised
- * answer must still sort and colour, not throw or compare as NaN.
- */
-function entryOf<V>(table: Readonly<Record<string, V>>, key: string): V | undefined {
-  return Object.hasOwn(table, key) ? table[key] : undefined;
 }
 
 /** How a result reads at a glance — the colour its line and its card's dot take. */

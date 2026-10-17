@@ -21,10 +21,16 @@ data class StaySummaryDto(
      * That happens two ways, which read differently: no campsite matched the
      * filters (`checked_sites` is 0), or campsites matched but the provider
      * returned nothing for the window (`checked_sites` is above 0, and the
-     * status is `no_data`). An instant rather than an age, so it means the same to a browser whose
-     * clock and the server's disagree, and a replayed answer does not look new.
+     * status is `no_data`). An instant rather than an age, so it means the same
+     * to a browser whose clock and the server's disagree, and a replayed answer
+     * does not look new.
      */
     @SerialName("observed_at") val observedAt: String? = null,
-    /** True when the answer came from stored observations, without asking the provider. */
+    /**
+     * True when the answer came from stored observations, without asking the
+     * provider. False can also mean nothing was served: with no campsite checked
+     * there is no answer to have come from anywhere, and this field is required,
+     * so a browser cannot tell that from a genuine miss.
+     */
     @SerialName("from_cache") val fromCache: Boolean,
 )

@@ -12,6 +12,7 @@
 // the route immediately after it is computed.
 import { useState, type ReactNode } from 'react';
 import { Button, EmptyState, Icon } from '@ui';
+import { entryOf } from '@/lib/entry-of';
 import { filterCopy, inViewCopy, listCopy, routeListCopy, stayCopy } from '@/lib/strings';
 import { useNow } from '@/lib/use-now';
 import { relativeTime } from '@/lib/watch-format';
@@ -322,6 +323,6 @@ function StayLine({ id, check }: { id: number; check: CurrentStayCheck }) {
   if (result.kind === 'error') return <span className={className}>{stayCopy.errorFor(result.outcome, result.reason)}</span>;
   const { status, open_sites: openSites } = result.summary;
   // A status a newer server added reads as no data, matching its tone.
-  const line = Object.hasOwn(stayCopy.result, status) ? stayCopy.result[status] : stayCopy.result.no_data;
+  const line = entryOf(stayCopy.result, status) ?? stayCopy.result.no_data;
   return <span className={className}>{line(openSites)}</span>;
 }

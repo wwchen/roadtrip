@@ -20,6 +20,7 @@
 // of fragments and get the word order wrong.
 
 import type { StayAvailabilityStatus, StayFailureReason, StayOutcome } from '@/api/availability-api';
+import { entryOf } from './entry-of';
 
 /**
  * What we call recreation.gov to users — the one name, matching the vendor's own
@@ -225,7 +226,7 @@ export const stayCopy = {
   errorFor: (outcome: StayOutcome, reason: StayFailureReason | null) => {
     if (outcome === 'timed_out') return stayCopy.timedOutLine;
     if (outcome !== 'refused') return stayCopy.error;
-    return (reason && STAY_REFUSAL_COPY[reason]) || stayCopy.refusedLine;
+    return (reason === null ? undefined : entryOf(STAY_REFUSAL_COPY, reason)) ?? stayCopy.refusedLine;
   },
   /** A card's answer, by status; `open` is the count of sites open every night. */
   result: {
