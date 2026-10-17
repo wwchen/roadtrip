@@ -64,11 +64,15 @@ private const val TEST_IP_POI_LIMIT_PER_MINUTE = 1_000
 private const val RATE_LIMITED_POI_ID = 100L
 private const val BEYOND_HORIZON_POI_ID = 101L
 
-/** A POI whose read never ends, so only the stream's own deadline can end the check. */
+/**
+ * A POI whose read waits until cancelled. With the per-POI timeout set far past the stream's
+ * ([TEST_PER_POI_TIMEOUT_SECONDS] against [TEST_STREAM_TIMEOUT_MS]), only the stream's own deadline can end the check.
+ */
 private const val STALLED_POI_ID = 102L
 
-/** Short enough to keep the test quick; the stalled read never returns, so it always fires. */
+/** Short enough to keep the test quick; the stalled read outlasts it, so it always fires. */
 private const val TEST_STREAM_TIMEOUT_MS = 200L
+private const val TEST_PER_POI_TIMEOUT_SECONDS = 30L
 private const val UNKNOWN_CAMPSITE_POI_ID = 999_999L
 private const val FORWARDED_FOR_HEADER = "X-Forwarded-For"
 
@@ -324,7 +328,10 @@ class BulkAvailabilityRoutesTest {
         testApplication {
             application {
                 routeTestApplication {
-                    bulkAvailabilityRoutesUnderTest(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
+                    bulkAvailabilityRoutesUnderTest(
+                        streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS),
+                        perPoiTimeout = Duration.ofSeconds(TEST_PER_POI_TIMEOUT_SECONDS),
+                    )
                 }
             }
 
@@ -593,6 +600,7 @@ class BulkAvailabilityRoutesTest {
         rateLimit: IpRateLimiter? = null,
         pollingSupported: Boolean = true,
         streamTimeout: Duration = BulkAvailabilityConfig.default.streamTimeout,
+        perPoiTimeout: Duration = BulkAvailabilityConfig.default.perPoiTimeout,
     ) {
         val config =
             BulkAvailabilityConfig(
@@ -601,6 +609,7 @@ class BulkAvailabilityRoutesTest {
                 tolerance = Duration.ZERO,
                 ipPoiLimitPerMinute = TEST_IP_POI_LIMIT_PER_MINUTE,
                 streamTimeout = streamTimeout,
+                perPoiTimeout = perPoiTimeout,
             )
         val controller =
             BulkAvailabilityController(

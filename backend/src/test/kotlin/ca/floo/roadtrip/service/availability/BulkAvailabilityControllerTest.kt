@@ -323,13 +323,16 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `a read that ends without an answer still answers, as the unclassified failure`() {
         runTest {
-            val answers = bulkController().stayAnswers(stayRequest(listOf(STRAY_CANCELLATION_POI_ID, 2L))).answers()
+            val items = bulkController().stayAnswers(stayRequest(listOf(STRAY_CANCELLATION_POI_ID, 2L))).toList()
+            val answers = items.answers()
 
             assertEquals(setOf(STRAY_CANCELLATION_POI_ID, 2L), answers.map { it.poiId }.toSet())
             val unanswered = answers.single { it.poiId == STRAY_CANCELLATION_POI_ID }
             assertEquals(StayOutcome.FAILED, unanswered.outcome)
             assertEquals(StayFailureReason.UNKNOWN, unanswered.reason)
             assertEquals(false, unanswered.retryable)
+            // The stream did not run out of time, so the check is complete, not deadline_reached.
+            assertEquals(StayStreamItem.Done(StayCheckOutcome.COMPLETE), items.last())
         }
     }
 

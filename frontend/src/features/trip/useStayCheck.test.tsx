@@ -116,6 +116,7 @@ describe('useStayCheck', () => {
     });
 
     expect(useStayCheckStore.getState().failure).toBe('failed');
+    expect(Object.keys(useStayCheckStore.getState().results)).toEqual(['21', '22']);
   });
 
   test('dates the check by the instant the server says its oldest answer was observed', async () => {
