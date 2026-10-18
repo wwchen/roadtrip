@@ -8,6 +8,7 @@ import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.cellStatuses
 import ca.floo.roadtrip.model.api.AvailabilityWindowState
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
@@ -270,6 +271,11 @@ class RecGovObservationsTest {
                 campsiteFixture(id = 100L, vendor = "recgov", vendorId = "100"),
                 campsiteFixture(id = 200L, vendor = "recgov", vendorId = "200"),
             )
+        val observations =
+            runBlocking {
+                RecGovAvailabilityProvider(clientReturning(emptyMap()), enabled = true)
+                    .availability(testCampground(), campsites, today, today.plusDays(1))
+            }
         val day =
             classify(
                 clientReturning(emptyMap()),
@@ -277,6 +283,10 @@ class RecGovObservationsTest {
                 catalogSiteIds = listOf("100", "200"),
             )["availability"]!!.jsonArray.single().jsonObject
 
+        assertEquals(
+            mapOf(100L to AvailabilityStatus.UNKNOWN, 200L to AvailabilityStatus.UNKNOWN),
+            observations.observations.filter { it.date == today }.associate { it.campsiteId!! to it.status },
+        )
         assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
         assertEquals(0, day.availableCellIds().size)
         assertEquals(2, day.cellStatuses().size)

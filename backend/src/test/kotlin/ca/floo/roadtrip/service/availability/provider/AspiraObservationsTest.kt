@@ -150,9 +150,10 @@ class AspiraObservationsTest {
                     aspiraCampsite(3, "3"),
                     aspiraCampsite(4, "4"),
                 )
+            val campground = aspiraCampground("wa", -999)
             val observations =
                 provider.availability(
-                    campground = aspiraCampground("wa", -999),
+                    campground = campground,
                     campsites = campsites,
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-03"),
@@ -166,6 +167,7 @@ class AspiraObservationsTest {
                 )
             val dto = window.fusedWindow()
 
+            assertEquals(provider.parentRefFor(campground), observations.campgroundRef)
             assertEquals("wa:-999:-999:null", window.campgroundRef?.serialize())
             assertEquals(listOf(1L, 3L), dto.days[0].availableIds)
             assertEquals(4, dto.days[0].statuses.size)
@@ -360,19 +362,25 @@ class AspiraObservationsTest {
 
             val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
             val campsites = listOf(aspiraCampsite(100, "100"))
+            val observations =
+                provider.availability(
+                    campground = aspiraCampground("pc", -999),
+                    campsites = campsites,
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-02"),
+                )
             val dto =
                 responseOf(
-                    provider.availability(
-                        campground = aspiraCampground("pc", -999),
-                        campsites = campsites,
-                        startDate = LocalDate.parse("2026-07-01"),
-                        endDate = LocalDate.parse("2026-07-02"),
-                    ),
+                    observations,
                     campsites = campsites,
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-02"),
                 )
 
+            assertEquals(
+                mapOf(100L to AvailabilityStatus.UNKNOWN),
+                observations.observations.filter { it.date == LocalDate.parse("2026-07-01") }.associate { it.campsiteId!! to it.status },
+            )
             assertEquals(AvailabilityStatus.UNKNOWN, dto.days.single().status)
             assertEquals(
                 mapOf(100L to AvailabilityStatus.UNKNOWN),
