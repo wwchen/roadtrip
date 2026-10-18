@@ -161,8 +161,8 @@ everything to `other`. `CampsiteDto.kind` carries the wire value and
 `kind_label` carries the enum's display label, so the drawer's Type dropdown
 can list labels while filtering on the wire value underneath.
 
-The `site_type` query parameter on the campsites, availability, and
-bulk-availability routes accepts only these wire values. An unknown value is
+The `site_type` parameter on the campsites, availability, and stay-check
+routes accepts only these wire values. An unknown value is
 a `bad_request` naming the value and listing the accepted set (built off
 `CampsiteKind.entries` so the error text cannot drift from the parser). A
 Watch create and modify validate `campsite_filters.site_type` against the same
@@ -463,19 +463,46 @@ an all-closed week has nothing to draw. `state: empty` covers two cases: no
 campsite matched the request, or no observations could be fetched for the
 window.
 
-The per-campsite `campsites[]` envelopes left this response and remain only on
-`POST /api/pois/availability/bulk`, which carries one `AvailabilityResponseDto`
-per campsite with the same `cells` shape (a single cell per day, that campsite's)
-and the same watchable predicate — the two endpoints share the mapping so they
-cannot answer it differently.
+Per-campsite envelopes are not served anywhere: this response is the one place
+a campsite's days are fused for a browser, and a caller who wants one campsite's
+nights reads `cells` here by campsite id.
 
-The stay stream, `POST /api/pois/availability/bulk/stream`, reduces each campground
-to how one stay looks there — `open`, `few_left`, `full`, `closed_for_season` or
-`no_data`, plus how many campsites are bookable every night of it — and sends each
-as its provider answers, for the map view's availability check.
-It reads the same slice and the same per-night statuses as the rest of this
-section (`service/availability/StaySummary.kt`), so the status is decided once,
-here, and never in a browser.
+### The stay check
+
+`POST /api/pois/availability/stays` answers a different question from the grid
+above: not "what is open at this campground" but "how does this one stay look at
+each of these campgrounds", for the map view's availability check. It is the only
+many-POI availability read. It streams as `text/event-stream`, one event per POI
+as that POI's provider answers (`poi_ids` is the fan-out order, so a caller sends
+the nearest first), then a final `done`:
+
+- `answer` carries `poi_id` and a required `outcome`, and the other fields hang
+  off it. `answered` carries a `StaySummaryDto`: a `status` (`open`, `few_left`,
+  `full`, `closed_for_season` or `no_data`), `open_sites` (campsites bookable
+  online for every night of the stay), `checked_sites`, `observed_at` (when the
+  oldest observation behind the answer was made, absent when none backs it) and
+  `from_cache`. `refused` is strictly about the dates: a `reason` of
+  `start_before_earliest`, `beyond_booking_horizon` or `window_too_long`, and
+  asking again cannot help. `failed` is a failure to ask: a `reason` plus a
+  server-stated `retryable`, so a browser never infers what an error code means.
+  `timed_out` carries nothing else and is always worth asking again.
+- `done` carries `outcome`: `complete`, or `deadline_reached` when the whole
+  stream's deadline cut the check short and the server answered `timed_out` for
+  each POI still waiting. Every POI has an answer by `done` either way, so the
+  outcome is the only thing that tells a truncated check from a finished one.
+
+The summary comes from the same slice and the same per-night statuses as the
+grid (`poiAvailabilitySlice`, then `service/availability/StaySummary.kt`), so the
+status is decided once, here, and never in a browser. The vocabularies are the
+`StayOutcome`, `StayFailureReason`, `StayAvailabilityStatus` and
+`StayCheckOutcome` enums, which generate into the frontend types; nothing on the
+client re-types them.
+
+`max_age_seconds` says how old a stored observation may be and still answer. The
+server clamps it into `[min-max-age, default-max-age]` rather than refusing it,
+and a request that names none gets the ceiling. The bounds, the POI cap, the
+fan-out concurrency and the deadlines are `roadtrip.availability.stays` config
+(`StayCheckConfig`).
 
 ## Capabilities
 

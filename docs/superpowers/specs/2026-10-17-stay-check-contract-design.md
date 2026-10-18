@@ -8,6 +8,13 @@ and makes its shapes say what they mean.
 Scope is the wire. The loader's freshness policy — see **Deferred** — is a
 separate piece of work.
 
+Two statements in this document were wrong when written and were caught during
+implementation. They are corrected in place, each marked **Correction**, with
+what was claimed and why it did not hold: the `observed_at` invariant (under
+`StaySummaryDto`, and again under **Testing**) and the claim that
+`AvailabilityResponseDto` is shared with the detail endpoint (under
+`StaySummaryDto`, **Deletions** and **Risks**).
+
 ## Problem
 
 `POST /api/pois/availability/bulk` and `POST /api/pois/availability/bulk/stream`
@@ -178,9 +185,9 @@ data class StaySummaryDto(
     @SerialName("open_sites") val openSites: Int,
     @SerialName("checked_sites") val checkedSites: Int,
     /**
-     * When the oldest observation behind this answer was seen. Absent exactly
-     * when [checkedSites] is 0 — no campsite matched the filter, so no
-     * observation backs the answer.
+     * When the oldest observation behind this answer was seen. Absent when no
+     * observation backs the answer: no campsite matched the filters, or campsites
+     * matched and the provider returned nothing for the window.
      */
     @SerialName("observed_at") val observedAt: String? = null,
     /** False when at least one campsite-day was refetched from the provider for this answer. */
@@ -194,17 +201,34 @@ The embedded `AvailabilityCacheBlock` goes. It was nullable ("absent when
 nothing was read"), its `ttl_seconds` was the applied tolerance rather than a
 TTL, and its `age_seconds` is a relative number the client immediately converts
 back to an instant (`observedAtOf`). `observed_at` is that instant, sent
-directly. `AvailabilityCacheBlock` itself stays: `AvailabilityResponseDto` on the detail
-endpoint still carries it, and its shape is not in scope here — the only change
-this spec makes to that DTO is dropping `longest_run_nights`, under
-**Deletions**.
+directly. `AvailabilityCacheBlock` itself stays: the detail endpoint's
+`PoiCampsitesAvailabilityResponseDto` still carries it as `cache`, and its shape
+is not in scope here.
 
-`observed_at` is the one residual optional field, and its absence is derivable
-from `checked_sites == 0` rather than free-floating. That holds because
-`CampsiteAvailabilityResult.batch` is non-null and `poiAvailabilitySlice`
-returns `batch = null` only in its `campsites.isEmpty()` branch, so a summary
-with no observations behind it always reports `checked_sites: 0` — including
-when `group_size` is what emptied the list.
+> **Correction.** As first written, this paragraph said `AvailabilityResponseDto`
+> carried the block on the detail endpoint, and that the only change to that DTO
+> was dropping `longest_run_nights`. The detail endpoint serves
+> `PoiCampsitesAvailabilityResponseDto`, not `AvailabilityResponseDto`; the latter
+> appeared in no contract row and was reachable only through the deleted scan's
+> body. See **Risks**.
+
+`observed_at` is the one residual optional field. Its absence means no
+observation backs the answer, which happens two ways, and a reader should be able
+to tell them apart: no campsite matched the filters (`checked_sites` is 0,
+including when `group_size` is what emptied the list), or campsites matched and
+the provider returned nothing for the window (`checked_sites` is above 0, and the
+status is `no_data`). The absence is the two cases' shared consequence, not
+`checked_sites == 0` alone.
+
+> **Correction.** As first written, this paragraph claimed `observed_at` is
+> "absent exactly when `checked_sites == 0`", arguing that
+> `poiAvailabilitySlice` returns `batch = null` only in its `campsites.isEmpty()`
+> branch. That is true of `batch`, but the invariant does not follow from it.
+> `observed_at` is the `minOfOrNull` over the batch's observations, and that is
+> also null when the batch exists with no observations — a provider that answered
+> nothing for the window — where `checked_sites` is above 0. The rule is: absent
+> when no observation backs the answer. The same statement under **Testing** is
+> corrected to match.
 
 ### The `done` event
 
@@ -278,10 +302,15 @@ service layer, not the route, and not the browser.
 | `STAY_REFUSAL_CODES`, `isStayRefusal`, `STAY_TIMEOUT_CODE`, `UNCLASSIFIED_ERROR` | `availability-api.ts`, `stay-check.ts` |
 | the `/bulk` half of `BulkAvailabilityRoutesTest` and `BulkAvailabilityControllerTest` | `backend/src/test/` |
 
-`longest_run_nights` is written only by the deleted `rank()`, so it has been
-null on the detail endpoint since it shipped. Removing it from the shared
-`AvailabilityResponseDto` is a consequence of the deletion, not a separate
-change.
+`longest_run_nights` is written only by the deleted `rank()`, so it was always
+null. Removing it from `AvailabilityResponseDto` is a consequence of the deletion,
+not a separate change.
+
+> **Correction.** As first written, this said the field had been null "on the
+> detail endpoint" and that `AvailabilityResponseDto` is shared with it. It is not:
+> the detail endpoint serves `PoiCampsitesAvailabilityResponseDto`, so the field was
+> never on that endpoint's wire. `AvailabilityResponseDto` survives as an internal
+> type; it left the generated types with the scan's body.
 
 ## Configuration
 
@@ -342,7 +371,11 @@ cannot land before the frontend moves. Each step is a commit.
 - `max_age_seconds` below the floor and above the ceiling both clamp; absent
   defaults to `default-max-age`. Assert the `freshAtOrAfter` the controller
   derives, not just the status code.
-- `observed_at` absent exactly when `checked_sites == 0`.
+- `observed_at` absent when no observation backs the answer, in both cases: no
+  campsite matched (`checked_sites == 0`), and campsites matched but the provider
+  returned nothing for the window (`checked_sites > 0`, `no_data`). *(Corrected:
+  this line first read "absent exactly when `checked_sites == 0`"; see
+  `StaySummaryDto`.)*
 - `ContractBodyCheckTest` / `contractLedgerCheck`: both events produced by a
   route test, or the build fails.
 - `api-endpoints.test.ts`: `CALLED_TODAY` loses `/api/pois/availability/bulk/stream`
@@ -378,10 +411,14 @@ cannot land before the frontend moves. Each step is a commit.
 
 ## Risks
 
-- **`AvailabilityResponseDto` is shared.** Removing `longest_run_nights` touches
+- ~~**`AvailabilityResponseDto` is shared.** Removing `longest_run_nights` touches
   the detail endpoint's generated type. It has always been null there, and
   nothing in `frontend/src` reads it, but the regenerated `api-types.ts` diff
-  will be larger than the route change suggests.
+  will be larger than the route change suggests.~~ **Correction: this risk did not
+  exist.** The detail endpoint serves `PoiCampsitesAvailabilityResponseDto`;
+  `AvailabilityResponseDto` appeared in no contract row and was reachable only
+  through the deleted scan's body. It left `api-types.ts` along with the three
+  `Bulk*` DTOs, and nothing the detail endpoint serves changed.
 - **The frontend cutover is not purely mechanical.** `stayTallies` currently
   derives its buckets from code strings; moving them to `outcome`/`reason` is a
   behaviour change wherever the two disagree. The existing `stay-check.test.ts`
