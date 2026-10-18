@@ -8,12 +8,15 @@ and makes its shapes say what they mean.
 Scope is the wire. The loader's freshness policy — see **Deferred** — is a
 separate piece of work.
 
-Two statements in this document were wrong when written and were caught during
-implementation. They are corrected in place, each marked **Correction**, with
-what was claimed and why it did not hold: the `observed_at` invariant (under
-`StaySummaryDto`, and again under **Testing**) and the claim that
-`AvailabilityResponseDto` is shared with the detail endpoint (under
-`StaySummaryDto`, **Deletions** and **Risks**).
+Five statements in this document were wrong or incomplete when written and were
+caught during implementation or the final read of the branch. They are corrected
+in place, each marked **Correction**, with what was claimed and why it did not
+hold: the `observed_at` invariant (under `StaySummaryDto`, and again under
+**Testing**); the claim that `AvailabilityResponseDto` is shared with the detail
+endpoint (under `StaySummaryDto`, **Deletions** and **Risks**); the count of
+`failed` reasons (under **Design**, the outcome table); the claim that no YAML
+sets the renamed keys (under **Configuration**); and the `OpenApiSmokeTest`
+assertion (under **Testing**).
 
 ## Problem
 
@@ -159,7 +162,7 @@ generate into `api-types.ts` and the client's hand-typed code lists are deleted.
 | `answered` | — | `stay` is set; render the card |
 | `refused` | `start_before_earliest`, `beyond_booking_horizon`, `window_too_long` | the dates cannot work here; terminal |
 | `timed_out` | — | did not answer in time; Check again is worth offering |
-| `failed` | `rate_limited`, `upstream_blocked`, `upstream_5xx`, `upstream_unreachable`, `provider_misconfigured`, `unsupported`, `not_found`, `unknown` | `retryable` says whether asking again can help |
+| `failed` | `rate_limited`, `upstream_blocked`, `upstream_5xx`, `upstream_unreachable`, `provider_misconfigured`, `unsupported`, `not_found`, `unknown_campground`, `unknown` | `retryable` says whether asking again can help |
 
 `refused` is strictly about the dates — exactly today's `STAY_REFUSAL_CODES`,
 now stated by the server. `not_found` sits under `failed` with
@@ -170,9 +173,19 @@ before any fan-out, since an inverted window is wrong for every POI.
 
 `retryable` is true for `rate_limited`, `upstream_blocked`, `upstream_5xx` and
 `upstream_unreachable`, and false for `provider_misconfigured`, `unsupported`,
-`not_found` and `unknown`. It is absent on `refused` (never retryable) and on
-`timed_out` (always worth retrying), so the field is present exactly where it
-carries information.
+`not_found`, `unknown_campground` and `unknown`. It is absent on `refused` (never
+retryable) and on `timed_out` (always worth retrying), so the field is present
+exactly where it carries information.
+
+> **Correction.** As first written, the table and this paragraph listed eleven
+> `StayFailureReason` members. The enum has twelve: `unknown_campground` was
+> added during implementation and the spec never caught up. It is kept apart from
+> `not_found` on purpose. `not_found` means no campground row is linked to the POI
+> id; `unknown_campground` means the campground resolved but no provider claims
+> it. A POI that exists with no provider is not a POI that does not exist, and
+> folding the two would tell a caller the latter. The UI renders them alike; the
+> distinction is for logs and for the wire. It is terminal (`retryable: false`)
+> and pinned by `WireVocabularyTest`.
 
 ### `StaySummaryDto`
 
@@ -321,11 +334,23 @@ not a separate change.
 | `tolerance` | `default-max-age` |
 | `fresh-tolerance` | `min-max-age` |
 
-No deploy config, compose file or YAML sets any `availability.bulk.*` key — the
-defaults all live in `BulkAvailabilityConfig.Companion` — so the rename costs
-nothing operationally. The existing invariants (`minMaxAge <= defaultMaxAge`,
+Nothing outside `backend/src` sets any `roadtrip.availability.*` key — no deploy
+config, compose file or CI workflow — so the rename costs nothing operationally.
+The existing invariants (`minMaxAge <= defaultMaxAge`,
 `ipPoiLimitPerMinute >= maxPois`, `fanOutConcurrency < db.max-pool-size`) carry
 over unchanged, with their `require` messages updated to the new names.
+
+> **Correction.** As first written, this section said no deploy config, compose
+> file or YAML set any `availability.bulk.*` key, because "the defaults all live in
+> `BulkAvailabilityConfig.Companion`". That reason was false.
+> `backend/src/main/resources/application.yaml` set five of them (`max-pois`,
+> `fan-out-concurrency`, `tolerance`, `fresh-tolerance`, `ip-rate-limit-per-minute`),
+> including both keys this section renames, and now sets eight under
+> `roadtrip.availability.stays.*`. The conclusion holds for a different reason:
+> that file is in `backend/src`, so the rename changed it in the same commit as the
+> code that reads it, and nothing outside `backend/src` (compose, deploy workflow,
+> secrets registry) sets a `roadtrip.availability.*` key that an operator would
+> have to migrate.
 
 ## The client
 
@@ -381,8 +406,15 @@ cannot land before the frontend moves. Each step is a commit.
 - `api-endpoints.test.ts`: `CALLED_TODAY` loses `/api/pois/availability/bulk/stream`
   and gains `/api/pois/availability/stays`; the `/bulk` exemption comment goes
   with the endpoint.
-- `OpenApiSmokeTest`: assert the deleted path is absent, as it already does for
-  `/api/availability/bulk`.
+- ~~`OpenApiSmokeTest`: assert the deleted path is absent, as it already does for
+  `/api/availability/bulk`.~~ **Correction: this assertion was dropped as
+  vacuous.** `OpenApiSmokeTest` never mounts the availability routes, so a
+  `paths` lookup for a deleted availability path is absent whether or not the
+  route was deleted; the existing `/api/availability/bulk` assertion it was meant
+  to follow is vacuous for the same reason. It was replaced by a check that can
+  fail: `ApiContractCoverageTest` asserts the contract holds exactly one row at
+  `/api/pois/availability/stays` and none whose path starts with
+  `/api/pois/availability/bulk`.
 
 ## Deferred, with reasoning
 
