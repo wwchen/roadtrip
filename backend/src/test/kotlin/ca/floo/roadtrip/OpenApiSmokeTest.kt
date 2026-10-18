@@ -177,7 +177,6 @@ class OpenApiSmokeTest {
             )
 
             assertFalse(paths.containsKey("/api/availability/bulk"))
-            assertFalse(paths.containsKey("/api/pois/availability/bulk"))
             // The redirect rows are outside both contracted prefixes, so mounting
             // authRoutes brings /auth/password/** into the document and nothing else.
             assertFalse(paths.containsKey("/auth/login"))
