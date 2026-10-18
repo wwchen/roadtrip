@@ -29,6 +29,11 @@ internal open class FailoverAvailabilityFetcher(
         val attempts: List<AttemptRecord>,
     )
 
+    /**
+     * [campsites] is the campground's campsite set, which is what the port takes:
+     * the candidates all answer for the campground, and the caller narrows the
+     * answer afterwards.
+     */
     open suspend fun fetch(
         providers: List<AvailabilityProvider>,
         campground: Campground,
@@ -88,7 +93,7 @@ internal open class FailoverAvailabilityFetcher(
     ): Attempt =
         try {
             val batch =
-                provider.catalogAvailability(
+                provider.availability(
                     campground = campground,
                     campsites = campsites,
                     startDate = window.startDate,

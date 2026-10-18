@@ -5,7 +5,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
-import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
@@ -43,28 +42,18 @@ class RecGovAvailabilityProvider(
 
     override suspend fun availability(
         campground: Campground,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch {
-        val recgovId = recgovIdOrThrow(campground)
-        return runWithErrorMapping {
-            fetchAvailability(recgovId, startDate, endDate)
-        }
-    }
-
-    override suspend fun catalogAvailability(
-        campground: Campground,
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        if (campsites.isEmpty()) {
-            return availability(campground, startDate, endDate)
-        }
         val recgovId = recgovIdOrThrow(campground)
+        // The facility-month payloads cover the campground whatever set out this
+        // call, so every campsite's cells are in them already. This map is how a
+        // vendor site id becomes a base unit; a site it has no entry for is a row
+        // we cannot key, and it is dropped rather than returned unkeyed.
         val campsiteIdByVendorId = campsites.associate { vendorSiteIdFor(it) to it.id }
         return runWithErrorMapping {
-            fetchCatalogAvailability(recgovId, campsiteIdByVendorId, startDate, endDate)
+            fetchMonths(recgovId, campsiteIdByVendorId, startDate, endDate)
         }
     }
 
@@ -73,35 +62,7 @@ class RecGovAvailabilityProvider(
         parentRef: BookingProviderRef,
     ): String = RecGovBookingUrl.template(vendorSiteIdFor(campsite))
 
-    private suspend fun fetchAvailability(
-        recgovId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch =
-        coroutineScope {
-            val dates = datesInWindow(startDate, endDate)
-            val months = monthsCovering(startDate, endDate.minusDays(1))
-            val observedAt = Instant.now()
-            val payloads =
-                months
-                    .map { month -> async { availabilityClient.fetchMonth(recgovId, month) } }
-                    .awaitAll()
-
-            val merged = mergeCampsites(payloads)
-            val observedAtByDate = dates.associateWith { observedAt }
-
-            AvailabilityObservationBatch(
-                provider = "recgov",
-                startDate = startDate,
-                endDate = endDate,
-                observations = observationsFromCampsites(merged, dates, observedAtByDate),
-                seasonBlock = inferReopenDate(merged, startDate),
-                cacheBlock = directFetchCacheBlock(),
-                scope = BookingProviderRef.RecGov(facilityId = recgovId),
-            )
-        }
-
-    private suspend fun fetchCatalogAvailability(
+    private suspend fun fetchMonths(
         recgovId: String,
         campsiteIdByVendorId: Map<String, Long>,
         startDate: LocalDate,
@@ -125,7 +86,6 @@ class RecGovAvailabilityProvider(
                 startDate = startDate,
                 endDate = endDate,
                 observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, campsiteIdByVendorId),
-                seasonBlock = inferReopenDate(catalogSites, startDate),
                 cacheBlock = directFetchCacheBlock(),
                 scope = BookingProviderRef.RecGov(facilityId = recgovId),
             )
@@ -192,16 +152,18 @@ private fun monthsCovering(
     return out
 }
 
+/** Only sites that resolve to a campsite: an unkeyed row is not a base-unit fact. */
 private fun observationsFromCampsites(
     merged: Map<String, Map<String, String>>,
     dates: List<LocalDate>,
     observedAtByDate: Map<LocalDate, Instant>,
-    campsiteIdsBySiteId: Map<String, Long> = emptyMap(),
+    campsiteIdsBySiteId: Map<String, Long>,
 ): List<CampsiteDayObservation> =
     merged.flatMap { (siteId, byDate) ->
+        val campsiteId = campsiteIdsBySiteId[siteId] ?: return@flatMap emptyList()
         dates.map { date ->
             CampsiteDayObservation(
-                campsiteId = campsiteIdsBySiteId[siteId],
+                campsiteId = campsiteId,
                 date = date,
                 observedAt = observedAtByDate[date] ?: Instant.EPOCH,
                 status = classifyRecgovStatus(byDate[date.toString()]),
@@ -220,22 +182,6 @@ private fun classifyRecgovStatus(raw: String?): AvailabilityStatus {
         status.equals("Reserved", true) || status.equals("Not Available", true) -> AvailabilityStatus.RESERVED
         else -> AvailabilityStatus.UNKNOWN
     }
-}
-
-private fun inferReopenDate(
-    merged: Map<String, Map<String, String>>,
-    today: LocalDate,
-): AvailabilitySeasonBlock? {
-    val candidates =
-        merged.values
-            .flatMap { it.entries }
-            .filter { (_, status) ->
-                classifyRecgovStatus(status).isOnlineBookable
-            }.mapNotNull { (date, _) ->
-                runCatching { LocalDate.parse(date) }.getOrNull()
-            }.filter { !it.isBefore(today) }
-    val earliest = candidates.minOrNull() ?: return null
-    return AvailabilitySeasonBlock(reopensOn = earliest.toString())
 }
 
 private fun directFetchCacheBlock(): AvailabilityCacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L)

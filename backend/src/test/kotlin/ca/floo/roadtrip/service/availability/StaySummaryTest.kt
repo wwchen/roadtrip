@@ -180,6 +180,7 @@ private fun slice(
                 observations = observations,
                 cacheBlock = cache,
             ),
+        reopensOnByCampsite = emptyMap(),
         pollingSupported = true,
     )
 }

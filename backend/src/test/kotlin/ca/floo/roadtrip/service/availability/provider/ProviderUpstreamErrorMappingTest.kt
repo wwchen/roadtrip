@@ -5,6 +5,7 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
 import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
@@ -112,6 +113,7 @@ class ProviderUpstreamErrorMappingTest {
         assertThrown(expected) {
             adapter.availability(
                 campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483615:-2147483624"),
+                campsites = listOf(errorMappingCampsite),
                 startDate = start,
                 endDate = end,
             )
@@ -137,6 +139,7 @@ class ProviderUpstreamErrorMappingTest {
                         bookingProviderRef = "upper-pines-campground-447",
                         dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
                     ),
+                campsites = listOf(errorMappingCampsite),
                 startDate = start,
                 endDate = end,
             )
@@ -158,6 +161,7 @@ class ProviderUpstreamErrorMappingTest {
         assertThrown(expected) {
             adapter.availability(
                 campground = testCampground(bookingProvider = "reserveamerica", bookingProviderRef = "NY:489"),
+                campsites = listOf(errorMappingCampsite),
                 startDate = start,
                 endDate = end,
             )
@@ -186,6 +190,7 @@ class ProviderUpstreamErrorMappingTest {
         assertThrown(expected) {
             adapter.availability(
                 campground = testCampground(bookingProvider = "reservecalifornia", bookingProviderRef = "671:611"),
+                campsites = listOf(errorMappingCampsite),
                 startDate = start,
                 endDate = end,
             )
@@ -200,3 +205,7 @@ class ProviderUpstreamErrorMappingTest {
         assertEquals(expected, thrown::class, "unexpected classification for: ${thrown.message}")
     }
 }
+
+/** One campsite, so an adapter that shapes its fetch per campsite has something to ask about. */
+private val errorMappingCampsite =
+    campsiteFixture(id = 1, vendor = "aspira", vendorId = "1", bookingProvider = "aspira", bookingProviderRef = null)

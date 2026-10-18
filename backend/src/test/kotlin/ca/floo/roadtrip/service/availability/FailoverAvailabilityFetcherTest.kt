@@ -72,12 +72,6 @@ class FailoverAvailabilityFetcherTest {
 
         override suspend fun availability(
             campground: Campground,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-
-        override suspend fun catalogAvailability(
-            campground: Campground,
             campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
@@ -359,14 +353,14 @@ class FailoverAvailabilityFetcherTest {
                         scriptReturns(emptyBatch())
                     }
 
-                    override suspend fun catalogAvailability(
+                    override suspend fun availability(
                         campground: Campground,
                         campsites: List<Campsite>,
                         startDate: LocalDate,
                         endDate: LocalDate,
                     ): AvailabilityObservationBatch {
                         clock.advance(125)
-                        return super.catalogAvailability(campground, campsites, startDate, endDate)
+                        return super.availability(campground, campsites, startDate, endDate)
                     }
                 }
 

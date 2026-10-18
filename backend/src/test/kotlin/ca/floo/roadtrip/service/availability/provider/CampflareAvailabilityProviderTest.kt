@@ -57,7 +57,7 @@ class CampflareAvailabilityProviderTest {
             val provider = CampflareAvailabilityProvider(client, enabled = true, configured = true)
 
             val batch =
-                provider.catalogAvailability(
+                provider.availability(
                     campground =
                         testCampground(
                             bookingProvider = "campflare",
@@ -114,7 +114,7 @@ class CampflareAvailabilityProviderTest {
             val provider = CampflareAvailabilityProvider(client, enabled = true, configured = true)
 
             val batch =
-                provider.catalogAvailability(
+                provider.availability(
                     campground =
                         testCampground(
                             bookingProvider = "campflare",

@@ -271,6 +271,47 @@ class AvailabilityRepo(
     }
 
     /**
+     * Per campsite, the earliest date from [from] on whose current observation
+     * says it is bookable — the stored-fact answer to "when does this reopen".
+     *
+     * A base-unit read: it says nothing about whose question it is. The caller
+     * passes the campsites its answer is about and reduces over them, which is
+     * why a reopen date survives a cache hit — it is a fact in the table, not a
+     * by-product of the call that happened to fetch.
+     *
+     * Reaches only as far as stored cells do: a window is stored as wide as the
+     * fetch that covered it, so a campground whose season starts past that has no
+     * answer here until a fetch reaches it.
+     */
+    fun earliestBookableDates(
+        campsiteIds: List<Long>,
+        from: LocalDate,
+    ): Map<Long, LocalDate> {
+        if (campsiteIds.isEmpty()) return emptyMap()
+        return ctx
+            .resultQuery(
+                """
+                SELECT campsite_id, min(target_date) AS reopens_on
+                FROM (
+                    SELECT DISTINCT ON (campsite_id, target_date)
+                        campsite_id, target_date, status
+                    FROM availability
+                    WHERE campsite_id = ANY(?::bigint[])
+                      AND target_date >= ?::date
+                    ORDER BY campsite_id, target_date, last_observed_at DESC, id DESC
+                ) cur
+                WHERE cur.status::text = ANY(?::text[])
+                GROUP BY campsite_id
+                """.trimIndent(),
+                campsiteIds.distinct().toTypedArray(),
+                from,
+                bookableLiterals,
+            ).fetch { r ->
+                r.get("campsite_id", Long::class.java) to r.get("reopens_on", LocalDate::class.java)
+            }.toMap()
+    }
+
+    /**
      * Of [dates], the ones a **recent** observation says are NOT bookable.
      *
      * Deliberately asymmetric, and the asymmetry is the whole point. This table
@@ -503,6 +544,13 @@ class AvailabilityRepo(
 }
 
 private const val DEFAULT_SUMMARY_WINDOW_HOURS: Int = 24 * 7
+
+/** The statuses that count as bookable, as the column stores them. One source: the enum. */
+private val bookableLiterals: Array<String> =
+    AvailabilityStatus.entries
+        .filter { it.isOnlineBookable }
+        .map { it.wireValue }
+        .toTypedArray()
 
 private fun AvailabilityStatus.toDb(): DbAvailabilityStatus =
     DbAvailabilityStatus.entries.firstOrNull { it.literal == wireValue }

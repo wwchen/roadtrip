@@ -72,7 +72,7 @@ class AspiraAvailabilityProviderTest {
                 )
 
             val batch =
-                adapter.catalogAvailability(
+                adapter.availability(
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483615:-2147483624"),
                     campsites =
                         listOf(
@@ -135,7 +135,7 @@ class AspiraAvailabilityProviderTest {
                 )
 
             val batch =
-                adapter.catalogAvailability(
+                adapter.availability(
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:-2147483624"),
                     campsites =
                         listOf(
@@ -190,7 +190,7 @@ class AspiraAvailabilityProviderTest {
                 )
 
             val batch =
-                adapter.catalogAvailability(
+                adapter.availability(
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:null"),
                     campsites =
                         listOf(
@@ -228,7 +228,7 @@ class AspiraAvailabilityProviderTest {
                 )
 
             assertFailsWith<AvailabilityProviderError.UpstreamBlocked> {
-                adapter.catalogAvailability(
+                adapter.availability(
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "bc:-2147483505:-2147483418:-2147483539"),
                     campsites =
                         listOf(
@@ -276,7 +276,7 @@ class AspiraAvailabilityProviderTest {
                 )
 
             val batch =
-                adapter.catalogAvailability(
+                adapter.availability(
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:null"),
                     campsites =
                         listOf(

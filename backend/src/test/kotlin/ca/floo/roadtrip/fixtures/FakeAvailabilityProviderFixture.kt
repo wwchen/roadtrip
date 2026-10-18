@@ -1,12 +1,18 @@
 package ca.floo.roadtrip.fixtures
 
+import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 /** rec.gov's real horizon; the default for fakes that don't care. */
 const val FAKE_PROVIDER_HORIZON_DAYS = 180
@@ -21,6 +27,8 @@ private const val UNSTUBBED_AVAILABILITY = "FakeAvailabilityProvider.availabilit
 /** One recorded [FakeAvailabilityProvider.availability] call. */
 data class FakeAvailabilityCall(
     val campground: Campground,
+    /** The campsites the call was asked to cover. */
+    val campsites: List<Campsite>,
     val startDate: LocalDate,
     val endDate: LocalDate,
 )
@@ -60,12 +68,45 @@ class FakeAvailabilityProvider(
 
     override suspend fun availability(
         campground: Campground,
+        campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        val call = FakeAvailabilityCall(campground, startDate, endDate)
+        val call = FakeAvailabilityCall(campground, campsites, startDate, endDate)
         recorded += call
         val handler = onAvailability ?: throw UnsupportedOperationException(UNSTUBBED_AVAILABILITY)
         return handler(call)
     }
 }
+
+/**
+ * What an adapter answers: one status per `(campsite, night)` for every campsite
+ * the call was given, each keyed — the base-unit shape the port requires. Every
+ * shipping adapter fetches its campground whatever the caller filtered to, so
+ * this is also why a filtered read warms the whole campground.
+ */
+fun campgroundBatch(
+    call: FakeAvailabilityCall,
+    provider: BookingProvider,
+    status: AvailabilityStatus = AvailabilityStatus.AVAILABLE,
+    observedAt: Instant,
+): AvailabilityObservationBatch =
+    AvailabilityObservationBatch(
+        provider = provider.id,
+        startDate = call.startDate,
+        endDate = call.endDate,
+        observations =
+            call.campsites.flatMap { campsite ->
+                datesOf(call.startDate, call.endDate).map { date ->
+                    CampsiteDayObservation(campsiteId = campsite.id, date = date, observedAt = observedAt, status = status)
+                }
+            },
+        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
+    )
+
+private fun datesOf(
+    startDate: LocalDate,
+    endDate: LocalDate,
+): List<LocalDate> =
+    (0 until ChronoUnit.DAYS.between(startDate, endDate).toInt())
+        .map { startDate.plusDays(it.toLong()) }

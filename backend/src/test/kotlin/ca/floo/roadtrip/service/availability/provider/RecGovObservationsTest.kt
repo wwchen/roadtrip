@@ -67,7 +67,7 @@ class RecGovObservationsTest {
             encodeApiJson(
                 responseOf(
                     runBlocking {
-                        p.catalogAvailability(testCampground(), campsites, today, today.plusDays(days.toLong()))
+                        p.availability(testCampground(), campsites, today, today.plusDays(days.toLong()))
                     },
                 ),
             )
@@ -82,7 +82,7 @@ class RecGovObservationsTest {
         val body =
             encodeApiJson(
                 responseOf(
-                    runBlocking { p.availability(testCampground(), today, today.plusDays(days.toLong())) },
+                    runBlocking { p.availability(testCampground(), emptyList(), today, today.plusDays(days.toLong())) },
                 ),
             )
         return parseJson(body)
@@ -275,7 +275,7 @@ class RecGovObservationsTest {
             encodeApiJson(
                 responseOf(
                     runBlocking {
-                        p.catalogAvailability(testCampground(), campsites, today, today.plusDays(1))
+                        p.availability(testCampground(), campsites, today, today.plusDays(1))
                     },
                 ),
             )

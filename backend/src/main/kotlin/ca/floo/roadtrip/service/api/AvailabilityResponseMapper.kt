@@ -87,6 +87,8 @@ internal fun availabilityResponseFromObservations(
     batch: AvailabilityObservationBatch,
     pollingSupported: Boolean,
     earliestDate: LocalDate,
+    /** Derived above from stored cells; the batch carries no answer-level fact. */
+    seasonBlock: AvailabilitySeasonBlock? = null,
 ): AvailabilityResponseDto {
     val perDay = dayClassificationsFromObservations(batch.startDate, batch.endDate, batch.observations)
     val state = classifyWindowState(perDay)
@@ -96,7 +98,7 @@ internal fun availabilityResponseFromObservations(
         endDate = batch.endDate,
         perDay = perDay,
         state = state,
-        seasonBlock = batch.seasonBlock.takeIf { state == StreamWindowState.CLOSED_FOR_SEASON },
+        seasonBlock = seasonBlock.takeIf { state == StreamWindowState.CLOSED_FOR_SEASON },
         cacheBlock = batch.cacheBlock,
         pollingSupported = pollingSupported,
         earliestDate = earliestDate,

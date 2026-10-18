@@ -44,7 +44,7 @@ class RecGovAvailabilityProviderTest {
             val adapter = RecGovAvailabilityProvider(client, enabled = true)
 
             val batch =
-                adapter.catalogAvailability(
+                adapter.availability(
                     campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
                     campsites =
                         listOf(
@@ -82,7 +82,7 @@ class RecGovAvailabilityProviderTest {
             val adapter = RecGovAvailabilityProvider(client, enabled = true)
 
             val batch =
-                adapter.catalogAvailability(
+                adapter.availability(
                     campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
                     campsites =
                         listOf(
@@ -137,7 +137,7 @@ class RecGovAvailabilityProviderTest {
             val adapter = RecGovAvailabilityProvider(client, enabled = true)
 
             val batch =
-                adapter.catalogAvailability(
+                adapter.availability(
                     campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
                     campsites =
                         listOf(

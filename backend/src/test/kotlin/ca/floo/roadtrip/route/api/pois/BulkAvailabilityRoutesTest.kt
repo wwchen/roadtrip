@@ -588,6 +588,7 @@ private class FakePoiAvailabilitySliceLookup(
                     observations = observations,
                     cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
                 ),
+            reopensOnByCampsite = emptyMap(),
             pollingSupported = pollingSupported,
         )
     }
