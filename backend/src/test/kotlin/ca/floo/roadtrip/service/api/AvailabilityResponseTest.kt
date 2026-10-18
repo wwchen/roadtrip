@@ -5,6 +5,8 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.DayClassification
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.route.common.encodeApiJson
+import ca.floo.roadtrip.service.availability.StreamWindowState
+import ca.floo.roadtrip.service.availability.classifyStreamWindowState
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray

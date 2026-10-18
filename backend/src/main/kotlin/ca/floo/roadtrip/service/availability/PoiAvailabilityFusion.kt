@@ -6,8 +6,6 @@ import ca.floo.roadtrip.model.api.AvailabilityWindowState
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
-import ca.floo.roadtrip.service.api.StreamWindowState
-import ca.floo.roadtrip.service.api.classifyStreamWindowState
 import ca.floo.roadtrip.service.api.rollupStatus
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit

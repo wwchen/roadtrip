@@ -8,8 +8,6 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.FetchedObservations
-import ca.floo.roadtrip.service.api.StreamWindowState
-import ca.floo.roadtrip.service.api.classifyStreamWindowState
 import java.time.Instant
 import java.time.LocalDate
 
