@@ -25,7 +25,6 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.toKotlinDuration
 
 private val log = LoggerFactory.getLogger("StayCheckController")
@@ -108,16 +107,16 @@ internal class StayCheckController(
     )
 
     /**
-     * One answer per requested POI, each as it lands, bar the one race below. POIs start
-     * in request order — the caller sends the nearest first — at most
+     * One answer per requested POI, each as it lands. POIs start in request order
+     * — the caller sends the nearest first — at most
      * [StayCheckConfig.fanOutConcurrency] at a time. One that outlives
      * [StayCheckConfig.perPoiTimeout] answers [STAY_TIMEOUT_ERROR] — outcome
      * `timed_out` — and once the whole stream reaches [StayCheckConfig.streamTimeout]
      * so does every POI yet to answer; a read that ended without an answer at all
      * answers the unclassified failure. Each failure is classified by [stayFailureOf]
      * into the answer's outcome, reason and retryability. So the flow completes by
-     * its deadline, with every POI in it bar that race. Cancelling the collector cancels every
-     * read in flight.
+     * its deadline, with every POI in it. Cancelling the collector cancels every read
+     * in flight.
      *
      * The flow ends with exactly one [StayStreamItem.Done], after every answer: it
      * says [StayCheckOutcome.DEADLINE_REACHED] when the stream's deadline fired, and
@@ -125,15 +124,10 @@ internal class StayCheckController(
      * below makes to pick its error code, emitted once rather than derived a second
      * way — every POI answers either way, so only the server can say which answers
      * are real. A read that merely ended without a result still completes the check:
-     * the stream did not run out of time. The sweep claims every index, so a read
-     * that finishes after it finds its answer already given, sends nothing, and
-     * nothing follows `Done`. There is one narrow window in which that is not so.
-     * `answer` claims an index with `answered.add` and only then sends; a read that
-     * wins the claim on another thread and is preempted before the send leaves the
-     * sweep walking past an index it sees as taken, and the send then lands after
-     * `Done`, or is dropped by a channel `finally` has closed. Either way that POI
-     * is never answered. It needs preemption between two adjacent non-suspending
-     * statements, so it is very rare, but "every POI answers" holds only outside it.
+     * the stream did not run out of time. [StayAnswerLedger] makes a read's claim and
+     * its send one step against that sweep, which claims every index, so a read that
+     * finishes after it finds its answer already given, sends nothing, and nothing
+     * follows `Done`.
      *
      * The reads are deliberately not the flow's children. A per-POI timeout lands
      * at a read's next suspension, so a read stuck in a blocking call — a database
@@ -146,16 +140,10 @@ internal class StayCheckController(
             val query = SliceQuery(request.siteTypes, request.startDate, request.endDate, request.groupSize, cutoffFor(request.maxAge))
             val gate = Semaphore(config.fanOutConcurrency)
             val perPoiTimeout = config.perPoiTimeout.toKotlinDuration()
-            val answered = ConcurrentHashMap.newKeySet<Int>()
 
             // Exactly once per POI, whoever gets there first: its read, or the sweep below.
             // The channel is unbounded, so the send never suspends and never fails while open.
-            fun answer(
-                index: Int,
-                answer: StayAnswerDto,
-            ) {
-                if (answered.add(index)) trySend(StayStreamItem.Answer(answer))
-            }
+            val ledger = StayAnswerLedger(request.poiIds.size)
 
             val reads = SupervisorJob()
             val readScope = CoroutineScope(coroutineContext.minusKey(Job) + reads)
@@ -165,15 +153,22 @@ internal class StayCheckController(
                         val read =
                             gate.withPermit { withTimeoutOrNull(perPoiTimeout) { read(poiId, query) } }
                                 ?: PoiRead.Failed(STAY_TIMEOUT_ERROR)
-                        answer(index, answerOf(poiId, read))
+                        val answer = StayStreamItem.Answer(answerOf(poiId, read))
+                        ledger.answer(index) { trySend(answer) }
                     }
                 }
                 val finished = withTimeoutOrNull(config.streamTimeout.toKotlinDuration()) { reads.children.toList().joinAll() }
                 // Whoever has not answered still does: past the deadline it ran out of
                 // time; otherwise its read ended without a result (a stray cancellation).
                 val unanswered = if (finished == null) STAY_TIMEOUT_ERROR else AvailabilityProviderError.Unknown.CODE
-                request.poiIds.forEachIndexed { index, poiId -> answer(index, answerOf(poiId, PoiRead.Failed(unanswered))) }
-                trySend(StayStreamItem.Done(if (finished == null) StayCheckOutcome.DEADLINE_REACHED else StayCheckOutcome.COMPLETE))
+                ledger.finish(
+                    sweep = { index ->
+                        trySend(StayStreamItem.Answer(answerOf(request.poiIds[index], PoiRead.Failed(unanswered))))
+                    },
+                    done = {
+                        trySend(StayStreamItem.Done(if (finished == null) StayCheckOutcome.DEADLINE_REACHED else StayCheckOutcome.COMPLETE))
+                    },
+                )
             } finally {
                 reads.cancel()
             }
