@@ -28,10 +28,12 @@ roadtrip:
       # the DbConfig default) — each concurrent POI can hold a pooled
       # connection through AvailabilityRepo.recordObservations.
       fan-out-concurrency: 3
-      tolerance: 2h
+      # How old a stored observation may be and still answer: the age a request
+      # gets when it names none, and the ceiling of what it may ask for.
+      default-max-age: 2h
       # The floor of the age a request may ask for (max_age_seconds, as the map's
-      # Check again does); tolerance above is the default and the ceiling.
-      fresh-tolerance: 1m
+      # Check again does); a shorter one is raised to it.
+      min-max-age: 1m
       # A streamed stay check finishes only when every campground has answered;
       # one that takes longer than this answers `timeout` instead.
       per-poi-timeout: 45s

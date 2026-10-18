@@ -13,7 +13,7 @@ data class BulkAvailabilityConfig(
      * How old a stored observation may be and still answer, rather than asking the
      * provider again: the default age, and the ceiling of what a request may ask for.
      */
-    val tolerance: Duration,
+    val defaultMaxAge: Duration,
     /**
      * How many campgrounds one caller may ask about per minute. Charged per POI,
      * not per request: one request fans out to an upstream
@@ -24,10 +24,10 @@ data class BulkAvailabilityConfig(
     /**
      * The floor of the age a request may ask for (`max_age_seconds`, as the map's
      * Check again does): a shorter one is raised to it. Short rather than zero, so a
-     * double-click does not ask every provider twice; never longer than [tolerance],
+     * double-click does not ask every provider twice; never longer than [defaultMaxAge],
      * which it defaults down to.
      */
-    val freshTolerance: Duration = minOf(tolerance, Duration.ofSeconds(DEFAULT_FRESH_TOLERANCE_SECONDS)),
+    val minMaxAge: Duration = minOf(defaultMaxAge, Duration.ofSeconds(DEFAULT_MIN_MAX_AGE_SECONDS)),
     /**
      * How long one campground of a streamed stay check may take before it answers
      * `timeout`. The stream can only finish when every campground has answered,
@@ -51,12 +51,12 @@ data class BulkAvailabilityConfig(
     init {
         require(maxPois >= 1) { "bulk max-pois must be >= 1 (got $maxPois)" }
         require(fanOutConcurrency >= 1) { "bulk fan-out-concurrency must be >= 1 (got $fanOutConcurrency)" }
-        require(!tolerance.isNegative) { "bulk tolerance must not be negative (got $tolerance)" }
+        require(!defaultMaxAge.isNegative) { "bulk default-max-age must not be negative (got $defaultMaxAge)" }
         require(ipPoiLimitPerMinute >= maxPois) {
             "bulk ip-poi-limit-per-minute must be at least max-pois ($maxPois) (got $ipPoiLimitPerMinute)"
         }
-        require(!freshTolerance.isNegative && freshTolerance <= tolerance) {
-            "bulk fresh-tolerance must be between 0 and tolerance ($tolerance) (got $freshTolerance)"
+        require(!minMaxAge.isNegative && minMaxAge <= defaultMaxAge) {
+            "bulk min-max-age must be between 0 and default-max-age ($defaultMaxAge) (got $minMaxAge)"
         }
         require(perPoiTimeout.isPositive) { "bulk per-poi-timeout must be positive (got $perPoiTimeout)" }
         require(streamTimeout.isPositive) { "bulk stream-timeout must be positive (got $streamTimeout)" }
@@ -73,11 +73,11 @@ data class BulkAvailabilityConfig(
         // AvailabilityRepo.recordObservations, so fan-out at or above the pool size
         // guarantees Hikari connection-acquisition timeouts.
         private const val DEFAULT_FAN_OUT_CONCURRENCY = 3
-        private const val DEFAULT_TOLERANCE_HOURS = 2L
+        private const val DEFAULT_MAX_AGE_HOURS = 2L
 
         /** Three full checks a minute — near what the batched check allowed (10 requests of ~13 POIs). */
         private const val DEFAULT_IP_POI_LIMIT_PER_MINUTE = 150
-        private const val DEFAULT_FRESH_TOLERANCE_SECONDS = 60L
+        private const val DEFAULT_MIN_MAX_AGE_SECONDS = 60L
         private const val DEFAULT_PER_POI_TIMEOUT_SECONDS = 45L
         private const val DEFAULT_STREAM_TIMEOUT_SECONDS = 120L
         private const val DEFAULT_STREAM_HEARTBEAT_SECONDS = 15L
@@ -95,20 +95,20 @@ data class BulkAvailabilityConfig(
             BulkAvailabilityConfig(
                 maxPois = DEFAULT_MAX_POIS,
                 fanOutConcurrency = DEFAULT_FAN_OUT_CONCURRENCY,
-                tolerance = Duration.ofHours(DEFAULT_TOLERANCE_HOURS),
+                defaultMaxAge = Duration.ofHours(DEFAULT_MAX_AGE_HOURS),
                 ipPoiLimitPerMinute = DEFAULT_IP_POI_LIMIT_PER_MINUTE,
-                freshTolerance = Duration.ofSeconds(DEFAULT_FRESH_TOLERANCE_SECONDS),
+                minMaxAge = Duration.ofSeconds(DEFAULT_MIN_MAX_AGE_SECONDS),
             )
 
         fun fromConfig(config: ConfigSection): BulkAvailabilityConfig =
             BulkAvailabilityConfig(
                 maxPois = config.value("max-pois")?.toInt() ?: default.maxPois,
                 fanOutConcurrency = config.value("fan-out-concurrency")?.toInt() ?: default.fanOutConcurrency,
-                tolerance = config.duration("tolerance", default.tolerance),
+                defaultMaxAge = config.duration("default-max-age", default.defaultMaxAge),
                 ipPoiLimitPerMinute =
                     config.value("ip-poi-limit-per-minute")?.toInt()
                         ?: default.ipPoiLimitPerMinute,
-                freshTolerance = config.duration("fresh-tolerance", default.freshTolerance),
+                minMaxAge = config.duration("min-max-age", default.minMaxAge),
                 perPoiTimeout = config.duration("per-poi-timeout", default.perPoiTimeout),
                 streamTimeout = config.duration("stream-timeout", default.streamTimeout),
                 streamHeartbeat = config.duration("stream-heartbeat", default.streamHeartbeat),

@@ -101,9 +101,9 @@ internal fun stayCheckDescription(config: BulkAvailabilityConfig): String =
         "${config.streamTimeout}; a quiet stream sends a keep-alive comment every ${config.streamHeartbeat}. " +
         "`max_age_seconds` is how old a stored observation may be and still answer, rather than asking " +
         "the providers again. It is clamped into the server's range, not obeyed: raised to " +
-        "${config.freshTolerance.seconds} seconds if lower (so a caller cannot force a refetch of every " +
-        "campground on every request), lowered to ${config.tolerance.seconds} seconds if higher, and " +
-        "${config.tolerance.seconds} seconds when left out. An out-of-range value is never a 400. " +
+        "${config.minMaxAge.seconds} seconds if lower (so a caller cannot force a refetch of every " +
+        "campground on every request), lowered to ${config.defaultMaxAge.seconds} seconds if higher, and " +
+        "${config.defaultMaxAge.seconds} seconds when left out. An out-of-range value is never a 400. " +
         "A refused request answers JSON with the status before any event is sent. Each requested POI is " +
         "charged against the caller's ${config.ipPoiLimitPerMinute} a minute; over it answers 503 " +
         "`ip_throttled`. `site_type` accepts: $siteTypeWireList. Per-campsite detail for one POI is " +
@@ -177,7 +177,7 @@ private fun StayCheckRequestDto.validated(
 
 /**
  * The age a stay check may serve a stored observation at: what the caller asked for,
- * held to [BulkAvailabilityConfig.freshTolerance] .. [BulkAvailabilityConfig.tolerance],
+ * held to [BulkAvailabilityConfig.minMaxAge] .. [BulkAvailabilityConfig.defaultMaxAge],
  * and the ceiling when it did not ask. Clamped rather than refused because an age out of
  * range is not a malformed request — the caller wants "as fresh as you will give me" or
  * "whatever you have", and gets exactly that. The floor stops a caller forcing zero and
@@ -189,8 +189,8 @@ private fun clampedMaxAge(
     config: BulkAvailabilityConfig,
 ): Duration =
     maxAgeSeconds
-        ?.let { Duration.ofSeconds(it).coerceIn(config.freshTolerance, config.tolerance) }
-        ?: config.tolerance
+        ?.let { Duration.ofSeconds(it).coerceIn(config.minMaxAge, config.defaultMaxAge) }
+        ?: config.defaultMaxAge
 
 private fun requirePoiIds(
     poiIds: List<Long>,

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test
 import java.time.Duration
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class BulkAvailabilityConfigTest {
     @Test
@@ -11,9 +12,9 @@ class BulkAvailabilityConfigTest {
         val config = BulkAvailabilityConfig.default
         assertEquals(50, config.maxPois)
         assertEquals(3, config.fanOutConcurrency)
-        assertEquals(Duration.ofHours(2), config.tolerance)
+        assertEquals(Duration.ofHours(2), config.defaultMaxAge)
         assertEquals(150, config.ipPoiLimitPerMinute)
-        assertEquals(Duration.ofMinutes(1), config.freshTolerance)
+        assertEquals(Duration.ofMinutes(1), config.minMaxAge)
         assertEquals(Duration.ofSeconds(45), config.perPoiTimeout)
         assertEquals(Duration.ofMinutes(2), config.streamTimeout)
         assertEquals(Duration.ofSeconds(15), config.streamHeartbeat)
@@ -31,21 +32,38 @@ class BulkAvailabilityConfigTest {
     @Test
     fun `the per-caller budget covers at least one request of the largest size`() {
         assertFailsWith<IllegalArgumentException> {
-            BulkAvailabilityConfig(maxPois = 50, fanOutConcurrency = 3, tolerance = Duration.ofHours(2), ipPoiLimitPerMinute = 49)
+            BulkAvailabilityConfig(maxPois = 50, fanOutConcurrency = 3, defaultMaxAge = Duration.ofHours(2), ipPoiLimitPerMinute = 49)
         }
     }
 
     @Test
-    fun `fresh tolerance may not exceed the usual tolerance`() {
-        assertFailsWith<IllegalArgumentException> {
-            BulkAvailabilityConfig(
-                maxPois = 50,
-                fanOutConcurrency = 3,
-                tolerance = Duration.ofMinutes(5),
-                ipPoiLimitPerMinute = 150,
-                freshTolerance = Duration.ofMinutes(10),
+    fun `min-max-age above default-max-age is refused`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                BulkAvailabilityConfig(
+                    maxPois = 50,
+                    fanOutConcurrency = 3,
+                    defaultMaxAge = Duration.ofMinutes(5),
+                    ipPoiLimitPerMinute = 150,
+                    minMaxAge = Duration.ofMinutes(10),
+                )
+            }
+        assertTrue(err.message!!.contains("min-max-age"), err.message)
+        assertTrue(err.message!!.contains("default-max-age"), err.message)
+    }
+
+    @Test
+    fun `the config reads the renamed keys`() {
+        val section =
+            ConfigSection(
+                mapOf(
+                    "default-max-age" to "30m",
+                    "min-max-age" to "10s",
+                ),
             )
-        }
+        val config = BulkAvailabilityConfig.fromConfig(section)
+        assertEquals(Duration.ofMinutes(30), config.defaultMaxAge)
+        assertEquals(Duration.ofSeconds(10), config.minMaxAge)
     }
 
     @Test
@@ -54,7 +72,7 @@ class BulkAvailabilityConfigTest {
             BulkAvailabilityConfig(
                 maxPois = 0,
                 fanOutConcurrency = 8,
-                tolerance = Duration.ofHours(2),
+                defaultMaxAge = Duration.ofHours(2),
                 ipPoiLimitPerMinute = 150,
             )
         }
@@ -66,7 +84,7 @@ class BulkAvailabilityConfigTest {
             BulkAvailabilityConfig(
                 maxPois = 50,
                 fanOutConcurrency = 0,
-                tolerance = Duration.ofHours(2),
+                defaultMaxAge = Duration.ofHours(2),
                 ipPoiLimitPerMinute = 150,
             )
         }

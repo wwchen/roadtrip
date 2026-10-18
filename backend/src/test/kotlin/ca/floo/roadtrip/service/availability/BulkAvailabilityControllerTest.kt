@@ -356,9 +356,9 @@ class BulkAvailabilityControllerTest {
                             maxPois = TEST_MAX_POIS,
                             fanOutConcurrency = TEST_FAN_OUT_CONCURRENCY,
                             // Neither end of the range is the request's age, so the cutoff can only come from the request.
-                            tolerance = Duration.ofHours(2),
+                            defaultMaxAge = Duration.ofHours(2),
                             ipPoiLimitPerMinute = TEST_IP_POI_LIMIT_PER_MINUTE,
-                            freshTolerance = Duration.ofMinutes(1),
+                            minMaxAge = Duration.ofMinutes(1),
                         ),
                     clock = Clock.fixed(now, ZoneOffset.UTC),
                 )
@@ -393,7 +393,7 @@ private fun bulkController(
             BulkAvailabilityConfig(
                 maxPois = TEST_MAX_POIS,
                 fanOutConcurrency = fanOutConcurrency,
-                tolerance = Duration.ZERO,
+                defaultMaxAge = Duration.ZERO,
                 ipPoiLimitPerMinute = TEST_IP_POI_LIMIT_PER_MINUTE,
                 perPoiTimeout = perPoiTimeout,
                 streamTimeout = streamTimeout,

@@ -649,8 +649,8 @@ class BulkAvailabilityRoutesTest {
      */
     private fun Route.maxAgeRoutesUnderTest(cutoffs: MutableList<Instant?> = mutableListOf()) =
         bulkAvailabilityRoutesUnderTest(
-            tolerance = maxAgeCeiling,
-            freshTolerance = maxAgeFloor,
+            defaultMaxAge = maxAgeCeiling,
+            minMaxAge = maxAgeFloor,
             clock = Clock.fixed(maxAgeNow, ZoneOffset.UTC),
             cutoffs = cutoffs,
         )
@@ -659,8 +659,8 @@ class BulkAvailabilityRoutesTest {
         rateLimit: IpRateLimiter? = null,
         streamTimeout: Duration = BulkAvailabilityConfig.default.streamTimeout,
         perPoiTimeout: Duration = BulkAvailabilityConfig.default.perPoiTimeout,
-        tolerance: Duration = Duration.ZERO,
-        freshTolerance: Duration = Duration.ZERO,
+        defaultMaxAge: Duration = Duration.ZERO,
+        minMaxAge: Duration = Duration.ZERO,
         clock: Clock = Clock.systemUTC(),
         cutoffs: MutableList<Instant?>? = null,
     ) {
@@ -668,9 +668,9 @@ class BulkAvailabilityRoutesTest {
             BulkAvailabilityConfig(
                 maxPois = TEST_MAX_POIS,
                 fanOutConcurrency = TEST_FAN_OUT_CONCURRENCY,
-                tolerance = tolerance,
+                defaultMaxAge = defaultMaxAge,
                 ipPoiLimitPerMinute = TEST_IP_POI_LIMIT_PER_MINUTE,
-                freshTolerance = freshTolerance,
+                minMaxAge = minMaxAge,
                 streamTimeout = streamTimeout,
                 perPoiTimeout = perPoiTimeout,
             )

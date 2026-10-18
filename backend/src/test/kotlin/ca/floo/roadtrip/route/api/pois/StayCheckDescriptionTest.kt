@@ -26,9 +26,9 @@ class StayCheckDescriptionTest {
         BulkAvailabilityConfig(
             maxPois = CONFIG_MAX_POIS,
             fanOutConcurrency = CONFIG_FAN_OUT,
-            tolerance = Duration.ofSeconds(CONFIG_CEILING_SECONDS),
+            defaultMaxAge = Duration.ofSeconds(CONFIG_CEILING_SECONDS),
             ipPoiLimitPerMinute = CONFIG_IP_LIMIT,
-            freshTolerance = Duration.ofSeconds(CONFIG_FLOOR_SECONDS),
+            minMaxAge = Duration.ofSeconds(CONFIG_FLOOR_SECONDS),
         )
     private val description = stayCheckDescription(config)
 
