@@ -562,7 +562,7 @@ private class FakeCampgroundWindowLookup(
         startDate: LocalDate?,
         endDate: LocalDate?,
         freshAtOrAfter: Instant?,
-    ): CampgroundWindow {
+    ): CampgroundWindow.Answered {
         if (poiId == RATE_LIMITED_POI_ID) throw AvailabilityProviderError.RateLimited()
         val campsite = campsiteFixture(id = poiId * FAKE_WINDOW_CAMPSITE_ID_MULTIPLIER, campgroundId = poiId)
         val observations =
@@ -576,7 +576,7 @@ private class FakeCampgroundWindowLookup(
                 ),
             )
         val window = ResolvedDateWindow(windowStart, windowEnd)
-        return CampgroundWindow(
+        return CampgroundWindow.Answered(
             poiId = poiId,
             campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
             window = window,

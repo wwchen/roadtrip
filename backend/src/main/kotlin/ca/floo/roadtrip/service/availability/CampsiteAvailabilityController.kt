@@ -83,10 +83,7 @@ internal class CampsiteAvailabilityController(
         dateContext: PoiDateContext,
         startDate: LocalDate?,
         endDate: LocalDate?,
-    ): CampgroundWindow {
-        // The site_type filter dropped every campsite, but the campground
-        // may still have a serving provider — ask it for the real horizon
-        // before falling back to the flat default.
+    ): CampgroundWindow.NoCampsitesMatched {
         val horizonDays = policy.bookingHorizonDays(campground)
         val window =
             dateResolver.resolveWindow(
@@ -97,22 +94,13 @@ internal class CampsiteAvailabilityController(
                 maxDays = EMPTY_WINDOW_MAX_DAYS,
                 defaultDays = EMPTY_WINDOW_DEFAULT_DAYS,
             )
-        return CampgroundWindow(
+        return CampgroundWindow.NoCampsitesMatched(
             poiId = poiId,
             campground = campground,
             window = window,
             earliestDate = dateContext.earliestDate,
-            // The fallback above only bounds the window it had to compute;
-            // with no provider there is no horizon to publish as truth.
             latestDate = horizonDays?.let { dateResolver.latestDate(dateContext, it) },
             campgroundCampsites = allCampsites,
-            campsites = emptyList(),
-            streams = emptyList(),
-            provider = policy.servingProvider(campground)?.id,
-            campgroundRef = null,
-            cache = null,
-            pollingSupported = policy.pollingSupported(campground),
-            reopensOnByCampsite = emptyMap(),
         )
     }
 

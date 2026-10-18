@@ -27,6 +27,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -55,9 +56,9 @@ class CampgroundCellCacheTest : SharedDbTest() {
         )
 
         assertEquals(2, filtered.campsites.size)
-        assertEquals(false, filtered.cache?.hit, "the first check had nothing stored to serve")
+        assertEquals(false, filtered.cache.hit, "the first check had nothing stored to serve")
         assertEquals(4, unfiltered.campsites.size)
-        assertEquals(true, unfiltered.cache?.hit, "the whole campground's cells were already stored")
+        assertEquals(true, unfiltered.cache.hit, "the whole campground's cells were already stored")
         assertEquals(fixture.allCampsiteIds, unfiltered.streams.mapTo(mutableSetOf()) { it.campsiteId })
         assertTrue(unfiltered.streams.all { stream -> stream.statuses.all { it == AvailabilityStatus.AVAILABLE } })
     }
@@ -233,16 +234,18 @@ private class CheckFixture(
     fun window(
         siteTypes: List<CampsiteKind>,
         freshAtOrAfter: Instant? = null,
-    ): CampgroundWindow =
-        runBlocking {
-            controller.campgroundWindow(
-                poiId = TEST_POI_ID,
-                siteTypes = siteTypes,
-                startDate = startDate,
-                endDate = endDate,
-                freshAtOrAfter = freshAtOrAfter,
-            )
-        }
+    ): CampgroundWindow.Answered =
+        assertIs(
+            runBlocking {
+                controller.campgroundWindow(
+                    poiId = TEST_POI_ID,
+                    siteTypes = siteTypes,
+                    startDate = startDate,
+                    endDate = endDate,
+                    freshAtOrAfter = freshAtOrAfter,
+                )
+            },
+        )
 
     fun fusedWeek(
         siteTypes: List<CampsiteKind>,

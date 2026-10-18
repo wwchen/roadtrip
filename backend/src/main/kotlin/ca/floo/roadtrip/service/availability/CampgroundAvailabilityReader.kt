@@ -26,7 +26,7 @@ internal class CampgroundAvailabilityReader(
         startDate: LocalDate?,
         endDate: LocalDate?,
         freshAtOrAfter: Instant?,
-    ): CampgroundWindow {
+    ): CampgroundWindow.Answered {
         val read = policy.read(campground, dateContext, startDate, endDate, freshAtOrAfter)
         val windows = read.windows
         val loaded =
@@ -54,7 +54,7 @@ internal class CampgroundAvailabilityReader(
                 )
             }
         val streams = streamsFor(campsites, windows.target, loaded.cells)
-        return CampgroundWindow(
+        return CampgroundWindow.Answered(
             poiId = poiId,
             campground = campground,
             window = windows.target,

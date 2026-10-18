@@ -96,7 +96,7 @@ internal class BulkAvailabilityController(
                     freshAtOrAfter = freshAtOrAfter,
                 )
             // Narrowed once, here, so both views answer over the same campsites.
-            val fitting = campgroundWindow.narrowedTo(campgroundWindow.campsites.fittingGroup(request.groupSize))
+            val fitting = campgroundWindow.narrowedToGroup(request.groupSize)
             when (request.view) {
                 BulkAvailabilityView.CAMPSITES -> rank(fitting, request.minNights)
                 BulkAvailabilityView.SUMMARY -> summarize(fitting)
@@ -121,7 +121,7 @@ internal class BulkAvailabilityController(
             poiId = campgroundWindow.poiId,
             startDate = campgroundWindow.window.startDate.toString(),
             endDate = campgroundWindow.window.endDate.toString(),
-            summary = staySummaryOf(campgroundWindow.streams, campgroundWindow.checkedSites(), campgroundWindow.cache),
+            summary = campgroundWindow.staySummary(),
         )
 
     private fun rank(

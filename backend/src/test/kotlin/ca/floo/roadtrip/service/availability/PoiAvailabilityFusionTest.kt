@@ -379,7 +379,7 @@ class PoiAvailabilityFusionTest {
 }
 
 private fun fusedOf(
-    campgroundWindow: CampgroundWindow,
+    campgroundWindow: CampgroundWindow.Answered,
     earliestDate: LocalDate,
 ): FusedWindow = campgroundWindow.copy(earliestDate = earliestDate).fusedWindow()
 
@@ -406,14 +406,14 @@ private fun windowOf(
     cacheBlock: AvailabilityCacheBlock = freshCache,
     pollingSupported: Boolean = true,
     extraObservations: List<CampsiteDayObservation> = emptyList(),
-): CampgroundWindow {
+): CampgroundWindow.Answered {
     val campsites = streams.keys.map { campsiteFixture(id = it) }
     val observations =
         streams.flatMap { (campsiteId, byDate) ->
             byDate.map { (date, status) -> CampsiteDayObservation(campsiteId, date, observedAt, status) }
         } + extraObservations
     val window = ResolvedDateWindow(windowStart, windowStart.plusDays(days))
-    return CampgroundWindow(
+    return CampgroundWindow.Answered(
         poiId = 1L,
         campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
         window = window,
@@ -424,7 +424,7 @@ private fun windowOf(
         streams = streamsFor(campsites, window, observations),
         provider = BookingProvider.RECGOV,
         campgroundRef = null,
-        cache = cacheBlock.takeIf { campsites.isNotEmpty() },
+        cache = cacheBlock,
         pollingSupported = pollingSupported,
         reopensOnByCampsite = reopensOn?.let { date -> campsites.associate { it.id to date } }.orEmpty(),
     )

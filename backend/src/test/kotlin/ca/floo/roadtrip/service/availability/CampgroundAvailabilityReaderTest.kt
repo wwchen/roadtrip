@@ -87,7 +87,7 @@ class CampgroundAvailabilityReaderTest : SharedDbTest() {
     private suspend fun CampgroundAvailabilityReader.readCampground(
         named: List<Campsite> = campsites,
         campgroundWide: List<Campsite> = campsites,
-    ): CampgroundWindow =
+    ): CampgroundWindow.Answered =
         read(
             poiId = poiId,
             campground = campground,

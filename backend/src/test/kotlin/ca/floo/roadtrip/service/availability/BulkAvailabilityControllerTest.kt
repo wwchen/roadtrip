@@ -106,6 +106,24 @@ class BulkAvailabilityControllerTest {
     }
 
     @Test
+    fun `the summary view of a poi with no matching campsites reads no data and carries no cache block`() {
+        runBlocking {
+            val entry =
+                bulkController()
+                    .availabilityForPois(
+                        request(poiIds = listOf(NO_SITES_POI_ID), view = BulkAvailabilityView.SUMMARY),
+                    ).pois
+                    .single()
+
+            val summary = assertNotNull(entry.summary)
+            assertEquals(StayAvailabilityStatus.NO_DATA, summary.status)
+            assertEquals(0, summary.openSites)
+            assertEquals(0, summary.checkedSites)
+            assertNull(summary.cache)
+        }
+    }
+
+    @Test
     fun `the summary view answers with the stay's summary instead of the campsites`() {
         runBlocking {
             // POI 1's three sites are bookable for runs of 1, 5 and 3 nights from the
@@ -321,9 +339,9 @@ private fun windowOf(
     poiId: Long,
     campsites: List<Campsite>,
     observations: List<CampsiteDayObservation>,
-): CampgroundWindow {
+): CampgroundWindow.Answered {
     val window = ResolvedDateWindow(windowStart, windowEnd)
-    return CampgroundWindow(
+    return CampgroundWindow.Answered(
         poiId = poiId,
         campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
         window = window,
@@ -334,7 +352,7 @@ private fun windowOf(
         streams = streamsFor(campsites, window, observations),
         provider = BookingProvider.RECGOV,
         campgroundRef = null,
-        cache = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0).takeIf { campsites.isNotEmpty() },
+        cache = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
         pollingSupported = true,
         reopensOnByCampsite = emptyMap(),
     )
@@ -359,4 +377,12 @@ private fun simpleWindow(poiId: Long): CampgroundWindow {
 }
 
 /** No campsite matched the requested site types: resolved, but nothing to rank. */
-private fun noSitesWindow(poiId: Long): CampgroundWindow = windowOf(poiId, emptyList(), emptyList())
+private fun noSitesWindow(poiId: Long): CampgroundWindow.NoCampsitesMatched =
+    CampgroundWindow.NoCampsitesMatched(
+        poiId = poiId,
+        campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
+        window = ResolvedDateWindow(windowStart, windowEnd),
+        earliestDate = windowStart,
+        latestDate = windowLatest,
+        campgroundCampsites = emptyList(),
+    )

@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.model.api.AvailabilityWindowState
+import ca.floo.roadtrip.model.api.StayAvailabilityStatus
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
@@ -68,13 +70,22 @@ class CampgroundWindowTest {
     }
 
     @Test
-    fun `a window with no cache block has no envelopes`() {
-        assertEquals(emptyList(), windowOver(listOf(campsite(LOW_ID))).copy(cache = null).perCampsiteEnvelopes())
+    fun `a window whose filter matched no campsite derives an empty answer throughout`() {
+        val noMatch = noCampsitesMatched()
+
+        assertEquals(emptyList(), noMatch.perCampsiteEnvelopes())
+        assertEquals(0, noMatch.checkedSites())
+        assertEquals(AvailabilityWindowState.EMPTY, noMatch.fusedWindow().state)
+        assertNull(noMatch.fusedWindow().cache)
+        assertEquals(StayAvailabilityStatus.NO_DATA, noMatch.staySummary().status)
+        assertNull(noMatch.staySummary().cache)
     }
 
     @Test
-    fun `a window with no provider has no envelopes`() {
-        assertEquals(emptyList(), windowOver(listOf(campsite(LOW_ID))).copy(provider = null).perCampsiteEnvelopes())
+    fun `narrowing to a group size leaves a window that matched no campsite unchanged`() {
+        val noMatch = noCampsitesMatched()
+
+        assertEquals(noMatch, noMatch.narrowedToGroup(groupSize = 4))
     }
 
     @Test
@@ -133,6 +144,18 @@ class CampgroundWindowTest {
         assertNull(Json.parseToJsonElement(encodeApiJson(withoutRef)).jsonObject["scope_ref"])
     }
 
+    private fun noCampsitesMatched(): CampgroundWindow.NoCampsitesMatched {
+        val window = ResolvedDateWindow(firstNight, firstNight.plusDays(NIGHTS))
+        return CampgroundWindow.NoCampsitesMatched(
+            poiId = 1L,
+            campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
+            window = window,
+            earliestDate = firstNight,
+            latestDate = window.endDate,
+            campgroundCampsites = listOf(campsite(LOW_ID)),
+        )
+    }
+
     private fun campsite(id: Long): Campsite = campsiteFixture(id = id)
 
     private fun observation(
@@ -148,9 +171,9 @@ class CampgroundWindowTest {
                 (0 until NIGHTS.toInt()).map { offset -> observation(campsite.id, offset, AvailabilityStatus.AVAILABLE) }
             },
         campgroundRef: BookingProviderRef? = null,
-    ): CampgroundWindow {
+    ): CampgroundWindow.Answered {
         val window = ResolvedDateWindow(firstNight, firstNight.plusDays(NIGHTS))
-        return CampgroundWindow(
+        return CampgroundWindow.Answered(
             poiId = 1L,
             campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
             window = window,

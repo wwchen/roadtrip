@@ -15,9 +15,9 @@ internal fun CampgroundObservations.asWindow(
     campsites: List<Campsite>,
     startDate: LocalDate,
     endDate: LocalDate,
-): CampgroundWindow {
+): CampgroundWindow.Answered {
     val window = ResolvedDateWindow(startDate, endDate)
-    return CampgroundWindow(
+    return CampgroundWindow.Answered(
         poiId = 1L,
         campground = testCampground(bookingProvider = provider.id, bookingProviderRef = campgroundRef?.serialize()),
         window = window,

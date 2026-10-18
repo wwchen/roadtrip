@@ -5,6 +5,7 @@ import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.testCampgroundReadPath
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
+import ca.floo.roadtrip.model.api.AvailabilityWindowState
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
@@ -30,7 +31,7 @@ import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -58,15 +59,15 @@ class CampsiteAvailabilityControllerWindowTest : SharedDbTest() {
                 )
             }
 
-        assertEquals(ResolvedDateWindow(fixture.startDate, fixture.endDate), campgroundWindow.window)
-        assertEquals(fixture.earliestDate, campgroundWindow.earliestDate)
+        val answered = assertIs<CampgroundWindow.Answered>(campgroundWindow)
+        assertEquals(ResolvedDateWindow(fixture.startDate, fixture.endDate), answered.window)
+        assertEquals(fixture.earliestDate, answered.earliestDate)
         // The horizon comes from the serving provider's capabilities.
-        assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), campgroundWindow.latestDate)
-        assertEquals(2, campgroundWindow.campgroundCampsites.size)
-        assertEquals(1, campgroundWindow.campsites.size)
-        assertEquals(campgroundWindow.campsites.map { it.id }, campgroundWindow.streams.map { it.campsiteId })
-        assertNotNull(campgroundWindow.cache)
-        assertEquals(BookingProvider.RECGOV, campgroundWindow.provider)
+        assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), answered.latestDate)
+        assertEquals(2, answered.campgroundCampsites.size)
+        assertEquals(1, answered.campsites.size)
+        assertEquals(answered.campsites.map { it.id }, answered.streams.map { it.campsiteId })
+        assertEquals(BookingProvider.RECGOV, answered.provider)
     }
 
     @Test
@@ -83,14 +84,32 @@ class CampsiteAvailabilityControllerWindowTest : SharedDbTest() {
                 )
             }
 
-        assertEquals(0, campgroundWindow.campsites.size)
-        assertEquals(emptyList(), campgroundWindow.streams)
-        assertNull(campgroundWindow.cache)
-        assertEquals(emptyMap(), campgroundWindow.reopensOnByCampsite)
-        assertEquals(ResolvedDateWindow(fixture.startDate, fixture.endDate), campgroundWindow.window)
-        assertEquals(2, campgroundWindow.campgroundCampsites.size)
-        assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), campgroundWindow.latestDate)
-        assertEquals(BookingProvider.RECGOV, campgroundWindow.provider)
+        val noMatch = assertIs<CampgroundWindow.NoCampsitesMatched>(campgroundWindow)
+        assertEquals(ResolvedDateWindow(fixture.startDate, fixture.endDate), noMatch.window)
+        assertEquals(2, noMatch.campgroundCampsites.size)
+        assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), noMatch.latestDate)
+    }
+
+    @Test
+    fun `a filter matching no campsite fuses to an empty window and yields no envelopes`() {
+        val fixture = windowTestController(siteTypes = listOf(CampsiteKind.TENT, CampsiteKind.TENT))
+
+        val campgroundWindow =
+            runBlocking {
+                fixture.controller.campgroundWindow(
+                    poiId = TEST_POI_ID,
+                    siteTypes = listOf(CampsiteKind.CABIN),
+                    startDate = fixture.startDate,
+                    endDate = fixture.endDate,
+                )
+            }
+        val fused = campgroundWindow.fusedWindow()
+
+        assertEquals(AvailabilityWindowState.EMPTY, fused.state)
+        assertNull(fused.cache)
+        assertNull(fused.season)
+        assertEquals(emptyList(), fused.days)
+        assertEquals(emptyList(), campgroundWindow.perCampsiteEnvelopes())
     }
 
     @Test
@@ -106,9 +125,10 @@ class CampsiteAvailabilityControllerWindowTest : SharedDbTest() {
                     endDate = fixture.endDate,
                 )
             }
+        val answered = assertIs<CampgroundWindow.Answered>(campgroundWindow)
         val fused = campgroundWindow.fusedWindow()
 
-        assertEquals(BUSY_CAMPGROUND_SITES, campgroundWindow.campsites.size)
+        assertEquals(BUSY_CAMPGROUND_SITES, answered.campsites.size)
         assertEquals(
             BUSY_CAMPGROUND_SITES,
             fused.days
@@ -119,7 +139,7 @@ class CampsiteAvailabilityControllerWindowTest : SharedDbTest() {
         // The serving provider was picked once for the window; nothing asked the
         // target resolver about a campsite, at any campground size.
         assertEquals(0, fixture.targets.campsiteResolves)
-        assertTrue(campgroundWindow.pollingSupported)
+        assertTrue(answered.pollingSupported)
     }
 
     /**
@@ -172,11 +192,11 @@ class CampsiteAvailabilityControllerWindowTest : SharedDbTest() {
                 )
             }
 
-        assertFalse(campgroundWindow.pollingSupported)
+        assertFalse(assertIs<CampgroundWindow.Answered>(campgroundWindow).pollingSupported)
     }
 
     @Test
-    fun `a window over a campground no provider claims has no latest date and no provider`() {
+    fun `a window over a campground no provider claims has no latest date`() {
         val fixture = windowTestController(siteTypes = listOf(CampsiteKind.TENT), providers = emptyList())
 
         val campgroundWindow =
@@ -189,8 +209,8 @@ class CampsiteAvailabilityControllerWindowTest : SharedDbTest() {
                 )
             }
 
+        assertIs<CampgroundWindow.NoCampsitesMatched>(campgroundWindow)
         assertNull(campgroundWindow.latestDate)
-        assertNull(campgroundWindow.provider)
     }
 
     /**
