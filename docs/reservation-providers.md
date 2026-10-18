@@ -463,9 +463,9 @@ an all-closed week has nothing to draw. `state: empty` covers two cases: no
 campsite matched the request, or no observations could be fetched for the
 window.
 
-Per-campsite envelopes are not served anywhere: this response is the one place
-a campsite's days are fused for a browser, and a caller who wants one campsite's
-nights reads `cells` here by campsite id.
+Per-campsite envelopes are not served anywhere: a caller who wants one
+campsite's nights reads that campsite's entry in each day's `cells`, keyed by
+campsite id.
 
 ### The stay check
 
@@ -477,11 +477,11 @@ as that POI's provider answers (`poi_ids` is the fan-out order, so a caller send
 the nearest first), then a final `done`:
 
 - `answer` carries `poi_id` and a required `outcome`, and the other fields hang
-  off it. `answered` carries a `StaySummaryDto`: a `status` (`open`, `few_left`,
-  `full`, `closed_for_season` or `no_data`), `open_sites` (campsites bookable
-  online for every night of the stay), `checked_sites`, `observed_at` (when the
-  oldest observation behind the answer was made, absent when none backs it) and
-  `from_cache`. `refused` is strictly about the dates: a `reason` of
+  off it. `answered` carries a `StaySummaryDto` in `stay`: a `status` (`open`,
+  `few_left`, `full`, `closed_for_season` or `no_data`), `open_sites` (campsites
+  bookable online for every night of the stay), `checked_sites`, `observed_at`
+  (when the oldest observation behind the answer was made, absent when none
+  backs it) and `from_cache`. `refused` is strictly about the dates: a `reason` of
   `start_before_earliest`, `beyond_booking_horizon` or `window_too_long`, and
   asking again cannot help. `failed` is a failure to ask: a `reason` plus a
   server-stated `retryable`, so a browser never infers what an error code means.

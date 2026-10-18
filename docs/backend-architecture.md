@@ -285,11 +285,12 @@ one request out to many POIs, so it gets its own controller, `StayCheckControlle
 The route parses and validates the body, charges the per-caller budget, and frames
 the stream; the controller owns the fan-out, the per-POI and whole-stream
 deadlines, and the isolation of one POI's failure from the rest.
-`StayFailureClassifier`, beside it, turns each failure into an `outcome`, `reason`
-and `retryable`, so no browser has to. Each POI is read through the same
-`poiAvailabilitySlice` the per-POI availability route uses, so the two cannot
-disagree about which campsites a POI has or what a night's status is. Per-campsite detail is not a bulk read:
-callers ask `GET /api/pois/{id}/campsites/availability` for one POI.
+`stayFailureOf` (in `StayFailureClassifier.kt`), beside it, turns each failure into
+an `outcome`, `reason` and `retryable`, so no browser has to. Each POI is read
+through the same `poiAvailabilitySlice` the per-POI availability route uses, so
+the two cannot disagree about which campsites a POI has or what a night's status
+is. Per-campsite detail is not a bulk read: callers ask
+`GET /api/pois/{id}/campsites/availability` for one POI.
 
 ## ETL Flow
 
