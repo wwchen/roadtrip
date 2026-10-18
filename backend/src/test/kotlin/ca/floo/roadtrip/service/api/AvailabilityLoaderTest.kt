@@ -50,6 +50,8 @@ class AvailabilityLoaderTest : SharedDbTest() {
             startDate = windowStart,
             endDate = windowEnd,
             freshAtOrAfter = fixedNow.minus(snapshotTtl),
+            fetchStartDate = windowStart,
+            fetchEndDate = windowEnd,
         )
 
     private fun batch(observations: List<CampsiteDayObservation>) =
@@ -291,11 +293,28 @@ class AvailabilityLoaderTest : SharedDbTest() {
     }
 
     @Test
+    fun `the UNKNOWN backfill reaches the fetch window's dates beyond the target window`() {
+        val extraDates = listOf(windowEnd, windowEnd.plusDays(1))
+
+        runBlocking {
+            loader.loadOrFetch(request(targets = listOf(siteA)).copy(fetchEndDate = windowEnd.plusDays(2))) {
+                batch(listOf(observation(siteB, windowStart)))
+            }
+        }
+
+        val stored =
+            repo
+                .readCurrent(listOf(siteA, siteB), windowDates() + extraDates)
+                .associate { (it.campsiteId to it.targetDate) to it.status }
+
+        extraDates.forEach { date ->
+            assertEquals(AvailabilityStatus.UNKNOWN, stored[siteA to date], "target campsite, fetch-only date $date")
+            assertNull(stored[siteB to date], "an untargeted campsite gets no back-fill on $date")
+        }
+    }
+
+    @Test
     fun `the direct-from-fetch response stays with the request's own targets`() {
-        // The vendor answered a shorter window than the request asked for, so
-        // the store cannot cover it and the fetched batch is served as-is. It
-        // now carries campsites this request is not about; they must not reach
-        // the response.
         val result =
             runBlocking {
                 loader.loadOrFetch(request(targets = listOf(siteA)).copy(fetchEndDate = windowStart.plusDays(1))) {

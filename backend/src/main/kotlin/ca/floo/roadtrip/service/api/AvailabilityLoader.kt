@@ -39,10 +39,10 @@ class AvailabilityLoader(
         val targets: List<CampsiteTarget>,
         val startDate: LocalDate,
         val endDate: LocalDate,
+        val fetchStartDate: LocalDate,
+        val fetchEndDate: LocalDate,
         val freshAtOrAfter: Instant,
         val runId: Long? = null,
-        val fetchStartDate: LocalDate = startDate,
-        val fetchEndDate: LocalDate = endDate,
     )
 
     suspend fun loadOrFetch(

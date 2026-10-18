@@ -116,6 +116,26 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
     }
 
     @Test
+    fun `the response names the provider failover served, not the one picked first`() {
+        val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
+        val fetcher = CapturingFetcher(servedBy = { BookingProvider.CAMPFLARE })
+
+        val result =
+            runBlocking {
+                service(listOf(recgov), fetcher).fetchAvailability(
+                    campground = campground,
+                    campsites = campsites,
+                    campgroundCampsites = campsites,
+                    startDate = null,
+                    endDate = null,
+                    dateContext = dateContext(),
+                )
+            }
+
+        assertEquals(BookingProvider.CAMPFLARE.id, result.batch.provider)
+    }
+
+    @Test
     fun `dispatches to the first provider that supports the campground`() {
         val aspira = FakeAvailabilityProvider(BookingProvider.ASPIRA)
         val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
@@ -282,8 +302,9 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
      * a two-day batch (one day inside the default 7-day target window, one far
      * outside it) so slicing behaviour is observable.
      */
-    private inner class CapturingFetcher :
-        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))) {
+    private inner class CapturingFetcher(
+        private val servedBy: (List<AvailabilityProvider>) -> BookingProvider = { it.first().id },
+    ) : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))) {
         var capturedProviders: List<AvailabilityProvider>? = null
         var capturedWindow: ResolvedDateWindow? = null
 
@@ -312,7 +333,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
                             ),
                         ),
                 )
-            return FailoverResult(observations = observations, servedBy = providers.first().id, attempts = emptyList())
+            return FailoverResult(observations = observations, servedBy = servedBy(providers), attempts = emptyList())
         }
     }
 }
