@@ -4,7 +4,6 @@ import ca.floo.roadtrip.config.ApiCacheConfig
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
@@ -22,8 +21,6 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-
-private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 
 internal data class CampsiteAvailabilityResult(
     val startDate: LocalDate,
@@ -44,6 +41,7 @@ internal class CampsiteAvailabilityService(
     private val snapshotFreshnessTtl: (provider: AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
 ) {
     private val availabilityLoader = AvailabilityLoader(availabilityRepo, clock)
+    private val readPolicy = AvailabilityReadPolicy(availabilityProviders, dateResolver, bookingHorizons, clock, snapshotFreshnessTtl)
 
     suspend fun fetchAvailability(
         campground: Campground,
@@ -54,28 +52,18 @@ internal class CampsiteAvailabilityService(
         dateContext: PoiDateContext,
         freshAtOrAfter: Instant? = null,
     ): CampsiteAvailabilityResult {
-        val provider = providerFor(campground)
-        val caps = provider.capabilities
-        val targetWindow =
-            dateResolver.resolveWindow(
+        val read =
+            readPolicy.read(
+                campground = campground,
+                dateContext = dateContext,
                 startDate = startDate,
                 endDate = endDate,
-                context = dateContext,
-                bookingHorizonDays = caps.bookingHorizonDays,
-                maxDays = caps.maxPollWindowDays,
-                defaultDays = DEFAULT_AVAILABILITY_DAYS,
+                freshAtOrAfter = freshAtOrAfter,
             )
-        val fetchWindow =
-            dateResolver.wideWindow(
-                anchor = targetWindow.startDate,
-                context = dateContext,
-                maxPollWindowDays = caps.maxPollWindowDays,
-                bookingHorizonDays = caps.bookingHorizonDays,
-            ) ?: targetWindow
-        val windows = AvailabilityWindows(target = targetWindow, fetch = fetchWindow)
-
-        val supportingProviders = availabilityProviders.filter { it.supportsCampground(campground) }
-        val freshAt = freshAtOrAfter ?: Instant.now(clock).minus(snapshotFreshnessTtl(provider))
+        val provider = read.provider
+        val windows = read.windows
+        val freshAt = read.freshAtOrAfter
+        val supportingProviders = readPolicy.supportingProviders(campground)
 
         val requestScope = provider.parentRefFor(campground)
         var servedBy: BookingProvider? = null
@@ -117,8 +105,7 @@ internal class CampsiteAvailabilityService(
         return CampsiteAvailabilityResult(
             startDate = windows.target.startDate,
             endDate = windows.target.endDate,
-            // providerFor above already found a provider for this campground, so the same pick here can't miss.
-            latestDate = bookingHorizons.latestDate(campground, dateContext)!!,
+            latestDate = read.latestDate ?: throw AvailabilityServiceError.UnknownCampground,
             batch = batch,
             reopensOnByCampsite = reopensOnByCampsite(campsites, batch, windows.target, freshAt),
         )
@@ -146,21 +133,18 @@ internal class CampsiteAvailabilityService(
         return repo.earliestBookableDates(closed, window.startDate, freshAtOrAfter)
     }
 
-    private fun providerFor(campground: Campground): AvailabilityProvider =
-        bookingHorizons.servingProvider(campground) ?: throw AvailabilityServiceError.UnknownCampground
-
     /**
      * The serving provider's booking horizon for [campground], or null when no
-     * provider claims it. Non-throwing counterpart to [providerFor], for
+     * provider claims it. Non-throwing counterpart to [AvailabilityReadPolicy.read], for
      * callers (the empty-campsite branch) that have a fallback of their own.
      */
-    fun bookingHorizonDaysFor(campground: Campground): Int? = bookingHorizons.horizonDaysFor(campground)
+    fun bookingHorizonDaysFor(campground: Campground): Int? = readPolicy.bookingHorizonDays(campground)
 
     /**
      * Whether the campground's serving provider can be polled for openings —
      * one pick for the whole slice, not one per campsite.
      */
-    fun internalPollingSupportedFor(campground: Campground): Boolean = bookingHorizons.internalPollingSupported(campground)
+    fun internalPollingSupportedFor(campground: Campground): Boolean = readPolicy.pollingSupported(campground)
 }
 
 private fun List<CampsiteDayObservation>.within(
