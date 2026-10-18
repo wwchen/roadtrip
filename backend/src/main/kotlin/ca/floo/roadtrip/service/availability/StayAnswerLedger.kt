@@ -8,14 +8,15 @@ internal class StayAnswerLedger(
 ) {
     private val lock = ReentrantLock()
     private val answered = BooleanArray(poiCount)
+    private var finished = false
 
     fun answer(
         index: Int,
         send: () -> Unit,
     ) = lock.withLock {
         if (!answered[index]) {
-            answered[index] = true
             send()
+            answered[index] = true
         }
     }
 
@@ -23,12 +24,15 @@ internal class StayAnswerLedger(
         sweep: (Int) -> Unit,
         done: () -> Unit,
     ) = lock.withLock {
-        answered.indices.forEach { index ->
-            if (!answered[index]) {
-                answered[index] = true
-                sweep(index)
+        if (!finished) {
+            answered.indices.forEach { index ->
+                if (!answered[index]) {
+                    sweep(index)
+                    answered[index] = true
+                }
             }
+            done()
+            finished = true
         }
-        done()
     }
 }

@@ -5,7 +5,7 @@ import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 import kotlin.test.fail
 
 private const val LATCH_TIMEOUT_SECONDS = 10L
@@ -84,6 +84,28 @@ class StayAnswerLedgerTest {
     }
 
     @Test
+    fun `an index whose send throws is left for the sweep to answer`() {
+        val ledger = StayAnswerLedger(1)
+        val sent = mutableListOf<String>()
+
+        assertFailsWith<IllegalStateException> { ledger.answer(0) { error("send failed") } }
+        ledger.finish(sweep = { sent += sweepOf(it) }, done = { sent += DONE })
+
+        assertEquals(listOf(sweepOf(0), DONE), sent)
+    }
+
+    @Test
+    fun `a second finish sends nothing, so done stays exactly once`() {
+        val ledger = StayAnswerLedger(1)
+        val sent = mutableListOf<String>()
+
+        ledger.finish(sweep = { sent += sweepOf(it) }, done = { sent += DONE })
+        ledger.finish(sweep = { sent += sweepOf(it) }, done = { sent += DONE })
+
+        assertEquals(listOf(sweepOf(0), DONE), sent)
+    }
+
+    @Test
     fun `an answer that arrives after the sweep sends nothing`() {
         val ledger = StayAnswerLedger(1)
         val sent = mutableListOf<String>()
@@ -120,11 +142,8 @@ class StayAnswerLedgerTest {
         val landed = sent.toList()
         assertEquals(RACING_POI_COUNT + 1, landed.size)
         assertEquals(DONE, landed.last())
-        (0 until RACING_POI_COUNT).forEach { index ->
-            assertTrue(
-                landed.count { it == answerOf(index) || it == sweepOf(index) } == 1,
-                "index $index landed ${landed.count { it == answerOf(index) || it == sweepOf(index) }} times",
-            )
-        }
+        val perIndex = IntArray(RACING_POI_COUNT)
+        landed.filterNot { it == DONE }.forEach { perIndex[it.substringAfterLast('-').toInt()]++ }
+        assertEquals(List(RACING_POI_COUNT) { 1 }, perIndex.toList())
     }
 }
