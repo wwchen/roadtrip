@@ -122,9 +122,12 @@ request time is never served from a capture).
 - `RecGovAvailabilityProvider` capabilities: `supportsInternalPolling = true`,
   `bookingHorizonDays = 180`, `maxPollWindowDays = 60` (one month-shaped fetch
   shape per tick, so a poll never fans out into ungoverned sub-calls).
-- `catalogAvailability` narrows the merged payload to the linked catalog rows
-  and stamps `campsiteId`; `availability` (no catalog rows) reports every
-  campsite the payload carries with a null `campsiteId`.
+- `availability` merges the facility-month payloads and keys them by the
+  campsites it was given, stamping `campsiteId` on every observation. A site in
+  the payload that no campsite resolves to is dropped: an unkeyed row is not a
+  base-unit fact. A campsite the payload does not mention is `unknown` — asked
+  and not told. The season block is not the adapter's to compute; it is derived
+  from stored cells above the port.
 - Enablement is config-gated by `roadtrip.read-path.enabled-availability-providers`.
   The adapter is always registered; when the list omits `recgov` it declines
   rec.gov refs and resolution continues through other candidates. `recgov` is

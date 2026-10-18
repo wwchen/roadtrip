@@ -504,6 +504,82 @@ and a request that names none gets the ceiling. The bounds, the POI cap, the
 fan-out concurrency and the deadlines are `roadtrip.availability.stays` config
 (`StayCheckConfig`).
 
+## Base units: what the port answers in
+
+The layers split by what shape data has. The API layer is shaped by the
+frontend's request; the controller fans that request out; the service and db
+layers store and cache **facts in base units**, and a base unit here is one
+`(campsite, night)` fact. Nothing request-shaped travels below the controller,
+and nothing below it derives a request-shaped answer.
+
+So `AvailabilityProvider` has one fetch method, and it is about a campground:
+
+```kotlin
+suspend fun availability(
+    campground: Campground,
+    campsites: List<Campsite>,
+    startDate: LocalDate,
+    endDate: LocalDate,
+): AvailabilityObservationBatch
+```
+
+`campsites` is the campsites of the campground to cover. It is id-resolution and
+fetch-shaping input — rec.gov maps its site ids through it, Aspira learns which
+map ids to fetch — and **not** a filter: no answer is narrowed by it. A read
+serving a request passes the campground's whole set whatever the request
+filtered to, because the upstream call covers the campground either way; pass
+less and the cells of the campsites the filter dropped are paid for and thrown
+away, and the next request calls the vendor again for a campground just called.
+`AvailabilityLoader` stores every cell a batch carries and answers from the
+request's own targets, so a wider batch never widens a response.
+
+Two rules are the contract:
+
+- **Every observation names a campsite.** A vendor row an adapter cannot resolve
+  to one of `campsites` is not a fact about a base unit, so it is dropped rather
+  than returned with a null campsite id — nothing above the port can store or
+  serve such a row. The campground-rollup path that used to produce them is
+  gone.
+- **No answer-level derivation below the port.** Whether a window is closed for
+  the season, when it reopens, how many sites a stay has: all of it is derived
+  above, from stored cells, by a caller that knows which campsites its answer is
+  about. An adapter reducing over `campsites` would be answering a question it
+  cannot see. `StaySummary.kt` has always worked this way; the detail path does
+  now too.
+
+Call-shaping stays inside the adapter: one campground is one call at the port,
+but may be several upstream — rec.gov by facility-month, Aspira per map (a
+campground can span sibling maps), ReserveAmerica a park matrix that can span
+sibling campgrounds. A matrix's sibling-campground facts are cells we could also
+key and store; that needs a caller that knows those campgrounds and is left
+alone for now.
+
+### Where the season block comes from
+
+"Closed for the season, reopening on X" is a statement about the campsites a
+request asked about, so it is not a provider's to state.
+`AvailabilityRepo.earliestBookableDates(campsiteIds, from)` reads, per campsite,
+the earliest stored date whose current observation is bookable.
+`CampsiteAvailabilityService` asks only about the campsites with nothing bookable
+in the window — the others have no reopening to report — and the slice reduces
+over the campsites it answers for. A cabin-filtered read is therefore never told
+when the tents reopen.
+
+Reading it from the table is also what makes it survive a cache hit. It used to
+be a by-product of the call that fetched: the loader passed the fetched batch's
+block on a miss and had none to pass on a hit, so the same request twice answered
+`closed_for_season` with a `reopens_on` and then without one. The reach is now
+the reach of stored cells, which is as wide as the fetch window that covered
+them.
+
+### What the poller passes
+
+The poller passes the campsites its watches cover, not the campground's set. A
+cadence tick pays for every cell it writes and every upstream call it makes, over
+and over, and nothing is waiting on the cells no watch covers — for Aspira the
+campground's full set would mean one fetch per sibling map on every tick. That is
+a cost decision, not a correctness one: no answer is derived from the list.
+
 ## Capabilities
 
 Every `AvailabilityProvider` serves availability. Capability flags only describe
@@ -533,8 +609,7 @@ every vendor. A request past `latest_date` is a `beyond_booking_horizon`
 
 | Action | Required interface | Notes |
 |---|---|---|
-| Per-day availability for a window | `AvailabilityProvider.availability(ref, startDate, endDate)` | Drives provider-level availability. Adapters fetch upstream directly; the decision to serve stored data or call the adapter live is handled above it by `AvailabilityLoader`, reading current state from the `availability` interval table. |
-| Catalog availability for linked campsites | `AvailabilityProvider.catalogAvailability(ref, campsites, startDate, endDate)` | The POI/campsite catalog path uses this so returned availability is narrowed to known catalog rows. |
+| Per-day availability for a window | `AvailabilityProvider.availability(campground, campsites, startDate, endDate)` | The one fetch method. Answers in base units — one observation per `(campsite, night)`, each naming its campsite — for the campsites of the campground. Adapters fetch upstream directly; the decision to serve stored data or call the adapter live is handled above it by `AvailabilityLoader`, reading current state from the `availability` interval table. See [Base units](#base-units-what-the-port-answers-in). |
 | Capability probe | `AvailabilityProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
 | Record availability history | poller writes status-run rows to the `availability` interval table | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |
@@ -748,7 +823,7 @@ A run can cover many campsites (a POI-scope watch fans out to every child
 campsite), but the poller does not issue one upstream call per campsite.
 `CatalogAvailabilityBatcher` groups a run's resolved targets by
 `(provider, parentRef, dateContext)` and issues exactly one
-`catalogAvailability` call per group — so N campsites under one campground
+`availability` call per group — so N campsites under one campground
 become one upstream call. This is what fixed the old per-site rate-limit
 fan-out. Call-shaping stays inside each adapter (months for rec.gov, the park
 matrix for ReserveAmerica, per-day map calls for Aspira); the batcher and poller
@@ -818,7 +893,7 @@ GET /api/poi/{poi_id}/reservables/availability
   ↓                                AvailabilityService
 week pages                         ↓
   ↓                                AvailabilityTargetResolver
-  ↓                                AvailabilityProvider.catalogAvailability
+  ↓                                AvailabilityProvider.availability
                                    ↓
                                    watch evaluator
   ↓                                  ↓ (match)
