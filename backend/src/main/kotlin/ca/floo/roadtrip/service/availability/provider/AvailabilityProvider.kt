@@ -70,13 +70,16 @@ interface AvailabilityProvider {
      * answer is the caller's job, above this port, and an adapter that reduced
      * over this list would be answering a question it cannot see.
      *
-     * A read serving a request passes the campground's whole set, whatever the
-     * request filtered to, because the upstream call covers the campground either
-     * way: pass less and the cells of the campsites the filter dropped are paid
-     * for and thrown away, and the next request calls the vendor again for a
-     * campground just called. The poller passes the campsites its watches cover
-     * instead — a cadence tick pays for every cell it writes and every upstream
-     * call it makes, over and over, and nothing is waiting on the rest.
+     * Both callers pass the campground's set. A read serving a request passes it
+     * whatever the request filtered to, because the upstream call covers the
+     * campground either way: pass less and the cells of the campsites the filter
+     * dropped are paid for and thrown away, and the next request calls the vendor
+     * again for a campground just called. The poller arrives here with the same
+     * list for a different reason — `DbAvailabilityTargetResolver.resolve(poller)`
+     * resolves a poller to its POI's campsites under its `(provider, parentRef)`
+     * group, so a watch scoped to one campsite still polls the catalog it sits
+     * in, which is what `poller fetches the full campground catalog even when a
+     * watch scopes one site` pins.
      *
      * Two rules follow from "base-unit facts", and both are the contract:
      *

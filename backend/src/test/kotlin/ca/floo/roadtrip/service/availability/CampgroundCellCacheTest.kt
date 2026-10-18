@@ -112,6 +112,33 @@ class CampgroundCellCacheTest : SharedDbTest() {
         assertEquals(fixture.reopenDate.toString(), tents.season?.reopensOn)
     }
 
+    @Test
+    fun `a full window looks up no reopen date`() {
+        // `reserved` every night is full, not closed, and a full window shows no
+        // season block — so there is nothing to look up. The stay check reads
+        // mostly-full campgrounds and never renders a reopen date, so looking one
+        // up per POI would be a round trip per POI for an answer nobody reads.
+        val fixture = checkFixture(status = AvailabilityStatus.RESERVED, reopensAfterWindow = true)
+
+        val slice = fixture.slice(siteTypes = emptyList())
+
+        assertEquals(emptyMap(), slice.reopensOnByCampsite)
+        assertNull(fusePoiWindow(slice, slice.earliestDate).season)
+    }
+
+    @Test
+    fun `a closed window stops reporting a reopen date nobody has looked at since`() {
+        // The stored AVAILABLE cell is older than this read's freshness cutoff,
+        // so it is not evidence that the campground reopens then.
+        val fixture = checkFixture(status = AvailabilityStatus.CLOSED, reopensAfterWindow = true)
+
+        val fresh = fixture.fusedWeek(siteTypes = emptyList())
+        assertEquals(fixture.reopenDate.toString(), fresh.season?.reopensOn)
+
+        val stale = fixture.fusedWeek(siteTypes = emptyList(), freshAtOrAfter = fixedNow.plusSeconds(1))
+        assertNull(stale.season, "a cell observed before the cutoff is not a reopening")
+    }
+
     private fun checkFixture(
         status: AvailabilityStatus = AvailabilityStatus.AVAILABLE,
         reopensAfterWindow: Boolean = false,
@@ -218,18 +245,25 @@ private class CheckFixture(
     val endDate: LocalDate,
     val reopenDate: LocalDate,
 ) {
-    fun slice(siteTypes: List<CampsiteKind>): PoiAvailabilitySlice =
+    fun slice(
+        siteTypes: List<CampsiteKind>,
+        freshAtOrAfter: Instant? = null,
+    ): PoiAvailabilitySlice =
         runBlocking {
             controller.poiAvailabilitySlice(
                 poiId = TEST_POI_ID,
                 siteTypes = siteTypes,
                 startDate = startDate,
                 endDate = endDate,
+                freshAtOrAfter = freshAtOrAfter,
             )
         }
 
-    fun fusedWeek(siteTypes: List<CampsiteKind>): FusedWindow {
-        val slice = slice(siteTypes)
+    fun fusedWeek(
+        siteTypes: List<CampsiteKind>,
+        freshAtOrAfter: Instant? = null,
+    ): FusedWindow {
+        val slice = slice(siteTypes, freshAtOrAfter)
         return fusePoiWindow(slice, slice.earliestDate)
     }
 }

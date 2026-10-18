@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.client.aspira.AspiraAvailability
 import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.model.api.HTTP_FORBIDDEN
 import ca.floo.roadtrip.model.api.HTTP_SERVICE_UNAVAILABLE
@@ -19,6 +18,9 @@ import ca.floo.roadtrip.model.domain.provider.BookingTenant
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.support.AspiraException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.time.LocalDate
@@ -103,6 +105,11 @@ class AspiraAvailabilityProvider(
                     scope = aspiraRef,
                     host = tenant.host,
                     resourceLocationId = resourceLocationId,
+                    // Every target: the occupancy response enumerates the
+                    // resources under this location, so a target it does not
+                    // mention was asked about and not mentioned, which is
+                    // UNKNOWN. The campsites carry no location of their own to
+                    // narrow by — see `AspiraCatalogCampsite.resourceLocationId`.
                     campsites = targets,
                     today = startDate,
                     days = ChronoUnit.DAYS.between(startDate, endDate).toInt(),
@@ -168,10 +175,19 @@ class AspiraAvailabilityProvider(
         }
 
         val observedAt = Instant.now()
-        val dataByMap = mutableMapOf<Int, AspiraAvailability>()
-        for (mapId in targets.map { it.mapId }.distinct()) {
-            dataByMap[mapId] = availabilityClient.fetch(host, mapId, startDate, endDate.minusDays(1))
-        }
+        // A campground's campsites can sit across sibling maps, and covering the
+        // campground means fetching all of them. They are independent calls, so
+        // the window costs one round trip's latency rather than one per map —
+        // the same shape rec.gov uses for its months.
+        val dataByMap =
+            coroutineScope {
+                targets
+                    .map { it.mapId }
+                    .distinct()
+                    .map { mapId -> async { mapId to availabilityClient.fetch(host, mapId, startDate, endDate.minusDays(1)) } }
+                    .awaitAll()
+                    .toMap()
+            }
 
         val resourceRows =
             targets.map { target ->

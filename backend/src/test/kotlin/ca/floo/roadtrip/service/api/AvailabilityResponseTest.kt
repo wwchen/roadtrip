@@ -100,6 +100,7 @@ class AvailabilityResponseTest {
                         cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 60),
                         scope = null,
                     ),
+                    seasonBlock = null,
                     pollingSupported = true,
                     earliestDate = LocalDate.parse("2026-06-10"),
                 ),
@@ -155,6 +156,7 @@ class AvailabilityResponseTest {
                     cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 3, ttlSeconds = 60),
                     scope = BookingProviderRef.RecGov(facilityId = "232447"),
                 ),
+                seasonBlock = null,
                 pollingSupported = true,
                 earliestDate = LocalDate.parse("2026-06-10"),
             )
@@ -195,6 +197,7 @@ class AvailabilityResponseTest {
                             resourceLocationId = null,
                         ),
                 ),
+                seasonBlock = null,
                 pollingSupported = true,
                 earliestDate = LocalDate.parse("2026-06-10"),
             )

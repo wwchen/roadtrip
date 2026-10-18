@@ -82,7 +82,7 @@ class AvailabilityRepo(
             val current = currentStatusRuns(txn, latest.values)
             val unchanged = latest.values.filter { current[it.cell()]?.status == it.status }
             val changed = latest.values.filter { current[it.cell()]?.status != it.status }
-            bumpObservedAt(txn, unchanged.mapNotNull { current[it.cell()]?.id }, unchanged.map { it.observedAt })
+            bumpObservedAt(txn, unchanged.mapNotNull { observation -> current[observation.cell()]?.id?.to(observation.observedAt) })
             insertStatusRuns(txn, changed, current, runId)
         }
     }
@@ -129,12 +129,12 @@ class AvailabilityRepo(
                     )
             }.toMap()
 
+    /** [seen] pairs a row id with when it was observed; one list, so the two cannot come apart. */
     private fun bumpObservedAt(
         txn: DSLContext,
-        ids: List<Long>,
-        observedAts: List<Instant>,
+        seen: List<Pair<Long, Instant>>,
     ) {
-        if (ids.isEmpty()) return
+        if (seen.isEmpty()) return
         txn
             .query(
                 """
@@ -143,8 +143,8 @@ class AvailabilityRepo(
                 FROM unnest(?::bigint[], ?::timestamptz[]) AS seen(id, observed_at)
                 WHERE a.id = seen.id
                 """.trimIndent(),
-                ids.toTypedArray(),
-                observedAts.map { utc(it) }.toTypedArray(),
+                seen.map { it.first }.toTypedArray(),
+                seen.map { utc(it.second) }.toTypedArray(),
             ).execute()
     }
 
@@ -272,12 +272,20 @@ class AvailabilityRepo(
 
     /**
      * Per campsite, the earliest date from [from] on whose current observation
-     * says it is bookable — the stored-fact answer to "when does this reopen".
+     * says it is bookable, counting only cells observed at or after
+     * [freshAtOrAfter] — the stored-fact answer to "when does this reopen".
      *
      * A base-unit read: it says nothing about whose question it is. The caller
      * passes the campsites its answer is about and reduces over them, which is
      * why a reopen date survives a cache hit — it is a fact in the table, not a
      * by-product of the call that happened to fetch.
+     *
+     * The freshness cutoff is the point. A reopen date is shown to a user as
+     * current, so a cell nobody has looked at since an earlier, wider window was
+     * fetched is not evidence of anything — the same rule
+     * [freshlyUnavailableDates] applies to the dates it blocks on. Without it an
+     * AVAILABLE cell stored weeks ago would keep being published as the date a
+     * campground reopens long after it filled.
      *
      * Reaches only as far as stored cells do: a window is stored as wide as the
      * fetch that covered it, so a campground whose season starts past that has no
@@ -286,6 +294,7 @@ class AvailabilityRepo(
     fun earliestBookableDates(
         campsiteIds: List<Long>,
         from: LocalDate,
+        freshAtOrAfter: Instant,
     ): Map<Long, LocalDate> {
         if (campsiteIds.isEmpty()) return emptyMap()
         return ctx
@@ -294,18 +303,20 @@ class AvailabilityRepo(
                 SELECT campsite_id, min(target_date) AS reopens_on
                 FROM (
                     SELECT DISTINCT ON (campsite_id, target_date)
-                        campsite_id, target_date, status
+                        campsite_id, target_date, status, last_observed_at
                     FROM availability
                     WHERE campsite_id = ANY(?::bigint[])
                       AND target_date >= ?::date
                     ORDER BY campsite_id, target_date, last_observed_at DESC, id DESC
                 ) cur
                 WHERE cur.status::text = ANY(?::text[])
+                  AND cur.last_observed_at >= ?::timestamptz
                 GROUP BY campsite_id
                 """.trimIndent(),
                 campsiteIds.distinct().toTypedArray(),
                 from,
                 bookableLiterals,
+                utc(freshAtOrAfter),
             ).fetch { r ->
                 r.get("campsite_id", Long::class.java) to r.get("reopens_on", LocalDate::class.java)
             }.toMap()

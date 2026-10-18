@@ -499,4 +499,4 @@ private fun fakeAspiraClient(
  * from its own start date by a provider the poller can reach.
  */
 private fun responseOf(batch: AvailabilityObservationBatch): AvailabilityResponseDto =
-    availabilityResponseFromObservations(batch, pollingSupported = true, earliestDate = batch.startDate)
+    availabilityResponseFromObservations(batch, pollingSupported = true, earliestDate = batch.startDate, seasonBlock = null)
