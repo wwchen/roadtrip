@@ -159,6 +159,38 @@ class FailoverAvailabilityFetcherTest {
     ): FailoverAvailabilityFetcher = FailoverAvailabilityFetcher(cooldowns = tracker, clock = { clock.now })
 
     @Test
+    fun `each candidate is handed the campsites its own call shape can cover`() =
+        runBlocking {
+            val clock = FakeClock()
+            val perCampground =
+                ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyBatch()) }
+            val perPart =
+                object : ScriptedProvider(BookingProvider.ASPIRA) {
+                    init {
+                        scriptReturns(emptyBatch("aspira"))
+                    }
+
+                    override val capabilities: AvailabilityProviderCapabilities =
+                        super.capabilities.copy(coversCampgroundPerCall = false)
+                }
+            val answered = listOf(campsite(1L))
+            val wholeCampground = answered + campsite(2L)
+
+            for (provider in listOf(perCampground, perPart)) {
+                fetcherWith(trackerWith(clock), clock).fetch(
+                    providers = listOf(provider),
+                    campground = testCampground,
+                    campsites = answered,
+                    campgroundCampsites = wholeCampground,
+                    window = window,
+                )
+            }
+
+            assertEquals(wholeCampground, perCampground.lastCampsites, "one call covers the campground, so cover it")
+            assertEquals(answered, perPart.lastCampsites, "covering the rest would cost this vendor another call per part")
+        }
+
+    @Test
     fun `first candidate succeeds — single attempt, servedBy first`() =
         runBlocking {
             val clock = FakeClock()

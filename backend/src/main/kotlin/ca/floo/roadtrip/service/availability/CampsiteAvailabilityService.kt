@@ -113,7 +113,8 @@ internal class CampsiteAvailabilityService(
                     failoverFetcher.fetch(
                         providers = supportingProviders,
                         campground = campground,
-                        campsites = campgroundCampsites,
+                        campsites = campsites,
+                        campgroundCampsites = campgroundCampsites,
                         window = ResolvedDateWindow(windows.fetch.startDate, windows.fetch.endDate),
                     )
                 result.batch ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())

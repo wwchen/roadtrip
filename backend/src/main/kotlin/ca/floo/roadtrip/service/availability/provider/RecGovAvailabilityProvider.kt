@@ -69,7 +69,6 @@ class RecGovAvailabilityProvider(
         endDate: LocalDate,
     ): AvailabilityObservationBatch =
         coroutineScope {
-            val dates = datesInWindow(startDate, endDate)
             val months = monthsCovering(startDate, endDate.minusDays(1))
             val observedAt = Instant.now()
             val payloads =
@@ -79,6 +78,7 @@ class RecGovAvailabilityProvider(
 
             val merged = mergeCampsites(payloads)
             val catalogSites = campsiteIdByVendorId.keys.associateWith { siteId -> merged[siteId].orEmpty() }
+            val dates = datesInWindow(startDate, endDate)
             val observedAtByDate = dates.associateWith { observedAt }
 
             AvailabilityObservationBatch(

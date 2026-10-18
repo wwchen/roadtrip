@@ -30,14 +30,20 @@ internal open class FailoverAvailabilityFetcher(
     )
 
     /**
-     * [campsites] is the campground's campsite set, which is what the port takes:
-     * the candidates all answer for the campground, and the caller narrows the
-     * answer afterwards.
+     * [campgroundCampsites] is the campground's whole campsite set and
+     * [campsites] the narrower set this read answers for. Which one a candidate
+     * is given is that candidate's `coversCampgroundPerCall`: a vendor whose one
+     * call covers the campground gets all of them, so every campsite's cells are
+     * stored; a vendor that answers per part of a campground gets the narrower
+     * set, because covering the rest would cost it another upstream call per
+     * part. Picked per candidate rather than once, since failover can land on a
+     * vendor of the other shape.
      */
     open suspend fun fetch(
         providers: List<AvailabilityProvider>,
         campground: Campground,
         campsites: List<Campsite>,
+        campgroundCampsites: List<Campsite> = campsites,
         window: ResolvedDateWindow,
     ): FailoverResult {
         val sorted = cooldowns.sortHealthyFirst(providers) { it.id }
@@ -46,7 +52,8 @@ internal open class FailoverAvailabilityFetcher(
         val attempts = mutableListOf<AttemptRecord>()
         for (provider in sorted) {
             val begin = clock()
-            val attempt = attemptFetch(provider, campground, campsites, window)
+            val covers = provider.capabilities.coversCampgroundPerCall
+            val attempt = attemptFetch(provider, campground, if (covers) campgroundCampsites else campsites, window)
             val durationMs = elapsedMs(begin, clock())
 
             attempts +=

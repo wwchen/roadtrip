@@ -52,6 +52,8 @@ class AspiraAvailabilityProvider(
             supportsInternalPolling = true,
             bookingHorizonDays = ASPIRA_BOOKING_HORIZON_DAYS,
             maxPollWindowDays = ASPIRA_MAX_POLL_WINDOW_DAYS,
+            // Per map, and a campground's campsites sit across sibling maps.
+            coversCampgroundPerCall = false,
         )
 
     override fun isEnabled(): Boolean = enabled
