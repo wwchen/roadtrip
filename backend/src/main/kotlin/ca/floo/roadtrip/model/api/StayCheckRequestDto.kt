@@ -32,7 +32,7 @@ data class StayCheckRequestDto(
      * rather than refusing it: up to its floor, so a caller cannot force a refetch of
      * every campground on every request (or ask every provider twice with a
      * double-click), and down to its ceiling, which is how stale is too stale to serve
-     * at all. Absent means the ceiling, the endpoint's usual tolerance. A smaller age
+     * at all. Absent means the ceiling, the endpoint's default max age. A smaller age
      * costs an upstream call per campground.
      */
     @SerialName("max_age_seconds") val maxAgeSeconds: Long? = null,

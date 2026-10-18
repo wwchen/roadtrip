@@ -111,7 +111,7 @@ export interface StayCheckRequest {
   groupSize: number | null;
   /**
    * How old a stored observation may be and still answer, in seconds; null takes the
-   * server's usual tolerance. The server clamps it into its own range, so a re-check
+   * server's default max age. The server clamps it into its own range, so a re-check
    * sends a small one and need not know where the range ends.
    */
   maxAgeSeconds: number | null;

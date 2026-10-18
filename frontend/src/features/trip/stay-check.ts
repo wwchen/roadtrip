@@ -20,7 +20,7 @@ export const CHECK_IDLE_TIMEOUT_MS = 60_000;
  * The age a re-check asks for: short, so what comes back is fresh, but not zero, so a
  * double-click does not ask every provider twice. It is a request, not a guarantee: the
  * server clamps whatever it is sent into its own range and may serve something older. A
- * first check names no age and gets the endpoint's usual tolerance.
+ * first check names no age and gets the endpoint's default max age.
  */
 export const RECHECK_MAX_AGE_SECONDS = 60;
 

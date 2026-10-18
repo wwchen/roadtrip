@@ -97,7 +97,7 @@ export interface StayCheckControl {
  * out, or switched off), and the ids of its cards a provider can answer for once
  * it is. Checking again — the same question, already answered — asks for a short
  * age (`RECHECK_MAX_AGE_SECONDS`) rather than answering from anything within the
- * server's usual tolerance.
+ * server's default max age.
  */
 export function useStayCheck(checkableIds: readonly number[] | null): StayCheckControl {
   const query = useCurrentStayQuery();
