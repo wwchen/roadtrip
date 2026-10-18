@@ -277,6 +277,71 @@ class AvailabilityRepoTest : SharedDbTest() {
     }
 
     @Test
+    fun `earliestBookableDates takes the first bookable date per campsite`() {
+        val a = seedCampsite("100")
+        val b = seedCampsite("200")
+        val repo = AvailabilityRepo(ctx)
+        val observedAt = Instant.parse("2026-06-18T10:00:00Z")
+        repo.recordObservations(
+            null,
+            listOf(
+                AvailabilityRepo.Observation(a, date, AvailabilityStatus.CLOSED, observedAt),
+                AvailabilityRepo.Observation(a, date.plusDays(2), AvailabilityStatus.AVAILABLE, observedAt),
+                AvailabilityRepo.Observation(a, date.plusDays(4), AvailabilityStatus.AVAILABLE, observedAt),
+                AvailabilityRepo.Observation(b, date.plusDays(1), AvailabilityStatus.RESERVED, observedAt),
+            ),
+        )
+
+        val dates = repo.earliestBookableDates(listOf(a, b), date, observedAt.minusSeconds(60))
+
+        assertEquals(mapOf(a to date.plusDays(2)), dates, "only a bookable cell is a reopening, and only the first one")
+    }
+
+    @Test
+    fun `earliestBookableDates ignores a cell nobody has observed lately`() {
+        // A reopen date is published to a user as current. An AVAILABLE cell left
+        // behind by an earlier, wider window is not evidence that the campground
+        // reopens then — the same rule freshlyUnavailableDates applies to the
+        // dates it blocks on.
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val longAgo = Instant.parse("2026-05-01T10:00:00Z")
+        repo.recordObservations(
+            null,
+            listOf(AvailabilityRepo.Observation(campsiteId, date.plusDays(2), AvailabilityStatus.AVAILABLE, longAgo)),
+        )
+
+        val cutoff = Instant.parse("2026-06-18T10:00:00Z")
+
+        assertEquals(emptyMap(), repo.earliestBookableDates(listOf(campsiteId), date, cutoff))
+        assertEquals(
+            mapOf(campsiteId to date.plusDays(2)),
+            repo.earliestBookableDates(listOf(campsiteId), date, longAgo.minusSeconds(1)),
+            "the same cell counts for a caller whose cutoff it is fresh enough for",
+        )
+    }
+
+    @Test
+    fun `earliestBookableDates reads the current row of a cell, not its history`() {
+        // The cell was bookable and is not any more: its chain still holds the
+        // AVAILABLE run, and reporting that as a reopening would publish a date
+        // the vendor has already withdrawn.
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val first = Instant.parse("2026-06-18T10:00:00Z")
+        repo.recordObservations(
+            null,
+            listOf(AvailabilityRepo.Observation(campsiteId, date.plusDays(2), AvailabilityStatus.AVAILABLE, first)),
+        )
+        repo.recordObservations(
+            null,
+            listOf(AvailabilityRepo.Observation(campsiteId, date.plusDays(2), AvailabilityStatus.RESERVED, first.plusSeconds(60))),
+        )
+
+        assertEquals(emptyMap(), repo.earliestBookableDates(listOf(campsiteId), date, first.minusSeconds(1)))
+    }
+
+    @Test
     fun `markElapsedAsPast adds a past status-run for elapsed cells only`() {
         val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)

@@ -574,11 +574,13 @@ them.
 
 ### What the poller passes
 
-The poller passes the campsites its watches cover, not the campground's set. A
-cadence tick pays for every cell it writes and every upstream call it makes, over
-and over, and nothing is waiting on the cells no watch covers — for Aspira the
-campground's full set would mean one fetch per sibling map on every tick. That is
-a cost decision, not a correctness one: no answer is derived from the list.
+The same campground-level set, by a different route.
+`DbAvailabilityTargetResolver.resolve(poller)` reads the POI's campsites and
+keeps the ones under the poller's `(provider, parentRef)`, so a watch scoped to a
+single campsite still polls the catalog that campsite sits in — the long-standing
+behaviour `poller fetches the full campground catalog even when a watch scopes
+one site` pins, and the reason a poll tick already pays a campground's worth of
+cells and upstream calls.
 
 ## Capabilities
 

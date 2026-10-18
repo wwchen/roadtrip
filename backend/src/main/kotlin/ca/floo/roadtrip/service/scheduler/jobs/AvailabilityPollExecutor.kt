@@ -123,6 +123,9 @@ internal class AvailabilityPollExecutor(
         return failoverFetcher.fetch(
             providers = first.candidates,
             campground = first.campground,
+            // Already the campground's catalog, not the watch's scope: the
+            // resolver reads the POI's campsites and keeps the ones under this
+            // poller's (provider, parentRef).
             campsites = rows.map { it.campsite },
             window = fetchWindow,
         )

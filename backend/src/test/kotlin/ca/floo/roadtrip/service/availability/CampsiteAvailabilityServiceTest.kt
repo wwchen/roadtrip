@@ -99,6 +99,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
                 svc.fetchAvailability(
                     campground = campground,
                     campsites = campsites,
+                    campgroundCampsites = campsites,
                     startDate = null,
                     endDate = null,
                     dateContext = dateContext(),
@@ -126,6 +127,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
                 service(listOf(aspira, recgov), fetcher).fetchAvailability(
                     campground = campground,
                     campsites = campsites,
+                    campgroundCampsites = campsites,
                     startDate = null,
                     endDate = null,
                     dateContext = dateContext(),
@@ -155,6 +157,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
                 service(listOf(recgov), fetcher).fetchAvailability(
                     campground = campground,
                     campsites = campsites,
+                    campgroundCampsites = campsites,
                     startDate = null,
                     endDate = null,
                     dateContext = dateContext(),
@@ -177,6 +180,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
                     service(listOf(aspiraOnly)).fetchAvailability(
                         campground = campground,
                         campsites = campsites,
+                        campgroundCampsites = campsites,
                         startDate = null,
                         endDate = null,
                         dateContext = dateContext(),
@@ -208,6 +212,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
                 ).fetchAvailability(
                     campground = campground,
                     campsites = campsites,
+                    campgroundCampsites = campsites,
                     startDate = null,
                     endDate = null,
                     dateContext = dateContext(),
@@ -237,6 +242,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
                 ).fetchAvailability(
                     campground = campground,
                     campsites = campsites,
+                    campgroundCampsites = campsites,
                     startDate = null,
                     endDate = null,
                     dateContext = dateContext(),
