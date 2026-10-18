@@ -4,19 +4,17 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailability
 import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
-import ca.floo.roadtrip.fixtures.availableIds
+import ca.floo.roadtrip.fixtures.availableIdsOn
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.rollupOn
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
-import ca.floo.roadtrip.fixtures.statuses
-import ca.floo.roadtrip.model.api.AvailabilityResponseDto
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.fixtures.statusesOn
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonNull
@@ -85,17 +83,19 @@ class AspiraObservationsTest {
                 )
 
             val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
-            val dto =
-                responseOf(
-                    provider.availability(
-                        campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
-                        startDate = LocalDate.parse("2026-07-01"),
-                        endDate = LocalDate.parse("2026-07-02"),
-                    ),
+            val batch =
+                provider.availability(
+                    campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-02"),
                 )
 
-            assertEquals(AvailabilityStatus.UNKNOWN, dto.availability.single().status)
-            assertEquals(emptyList(), dto.availability.single().availableIds)
+            // The map rows parse, but nothing names a campsite, so every
+            // observation stays unkeyed and no cell can be attributed to one.
+            assertTrue(batch.observations.isNotEmpty())
+            assertTrue(batch.observations.all { it.campsiteId == null })
+            assertEquals(emptyMap(), batch.statusesOn(0))
+            assertEquals(emptyList(), batch.availableIdsOn(0))
         }
 
     @Test
@@ -153,20 +153,18 @@ class AspiraObservationsTest {
                     aspiraCampsite(3, "3"),
                     aspiraCampsite(4, "4"),
                 )
-            val dto =
-                responseOf(
-                    provider.catalogAvailability(
-                        campground = aspiraCampground("wa", -999),
-                        campsites = campsites,
-                        startDate = LocalDate.parse("2026-07-01"),
-                        endDate = LocalDate.parse("2026-07-03"),
-                    ),
+            val batch =
+                provider.catalogAvailability(
+                    campground = aspiraCampground("wa", -999),
+                    campsites = campsites,
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-03"),
                 )
 
-            assertEquals("wa:-999:-999:null", dto.scopeRef)
-            assertEquals(listOf(1L, 3L), dto.availability[0].availableIds)
-            assertEquals(4, dto.availability[0].statuses.size)
-            assertEquals(4, dto.availability[1].statuses.size)
+            assertEquals("wa:-999:-999:null", batch.scope!!.serialize())
+            assertEquals(listOf(1L, 3L), batch.availableIdsOn(0))
+            assertEquals(4, batch.statusesOn(0).size)
+            assertEquals(4, batch.statusesOn(1).size)
         }
 
     @Test
@@ -196,24 +194,22 @@ class AspiraObservationsTest {
                     aspiraCampsite(2, "2"),
                     aspiraCampsite(3, "3"),
                 )
-            val dto =
-                responseOf(
-                    provider.catalogAvailability(
-                        campground = aspiraCampground("pc", -999),
-                        campsites = campsites,
-                        startDate = LocalDate.parse("2026-07-09"),
-                        endDate = LocalDate.parse("2026-07-10"),
-                    ),
+            val batch =
+                provider.catalogAvailability(
+                    campground = aspiraCampground("pc", -999),
+                    campsites = campsites,
+                    startDate = LocalDate.parse("2026-07-09"),
+                    endDate = LocalDate.parse("2026-07-10"),
                 )
 
-            assertEquals(listOf(1L), dto.availability.single().availableIds)
+            assertEquals(listOf(1L), batch.availableIdsOn(0))
             assertEquals(
                 mapOf(
                     1L to AvailabilityStatus.AVAILABLE,
                     2L to AvailabilityStatus.RESERVED,
                     3L to AvailabilityStatus.RESERVED,
                 ),
-                dto.availability.single().statuses,
+                batch.statusesOn(0),
             )
         }
 
@@ -252,21 +248,19 @@ class AspiraObservationsTest {
                             ),
                     ),
                 )
-            val dto =
-                responseOf(
-                    provider.catalogAvailability(
-                        campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
-                        campsites = campsites,
-                        startDate = LocalDate.parse("2026-08-22"),
-                        endDate = LocalDate.parse("2026-08-26"),
-                    ),
+            val batch =
+                provider.catalogAvailability(
+                    campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
+                    campsites = campsites,
+                    startDate = LocalDate.parse("2026-08-22"),
+                    endDate = LocalDate.parse("2026-08-26"),
                 )
 
-            assertEquals(emptyList(), dto.availability[0].availableIds)
-            assertEquals(AvailabilityStatus.RESERVED, dto.availability[0].status)
-            assertEquals(AvailabilityStatus.RESERVED, dto.availability[1].status)
-            assertEquals(listOf(BC_PARKS_TEST_CAMPSITE_ID), dto.availability[2].availableIds)
-            assertEquals(AvailabilityStatus.CLOSED, dto.availability[3].status)
+            assertEquals(emptyList(), batch.availableIdsOn(0))
+            assertEquals(AvailabilityStatus.RESERVED, batch.rollupOn(0))
+            assertEquals(AvailabilityStatus.RESERVED, batch.rollupOn(1))
+            assertEquals(listOf(BC_PARKS_TEST_CAMPSITE_ID), batch.availableIdsOn(2))
+            assertEquals(AvailabilityStatus.CLOSED, batch.rollupOn(3))
         }
 
     @Test
@@ -308,14 +302,12 @@ class AspiraObservationsTest {
                         bookingProviderRef = "bc:$ALICE_LAKE_PARENT_MAP_ID:$ALICE_LAKE_WALK_IN_MAP_ID:$ALICE_LAKE_PARENT_MAP_ID",
                     ),
                 )
-            val dto =
-                responseOf(
-                    provider.catalogAvailability(
-                        campground = aspiraCampground("bc", ALICE_LAKE_PARENT_MAP_ID),
-                        campsites = campsites,
-                        startDate = LocalDate.parse("2026-08-22"),
-                        endDate = LocalDate.parse("2026-08-23"),
-                    ),
+            val batch =
+                provider.catalogAvailability(
+                    campground = aspiraCampground("bc", ALICE_LAKE_PARENT_MAP_ID),
+                    campsites = campsites,
+                    startDate = LocalDate.parse("2026-08-22"),
+                    endDate = LocalDate.parse("2026-08-23"),
                 )
 
             assertEquals(
@@ -327,7 +319,7 @@ class AspiraObservationsTest {
                     ALICE_LAKE_LOOP_A_CAMPSITE_ID to AvailabilityStatus.RESERVED,
                     ALICE_LAKE_WALK_IN_CAMPSITE_ID to AvailabilityStatus.AVAILABLE,
                 ),
-                dto.availability.single().statuses,
+                batch.statusesOn(0),
             )
         }
 
@@ -348,21 +340,16 @@ class AspiraObservationsTest {
 
             val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
             val campsites = listOf(aspiraCampsite(100, "100"))
-            val dto =
-                responseOf(
-                    provider.catalogAvailability(
-                        campground = aspiraCampground("pc", -999),
-                        campsites = campsites,
-                        startDate = LocalDate.parse("2026-07-01"),
-                        endDate = LocalDate.parse("2026-07-02"),
-                    ),
+            val batch =
+                provider.catalogAvailability(
+                    campground = aspiraCampground("pc", -999),
+                    campsites = campsites,
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-02"),
                 )
 
-            assertEquals(AvailabilityStatus.UNKNOWN, dto.availability.single().status)
-            assertEquals(
-                mapOf(100L to AvailabilityStatus.UNKNOWN),
-                dto.availability.single().statuses,
-            )
+            assertEquals(AvailabilityStatus.UNKNOWN, batch.rollupOn(0))
+            assertEquals(mapOf(100L to AvailabilityStatus.UNKNOWN), batch.statusesOn(0))
         }
 
     @Test
@@ -400,18 +387,16 @@ class AspiraObservationsTest {
                     aspiraCampsite(200, "200", DataProviderRef.AspiraCampsite(tenant = "pc", resourceLocationId = 200)),
                     aspiraCampsite(300, "300", DataProviderRef.AspiraCampsite(tenant = "pc", resourceLocationId = 300)),
                 )
-            val dto =
-                responseOf(
-                    provider.catalogAvailability(
-                        campground = aspiraCampground("pc", -999, resourceLocationId = -123),
-                        campsites = campsites,
-                        startDate = LocalDate.parse("2026-06-17"),
-                        endDate = LocalDate.parse("2026-06-19"),
-                    ),
+            val batch =
+                provider.catalogAvailability(
+                    campground = aspiraCampground("pc", -999, resourceLocationId = -123),
+                    campsites = campsites,
+                    startDate = LocalDate.parse("2026-06-17"),
+                    endDate = LocalDate.parse("2026-06-19"),
                 )
 
-            assertEquals(listOf(100L), dto.availability[0].availableIds)
-            assertEquals(AvailabilityStatus.RESERVED, dto.availability[1].status)
+            assertEquals(listOf(100L), batch.availableIdsOn(0))
+            assertEquals(AvailabilityStatus.RESERVED, batch.rollupOn(1))
         }
 }
 
@@ -492,10 +477,3 @@ private fun fakeAspiraClient(
             onFetchOccupancy?.invoke(host, resourceLocationId, startDate, endDate)
                 ?: error("fakeAspiraClient.fetchOccupancy not stubbed")
     }
-
-/**
- * These tests read parsed statuses, not watchability, so every window is quoted
- * from its own start date by a provider the poller can reach.
- */
-private fun responseOf(batch: AvailabilityObservationBatch): AvailabilityResponseDto =
-    availabilityResponseFromObservations(batch, pollingSupported = true, earliestDate = batch.startDate)

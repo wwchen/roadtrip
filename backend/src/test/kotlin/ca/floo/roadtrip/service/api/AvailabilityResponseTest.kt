@@ -1,255 +1,72 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.fixtures.availableIds
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
-import ca.floo.roadtrip.model.availability.DayClassification
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.route.common.encodeApiJson
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.boolean
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+private val windowStart: LocalDate = LocalDate.parse("2026-06-10")
 
 class AvailabilityResponseTest {
     @Test
-    fun `availability renderer serializes stable dto shape`() {
-        val body =
-            encodeApiJson(
-                availabilityResponseDto(
-                    provider = "recgov",
-                    startDate = LocalDate.parse("2026-06-10"),
-                    endDate = LocalDate.parse("2026-06-11"),
-                    perDay =
-                        listOf(
-                            DayClassification(
-                                date = "2026-06-10",
-                                status = AvailabilityStatus.AVAILABLE,
-                                availableCampsiteIds = listOf(100L, 200L, 300L),
-                                campsiteStatuses =
-                                    mapOf(
-                                        100L to AvailabilityStatus.AVAILABLE,
-                                        200L to AvailabilityStatus.AVAILABLE,
-                                        300L to AvailabilityStatus.AVAILABLE,
-                                        400L to AvailabilityStatus.RESERVED,
-                                        500L to AvailabilityStatus.FIRST_COME,
-                                    ),
-                            ),
-                        ),
-                    state = StreamWindowState.SUCCESS,
-                    seasonBlock = null,
-                    cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
-                    pollingSupported = true,
-                    earliestDate = LocalDate.parse("2026-06-10"),
-                    scopeRef = BookingProviderRef.RecGov(facilityId = "232447").serialize(),
-                ),
-            )
-        val json = Json.parseToJsonElement(body).jsonObject
-        val availabilityDay = json["availability"]!!.jsonArray[0].jsonObject
-
-        assertEquals("recgov", json["provider"]!!.jsonPrimitive.content)
-        assertEquals("232447", json["scope_ref"]!!.jsonPrimitive.content)
-        // No season block: a Kotlin null, so explicitNulls = false omits the key
-        // and the generated `season?: unknown` is honest.
-        assertNull(json["season"])
-        assertEquals("2026-06-10", json["start_date"]!!.jsonPrimitive.content)
-        assertEquals("2026-06-11", json["end_date"]!!.jsonPrimitive.content)
-        assertNull(json["window"])
-        assertNull(json["summary"])
-        assertEquals("available", availabilityDay["status"]!!.jsonPrimitive.content)
-        assertNull(availabilityDay["available_count"])
-        assertNull(availabilityDay["total"])
-        assertNull(availabilityDay["available_campsite_ids"])
-        assertNull(availabilityDay["campsite_statuses"])
-        // One cell per campsite, ascending, each carrying its own watchability.
-        val cells = availabilityDay["cells"]!!.jsonObject
-        assertEquals(listOf("100", "200", "300", "400", "500"), cells.keys.toList())
-        assertEquals("first_come", cells["500"]!!.jsonObject["status"]!!.jsonPrimitive.content)
-        assertEquals(false, cells["100"]!!.jsonObject["watchable"]!!.jsonPrimitive.boolean)
-        assertEquals(true, cells["400"]!!.jsonObject["watchable"]!!.jsonPrimitive.boolean)
-        assertEquals(true, availabilityDay["watchable"]!!.jsonPrimitive.boolean)
-        assertEquals(false, json["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
-    }
-
-    @Test
-    fun `a batch without a scope serializes with no scope_ref key`() {
-        val body =
-            encodeApiJson(
-                availabilityResponseFromObservations(
-                    AvailabilityObservationBatch(
-                        provider = "recgov",
-                        startDate = LocalDate.parse("2026-06-10"),
-                        endDate = LocalDate.parse("2026-06-11"),
-                        observations =
-                            listOf(
-                                CampsiteDayObservation(
-                                    campsiteId = 100,
-                                    date = LocalDate.parse("2026-06-10"),
-                                    observedAt = Instant.parse("2026-06-01T00:00:00Z"),
-                                    status = AvailabilityStatus.AVAILABLE,
-                                ),
-                            ),
-                        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 60),
-                        scope = null,
-                    ),
-                    pollingSupported = true,
-                    earliestDate = LocalDate.parse("2026-06-10"),
-                ),
-            )
-        val json = Json.parseToJsonElement(body).jsonObject
-
-        assertNull(json["scope_ref"])
-    }
-
-    @Test
-    fun `atomic campsite day observations roll up to stable dto shape`() {
-        val olderObservedAt = Instant.parse("2026-06-01T00:00:00Z")
-        val observedAt = Instant.parse("2026-06-01T00:05:00Z")
-        val dto =
-            availabilityResponseFromObservations(
-                AvailabilityObservationBatch(
-                    provider = "recgov",
-                    startDate = LocalDate.parse("2026-06-10"),
-                    endDate = LocalDate.parse("2026-06-12"),
-                    observations =
-                        listOf(
-                            CampsiteDayObservation(
-                                campsiteId = 100,
-                                date = LocalDate.parse("2026-06-10"),
-                                observedAt = olderObservedAt,
-                                status = AvailabilityStatus.RESERVED,
-                            ),
-                            CampsiteDayObservation(
-                                campsiteId = 100,
-                                date = LocalDate.parse("2026-06-10"),
-                                observedAt = observedAt,
-                                status = AvailabilityStatus.AVAILABLE,
-                            ),
-                            CampsiteDayObservation(
-                                campsiteId = 200,
-                                date = LocalDate.parse("2026-06-10"),
-                                observedAt = observedAt,
-                                status = AvailabilityStatus.RESERVED,
-                            ),
-                            CampsiteDayObservation(
-                                campsiteId = 100,
-                                date = LocalDate.parse("2026-06-11"),
-                                observedAt = observedAt,
-                                status = AvailabilityStatus.RESERVED,
-                            ),
-                            CampsiteDayObservation(
-                                campsiteId = 200,
-                                date = LocalDate.parse("2026-06-11"),
-                                observedAt = observedAt,
-                                status = AvailabilityStatus.UNKNOWN,
-                            ),
-                        ),
-                    cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 3, ttlSeconds = 60),
-                    scope = BookingProviderRef.RecGov(facilityId = "232447"),
-                ),
-                pollingSupported = true,
-                earliestDate = LocalDate.parse("2026-06-10"),
-            )
-
-        assertEquals("recgov", dto.provider)
-        assertEquals("232447", dto.scopeRef)
-        assertEquals("2026-06-10", dto.startDate)
-        assertEquals("2026-06-12", dto.endDate)
-        assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
-        assertEquals(listOf(100L), dto.availability[0].availableIds)
-        assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[1].status)
-    }
-
-    @Test
-    fun `atomic rollup preserves empty days in the requested window`() {
-        val observedAt = Instant.parse("2026-06-01T00:00:00Z")
-        val dto =
-            availabilityResponseFromObservations(
-                AvailabilityObservationBatch(
-                    provider = "aspira",
-                    startDate = LocalDate.parse("2026-06-10"),
-                    endDate = LocalDate.parse("2026-06-12"),
-                    observations =
-                        listOf(
-                            CampsiteDayObservation(
-                                campsiteId = 100,
-                                date = LocalDate.parse("2026-06-10"),
-                                observedAt = observedAt,
-                                status = AvailabilityStatus.AVAILABLE,
-                            ),
-                        ),
-                    cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
-                    scope =
-                        BookingProviderRef.Aspira(
-                            tenant = "pc",
-                            transactionLocationId = 4189,
-                            mapId = -2147483388,
-                            resourceLocationId = null,
-                        ),
-                ),
-                pollingSupported = true,
-                earliestDate = LocalDate.parse("2026-06-10"),
-            )
-
-        assertEquals("pc:4189:-2147483388:null", dto.scopeRef)
-        assertEquals(2, dto.availability.size)
-        assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
-        assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[1].status)
-        assertEquals(emptyList(), dto.availability[1].availableIds)
-        assertEquals(emptyMap(), dto.availability[1].cells)
-    }
-
-    @Test
-    fun `unknown day rollup is not closed for season`() {
-        val day =
-            dayClassificationFromStatuses(
-                date = "2026-06-10",
-                statuses = listOf(AvailabilityStatus.UNKNOWN),
-            )
-
-        assertEquals(AvailabilityStatus.UNKNOWN, day.status)
-        assertEquals(StreamWindowState.SUCCESS, classifyWindowState(listOf(day)))
-    }
-
-    @Test
-    fun `unknown campsite status dominates reserved in day rollup`() {
-        val day =
-            dayClassificationFromCampsiteStatuses(
-                date = "2026-06-10",
-                statuses =
-                    mapOf(
-                        100L to AvailabilityStatus.RESERVED,
-                        200L to AvailabilityStatus.UNKNOWN,
+    fun `the latest observation for a date wins`() {
+        val statuses =
+            campsiteWindowStatuses(
+                startDate = windowStart,
+                endDate = windowStart.plusDays(1),
+                observations =
+                    listOf(
+                        observation(windowStart, "2026-06-01T00:00:00Z", AvailabilityStatus.RESERVED),
+                        observation(windowStart, "2026-06-01T00:05:00Z", AvailabilityStatus.AVAILABLE),
                     ),
             )
 
-        assertEquals(AvailabilityStatus.UNKNOWN, day.status)
-        assertEquals(StreamWindowState.SUCCESS, classifyWindowState(listOf(day)))
+        assertEquals(listOf(AvailabilityStatus.AVAILABLE), statuses)
     }
 
     @Test
-    fun `reserved and closed known statuses still classify as success`() {
-        val days =
-            listOf(
-                dayClassificationFromStatuses(
-                    date = "2026-06-10",
-                    statuses = listOf(AvailabilityStatus.RESERVED),
-                ),
-                dayClassificationFromStatuses(
-                    date = "2026-06-11",
-                    statuses = listOf(AvailabilityStatus.CLOSED),
-                ),
+    fun `a window keeps every date asked for, observed or not`() {
+        val statuses =
+            campsiteWindowStatuses(
+                startDate = windowStart,
+                endDate = windowStart.plusDays(3),
+                observations =
+                    listOf(
+                        observation(windowStart, "2026-06-01T00:00:00Z", AvailabilityStatus.AVAILABLE),
+                        // Outside the window: it dates nothing the window answers.
+                        observation(windowStart.plusDays(5), "2026-06-01T00:00:00Z", AvailabilityStatus.RESERVED),
+                    ),
             )
 
-        assertEquals(StreamWindowState.SUCCESS, classifyWindowState(days))
+        assertEquals(
+            listOf(AvailabilityStatus.AVAILABLE, AvailabilityStatus.UNKNOWN, AvailabilityStatus.UNKNOWN),
+            statuses,
+        )
+    }
+
+    @Test
+    fun `an unobserved night is not a closed one`() {
+        assertFalse(isClosedForSeason(listOf(AvailabilityStatus.UNKNOWN)))
+        assertFalse(isClosedForSeason(listOf(AvailabilityStatus.CLOSED, AvailabilityStatus.UNKNOWN)))
+    }
+
+    @Test
+    fun `a window nobody answered is not closed for the season`() {
+        assertFalse(isClosedForSeason(emptyList()))
+    }
+
+    @Test
+    fun `reserved and closed nights together are not a closed season`() {
+        assertFalse(isClosedForSeason(listOf(AvailabilityStatus.RESERVED, AvailabilityStatus.CLOSED)))
+        assertTrue(isClosedForSeason(listOf(AvailabilityStatus.CLOSED, AvailabilityStatus.CLOSED)))
     }
 
     @Test
@@ -261,3 +78,15 @@ class AvailabilityResponseTest {
         assertEquals("rate_limited", json["error"]!!.jsonPrimitive.content)
     }
 }
+
+private fun observation(
+    date: LocalDate,
+    observedAt: String,
+    status: AvailabilityStatus,
+): CampsiteDayObservation =
+    CampsiteDayObservation(
+        campsiteId = 100L,
+        date = date,
+        observedAt = Instant.parse(observedAt),
+        status = status,
+    )

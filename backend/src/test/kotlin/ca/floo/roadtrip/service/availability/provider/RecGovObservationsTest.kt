@@ -2,29 +2,26 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.recgov.Campsite
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
-import ca.floo.roadtrip.fixtures.availableCellIds
+import ca.floo.roadtrip.fixtures.availableIdsOn
 import ca.floo.roadtrip.fixtures.campsiteFixture
-import ca.floo.roadtrip.fixtures.cellStatuses
-import ca.floo.roadtrip.model.api.AvailabilityResponseDto
+import ca.floo.roadtrip.fixtures.rollupOn
+import ca.floo.roadtrip.fixtures.statusesOn
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.route.common.encodeApiJson
-import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
+import ca.floo.roadtrip.service.api.campsiteWindowStatuses
+import ca.floo.roadtrip.service.api.isClosedForSeason
 import ca.floo.roadtrip.support.RecGovException
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class RecGovObservationsTest {
     private val today: LocalDate = LocalDate.now(ZoneOffset.UTC)
@@ -51,42 +48,29 @@ class RecGovObservationsTest {
             ): Map<String, Campsite> = map
         }
 
-    private fun parseJson(body: String): JsonObject = Json.parseToJsonElement(body).jsonObject
-
     private fun classify(
         client: RecGovAvailabilityClient,
         days: Int = 7,
         catalogSiteIds: List<String> = listOf("100"),
-    ): JsonObject {
+    ): AvailabilityObservationBatch {
         val p = RecGovAvailabilityProvider(client, enabled = true)
         val campsites =
             catalogSiteIds.map { siteId ->
                 campsiteFixture(id = siteId.toLong(), vendor = "recgov", vendorId = siteId)
             }
-        val body =
-            encodeApiJson(
-                responseOf(
-                    runBlocking {
-                        p.catalogAvailability(testCampground(), campsites, today, today.plusDays(days.toLong()))
-                    },
-                ),
-            )
-        return parseJson(body)
+        return runBlocking {
+            p.catalogAvailability(testCampground(), campsites, today, today.plusDays(days.toLong()))
+        }
     }
 
     private fun classifyRaw(
         client: RecGovAvailabilityClient,
         days: Int = 7,
-    ): JsonObject {
-        val p = RecGovAvailabilityProvider(client, enabled = true)
-        val body =
-            encodeApiJson(
-                responseOf(
-                    runBlocking { p.availability(testCampground(), today, today.plusDays(days.toLong())) },
-                ),
-            )
-        return parseJson(body)
-    }
+    ): AvailabilityObservationBatch =
+        runBlocking {
+            RecGovAvailabilityProvider(client, enabled = true)
+                .availability(testCampground(), today, today.plusDays(days.toLong()))
+        }
 
     private fun testCampground(): Campground =
         Campground(
@@ -119,7 +103,7 @@ class RecGovObservationsTest {
         )
 
     @Test
-    fun `success state with availability returns success JSON shape`() {
+    fun `a parsed window carries the provider, scope and every date asked for`() {
         val map =
             mapOf(
                 "100" to
@@ -131,33 +115,45 @@ class RecGovObservationsTest {
                         ),
                     ),
             )
-        val body = classify(clientReturning(map), days = 7)
-        assertEquals("success", body["state"]!!.jsonPrimitive.content)
-        assertEquals("recgov", body["provider"]!!.jsonPrimitive.content)
-        assertEquals("232447", body["scope_ref"]!!.jsonPrimitive.content)
-        assertEquals(today.toString(), body["start_date"]!!.jsonPrimitive.content)
-        assertEquals(today.plusDays(7).toString(), body["end_date"]!!.jsonPrimitive.content)
-        assertEquals(7, body["availability"]!!.jsonArray.size)
+        val batch = classify(clientReturning(map), days = 7)
+
+        assertEquals("recgov", batch.provider)
+        assertEquals("232447", batch.scope!!.serialize())
+        assertEquals(today, batch.startDate)
+        assertEquals(today.plusDays(7), batch.endDate)
+        // A date upstream said nothing about is still a date the window answers.
+        assertEquals(
+            listOf(
+                AvailabilityStatus.AVAILABLE,
+                AvailabilityStatus.RESERVED,
+                AvailabilityStatus.AVAILABLE,
+            ) + List(4) { AvailabilityStatus.UNKNOWN },
+            (0 until 7).map { batch.rollupOn(it) },
+        )
     }
 
     @Test
-    fun `zero_available state when all days are booked`() {
+    fun `a fully booked window parses to reserved with nothing bookable`() {
         val booked = (0..6L).associate { futureKey(it) to "Reserved" }
-        val body = classify(clientReturning(mapOf("100" to campsiteWith(booked))), days = 7)
-        assertEquals("zero_available", body["state"]!!.jsonPrimitive.content)
+        val batch = classify(clientReturning(mapOf("100" to campsiteWith(booked))), days = 7)
+
+        assertEquals(List(7) { AvailabilityStatus.RESERVED }, (0 until 7).map { batch.rollupOn(it) })
+        assertTrue((0 until 7).all { batch.availableIdsOn(it).isEmpty() })
     }
 
     @Test
-    fun `closed_for_season state when all days are Closed`() {
+    fun `a window of only Closed days closes the stream for the season`() {
         val closed = (0..6L).associate { futureKey(it) to "Closed" }
-        val body = classify(clientReturning(mapOf("100" to campsiteWith(closed))), days = 7)
-        assertEquals("closed_for_season", body["state"]!!.jsonPrimitive.content)
+        val batch = classify(clientReturning(mapOf("100" to campsiteWith(closed))), days = 7)
+
+        assertTrue(isClosedForSeason(campsiteWindowStatuses(batch.startDate, batch.endDate, batch.observations)))
     }
 
     @Test
-    fun `empty state when no campsites returned`() {
-        val body = classifyRaw(clientReturning(emptyMap()), days = 7)
-        assertEquals("empty", body["state"]!!.jsonPrimitive.content)
+    fun `a campground upstream returns no campsites for observes nothing`() {
+        val batch = classifyRaw(clientReturning(emptyMap()), days = 7)
+
+        assertEquals(emptyList(), batch.observations)
     }
 
     @Test
@@ -169,43 +165,38 @@ class RecGovObservationsTest {
                         mapOf(futureKey(0) to "Not Reservable"),
                     ),
             )
-        val body = classify(clientReturning(map), days = 1)
-        val day = body["availability"]!!.jsonArray.single().jsonObject
+        val batch = classify(clientReturning(map), days = 1)
 
-        assertEquals("success", body["state"]!!.jsonPrimitive.content)
-        assertEquals("first_come", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day.availableCellIds().size)
-        assertEquals(
-            "first_come",
-            day.cellStatuses()["100"],
-        )
+        assertEquals(AvailabilityStatus.FIRST_COME, batch.rollupOn(0))
+        // Walk-up is not a booking anyone can make, so it is not bookable online.
+        assertEquals(emptyList(), batch.availableIdsOn(0))
+        assertEquals(mapOf(100L to AvailabilityStatus.FIRST_COME), batch.statusesOn(0))
     }
 
     @Test
     fun `unrecognised upstream status maps to unknown, never reserved`() {
         val map = mapOf("100" to campsiteWith(mapOf(futureKey(0) to "Walk-Up Only")))
-        val body = classify(clientReturning(map), days = 1)
-        val day = body["availability"]!!.jsonArray.single().jsonObject
+        val batch = classify(clientReturning(map), days = 1)
 
-        assertEquals(
-            "unknown",
-            day.cellStatuses()["100"],
-        )
+        assertEquals(mapOf(100L to AvailabilityStatus.UNKNOWN), batch.statusesOn(0))
     }
 
     @Test
-    fun `a window of only reserved and not-available days rolls up to zero_available`() {
+    fun `reserved and not-available both parse to reserved`() {
         val map =
             mapOf(
                 "100" to campsiteWith((0..1L).associate { futureKey(it) to "Reserved" }),
                 "200" to campsiteWith((0..1L).associate { futureKey(it) to "Not Available" }),
             )
-        val body = classify(clientReturning(map), days = 2, catalogSiteIds = listOf("100", "200"))
+        val batch = classify(clientReturning(map), days = 2, catalogSiteIds = listOf("100", "200"))
 
-        assertEquals("zero_available", body["state"]!!.jsonPrimitive.content)
         assertEquals(
-            listOf("reserved", "reserved"),
-            body["availability"]!!.jsonArray.map { it.jsonObject["status"]!!.jsonPrimitive.content },
+            listOf(AvailabilityStatus.RESERVED, AvailabilityStatus.RESERVED),
+            listOf(batch.rollupOn(0), batch.rollupOn(1)),
+        )
+        assertEquals(
+            mapOf(100L to AvailabilityStatus.RESERVED, 200L to AvailabilityStatus.RESERVED),
+            batch.statusesOn(0),
         )
     }
 
@@ -216,51 +207,35 @@ class RecGovObservationsTest {
                 "100" to campsiteWith(mapOf(futureKey(0) to "Reserved")),
                 "200" to campsiteWith(mapOf(futureKey(0) to "Walk-Up Only")),
             )
-        val body = classify(clientReturning(map), days = 1, catalogSiteIds = listOf("100", "200"))
-        val day = body["availability"]!!.jsonArray.single().jsonObject
+        val batch = classify(clientReturning(map), days = 1, catalogSiteIds = listOf("100", "200"))
 
-        assertEquals("success", body["state"]!!.jsonPrimitive.content)
-        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
+        assertEquals(AvailabilityStatus.UNKNOWN, batch.rollupOn(0))
     }
 
     @Test
     fun `not available maps to reserved`() {
         val map = mapOf("100" to campsiteWith(mapOf(futureKey(0) to "Not Available")))
-        val body = classify(clientReturning(map), days = 1)
-        val day = body["availability"]!!.jsonArray.single().jsonObject
+        val batch = classify(clientReturning(map), days = 1)
 
-        assertEquals(
-            "reserved",
-            day.cellStatuses()["100"],
-        )
+        assertEquals(mapOf(100L to AvailabilityStatus.RESERVED), batch.statusesOn(0))
     }
 
     @Test
     fun `missing date row maps to unknown rather than closed`() {
         val map = mapOf("100" to campsiteWith(emptyMap()))
-        val body = classify(clientReturning(map), days = 1)
-        val day = body["availability"]!!.jsonArray.single().jsonObject
+        val batch = classify(clientReturning(map), days = 1)
 
-        assertEquals("success", body["state"]!!.jsonPrimitive.content)
-        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
-        assertEquals(
-            "unknown",
-            day.cellStatuses()["100"],
-        )
+        assertEquals(AvailabilityStatus.UNKNOWN, batch.rollupOn(0))
+        assertEquals(mapOf(100L to AvailabilityStatus.UNKNOWN), batch.statusesOn(0))
     }
 
     @Test
     fun `null availability artifact maps to unknown rather than reserved`() {
         val map = mapOf("100" to campsiteWith(mapOf(futureKey(0) to "null")))
-        val body = classify(clientReturning(map), days = 1)
-        val day = body["availability"]!!.jsonArray.single().jsonObject
+        val batch = classify(clientReturning(map), days = 1)
 
-        assertEquals("success", body["state"]!!.jsonPrimitive.content)
-        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
-        assertEquals(
-            "unknown",
-            day.cellStatuses()["100"],
-        )
+        assertEquals(AvailabilityStatus.UNKNOWN, batch.rollupOn(0))
+        assertEquals(mapOf(100L to AvailabilityStatus.UNKNOWN), batch.statusesOn(0))
     }
 
     @Test
@@ -271,26 +246,16 @@ class RecGovObservationsTest {
                 campsiteFixture(id = 200L, vendor = "recgov", vendorId = "200"),
             )
         val p = RecGovAvailabilityProvider(clientReturning(emptyMap()), enabled = true)
-        val body =
-            encodeApiJson(
-                responseOf(
-                    runBlocking {
-                        p.catalogAvailability(testCampground(), campsites, today, today.plusDays(1))
-                    },
-                ),
-            )
-        val day = parseJson(body)["availability"]!!.jsonArray.single().jsonObject
+        val batch =
+            runBlocking {
+                p.catalogAvailability(testCampground(), campsites, today, today.plusDays(1))
+            }
 
-        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day.availableCellIds().size)
-        assertEquals(2, day.cellStatuses().size)
+        assertEquals(AvailabilityStatus.UNKNOWN, batch.rollupOn(0))
+        assertEquals(emptyList(), batch.availableIdsOn(0))
         assertEquals(
-            "unknown",
-            day.cellStatuses()["100"],
-        )
-        assertEquals(
-            "unknown",
-            day.cellStatuses()["200"],
+            mapOf(100L to AvailabilityStatus.UNKNOWN, 200L to AvailabilityStatus.UNKNOWN),
+            batch.statusesOn(0),
         )
     }
 
@@ -364,9 +329,9 @@ class RecGovObservationsTest {
                         ),
                     ),
             )
-        val body = classify(clientReturning(map), days = 2)
-        val avail = body["availability"]!!.jsonArray
-        assertEquals("available", avail[0].jsonObject["status"]!!.jsonPrimitive.content)
+        val batch = classify(clientReturning(map), days = 2)
+
+        assertEquals(AvailabilityStatus.AVAILABLE, batch.rollupOn(0))
     }
 
     @Test
@@ -381,10 +346,10 @@ class RecGovObservationsTest {
                         ),
                     ),
             )
-        val body = classify(clientReturning(map), days = 1)
-        val avail = body["availability"]!!.jsonArray
-        assertEquals("available", avail[0].jsonObject["status"]!!.jsonPrimitive.content)
-        assertEquals(listOf("100"), avail[0].jsonObject.availableCellIds())
+        val batch = classify(clientReturning(map), days = 1)
+
+        assertEquals(AvailabilityStatus.AVAILABLE, batch.rollupOn(0))
+        assertEquals(listOf(100L), batch.availableIdsOn(0))
     }
 
     @Test
@@ -406,11 +371,11 @@ class RecGovObservationsTest {
                         ),
                     ),
             )
-        val body = classify(clientReturning(map), days = 1, catalogSiteIds = listOf("100", "200"))
-        val day = body["availability"]!!.jsonArray[0].jsonObject
-        assertEquals("available", day["status"]!!.jsonPrimitive.content)
-        assertEquals(2, day.availableCellIds().size)
-        assertEquals(2, day.cellStatuses().size)
+        val batch = classify(clientReturning(map), days = 1, catalogSiteIds = listOf("100", "200"))
+
+        assertEquals(AvailabilityStatus.AVAILABLE, batch.rollupOn(0))
+        assertEquals(2, batch.availableIdsOn(0).size)
+        assertEquals(2, batch.statusesOn(0).size)
     }
 
     @Test
@@ -432,9 +397,9 @@ class RecGovObservationsTest {
                         ),
                     ),
             )
-        val body = classify(clientReturning(map), days = 1, catalogSiteIds = listOf("100", "200"))
-        val day = body["availability"]!!.jsonArray[0].jsonObject
-        assertEquals(listOf("100", "200"), day.availableCellIds())
+        val batch = classify(clientReturning(map), days = 1, catalogSiteIds = listOf("100", "200"))
+
+        assertEquals(listOf(100L, 200L), batch.availableIdsOn(0))
     }
 
     @Test
@@ -445,15 +410,8 @@ class RecGovObservationsTest {
                 futureKey(i.toLong()) to s
             }
         val map = mapOf("100" to campsiteWith(byDay))
-        val body = classify(clientReturning(map), days = 1)
-        val day = body["availability"]!!.jsonArray[0].jsonObject
-        assertEquals("available", day["status"]!!.jsonPrimitive.content)
+        val batch = classify(clientReturning(map), days = 1)
+
+        assertEquals(AvailabilityStatus.AVAILABLE, batch.rollupOn(0))
     }
 }
-
-/**
- * These tests read parsed statuses, not watchability, so every window is quoted
- * from its own start date by a provider the poller can reach.
- */
-private fun responseOf(batch: AvailabilityObservationBatch): AvailabilityResponseDto =
-    availabilityResponseFromObservations(batch, pollingSupported = true, earliestDate = batch.startDate)
