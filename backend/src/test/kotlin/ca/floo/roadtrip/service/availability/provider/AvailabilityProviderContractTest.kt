@@ -12,6 +12,7 @@ import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityCl
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampgroundAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampsiteAvailability
@@ -19,6 +20,7 @@ import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGr
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
@@ -57,7 +59,7 @@ class AvailabilityProviderContractTest {
             val startDate = LocalDate.parse("2026-07-01")
             val endDate = LocalDate.parse("2026-07-02")
 
-            val batch =
+            val observations =
                 provider.availability(
                     campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
                     campsites = emptyList(),
@@ -65,14 +67,24 @@ class AvailabilityProviderContractTest {
                     endDate = endDate,
                 )
 
-            assertEquals("recgov", batch.provider)
+            assertEquals(BookingProviderRef.RecGov(facilityId = "232447"), observations.campgroundRef)
         }
+
+    @Test
+    fun `the port returns what the vendor said and nothing the caller already knows`() {
+        assertEquals(
+            setOf("campgroundRef", "observations"),
+            CampgroundObservations::class.java.declaredFields
+                .map { it.name }
+                .toSet(),
+        )
+    }
 
     @Test
     fun `every adapter answers for every campsite it is given, and keys every observation`() =
         runBlocking {
             for (case in portContractCases()) {
-                val batch =
+                val answer =
                     case.provider.availability(
                         campground = case.campground,
                         campsites = case.campsites,
@@ -82,11 +94,11 @@ class AvailabilityProviderContractTest {
 
                 assertEquals(
                     case.campsites.mapTo(mutableSetOf()) { it.id },
-                    batch.observations.mapNotNullTo(mutableSetOf()) { it.campsiteId },
+                    answer.observations.mapNotNullTo(mutableSetOf()) { it.campsiteId },
                     "${case.label} did not answer for every campsite it was given",
                 )
                 assertTrue(
-                    batch.observations.none { it.campsiteId == null },
+                    answer.observations.none { it.campsiteId == null },
                     "${case.label} returned an observation that names no campsite",
                 )
             }
@@ -151,7 +163,7 @@ class AvailabilityProviderContractTest {
             val mentioned = aspiraContractCampsite(1, 100)
             val unmentioned = aspiraContractCampsite(2, 200)
 
-            val batch =
+            val answer =
                 adapter.availability(
                     campground =
                         testCampground(
@@ -163,7 +175,7 @@ class AvailabilityProviderContractTest {
                     endDate = portContractDate.plusDays(1),
                 )
 
-            val byCampsite = batch.observations.associateBy { it.campsiteId }
+            val byCampsite = answer.observations.associateBy { it.campsiteId }
             assertEquals(setOf(mentioned.id, unmentioned.id), byCampsite.keys.filterNotNullTo(mutableSetOf()))
             assertEquals(AvailabilityStatus.AVAILABLE, byCampsite[mentioned.id]?.status)
             assertEquals(AvailabilityStatus.UNKNOWN, byCampsite[unmentioned.id]?.status)

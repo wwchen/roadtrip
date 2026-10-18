@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
-import ca.floo.roadtrip.fixtures.campgroundBatch
+import ca.floo.roadtrip.fixtures.campgroundObservations
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
@@ -149,7 +149,7 @@ class CampgroundCellCacheTest : SharedDbTest() {
             FakeAvailabilityProvider(
                 BookingProvider.RECGOV,
                 onAvailability = { call ->
-                    val base = campgroundBatch(call, BookingProvider.RECGOV, status = status, observedAt = fixedNow)
+                    val base = campgroundObservations(call, status = status, observedAt = fixedNow)
                     if (!reopensAfterWindow) {
                         base
                     } else {

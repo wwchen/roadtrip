@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -57,7 +57,7 @@ internal class CatalogAvailabilityBatcher {
             provider: AvailabilityProvider,
             targets: List<ResolvedAvailabilityTarget>,
             windows: AvailabilityWindows,
-        ) -> AvailabilityObservationBatch,
+        ) -> CampgroundObservations,
     ): List<GroupFetchResult> =
         targets
             .groupBy { GroupKey(it.provider, it.campground, it.dateContext) }
@@ -71,7 +71,7 @@ internal class CatalogAvailabilityBatcher {
                         dateContext = key.dateContext,
                         campsites = campsites,
                         window = null,
-                        batch = null,
+                        observations = null,
                         outcome = FetchOutcome.OK,
                         durationMs = 0,
                         error = null,
@@ -79,14 +79,14 @@ internal class CatalogAvailabilityBatcher {
                 }
                 val startedNanos = System.nanoTime()
                 try {
-                    val batch = fetch(key.campground, key.provider, groupTargets, windows)
+                    val observations = fetch(key.campground, key.provider, groupTargets, windows)
                     GroupFetchResult(
                         provider = key.provider,
                         campground = key.campground,
                         dateContext = key.dateContext,
                         campsites = campsites,
                         window = windows.fetch,
-                        batch = batch,
+                        observations = observations,
                         outcome = FetchOutcome.OK,
                         durationMs = elapsedMs(startedNanos),
                         error = null,
@@ -98,7 +98,7 @@ internal class CatalogAvailabilityBatcher {
                         dateContext = key.dateContext,
                         campsites = campsites,
                         window = windows.fetch,
-                        batch = null,
+                        observations = null,
                         outcome = e.toFetchOutcome(),
                         durationMs = elapsedMs(startedNanos),
                         error = e.message ?: e::class.simpleName,

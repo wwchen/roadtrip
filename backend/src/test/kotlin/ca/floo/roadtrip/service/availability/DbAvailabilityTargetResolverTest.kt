@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -87,7 +87,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+        ): CampgroundObservations = throw UnsupportedOperationException("not used")
     }
 
     private open class NoopCampflareProvider(
@@ -108,7 +108,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+        ): CampgroundObservations = throw UnsupportedOperationException("not used")
     }
 
     private class NoopAspiraProvider : AvailabilityProvider {
@@ -127,7 +127,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+        ): CampgroundObservations = throw UnsupportedOperationException("not used")
 
         override fun vendorSiteIdFor(campsite: Campsite): String =
             when (val ref = campsite.dataProviderRef) {

@@ -2,11 +2,10 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -49,7 +48,7 @@ class ReserveAmericaAvailabilityProvider(
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): AvailabilityObservationBatch {
+    ): CampgroundObservations {
         val reserveAmericaRef = reserveAmericaRefOrThrow(campground)
         val tenant = tenantForRef(reserveAmericaRef)
         val data = fetch(tenant, reserveAmericaRef.parkId, startDate, endDate)
@@ -62,14 +61,12 @@ class ReserveAmericaAvailabilityProvider(
                     observedAt = data.observedAt,
                 )
             }
-        return batch(
-            scope =
+        return CampgroundObservations(
+            campgroundRef =
                 BookingProviderRef.ReserveAmerica(
                     contractCode = tenant.contractCode,
                     parkId = reserveAmericaRef.parkId,
                 ),
-            startDate = startDate,
-            endDate = endDate,
             observations = observations,
         )
     }
@@ -112,23 +109,6 @@ class ReserveAmericaAvailabilityProvider(
                 status = byDate[date] ?: AvailabilityStatus.UNKNOWN,
             )
         }
-
-    private fun batch(
-        scope: BookingProviderRef.ReserveAmerica,
-        startDate: LocalDate,
-        endDate: LocalDate,
-        observations: List<CampsiteDayObservation>,
-        campsiteId: Long? = null,
-    ): AvailabilityObservationBatch =
-        AvailabilityObservationBatch(
-            provider = "reserveamerica",
-            startDate = startDate,
-            endDate = endDate,
-            observations = observations,
-            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L),
-            scope = scope,
-            campsiteId = campsiteId,
-        )
 
     private fun reserveAmericaRefOrThrow(campground: Campground): BookingProviderRef.ReserveAmerica =
         (claimedRef(campground) as? BookingProviderRef.ReserveAmerica)

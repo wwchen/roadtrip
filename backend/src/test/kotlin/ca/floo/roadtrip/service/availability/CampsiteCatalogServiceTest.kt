@@ -2,8 +2,8 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -202,6 +202,6 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
             campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+        ): CampgroundObservations = throw UnsupportedOperationException("not used")
     }
 }

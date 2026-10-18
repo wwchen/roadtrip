@@ -5,10 +5,9 @@ import ca.floo.roadtrip.config.CampsiteAvailabilityConfig
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -749,13 +748,11 @@ private class ServingRecgovProvider(
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): AvailabilityObservationBatch {
+    ): CampgroundObservations {
         val observedAt = Instant.now()
         val days = ChronoUnit.DAYS.between(startDate, endDate).toInt()
-        return AvailabilityObservationBatch(
-            provider = id.id,
-            startDate = startDate,
-            endDate = endDate,
+        return CampgroundObservations(
+            campgroundRef = null,
             observations =
                 campsites.flatMap { campsite ->
                     (0 until days).map { offset ->
@@ -767,7 +764,6 @@ private class ServingRecgovProvider(
                         )
                     }
                 },
-            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
         )
     }
 }

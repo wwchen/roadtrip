@@ -1,8 +1,7 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -54,13 +53,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         )
 
     private fun batch(observations: List<CampsiteDayObservation>) =
-        AvailabilityObservationBatch(
-            provider = PROVIDER,
-            startDate = windowStart,
-            endDate = windowEnd,
-            observations = observations,
-            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = snapshotTtl.seconds),
-        )
+        CampgroundObservations(campgroundRef = null, observations = observations)
 
     private fun observation(
         campsiteId: Long,
@@ -305,9 +298,8 @@ class AvailabilityLoaderTest : SharedDbTest() {
         // the response.
         val result =
             runBlocking {
-                loader.loadOrFetch(request(targets = listOf(siteA))) {
+                loader.loadOrFetch(request(targets = listOf(siteA)).copy(fetchEndDate = windowStart.plusDays(1))) {
                     batch(listOf(observation(siteA, windowStart), observation(siteB, windowStart)))
-                        .copy(endDate = windowStart.plusDays(1))
                 }
             }
 

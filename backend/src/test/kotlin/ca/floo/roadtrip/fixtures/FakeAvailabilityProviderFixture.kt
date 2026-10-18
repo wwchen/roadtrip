@@ -1,9 +1,8 @@
 package ca.floo.roadtrip.fixtures
 
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -47,7 +46,7 @@ class FakeAvailabilityProvider(
     maxPollWindowDays: Int = FAKE_PROVIDER_MAX_POLL_WINDOW_DAYS,
     private val enabled: Boolean = true,
     private val parentRefOverride: ((Campground) -> BookingProviderRef?)? = null,
-    private val onAvailability: (suspend (FakeAvailabilityCall) -> AvailabilityObservationBatch)? = null,
+    private val onAvailability: (suspend (FakeAvailabilityCall) -> CampgroundObservations)? = null,
 ) : AvailabilityProvider {
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(
@@ -70,7 +69,7 @@ class FakeAvailabilityProvider(
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): AvailabilityObservationBatch {
+    ): CampgroundObservations {
         val call = FakeAvailabilityCall(campground, campsites, startDate, endDate)
         recorded += call
         val handler = onAvailability ?: throw UnsupportedOperationException(UNSTUBBED_AVAILABILITY)
@@ -78,23 +77,19 @@ class FakeAvailabilityProvider(
     }
 }
 
-fun campgroundBatch(
+fun campgroundObservations(
     call: FakeAvailabilityCall,
-    provider: BookingProvider,
     status: AvailabilityStatus = AvailabilityStatus.AVAILABLE,
     observedAt: Instant,
-): AvailabilityObservationBatch =
-    AvailabilityObservationBatch(
-        provider = provider.id,
-        startDate = call.startDate,
-        endDate = call.endDate,
+): CampgroundObservations =
+    CampgroundObservations(
+        campgroundRef = null,
         observations =
             call.campsites.flatMap { campsite ->
                 datesOf(call.startDate, call.endDate).map { date ->
                     CampsiteDayObservation(campsiteId = campsite.id, date = date, observedAt = observedAt, status = status)
                 }
             },
-        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
     )
 
 private fun datesOf(

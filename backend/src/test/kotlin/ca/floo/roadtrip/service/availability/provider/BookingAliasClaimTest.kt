@@ -185,7 +185,7 @@ class BookingAliasClaimTest {
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-02"),
                 )
-            assertEquals(ASPIRA_MAP_ID, (batch.scope as BookingProviderRef.Aspira).mapId.toString())
+            assertEquals(ASPIRA_MAP_ID, (batch.campgroundRef as BookingProviderRef.Aspira).mapId.toString())
         }
 
     @Test
@@ -209,7 +209,7 @@ class BookingAliasClaimTest {
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-02"),
                 )
-            assertEquals(RESERVEAMERICA_PARK_ID, (batch.scope as BookingProviderRef.ReserveAmerica).parkId)
+            assertEquals(RESERVEAMERICA_PARK_ID, (batch.campgroundRef as BookingProviderRef.ReserveAmerica).parkId)
         }
 
     private fun campground(bookingAliases: List<BookingAlias>): Campground =

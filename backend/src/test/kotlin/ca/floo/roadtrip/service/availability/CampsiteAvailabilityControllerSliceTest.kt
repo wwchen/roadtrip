@@ -4,9 +4,8 @@ import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campground
@@ -303,17 +302,14 @@ private class CannedBatchFetcher : FailoverAvailabilityFetcher(cooldowns = Provi
         window: ResolvedDateWindow,
     ): FailoverResult {
         val observedAt = Instant.parse("2026-07-30T12:00:00Z")
-        val batch =
-            AvailabilityObservationBatch(
-                provider = providers.first().id.id,
-                startDate = window.startDate,
-                endDate = window.endDate,
+        val observations =
+            CampgroundObservations(
+                campgroundRef = null,
                 observations =
                     campsites.map { campsite ->
                         CampsiteDayObservation(campsite.id, window.startDate, observedAt, AvailabilityStatus.AVAILABLE)
                     },
-                cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
             )
-        return FailoverResult(batch = batch, servedBy = providers.first().id, attempts = emptyList())
+        return FailoverResult(observations = observations, servedBy = providers.first().id, attempts = emptyList())
     }
 }

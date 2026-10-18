@@ -84,8 +84,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
             assertEquals(BookingProvider.RESERVECALIFORNIA, provider.id)
             assertEquals(false, provider.capabilities.supportsInternalPolling)
             assertEquals(183, provider.capabilities.bookingHorizonDays)
-            assertEquals("reservecalifornia", batch.provider)
-            assertEquals(BookingProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611L, 612L)), batch.scope)
+            assertEquals(BookingProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611L, 612L)), batch.campgroundRef)
             assertEquals(3, batch.observations.size)
             assertEquals(setOf(43793L), batch.observations.map { it.campsiteId }.toSet())
             assertEquals(

@@ -5,11 +5,10 @@ import ca.floo.roadtrip.client.slack.SlackBlockDto
 import ca.floo.roadtrip.config.AvailabilityPollerConfig
 import ca.floo.roadtrip.config.VendorRateLimitConfig
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.availability.WatchDoneReason
@@ -530,7 +529,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
-        ): AvailabilityObservationBatch {
+        ): CampgroundObservations {
             calls++
             lastStart = startDate
             lastEnd = endDate
@@ -545,13 +544,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                         status = status,
                     )
                 }
-            return AvailabilityObservationBatch(
-                provider = "recgov",
-                startDate = startDate,
-                endDate = endDate,
-                observations = observations,
-                cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
-            )
+            return CampgroundObservations(campgroundRef = null, observations = observations)
         }
 
         override fun reservationUrlTemplate(
@@ -576,7 +569,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw AvailabilityProviderError.RateLimited(RuntimeException("429"))
+        ): CampgroundObservations = throw AvailabilityProviderError.RateLimited(RuntimeException("429"))
     }
 
     @Test
@@ -1512,11 +1505,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                             AttemptSpec(BookingProvider.CAMPFLARE, "cf-1", FetchOutcome.RATE_LIMITED, 42, "429"),
                             AttemptSpec(BookingProvider.RECGOV, "232447", FetchOutcome.OK, 84, null),
                         ),
-                    successBatch =
-                        AvailabilityObservationBatch(
-                            provider = "recgov",
-                            startDate = farStart,
-                            endDate = farStart.plusDays(2),
+                    successObservations =
+                        CampgroundObservations(
+                            campgroundRef = null,
                             observations =
                                 listOf(
                                     CampsiteDayObservation(
@@ -1526,7 +1517,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                                         status = AvailabilityStatus.AVAILABLE,
                                     ),
                                 ),
-                            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
                         ),
                     servedBy = BookingProvider.RECGOV,
                 )
@@ -1559,7 +1549,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     private fun fakeFailoverFetcher(
         attempts: List<AttemptSpec>,
-        successBatch: AvailabilityObservationBatch?,
+        successObservations: CampgroundObservations?,
         servedBy: BookingProvider?,
     ): FailoverAvailabilityFetcher =
         object : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = testProviderCooldown)) {
@@ -1571,7 +1561,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 window: ResolvedDateWindow,
             ): FailoverAvailabilityFetcher.FailoverResult =
                 FailoverAvailabilityFetcher.FailoverResult(
-                    batch = successBatch,
+                    observations = successObservations,
                     servedBy = servedBy,
                     attempts =
                         attempts.map { spec ->

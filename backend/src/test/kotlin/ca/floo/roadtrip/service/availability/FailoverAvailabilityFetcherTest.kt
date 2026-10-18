@@ -1,10 +1,9 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.fixtures.campsiteFixture
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -43,7 +42,7 @@ class FailoverAvailabilityFetcherTest {
     /** Fake provider whose `catalogAvailability` behaviour is scripted per call. */
     private open class ScriptedProvider(
         override val id: BookingProvider,
-        // A queue of "return this batch" or "throw this" behaviours per call.
+        // A queue of "return these observations" or "throw this" behaviours per call.
         private val script: MutableList<Behaviour> = mutableListOf(),
     ) : AvailabilityProvider {
         var calls: Int = 0
@@ -52,8 +51,8 @@ class FailoverAvailabilityFetcherTest {
             private set
 
         sealed class Behaviour {
-            data class ReturnBatch(
-                val batch: AvailabilityObservationBatch,
+            data class Return(
+                val observations: CampgroundObservations,
             ) : Behaviour()
 
             data class Throw(
@@ -75,18 +74,18 @@ class FailoverAvailabilityFetcherTest {
             campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
-        ): AvailabilityObservationBatch {
+        ): CampgroundObservations {
             calls++
             lastCampsites = campsites
             val next = script.removeAt(0)
             return when (next) {
-                is Behaviour.ReturnBatch -> next.batch
+                is Behaviour.Return -> next.observations
                 is Behaviour.Throw -> throw next.error
             }
         }
 
-        fun scriptReturns(batch: AvailabilityObservationBatch) {
-            script += Behaviour.ReturnBatch(batch)
+        fun scriptReturns(observations: CampgroundObservations) {
+            script += Behaviour.Return(observations)
         }
 
         fun scriptThrows(error: Throwable) {
@@ -94,14 +93,7 @@ class FailoverAvailabilityFetcherTest {
         }
     }
 
-    private fun emptyBatch(providerLabel: String = "recgov"): AvailabilityObservationBatch =
-        AvailabilityObservationBatch(
-            provider = providerLabel,
-            startDate = window.startDate,
-            endDate = window.endDate,
-            observations = emptyList(),
-            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
-        )
+    private fun emptyObservations(): CampgroundObservations = CampgroundObservations(campgroundRef = null, observations = emptyList())
 
     private fun campsite(
         id: Long,
@@ -163,11 +155,11 @@ class FailoverAvailabilityFetcherTest {
         runBlocking {
             val clock = FakeClock()
             val perCampground =
-                ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyBatch()) }
+                ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyObservations()) }
             val perPart =
                 object : ScriptedProvider(BookingProvider.ASPIRA) {
                     init {
-                        scriptReturns(emptyBatch("aspira"))
+                        scriptReturns(emptyObservations())
                     }
 
                     override val capabilities: AvailabilityProviderCapabilities =
@@ -195,7 +187,7 @@ class FailoverAvailabilityFetcherTest {
         runBlocking {
             val clock = FakeClock()
             val tracker = trackerWith(clock)
-            val provider = ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyBatch()) }
+            val provider = ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyObservations()) }
             val result =
                 fetcherWith(tracker, clock).fetch(
                     providers = listOf(provider),
@@ -204,7 +196,7 @@ class FailoverAvailabilityFetcherTest {
                     window = window,
                 )
 
-            assertNotNull(result.batch)
+            assertNotNull(result.observations)
             assertEquals(BookingProvider.RECGOV, result.servedBy)
             assertEquals(1, result.attempts.size)
             assertEquals(FetchOutcome.OK, result.attempts.single().outcome)
@@ -221,7 +213,7 @@ class FailoverAvailabilityFetcherTest {
                     scriptThrows(AvailabilityProviderError.RateLimited(RuntimeException("429")))
                 }
             val healthy =
-                ScriptedProvider(BookingProvider.CAMPFLARE).apply { scriptReturns(emptyBatch("campflare")) }
+                ScriptedProvider(BookingProvider.CAMPFLARE).apply { scriptReturns(emptyObservations()) }
             val result =
                 fetcherWith(tracker, clock).fetch(
                     providers = listOf(cooling, healthy),
@@ -230,7 +222,7 @@ class FailoverAvailabilityFetcherTest {
                     window = window,
                 )
 
-            assertNotNull(result.batch)
+            assertNotNull(result.observations)
             assertEquals(BookingProvider.CAMPFLARE, result.servedBy)
             assertEquals(2, result.attempts.size)
             assertEquals(FetchOutcome.RATE_LIMITED, result.attempts[0].outcome)
@@ -240,7 +232,7 @@ class FailoverAvailabilityFetcherTest {
         }
 
     @Test
-    fun `all candidates retryable-fail — null batch, cooldowns recorded for all`() =
+    fun `all candidates retryable-fail — null observations, cooldowns recorded for all`() =
         runBlocking {
             val clock = FakeClock()
             val tracker = trackerWith(clock)
@@ -265,7 +257,7 @@ class FailoverAvailabilityFetcherTest {
                     window = window,
                 )
 
-            assertNull(result.batch)
+            assertNull(result.observations)
             assertNull(result.servedBy)
             assertEquals(3, result.attempts.size)
             assertEquals(FetchOutcome.RATE_LIMITED, result.attempts[0].outcome)
@@ -286,7 +278,7 @@ class FailoverAvailabilityFetcherTest {
                     scriptThrows(IllegalStateException("boom"))
                 }
             val second =
-                ScriptedProvider(BookingProvider.CAMPFLARE).apply { scriptReturns(emptyBatch("campflare")) }
+                ScriptedProvider(BookingProvider.CAMPFLARE).apply { scriptReturns(emptyObservations()) }
 
             val result =
                 fetcherWith(tracker, clock).fetch(
@@ -296,7 +288,7 @@ class FailoverAvailabilityFetcherTest {
                     window = window,
                 )
 
-            assertNull(result.batch)
+            assertNull(result.observations)
             assertNull(result.servedBy)
             assertEquals(1, result.attempts.size)
             assertEquals(FetchOutcome.OTHER, result.attempts.single().outcome)
@@ -313,7 +305,7 @@ class FailoverAvailabilityFetcherTest {
             // Pre-cool the only candidate: sortHealthyFirst demotes but never
             // drops. The fetcher must still call it.
             tracker.recordFailure(BookingProvider.RECGOV)
-            val provider = ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyBatch()) }
+            val provider = ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyObservations()) }
 
             val result =
                 fetcherWith(tracker, clock).fetch(
@@ -324,13 +316,13 @@ class FailoverAvailabilityFetcherTest {
                 )
 
             assertEquals(1, provider.calls, "sole cooling candidate must still be tried")
-            assertNotNull(result.batch)
+            assertNotNull(result.observations)
             assertEquals(BookingProvider.RECGOV, result.servedBy)
             assertFalse(tracker.isCooling(BookingProvider.RECGOV), "success cleared the cooldown")
         }
 
     @Test
-    fun `empty candidates list — empty attempts, null batch, null servedBy`() =
+    fun `empty candidates list — empty attempts, null observations, null servedBy`() =
         runBlocking {
             val clock = FakeClock()
             val tracker = trackerWith(clock)
@@ -343,7 +335,7 @@ class FailoverAvailabilityFetcherTest {
                     window = window,
                 )
 
-            assertNull(result.batch)
+            assertNull(result.observations)
             assertNull(result.servedBy)
             assertTrue(result.attempts.isEmpty())
         }
@@ -382,7 +374,7 @@ class FailoverAvailabilityFetcherTest {
             val provider =
                 object : ScriptedProvider(BookingProvider.RECGOV) {
                     init {
-                        scriptReturns(emptyBatch())
+                        scriptReturns(emptyObservations())
                     }
 
                     override suspend fun availability(
@@ -390,7 +382,7 @@ class FailoverAvailabilityFetcherTest {
                         campsites: List<Campsite>,
                         startDate: LocalDate,
                         endDate: LocalDate,
-                    ): AvailabilityObservationBatch {
+                    ): CampgroundObservations {
                         clock.advance(125)
                         return super.availability(campground, campsites, startDate, endDate)
                     }

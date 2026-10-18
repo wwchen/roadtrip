@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.api
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -40,11 +41,13 @@ class AvailabilityLoader(
         val endDate: LocalDate,
         val freshAtOrAfter: Instant,
         val runId: Long? = null,
+        val fetchStartDate: LocalDate = startDate,
+        val fetchEndDate: LocalDate = endDate,
     )
 
     suspend fun loadOrFetch(
         request: Request,
-        fetch: suspend () -> AvailabilityObservationBatch,
+        fetch: suspend () -> CampgroundObservations,
     ): AvailabilityObservationBatch {
         val repo = availabilityRepo
         if (repo == null || request.targets.isEmpty()) return sliceToTarget(fetch(), request)
@@ -68,7 +71,7 @@ class AvailabilityLoader(
         val latest = repo.readCurrent(dbIds, dates)
         return if (cellsOf(latest).containsAll(required)) {
             batchFromLatest(
-                request = request.copy(metadata = metadataFromBatch(fetched, request.metadata)),
+                request = request.copy(metadata = metadataFromFetched(fetched, request.metadata)),
                 rows = latest,
                 hit = false,
             )
@@ -78,12 +81,13 @@ class AvailabilityLoader(
     }
 
     private fun sliceToTarget(
-        fetched: AvailabilityObservationBatch,
+        fetched: CampgroundObservations,
         request: Request,
     ): AvailabilityObservationBatch {
         val targetDates = datesInWindow(request.startDate, request.endDate).toSet()
         val targetIds = request.targets.mapTo(mutableSetOf()) { it.dbId }
-        return fetched.copy(
+        return AvailabilityObservationBatch(
+            provider = request.metadata.provider,
             startDate = request.startDate,
             endDate = request.endDate,
             // The batch covers the whole campground; the response is only about
@@ -99,25 +103,27 @@ class AvailabilityLoader(
                     ageSeconds = 0,
                     ttlSeconds = effectiveTtlSeconds(request),
                 ),
+            scope = fetched.campgroundRef ?: request.metadata.scope,
+            campsiteId = request.metadata.campsiteId,
         )
     }
 
     private fun recordFetched(
         repo: AvailabilityRepo,
         request: Request,
-        batch: AvailabilityObservationBatch,
+        fetched: CampgroundObservations,
     ) {
-        val dates = datesInWindow(batch.startDate, batch.endDate)
+        val dates = datesInWindow(request.fetchStartDate, request.fetchEndDate)
         val observedAtByDate =
-            batch.observations.groupBy { it.date }.mapValues { (_, observations) -> observations.maxOf { it.observedAt } }
-        val fallbackObservedAt = batch.observations.maxOfOrNull { it.observedAt } ?: Instant.now(clock)
+            fetched.observations.groupBy { it.date }.mapValues { (_, observations) -> observations.maxOf { it.observedAt } }
+        val fallbackObservedAt = fetched.observations.maxOfOrNull { it.observedAt } ?: Instant.now(clock)
         val covered = mutableSetOf<AvailabilityCell>()
         val observations = mutableListOf<AvailabilityRepo.Observation>()
         // Every cell the vendor answered, whether or not this request's filter
         // asked about it. The upstream call covered the campground and we paid
         // for it; narrowing the write to the filtered targets is what left the
         // next unfiltered check with a hole to refetch.
-        for (observation in batch.observations) {
+        for (observation in fetched.observations) {
             val campsiteId = observation.campsiteId ?: continue
             covered += AvailabilityCell(campsiteId, observation.date)
             observations += AvailabilityRepo.Observation(campsiteId, observation.date, observation.status, observation.observedAt)
@@ -172,15 +178,10 @@ class AvailabilityLoader(
         )
     }
 
-    private fun metadataFromBatch(
-        batch: AvailabilityObservationBatch,
+    private fun metadataFromFetched(
+        fetched: CampgroundObservations,
         fallback: Metadata,
-    ): Metadata =
-        fallback.copy(
-            provider = batch.provider,
-            scope = batch.scope ?: fallback.scope,
-            campsiteId = batch.campsiteId ?: fallback.campsiteId,
-        )
+    ): Metadata = fallback.copy(scope = fetched.campgroundRef ?: fallback.scope)
 
     private fun observedAtByCell(rows: List<AvailabilityRepo.CurrentCell>): Map<AvailabilityCell, Instant> =
         rows.associate { AvailabilityCell(it.campsiteId, it.targetDate) to it.observedAt.toInstant() }

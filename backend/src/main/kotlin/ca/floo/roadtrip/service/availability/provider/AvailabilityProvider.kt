@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.bookingRefFor
@@ -67,7 +67,7 @@ interface AvailabilityProvider {
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): AvailabilityObservationBatch
+    ): CampgroundObservations
 
     /** The campsite's id on this vendor: its primary, else this provider's alias, else the catalog ref. */
     fun vendorSiteIdFor(campsite: Campsite): String =

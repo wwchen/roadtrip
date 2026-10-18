@@ -4,11 +4,10 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.model.api.HTTP_FORBIDDEN
 import ca.floo.roadtrip.model.api.HTTP_SERVICE_UNAVAILABLE
 import ca.floo.roadtrip.model.api.HTTP_UNAUTHORIZED
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -67,7 +66,7 @@ class AspiraAvailabilityProvider(
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): AvailabilityObservationBatch {
+    ): CampgroundObservations {
         val aspiraRef = aspiraRefOrThrow(campground)
         val tenant = tenantForRef(aspiraRef)
         val parentMapId = mapIdOrThrow(aspiraRef.mapId)
@@ -156,11 +155,11 @@ class AspiraAvailabilityProvider(
         campsites: List<AspiraCatalogCampsite>,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): AvailabilityObservationBatch {
+    ): CampgroundObservations {
         val days = daysBetween(startDate, endDate)
         val targets = campsites.distinctBy { it.campsiteId }
         if (targets.isEmpty()) {
-            return emptyBatch(scope, startDate, endDate)
+            return CampgroundObservations(campgroundRef = scope, observations = emptyList())
         }
 
         val observedAt = Instant.now()
@@ -182,13 +181,9 @@ class AspiraAvailabilityProvider(
                     observedAt = observedAt,
                 )
             }
-        return AvailabilityObservationBatch(
-            provider = "aspira",
-            startDate = startDate,
-            endDate = endDate,
+        return CampgroundObservations(
+            campgroundRef = scope,
             observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days),
-            cacheBlock = directFetchCacheBlock(),
-            scope = scope,
         )
     }
 
@@ -199,10 +194,10 @@ class AspiraAvailabilityProvider(
         campsites: List<AspiraCatalogCampsite>,
         today: LocalDate,
         days: Int,
-    ): AvailabilityObservationBatch {
+    ): CampgroundObservations {
         val targets = campsites.distinctBy { it.campsiteId }
         if (targets.isEmpty()) {
-            return emptyBatch(scope, today, today.plusDays(days.toLong()))
+            return CampgroundObservations(campgroundRef = scope, observations = emptyList())
         }
 
         val observations =
@@ -212,14 +207,7 @@ class AspiraAvailabilityProvider(
                 val data = availabilityClient.fetchOccupancy(host, resourceLocationId, arrival, checkout)
                 observationsFromOccupancyCatalogArrivalDay(targets, data.resourceOccupancy, arrival, Instant.now())
             }
-        return AvailabilityObservationBatch(
-            provider = "aspira",
-            startDate = today,
-            endDate = today.plusDays(days.toLong()),
-            observations = observations,
-            cacheBlock = directFetchCacheBlock(),
-            scope = scope,
-        )
+        return CampgroundObservations(campgroundRef = scope, observations = observations)
     }
 
     private fun tenantForRef(ref: BookingProviderRef.Aspira): BookingTenant =
@@ -340,19 +328,3 @@ private fun daysBetween(
     startDate: LocalDate,
     endDate: LocalDate,
 ): Int = ChronoUnit.DAYS.between(startDate, endDate).toInt()
-
-private fun emptyBatch(
-    scope: BookingProviderRef.Aspira,
-    startDate: LocalDate,
-    endDate: LocalDate,
-): AvailabilityObservationBatch =
-    AvailabilityObservationBatch(
-        provider = "aspira",
-        startDate = startDate,
-        endDate = endDate,
-        observations = emptyList(),
-        cacheBlock = directFetchCacheBlock(),
-        scope = scope,
-    )
-
-private fun directFetchCacheBlock(): AvailabilityCacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L)

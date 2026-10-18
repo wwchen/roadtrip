@@ -81,7 +81,7 @@ internal class AvailabilityPollExecutor(
                             val result = fetchWithFailover(rows, windows.fetch)
                             val refKey = provider.parentRefFor(campground)?.parentRefKey ?: "unknown"
                             attemptsByGroup[provider.id to refKey] = result.attempts
-                            result.batch ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
+                            result.observations ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
                         },
                     )
                 val outcome = runService.recordResults(handle, results, attemptsByGroup)

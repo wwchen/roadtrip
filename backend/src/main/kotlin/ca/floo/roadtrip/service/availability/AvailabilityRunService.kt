@@ -128,10 +128,10 @@ internal class AvailabilityRunService(
         result: GroupFetchResult,
         runId: Long,
     ): List<CellTransition> {
-        val batch = result.batch ?: return emptyList()
+        val fetched = result.observations ?: return emptyList()
         val campsiteIds = result.campsites.mapTo(mutableSetOf()) { it.id }
         val observations =
-            batch.observations.mapNotNull { obs ->
+            fetched.observations.mapNotNull { obs ->
                 val dbId = obs.campsiteId?.takeIf { it in campsiteIds } ?: return@mapNotNull null
                 AvailabilityRepo.Observation(
                     campsiteId = dbId,

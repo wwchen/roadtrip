@@ -2,13 +2,15 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.recgov.Campsite
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
+import ca.floo.roadtrip.fixtures.askedFor
 import ca.floo.roadtrip.fixtures.availableCellIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.cellStatuses
 import ca.floo.roadtrip.model.api.AvailabilityResponseDto
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
@@ -69,6 +71,8 @@ class RecGovObservationsTest {
                     runBlocking {
                         p.availability(testCampground(), campsites, today, today.plusDays(days.toLong()))
                     },
+                    startDate = today,
+                    endDate = today.plusDays(days.toLong()),
                 ),
             )
         return parseJson(body)
@@ -83,6 +87,8 @@ class RecGovObservationsTest {
             encodeApiJson(
                 responseOf(
                     runBlocking { p.availability(testCampground(), emptyList(), today, today.plusDays(days.toLong())) },
+                    startDate = today,
+                    endDate = today.plusDays(days.toLong()),
                 ),
             )
         return parseJson(body)
@@ -277,6 +283,8 @@ class RecGovObservationsTest {
                     runBlocking {
                         p.availability(testCampground(), campsites, today, today.plusDays(1))
                     },
+                    startDate = today,
+                    endDate = today.plusDays(1),
                 ),
             )
         val day = parseJson(body)["availability"]!!.jsonArray.single().jsonObject
@@ -455,5 +463,14 @@ class RecGovObservationsTest {
  * These tests read parsed statuses, not watchability, so every window is quoted
  * from its own start date by a provider the poller can reach.
  */
-private fun responseOf(batch: AvailabilityObservationBatch): AvailabilityResponseDto =
-    availabilityResponseFromObservations(batch, pollingSupported = true, earliestDate = batch.startDate, seasonBlock = null)
+private fun responseOf(
+    observations: CampgroundObservations,
+    startDate: LocalDate,
+    endDate: LocalDate,
+): AvailabilityResponseDto =
+    availabilityResponseFromObservations(
+        observations.askedFor(BookingProvider.RECGOV, startDate, endDate),
+        pollingSupported = true,
+        earliestDate = startDate,
+        seasonBlock = null,
+    )

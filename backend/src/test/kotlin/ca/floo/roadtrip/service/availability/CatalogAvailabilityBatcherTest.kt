@@ -2,10 +2,9 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campsiteFixture
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campground
@@ -46,7 +45,7 @@ class CatalogAvailabilityBatcherTest {
                     fetch = { _, _, targets, ws ->
                         calls++
                         assertEquals(2, targets.size)
-                        emptyBatch(ws.fetch)
+                        emptyObservations()
                     },
                 )
             assertEquals(1, calls)
@@ -67,7 +66,7 @@ class CatalogAvailabilityBatcherTest {
             var calls = 0
             CatalogAvailabilityBatcher().fetchByGroup(targets, { _, _ -> windows }, { _, _, _, ws ->
                 calls++
-                emptyBatch(ws.fetch)
+                emptyObservations()
             })
             assertEquals(2, calls)
         }
@@ -85,7 +84,7 @@ class CatalogAvailabilityBatcherTest {
                     { _, _, _, _ -> throw thrown },
                 )
             assertEquals(FetchOutcome.RATE_LIMITED, results[0].outcome)
-            assertNull(results[0].batch)
+            assertNull(results[0].observations)
             assertNotNull(results[0].providerError)
             assertTrue(results[0].providerError is AvailabilityProviderError.RateLimited)
             assertEquals(thrown, results[0].providerError)
@@ -103,7 +102,7 @@ class CatalogAvailabilityBatcherTest {
                     { _, _ -> null },
                     { _, _, _, ws ->
                         calls++
-                        emptyBatch(ws.fetch)
+                        emptyObservations()
                     },
                 )
             assertEquals(0, calls)
@@ -122,7 +121,7 @@ class CatalogAvailabilityBatcherTest {
                 CatalogAvailabilityBatcher().fetchByGroup(
                     targets,
                     { _, _ -> AvailabilityWindows(target, fetch) },
-                    { _, _, _, ws -> emptyBatch(ws.fetch) },
+                    { _, _, _, ws -> emptyObservations() },
                 )
             assertEquals(fetch, results[0].window)
         }
@@ -148,7 +147,7 @@ class CatalogAvailabilityBatcherTest {
                     windowFor = { _, _ -> windows },
                     fetch = { _, _, targets, ws ->
                         assertEquals(listOf(1L), targets.map { it.campsite.id })
-                        emptyBatch(ws.fetch)
+                        emptyObservations()
                     },
                 )
             assertEquals(1, results.size)
@@ -208,12 +207,5 @@ class CatalogAvailabilityBatcherTest {
         )
     }
 
-    private fun emptyBatch(w: ResolvedDateWindow): AvailabilityObservationBatch =
-        AvailabilityObservationBatch(
-            provider = "recgov",
-            startDate = w.startDate,
-            endDate = w.endDate,
-            observations = emptyList(),
-            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
-        )
+    private fun emptyObservations(): CampgroundObservations = CampgroundObservations(campgroundRef = null, observations = emptyList())
 }

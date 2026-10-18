@@ -3,11 +3,10 @@ package ca.floo.roadtrip.service.availability.provider
 import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
 import ca.floo.roadtrip.model.api.HTTP_FORBIDDEN
 import ca.floo.roadtrip.model.api.HTTP_UNAUTHORIZED
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.domain.Campground
@@ -44,7 +43,7 @@ class CampflareAvailabilityProvider(
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): AvailabilityObservationBatch {
+    ): CampgroundObservations {
         val campgroundId = campflareIdOrThrow(campground)
         val data = fetch(campgroundId, startDate, endDate)
         val byCampsiteId =
@@ -63,10 +62,8 @@ class CampflareAvailabilityProvider(
                     data = data,
                 )
             }
-        return batch(
-            campgroundId = campgroundId,
-            startDate = startDate,
-            endDate = endDate,
+        return CampgroundObservations(
+            campgroundRef = BookingProviderRef.Campflare(campgroundId = campgroundId),
             observations = observations,
         )
     }
@@ -99,21 +96,6 @@ class CampflareAvailabilityProvider(
             )
         }
 
-    private fun batch(
-        campgroundId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-        observations: List<CampsiteDayObservation>,
-    ): AvailabilityObservationBatch =
-        AvailabilityObservationBatch(
-            provider = CAMPFLARE_PROVIDER,
-            startDate = startDate,
-            endDate = endDate,
-            observations = observations,
-            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L),
-            scope = BookingProviderRef.Campflare(campgroundId = campgroundId),
-        )
-
     private fun campflareIdOrThrow(campground: Campground): String =
         (claimedRef(campground) as? BookingProviderRef.Campflare)?.campgroundId
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
@@ -129,7 +111,6 @@ class CampflareAvailabilityProvider(
         /** An auth failure is a key problem, not an outage: retrying it is
          *  pointless, so it is classified as blocked rather than 5xx. */
         private val campflareBlockedStatuses = setOf(HTTP_UNAUTHORIZED, HTTP_FORBIDDEN)
-        private const val CAMPFLARE_PROVIDER = "campflare"
         private const val CAMPFLARE_BOOKING_HORIZON_DAYS = 365
         private const val CAMPFLARE_MAX_POLL_WINDOW_DAYS = 60
     }

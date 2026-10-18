@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -24,7 +24,7 @@ internal open class FailoverAvailabilityFetcher(
     )
 
     data class FailoverResult(
-        val batch: AvailabilityObservationBatch?,
+        val observations: CampgroundObservations?,
         val servedBy: BookingProvider?,
         val attempts: List<AttemptRecord>,
     )
@@ -37,7 +37,7 @@ internal open class FailoverAvailabilityFetcher(
         window: ResolvedDateWindow,
     ): FailoverResult {
         val sorted = cooldowns.sortHealthyFirst(providers) { it.id }
-        if (sorted.isEmpty()) return FailoverResult(batch = null, servedBy = null, attempts = emptyList())
+        if (sorted.isEmpty()) return FailoverResult(observations = null, servedBy = null, attempts = emptyList())
 
         val attempts = mutableListOf<AttemptRecord>()
         for (provider in sorted) {
@@ -59,7 +59,7 @@ internal open class FailoverAvailabilityFetcher(
             when (attempt.outcome) {
                 FetchOutcome.OK -> {
                     cooldowns.recordSuccess(provider.id)
-                    return FailoverResult(batch = attempt.batch, servedBy = provider.id, attempts = attempts)
+                    return FailoverResult(observations = attempt.observations, servedBy = provider.id, attempts = attempts)
                 }
                 FetchOutcome.RATE_LIMITED,
                 FetchOutcome.UPSTREAM_5XX,
@@ -68,16 +68,16 @@ internal open class FailoverAvailabilityFetcher(
                     cooldowns.recordFailure(provider.id)
                 }
                 FetchOutcome.OTHER -> {
-                    return FailoverResult(batch = null, servedBy = null, attempts = attempts)
+                    return FailoverResult(observations = null, servedBy = null, attempts = attempts)
                 }
             }
         }
-        return FailoverResult(batch = null, servedBy = null, attempts = attempts)
+        return FailoverResult(observations = null, servedBy = null, attempts = attempts)
     }
 
     private data class Attempt(
         val outcome: FetchOutcome,
-        val batch: AvailabilityObservationBatch?,
+        val observations: CampgroundObservations?,
         val error: String?,
         val providerError: AvailabilityProviderError? = null,
     )
@@ -89,18 +89,18 @@ internal open class FailoverAvailabilityFetcher(
         window: ResolvedDateWindow,
     ): Attempt =
         try {
-            val batch =
+            val observations =
                 provider.availability(
                     campground = campground,
                     campsites = campsites,
                     startDate = window.startDate,
                     endDate = window.endDate,
                 )
-            Attempt(outcome = FetchOutcome.OK, batch = batch, error = null)
+            Attempt(outcome = FetchOutcome.OK, observations = observations, error = null)
         } catch (e: AvailabilityProviderError) {
-            Attempt(outcome = e.toFetchOutcome(), batch = null, error = e.message ?: e::class.simpleName, providerError = e)
+            Attempt(outcome = e.toFetchOutcome(), observations = null, error = e.message ?: e::class.simpleName, providerError = e)
         } catch (e: Throwable) {
-            Attempt(outcome = FetchOutcome.OTHER, batch = null, error = e.message ?: e.javaClass.simpleName)
+            Attempt(outcome = FetchOutcome.OTHER, observations = null, error = e.message ?: e.javaClass.simpleName)
         }
 
     private fun elapsedMs(

@@ -4,14 +4,15 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailability
 import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
+import ca.floo.roadtrip.fixtures.askedFor
 import ca.floo.roadtrip.fixtures.availableIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.statuses
 import ca.floo.roadtrip.model.api.AvailabilityResponseDto
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -157,6 +158,8 @@ class AspiraObservationsTest {
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-03"),
                     ),
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-03"),
                 )
 
             assertEquals("wa:-999:-999:null", dto.scopeRef)
@@ -200,6 +203,8 @@ class AspiraObservationsTest {
                         startDate = LocalDate.parse("2026-07-09"),
                         endDate = LocalDate.parse("2026-07-10"),
                     ),
+                    startDate = LocalDate.parse("2026-07-09"),
+                    endDate = LocalDate.parse("2026-07-10"),
                 )
 
             assertEquals(listOf(1L), dto.availability.single().availableIds)
@@ -256,6 +261,8 @@ class AspiraObservationsTest {
                         startDate = LocalDate.parse("2026-08-22"),
                         endDate = LocalDate.parse("2026-08-26"),
                     ),
+                    startDate = LocalDate.parse("2026-08-22"),
+                    endDate = LocalDate.parse("2026-08-26"),
                 )
 
             assertEquals(emptyList(), dto.availability[0].availableIds)
@@ -312,6 +319,8 @@ class AspiraObservationsTest {
                         startDate = LocalDate.parse("2026-08-22"),
                         endDate = LocalDate.parse("2026-08-23"),
                     ),
+                    startDate = LocalDate.parse("2026-08-22"),
+                    endDate = LocalDate.parse("2026-08-23"),
                 )
 
             assertEquals(
@@ -352,6 +361,8 @@ class AspiraObservationsTest {
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-02"),
                     ),
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-02"),
                 )
 
             assertEquals(AvailabilityStatus.UNKNOWN, dto.availability.single().status)
@@ -404,6 +415,8 @@ class AspiraObservationsTest {
                         startDate = LocalDate.parse("2026-06-17"),
                         endDate = LocalDate.parse("2026-06-19"),
                     ),
+                    startDate = LocalDate.parse("2026-06-17"),
+                    endDate = LocalDate.parse("2026-06-19"),
                 )
 
             assertEquals(listOf(100L), dto.availability[0].availableIds)
@@ -493,5 +506,14 @@ private fun fakeAspiraClient(
  * These tests read parsed statuses, not watchability, so every window is quoted
  * from its own start date by a provider the poller can reach.
  */
-private fun responseOf(batch: AvailabilityObservationBatch): AvailabilityResponseDto =
-    availabilityResponseFromObservations(batch, pollingSupported = true, earliestDate = batch.startDate, seasonBlock = null)
+private fun responseOf(
+    observations: CampgroundObservations,
+    startDate: LocalDate,
+    endDate: LocalDate,
+): AvailabilityResponseDto =
+    availabilityResponseFromObservations(
+        observations.askedFor(BookingProvider.ASPIRA, startDate, endDate),
+        pollingSupported = true,
+        earliestDate = startDate,
+        seasonBlock = null,
+    )

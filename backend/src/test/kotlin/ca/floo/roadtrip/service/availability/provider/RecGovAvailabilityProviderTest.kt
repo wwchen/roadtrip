@@ -1,8 +1,10 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
+import ca.floo.roadtrip.fixtures.askedFor
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import kotlinx.coroutines.runBlocking
@@ -148,7 +150,10 @@ class RecGovAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-07-03"),
                 )
 
-            val dates = availabilityDatesFromObservations(batch)
+            val dates =
+                availabilityDatesFromObservations(
+                    batch.askedFor(BookingProvider.RECGOV, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-03")),
+                )
             assertEquals(listOf("2026-07-01", "2026-07-02"), dates)
         }
 

@@ -3,9 +3,8 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.config.ApiCacheConfig
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
@@ -299,11 +298,9 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
             capturedWindow = window
             val campsiteId = campsites.first().id
             val observedAt = Instant.parse("2026-07-30T12:00:00Z")
-            val batch =
-                AvailabilityObservationBatch(
-                    provider = providers.first().id.id,
-                    startDate = window.startDate,
-                    endDate = window.endDate,
+            val observations =
+                CampgroundObservations(
+                    campgroundRef = null,
                     observations =
                         listOf(
                             CampsiteDayObservation(campsiteId, window.startDate, observedAt, AvailabilityStatus.AVAILABLE),
@@ -314,9 +311,8 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
                                 AvailabilityStatus.AVAILABLE,
                             ),
                         ),
-                    cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
                 )
-            return FailoverResult(batch = batch, servedBy = providers.first().id, attempts = emptyList())
+            return FailoverResult(observations = observations, servedBy = providers.first().id, attempts = emptyList())
         }
     }
 }

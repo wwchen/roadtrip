@@ -65,8 +65,7 @@ class ReserveAmericaAvailabilityProviderTest {
 
             assertEquals(BookingProvider.RESERVEAMERICA, adapter.id)
             assertEquals(false, adapter.capabilities.supportsInternalPolling)
-            assertEquals("reserveamerica", batch.provider)
-            assertEquals(BookingProviderRef.ReserveAmerica(contractCode = "NY", parkId = "489"), batch.scope)
+            assertEquals(BookingProviderRef.ReserveAmerica(contractCode = "NY", parkId = "489"), batch.campgroundRef)
             assertEquals(2, batch.observations.size)
             assertEquals(
                 listOf(AvailabilityStatus.RESERVED, AvailabilityStatus.AVAILABLE),

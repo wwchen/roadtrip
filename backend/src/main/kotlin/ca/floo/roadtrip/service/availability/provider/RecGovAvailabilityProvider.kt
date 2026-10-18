@@ -1,11 +1,10 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -46,7 +45,7 @@ class RecGovAvailabilityProvider(
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): AvailabilityObservationBatch {
+    ): CampgroundObservations {
         val recgovId = recgovIdOrThrow(campground)
         val campsiteIdByVendorId = campsites.associate { vendorSiteIdFor(it) to it.id }
         return runWithErrorMapping {
@@ -64,7 +63,7 @@ class RecGovAvailabilityProvider(
         campsiteIdByVendorId: Map<String, Long>,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): AvailabilityObservationBatch =
+    ): CampgroundObservations =
         coroutineScope {
             val months = monthsCovering(startDate, endDate.minusDays(1))
             val observedAt = Instant.now()
@@ -78,13 +77,9 @@ class RecGovAvailabilityProvider(
             val dates = datesInWindow(startDate, endDate)
             val observedAtByDate = dates.associateWith { observedAt }
 
-            AvailabilityObservationBatch(
-                provider = "recgov",
-                startDate = startDate,
-                endDate = endDate,
+            CampgroundObservations(
+                campgroundRef = BookingProviderRef.RecGov(facilityId = recgovId),
                 observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, campsiteIdByVendorId),
-                cacheBlock = directFetchCacheBlock(),
-                scope = BookingProviderRef.RecGov(facilityId = recgovId),
             )
         }
 
@@ -179,5 +174,3 @@ private fun classifyRecgovStatus(raw: String?): AvailabilityStatus {
         else -> AvailabilityStatus.UNKNOWN
     }
 }
-
-private fun directFetchCacheBlock(): AvailabilityCacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L)

@@ -74,7 +74,8 @@ internal class CampsiteAvailabilityService(
         val supportingProviders = availabilityProviders.filter { it.supportsCampground(campground) }
         val freshAt = freshAtOrAfter ?: Instant.now(clock).minus(snapshotFreshnessTtl(provider))
 
-        val batch =
+        var servedBy: BookingProvider? = null
+        val loaded =
             availabilityLoader.loadOrFetch(
                 AvailabilityLoader.Request(
                     metadata =
@@ -86,6 +87,8 @@ internal class CampsiteAvailabilityService(
                     startDate = windows.target.startDate,
                     endDate = windows.target.endDate,
                     freshAtOrAfter = freshAt,
+                    fetchStartDate = windows.fetch.startDate,
+                    fetchEndDate = windows.fetch.endDate,
                 ),
             ) {
                 val result =
@@ -96,8 +99,10 @@ internal class CampsiteAvailabilityService(
                         campgroundCampsites = campgroundCampsites,
                         window = ResolvedDateWindow(windows.fetch.startDate, windows.fetch.endDate),
                     )
-                result.batch ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
+                servedBy = result.servedBy
+                result.observations ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
             }
+        val batch = servedBy?.let { loaded.copy(provider = it.id) } ?: loaded
 
         return CampsiteAvailabilityResult(
             startDate = windows.target.startDate,

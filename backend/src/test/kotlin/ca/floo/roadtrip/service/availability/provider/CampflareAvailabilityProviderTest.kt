@@ -84,8 +84,7 @@ class CampflareAvailabilityProviderTest {
                 ),
                 observedCall,
             )
-            assertEquals("campflare", batch.provider)
-            assertEquals(BookingProviderRef.Campflare(campgroundId = "upper-pines-campground-447"), batch.scope)
+            assertEquals(BookingProviderRef.Campflare(campgroundId = "upper-pines-campground-447"), batch.campgroundRef)
             assertEquals(2, batch.observations.size)
             assertEquals(setOf(100L), batch.observations.map { it.campsiteId }.toSet())
             assertEquals(
