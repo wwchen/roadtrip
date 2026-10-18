@@ -23,7 +23,7 @@ import {
   type StayQuery,
   type StayResult,
 } from '@/stores/stayCheckStore';
-import { CHECK_IDLE_TIMEOUT_MS, resultOf } from './stay-check';
+import { CHECK_IDLE_TIMEOUT_MS, RECHECK_MAX_AGE_SECONDS, resultOf } from './stay-check';
 
 /** The stay stream's code for a caller over its per-IP limit. */
 const THROTTLED_CODE = 'ip_throttled';
@@ -95,8 +95,9 @@ export interface StayCheckControl {
 /**
  * [checkableIds] is null while the in-view list is not ready (loading, zoomed
  * out, or switched off), and the ids of its cards a provider can answer for once
- * it is. Checking again — the same question, already answered — asks the
- * providers afresh rather than answering from recent observations.
+ * it is. Checking again — the same question, already answered — asks for the
+ * youngest observations the server allows (`RECHECK_MAX_AGE_SECONDS`) rather than
+ * answering from anything within its usual tolerance.
  */
 export function useStayCheck(checkableIds: readonly number[] | null): StayCheckControl {
   const query = useCurrentStayQuery();
@@ -127,7 +128,7 @@ export function useStayCheck(checkableIds: readonly number[] | null): StayCheckC
     [],
   );
 
-  const run = useCallback(async (fresh: boolean) => {
+  const run = useCallback(async (maxAgeSeconds: number | null) => {
     if (query === null || checkableIds === null || checkableIds.length === 0) return;
     inFlight.current?.abort();
     const controller = new AbortController();
@@ -136,7 +137,7 @@ export function useStayCheck(checkableIds: readonly number[] | null): StayCheckC
     try {
       const outcome = await withIdleTimeout(
         async (signal, alive): Promise<StayCheckOutcome | null> => {
-          const request = { ...query, poiIds: [...checkableIds], fresh };
+          const request = { ...query, poiIds: [...checkableIds], maxAgeSeconds };
           for await (const event of streamStays(request, { signal, onActivity: alive })) {
             // An event already read when the check was cancelled answers nothing now.
             if (controller.signal.aborted) return null;
@@ -177,6 +178,6 @@ export function useStayCheck(checkableIds: readonly number[] | null): StayCheckC
     coolingDown,
     failure: current?.failure ?? null,
     nothingToCheck: query !== null && checkableIds !== null && checkableIds.length === 0,
-    check: () => void run(checked),
+    check: () => void run(checked ? RECHECK_MAX_AGE_SECONDS : null),
   };
 }

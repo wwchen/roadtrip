@@ -9,6 +9,11 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class StayCheckRequestDto(
+    /**
+     * The campgrounds to check. POIs start in the order given, so send the nearest
+     * first: with more of them than the server reads at once, the ones at the front
+     * answer first and the rest wait their turn.
+     */
     @SerialName("poi_ids") val poiIds: List<Long> = emptyList(),
     /** The first night, `YYYY-MM-DD`. */
     @SerialName("start_date") val startDate: String? = null,
@@ -22,9 +27,13 @@ data class StayCheckRequestDto(
      */
     @SerialName("group_size") val groupSize: Int? = null,
     /**
-     * Ask the providers again unless an observation is only moments old, instead of
-     * answering from anything younger than the endpoint's usual tolerance. For a
-     * re-check; it costs an upstream call per campground.
+     * How old a stored observation may be and still answer, in seconds, instead of
+     * asking the provider again; a re-check sends a small one. The server clamps it
+     * rather than refusing it: up to its floor, so a caller cannot force a refetch of
+     * every campground on every request (or ask every provider twice with a
+     * double-click), and down to its ceiling, which is how stale is too stale to serve
+     * at all. Absent means the ceiling, the endpoint's usual tolerance. A smaller age
+     * costs an upstream call per campground.
      */
-    val fresh: Boolean = false,
+    @SerialName("max_age_seconds") val maxAgeSeconds: Long? = null,
 )

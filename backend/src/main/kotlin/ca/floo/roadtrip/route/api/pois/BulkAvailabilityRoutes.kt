@@ -32,6 +32,7 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import java.time.Duration
 import java.time.LocalDate
 
 /**
@@ -94,7 +95,7 @@ internal fun Route.bulkAvailabilityRoutes(
                 summary = "How one stay looks at many campground POIs, streamed as each answers",
                 description =
                     "Body: { poi_ids: [pois.id, ...1..${config.maxPois}], start_date, end_date, " +
-                        "site_type?, group_size?, fresh? }. Answers 200 as a text/event-stream: one " +
+                        "site_type?, group_size?, max_age_seconds? }. Answers 200 as a text/event-stream: one " +
                         "`${StayAnswerDto.EVENT}` event per requested POI as it lands — POIs start in " +
                         "request order, so send the nearest first — each with an `outcome`: `answered`, " +
                         "with `stay` saying how the stay looks there (`open`, `few_left`, `full`, " +
@@ -197,9 +198,26 @@ private fun StayCheckRequestDto.validated(
         endDate = end,
         siteTypes = siteTypes,
         groupSize = groupSize,
-        fresh = fresh,
+        maxAge = clampedMaxAge(maxAgeSeconds, config),
     )
 }
+
+/**
+ * The age a stay check may serve a stored observation at: what the caller asked for,
+ * held to [BulkAvailabilityConfig.freshTolerance] .. [BulkAvailabilityConfig.tolerance],
+ * and the ceiling when it did not ask. Clamped rather than refused because an age out of
+ * range is not a malformed request — the caller wants "as fresh as you will give me" or
+ * "whatever you have", and gets exactly that. The floor stops a caller forcing zero and
+ * refetching every campground on every request; the ceiling keeps the server in charge
+ * of how stale is too stale to serve at all.
+ */
+private fun clampedMaxAge(
+    maxAgeSeconds: Long?,
+    config: BulkAvailabilityConfig,
+): Duration =
+    maxAgeSeconds
+        ?.let { Duration.ofSeconds(it).coerceIn(config.freshTolerance, config.tolerance) }
+        ?: config.tolerance
 
 private fun requirePoiIds(
     poiIds: List<Long>,

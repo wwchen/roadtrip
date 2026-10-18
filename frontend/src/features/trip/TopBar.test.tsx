@@ -10,6 +10,7 @@ import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
 import { useStayCheckStore } from '@/stores/stayCheckStore';
 import { useTripStore } from '@/stores/tripStore';
+import { RECHECK_MAX_AGE_SECONDS } from './stay-check';
 import { MAX_IN_VIEW_CARDS } from './useCampgroundSummaries';
 import type { PinFeature } from '@/map/pins';
 import { FakeMap } from '@/test/fake-map';
@@ -1295,7 +1296,7 @@ describe('the in-view list', () => {
       expect(screen.queryByText(/unknown/)).toBeNull();
     });
 
-    test('Check again asks the providers afresh; the first check does not', async () => {
+    test('Check again sends the youngest age the server allows; the first check names none', async () => {
       stayStream = () => eventStreamResponse([answer(21, { status: 'full', open_sites: 0, checked_sites: 132 }), done(1)]);
       withViewport();
       mount();
@@ -1307,8 +1308,10 @@ describe('the in-view list', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
 
       await waitFor(() => expect(stayBodies).toHaveLength(2));
+      expect(stayBodies[0]).not.toHaveProperty('max_age_seconds');
       expect(stayBodies[0]).not.toHaveProperty('fresh');
-      expect(stayBodies[1]).toMatchObject({ fresh: true });
+      expect(stayBodies[1]).toMatchObject({ max_age_seconds: RECHECK_MAX_AGE_SECONDS });
+      expect(stayBodies[1]).not.toHaveProperty('fresh');
     });
 
     test('below the zoom gate the button waits without claiming nothing is checkable', () => {

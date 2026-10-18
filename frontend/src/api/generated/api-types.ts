@@ -825,7 +825,7 @@ export interface StayCheckRequestDto {
   end_date?: string;
   site_type?: string[];
   group_size?: number;
-  fresh?: boolean;
+  max_age_seconds?: number;
 }
 
 export type StayFailureReason = 'start_before_earliest' | 'beyond_booking_horizon' | 'window_too_long' | 'rate_limited' | 'upstream_blocked' | 'upstream_5xx' | 'upstream_unreachable' | 'provider_misconfigured' | 'unsupported' | 'not_found' | 'unknown_campground' | 'unknown';

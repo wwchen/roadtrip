@@ -17,6 +17,15 @@ import type { StayResult } from '@/stores/stayCheckStore';
 export const CHECK_IDLE_TIMEOUT_MS = 60_000;
 
 /**
+ * The age a re-check asks for: the youngest the server will serve. It matches the
+ * server's floor (`availability.bulk.fresh-tolerance`), short rather than zero so a
+ * double-click does not ask every provider twice. The server clamps what it is sent,
+ * so a floor configured higher answers at its own, and this need not track it. A first
+ * check names no age and gets the endpoint's usual tolerance.
+ */
+export const RECHECK_MAX_AGE_SECONDS = 60;
+
+/**
  * A campground's answer: its summary when it answered, else the outcome the server
  * classified it as. Anything that is not an answered stay lands on the error arm,
  * an outcome this build has never heard of included, so a newer server adding one

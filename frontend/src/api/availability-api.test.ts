@@ -6,7 +6,7 @@ import { eventStreamResponse, jsonResponse, stubFetch } from '@/test/fetch-stub'
 
 afterEach(() => vi.unstubAllGlobals());
 
-const STAY = { poiIds: [21, 22], start: '2026-09-11', end: '2026-09-13', siteType: null, groupSize: null, fresh: false };
+const STAY = { poiIds: [21, 22], start: '2026-09-11', end: '2026-09-13', siteType: null, groupSize: null, maxAgeSeconds: null };
 
 async function eventsOf(stream: AsyncGenerator<StayStreamEvent>): Promise<StayStreamEvent[]> {
   const events: StayStreamEvent[] = [];
@@ -24,7 +24,7 @@ describe('streamStays', () => {
       ]),
     );
 
-    const events = await eventsOf(streamStays({ ...STAY, siteType: 'tent', groupSize: 4, fresh: true }));
+    const events = await eventsOf(streamStays({ ...STAY, siteType: 'tent', groupSize: 4, maxAgeSeconds: 120 }));
 
     expect(fetchStub.last.url).toBe(STAY_STREAM_URL);
     expect(fetchStub.last.method).toBe('POST');
@@ -35,7 +35,7 @@ describe('streamStays', () => {
       end_date: '2026-09-13',
       site_type: ['tent'],
       group_size: 4,
-      fresh: true,
+      max_age_seconds: 120,
     });
     expect(events).toEqual([
       { kind: 'answer', answer: { poi_id: 22, error: 'rate_limited' } },

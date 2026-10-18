@@ -109,8 +109,12 @@ export interface StayCheckRequest {
   end: string;
   siteType: CampsiteKind | null;
   groupSize: number | null;
-  /** Ask the providers again rather than answer from recent observations: a re-check. */
-  fresh: boolean;
+  /**
+   * How old a stored observation may be and still answer, in seconds; null takes the
+   * server's usual tolerance. The server clamps it into its own range, so a re-check
+   * sends a small one and need not know where the range ends.
+   */
+  maxAgeSeconds: number | null;
 }
 
 /**
@@ -123,7 +127,7 @@ export interface StayCheckRequest {
  * stream can grow one without breaking it.
  */
 export async function* streamStays(
-  { poiIds, start, end, siteType, groupSize, fresh }: StayCheckRequest,
+  { poiIds, start, end, siteType, groupSize, maxAgeSeconds }: StayCheckRequest,
   { signal, onActivity }: StayStreamOptions = {},
 ): AsyncGenerator<StayStreamEvent> {
   const body = await jsonPostStream(
@@ -134,7 +138,7 @@ export async function* streamStays(
       end_date: end,
       site_type: siteType ? [siteType] : [],
       ...(groupSize ? { group_size: groupSize } : {}),
-      ...(fresh ? { fresh: true } : {}),
+      ...(maxAgeSeconds !== null ? { max_age_seconds: maxAgeSeconds } : {}),
     },
     { signal },
   );

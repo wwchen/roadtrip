@@ -39,11 +39,13 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.routing.Route
+import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.json.Json
@@ -52,9 +54,11 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -85,6 +89,17 @@ private val windowEnd: LocalDate = LocalDate.of(2026, 9, 8)
 /** rec.gov's horizon, so the faked slice's ceiling is a real provider's. */
 private const val BOOKING_HORIZON_DAYS = 180L
 private val observedAt: Instant = Instant.parse("2026-08-20T00:00:00Z")
+
+/** The clock the max-age tests read, so the cutoff a request derives is an exact instant. */
+private val maxAgeNow: Instant = Instant.parse("2026-10-12T12:00:00Z")
+
+/** The endpoint's default and ceiling, and its floor: far enough apart that a clamp cannot be mistaken for either end. */
+private val maxAgeCeiling: Duration = Duration.ofHours(2)
+private val maxAgeFloor: Duration = Duration.ofMinutes(1)
+
+/** Strictly inside the range, and neither end of it nor the default; and a year, which only the ceiling can answer. */
+private const val MAX_AGE_INSIDE_RANGE_SECONDS = 600L
+private const val MAX_AGE_A_YEAR_SECONDS = 31_536_000L
 
 class BulkAvailabilityRoutesTest {
     @Test
@@ -354,6 +369,88 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
+    fun `max_age_seconds below the floor clamps up to it`() =
+        testApplication {
+            val cutoffs = mutableListOf<Instant?>()
+            application { routeTestApplication { maxAgeRoutesUnderTest(cutoffs) } }
+
+            // Zero is the case the floor exists for: it would refetch every campground on every request.
+            val zero = postStay(maxAgeSeconds = "0")
+            val negative = postStay(maxAgeSeconds = "-1")
+
+            assertEquals(HttpStatusCode.OK, zero.status)
+            assertEquals(HttpStatusCode.OK, negative.status)
+            assertEquals(listOf<Instant?>(maxAgeNow.minus(maxAgeFloor), maxAgeNow.minus(maxAgeFloor)), cutoffs)
+        }
+
+    @Test
+    fun `max_age_seconds above the ceiling clamps down to it`() =
+        testApplication {
+            val cutoffs = mutableListOf<Instant?>()
+            application { routeTestApplication { maxAgeRoutesUnderTest(cutoffs) } }
+
+            val resp = postStay(maxAgeSeconds = "$MAX_AGE_A_YEAR_SECONDS")
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            assertEquals(listOf<Instant?>(maxAgeNow.minus(maxAgeCeiling)), cutoffs)
+        }
+
+    @Test
+    fun `an absent max_age_seconds uses the default`() =
+        testApplication {
+            val cutoffs = mutableListOf<Instant?>()
+            application { routeTestApplication { maxAgeRoutesUnderTest(cutoffs) } }
+
+            val resp = postStay(maxAgeSeconds = null)
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            assertEquals(listOf<Instant?>(maxAgeNow.minus(maxAgeCeiling)), cutoffs)
+        }
+
+    @Test
+    fun `a max_age_seconds inside the range passes through unchanged`() =
+        testApplication {
+            val cutoffs = mutableListOf<Instant?>()
+            application { routeTestApplication { maxAgeRoutesUnderTest(cutoffs) } }
+
+            // Neither end of the range, nor the default: a clamp that always answered one of them fails here.
+            val resp = postStay(maxAgeSeconds = "$MAX_AGE_INSIDE_RANGE_SECONDS")
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            assertEquals(listOf<Instant?>(maxAgeNow.minusSeconds(MAX_AGE_INSIDE_RANGE_SECONDS)), cutoffs)
+        }
+
+    @Test
+    fun `a clamped value is not a bad request`() =
+        testApplication {
+            application { routeTestApplication { maxAgeRoutesUnderTest() } }
+
+            for (maxAge in listOf("0", "-1", "$MAX_AGE_A_YEAR_SECONDS", null)) {
+                val resp = postStay(maxAgeSeconds = maxAge)
+                assertEquals(HttpStatusCode.OK, resp.status, "max_age_seconds=$maxAge")
+                assertEquals(ContentType.Text.EventStream, resp.contentType()?.withoutParameters(), "max_age_seconds=$maxAge")
+                assertEquals(listOf("answer", "done"), streamEvents(resp.bodyAsText()).map { it.first }, "max_age_seconds=$maxAge")
+            }
+        }
+
+    @Test
+    fun `the removed fresh field no longer changes the age`() =
+        testApplication {
+            val cutoffs = mutableListOf<Instant?>()
+            application { routeTestApplication { maxAgeRoutesUnderTest(cutoffs) } }
+
+            // Unknown keys are ignored on the wire, so an old client still gets an answer, at the default age.
+            val resp =
+                client.post("/api/pois/availability/bulk/stream") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd","fresh":true}""")
+                }
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            assertEquals(listOf<Instant?>(maxAgeNow.minus(maxAgeCeiling)), cutoffs)
+        }
+
+    @Test
     fun `an answer event carries outcome and omits the fields that do not apply`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
@@ -596,25 +693,51 @@ class BulkAvailabilityRoutesTest {
             assertEquals(HttpStatusCode.ServiceUnavailable, postVia("192.0.2.99, 203.0.113.7, 172.18.0.5").status)
         }
 
+    /** One stay-stream POST for POI 1, with [maxAgeSeconds] written into the body as given, or left out when null. */
+    private suspend fun ApplicationTestBuilder.postStay(maxAgeSeconds: String?): HttpResponse =
+        client.post("/api/pois/availability/bulk/stream") {
+            contentType(ContentType.Application.Json)
+            val maxAge = maxAgeSeconds?.let { ""","max_age_seconds":$it""" }.orEmpty()
+            setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"$maxAge}""")
+        }
+
+    /**
+     * The routes over a config whose floor, default and ceiling are three distinct, known ages and a clock
+     * frozen at [maxAgeNow], recording each cutoff the controller hands the lookup into [cutoffs].
+     */
+    private fun Route.maxAgeRoutesUnderTest(cutoffs: MutableList<Instant?> = mutableListOf()) =
+        bulkAvailabilityRoutesUnderTest(
+            tolerance = maxAgeCeiling,
+            freshTolerance = maxAgeFloor,
+            clock = Clock.fixed(maxAgeNow, ZoneOffset.UTC),
+            cutoffs = cutoffs,
+        )
+
     private fun Route.bulkAvailabilityRoutesUnderTest(
         rateLimit: IpRateLimiter? = null,
         pollingSupported: Boolean = true,
         streamTimeout: Duration = BulkAvailabilityConfig.default.streamTimeout,
         perPoiTimeout: Duration = BulkAvailabilityConfig.default.perPoiTimeout,
+        tolerance: Duration = Duration.ZERO,
+        freshTolerance: Duration = Duration.ZERO,
+        clock: Clock = Clock.systemUTC(),
+        cutoffs: MutableList<Instant?>? = null,
     ) {
         val config =
             BulkAvailabilityConfig(
                 maxPois = TEST_MAX_POIS,
                 fanOutConcurrency = TEST_FAN_OUT_CONCURRENCY,
-                tolerance = Duration.ZERO,
+                tolerance = tolerance,
                 ipPoiLimitPerMinute = TEST_IP_POI_LIMIT_PER_MINUTE,
+                freshTolerance = freshTolerance,
                 streamTimeout = streamTimeout,
                 perPoiTimeout = perPoiTimeout,
             )
         val controller =
             BulkAvailabilityController(
-                sliceLookup = FakePoiAvailabilitySliceLookup(pollingSupported),
+                sliceLookup = FakePoiAvailabilitySliceLookup(pollingSupported, cutoffs),
                 config = config,
+                clock = clock,
             )
         if (rateLimit != null) {
             bulkAvailabilityRoutes(controller, config, rateLimit)
@@ -714,6 +837,7 @@ private fun streamEvents(body: String): List<Pair<String, String>> =
  */
 private class FakePoiAvailabilitySliceLookup(
     private val pollingSupported: Boolean = true,
+    private val cutoffs: MutableList<Instant?>? = null,
 ) : PoiAvailabilitySliceLookup {
     override suspend fun poiAvailabilitySlice(
         poiId: Long,
@@ -722,6 +846,7 @@ private class FakePoiAvailabilitySliceLookup(
         endDate: LocalDate?,
         freshAtOrAfter: Instant?,
     ): PoiAvailabilitySlice {
+        cutoffs?.add(freshAtOrAfter)
         if (poiId == RATE_LIMITED_POI_ID) throw AvailabilityProviderError.RateLimited()
         if (poiId == STALLED_POI_ID) awaitCancellation()
         if (poiId == BEYOND_HORIZON_POI_ID) {

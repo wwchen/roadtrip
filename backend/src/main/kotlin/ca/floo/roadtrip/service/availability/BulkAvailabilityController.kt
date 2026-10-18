@@ -27,6 +27,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
@@ -60,8 +61,11 @@ internal data class StayCheckRequest(
     val siteTypes: List<CampsiteKind>,
     /** Campsites that sleep fewer are left out; null leaves capacity unchecked. */
     val groupSize: Int? = null,
-    /** Answer only from observations [BulkAvailabilityConfig.freshTolerance] old or younger. */
-    val fresh: Boolean = false,
+    /**
+     * Answer only from observations this old or younger. Already clamped by the route
+     * into the config's range, so the controller takes it as given.
+     */
+    val maxAge: Duration,
 )
 
 /**
@@ -171,7 +175,7 @@ internal class BulkAvailabilityController(
      */
     fun stayAnswers(request: StayCheckRequest): Flow<StayStreamItem> =
         channelFlow {
-            val query = SliceQuery(request.siteTypes, request.startDate, request.endDate, request.groupSize, freshAtOrAfter(request.fresh))
+            val query = SliceQuery(request.siteTypes, request.startDate, request.endDate, request.groupSize, cutoffFor(request.maxAge))
             val gate = Semaphore(config.fanOutConcurrency)
             val perPoiTimeout = config.perPoiTimeout.toKotlinDuration()
             val answered = ConcurrentHashMap.newKeySet<Int>()
@@ -219,7 +223,10 @@ internal class BulkAvailabilityController(
                 }
         }
 
-    private fun freshAtOrAfter(fresh: Boolean): Instant = Instant.now(clock).minus(if (fresh) config.freshTolerance else config.tolerance)
+    /** The oldest instant an observation may carry and still answer: [maxAge] before now. */
+    private fun cutoffFor(maxAge: Duration): Instant = Instant.now(clock).minus(maxAge)
+
+    private fun freshAtOrAfter(fresh: Boolean): Instant = cutoffFor(if (fresh) config.freshTolerance else config.tolerance)
 
     private suspend fun read(
         poiId: Long,

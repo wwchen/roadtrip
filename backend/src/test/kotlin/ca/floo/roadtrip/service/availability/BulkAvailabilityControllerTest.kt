@@ -61,6 +61,9 @@ private const val TEST_GENEROUS_TIMEOUT_SECONDS = 30L
 private const val TEST_MAX_POIS = 50
 private const val TEST_FAN_OUT_CONCURRENCY = 8
 private const val TEST_IP_POI_LIMIT_PER_MINUTE = 1_000
+
+/** Strictly between the floor and ceiling in the stay max-age test, so the cutoff can only have come from the request. */
+private const val STAY_MAX_AGE_SECONDS = 600L
 private const val NORMAL_SLICE_DELAY_MS = 20L
 
 private val windowStart: LocalDate = LocalDate.of(2026, 9, 1)
@@ -395,6 +398,33 @@ class BulkAvailabilityControllerTest {
     }
 
     @Test
+    fun `a stay check reads every poi against now minus the max age the request carries`() {
+        runTest {
+            val now = Instant.parse("2026-10-12T12:00:00Z")
+            val maxAge = Duration.ofSeconds(STAY_MAX_AGE_SECONDS)
+            val recorder = CutoffRecorder()
+            val controller =
+                BulkAvailabilityController(
+                    sliceLookup = FakePoiAvailabilitySliceLookup(recorder),
+                    config =
+                        BulkAvailabilityConfig(
+                            maxPois = TEST_MAX_POIS,
+                            fanOutConcurrency = TEST_FAN_OUT_CONCURRENCY,
+                            // Neither end of the range is the request's age, so the cutoff can only come from the request.
+                            tolerance = Duration.ofHours(2),
+                            ipPoiLimitPerMinute = TEST_IP_POI_LIMIT_PER_MINUTE,
+                            freshTolerance = Duration.ofMinutes(1),
+                        ),
+                    clock = Clock.fixed(now, ZoneOffset.UTC),
+                )
+
+            controller.stayAnswers(stayRequest(listOf(1L, 2L, 3L), maxAge = maxAge)).toList()
+
+            assertEquals(List(3) { now.minus(maxAge) }, recorder.cutoffs)
+        }
+    }
+
+    @Test
     fun `every poi in one fan out is measured against the same freshness cutoff`() {
         runTest {
             val recorder = CutoffRecorder()
@@ -463,6 +493,7 @@ private fun request(
 private fun stayRequest(
     poiIds: List<Long>,
     groupSize: Int? = null,
+    maxAge: Duration = Duration.ZERO,
 ): StayCheckRequest =
     StayCheckRequest(
         poiIds = poiIds,
@@ -470,6 +501,7 @@ private fun stayRequest(
         endDate = windowEnd,
         siteTypes = emptyList(),
         groupSize = groupSize,
+        maxAge = maxAge,
     )
 
 /** Counts blocked reads that came back with a slice, so a test proves it released one rather than assuming it did. */
