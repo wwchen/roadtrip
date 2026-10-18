@@ -7,11 +7,17 @@ import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.service.availability.provider.testCampground
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private val firstNight: LocalDate = LocalDate.parse("2026-08-10")
@@ -61,16 +67,89 @@ class CampgroundWindowTest {
         assertEquals(emptyList(), windowOver(emptyList()).perCampsiteEnvelopes())
     }
 
+    @Test
+    fun `a window with no cache block has no envelopes`() {
+        assertEquals(emptyList(), windowOver(listOf(campsite(LOW_ID))).copy(cache = null).perCampsiteEnvelopes())
+    }
+
+    @Test
+    fun `a window with no provider has no envelopes`() {
+        assertEquals(emptyList(), windowOver(listOf(campsite(LOW_ID))).copy(provider = null).perCampsiteEnvelopes())
+    }
+
+    @Test
+    fun `an unobserved night ships no cell while the stream still reads unknown`() {
+        val observations =
+            listOf(
+                observation(LOW_ID, 0, AvailabilityStatus.AVAILABLE),
+                observation(LOW_ID, 2, AvailabilityStatus.UNKNOWN),
+            )
+        val window = windowOver(listOf(campsite(LOW_ID)), observations)
+
+        val days =
+            window
+                .perCampsiteEnvelopes()
+                .single()
+                .response.availability
+
+        assertEquals(
+            setOf(AvailabilityStatus.UNKNOWN),
+            window.streams
+                .single()
+                .statuses
+                .drop(1)
+                .toSet(),
+        )
+        assertEquals(listOf(setOf(LOW_ID), emptySet(), setOf(LOW_ID)), days.map { it.cells.keys })
+        assertEquals(AvailabilityStatus.UNKNOWN, days[1].status)
+        assertEquals(AvailabilityStatus.UNKNOWN, days[2].cells.getValue(LOW_ID).status)
+    }
+
+    @Test
+    fun `a window the provider said nothing about reads empty, not success`() {
+        val window = windowOver(listOf(campsite(LOW_ID)), observations = emptyList())
+
+        val response = window.perCampsiteEnvelopes().single().response
+
+        assertEquals("empty", response.state)
+        assertTrue(response.availability.all { it.cells.isEmpty() })
+    }
+
+    @Test
+    fun `an envelope serializes the campground ref as scope_ref, and omits it when there is none`() {
+        val ref = BookingProviderRef.RecGov(facilityId = "232447")
+
+        val withRef = windowOver(listOf(campsite(LOW_ID)), campgroundRef = ref).perCampsiteEnvelopes().single().response
+        val withoutRef = windowOver(listOf(campsite(LOW_ID))).perCampsiteEnvelopes().single().response
+
+        assertEquals(
+            "232447",
+            Json
+                .parseToJsonElement(encodeApiJson(withRef))
+                .jsonObject["scope_ref"]
+                ?.jsonPrimitive
+                ?.content,
+        )
+        assertNull(Json.parseToJsonElement(encodeApiJson(withoutRef)).jsonObject["scope_ref"])
+    }
+
     private fun campsite(id: Long): Campsite = campsiteFixture(id = id)
 
-    private fun windowOver(campsites: List<Campsite>): CampgroundWindow {
-        val window = ResolvedDateWindow(firstNight, firstNight.plusDays(NIGHTS))
-        val observations =
+    private fun observation(
+        campsiteId: Long,
+        offset: Int,
+        status: AvailabilityStatus,
+    ) = CampsiteDayObservation(campsiteId, firstNight.plusDays(offset.toLong()), observedAtTime, status)
+
+    private fun windowOver(
+        campsites: List<Campsite>,
+        observations: List<CampsiteDayObservation> =
             campsites.flatMap { campsite ->
-                (0 until NIGHTS).map { offset ->
-                    CampsiteDayObservation(campsite.id, firstNight.plusDays(offset), observedAtTime, AvailabilityStatus.AVAILABLE)
-                }
-            }
+                (0 until NIGHTS.toInt()).map { offset -> observation(campsite.id, offset, AvailabilityStatus.AVAILABLE) }
+            },
+        campgroundRef: BookingProviderRef? = null,
+    ): CampgroundWindow {
+        val window = ResolvedDateWindow(firstNight, firstNight.plusDays(NIGHTS))
         return CampgroundWindow(
             poiId = 1L,
             campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
@@ -81,7 +160,7 @@ class CampgroundWindowTest {
             campsites = campsites,
             streams = streamsFor(campsites, window, observations),
             provider = BookingProvider.RECGOV,
-            campgroundRef = null,
+            campgroundRef = campgroundRef,
             cache = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
             pollingSupported = true,
             reopensOnByCampsite = emptyMap(),

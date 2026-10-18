@@ -2,23 +2,26 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.recgov.Campsite
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
+import ca.floo.roadtrip.fixtures.asWindow
 import ca.floo.roadtrip.fixtures.availableCellIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.cellStatuses
-import ca.floo.roadtrip.model.api.AvailabilityResponseDto
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
+import ca.floo.roadtrip.model.api.AvailabilityWindowState
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
-import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.route.common.encodeApiJson
-import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
+import ca.floo.roadtrip.service.api.embeddedApiJson
+import ca.floo.roadtrip.service.availability.CampgroundWindow
+import ca.floo.roadtrip.service.availability.fusedWindow
+import ca.floo.roadtrip.service.availability.perCampsiteEnvelopes
 import ca.floo.roadtrip.support.RecGovException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -55,43 +58,36 @@ class RecGovObservationsTest {
 
     private fun parseJson(body: String): JsonObject = Json.parseToJsonElement(body).jsonObject
 
-    private fun classify(
+    private fun windowOf(
         client: RecGovAvailabilityClient,
-        days: Int = 7,
-        catalogSiteIds: List<String> = listOf("100"),
-    ): JsonObject {
+        days: Int,
+        catalogSiteIds: List<String>,
+    ): CampgroundWindow {
         val p = RecGovAvailabilityProvider(client, enabled = true)
         val campsites =
             catalogSiteIds.map { siteId ->
                 campsiteFixture(id = siteId.toLong(), vendor = "recgov", vendorId = siteId)
             }
-        val body =
-            encodeApiJson(
-                responseOf(
-                    runBlocking {
-                        p.availability(testCampground(), campsites, today, today.plusDays(days.toLong()))
-                    },
-                    startDate = today,
-                    endDate = today.plusDays(days.toLong()),
-                ),
-            )
-        return parseJson(body)
+        val endDate = today.plusDays(days.toLong())
+        return runBlocking { p.availability(testCampground(), campsites, today, endDate) }
+            .asWindow(BookingProvider.RECGOV, campsites, today, endDate)
     }
 
-    private fun classifyRaw(
+    private fun classify(
         client: RecGovAvailabilityClient,
         days: Int = 7,
+        catalogSiteIds: List<String> = listOf("100"),
     ): JsonObject {
-        val p = RecGovAvailabilityProvider(client, enabled = true)
-        val body =
-            encodeApiJson(
-                responseOf(
-                    runBlocking { p.availability(testCampground(), emptyList(), today, today.plusDays(days.toLong())) },
-                    startDate = today,
-                    endDate = today.plusDays(days.toLong()),
-                ),
-            )
-        return parseJson(body)
+        val window = windowOf(client, days, catalogSiteIds)
+        val envelopes = window.perCampsiteEnvelopes()
+        if (envelopes.size == 1) return parseJson(encodeApiJson(envelopes.single().response))
+        val fused = window.fusedWindow()
+        return JsonObject(
+            mapOf(
+                "state" to embeddedApiJson.encodeToJsonElement(fused.state),
+                "availability" to embeddedApiJson.encodeToJsonElement(fused.days),
+            ),
+        )
     }
 
     private fun testCampground(): Campground =
@@ -159,8 +155,8 @@ class RecGovObservationsTest {
 
     @Test
     fun `empty state when no campsites returned`() {
-        val body = classifyRaw(clientReturning(emptyMap()), days = 7)
-        assertEquals("empty", body["state"]!!.jsonPrimitive.content)
+        val fused = windowOf(clientReturning(emptyMap()), days = 7, catalogSiteIds = emptyList()).fusedWindow()
+        assertEquals(AvailabilityWindowState.EMPTY, fused.state)
     }
 
     @Test
@@ -203,9 +199,10 @@ class RecGovObservationsTest {
                 "100" to campsiteWith((0..1L).associate { futureKey(it) to "Reserved" }),
                 "200" to campsiteWith((0..1L).associate { futureKey(it) to "Not Available" }),
             )
+        val window = windowOf(clientReturning(map), days = 2, catalogSiteIds = listOf("100", "200"))
         val body = classify(clientReturning(map), days = 2, catalogSiteIds = listOf("100", "200"))
 
-        assertEquals("zero_available", body["state"]!!.jsonPrimitive.content)
+        assertEquals(listOf("zero_available", "zero_available"), window.perCampsiteEnvelopes().map { it.response.state })
         assertEquals(
             listOf("reserved", "reserved"),
             body["availability"]!!.jsonArray.map { it.jsonObject["status"]!!.jsonPrimitive.content },
@@ -273,18 +270,12 @@ class RecGovObservationsTest {
                 campsiteFixture(id = 100L, vendor = "recgov", vendorId = "100"),
                 campsiteFixture(id = 200L, vendor = "recgov", vendorId = "200"),
             )
-        val p = RecGovAvailabilityProvider(clientReturning(emptyMap()), enabled = true)
-        val body =
-            encodeApiJson(
-                responseOf(
-                    runBlocking {
-                        p.availability(testCampground(), campsites, today, today.plusDays(1))
-                    },
-                    startDate = today,
-                    endDate = today.plusDays(1),
-                ),
-            )
-        val day = parseJson(body)["availability"]!!.jsonArray.single().jsonObject
+        val day =
+            classify(
+                clientReturning(emptyMap()),
+                days = 1,
+                catalogSiteIds = listOf("100", "200"),
+            )["availability"]!!.jsonArray.single().jsonObject
 
         assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
         assertEquals(0, day.availableCellIds().size)
@@ -455,24 +446,3 @@ class RecGovObservationsTest {
         assertEquals("available", day["status"]!!.jsonPrimitive.content)
     }
 }
-
-/**
- * These tests read parsed statuses, not watchability, so every window is quoted
- * from its own start date by a provider the poller can reach.
- */
-private fun responseOf(
-    observations: CampgroundObservations,
-    startDate: LocalDate,
-    endDate: LocalDate,
-): AvailabilityResponseDto =
-    availabilityResponseFromObservations(
-        provider = BookingProvider.RECGOV.id,
-        campgroundRef = observations.campgroundRef,
-        startDate = startDate,
-        endDate = endDate,
-        observations = observations.observations,
-        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
-        pollingSupported = true,
-        earliestDate = startDate,
-        seasonBlock = null,
-    )

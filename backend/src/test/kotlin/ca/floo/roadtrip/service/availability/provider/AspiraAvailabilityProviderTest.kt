@@ -4,6 +4,8 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailability
 import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
+import ca.floo.roadtrip.fixtures.asWindow
+import ca.floo.roadtrip.fixtures.availableIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
@@ -11,7 +13,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
+import ca.floo.roadtrip.service.availability.fusedWindow
 import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
@@ -275,36 +277,38 @@ class AspiraAvailabilityProviderTest {
                     enabled = true,
                 )
 
+            val campsites =
+                listOf(
+                    campsiteFixture(
+                        id = 100,
+                        vendor = "aspira",
+                        vendorId = "pc:100",
+                        bookingProvider = "aspira",
+                        bookingProviderRef = null,
+                    ),
+                    campsiteFixture(
+                        id = 101,
+                        vendor = "aspira",
+                        vendorId = "pc:101",
+                        bookingProvider = "aspira",
+                        bookingProviderRef = null,
+                    ),
+                )
             val batch =
                 adapter.availability(
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:null"),
-                    campsites =
-                        listOf(
-                            campsiteFixture(
-                                id = 100,
-                                vendor = "aspira",
-                                vendorId = "pc:100",
-                                bookingProvider = "aspira",
-                                bookingProviderRef = null,
-                            ),
-                            campsiteFixture(
-                                id = 101,
-                                vendor = "aspira",
-                                vendorId = "pc:101",
-                                bookingProvider = "aspira",
-                                bookingProviderRef = null,
-                            ),
-                        ),
+                    campsites = campsites,
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-03"),
                 )
 
             val dates =
-                availabilityDatesFromObservations(
-                    startDate = LocalDate.parse("2026-07-01"),
-                    endDate = LocalDate.parse("2026-07-03"),
-                    observations = batch.observations,
-                )
+                batch
+                    .asWindow(BookingProvider.ASPIRA, campsites, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-03"))
+                    .fusedWindow()
+                    .days
+                    .filter { it.availableIds.isNotEmpty() }
+                    .map { it.date }
             assertEquals(listOf("2026-07-01", "2026-07-02"), dates)
         }
 

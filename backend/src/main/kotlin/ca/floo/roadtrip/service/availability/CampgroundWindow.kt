@@ -10,7 +10,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.StreamWindowState
 import ca.floo.roadtrip.service.api.availabilityResponseDto
-import ca.floo.roadtrip.service.api.classifyStreamWindowState
+import ca.floo.roadtrip.service.api.classifyObservedWindowState
 import ca.floo.roadtrip.service.api.dayClassificationFromCampsiteStatuses
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -69,7 +69,7 @@ internal fun CampgroundWindow.perCampsiteEnvelopes(): List<CampsiteEnvelope> {
         .distinct()
         .mapNotNull { streamsById[it] }
         .map { stream ->
-            val state = classifyStreamWindowState(stream.statuses)
+            val state = classifyObservedWindowState(stream.statuses, stream.observed)
             CampsiteEnvelope(
                 response =
                     availabilityResponseDto(
@@ -80,7 +80,12 @@ internal fun CampgroundWindow.perCampsiteEnvelopes(): List<CampsiteEnvelope> {
                             (0 until dayCount).map { offset ->
                                 dayClassificationFromCampsiteStatuses(
                                     date = window.startDate.plusDays(offset.toLong()).toString(),
-                                    statuses = mapOf(stream.campsiteId to stream.statuses[offset]),
+                                    statuses =
+                                        if (stream.observed[offset]) {
+                                            mapOf(stream.campsiteId to stream.statuses[offset])
+                                        } else {
+                                            emptyMap()
+                                        },
                                 )
                             },
                         state = state,

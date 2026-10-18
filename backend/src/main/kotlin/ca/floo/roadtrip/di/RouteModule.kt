@@ -263,12 +263,13 @@ private fun campsiteAvailabilityController(
             dateResolver = dateResolver,
             pollerRepo = pollerRepo,
         )
+    val clock = Clock.systemUTC()
     val readPolicy =
         AvailabilityReadPolicy(
             providers = availabilityProviders,
             dateResolver = dateResolver,
             bookingHorizons = bookingHorizons,
-            clock = Clock.systemUTC(),
+            clock = clock,
             snapshotFreshnessTtl = configuredSnapshotFreshnessTtl(cacheConfig),
         )
     return CampsiteAvailabilityController(
@@ -286,7 +287,7 @@ private fun campsiteAvailabilityController(
         reader =
             CampgroundAvailabilityReader(
                 policy = readPolicy,
-                loader = AvailabilityLoader(availabilityRepo),
+                loader = AvailabilityLoader(availabilityRepo, clock),
                 failoverFetcher = failoverFetcher,
                 availabilityRepo = availabilityRepo,
             ),

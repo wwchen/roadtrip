@@ -1,10 +1,13 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
+import ca.floo.roadtrip.fixtures.asWindow
+import ca.floo.roadtrip.fixtures.availableIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
+import ca.floo.roadtrip.service.availability.fusedWindow
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import kotlin.test.Test
@@ -136,24 +139,26 @@ class RecGovAvailabilityProviderTest {
                 }
             val adapter = RecGovAvailabilityProvider(client, enabled = true)
 
+            val campsites =
+                listOf(
+                    campsiteFixture(id = 330257, vendor = "recgov", vendorId = "330257"),
+                    campsiteFixture(id = 330258, vendor = "recgov", vendorId = "330258"),
+                )
             val batch =
                 adapter.availability(
                     campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
-                    campsites =
-                        listOf(
-                            campsiteFixture(id = 330257, vendor = "recgov", vendorId = "330257"),
-                            campsiteFixture(id = 330258, vendor = "recgov", vendorId = "330258"),
-                        ),
+                    campsites = campsites,
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-03"),
                 )
 
             val dates =
-                availabilityDatesFromObservations(
-                    startDate = LocalDate.parse("2026-07-01"),
-                    endDate = LocalDate.parse("2026-07-03"),
-                    observations = batch.observations,
-                )
+                batch
+                    .asWindow(BookingProvider.RECGOV, campsites, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-03"))
+                    .fusedWindow()
+                    .days
+                    .filter { it.availableIds.isNotEmpty() }
+                    .map { it.date }
             assertEquals(listOf("2026-07-01", "2026-07-02"), dates)
         }
 

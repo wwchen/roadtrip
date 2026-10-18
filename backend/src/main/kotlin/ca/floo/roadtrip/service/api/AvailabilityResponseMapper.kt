@@ -10,63 +10,15 @@ import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.DayClassification
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-// Shared response shape for the unified availability endpoints.
-// Both rec.gov and Aspira providers feed the same downstream classification
-// + render path so the FE drawer.js doesn't have to learn two contracts.
-//
-// Each provider's route is responsible for translating its upstream payload
-// into a List<DayClassification> via its own classifyDays() — only the
-// inputs differ (rec.gov: per-campsite per-day status strings; Aspira:
-// per-sub-area per-day status codes). Everything below is provider-agnostic.
-
-fun dayClassificationsFromObservations(
-    startDate: LocalDate,
-    endDate: LocalDate,
-    observations: List<CampsiteDayObservation>,
-): List<DayClassification> {
-    val byDate =
-        observations
-            .asSequence()
-            .filter { !it.date.isBefore(startDate) && it.date.isBefore(endDate) }
-            .groupBy { it.date }
-    val days = ChronoUnit.DAYS.between(startDate, endDate).toInt()
-    return (0 until days).map { offset ->
-        val date = startDate.plusDays(offset.toLong())
-        val latestByCampsite = linkedMapOf<Long, CampsiteDayObservation>()
-        for (observation in byDate[date].orEmpty()) {
-            val campsiteId = observation.campsiteId ?: continue
-            val current = latestByCampsite[campsiteId]
-            if (current == null || !observation.observedAt.isBefore(current.observedAt)) {
-                latestByCampsite[campsiteId] = observation
-            }
-        }
-        val statuses = latestByCampsite.mapValues { (_, observation) -> observation.status }
-        dayClassificationFromCampsiteStatuses(date.toString(), statuses)
-    }
-}
-
-fun availabilityDatesFromObservations(
-    startDate: LocalDate,
-    endDate: LocalDate,
-    observations: List<CampsiteDayObservation>,
-): List<String> =
-    dayClassificationsFromObservations(startDate, endDate, observations)
-        .filter { it.availableCampsiteIds.orEmpty().isNotEmpty() }
-        .map { it.date }
-
 /**
  * One campsite's window as a status per date: the latest observation for each
  * date, `UNKNOWN` where the campsite went unobserved.
- *
- * The slim counterpart to [dayClassificationsFromObservations], for callers that
- * fuse the streams themselves and would throw away everything but the status.
  */
 internal fun campsiteWindowStatuses(
     startDate: LocalDate,
@@ -87,33 +39,6 @@ internal fun campsiteWindowStatuses(
     }
 }
 
-internal fun availabilityResponseFromObservations(
-    provider: String,
-    campgroundRef: BookingProviderRef?,
-    startDate: LocalDate,
-    endDate: LocalDate,
-    observations: List<CampsiteDayObservation>,
-    cacheBlock: AvailabilityCacheBlock,
-    pollingSupported: Boolean,
-    earliestDate: LocalDate,
-    seasonBlock: AvailabilitySeasonBlock?,
-): AvailabilityResponseDto {
-    val perDay = dayClassificationsFromObservations(startDate, endDate, observations)
-    val state = classifyWindowState(perDay)
-    return availabilityResponseDto(
-        provider = provider,
-        startDate = startDate,
-        endDate = endDate,
-        perDay = perDay,
-        state = state,
-        seasonBlock = seasonBlock.takeIf { state == StreamWindowState.CLOSED_FOR_SEASON },
-        cacheBlock = cacheBlock,
-        pollingSupported = pollingSupported,
-        earliestDate = earliestDate,
-        scopeRef = campgroundRef?.serialize(),
-    )
-}
-
 fun dayClassificationFromCampsiteStatuses(
     date: String,
     statuses: Map<Long, AvailabilityStatus>,
@@ -129,20 +54,6 @@ fun dayClassificationFromCampsiteStatuses(
         status = rollupStatus(sorted.values),
         availableCampsiteIds = availableIds,
         campsiteStatuses = sorted,
-    )
-}
-
-fun dayClassificationFromStatuses(
-    date: String,
-    statuses: List<AvailabilityStatus>,
-): DayClassification {
-    val keyedStatuses =
-        statuses
-            .mapIndexed { index, status -> index.toLong() to status }
-            .toMap()
-    return dayClassificationFromCampsiteStatuses(
-        date = date,
-        statuses = keyedStatuses,
     )
 }
 
@@ -176,15 +87,16 @@ internal enum class StreamWindowState(
     ZERO_AVAILABLE("zero_available"),
 }
 
-/** Roll up per-day classifications into a single window-level state. */
-internal fun classifyWindowState(days: List<DayClassification>): StreamWindowState =
-    windowState(days.map { day -> day.status.takeIf { day.campsiteStatuses.orEmpty().isNotEmpty() } })
-
 /**
  * The same rule over one campsite's per-date statuses, where an unobserved date
  * is already `UNKNOWN` and so indistinguishable from an observed one.
  */
 internal fun classifyStreamWindowState(statuses: List<AvailabilityStatus>): StreamWindowState = windowState(statuses)
+
+internal fun classifyObservedWindowState(
+    statuses: List<AvailabilityStatus>,
+    observed: List<Boolean>,
+): StreamWindowState = windowState(statuses.zip(observed) { status, seen -> status.takeIf { seen } })
 
 /** Null is a date nobody observed; the rollup of an observed date is never null. */
 private fun windowState(perDay: List<AvailabilityStatus?>): StreamWindowState {

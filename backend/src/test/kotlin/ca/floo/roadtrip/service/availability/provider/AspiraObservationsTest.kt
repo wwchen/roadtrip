@@ -4,12 +4,11 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailability
 import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
+import ca.floo.roadtrip.fixtures.asWindow
 import ca.floo.roadtrip.fixtures.availableIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.statuses
-import ca.floo.roadtrip.model.api.AvailabilityResponseDto
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampgroundObservations
@@ -17,7 +16,8 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
+import ca.floo.roadtrip.service.availability.FusedWindow
+import ca.floo.roadtrip.service.availability.fusedWindow
 import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonNull
@@ -150,22 +150,26 @@ class AspiraObservationsTest {
                     aspiraCampsite(3, "3"),
                     aspiraCampsite(4, "4"),
                 )
-            val dto =
-                responseOf(
-                    provider.availability(
-                        campground = aspiraCampground("wa", -999),
-                        campsites = campsites,
-                        startDate = LocalDate.parse("2026-07-01"),
-                        endDate = LocalDate.parse("2026-07-03"),
-                    ),
+            val observations =
+                provider.availability(
+                    campground = aspiraCampground("wa", -999),
+                    campsites = campsites,
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-03"),
                 )
+            val window =
+                observations.asWindow(
+                    BookingProvider.ASPIRA,
+                    campsites,
+                    LocalDate.parse("2026-07-01"),
+                    LocalDate.parse("2026-07-03"),
+                )
+            val dto = window.fusedWindow()
 
-            assertEquals("wa:-999:-999:null", dto.scopeRef)
-            assertEquals(listOf(1L, 3L), dto.availability[0].availableIds)
-            assertEquals(4, dto.availability[0].statuses.size)
-            assertEquals(4, dto.availability[1].statuses.size)
+            assertEquals("wa:-999:-999:null", window.campgroundRef?.serialize())
+            assertEquals(listOf(1L, 3L), dto.days[0].availableIds)
+            assertEquals(4, dto.days[0].statuses.size)
+            assertEquals(4, dto.days[1].statuses.size)
         }
 
     @Test
@@ -203,18 +207,19 @@ class AspiraObservationsTest {
                         startDate = LocalDate.parse("2026-07-09"),
                         endDate = LocalDate.parse("2026-07-10"),
                     ),
+                    campsites = campsites,
                     startDate = LocalDate.parse("2026-07-09"),
                     endDate = LocalDate.parse("2026-07-10"),
                 )
 
-            assertEquals(listOf(1L), dto.availability.single().availableIds)
+            assertEquals(listOf(1L), dto.days.single().availableIds)
             assertEquals(
                 mapOf(
                     1L to AvailabilityStatus.AVAILABLE,
                     2L to AvailabilityStatus.RESERVED,
                     3L to AvailabilityStatus.RESERVED,
                 ),
-                dto.availability.single().statuses,
+                dto.days.single().statuses,
             )
         }
 
@@ -261,15 +266,16 @@ class AspiraObservationsTest {
                         startDate = LocalDate.parse("2026-08-22"),
                         endDate = LocalDate.parse("2026-08-26"),
                     ),
+                    campsites = campsites,
                     startDate = LocalDate.parse("2026-08-22"),
                     endDate = LocalDate.parse("2026-08-26"),
                 )
 
-            assertEquals(emptyList(), dto.availability[0].availableIds)
-            assertEquals(AvailabilityStatus.RESERVED, dto.availability[0].status)
-            assertEquals(AvailabilityStatus.RESERVED, dto.availability[1].status)
-            assertEquals(listOf(BC_PARKS_TEST_CAMPSITE_ID), dto.availability[2].availableIds)
-            assertEquals(AvailabilityStatus.CLOSED, dto.availability[3].status)
+            assertEquals(emptyList(), dto.days[0].availableIds)
+            assertEquals(AvailabilityStatus.RESERVED, dto.days[0].status)
+            assertEquals(AvailabilityStatus.RESERVED, dto.days[1].status)
+            assertEquals(listOf(BC_PARKS_TEST_CAMPSITE_ID), dto.days[2].availableIds)
+            assertEquals(AvailabilityStatus.CLOSED, dto.days[3].status)
         }
 
     @Test
@@ -319,6 +325,7 @@ class AspiraObservationsTest {
                         startDate = LocalDate.parse("2026-08-22"),
                         endDate = LocalDate.parse("2026-08-23"),
                     ),
+                    campsites = campsites,
                     startDate = LocalDate.parse("2026-08-22"),
                     endDate = LocalDate.parse("2026-08-23"),
                 )
@@ -332,7 +339,7 @@ class AspiraObservationsTest {
                     ALICE_LAKE_LOOP_A_CAMPSITE_ID to AvailabilityStatus.RESERVED,
                     ALICE_LAKE_WALK_IN_CAMPSITE_ID to AvailabilityStatus.AVAILABLE,
                 ),
-                dto.availability.single().statuses,
+                dto.days.single().statuses,
             )
         }
 
@@ -361,14 +368,15 @@ class AspiraObservationsTest {
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-02"),
                     ),
+                    campsites = campsites,
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-02"),
                 )
 
-            assertEquals(AvailabilityStatus.UNKNOWN, dto.availability.single().status)
+            assertEquals(AvailabilityStatus.UNKNOWN, dto.days.single().status)
             assertEquals(
                 mapOf(100L to AvailabilityStatus.UNKNOWN),
-                dto.availability.single().statuses,
+                dto.days.single().statuses,
             )
         }
 
@@ -415,12 +423,13 @@ class AspiraObservationsTest {
                         startDate = LocalDate.parse("2026-06-17"),
                         endDate = LocalDate.parse("2026-06-19"),
                     ),
+                    campsites = campsites,
                     startDate = LocalDate.parse("2026-06-17"),
                     endDate = LocalDate.parse("2026-06-19"),
                 )
 
-            assertEquals(listOf(100L), dto.availability[0].availableIds)
-            assertEquals(AvailabilityStatus.RESERVED, dto.availability[1].status)
+            assertEquals(listOf(100L), dto.days[0].availableIds)
+            assertEquals(AvailabilityStatus.RESERVED, dto.days[1].status)
         }
 }
 
@@ -502,23 +511,9 @@ private fun fakeAspiraClient(
                 ?: error("fakeAspiraClient.fetchOccupancy not stubbed")
     }
 
-/**
- * These tests read parsed statuses, not watchability, so every window is quoted
- * from its own start date by a provider the poller can reach.
- */
 private fun responseOf(
     observations: CampgroundObservations,
+    campsites: List<Campsite>,
     startDate: LocalDate,
     endDate: LocalDate,
-): AvailabilityResponseDto =
-    availabilityResponseFromObservations(
-        provider = BookingProvider.ASPIRA.id,
-        campgroundRef = observations.campgroundRef,
-        startDate = startDate,
-        endDate = endDate,
-        observations = observations.observations,
-        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
-        pollingSupported = true,
-        earliestDate = startDate,
-        seasonBlock = null,
-    )
+): FusedWindow = observations.asWindow(BookingProvider.ASPIRA, campsites, startDate, endDate).fusedWindow()
