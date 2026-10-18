@@ -46,37 +46,6 @@ class ReserveAmericaAvailabilityProvider(
 
     override suspend fun availability(
         campground: Campground,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch {
-        val reserveAmericaRef = reserveAmericaRefOrThrow(campground)
-        val tenant = tenantForRef(reserveAmericaRef)
-        val data = fetch(tenant, reserveAmericaRef.parkId, startDate, endDate)
-        val observations =
-            data.statuses.flatMap { (_, byDate) ->
-                dates(startDate, endDate).map { date ->
-                    CampsiteDayObservation(
-                        campsiteId = null,
-                        date = date,
-                        observedAt = data.observedAt,
-                        status = byDate[date] ?: AvailabilityStatus.UNKNOWN,
-                    )
-                }
-            }
-        return batch(
-            scope =
-                BookingProviderRef.ReserveAmerica(
-                    contractCode = tenant.contractCode,
-                    parkId = reserveAmericaRef.parkId,
-                ),
-            startDate = startDate,
-            endDate = endDate,
-            observations = observations,
-        )
-    }
-
-    override suspend fun catalogAvailability(
-        campground: Campground,
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -84,6 +53,10 @@ class ReserveAmericaAvailabilityProvider(
         val reserveAmericaRef = reserveAmericaRefOrThrow(campground)
         val tenant = tenantForRef(reserveAmericaRef)
         val data = fetch(tenant, reserveAmericaRef.parkId, startDate, endDate)
+        // One park matrix per call, so every campsite's cells are already in this
+        // response. The matrix can also carry sibling campgrounds of the park,
+        // whose cells we could key and store too — that needs a caller that knows
+        // those campgrounds, and is left alone here.
         val observations =
             campsites.flatMap { campsite ->
                 observationsForReservable(
@@ -130,7 +103,7 @@ class ReserveAmericaAvailabilityProvider(
         }
 
     private fun observationsForReservable(
-        campsiteId: Long?,
+        campsiteId: Long,
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
         observedAt: Instant,

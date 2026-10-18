@@ -25,6 +25,12 @@ internal data class CampsiteAvailabilityResult(
     /** The serving provider's booking horizon, for the client's date picker. */
     val latestDate: LocalDate,
     val batch: AvailabilityObservationBatch,
+    /**
+     * Per campsite of this read, the earliest stored date it is bookable — the
+     * material a "closed for the season, reopening on X" answer is reduced from.
+     * Read from the table, so it is the same on a cache hit as on a fetch.
+     */
+    val reopensOnByCampsite: Map<Long, LocalDate>,
 )
 
 internal class CampsiteAvailabilityService(
@@ -32,15 +38,26 @@ internal class CampsiteAvailabilityService(
     private val dateResolver: AvailabilityDateResolver,
     private val failoverFetcher: FailoverAvailabilityFetcher,
     private val bookingHorizons: BookingHorizonResolver,
-    availabilityRepo: AvailabilityRepo? = null,
+    private val availabilityRepo: AvailabilityRepo? = null,
     private val clock: Clock = Clock.systemUTC(),
     private val snapshotFreshnessTtl: (provider: AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
 ) {
     private val availabilityLoader = AvailabilityLoader(availabilityRepo, clock)
 
+    /**
+     * One campground's availability, as the base-unit facts for [campsites].
+     *
+     * [campgroundCampsites] is the campground's whole campsite set and is what
+     * the provider port is given: the one upstream call covers the campground, so
+     * every campsite's cells are stored, and the next read of any of them is
+     * served without calling the vendor. [campsites] is this read's own
+     * narrowing — the cells it answers from and the campsites its season block is
+     * reduced over — and it goes no further down than here.
+     */
     suspend fun fetchAvailability(
         campground: Campground,
         campsites: List<Campsite>,
+        campgroundCampsites: List<Campsite> = campsites,
         startDate: LocalDate?,
         endDate: LocalDate?,
         dateContext: PoiDateContext,
@@ -86,7 +103,7 @@ internal class CampsiteAvailabilityService(
                     failoverFetcher.fetch(
                         providers = supportingProviders,
                         campground = campground,
-                        campsites = campsites,
+                        campsites = campgroundCampsites,
                         window = ResolvedDateWindow(windows.fetch.startDate, windows.fetch.endDate),
                     )
                 result.batch ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
@@ -98,7 +115,26 @@ internal class CampsiteAvailabilityService(
             // providerFor above already found a provider for this campground, so the same pick here can't miss.
             latestDate = bookingHorizons.latestDate(campground, dateContext)!!,
             batch = batch,
+            reopensOnByCampsite = reopensOnByCampsite(campsites, batch, windows.target.startDate),
         )
+    }
+
+    /**
+     * Only the campsites with nothing bookable in the window have a reopen date
+     * to look up — the others are open, and asking the table about them would be
+     * a round trip per read for an answer nobody surfaces. A campsite that *is*
+     * shut this window may still reopen inside a stored cell beyond it, which is
+     * the whole point of reading past the window here.
+     */
+    private fun reopensOnByCampsite(
+        campsites: List<Campsite>,
+        batch: AvailabilityObservationBatch,
+        from: LocalDate,
+    ): Map<Long, LocalDate> {
+        val repo = availabilityRepo ?: return emptyMap()
+        val bookable = batch.observations.filter { it.status.isOnlineBookable }.mapNotNullTo(mutableSetOf()) { it.campsiteId }
+        val shut = campsites.map { it.id }.filterNot { it in bookable }
+        return repo.earliestBookableDates(shut, from)
     }
 
     private fun providerFor(campground: Campground): AvailabilityProvider =

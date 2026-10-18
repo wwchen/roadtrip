@@ -746,12 +746,6 @@ private class ServingRecgovProvider(
 
     override suspend fun availability(
         campground: Campground,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch = throw UnsupportedOperationException("catalogAvailability is the read-slice entry point")
-
-    override suspend fun catalogAvailability(
-        campground: Campground,
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,

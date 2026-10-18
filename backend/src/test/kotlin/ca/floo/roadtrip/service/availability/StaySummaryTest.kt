@@ -242,5 +242,6 @@ private fun sliceOver(
                 observations = observations,
                 cacheBlock = cacheBlock,
             ),
+        reopensOnByCampsite = emptyMap(),
         pollingSupported = true,
     )

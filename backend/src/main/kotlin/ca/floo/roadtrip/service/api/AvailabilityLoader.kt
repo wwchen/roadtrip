@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
@@ -72,7 +71,6 @@ class AvailabilityLoader(
                 request = request.copy(metadata = metadataFromBatch(fetched, request.metadata)),
                 rows = latest,
                 hit = false,
-                seasonBlock = fetched.seasonBlock,
             )
         } else {
             sliceToTarget(fetched, request)
@@ -148,7 +146,6 @@ class AvailabilityLoader(
         request: Request,
         rows: List<AvailabilityRepo.CurrentCell>,
         hit: Boolean,
-        seasonBlock: AvailabilitySeasonBlock? = null,
     ): AvailabilityObservationBatch {
         val now = Instant.now(clock)
         return AvailabilityObservationBatch(
@@ -170,7 +167,6 @@ class AvailabilityLoader(
                     ageSeconds = maxAgeSeconds(rows, now),
                     ttlSeconds = effectiveTtlSeconds(request),
                 ),
-            seasonBlock = seasonBlock,
             scope = request.metadata.scope,
             campsiteId = request.metadata.campsiteId,
         )

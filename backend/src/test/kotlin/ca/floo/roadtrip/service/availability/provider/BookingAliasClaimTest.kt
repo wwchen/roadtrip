@@ -145,7 +145,7 @@ class BookingAliasClaimTest {
                 }
 
             val batch =
-                RecGovAvailabilityProvider(client, enabled = true).catalogAvailability(
+                RecGovAvailabilityProvider(client, enabled = true).availability(
                     campground = aliasedCampground,
                     campsites =
                         listOf(
@@ -181,6 +181,7 @@ class BookingAliasClaimTest {
             val batch =
                 provider.availability(
                     campground = aliased,
+                    campsites = listOf(aliasClaimCampsite),
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-02"),
                 )
@@ -204,6 +205,7 @@ class BookingAliasClaimTest {
             val batch =
                 provider.availability(
                     campground = aliased,
+                    campsites = listOf(aliasClaimCampsite),
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-02"),
                 )
@@ -286,3 +288,7 @@ class BookingAliasClaimTest {
             enabled = true,
         )
 }
+
+/** One campsite, so an adapter that shapes its fetch per campsite has something to ask about. */
+private val aliasClaimCampsite =
+    campsiteFixture(id = 1, vendor = "aspira", vendorId = "1", bookingProvider = "aspira", bookingProviderRef = null)

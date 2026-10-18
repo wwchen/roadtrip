@@ -53,7 +53,7 @@ class ReserveAmericaAvailabilityProviderTest {
                 )
 
             val batch =
-                adapter.catalogAvailability(
+                adapter.availability(
                     campground = testCampground(bookingProvider = "reserveamerica", bookingProviderRef = "NY:489"),
                     campsites =
                         listOf(

@@ -40,28 +40,6 @@ class ReserveCaliforniaAvailabilityProvider(
 
     override suspend fun availability(
         campground: Campground,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch {
-        val reserveCaliforniaRef = reserveCaliforniaRefOrThrow(campground)
-        val grids = fetchFacilities(reserveCaliforniaRef, startDate, endDate)
-        val dates = dates(startDate, endDate)
-        val observations =
-            grids.flatMap { grid ->
-                grid.statuses.flatMap { (unitId, byDate) ->
-                    observationsForReservable(
-                        campsiteId = null,
-                        byDate = byDate,
-                        dates = dates,
-                        observedAt = grid.observedAt,
-                    )
-                }
-            }
-        return batch(reserveCaliforniaRef, startDate, endDate, observations)
-    }
-
-    override suspend fun catalogAvailability(
-        campground: Campground,
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -73,6 +51,8 @@ class ReserveCaliforniaAvailabilityProvider(
                 .flatMap { grid -> grid.statuses.map { (unitId, byDate) -> unitId to (grid.observedAt to byDate) } }
                 .toMap()
         val dates = dates(startDate, endDate)
+        // The grids come per facility id off the campground's ref, not per
+        // campsite, so every campsite's cells are already here.
         val observations =
             campsites.flatMap { campsite ->
                 val found = byUnit[campsite.reserveCaliforniaVendorId()]
@@ -109,7 +89,7 @@ class ReserveCaliforniaAvailabilityProvider(
         }
 
     private fun observationsForReservable(
-        campsiteId: Long?,
+        campsiteId: Long,
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
         observedAt: Instant,

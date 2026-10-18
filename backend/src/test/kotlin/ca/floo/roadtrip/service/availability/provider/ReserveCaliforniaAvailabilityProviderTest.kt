@@ -71,7 +71,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
             val provider = ReserveCaliforniaAvailabilityProvider(availabilityClient = availabilityClient, enabled = true)
 
             val batch =
-                provider.catalogAvailability(
+                provider.availability(
                     campground = testCampground(bookingProvider = "reservecalifornia", bookingProviderRef = "690:611,612"),
                     campsites =
                         listOf(
@@ -125,7 +125,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
             val availabilityClient = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
             val provider = ReserveCaliforniaAvailabilityProvider(availabilityClient = availabilityClient, enabled = true)
 
-            provider.catalogAvailability(
+            provider.availability(
                 campground = testCampground(bookingProvider = "reservecalifornia", bookingProviderRef = "690:611,612"),
                 campsites = emptyList(),
                 startDate = LocalDate.parse("2026-12-15"),
@@ -162,7 +162,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
                 )
 
             val batch =
-                provider.catalogAvailability(
+                provider.availability(
                     campground = testCampground(bookingProvider = "reservecalifornia", bookingProviderRef = "690:611"),
                     campsites =
                         listOf(
