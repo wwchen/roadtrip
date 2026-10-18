@@ -65,5 +65,5 @@ alongside in the `booking_aliases` bag (V59 canonicalizes rows that previously
 stamped rec.gov as their primary). Both identities are claimable, so when
 rec.gov is enabled it serves availability and takes the booking for the same
 inventory, and when it is not, Campflare does — the same row, under whichever
-vendor answers. `claimedRef` is how a provider says which of the two it matched;
+vendor answers. `claimedCampgroundRef` is how a provider says which of the two it matched;
 nothing above the adapter needs to know a row has more than one identity.

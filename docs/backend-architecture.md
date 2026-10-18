@@ -267,18 +267,23 @@ polling must resolve the same provider targets.
 
 ```
 routes
-  -> service.availability
-  -> target resolver
+  -> availability controller
+  -> CampgroundAvailabilityReader        (AvailabilityReadPolicy: window, provider, TTL)
+  -> AvailabilityLoader                  (LoadedCells: stored cells, else a fetch)
+  -> FailoverAvailabilityFetcher         (target resolver's ordered candidates)
   -> service.availability.provider
-  -> provider adapter
-  -> provider-neutral availability observations
-  -> API DTO mapper
+  -> provider adapter                    (returns CampgroundObservations)
+  -> CampgroundWindow                    (the read model: streams of cells)
+  -> response functions + API DTO mapper (pure, over the CampgroundWindow)
 ```
+
+A **cell** is one campsite-night fact, a **stream** is one campsite across a
+window, and a **window** is the campground-level unit of fetching and caching.
 
 Route code never parses provider references and never calls vendor adapters
 directly. Provider-specific richness stays inside the adapter or in explicit
 extension points owned by the availability-provider layer.
-`AvailabilityObservationBatch.scope` is the typed `BookingProviderRef` the adapter fetched under; adapters never put vendor ids in generic fields.
+`CampgroundObservations.campgroundRef` is the typed `BookingProviderRef` the adapter fetched under; adapters never put vendor ids in generic fields.
 
 ## ETL Flow
 

@@ -21,7 +21,7 @@ Rec.gov exposes two surfaces we use, and they serve different phases:
   string when rec.gov is the row's primary, parsed as
   `BookingProviderRef.RecGov(facilityId)`. A Campflare-primary row that
   rec.gov also sells carries the same facility id as a `booking_aliases`
-  entry instead — `AvailabilityProvider.claimedRef` checks the primary, then
+  entry instead — `AvailabilityProvider.claimedCampgroundRef` checks the primary, then
   the alias, so either shape resolves to one `BookingProviderRef.RecGov`
   before it reaches this adapter. A campground whose ref is neither is
   rejected with `AvailabilityProviderError.WrongRefType`.

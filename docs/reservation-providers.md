@@ -92,11 +92,12 @@ normalized availability contract plus identity, capabilities, ref handling, and
 booking-link metadata. There is no separate registry class — dispatch is
 `providers.firstOrNull { it.supportsCampground(campground) }`, which asks each
 adapter about the concrete catalog row rather than about a bare provider id.
-One rule for every adapter: enabled, and `claimedRef(campground)` is non-null —
-the primary ref when it is this provider's, else the matching alias parsed as
-this provider's `BookingProviderRef`. `parentRefFor` and `vendorSiteIdFor`
-resolve the same way, so an aliased row keeps the `parent_ref` key its live
-poller already stores. Aspira overrides `supportsCampground` to also require a
+One rule for every adapter: enabled, and `claimedCampgroundRef(campground)` is
+non-null — the primary ref when it is this provider's, else the matching alias
+parsed as this provider's `BookingProviderRef`. `campgroundRefFor` and
+`vendorSiteIdFor` resolve the same way, so an aliased row keeps the
+`parent_ref` key its live poller already stores. (`parent_ref` is the column
+and wire name; in Kotlin the same value is `campgroundRef`.) Aspira overrides `supportsCampground` to also require a
 tenant it is configured for, which a `BookingProvider`-keyed lookup could not
 express.
 Boot wiring assembles that list as one Koin singleton
@@ -106,7 +107,7 @@ HTTP clients under `clients/` stay vendor-specific because their upstream
 request and response shapes are genuinely different; each client interface is
 its own `AutoCloseable` (e.g. `RecGovAvailabilityClient`,
 `CampflareAvailabilityClient`). The adapter boundary is where those shapes
-become provider-neutral `AvailabilityObservationBatch` values.
+become provider-neutral `CampgroundObservations` values.
 
 There is no runtime fallback-mode registry either. Availability services
 enumerate candidate providers from the catalog row via
@@ -124,8 +125,16 @@ service/availability/
 ├── ResolvedAvailabilityTarget.kt        # (campsite, provider, campground, dateContext, candidates)
 ├── FailoverAvailabilityFetcher.kt       # walks candidates on retryable failure; records per-attempt outcomes
 ├── ProviderCooldownTracker.kt           # in-process demote-on-failure for BookingProvider
-├── CatalogAvailabilityBatcher.kt        # groups resolved targets by (provider, parentRef, dateContext)
-├── PoiAvailabilityFusion.kt             # campsite streams → the campground week (rollup, cells, watchability)
+├── CatalogAvailabilityBatcher.kt        # groups resolved targets by (provider, campgroundRef, dateContext)
+├── AvailabilityReadPolicy.kt            # per read: serving provider, target + fetch windows, freshness TTL, horizon
+├── CampgroundAvailabilityReader.kt      # one read: policy → AvailabilityLoader → streams → CampgroundWindow
+├── CampgroundWindow.kt                  # the read model: one campground over one window (data only)
+├── CampgroundWindowResponses.kt         # pure functions over CampgroundWindow: narrow, fuse, per-campsite envelopes
+├── CampsiteStream.kt                    # one campsite across a window; stream builders and window-state classifiers
+├── FusedWindow.kt                       # the campground week: state, season, cache, per-day cells
+├── PoiAvailabilityFusion.kt             # campsite streams → FusedWindow (rollup, cells, watchability)
+├── CampsiteAvailabilityController.kt    # POI → CampgroundWindow for the detail route
+├── BulkAvailabilityController.kt        # fans CampgroundWindow reads out over many POIs
 ├── TriggerActionHandler.kt              # fire-side registry (notification/ATC kinds; unknown kinds inert)
 ├── AtcTriggerActionHandler.kt           # `atc` → booking adapter, then the owner's Slack + email
 ├── NotifyTriggerActionHandler.kt        # `slack_notify` / `email_notify` → notification targets
@@ -135,10 +144,36 @@ service/availability/
     └── InternalPollerAlertProvider.kt   # today's poller-membership sync + orphan deactivation
 ```
 
-`CampsiteAvailabilityService.kt` and `CampsiteCatalogService.kt` (POI →
-linked campsites) live beside the resolver in `service/availability/` and are
-what `CampsiteRoutes` actually calls — there is no separate top-level
+`CampsiteCatalogService.kt` (POI → linked campsites) and the two controllers
+live beside the resolver in `service/availability/` and are what
+`CampsiteRoutes` actually calls — there is no separate top-level
 `AvailabilityService.kt` file.
+
+### The read path
+
+A read answers one campground over one window, and everything in it is named by
+grain: a **cell** is one campsite-night fact, a **stream** is one campsite's
+cells across a window, and a **window** is the campground-level unit of fetching
+and caching.
+
+1. The controller resolves the POI to a campground and its campsites, then asks
+   `CampgroundAvailabilityReader` to read.
+2. `AvailabilityReadPolicy` decides what the read is: the serving provider, the
+   target window (what the caller asked for) and the wider fetch window (what
+   one upstream call covers), the freshness TTL, and the booking horizon. The
+   reader holds none of that policy.
+3. `AvailabilityLoader` returns `LoadedCells`: the stored cells for the target
+   window, plus a `FetchedObservations` (the adapter's `CampgroundObservations`
+   and which provider served it) when the store could not answer. It stores
+   every cell a fetch carries and answers from the request's own campsites.
+4. The reader builds one `CampsiteStream` per requested campsite and returns a
+   `CampgroundWindow`: the campground, the window, the streams, the serving
+   provider, the `campgroundRef`, the cache block, and the reopening dates.
+5. The response layer is pure functions over that `CampgroundWindow`
+   (`CampgroundWindowResponses.kt`): `narrowedTo` re-scopes it to a subset of
+   campsites, `fusedWindow` folds the streams into a `FusedWindow` for the
+   detail endpoint, and `perCampsiteEnvelopes` builds the per-campsite bodies
+   for the bulk endpoint. `CampgroundWindow` is data only; nothing on it derives.
 
 Availability services load persisted `Campsite` rows and resolve them into
 `ResolvedAvailabilityTarget` before calling provider adapters. The
@@ -319,7 +354,7 @@ name, whether it `sells`, and its tenants (`code`, `host`, `display_name`).
 <name>"` when it does not), `linkLabel(host)`, and `tenantsOf(provider)`.
 `BookingAdapter` has no `displayName`: `AtcTriggerActionHandler`,
 `WatchCapabilityService`, `BookingActionService`, and `CampgroundCta` all ask
-the registry, keyed by the target's `parentRef`, so a tenant is named the same
+the registry, keyed by the target's `campgroundRef`, so a tenant is named the same
 everywhere. `booking_system` reads the tenant (`BC Parks`), not the platform
 (`Aspira NextGen`); a ref whose tenant the registry does not know reads the
 vendor name.
@@ -331,7 +366,7 @@ availability provider's claim, else the declared primary. It does not consult
 the ATC companion.
 
 **Copy names the provider that acted.** An ATC outcome travels as
-`AtcResultNotice`, carrying the registry's name for the target's `parentRef`
+`AtcResultNotice`, carrying the registry's name for the target's `campgroundRef`
 as `bookingSystem` and the holding adapter's `cartUrl`; the email body and the
 Slack card read those instead of a vendor literal. The Slack openings footer
 names the booking site the alert's Reserve links lead to —
@@ -472,7 +507,7 @@ cannot answer it differently.
 The bulk endpoint's `view: summary` reduces each campground to how one stay looks
 there — `open`, `few_left`, `full`, `closed_for_season` or `no_data`, plus how many
 campsites are bookable every night of it — for the map view's availability check.
-It reads the same slice and the same per-night statuses as the rest of this
+It reads the same `CampgroundWindow` and the same per-night statuses as the rest of this
 section (`service/availability/StaySummary.kt`), so the status is decided once,
 here, and never in a browser.
 
@@ -492,7 +527,7 @@ suspend fun availability(
     campsites: List<Campsite>,
     startDate: LocalDate,
     endDate: LocalDate,
-): AvailabilityObservationBatch
+): CampgroundObservations
 ```
 
 `campsites` is the campsites of the campground to cover. It is id-resolution and
@@ -502,8 +537,9 @@ serving a request passes the campground's whole set whatever the request
 filtered to, because the upstream call covers the campground either way; pass
 less and the cells of the campsites the filter dropped are paid for and thrown
 away, and the next request calls the vendor again for a campground just called.
-`AvailabilityLoader` stores every cell a batch carries and answers from the
-request's own targets, so a wider batch never widens a response.
+`AvailabilityLoader` stores every cell a `CampgroundObservations` carries and
+answers from the request's own targets, so a wider fetch never widens a
+response.
 
 Two rules are the contract:
 
@@ -532,14 +568,14 @@ alone for now.
 request asked about, so it is not a provider's to state.
 `AvailabilityRepo.earliestBookableDates(campsiteIds, from)` reads, per campsite,
 the earliest stored date whose current observation is bookable.
-`CampsiteAvailabilityService` asks only about the campsites with nothing bookable
-in the window — the others have no reopening to report — and the slice reduces
-over the campsites it answers for. A cabin-filtered read is therefore never told
+`CampgroundAvailabilityReader` asks only about the campsites whose stream is
+closed for the season — the others have no reopening to report — and the
+`CampgroundWindow` reduces over the campsites it answers for. A cabin-filtered read is therefore never told
 when the tents reopen.
 
 Reading it from the table is also what makes it survive a cache hit. It used to
-be a by-product of the call that fetched: the loader passed the fetched batch's
-block on a miss and had none to pass on a hit, so the same request twice answered
+be a by-product of the call that fetched: the loader passed the fetched
+observations' block on a miss and had none to pass on a hit, so the same request twice answered
 `closed_for_season` with a `reopens_on` and then without one. The reach is now
 the reach of stored cells, which is as wide as the fetch window that covered
 them.
@@ -548,7 +584,7 @@ them.
 
 The same campground-level set, by a different route.
 `DbAvailabilityTargetResolver.resolve(poller)` reads the POI's campsites and
-keeps the ones under the poller's `(provider, parentRef)`, so a watch scoped to a
+keeps the ones under the poller's `(provider, campgroundRef)`, so a watch scoped to a
 single campsite still polls the catalog that campsite sits in — the long-standing
 behaviour `poller fetches the full campground catalog even when a watch scopes
 one site` pins, and the reason a poll tick already pays a campground's worth of
@@ -586,7 +622,7 @@ every vendor. A request past `latest_date` is a `beyond_booking_horizon`
 | Per-day availability for a window | `AvailabilityProvider.availability(campground, campsites, startDate, endDate)` | The one fetch method. Answers in base units — one observation per `(campsite, night)`, each naming its campsite — for the campsites of the campground. Adapters fetch upstream directly; the decision to serve stored data or call the adapter live is handled above it by `AvailabilityLoader`, reading current state from the `availability` interval table. See [Base units](#base-units-what-the-port-answers-in). |
 | Capability probe | `AvailabilityProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
-| Record availability history | poller writes status-run rows to the `availability` interval table | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |
+| Record availability history | poller writes status-run rows to the `availability` interval table | Provider-agnostic; uses `CampgroundObservations` observations. |
 | Notify on match | poller dispatches via configured notification triggers (`slack_notify`, `email_notify`; push future) | Channels and email recipients are not provider-specific. See `docs/superpowers/specs/2026-07-03-availability-alerts-design.md`. |
 
 Availability *providers* model observation only — matches, notifications and
@@ -796,7 +832,7 @@ watch → job → run → fetch-call(s) → snapshots
 A run can cover many campsites (a POI-scope watch fans out to every child
 campsite), but the poller does not issue one upstream call per campsite.
 `CatalogAvailabilityBatcher` groups a run's resolved targets by
-`(provider, parentRef, dateContext)` and issues exactly one
+`(provider, campgroundRef, dateContext)` and issues exactly one
 `availability` call per group — so N campsites under one campground
 become one upstream call. This is what fixed the old per-site rate-limit
 fan-out. Call-shaping stays inside each adapter (months for rec.gov, the park
@@ -863,8 +899,8 @@ browse → pin click
   ↓
 GET /api/pois/{id}
   ↓
-GET /api/poi/{poi_id}/reservables/availability
-  ↓                                AvailabilityService
+GET /api/pois/{id}/campsites/availability
+  ↓                                AvailabilityPollExecutor
 week pages                         ↓
   ↓                                AvailabilityTargetResolver
   ↓                                AvailabilityProvider.availability

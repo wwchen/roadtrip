@@ -418,7 +418,7 @@ Minimal v1 path:
 3. `ReserveCaliforniaSitesEtl` imports site reservables from captured standard
    facility grids.
 4. `ReserveCaliforniaAvailabilityProvider` fetches `search/grid` per facility
-   and merges unit slices into `AvailabilityObservationBatch`.
+   and merges unit slices into `CampgroundObservations`.
 5. `supportsInternalPolling = false` until rate limits and snapshot behavior are
    validated.
 
