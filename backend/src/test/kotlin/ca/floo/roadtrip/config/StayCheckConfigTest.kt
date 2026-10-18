@@ -6,10 +6,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-class BulkAvailabilityConfigTest {
+class StayCheckConfigTest {
     @Test
     fun `defaults are used when the section is absent`() {
-        val config = BulkAvailabilityConfig.default
+        val config = StayCheckConfig.default
         assertEquals(50, config.maxPois)
         assertEquals(3, config.fanOutConcurrency)
         assertEquals(Duration.ofHours(2), config.defaultMaxAge)
@@ -22,17 +22,17 @@ class BulkAvailabilityConfigTest {
 
     @Test
     fun `a stream's heartbeat may not be slower than a client waits for a sign of life`() {
-        val atCeiling = Duration.ofSeconds(BulkAvailabilityConfig.MAX_STREAM_HEARTBEAT_SECONDS)
-        assertEquals(atCeiling, BulkAvailabilityConfig.default.copy(streamHeartbeat = atCeiling).streamHeartbeat)
+        val atCeiling = Duration.ofSeconds(StayCheckConfig.MAX_STREAM_HEARTBEAT_SECONDS)
+        assertEquals(atCeiling, StayCheckConfig.default.copy(streamHeartbeat = atCeiling).streamHeartbeat)
         assertFailsWith<IllegalArgumentException> {
-            BulkAvailabilityConfig.default.copy(streamHeartbeat = atCeiling.plusSeconds(1))
+            StayCheckConfig.default.copy(streamHeartbeat = atCeiling.plusSeconds(1))
         }
     }
 
     @Test
     fun `the per-caller budget covers at least one request of the largest size`() {
         assertFailsWith<IllegalArgumentException> {
-            BulkAvailabilityConfig(maxPois = 50, fanOutConcurrency = 3, defaultMaxAge = Duration.ofHours(2), ipPoiLimitPerMinute = 49)
+            StayCheckConfig(maxPois = 50, fanOutConcurrency = 3, defaultMaxAge = Duration.ofHours(2), ipPoiLimitPerMinute = 49)
         }
     }
 
@@ -40,7 +40,7 @@ class BulkAvailabilityConfigTest {
     fun `min-max-age above default-max-age is refused`() {
         val err =
             assertFailsWith<IllegalArgumentException> {
-                BulkAvailabilityConfig(
+                StayCheckConfig(
                     maxPois = 50,
                     fanOutConcurrency = 3,
                     defaultMaxAge = Duration.ofMinutes(5),
@@ -61,7 +61,7 @@ class BulkAvailabilityConfigTest {
                     "min-max-age" to "10s",
                 ),
             )
-        val config = BulkAvailabilityConfig.fromConfig(section)
+        val config = StayCheckConfig.fromConfig(section)
         assertEquals(Duration.ofMinutes(30), config.defaultMaxAge)
         assertEquals(Duration.ofSeconds(10), config.minMaxAge)
     }
@@ -69,7 +69,7 @@ class BulkAvailabilityConfigTest {
     @Test
     fun `max pois must be positive`() {
         assertFailsWith<IllegalArgumentException> {
-            BulkAvailabilityConfig(
+            StayCheckConfig(
                 maxPois = 0,
                 fanOutConcurrency = 8,
                 defaultMaxAge = Duration.ofHours(2),
@@ -81,7 +81,7 @@ class BulkAvailabilityConfigTest {
     @Test
     fun `fan out concurrency must be positive`() {
         assertFailsWith<IllegalArgumentException> {
-            BulkAvailabilityConfig(
+            StayCheckConfig(
                 maxPois = 50,
                 fanOutConcurrency = 0,
                 defaultMaxAge = Duration.ofHours(2),

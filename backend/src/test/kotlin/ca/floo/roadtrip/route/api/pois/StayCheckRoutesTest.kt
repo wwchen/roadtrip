@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.route.api.pois
 
-import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.config.CampsiteAvailabilityConfig
+import ca.floo.roadtrip.config.StayCheckConfig
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
@@ -22,7 +22,6 @@ import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
-import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
@@ -30,6 +29,7 @@ import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.PoiAvailabilitySlice
 import ca.floo.roadtrip.service.availability.PoiAvailabilitySliceLookup
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
+import ca.floo.roadtrip.service.availability.StayCheckController
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
@@ -106,11 +106,11 @@ private val maxAgeFloor: Duration = Duration.ofMinutes(1)
 private const val MAX_AGE_INSIDE_RANGE_SECONDS = 600L
 private const val MAX_AGE_A_YEAR_SECONDS = 31_536_000L
 
-class BulkAvailabilityRoutesTest {
+class StayCheckRoutesTest {
     @Test
     fun `the stay check answers at its own path`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -126,7 +126,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `the per-campsite scan is gone`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(REMOVED_SCAN_PATH) {
@@ -140,7 +140,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `the old stream path is gone`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(REMOVED_STREAM_PATH) {
@@ -154,7 +154,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `rejects a request with more poi ids than the configured cap`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -170,7 +170,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `rejects an unparseable date`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -186,7 +186,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `rejects a request omitting both dates`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -202,7 +202,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `rejects a request missing only the end date`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -218,7 +218,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `rejects an inverted window before fanning out`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -234,7 +234,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `rejects an empty poi_ids list`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -250,7 +250,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `rejects a site_type outside the wire vocabulary and names the value`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -270,7 +270,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `rejects syntactically malformed json without leaking the parser's message`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -286,7 +286,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `rejects a wrong-typed field without leaking the serializer's message`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -302,7 +302,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `the stream answers each poi as an event, then says it is done`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -341,7 +341,7 @@ class BulkAvailabilityRoutesTest {
         testApplication {
             application {
                 routeTestApplication {
-                    bulkAvailabilityRoutesUnderTest(
+                    stayCheckRoutesUnderTest(
                         streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS),
                         perPoiTimeout = Duration.ofSeconds(TEST_PER_POI_TIMEOUT_SECONDS),
                     )
@@ -468,7 +468,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `an answer event carries outcome and omits the fields that do not apply`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -508,7 +508,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `the stream refuses a bad request with JSON, before any event`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -525,7 +525,7 @@ class BulkAvailabilityRoutesTest {
     @Test
     fun `rejects a non-positive group_size`() =
         testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+            application { routeTestApplication { stayCheckRoutesUnderTest() } }
 
             val resp =
                 client.post(STAYS_PATH) {
@@ -544,7 +544,7 @@ class BulkAvailabilityRoutesTest {
             application {
                 routeTestApplication {
                     // One token, frozen clock: the second request must be denied.
-                    bulkAvailabilityRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 1, nowMs = { 0L }))
+                    stayCheckRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 1, nowMs = { 0L }))
                 }
             }
 
@@ -570,7 +570,7 @@ class BulkAvailabilityRoutesTest {
         testApplication {
             application {
                 routeTestApplication {
-                    bulkAvailabilityRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 3, nowMs = { 0L }))
+                    stayCheckRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 3, nowMs = { 0L }))
                 }
             }
 
@@ -591,7 +591,7 @@ class BulkAvailabilityRoutesTest {
         testApplication {
             application {
                 routeTestApplication {
-                    bulkAvailabilityRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 1, nowMs = { 0L }))
+                    stayCheckRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 1, nowMs = { 0L }))
                 }
             }
 
@@ -617,7 +617,7 @@ class BulkAvailabilityRoutesTest {
                 routeTestApplication {
                     // One token each, frozen clock. Every request shares one socket peer, as
                     // every visitor does behind a proxy; X-Forwarded-For tells them apart.
-                    bulkAvailabilityRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 1, nowMs = { 0L }))
+                    stayCheckRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 1, nowMs = { 0L }))
                 }
             }
 
@@ -648,24 +648,24 @@ class BulkAvailabilityRoutesTest {
      * frozen at [maxAgeNow], recording each cutoff the controller hands the lookup into [cutoffs].
      */
     private fun Route.maxAgeRoutesUnderTest(cutoffs: MutableList<Instant?> = mutableListOf()) =
-        bulkAvailabilityRoutesUnderTest(
+        stayCheckRoutesUnderTest(
             defaultMaxAge = maxAgeCeiling,
             minMaxAge = maxAgeFloor,
             clock = Clock.fixed(maxAgeNow, ZoneOffset.UTC),
             cutoffs = cutoffs,
         )
 
-    private fun Route.bulkAvailabilityRoutesUnderTest(
+    private fun Route.stayCheckRoutesUnderTest(
         rateLimit: IpRateLimiter? = null,
-        streamTimeout: Duration = BulkAvailabilityConfig.default.streamTimeout,
-        perPoiTimeout: Duration = BulkAvailabilityConfig.default.perPoiTimeout,
+        streamTimeout: Duration = StayCheckConfig.default.streamTimeout,
+        perPoiTimeout: Duration = StayCheckConfig.default.perPoiTimeout,
         defaultMaxAge: Duration = Duration.ZERO,
         minMaxAge: Duration = Duration.ZERO,
         clock: Clock = Clock.systemUTC(),
         cutoffs: MutableList<Instant?>? = null,
     ) {
         val config =
-            BulkAvailabilityConfig(
+            StayCheckConfig(
                 maxPois = TEST_MAX_POIS,
                 fanOutConcurrency = TEST_FAN_OUT_CONCURRENCY,
                 defaultMaxAge = defaultMaxAge,
@@ -675,15 +675,15 @@ class BulkAvailabilityRoutesTest {
                 perPoiTimeout = perPoiTimeout,
             )
         val controller =
-            BulkAvailabilityController(
+            StayCheckController(
                 sliceLookup = FakePoiAvailabilitySliceLookup(cutoffs),
                 config = config,
                 clock = clock,
             )
         if (rateLimit != null) {
-            bulkAvailabilityRoutes(controller, config, rateLimit)
+            stayCheckRoutes(controller, config, rateLimit)
         } else {
-            bulkAvailabilityRoutes(controller, config)
+            stayCheckRoutes(controller, config)
         }
     }
 }
@@ -694,19 +694,19 @@ class BulkAvailabilityRoutesTest {
  * Ktor must keep routing a numeric POI id through the `{id}` parameter node
  * rather than losing it to the new literal `availability` segment.
  */
-class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
+class StayCheckRouteCollisionTest : SharedDbTest() {
     @Test
     fun `the pre-existing detail endpoint still routes correctly once the stay check is registered`() =
         testApplication {
             application {
                 routeTestApplication {
                     campsiteRoutes(campsiteAvailabilityController(), CampsiteAvailabilityConfig.default)
-                    bulkAvailabilityRoutes(
-                        BulkAvailabilityController(
+                    stayCheckRoutes(
+                        StayCheckController(
                             sliceLookup = FakePoiAvailabilitySliceLookup(),
-                            config = BulkAvailabilityConfig.default,
+                            config = StayCheckConfig.default,
                         ),
-                        BulkAvailabilityConfig.default,
+                        StayCheckConfig.default,
                     )
                 }
             }

@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.config
 
 /**
- * Caps on the single-POI availability read. Its costlier bulk sibling has been
+ * Caps on the single-POI availability read. Its costlier sibling, the stay check, has been
  * tunable since it shipped; this one was a route literal, which meant the
  * cheaper endpoint was the one an operator could not throttle.
  */

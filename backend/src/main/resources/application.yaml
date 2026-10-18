@@ -20,7 +20,7 @@ roadtrip:
       default-cadence: 300s
       idle-reschedule: 300s
       governor-starved-retry: 15s
-    bulk:
+    stays:
       # The stay check is the one read that can turn one request into many
       # upstream calls, so each bound is stated here rather than compiled in.
       max-pois: 50
@@ -47,9 +47,10 @@ roadtrip:
       # call. At least max-pois.
       ip-poi-limit-per-minute: 150
     campsite:
-      # Per-IP ceiling on the single-POI availability read. Higher than bulk's
-      # because one call is one POI, not a fan-out — but still an anonymous
-      # endpoint that reaches upstream vendors, so an operator can turn it down.
+      # Per-IP ceiling on the single-POI availability read. Counted per call,
+      # where the stay check counts per POI, because one call here is one POI,
+      # not a fan-out — but still an anonymous endpoint that reaches upstream
+      # vendors, so an operator can turn it down.
       ip-rate-limit-per-minute: 30
   booking:
     # How stale the last availability observation may be and still let a direct

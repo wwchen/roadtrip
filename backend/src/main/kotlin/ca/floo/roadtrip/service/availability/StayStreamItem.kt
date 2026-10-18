@@ -4,7 +4,7 @@ import ca.floo.roadtrip.model.api.StayAnswerDto
 import ca.floo.roadtrip.model.api.StayCheckOutcome
 
 /**
- * One thing [BulkAvailabilityController.stayAnswers] hands its collector: a
+ * One thing [StayCheckController.stayAnswers] hands its collector: a
  * campground's answer, or — exactly once, last — how the check ended. The
  * terminal outcome rides the same flow as the answers because it is the
  * controller that knows whether its stream deadline fired; the route only

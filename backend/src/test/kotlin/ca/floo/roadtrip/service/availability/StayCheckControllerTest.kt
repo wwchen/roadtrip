@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.config.BulkAvailabilityConfig
+import ca.floo.roadtrip.config.StayCheckConfig
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.api.StayAnswerDto
 import ca.floo.roadtrip.model.api.StayAvailabilityStatus
@@ -74,11 +74,11 @@ private const val BOOKING_HORIZON_DAYS = 180L
 private val windowLatest: LocalDate = windowStart.plusDays(BOOKING_HORIZON_DAYS)
 private val observedAt: Instant = Instant.parse("2026-08-20T00:00:00Z")
 
-class BulkAvailabilityControllerTest {
+class StayCheckControllerTest {
     @Test
     fun `a poi whose lookup throws an unmapped exception answers failed, unknown, and does not fail its neighbours`() {
         runTest {
-            val answers = bulkController().stayAnswers(stayRequest(listOf(1L, CRASHING_POI_ID, 2L))).answers()
+            val answers = stayCheckController().stayAnswers(stayRequest(listOf(1L, CRASHING_POI_ID, 2L))).answers()
 
             assertEquals(setOf(1L, CRASHING_POI_ID, 2L), answers.map { it.poiId }.toSet())
             val crashed = answers.single { it.poiId == CRASHING_POI_ID }
@@ -93,7 +93,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `an unknown poi answers failed, not_found`() {
         runTest {
-            val answer = bulkController().stayAnswers(stayRequest(listOf(UNKNOWN_POI_ID))).answers().single()
+            val answer = stayCheckController().stayAnswers(stayRequest(listOf(UNKNOWN_POI_ID))).answers().single()
 
             assertEquals(StayOutcome.FAILED, answer.outcome)
             assertEquals(StayFailureReason.NOT_FOUND, answer.reason)
@@ -104,7 +104,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `a poi with no matching campsites answers with no_data over zero sites, not a failure`() {
         runTest {
-            val answer = bulkController().stayAnswers(stayRequest(listOf(NO_SITES_POI_ID))).answers().single()
+            val answer = stayCheckController().stayAnswers(stayRequest(listOf(NO_SITES_POI_ID))).answers().single()
 
             assertEquals(StayOutcome.ANSWERED, answer.outcome)
             val stay = assertNotNull(answer.stay)
@@ -121,7 +121,7 @@ class BulkAvailabilityControllerTest {
             // POI 1's three sites are bookable for runs of 1, 5 and 3 nights from the
             // window's start and unanswered after, so none is open for every night of the
             // seven-night window and nothing rules any out: no data, not full.
-            val answer = bulkController().stayAnswers(stayRequest(listOf(1L))).answers().single()
+            val answer = stayCheckController().stayAnswers(stayRequest(listOf(1L))).answers().single()
 
             assertEquals(1L, answer.poiId)
             assertEquals(StayOutcome.ANSWERED, answer.outcome)
@@ -138,7 +138,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `a rate-limited poi answers failed, rate_limited, retryable`() {
         runTest {
-            val answers = bulkController().stayAnswers(stayRequest(listOf(1L, RATE_LIMITED_POI_ID))).answers()
+            val answers = stayCheckController().stayAnswers(stayRequest(listOf(1L, RATE_LIMITED_POI_ID))).answers()
 
             assertEquals(setOf(1L, RATE_LIMITED_POI_ID), answers.map { it.poiId }.toSet())
             val failed = answers.single { it.poiId == RATE_LIMITED_POI_ID }
@@ -152,7 +152,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `a poi past its booking horizon answers refused with no retryable`() {
         runTest {
-            val answer = bulkController().stayAnswers(stayRequest(listOf(BEYOND_HORIZON_POI_ID))).answers().single()
+            val answer = stayCheckController().stayAnswers(stayRequest(listOf(BEYOND_HORIZON_POI_ID))).answers().single()
 
             assertEquals(StayOutcome.REFUSED, answer.outcome)
             assertEquals(StayFailureReason.BEYOND_BOOKING_HORIZON, answer.reason)
@@ -164,7 +164,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `duplicate poi ids each get their own answer`() {
         runTest {
-            val answers = bulkController().stayAnswers(stayRequest(listOf(7L, 7L))).answers()
+            val answers = stayCheckController().stayAnswers(stayRequest(listOf(7L, 7L))).answers()
 
             assertEquals(listOf(7L, 7L), answers.map { it.poiId })
             assertEquals(listOf(StayOutcome.ANSWERED, StayOutcome.ANSWERED), answers.map { it.outcome })
@@ -174,7 +174,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `stay answers arrive as they land, not in request order`() {
         runTest {
-            val answers = bulkController().stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L))).answers()
+            val answers = stayCheckController().stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L))).answers()
 
             assertEquals(listOf(2L, SLOW_POI_ID), answers.map { it.poiId })
         }
@@ -184,7 +184,7 @@ class BulkAvailabilityControllerTest {
     fun `a poi that outlives the per-poi timeout answers timed_out with no reason`() {
         runTest {
             val answers =
-                bulkController(perPoiTimeout = Duration.ofMillis(TEST_PER_POI_TIMEOUT_MS))
+                stayCheckController(perPoiTimeout = Duration.ofMillis(TEST_PER_POI_TIMEOUT_MS))
                     .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L)))
                     .answers()
 
@@ -201,7 +201,7 @@ class BulkAvailabilityControllerTest {
     fun `past the stream's deadline every poi yet to answer answers timeout, and the stream still ends`() {
         runTest {
             val answers =
-                bulkController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
+                stayCheckController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
                     .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L, SLOW_POI_ID)))
                     .answers()
 
@@ -216,7 +216,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `a check where every poi answers in time ends complete`() {
         runTest {
-            val items = bulkController().stayAnswers(stayRequest(listOf(1L, RATE_LIMITED_POI_ID, 2L))).toList()
+            val items = stayCheckController().stayAnswers(stayRequest(listOf(1L, RATE_LIMITED_POI_ID, 2L))).toList()
 
             assertEquals(StayStreamItem.Done(StayCheckOutcome.COMPLETE), items.last())
             assertEquals(1, items.count { it is StayStreamItem.Done }, "exactly one terminal item")
@@ -230,7 +230,7 @@ class BulkAvailabilityControllerTest {
             // The slow POI times out on its own clock, well inside a generous stream deadline:
             // that is an answer the campground gave, not a check cut short.
             val items =
-                bulkController(perPoiTimeout = Duration.ofMillis(TEST_PER_POI_TIMEOUT_MS))
+                stayCheckController(perPoiTimeout = Duration.ofMillis(TEST_PER_POI_TIMEOUT_MS))
                     .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L)))
                     .toList()
 
@@ -243,7 +243,7 @@ class BulkAvailabilityControllerTest {
     fun `a check that hits the stream deadline ends deadline_reached`() {
         runTest {
             val items =
-                bulkController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
+                stayCheckController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
                     .stayAnswers(stayRequest(listOf(SLOW_POI_ID, 2L)))
                     .toList()
 
@@ -264,7 +264,7 @@ class BulkAvailabilityControllerTest {
             val items = mutableListOf<StayStreamItem>()
             val stream =
                 launch {
-                    bulkController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS), blockedReads = blockedReads)
+                    stayCheckController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS), blockedReads = blockedReads)
                         .stayAnswers(stayRequest(listOf(BLOCKED_POI_ID, 2L)))
                         .collect { items += it }
                 }
@@ -293,7 +293,7 @@ class BulkAvailabilityControllerTest {
     fun `a read that cannot be cancelled does not hold the stream past its deadline`() {
         runTest {
             val answers =
-                bulkController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
+                stayCheckController(streamTimeout = Duration.ofMillis(TEST_STREAM_TIMEOUT_MS))
                     .stayAnswers(stayRequest(listOf(STUCK_POI_ID, 2L)))
                     .answers()
 
@@ -306,7 +306,7 @@ class BulkAvailabilityControllerTest {
     @Test
     fun `a read that ends without an answer still answers, as the unclassified failure`() {
         runTest {
-            val items = bulkController().stayAnswers(stayRequest(listOf(STRAY_CANCELLATION_POI_ID, 2L))).toList()
+            val items = stayCheckController().stayAnswers(stayRequest(listOf(STRAY_CANCELLATION_POI_ID, 2L))).toList()
             val answers = items.answers()
 
             assertEquals(setOf(STRAY_CANCELLATION_POI_ID, 2L), answers.map { it.poiId }.toSet())
@@ -323,7 +323,7 @@ class BulkAvailabilityControllerTest {
     fun `the stay stream never runs more pois at once than the configured fan out`() {
         runTest {
             val meter = ConcurrencyMeter()
-            bulkController(fanOutConcurrency = 2, meter = meter).stayAnswers(stayRequest((1L..8L).toList())).answers()
+            stayCheckController(fanOutConcurrency = 2, meter = meter).stayAnswers(stayRequest((1L..8L).toList())).answers()
             assertEquals(2, meter.peak)
         }
     }
@@ -333,7 +333,7 @@ class BulkAvailabilityControllerTest {
         runTest {
             // POI 1's long-run site sleeps 2; the other two state no capacity.
             val stay =
-                bulkController()
+                stayCheckController()
                     .stayAnswers(stayRequest(listOf(1L), groupSize = 4))
                     .answers()
                     .single()
@@ -349,10 +349,10 @@ class BulkAvailabilityControllerTest {
             val maxAge = Duration.ofSeconds(STAY_MAX_AGE_SECONDS)
             val recorder = CutoffRecorder()
             val controller =
-                BulkAvailabilityController(
+                StayCheckController(
                     sliceLookup = FakePoiAvailabilitySliceLookup(recorder),
                     config =
-                        BulkAvailabilityConfig(
+                        StayCheckConfig(
                             maxPois = TEST_MAX_POIS,
                             fanOutConcurrency = TEST_FAN_OUT_CONCURRENCY,
                             // Neither end of the range is the request's age, so the cutoff can only come from the request.
@@ -373,24 +373,24 @@ class BulkAvailabilityControllerTest {
     fun `every poi in one stay check is measured against the same freshness cutoff`() {
         runTest {
             val recorder = CutoffRecorder()
-            bulkController(recorder = recorder).stayAnswers(stayRequest(listOf(1L, 2L, 3L))).answers()
+            stayCheckController(recorder = recorder).stayAnswers(stayRequest(listOf(1L, 2L, 3L))).answers()
             assertEquals(1, recorder.cutoffs.distinct().size)
         }
     }
 }
 
-private fun bulkController(
+private fun stayCheckController(
     fanOutConcurrency: Int = TEST_FAN_OUT_CONCURRENCY,
     recorder: CutoffRecorder? = null,
     meter: ConcurrencyMeter? = null,
     perPoiTimeout: Duration = Duration.ofSeconds(TEST_GENEROUS_TIMEOUT_SECONDS),
     streamTimeout: Duration = Duration.ofSeconds(TEST_GENEROUS_TIMEOUT_SECONDS),
     blockedReads: BlockedReadLog? = null,
-): BulkAvailabilityController =
-    BulkAvailabilityController(
+): StayCheckController =
+    StayCheckController(
         sliceLookup = FakePoiAvailabilitySliceLookup(recorder, meter, blockedReads),
         config =
-            BulkAvailabilityConfig(
+            StayCheckConfig(
                 maxPois = TEST_MAX_POIS,
                 fanOutConcurrency = fanOutConcurrency,
                 defaultMaxAge = Duration.ZERO,

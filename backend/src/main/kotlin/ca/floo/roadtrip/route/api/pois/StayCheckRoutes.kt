@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.route.api.pois
 
-import ca.floo.roadtrip.config.BulkAvailabilityConfig
+import ca.floo.roadtrip.config.StayCheckConfig
 import ca.floo.roadtrip.model.api.StayAnswerDto
 import ca.floo.roadtrip.model.api.StayAvailabilityStatus
 import ca.floo.roadtrip.model.api.StayCheckDoneDto
@@ -24,7 +24,7 @@ import ca.floo.roadtrip.route.common.unknownSiteTypeDetail
 import ca.floo.roadtrip.route.common.wireName
 import ca.floo.roadtrip.route.common.wireNameList
 import ca.floo.roadtrip.service.api.availabilityErrorDto
-import ca.floo.roadtrip.service.availability.BulkAvailabilityController
+import ca.floo.roadtrip.service.availability.StayCheckController
 import ca.floo.roadtrip.service.availability.StayCheckRequest
 import ca.floo.roadtrip.service.availability.StayStreamItem
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
@@ -44,12 +44,12 @@ import java.time.LocalDate
  * `receiveJsonBody` itself (malformed JSON, a wrong-typed field) and carries
  * raw `kotlinx.serialization` exception text — never safe to put on the wire.
  */
-private val bulkValidationErrorCodes =
+private val stayCheckValidationErrorCodes =
     setOf(BAD_REQUEST_ERROR, "too_many_pois", "bad_group_size", "bad_date_window", "end_before_start")
 
-internal fun Route.bulkAvailabilityRoutes(
-    controller: BulkAvailabilityController,
-    config: BulkAvailabilityConfig,
+internal fun Route.stayCheckRoutes(
+    controller: StayCheckController,
+    config: StayCheckConfig,
     rateLimit: IpRateLimiter = IpRateLimiter(perMinute = config.ipPoiLimitPerMinute),
 ) {
     route("/api") {
@@ -83,7 +83,7 @@ internal fun Route.bulkAvailabilityRoutes(
  * the body is written from so the published text cannot drift from either: each
  * vocabulary is read off its serializer, each bound off the config that enforces it.
  */
-internal fun stayCheckDescription(config: BulkAvailabilityConfig): String =
+internal fun stayCheckDescription(config: StayCheckConfig): String =
     "Body: { poi_ids: [pois.id, ...1..${config.maxPois}], start_date, end_date, " +
         "site_type?, group_size?, max_age_seconds? }. Answers 200 as a text/event-stream: one " +
         "`${StayAnswerDto.EVENT}` event per requested POI as it lands — POIs start in " +
@@ -93,21 +93,25 @@ internal fun stayCheckDescription(config: BulkAvailabilityConfig): String =
         "start_date up to end_date. `${StayOutcome.REFUSED.wireName()}` means the dates cannot work there, " +
         "with a `reason`. `${StayOutcome.FAILED.wireName()}` carries a `reason` and whether asking again " +
         "can help (`retryable`). `${StayOutcome.TIMED_OUT.wireName()}` means the POI did not answer in time. " +
-        "Then one `${StayCheckDoneDto.EVENT}` event, whose `outcome` is ${wireNameList<StayCheckOutcome>()}: " +
-        "`${StayCheckOutcome.DEADLINE_REACHED.wireName()}` when the stream's deadline cut the check short and " +
-        "the server answered `${StayOutcome.TIMED_OUT.wireName()}` for the POIs still waiting; then the " +
-        "stream closes. A POI that takes longer than ${config.perPoiTimeout} answers " +
-        "`${StayOutcome.TIMED_OUT.wireName()}`, and so does every POI yet to answer once the stream reaches " +
-        "${config.streamTimeout}; a quiet stream sends a keep-alive comment every ${config.streamHeartbeat}. " +
+        "Then one `${StayCheckDoneDto.EVENT}` event, whose `outcome` is one of ${wireNameList<StayCheckOutcome>()}: " +
+        "`${StayCheckOutcome.DEADLINE_REACHED.wireName()}` means the stream's deadline cut the check short, " +
+        "and the server answered `${StayOutcome.TIMED_OUT.wireName()}` for the POIs still waiting; " +
+        "`${StayCheckOutcome.COMPLETE.wireName()}` otherwise. The stream then closes. A POI that takes " +
+        "longer than ${config.perPoiTimeout.inSeconds()} answers `${StayOutcome.TIMED_OUT.wireName()}`, and so " +
+        "does every POI yet to answer once the stream reaches ${config.streamTimeout.inSeconds()}; a quiet " +
+        "stream sends a keep-alive comment every ${config.streamHeartbeat.inSeconds()}. " +
         "`max_age_seconds` is how old a stored observation may be and still answer, rather than asking " +
         "the providers again. It is clamped into the server's range, not obeyed: raised to " +
-        "${config.minMaxAge.seconds} seconds if lower (so a caller cannot force a refetch of every " +
-        "campground on every request), lowered to ${config.defaultMaxAge.seconds} seconds if higher, and " +
-        "${config.defaultMaxAge.seconds} seconds when left out. An out-of-range value is never a 400. " +
+        "${config.minMaxAge.inSeconds()} if lower (so a caller cannot force a refetch of every " +
+        "campground on every request), lowered to ${config.defaultMaxAge.inSeconds()} if higher, and " +
+        "${config.defaultMaxAge.inSeconds()} when left out. An out-of-range value is never a 400. " +
         "A refused request answers JSON with the status before any event is sent. Each requested POI is " +
         "charged against the caller's ${config.ipPoiLimitPerMinute} a minute; over it answers 503 " +
         "`ip_throttled`. `site_type` accepts: $siteTypeWireList. Per-campsite detail for one POI is " +
         "`GET /api/pois/{id}/campsites/availability`."
+
+/** A bound as the published description writes it: "45 seconds", never `PT45S`. */
+private fun Duration.inSeconds(): String = "$seconds seconds"
 
 /**
  * Refuses with 503 when asking about [poiCount] more campgrounds would put the
@@ -120,7 +124,7 @@ private suspend fun RoutingContext.throttled(
     poiCount: Int,
 ): Boolean {
     if (rateLimit.allow(call.request.origin.remoteHost, cost = poiCount)) return false
-    call.respondBulkError("ip_throttled", HttpStatusCode.ServiceUnavailable)
+    call.respondStayCheckError("ip_throttled", HttpStatusCode.ServiceUnavailable)
     return true
 }
 
@@ -128,7 +132,7 @@ private suspend fun RoutingContext.throttled(
 private suspend fun <T> RouteBodyResult<T>.orRefuse(call: ApplicationCall): T? =
     when (this) {
         is RouteBodyResult.Invalid -> {
-            call.respondBulkError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest)
+            call.respondStayCheckError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest)
             null
         }
         is RouteBodyResult.Valid -> value
@@ -138,7 +142,7 @@ private suspend fun <T> RouteBodyResult<T>.orRefuse(call: ApplicationCall): T? =
 private suspend fun ApplicationCall.siteTypesOrRefuse(raw: List<String>): List<CampsiteKind>? =
     when (val parsed = parseSiteTypes(raw)) {
         is SiteTypeQuery.Unknown -> {
-            respondBulkError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest, detail = unknownSiteTypeDetail(parsed.value))
+            respondStayCheckError(BAD_REQUEST_ERROR, HttpStatusCode.BadRequest, detail = unknownSiteTypeDetail(parsed.value))
             null
         }
         is SiteTypeQuery.Parsed -> parsed.kinds
@@ -151,15 +155,15 @@ private suspend fun <T> validatedOrRefuse(
 ): T? =
     when (val validated = RouteBodyResult.Valid(Unit).mapCatching { validate() }) {
         is RouteBodyResult.Invalid -> {
-            val code = validated.detail?.takeIf { it in bulkValidationErrorCodes } ?: BAD_REQUEST_ERROR
-            call.respondBulkError(code, HttpStatusCode.BadRequest)
+            val code = validated.detail?.takeIf { it in stayCheckValidationErrorCodes } ?: BAD_REQUEST_ERROR
+            call.respondStayCheckError(code, HttpStatusCode.BadRequest)
             null
         }
         is RouteBodyResult.Valid -> validated.value
     }
 
 private fun StayCheckRequestDto.validated(
-    config: BulkAvailabilityConfig,
+    config: StayCheckConfig,
     siteTypes: List<CampsiteKind>,
 ): StayCheckRequest {
     requirePoiIds(poiIds, config)
@@ -177,7 +181,7 @@ private fun StayCheckRequestDto.validated(
 
 /**
  * The age a stay check may serve a stored observation at: what the caller asked for,
- * held to [BulkAvailabilityConfig.minMaxAge] .. [BulkAvailabilityConfig.defaultMaxAge],
+ * held to [StayCheckConfig.minMaxAge] .. [StayCheckConfig.defaultMaxAge],
  * and the ceiling when it did not ask. Clamped rather than refused because an age out of
  * range is not a malformed request — the caller wants "as fresh as you will give me" or
  * "whatever you have", and gets exactly that. The floor stops a caller forcing zero and
@@ -186,7 +190,7 @@ private fun StayCheckRequestDto.validated(
  */
 private fun clampedMaxAge(
     maxAgeSeconds: Long?,
-    config: BulkAvailabilityConfig,
+    config: StayCheckConfig,
 ): Duration =
     maxAgeSeconds
         ?.let { Duration.ofSeconds(it).coerceIn(config.minMaxAge, config.defaultMaxAge) }
@@ -194,7 +198,7 @@ private fun clampedMaxAge(
 
 private fun requirePoiIds(
     poiIds: List<Long>,
-    config: BulkAvailabilityConfig,
+    config: StayCheckConfig,
 ) {
     require(poiIds.isNotEmpty()) { BAD_REQUEST_ERROR }
     require(poiIds.size <= config.maxPois) { "too_many_pois" }
@@ -208,7 +212,7 @@ private fun requireGroupSize(groupSize: Int?) {
  * Both dates, parsed, the end after the start. Both are required: with either
  * left null each POI would resolve its own default window from its own centroid
  * timezone, so answers would no longer be comparable across POIs — defeating
- * the endpoints' purpose (see spec Decision 5). The order is checked here as
+ * the endpoint's purpose. The order is checked here as
  * well as per POI: an inverted window is wrong for every POI, so refusing it up
  * front avoids a whole fan-out that can only fail.
  */
@@ -231,7 +235,7 @@ private fun parseDate(raw: String?): LocalDate? =
         }
     }
 
-private suspend fun ApplicationCall.respondBulkError(
+private suspend fun ApplicationCall.respondStayCheckError(
     error: String,
     status: HttpStatusCode,
     detail: String? = null,

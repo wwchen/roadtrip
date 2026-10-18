@@ -8,10 +8,10 @@ import type { StayResult } from '@/stores/stayCheckStore';
 /**
  * The longest a check's stream may go without sending anything — an answer, or
  * the keep-alive the backend writes while it has none, at least every 20 s
- * (`BulkAvailabilityConfig.MAX_STREAM_HEARTBEAT_SECONDS`). A stream this quiet
+ * (`StayCheckConfig.MAX_STREAM_HEARTBEAT_SECONDS`). A stream this quiet
  * has lost its connection; without a limit the check, and its button, would stay
  * running until the page was reloaded. How long the providers take is not this
- * limit's business: the backend bounds that itself (`availability.bulk.per-poi-timeout`
+ * limit's business: the backend bounds that itself (`availability.stays.per-poi-timeout`
  * and `stream-timeout`) and answers `timed_out` for whoever ran out.
  */
 export const CHECK_IDLE_TIMEOUT_MS = 60_000;

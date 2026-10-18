@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.route.api.pois
 
-import ca.floo.roadtrip.config.BulkAvailabilityConfig
+import ca.floo.roadtrip.config.StayCheckConfig
 import ca.floo.roadtrip.model.api.StayAvailabilityStatus
 import ca.floo.roadtrip.model.api.StayCheckOutcome
 import ca.floo.roadtrip.model.api.StayOutcome
@@ -16,6 +16,9 @@ private const val CONFIG_IP_LIMIT = 700
 private const val CONFIG_CEILING_SECONDS = 7_200L
 private const val CONFIG_FLOOR_SECONDS = 90L
 
+/** `PT45S`, `PT2M`: how `Duration.toString` writes a duration, which is not how a reader does. */
+private val isoDuration = Regex("""\bPT\d""")
+
 /**
  * The text `/api/docs` publishes for the stay check. It is built from the enums
  * and the config, so these pin that it says what they say rather than what it
@@ -23,7 +26,7 @@ private const val CONFIG_FLOOR_SECONDS = 90L
  */
 class StayCheckDescriptionTest {
     private val config =
-        BulkAvailabilityConfig(
+        StayCheckConfig(
             maxPois = CONFIG_MAX_POIS,
             fanOutConcurrency = CONFIG_FAN_OUT,
             defaultMaxAge = Duration.ofSeconds(CONFIG_CEILING_SECONDS),
@@ -51,6 +54,14 @@ class StayCheckDescriptionTest {
         assertTrue("$CONFIG_FLOOR_SECONDS seconds if lower" in description, description)
         assertTrue("$CONFIG_CEILING_SECONDS seconds if higher" in description, description)
         assertTrue("never a 400" in description, description)
+    }
+
+    @Test
+    fun `it writes every duration as seconds, never as an ISO-8601 duration`() {
+        for (bound in listOf(config.perPoiTimeout, config.streamTimeout, config.streamHeartbeat)) {
+            assertTrue("${bound.seconds} seconds" in description, description)
+        }
+        assertTrue(isoDuration.find(description) == null, description)
     }
 
     @Test

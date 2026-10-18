@@ -6,7 +6,7 @@ import java.time.Duration
  * Caps and timings for the stay check. It is the one read that can turn a single
  * request into many upstream calls, so every bound here is operationally tunable.
  */
-data class BulkAvailabilityConfig(
+data class StayCheckConfig(
     val maxPois: Int,
     val fanOutConcurrency: Int,
     /**
@@ -49,19 +49,19 @@ data class BulkAvailabilityConfig(
     val streamHeartbeat: Duration = Duration.ofSeconds(DEFAULT_STREAM_HEARTBEAT_SECONDS),
 ) {
     init {
-        require(maxPois >= 1) { "bulk max-pois must be >= 1 (got $maxPois)" }
-        require(fanOutConcurrency >= 1) { "bulk fan-out-concurrency must be >= 1 (got $fanOutConcurrency)" }
-        require(!defaultMaxAge.isNegative) { "bulk default-max-age must not be negative (got $defaultMaxAge)" }
+        require(maxPois >= 1) { "stays max-pois must be >= 1 (got $maxPois)" }
+        require(fanOutConcurrency >= 1) { "stays fan-out-concurrency must be >= 1 (got $fanOutConcurrency)" }
+        require(!defaultMaxAge.isNegative) { "stays default-max-age must not be negative (got $defaultMaxAge)" }
         require(ipPoiLimitPerMinute >= maxPois) {
-            "bulk ip-poi-limit-per-minute must be at least max-pois ($maxPois) (got $ipPoiLimitPerMinute)"
+            "stays ip-poi-limit-per-minute must be at least max-pois ($maxPois) (got $ipPoiLimitPerMinute)"
         }
         require(!minMaxAge.isNegative && minMaxAge <= defaultMaxAge) {
-            "bulk min-max-age must be between 0 and default-max-age ($defaultMaxAge) (got $minMaxAge)"
+            "stays min-max-age must be between 0 and default-max-age ($defaultMaxAge) (got $minMaxAge)"
         }
-        require(perPoiTimeout.isPositive) { "bulk per-poi-timeout must be positive (got $perPoiTimeout)" }
-        require(streamTimeout.isPositive) { "bulk stream-timeout must be positive (got $streamTimeout)" }
+        require(perPoiTimeout.isPositive) { "stays per-poi-timeout must be positive (got $perPoiTimeout)" }
+        require(streamTimeout.isPositive) { "stays stream-timeout must be positive (got $streamTimeout)" }
         require(streamHeartbeat.isPositive && streamHeartbeat <= Duration.ofSeconds(MAX_STREAM_HEARTBEAT_SECONDS)) {
-            "bulk stream-heartbeat must be between 0 and ${MAX_STREAM_HEARTBEAT_SECONDS}s (got $streamHeartbeat)"
+            "stays stream-heartbeat must be between 0 and ${MAX_STREAM_HEARTBEAT_SECONDS}s (got $streamHeartbeat)"
         }
     }
 
@@ -92,7 +92,7 @@ data class BulkAvailabilityConfig(
         const val MAX_STREAM_HEARTBEAT_SECONDS = 20L
 
         val default =
-            BulkAvailabilityConfig(
+            StayCheckConfig(
                 maxPois = DEFAULT_MAX_POIS,
                 fanOutConcurrency = DEFAULT_FAN_OUT_CONCURRENCY,
                 defaultMaxAge = Duration.ofHours(DEFAULT_MAX_AGE_HOURS),
@@ -100,8 +100,8 @@ data class BulkAvailabilityConfig(
                 minMaxAge = Duration.ofSeconds(DEFAULT_MIN_MAX_AGE_SECONDS),
             )
 
-        fun fromConfig(config: ConfigSection): BulkAvailabilityConfig =
-            BulkAvailabilityConfig(
+        fun fromConfig(config: ConfigSection): StayCheckConfig =
+            StayCheckConfig(
                 maxPois = config.value("max-pois")?.toInt() ?: default.maxPois,
                 fanOutConcurrency = config.value("fan-out-concurrency")?.toInt() ?: default.fanOutConcurrency,
                 defaultMaxAge = config.duration("default-max-age", default.defaultMaxAge),

@@ -16,7 +16,7 @@ internal fun unknownSiteTypeDetail(value: String): String = "unknown site_type '
 
 /**
  * A `site_type` value set, or the first value outside the wire vocabulary.
- * Shared by the campsite routes (query params), bulk availability (a
+ * Shared by the campsite routes (query params), the stay check (a
  * request-body field) and the watch routes (a `campsite_filters` key) so no
  * caller parses exception text to find the offending value.
  */

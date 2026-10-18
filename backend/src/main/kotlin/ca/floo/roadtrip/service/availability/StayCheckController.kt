@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.config.BulkAvailabilityConfig
+import ca.floo.roadtrip.config.StayCheckConfig
 import ca.floo.roadtrip.model.api.StayAnswerDto
 import ca.floo.roadtrip.model.api.StayCheckOutcome
 import ca.floo.roadtrip.model.api.StayOutcome
@@ -28,11 +28,11 @@ import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.toKotlinDuration
 
-private val log = LoggerFactory.getLogger("BulkAvailabilityController")
+private val log = LoggerFactory.getLogger("StayCheckController")
 
 /**
- * The answer a campground gives when it outlives [BulkAvailabilityConfig.perPoiTimeout],
- * or is still waiting when the stream reaches [BulkAvailabilityConfig.streamTimeout].
+ * The answer a campground gives when it outlives [StayCheckConfig.perPoiTimeout],
+ * or is still waiting when the stream reaches [StayCheckConfig.streamTimeout].
  */
 internal const val STAY_TIMEOUT_ERROR = "timeout"
 
@@ -92,14 +92,14 @@ private sealed interface PoiRead {
  * stream. Each POI's failure is captured at the fan-out boundary, so one bad
  * vendor never blanks the rest.
  */
-internal class BulkAvailabilityController(
+internal class StayCheckController(
     private val sliceLookup: PoiAvailabilitySliceLookup,
-    private val config: BulkAvailabilityConfig,
+    private val config: StayCheckConfig,
     private val clock: Clock = Clock.systemUTC(),
 ) {
     constructor(
         campsiteController: CampsiteAvailabilityController,
-        config: BulkAvailabilityConfig,
+        config: StayCheckConfig,
         clock: Clock = Clock.systemUTC(),
     ) : this(
         PoiAvailabilitySliceLookup(campsiteController::poiAvailabilitySlice),
@@ -110,9 +110,9 @@ internal class BulkAvailabilityController(
     /**
      * One answer per requested POI, each as it lands, and never fewer. POIs start
      * in request order — the caller sends the nearest first — at most
-     * [BulkAvailabilityConfig.fanOutConcurrency] at a time. One that outlives
-     * [BulkAvailabilityConfig.perPoiTimeout] answers [STAY_TIMEOUT_ERROR] — outcome
-     * `timed_out` — and once the whole stream reaches [BulkAvailabilityConfig.streamTimeout]
+     * [StayCheckConfig.fanOutConcurrency] at a time. One that outlives
+     * [StayCheckConfig.perPoiTimeout] answers [STAY_TIMEOUT_ERROR] — outcome
+     * `timed_out` — and once the whole stream reaches [StayCheckConfig.streamTimeout]
      * so does every POI yet to answer; a read that ended without an answer at all
      * answers the unclassified failure. Each failure is classified by [stayFailureOf]
      * into the answer's outcome, reason and retryability. So the flow completes by
@@ -193,7 +193,7 @@ internal class BulkAvailabilityController(
     ): PoiRead =
         try {
             val slice = sliceLookup.poiAvailabilitySlice(poiId, query.siteTypes, query.startDate, query.endDate, query.freshAtOrAfter)
-            // Narrowed once, here, so both reads answer over the same campsites.
+            // Narrowed once, here, so the read answers over the campsites that fit the group.
             PoiRead.Resolved(slice.copy(campsites = slice.campsites.fittingGroup(query.groupSize)))
         } catch (e: CancellationException) {
             // Coroutine cancellation (a sibling's failure, the caller disconnecting,
@@ -205,8 +205,9 @@ internal class BulkAvailabilityController(
             PoiRead.Failed(e.code)
         } catch (e: Exception) {
             // Anything unmapped (e.g. a DB connection-acquisition timeout) must not
-            // escape the fan-out and cancel every sibling POI. See spec Decision 6.
-            log.error("bulk availability poi={} failed: {}", poiId, causeChain(e), e)
+            // escape the fan-out and cancel every sibling POI: a failure is that POI's answer,
+            // not the stream's.
+            log.error("stay check poi={} failed: {}", poiId, causeChain(e), e)
             PoiRead.Failed(AvailabilityProviderError.Unknown(e).code)
         }
 }
