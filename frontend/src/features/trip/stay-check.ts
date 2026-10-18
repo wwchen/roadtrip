@@ -17,11 +17,10 @@ import type { StayResult } from '@/stores/stayCheckStore';
 export const CHECK_IDLE_TIMEOUT_MS = 60_000;
 
 /**
- * The age a re-check asks for: the youngest the server will serve. It matches the
- * server's floor (`availability.bulk.fresh-tolerance`), short rather than zero so a
- * double-click does not ask every provider twice. The server clamps what it is sent,
- * so a floor configured higher answers at its own, and this need not track it. A first
- * check names no age and gets the endpoint's usual tolerance.
+ * The age a re-check asks for: short, so what comes back is fresh, but not zero, so a
+ * double-click does not ask every provider twice. It is a request, not a guarantee: the
+ * server clamps whatever it is sent into its own range and may serve something older. A
+ * first check names no age and gets the endpoint's usual tolerance.
  */
 export const RECHECK_MAX_AGE_SECONDS = 60;
 

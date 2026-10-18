@@ -95,9 +95,9 @@ export interface StayCheckControl {
 /**
  * [checkableIds] is null while the in-view list is not ready (loading, zoomed
  * out, or switched off), and the ids of its cards a provider can answer for once
- * it is. Checking again — the same question, already answered — asks for the
- * youngest observations the server allows (`RECHECK_MAX_AGE_SECONDS`) rather than
- * answering from anything within its usual tolerance.
+ * it is. Checking again — the same question, already answered — asks for a short
+ * age (`RECHECK_MAX_AGE_SECONDS`) rather than answering from anything within the
+ * server's usual tolerance.
  */
 export function useStayCheck(checkableIds: readonly number[] | null): StayCheckControl {
   const query = useCurrentStayQuery();

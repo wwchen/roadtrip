@@ -1296,7 +1296,7 @@ describe('the in-view list', () => {
       expect(screen.queryByText(/unknown/)).toBeNull();
     });
 
-    test('Check again sends the youngest age the server allows; the first check names none', async () => {
+    test('Check again asks for a short age; the first check names none', async () => {
       stayStream = () => eventStreamResponse([answer(21, { status: 'full', open_sites: 0, checked_sites: 132 }), done(1)]);
       withViewport();
       mount();

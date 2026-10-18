@@ -421,6 +421,18 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
+    fun `a max_age_seconds exactly at the floor or the ceiling is kept, the range being inclusive`() =
+        testApplication {
+            val cutoffs = mutableListOf<Instant?>()
+            application { routeTestApplication { maxAgeRoutesUnderTest(cutoffs) } }
+
+            postStay(maxAgeSeconds = "${maxAgeFloor.seconds}")
+            postStay(maxAgeSeconds = "${maxAgeCeiling.seconds}")
+
+            assertEquals(listOf<Instant?>(maxAgeNow.minus(maxAgeFloor), maxAgeNow.minus(maxAgeCeiling)), cutoffs)
+        }
+
+    @Test
     fun `a clamped value is not a bad request`() =
         testApplication {
             application { routeTestApplication { maxAgeRoutesUnderTest() } }

@@ -61,10 +61,10 @@ private const val TEST_GENEROUS_TIMEOUT_SECONDS = 30L
 private const val TEST_MAX_POIS = 50
 private const val TEST_FAN_OUT_CONCURRENCY = 8
 private const val TEST_IP_POI_LIMIT_PER_MINUTE = 1_000
+private const val NORMAL_SLICE_DELAY_MS = 20L
 
 /** Strictly between the floor and ceiling in the stay max-age test, so the cutoff can only have come from the request. */
 private const val STAY_MAX_AGE_SECONDS = 600L
-private const val NORMAL_SLICE_DELAY_MS = 20L
 
 private val windowStart: LocalDate = LocalDate.of(2026, 9, 1)
 private val windowEnd: LocalDate = LocalDate.of(2026, 9, 8)
