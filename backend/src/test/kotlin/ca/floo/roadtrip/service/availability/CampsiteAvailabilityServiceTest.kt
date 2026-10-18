@@ -136,6 +136,26 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
     }
 
     @Test
+    fun `a campground-wide fetch is narrowed to the campsites the request named`() {
+        val unnamedCampsite = campsites.first().id + 1
+        val fetcher = CapturingFetcher(alsoReportsCampsite = unnamedCampsite)
+
+        val result =
+            runBlocking {
+                service(listOf(FakeAvailabilityProvider(BookingProvider.RECGOV)), fetcher).fetchAvailability(
+                    campground = campground,
+                    campsites = campsites,
+                    campgroundCampsites = campsites,
+                    startDate = null,
+                    endDate = null,
+                    dateContext = dateContext(),
+                )
+            }
+
+        assertEquals(listOf(campsites.first().id), result.batch.observations.map { it.campsiteId })
+    }
+
+    @Test
     fun `dispatches to the first provider that supports the campground`() {
         val aspira = FakeAvailabilityProvider(BookingProvider.ASPIRA)
         val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
@@ -304,6 +324,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
      */
     private inner class CapturingFetcher(
         private val servedBy: (List<AvailabilityProvider>) -> BookingProvider = { it.first().id },
+        private val alsoReportsCampsite: Long? = null,
     ) : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))) {
         var capturedProviders: List<AvailabilityProvider>? = null
         var capturedWindow: ResolvedDateWindow? = null
@@ -323,8 +344,11 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
                 CampgroundObservations(
                     campgroundRef = null,
                     observations =
-                        listOf(
+                        listOfNotNull(
                             CampsiteDayObservation(campsiteId, window.startDate, observedAt, AvailabilityStatus.AVAILABLE),
+                            alsoReportsCampsite?.let {
+                                CampsiteDayObservation(it, window.startDate, observedAt, AvailabilityStatus.AVAILABLE)
+                            },
                             CampsiteDayObservation(
                                 campsiteId,
                                 window.startDate.plusDays(DEFAULT_WINDOW_DAYS + 1),

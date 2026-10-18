@@ -2,13 +2,16 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.ApiCacheConfig
 import ca.floo.roadtrip.config.ApiCacheEntity
+import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
+import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.StreamWindowState
@@ -74,15 +77,12 @@ internal class CampsiteAvailabilityService(
         val supportingProviders = availabilityProviders.filter { it.supportsCampground(campground) }
         val freshAt = freshAtOrAfter ?: Instant.now(clock).minus(snapshotFreshnessTtl(provider))
 
+        val requestScope = provider.parentRefFor(campground)
         var servedBy: BookingProvider? = null
+        var fetchedScope: BookingProviderRef? = null
         val loaded =
-            availabilityLoader.loadOrFetch(
+            availabilityLoader.load(
                 AvailabilityLoader.Request(
-                    metadata =
-                        AvailabilityLoader.Metadata(
-                            provider = provider.id.id,
-                            scope = provider.parentRefFor(campground),
-                        ),
                     targets = campsites.map { AvailabilityLoader.CampsiteTarget(dbId = it.id) },
                     startDate = windows.target.startDate,
                     endDate = windows.target.endDate,
@@ -100,9 +100,19 @@ internal class CampsiteAvailabilityService(
                         window = ResolvedDateWindow(windows.fetch.startDate, windows.fetch.endDate),
                     )
                 servedBy = result.servedBy
-                result.observations ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
+                val fetched = result.observations ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
+                fetchedScope = fetched.campgroundRef
+                fetched
             }
-        val batch = servedBy?.let { loaded.copy(provider = it.id) } ?: loaded
+        val batch =
+            AvailabilityObservationBatch(
+                provider = (servedBy ?: provider.id).id,
+                startDate = windows.target.startDate,
+                endDate = windows.target.endDate,
+                observations = loaded.cells.within(campsites.mapTo(mutableSetOf()) { it.id }, windows.target),
+                cacheBlock = AvailabilityCacheBlock(loaded.hit, loaded.ageSeconds, loaded.ttlSeconds),
+                scope = fetchedScope ?: requestScope,
+            )
 
         return CampsiteAvailabilityResult(
             startDate = windows.target.startDate,
@@ -152,6 +162,16 @@ internal class CampsiteAvailabilityService(
      */
     fun internalPollingSupportedFor(campground: Campground): Boolean = bookingHorizons.internalPollingSupported(campground)
 }
+
+private fun List<CampsiteDayObservation>.within(
+    campsiteIds: Set<Long>,
+    window: ResolvedDateWindow,
+): List<CampsiteDayObservation> =
+    filter {
+        !it.date.isBefore(window.startDate) &&
+            it.date.isBefore(window.endDate) &&
+            (campsiteIds.isEmpty() || it.campsiteId in campsiteIds)
+    }
 
 internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration = ApiCacheEntity.availability(providerId).defaultTtl
 

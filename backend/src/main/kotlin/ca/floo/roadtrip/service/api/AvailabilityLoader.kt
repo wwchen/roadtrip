@@ -1,11 +1,8 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.availability.AvailabilityCell
 import ca.floo.roadtrip.service.availability.requiredCells
@@ -15,6 +12,13 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+
+data class LoadedCells(
+    val cells: List<CampsiteDayObservation>,
+    val hit: Boolean,
+    val ageSeconds: Long,
+    val ttlSeconds: Long,
+)
 
 /**
  * Loads availability for a window, deciding per request whether the stored
@@ -28,14 +32,7 @@ class AvailabilityLoader(
         val dbId: Long,
     )
 
-    data class Metadata(
-        val provider: String,
-        val scope: BookingProviderRef? = null,
-        val campsiteId: Long? = null,
-    )
-
     data class Request(
-        val metadata: Metadata,
         val targets: List<CampsiteTarget>,
         val startDate: LocalDate,
         val endDate: LocalDate,
@@ -45,12 +42,12 @@ class AvailabilityLoader(
         val runId: Long? = null,
     )
 
-    suspend fun loadOrFetch(
+    suspend fun load(
         request: Request,
         fetch: suspend () -> CampgroundObservations,
-    ): AvailabilityObservationBatch {
+    ): LoadedCells {
         val repo = availabilityRepo
-        if (repo == null || request.targets.isEmpty()) return sliceToTarget(fetch(), request)
+        if (repo == null || request.targets.isEmpty()) return fetchedCells(fetch(), request)
 
         val dates = datesInWindow(request.startDate, request.endDate)
         val dbIds = request.targets.map { it.dbId }.distinct()
@@ -62,7 +59,7 @@ class AvailabilityLoader(
         // `AvailabilityProvider`, so one unanswered cell still costs one
         // provider call — but a window whose cells are all answered costs none.
         if (unansweredCells(required, observedAtByCell(cached), request.freshAtOrAfter).isEmpty()) {
-            return batchFromLatest(request, cached, hit = true)
+            return storedCells(request, cached, hit = true)
         }
 
         val fetched = fetch()
@@ -70,43 +67,22 @@ class AvailabilityLoader(
 
         val latest = repo.readCurrent(dbIds, dates)
         return if (cellsOf(latest).containsAll(required)) {
-            batchFromLatest(
-                request = request.copy(metadata = metadataFromFetched(fetched, request.metadata)),
-                rows = latest,
-                hit = false,
-            )
+            storedCells(request, latest, hit = false)
         } else {
-            sliceToTarget(fetched, request)
+            fetchedCells(fetched, request)
         }
     }
 
-    private fun sliceToTarget(
+    private fun fetchedCells(
         fetched: CampgroundObservations,
         request: Request,
-    ): AvailabilityObservationBatch {
-        val targetDates = datesInWindow(request.startDate, request.endDate).toSet()
-        val targetIds = request.targets.mapTo(mutableSetOf()) { it.dbId }
-        return AvailabilityObservationBatch(
-            provider = request.metadata.provider,
-            startDate = request.startDate,
-            endDate = request.endDate,
-            // The batch covers the whole campground; the response is only about
-            // the campsites this request named. With no targets there is nothing
-            // to narrow to, so the batch stands as fetched.
-            observations =
-                fetched.observations.filter {
-                    it.date in targetDates && (targetIds.isEmpty() || it.campsiteId in targetIds)
-                },
-            cacheBlock =
-                AvailabilityCacheBlock(
-                    hit = false,
-                    ageSeconds = 0,
-                    ttlSeconds = effectiveTtlSeconds(request),
-                ),
-            scope = fetched.campgroundRef ?: request.metadata.scope,
-            campsiteId = request.metadata.campsiteId,
+    ): LoadedCells =
+        LoadedCells(
+            cells = fetched.observations,
+            hit = false,
+            ageSeconds = 0,
+            ttlSeconds = effectiveTtlSeconds(request),
         )
-    }
 
     private fun recordFetched(
         repo: AvailabilityRepo,
@@ -148,17 +124,13 @@ class AvailabilityLoader(
         repo.recordObservations(request.runId, observations)
     }
 
-    private fun batchFromLatest(
+    private fun storedCells(
         request: Request,
         rows: List<AvailabilityRepo.CurrentCell>,
         hit: Boolean,
-    ): AvailabilityObservationBatch {
-        val now = Instant.now(clock)
-        return AvailabilityObservationBatch(
-            provider = request.metadata.provider,
-            startDate = request.startDate,
-            endDate = request.endDate,
-            observations =
+    ): LoadedCells =
+        LoadedCells(
+            cells =
                 rows.map { row ->
                     CampsiteDayObservation(
                         campsiteId = row.campsiteId,
@@ -167,21 +139,10 @@ class AvailabilityLoader(
                         status = row.status,
                     )
                 },
-            cacheBlock =
-                AvailabilityCacheBlock(
-                    hit = hit,
-                    ageSeconds = maxAgeSeconds(rows, now),
-                    ttlSeconds = effectiveTtlSeconds(request),
-                ),
-            scope = request.metadata.scope,
-            campsiteId = request.metadata.campsiteId,
+            hit = hit,
+            ageSeconds = maxAgeSeconds(rows, Instant.now(clock)),
+            ttlSeconds = effectiveTtlSeconds(request),
         )
-    }
-
-    private fun metadataFromFetched(
-        fetched: CampgroundObservations,
-        fallback: Metadata,
-    ): Metadata = fallback.copy(scope = fetched.campgroundRef ?: fallback.scope)
 
     private fun observedAtByCell(rows: List<AvailabilityRepo.CurrentCell>): Map<AvailabilityCell, Instant> =
         rows.associate { AvailabilityCell(it.campsiteId, it.targetDate) to it.observedAt.toInstant() }

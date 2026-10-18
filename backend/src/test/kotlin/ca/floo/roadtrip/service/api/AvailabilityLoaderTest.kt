@@ -26,7 +26,6 @@ private val fixedNow: Instant = Instant.parse("2026-07-30T12:00:00Z")
 private val snapshotTtl: Duration = Duration.ofMinutes(30)
 private val windowStart: LocalDate = LocalDate.of(2026, 8, 1)
 private val windowEnd: LocalDate = windowStart.plusDays(2)
-private const val PROVIDER = "recgov"
 
 class AvailabilityLoaderTest : SharedDbTest() {
     private val repo by lazy { AvailabilityRepo(ctx) }
@@ -45,7 +44,6 @@ class AvailabilityLoaderTest : SharedDbTest() {
 
     private fun request(targets: List<Long> = listOf(siteA, siteB)) =
         AvailabilityLoader.Request(
-            metadata = AvailabilityLoader.Metadata(provider = PROVIDER),
             targets = targets.map { AvailabilityLoader.CampsiteTarget(dbId = it) },
             startDate = windowStart,
             endDate = windowEnd,
@@ -86,16 +84,14 @@ class AvailabilityLoaderTest : SharedDbTest() {
 
         val result =
             runBlocking {
-                loader.loadOrFetch(request()) { fail("fresh cache must not trigger a live fetch") }
+                loader.load(request()) { fail("fresh cache must not trigger a live fetch") }
             }
 
-        assertTrue(result.cacheBlock.hit)
-        assertEquals(snapshotTtl.seconds, result.cacheBlock.ttlSeconds)
-        assertEquals(60, result.cacheBlock.ageSeconds)
-        assertEquals(4, result.observations.size)
-        assertTrue(result.observations.all { it.status == AvailabilityStatus.RESERVED })
-        assertEquals(windowStart, result.startDate)
-        assertEquals(windowEnd, result.endDate)
+        assertTrue(result.hit)
+        assertEquals(snapshotTtl.seconds, result.ttlSeconds)
+        assertEquals(60, result.ageSeconds)
+        assertEquals(4, result.cells.size)
+        assertTrue(result.cells.all { it.status == AvailabilityStatus.RESERVED })
     }
 
     @Test
@@ -107,13 +103,13 @@ class AvailabilityLoaderTest : SharedDbTest() {
 
         val result =
             runBlocking {
-                loader.loadOrFetch(request(targets = listOf(siteA, siteB, siteA))) {
+                loader.load(request(targets = listOf(siteA, siteB, siteA))) {
                     fail("every requested cell is stored and fresh; a repeated target must not force a fetch")
                 }
             }
 
-        assertTrue(result.cacheBlock.hit)
-        assertEquals(4, result.observations.size)
+        assertTrue(result.hit)
+        assertEquals(4, result.cells.size)
     }
 
     @Test
@@ -134,7 +130,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         var fetchCount = 0
         val result =
             runBlocking {
-                loader.loadOrFetch(request()) {
+                loader.load(request()) {
                     fetchCount++
                     batch(
                         listOf(siteA, siteB).flatMap { site ->
@@ -145,7 +141,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
             }
 
         assertEquals(1, fetchCount)
-        assertFalse(result.cacheBlock.hit)
+        assertFalse(result.hit)
     }
 
     @Test
@@ -153,7 +149,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         var fetchCount = 0
         val result =
             runBlocking {
-                loader.loadOrFetch(request()) {
+                loader.load(request()) {
                     fetchCount++
                     batch(
                         listOf(siteA, siteB).flatMap { site ->
@@ -164,9 +160,9 @@ class AvailabilityLoaderTest : SharedDbTest() {
             }
 
         assertEquals(1, fetchCount)
-        assertFalse(result.cacheBlock.hit)
-        assertEquals(4, result.observations.size)
-        assertTrue(result.observations.all { it.status == AvailabilityStatus.AVAILABLE })
+        assertFalse(result.hit)
+        assertEquals(4, result.cells.size)
+        assertTrue(result.cells.all { it.status == AvailabilityStatus.AVAILABLE })
 
         val stored = repo.readCurrent(listOf(siteA, siteB), windowDates())
         assertEquals(4, stored.size)
@@ -180,7 +176,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         var fetchCount = 0
         val result =
             runBlocking {
-                loader.loadOrFetch(request()) {
+                loader.load(request()) {
                     fetchCount++
                     batch(
                         listOf(siteA, siteB).flatMap { site ->
@@ -191,8 +187,8 @@ class AvailabilityLoaderTest : SharedDbTest() {
             }
 
         assertEquals(1, fetchCount)
-        assertFalse(result.cacheBlock.hit)
-        assertTrue(result.observations.all { it.status == AvailabilityStatus.AVAILABLE })
+        assertFalse(result.hit)
+        assertTrue(result.cells.all { it.status == AvailabilityStatus.AVAILABLE })
         val stored = repo.readCurrent(listOf(siteA, siteB), windowDates())
         assertTrue(stored.all { it.status == AvailabilityStatus.AVAILABLE })
     }
@@ -204,7 +200,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         // reaches full coverage instead of looking permanently stale.
         val result =
             runBlocking {
-                loader.loadOrFetch(request()) {
+                loader.load(request()) {
                     batch(listOf(observation(siteA, windowStart)))
                 }
             }
@@ -218,15 +214,15 @@ class AvailabilityLoaderTest : SharedDbTest() {
         assertEquals(AvailabilityStatus.UNKNOWN, byCell[siteB to windowStart.plusDays(1)])
 
         // Backfill completes coverage, so the response is served from the store.
-        assertFalse(result.cacheBlock.hit)
-        assertEquals(4, result.observations.size)
+        assertFalse(result.hit)
+        assertEquals(4, result.cells.size)
         assertEquals(
             1,
-            result.observations.count { it.status == AvailabilityStatus.AVAILABLE },
+            result.cells.count { it.status == AvailabilityStatus.AVAILABLE },
         )
         assertEquals(
             3,
-            result.observations.count { it.status == AvailabilityStatus.UNKNOWN },
+            result.cells.count { it.status == AvailabilityStatus.UNKNOWN },
         )
     }
 
@@ -244,7 +240,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         // of that seam in the meantime.
         var fetchCount = 0
         runBlocking {
-            loader.loadOrFetch(request(targets = listOf(siteA))) {
+            loader.load(request(targets = listOf(siteA))) {
                 fetchCount++
                 batch(
                     listOf(siteA, siteB).flatMap { site ->
@@ -258,15 +254,15 @@ class AvailabilityLoaderTest : SharedDbTest() {
 
         val unfiltered =
             runBlocking {
-                loader.loadOrFetch(request()) {
+                loader.load(request()) {
                     fetchCount++
                     fail("the narrowed fetch already answered every cell of the wider request")
                 }
             }
 
         assertEquals(1, fetchCount)
-        assertTrue(unfiltered.cacheBlock.hit)
-        assertEquals(4, unfiltered.observations.size)
+        assertTrue(unfiltered.hit)
+        assertEquals(4, unfiltered.cells.size)
     }
 
     @Test
@@ -276,7 +272,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         // never answered gets no row, rather than an UNKNOWN that would make a
         // later request think the cell had been looked at.
         runBlocking {
-            loader.loadOrFetch(request(targets = listOf(siteA))) {
+            loader.load(request(targets = listOf(siteA))) {
                 batch(listOf(observation(siteB, windowStart)))
             }
         }
@@ -297,7 +293,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         val extraDates = listOf(windowEnd, windowEnd.plusDays(1))
 
         runBlocking {
-            loader.loadOrFetch(request(targets = listOf(siteA)).copy(fetchEndDate = windowEnd.plusDays(2))) {
+            loader.load(request(targets = listOf(siteA)).copy(fetchEndDate = windowEnd.plusDays(2))) {
                 batch(listOf(observation(siteB, windowStart)))
             }
         }
@@ -314,15 +310,67 @@ class AvailabilityLoaderTest : SharedDbTest() {
     }
 
     @Test
-    fun `the direct-from-fetch response stays with the request's own targets`() {
+    fun `a miss the store cannot complete hands back everything the vendor said`() {
         val result =
             runBlocking {
-                loader.loadOrFetch(request(targets = listOf(siteA)).copy(fetchEndDate = windowStart.plusDays(1))) {
+                loader.load(request(targets = listOf(siteA)).copy(fetchEndDate = windowStart.plusDays(1))) {
                     batch(listOf(observation(siteA, windowStart), observation(siteB, windowStart)))
                 }
             }
 
-        assertFalse(result.cacheBlock.hit)
-        assertEquals(listOf(siteA), result.observations.map { it.campsiteId })
+        assertFalse(result.hit)
+        assertEquals(0, result.ageSeconds)
+        assertEquals(snapshotTtl.seconds, result.ttlSeconds)
+        assertEquals(setOf(siteA, siteB), result.cells.map { it.campsiteId }.toSet())
+    }
+
+    @Test
+    fun `a window with one stale cell reports a miss, not a hit`() {
+        seedStoredWindow(AvailabilityStatus.RESERVED, observedAt = fixedNow.minusSeconds(60))
+        val staleDate = windowStart.plusDays(1)
+        repo.recordObservations(
+            null,
+            listOf(
+                AvailabilityRepo.Observation(
+                    siteB,
+                    staleDate,
+                    AvailabilityStatus.RESERVED,
+                    fixedNow.minus(snapshotTtl).minusSeconds(60),
+                ),
+            ),
+        )
+
+        var fetchCount = 0
+        val result =
+            runBlocking {
+                loader.load(request()) {
+                    fetchCount++
+                    batch(
+                        listOf(siteA, siteB).flatMap { site ->
+                            windowDates().map { date ->
+                                val status =
+                                    if (site == siteB && date == staleDate) AvailabilityStatus.AVAILABLE else AvailabilityStatus.RESERVED
+                                observation(site, date, status)
+                            }
+                        },
+                    )
+                }
+            }
+
+        assertEquals(1, fetchCount)
+        assertFalse(result.hit)
+        assertEquals(4, result.cells.size)
+        assertEquals(
+            AvailabilityStatus.AVAILABLE,
+            result.cells.single { it.campsiteId == siteB && it.date == staleDate }.status,
+        )
+        assertEquals(3, result.cells.count { it.status == AvailabilityStatus.RESERVED })
+    }
+
+    @Test
+    fun `the loader answers with cells, not a shaped response`() {
+        val fields = LoadedCells::class.java.declaredFields.mapTo(mutableSetOf()) { it.name }
+
+        assertEquals(setOf("cells", "hit", "ageSeconds", "ttlSeconds"), fields)
     }
 }
