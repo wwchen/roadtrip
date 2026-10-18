@@ -169,9 +169,11 @@ and caching.
 3. `AvailabilityLoader` returns `LoadedCells`: the stored cells for the target
    window, plus a `FetchedObservations` (the adapter's `CampgroundObservations`
    and which provider served it) when the store could not answer. It stores
-   every cell a fetch carries and hands back the whole `CampgroundObservations`;
-   it does not narrow to the request. Narrowing is the reader's: it builds
-   streams only for the campsites the read answers for.
+   every cell a fetch carries. Its stored cells come from `readCurrent`, so they
+   are already the request's targets; the `FetchedObservations` it hands back on
+   a miss is the campground-wide answer, unnarrowed. Either way the narrowing
+   that reaches a response is the reader's: it builds streams only for the
+   campsites the read answers for.
 4. The reader builds one `CampsiteStream` per requested campsite and returns a
    `CampgroundWindow`: the campground, the window, the streams, the serving
    provider, the `campgroundRef`, the cache block, and the reopening dates.
