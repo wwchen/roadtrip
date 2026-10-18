@@ -18,8 +18,8 @@ describe('streamStays', () => {
   test('posts the stay to the stream route, asking for events, and yields each answer then done', async () => {
     const fetchStub = stubFetch(
       eventStreamResponse([
-        { event: STAY_ANSWER_EVENT, data: { poi_id: 22, error: 'rate_limited' } },
-        { event: STAY_ANSWER_EVENT, data: { poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 40 } } },
+        { event: STAY_ANSWER_EVENT, data: { poi_id: 22, outcome: 'failed', reason: 'rate_limited', retryable: true } },
+        { event: STAY_ANSWER_EVENT, data: { poi_id: 21, outcome: 'answered', stay: { status: 'open', open_sites: 8, checked_sites: 40, from_cache: false } } },
         { event: STAY_DONE_EVENT, data: { outcome: 'complete' } },
       ]),
     );
@@ -38,8 +38,8 @@ describe('streamStays', () => {
       max_age_seconds: 120,
     });
     expect(events).toEqual([
-      { kind: 'answer', answer: { poi_id: 22, error: 'rate_limited' } },
-      { kind: 'answer', answer: { poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 40 } } },
+      { kind: 'answer', answer: { poi_id: 22, outcome: 'failed', reason: 'rate_limited', retryable: true } },
+      { kind: 'answer', answer: { poi_id: 21, outcome: 'answered', stay: { status: 'open', open_sites: 8, checked_sites: 40, from_cache: false } } },
       { kind: 'done', done: { outcome: 'complete' } },
     ]);
   });

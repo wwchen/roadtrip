@@ -1119,10 +1119,10 @@ describe('the in-view list', () => {
       event: STAY_ANSWER_EVENT,
       data: { poi_id: poiId, outcome: 'answered', stay: { ...stay, from_cache: false } },
     });
-    const done = (answered: number): StubEvent => ({ event: STAY_DONE_EVENT, data: { answered } });
+    const done = (): StubEvent => ({ event: STAY_DONE_EVENT, data: { outcome: 'complete' } });
 
     test('asks about the checkable cards for the stay and shows each one its answer', async () => {
-      stayStream = () => eventStreamResponse([answer(21, { status: 'open', open_sites: 8, checked_sites: 132 }), done(1)]);
+      stayStream = () => eventStreamResponse([answer(21, { status: 'open', open_sites: 8, checked_sites: 132 }), done()]);
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
@@ -1135,6 +1135,20 @@ describe('the in-view list', () => {
       expect(stayBodies).toEqual([{ poi_ids: [21], start_date: '2026-09-11', end_date: '2026-09-13', site_type: [] }]);
       expect(screen.getByText('Fri Sep 11 → Sun Sep 13 · 1 with a site · 0 full · Checked just now')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument();
+    });
+
+    test('a check that finishes cleanly leaves no note beside the button', async () => {
+      stayStream = () => eventStreamResponse([answer(21, { status: 'open', open_sites: 8, checked_sites: 132 }), done()]);
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument());
+      expect(screen.getByText('8 sites open')).toBeInTheDocument();
+      expect(screen.queryByRole('status')).toBeNull();
     });
 
     test('one request asks about every card, each filling in as it answers, and the list re-sorts once all are back', async () => {
@@ -1161,7 +1175,7 @@ describe('the in-view list', () => {
 
       act(() => {
         stream.send(answer(22, { status: 'few_left', open_sites: 2, checked_sites: 170 }));
-        stream.send(done(2));
+        stream.send(done());
         stream.close();
       });
       await waitFor(() => expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument());
@@ -1176,7 +1190,7 @@ describe('the in-view list', () => {
         eventStreamResponse([
           answer(21, { status: 'full', open_sites: 0, checked_sites: 206 }),
           answer(22, { status: 'open', open_sites: 9, checked_sites: 170 }),
-          done(2),
+          done(),
         ]);
       withViewport();
       mount();
@@ -1200,7 +1214,7 @@ describe('the in-view list', () => {
         eventStreamResponse([
           answer(21, { status: 'open', open_sites: 8, checked_sites: 132 }),
           { event: STAY_ANSWER_EVENT, data: { poi_id: 22, outcome: 'failed', reason: 'rate_limited', retryable: true } },
-          done(2),
+          done(),
         ]);
       withViewport();
       mount();
@@ -1267,7 +1281,7 @@ describe('the in-view list', () => {
 
     test('a campground that refuses the dates says why', async () => {
       stayStream = () =>
-        eventStreamResponse([{ event: STAY_ANSWER_EVENT, data: { poi_id: 21, outcome: 'refused', reason: 'beyond_booking_horizon' } }, done(1)]);
+        eventStreamResponse([{ event: STAY_ANSWER_EVENT, data: { poi_id: 21, outcome: 'refused', reason: 'beyond_booking_horizon' } }, done()]);
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
@@ -1283,7 +1297,7 @@ describe('the in-view list', () => {
 
     test('a campground that ran out of time says so, and is counted apart as worth asking again', async () => {
       stayStream = () =>
-        eventStreamResponse([{ event: STAY_ANSWER_EVENT, data: { poi_id: 21, outcome: 'timed_out' } }, done(1)]);
+        eventStreamResponse([{ event: STAY_ANSWER_EVENT, data: { poi_id: 21, outcome: 'timed_out' } }, done()]);
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
@@ -1297,7 +1311,7 @@ describe('the in-view list', () => {
     });
 
     test('Check again asks for a short age; the first check names none', async () => {
-      stayStream = () => eventStreamResponse([answer(21, { status: 'full', open_sites: 0, checked_sites: 132 }), done(1)]);
+      stayStream = () => eventStreamResponse([answer(21, { status: 'full', open_sites: 0, checked_sites: 132 }), done()]);
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
@@ -1379,7 +1393,7 @@ describe('the in-view list', () => {
     });
 
     test('new dates leave the old answers behind', async () => {
-      stayStream = () => eventStreamResponse([answer(21, { status: 'open', open_sites: 8, checked_sites: 132 }), done(1)]);
+      stayStream = () => eventStreamResponse([answer(21, { status: 'open', open_sites: 8, checked_sites: 132 }), done()]);
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
