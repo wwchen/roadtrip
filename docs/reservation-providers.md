@@ -97,7 +97,9 @@ non-null — the primary ref when it is this provider's, else the matching alias
 parsed as this provider's `BookingProviderRef`. `campgroundRefFor` and
 `vendorSiteIdFor` resolve the same way, so an aliased row keeps the
 `parent_ref` key its live poller already stores. (`parent_ref` is the column
-and wire name; in Kotlin the same value is `campgroundRef`.) Aspira overrides `supportsCampground` to also require a
+name and the wire name on `AvailabilityPollerSchema`; the availability response
+DTO's wire name for the same value is `scope_ref`. In Kotlin it is
+`campgroundRef` in both.) Aspira overrides `supportsCampground` to also require a
 tenant it is configured for, which a `BookingProvider`-keyed lookup could not
 express.
 Boot wiring assembles that list as one Koin singleton
@@ -167,7 +169,9 @@ and caching.
 3. `AvailabilityLoader` returns `LoadedCells`: the stored cells for the target
    window, plus a `FetchedObservations` (the adapter's `CampgroundObservations`
    and which provider served it) when the store could not answer. It stores
-   every cell a fetch carries and answers from the request's own campsites.
+   every cell a fetch carries and hands back the whole `CampgroundObservations`;
+   it does not narrow to the request. Narrowing is the reader's: it builds
+   streams only for the campsites the read answers for.
 4. The reader builds one `CampsiteStream` per requested campsite and returns a
    `CampgroundWindow`: the campground, the window, the streams, the serving
    provider, the `campgroundRef`, the cache block, and the reopening dates.
@@ -513,6 +517,13 @@ It reads the same `CampgroundWindow` and the same per-night statuses as the rest
 section (`service/availability/StaySummary.kt`), so the status is decided once,
 here, and never in a browser.
 
+The week grid and the stay summary deliberately disagree about closed-for-season.
+Fusion calls the week `closed_for_season` only when every night of every stream is
+`closed`. The summary calls a stay `closed_for_season` when no site is bookable and
+each site that answered at all has at least one `closed` night, so a stay that runs
+into the closure is closed to the summary while the week grid still shows
+`success`. `StaySummaryTest` pins both.
+
 ## Base units: what the port answers in
 
 The layers split by what shape data has. The API layer is shaped by the
@@ -540,8 +551,10 @@ filtered to, because the upstream call covers the campground either way; pass
 less and the cells of the campsites the filter dropped are paid for and thrown
 away, and the next request calls the vendor again for a campground just called.
 `AvailabilityLoader` stores every cell a `CampgroundObservations` carries and
-answers from the request's own targets, so a wider fetch never widens a
-response.
+returns the fetched observations whole; it does not narrow them.
+`CampgroundAvailabilityReader` builds streams (`streamsFor`) only for the
+campsites the read answers for, so a wider fetch never widens a response: a
+filtered response does not contain the dropped campsites' cells.
 
 Two rules are the contract:
 
