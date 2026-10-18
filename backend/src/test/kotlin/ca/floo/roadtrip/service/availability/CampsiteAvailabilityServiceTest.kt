@@ -292,6 +292,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
             providers: List<AvailabilityProvider>,
             campground: Campground,
             campsites: List<Campsite>,
+            campgroundCampsites: List<Campsite>,
             window: ResolvedDateWindow,
         ): FailoverResult {
             capturedProviders = providers

@@ -1567,6 +1567,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 providers: List<AvailabilityProvider>,
                 campground: Campground,
                 campsites: List<Campsite>,
+                campgroundCampsites: List<Campsite>,
                 window: ResolvedDateWindow,
             ): FailoverAvailabilityFetcher.FailoverResult =
                 FailoverAvailabilityFetcher.FailoverResult(
