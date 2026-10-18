@@ -37,6 +37,7 @@ import ca.floo.roadtrip.route.auth.roadtripAuthorization
 import ca.floo.roadtrip.route.common.apiContractDrift
 import ca.floo.roadtrip.route.common.undeclaredAccessRoutes
 import ca.floo.roadtrip.route.static.staticSiteRoutes
+import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.RouteResponseMapper
 import ca.floo.roadtrip.service.auth.AuthController
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
@@ -50,14 +51,15 @@ import ca.floo.roadtrip.service.auth.UserProvisioningService
 import ca.floo.roadtrip.service.auth.WatchAccessResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDashboardController
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityReadPolicy
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.BookingIdentityResolver
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
+import ca.floo.roadtrip.service.availability.CampgroundAvailabilityReader
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
-import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
@@ -85,6 +87,7 @@ import org.koin.core.qualifier.named
 import org.koin.ktor.ext.getKoin
 import org.koin.ktor.ext.inject
 import java.io.File
+import java.time.Clock
 import java.time.Duration
 
 internal fun Application.registerKoinRoutes() {
@@ -260,6 +263,14 @@ private fun campsiteAvailabilityController(
             dateResolver = dateResolver,
             pollerRepo = pollerRepo,
         )
+    val readPolicy =
+        AvailabilityReadPolicy(
+            providers = availabilityProviders,
+            dateResolver = dateResolver,
+            bookingHorizons = bookingHorizons,
+            clock = Clock.systemUTC(),
+            snapshotFreshnessTtl = configuredSnapshotFreshnessTtl(cacheConfig),
+        )
     return CampsiteAvailabilityController(
         campgroundRepo = campgroundRepo,
         campsitesRepo = campsitesRepo,
@@ -271,14 +282,13 @@ private fun campsiteAvailabilityController(
                 targets = targets,
                 identities = identities,
             ),
-        availabilityService =
-            CampsiteAvailabilityService(
-                availabilityProviders = availabilityProviders,
-                dateResolver = dateResolver,
+        policy = readPolicy,
+        reader =
+            CampgroundAvailabilityReader(
+                policy = readPolicy,
+                loader = AvailabilityLoader(availabilityRepo),
                 failoverFetcher = failoverFetcher,
-                bookingHorizons = bookingHorizons,
                 availabilityRepo = availabilityRepo,
-                snapshotFreshnessTtl = configuredSnapshotFreshnessTtl(cacheConfig),
             ),
         dateResolver = dateResolver,
         watchCapabilityService = watchCapabilities,

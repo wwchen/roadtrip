@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
 import ca.floo.roadtrip.config.CampsiteAvailabilityConfig
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
+import ca.floo.roadtrip.fixtures.testCampgroundReadPath
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
@@ -25,9 +26,7 @@ import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.route.api.pois.campsiteRoutes
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
-import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
-import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
@@ -126,18 +125,19 @@ class CampsiteRoutesTest : SharedDbTest() {
                 dateResolver = dateResolver,
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
+        val readPath =
+            testCampgroundReadPath(
+                providers = providers,
+                dateResolver = dateResolver,
+                failoverFetcher = FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))),
+                availabilityRepo = AvailabilityRepo(ctx),
+            )
         return CampsiteAvailabilityController(
             campgroundRepo = campgroundRepo,
             campsitesRepo = campsitesRepo,
             catalogService = testCampsiteCatalogService(ctx, campsitesRepo, targets),
-            availabilityService =
-                CampsiteAvailabilityService(
-                    availabilityProviders = providers,
-                    dateResolver = dateResolver,
-                    failoverFetcher = FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))),
-                    bookingHorizons = BookingHorizonResolver(providers, dateResolver),
-                    availabilityRepo = AvailabilityRepo(ctx),
-                ),
+            policy = readPath.policy,
+            reader = readPath.reader,
             dateResolver = dateResolver,
             watchCapabilityService =
                 WatchCapabilityService(

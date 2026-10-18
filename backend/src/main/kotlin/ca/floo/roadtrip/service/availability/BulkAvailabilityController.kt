@@ -45,7 +45,7 @@ internal fun interface PoiAvailabilitySliceLookup {
         startDate: LocalDate?,
         endDate: LocalDate?,
         freshAtOrAfter: Instant?,
-    ): PoiAvailabilitySlice
+    ): CampgroundWindow
 }
 
 /**
@@ -87,7 +87,7 @@ internal class BulkAvailabilityController(
         freshAtOrAfter: Instant,
     ): BulkPoiAvailabilityDto =
         try {
-            val slice =
+            val campgroundWindow =
                 sliceLookup.poiAvailabilitySlice(
                     poiId = poiId,
                     siteTypes = request.siteTypes,
@@ -96,7 +96,7 @@ internal class BulkAvailabilityController(
                     freshAtOrAfter = freshAtOrAfter,
                 )
             // Narrowed once, here, so both views answer over the same campsites.
-            val fitting = slice.copy(campsites = slice.campsites.fittingGroup(request.groupSize))
+            val fitting = campgroundWindow.narrowedTo(campgroundWindow.campsites.fittingGroup(request.groupSize))
             when (request.view) {
                 BulkAvailabilityView.CAMPSITES -> rank(fitting, request.minNights)
                 BulkAvailabilityView.SUMMARY -> summarize(fitting)
@@ -116,29 +116,29 @@ internal class BulkAvailabilityController(
             BulkPoiAvailabilityDto(poiId = poiId, error = AvailabilityProviderError.Unknown(e).code)
         }
 
-    private fun summarize(slice: PoiAvailabilitySlice): BulkPoiAvailabilityDto =
+    private fun summarize(campgroundWindow: CampgroundWindow): BulkPoiAvailabilityDto =
         BulkPoiAvailabilityDto(
-            poiId = slice.poiId,
-            startDate = slice.startDate.toString(),
-            endDate = slice.endDate.toString(),
-            summary = staySummaryOf(slice.streams(), slice.checkedSites(), slice.batch?.cacheBlock),
+            poiId = campgroundWindow.poiId,
+            startDate = campgroundWindow.window.startDate.toString(),
+            endDate = campgroundWindow.window.endDate.toString(),
+            summary = staySummaryOf(campgroundWindow.streams, campgroundWindow.checkedSites(), campgroundWindow.cache),
         )
 
     private fun rank(
-        slice: PoiAvailabilitySlice,
+        campgroundWindow: CampgroundWindow,
         minNights: Int,
     ): BulkPoiAvailabilityDto {
         val campsites =
-            slice
+            campgroundWindow
                 .perCampsiteEnvelopes()
-                .map { it.response.copy(longestRunNights = longestRunNights(it.observations)) }
+                .map { it.response.copy(longestRunNights = longestRunNights(it.stream.statuses)) }
                 .filter { (it.longestRunNights ?: 0) >= minNights }
                 .sortedByDescending { it.longestRunNights ?: 0 }
 
         return BulkPoiAvailabilityDto(
-            poiId = slice.poiId,
-            startDate = slice.startDate.toString(),
-            endDate = slice.endDate.toString(),
+            poiId = campgroundWindow.poiId,
+            startDate = campgroundWindow.window.startDate.toString(),
+            endDate = campgroundWindow.window.endDate.toString(),
             campsites = campsites,
         )
     }

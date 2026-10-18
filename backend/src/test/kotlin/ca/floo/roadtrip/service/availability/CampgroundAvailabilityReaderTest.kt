@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.config.ApiCacheConfig
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
+import ca.floo.roadtrip.fixtures.testCampgroundReadPath
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
@@ -41,9 +42,10 @@ private val aspiraTtlOverride: Duration = Duration.ofMinutes(15)
 // Wide enough that any row this suite writes counts as fresh, forcing the cache path.
 private val alwaysFreshTtl: Duration = Duration.ofDays(3650)
 
-class CampsiteAvailabilityServiceTest : SharedDbTest() {
+class CampgroundAvailabilityReaderTest : SharedDbTest() {
     private lateinit var campground: Campground
     private lateinit var campsites: List<Campsite>
+    private var poiId = 0L
 
     @BeforeEach
     fun seed() {
@@ -59,60 +61,62 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
                 bookingProviderRef = "232447",
             )
         ctx.seedCampsite(campgroundId = fixture.catalogId, vendorId = "svc-100")
+        poiId = fixture.poiId
         campground = CampgroundRepo(ctx).findByPoi(fixture.poiId)!!
         campsites = CampsiteRepo(ctx).findByCampground(fixture.catalogId)
     }
 
     private fun dateContext() = PoiDateContext(timeZone = ZoneId.of("UTC"), earliestDate = earliestBookable)
 
-    private fun service(
+    private fun reader(
         providers: List<AvailabilityProvider>,
         fetcher: FailoverAvailabilityFetcher = CapturingFetcher(),
         clock: Clock = Clock.systemUTC(),
         snapshotFreshnessTtl: (AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
         availabilityRepo: AvailabilityRepo? = null,
-    ): CampsiteAvailabilityService {
-        val dateResolver = AvailabilityDateResolver(PoiRepo(ctx))
-        return CampsiteAvailabilityService(
-            availabilityProviders = providers,
-            dateResolver = dateResolver,
+    ): CampgroundAvailabilityReader =
+        testCampgroundReadPath(
+            providers = providers,
+            dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
             failoverFetcher = fetcher,
-            bookingHorizons = BookingHorizonResolver(providers, dateResolver),
             availabilityRepo = availabilityRepo,
             clock = clock,
             snapshotFreshnessTtl = snapshotFreshnessTtl,
+        ).reader
+
+    private suspend fun CampgroundAvailabilityReader.readCampground(
+        named: List<Campsite> = campsites,
+        campgroundWide: List<Campsite> = campsites,
+    ): CampgroundWindow =
+        read(
+            poiId = poiId,
+            campground = campground,
+            campgroundCampsites = campgroundWide,
+            campsites = named,
+            dateContext = dateContext(),
+            startDate = null,
+            endDate = null,
+            freshAtOrAfter = null,
         )
-    }
 
     @Test
-    fun `a cache hit still carries the provider's parent ref as scope`() {
+    fun `a cache hit still carries the provider's parent ref as the campground ref`() {
         val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
-        val svc =
-            service(
+        val reader =
+            reader(
                 providers = listOf(recgov),
                 snapshotFreshnessTtl = { alwaysFreshTtl },
                 availabilityRepo = AvailabilityRepo(ctx),
             )
-        val fetch =
-            suspend {
-                svc.fetchAvailability(
-                    campground = campground,
-                    campsites = campsites,
-                    campgroundCampsites = campsites,
-                    startDate = null,
-                    endDate = null,
-                    dateContext = dateContext(),
-                )
-            }
 
-        val result =
+        val window =
             runBlocking {
-                fetch()
-                fetch()
+                reader.readCampground()
+                reader.readCampground()
             }
 
-        assertEquals(true, result.batch.cacheBlock.hit)
-        assertEquals(recgov.parentRefFor(campground), result.batch.scope)
+        assertEquals(true, window.cache?.hit)
+        assertEquals(recgov.parentRefFor(campground), window.campgroundRef)
     }
 
     @Test
@@ -120,19 +124,31 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
         val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
         val fetcher = CapturingFetcher(servedBy = { BookingProvider.CAMPFLARE })
 
-        val result =
+        val window = runBlocking { reader(listOf(recgov), fetcher).readCampground() }
+
+        assertEquals(BookingProvider.CAMPFLARE, window.provider)
+    }
+
+    @Test
+    fun `a read served from the store names the provider the policy picked`() {
+        val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
+        val fetcher = CapturingFetcher(servedBy = { BookingProvider.CAMPFLARE })
+        val reader =
+            reader(
+                providers = listOf(recgov),
+                fetcher = fetcher,
+                snapshotFreshnessTtl = { alwaysFreshTtl },
+                availabilityRepo = AvailabilityRepo(ctx),
+            )
+
+        val window =
             runBlocking {
-                service(listOf(recgov), fetcher).fetchAvailability(
-                    campground = campground,
-                    campsites = campsites,
-                    campgroundCampsites = campsites,
-                    startDate = null,
-                    endDate = null,
-                    dateContext = dateContext(),
-                )
+                reader.readCampground()
+                reader.readCampground()
             }
 
-        assertEquals(BookingProvider.CAMPFLARE.id, result.batch.provider)
+        assertEquals(true, window.cache?.hit)
+        assertEquals(BookingProvider.RECGOV, window.provider)
     }
 
     @Test
@@ -140,19 +156,28 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
         val unnamedCampsite = campsites.first().id + 1
         val fetcher = CapturingFetcher(alsoReportsCampsite = unnamedCampsite)
 
-        val result =
+        val window =
+            runBlocking { reader(listOf(FakeAvailabilityProvider(BookingProvider.RECGOV)), fetcher).readCampground() }
+
+        assertEquals(listOf(campsites.first().id), window.streams.map { it.campsiteId })
+    }
+
+    @Test
+    fun `the model's streams cover the campsites the read answers for, and no others`() {
+        val named = campsites.first()
+        val unnamed = campsites.first().copy(id = named.id + 1)
+        val fetcher = CapturingFetcher(alsoReportsCampsite = unnamed.id)
+
+        val window =
             runBlocking {
-                service(listOf(FakeAvailabilityProvider(BookingProvider.RECGOV)), fetcher).fetchAvailability(
-                    campground = campground,
-                    campsites = campsites,
-                    campgroundCampsites = campsites,
-                    startDate = null,
-                    endDate = null,
-                    dateContext = dateContext(),
-                )
+                reader(listOf(FakeAvailabilityProvider(BookingProvider.RECGOV)), fetcher)
+                    .readCampground(named = listOf(named), campgroundWide = listOf(named, unnamed))
             }
 
-        assertEquals(listOf(campsites.first().id), result.batch.observations.map { it.campsiteId })
+        assertEquals(listOf(named.id, unnamed.id), fetcher.capturedCampgroundCampsiteIds, "the fetch covered the campground")
+        assertEquals(listOf(named.id), window.campsites.map { it.id })
+        assertEquals(listOf(named.id, unnamed.id), window.campgroundCampsites.map { it.id })
+        assertEquals(listOf(named.id), window.streams.map { it.campsiteId })
     }
 
     @Test
@@ -161,25 +186,10 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
         val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
         val fetcher = CapturingFetcher()
 
-        val result =
-            runBlocking {
-                service(listOf(aspira, recgov), fetcher).fetchAvailability(
-                    campground = campground,
-                    campsites = campsites,
-                    campgroundCampsites = campsites,
-                    startDate = null,
-                    endDate = null,
-                    dateContext = dateContext(),
-                )
-            }
+        val window = runBlocking { reader(listOf(aspira, recgov), fetcher).readCampground() }
 
-        // Only the supporting provider reaches the failover fetcher; the aspira
-        // adapter (wrong booking provider for this campground) is filtered out.
         assertEquals(listOf<AvailabilityProvider>(recgov), fetcher.capturedProviders)
-        // Target window: default 7 days anchored at the earliest bookable date.
-        assertEquals(earliestBookable, result.startDate)
-        assertEquals(earliestBookable.plusDays(DEFAULT_WINDOW_DAYS), result.endDate)
-        // Fetch window: the widest single call the vendor allows (60 days).
+        assertEquals(ResolvedDateWindow(earliestBookable, earliestBookable.plusDays(DEFAULT_WINDOW_DAYS)), window.window)
         assertEquals(
             ResolvedDateWindow(earliestBookable, earliestBookable.plusDays(WIDE_WINDOW_DAYS)),
             fetcher.capturedWindow,
@@ -187,26 +197,16 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
     }
 
     @Test
-    fun `slices the fetched batch down to the requested target window`() {
+    fun `slices the fetched cells down to the requested target window`() {
         val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
-        val fetcher = CapturingFetcher()
 
-        val result =
-            runBlocking {
-                service(listOf(recgov), fetcher).fetchAvailability(
-                    campground = campground,
-                    campsites = campsites,
-                    campgroundCampsites = campsites,
-                    startDate = null,
-                    endDate = null,
-                    dateContext = dateContext(),
-                )
-            }
+        val window = runBlocking { reader(listOf(recgov)).readCampground() }
 
-        // The fake fetcher reports one in-window and one out-of-window day; only
-        // the in-window observation survives the slice to the 7-day target.
-        assertEquals(listOf(earliestBookable), result.batch.observations.map { it.date })
-        assertEquals(false, result.batch.cacheBlock.hit)
+        val stream = window.streams.single()
+        assertEquals(DEFAULT_WINDOW_DAYS.toInt(), stream.statuses.size)
+        assertEquals(AvailabilityStatus.AVAILABLE, stream.statuses.first())
+        assertEquals(setOf(AvailabilityStatus.UNKNOWN), stream.statuses.drop(1).toSet())
+        assertEquals(false, window.cache?.hit)
     }
 
     @Test
@@ -215,80 +215,46 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
 
         val error =
             assertFailsWith<AvailabilityServiceError> {
-                runBlocking {
-                    service(listOf(aspiraOnly)).fetchAvailability(
-                        campground = campground,
-                        campsites = campsites,
-                        campgroundCampsites = campsites,
-                        startDate = null,
-                        endDate = null,
-                        dateContext = dateContext(),
-                    )
-                }
+                runBlocking { reader(listOf(aspiraOnly)).readCampground() }
             }
         assertSame(AvailabilityServiceError.UnknownCampground, error)
     }
 
     @Test
     fun `snapshot freshness TTL is selected for the dispatched provider`() {
-        // Fixed clock: effectiveTtlSeconds derives ttl from Duration.between(freshAtOrAfter,
-        // now), so a system clock makes this assertion depend on two Instant.now() calls
-        // landing in the same second.
         val clock = Clock.fixed(Instant.parse("2020-01-01T00:00:00Z"), ZoneOffset.UTC)
         val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
         val ttl = Duration.ofMinutes(5)
         var askedFor: AvailabilityProvider? = null
 
-        val result =
+        val window =
             runBlocking {
-                service(
+                reader(
                     providers = listOf(recgov),
                     clock = clock,
                     snapshotFreshnessTtl = { provider ->
                         askedFor = provider
                         ttl
                     },
-                ).fetchAvailability(
-                    campground = campground,
-                    campsites = campsites,
-                    campgroundCampsites = campsites,
-                    startDate = null,
-                    endDate = null,
-                    dateContext = dateContext(),
-                )
+                ).readCampground()
             }
 
         assertSame(recgov, askedFor)
-        assertEquals(ttl.seconds, result.batch.cacheBlock.ttlSeconds)
+        assertEquals(ttl.seconds, window.cache?.ttlSeconds)
     }
 
     @Test
-    fun `the service's injected clock is the same clock its loader measures ttl against`() {
-        // Fixed far from the real system clock: if the loader fell back to its own
-        // Clock.systemUTC() instead of the one threaded through from the service,
-        // ttlSeconds would come back as a multi-year duration, not exactly `ttl`.
-        val fixedNow = Instant.parse("2020-01-01T00:00:00Z")
-        val clock = Clock.fixed(fixedNow, ZoneOffset.UTC)
+    fun `the injected clock is the same clock the loader measures ttl against`() {
+        val clock = Clock.fixed(Instant.parse("2020-01-01T00:00:00Z"), ZoneOffset.UTC)
         val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
         val ttl = Duration.ofMinutes(5)
 
-        val result =
+        val window =
             runBlocking {
-                service(
-                    providers = listOf(recgov),
-                    clock = clock,
-                    snapshotFreshnessTtl = { ttl },
-                ).fetchAvailability(
-                    campground = campground,
-                    campsites = campsites,
-                    campgroundCampsites = campsites,
-                    startDate = null,
-                    endDate = null,
-                    dateContext = dateContext(),
-                )
+                reader(providers = listOf(recgov), clock = clock, snapshotFreshnessTtl = { ttl }).readCampground()
             }
 
-        assertEquals(ttl.seconds, result.batch.cacheBlock.ttlSeconds)
+        assertEquals(ttl.seconds, window.cache?.ttlSeconds)
     }
 
     @Test
@@ -318,7 +284,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
     }
 
     /**
-     * Failover fetcher stub: captures what the service hands it and answers with
+     * Failover fetcher stub: captures what the reader hands it and answers with
      * a two-day batch (one day inside the default 7-day target window, one far
      * outside it) so slicing behaviour is observable.
      */
@@ -328,6 +294,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
     ) : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))) {
         var capturedProviders: List<AvailabilityProvider>? = null
         var capturedWindow: ResolvedDateWindow? = null
+        var capturedCampgroundCampsiteIds: List<Long>? = null
 
         override suspend fun fetch(
             providers: List<AvailabilityProvider>,
@@ -338,6 +305,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
         ): FailoverResult {
             capturedProviders = providers
             capturedWindow = window
+            capturedCampgroundCampsiteIds = campgroundCampsites.map { it.id }
             val campsiteId = campsites.first().id
             val observedAt = Instant.parse("2026-07-30T12:00:00Z")
             val observations =

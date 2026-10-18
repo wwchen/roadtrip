@@ -4,12 +4,12 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailability
 import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
-import ca.floo.roadtrip.fixtures.askedFor
 import ca.floo.roadtrip.fixtures.availableIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.statuses
 import ca.floo.roadtrip.model.api.AvailabilityResponseDto
+import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampgroundObservations
@@ -512,7 +512,12 @@ private fun responseOf(
     endDate: LocalDate,
 ): AvailabilityResponseDto =
     availabilityResponseFromObservations(
-        observations.askedFor(BookingProvider.ASPIRA, startDate, endDate),
+        provider = BookingProvider.ASPIRA.id,
+        campgroundRef = observations.campgroundRef,
+        startDate = startDate,
+        endDate = endDate,
+        observations = observations.observations,
+        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
         pollingSupported = true,
         earliestDate = startDate,
         seasonBlock = null,

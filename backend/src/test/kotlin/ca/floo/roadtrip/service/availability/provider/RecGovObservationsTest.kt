@@ -2,11 +2,11 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.recgov.Campsite
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
-import ca.floo.roadtrip.fixtures.askedFor
 import ca.floo.roadtrip.fixtures.availableCellIds
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.cellStatuses
 import ca.floo.roadtrip.model.api.AvailabilityResponseDto
+import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.domain.Campground
@@ -466,7 +466,12 @@ private fun responseOf(
     endDate: LocalDate,
 ): AvailabilityResponseDto =
     availabilityResponseFromObservations(
-        observations.askedFor(BookingProvider.RECGOV, startDate, endDate),
+        provider = BookingProvider.RECGOV.id,
+        campgroundRef = observations.campgroundRef,
+        startDate = startDate,
+        endDate = endDate,
+        observations = observations.observations,
+        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
         pollingSupported = true,
         earliestDate = startDate,
         seasonBlock = null,

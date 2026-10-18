@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.api
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
@@ -53,7 +54,10 @@ class AvailabilityLoaderTest : SharedDbTest() {
         )
 
     private fun batch(observations: List<CampsiteDayObservation>) =
-        CampgroundObservations(campgroundRef = null, observations = observations)
+        FetchedObservations(
+            observations = CampgroundObservations(campgroundRef = null, observations = observations),
+            servedBy = BookingProvider.RECGOV,
+        )
 
     private fun observation(
         campsiteId: Long,
@@ -92,6 +96,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         assertEquals(60, result.ageSeconds)
         assertEquals(4, result.cells.size)
         assertTrue(result.cells.all { it.status == AvailabilityStatus.RESERVED })
+        assertNull(result.fetched, "nothing was fetched, so nobody served this")
     }
 
     @Test
@@ -163,6 +168,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         assertFalse(result.hit)
         assertEquals(4, result.cells.size)
         assertTrue(result.cells.all { it.status == AvailabilityStatus.AVAILABLE })
+        assertEquals(BookingProvider.RECGOV, result.fetched?.servedBy)
 
         val stored = repo.readCurrent(listOf(siteA, siteB), windowDates())
         assertEquals(4, stored.size)
@@ -371,6 +377,6 @@ class AvailabilityLoaderTest : SharedDbTest() {
     fun `the loader answers with cells, not a shaped response`() {
         val fields = LoadedCells::class.java.declaredFields.mapTo(mutableSetOf()) { it.name }
 
-        assertEquals(setOf("cells", "hit", "ageSeconds", "ttlSeconds"), fields)
+        assertEquals(setOf("cells", "hit", "ageSeconds", "ttlSeconds", "fetched"), fields)
     }
 }

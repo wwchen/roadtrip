@@ -1,8 +1,11 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.config.ApiCacheConfig
+import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import java.time.Clock
 import java.time.Duration
@@ -32,7 +35,7 @@ internal class AvailabilityReadPolicy(
         endDate: LocalDate?,
         freshAtOrAfter: Instant?,
     ): AvailabilityRead {
-        val provider = bookingHorizons.servingProvider(campground) ?: throw AvailabilityServiceError.UnknownCampground
+        val provider = servingProvider(campground) ?: throw AvailabilityServiceError.UnknownCampground
         val caps = provider.capabilities
         val targetWindow =
             dateResolver.resolveWindow(
@@ -58,6 +61,8 @@ internal class AvailabilityReadPolicy(
         )
     }
 
+    fun servingProvider(campground: Campground): AvailabilityProvider? = bookingHorizons.servingProvider(campground)
+
     fun latestDate(
         campground: Campground,
         dateContext: PoiDateContext,
@@ -69,3 +74,8 @@ internal class AvailabilityReadPolicy(
 
     fun pollingSupported(campground: Campground): Boolean = bookingHorizons.internalPollingSupported(campground)
 }
+
+internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration = ApiCacheEntity.availability(providerId).defaultTtl
+
+internal fun configuredSnapshotFreshnessTtl(cache: ApiCacheConfig): (AvailabilityProvider) -> Duration =
+    { provider -> cache.availabilityTtl(provider.id) }

@@ -4,7 +4,6 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailability
 import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
-import ca.floo.roadtrip.fixtures.askedFor
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
@@ -302,7 +301,9 @@ class AspiraAvailabilityProviderTest {
 
             val dates =
                 availabilityDatesFromObservations(
-                    batch.askedFor(BookingProvider.ASPIRA, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-03")),
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-03"),
+                    observations = batch.observations,
                 )
             assertEquals(listOf("2026-07-01", "2026-07-02"), dates)
         }

@@ -2,6 +2,9 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
+import ca.floo.roadtrip.model.availability.PoiDateContext
+import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -27,7 +30,8 @@ internal class CampsiteAvailabilityController(
     private val campgroundRepo: CampgroundRepo,
     private val campsitesRepo: CampsiteRepo,
     private val catalogService: CampsiteCatalogService,
-    private val availabilityService: CampsiteAvailabilityService,
+    private val policy: AvailabilityReadPolicy,
+    private val reader: CampgroundAvailabilityReader,
     private val dateResolver: AvailabilityDateResolver,
     private val watchCapabilityService: WatchCapabilityService,
 ) {
@@ -50,67 +54,65 @@ internal class CampsiteAvailabilityController(
         startDate: LocalDate?,
         endDate: LocalDate?,
         freshAtOrAfter: Instant? = null,
-    ): PoiAvailabilitySlice {
+    ): CampgroundWindow {
         val campground = campgroundRepo.findByPoi(poiId) ?: throw AvailabilityServiceError.NotFound
         val allCampsites = campsitesRepo.findByCampground(campground.id)
         val campsites = allCampsites.filterBySiteTypes(siteTypes)
         val dateContext = dateResolver.contextForPoi(poiId)
-        // One provider pick for the whole slice: `watchable` is the serving
-        // provider's answer, not a per-campsite lookup.
-        val pollingSupported = availabilityService.internalPollingSupportedFor(campground)
 
         if (campsites.isEmpty()) {
-            // The site_type filter dropped every campsite, but the campground
-            // may still have a serving provider — ask it for the real horizon
-            // before falling back to the flat default.
-            val horizonDays = availabilityService.bookingHorizonDaysFor(campground)
-            val window =
-                dateResolver.resolveWindow(
-                    startDate = startDate,
-                    endDate = endDate,
-                    context = dateContext,
-                    bookingHorizonDays = horizonDays ?: EMPTY_WINDOW_HORIZON_DAYS,
-                    maxDays = EMPTY_WINDOW_MAX_DAYS,
-                    defaultDays = EMPTY_WINDOW_DEFAULT_DAYS,
-                )
-            return PoiAvailabilitySlice(
-                poiId = poiId,
-                startDate = window.startDate,
-                endDate = window.endDate,
-                earliestDate = dateContext.earliestDate,
-                // The fallback above only bounds the window it had to compute;
-                // with no provider there is no horizon to publish as truth.
-                latestDate = horizonDays?.let { dateResolver.latestDate(dateContext, it) },
-                allCampsites = allCampsites,
-                campsites = emptyList(),
-                batch = null,
-                reopensOnByCampsite = emptyMap(),
-                pollingSupported = pollingSupported,
-            )
+            return emptyWindow(poiId, campground, allCampsites, dateContext, startDate, endDate)
         }
 
-        val result =
-            availabilityService.fetchAvailability(
-                campground = campground,
-                campsites = campsites,
-                campgroundCampsites = allCampsites,
+        return reader.read(
+            poiId = poiId,
+            campground = campground,
+            campgroundCampsites = allCampsites,
+            campsites = campsites,
+            dateContext = dateContext,
+            startDate = startDate,
+            endDate = endDate,
+            freshAtOrAfter = freshAtOrAfter,
+        )
+    }
+
+    private fun emptyWindow(
+        poiId: Long,
+        campground: Campground,
+        allCampsites: List<Campsite>,
+        dateContext: PoiDateContext,
+        startDate: LocalDate?,
+        endDate: LocalDate?,
+    ): CampgroundWindow {
+        // The site_type filter dropped every campsite, but the campground
+        // may still have a serving provider — ask it for the real horizon
+        // before falling back to the flat default.
+        val horizonDays = policy.bookingHorizonDays(campground)
+        val window =
+            dateResolver.resolveWindow(
                 startDate = startDate,
                 endDate = endDate,
-                dateContext = dateContext,
-                freshAtOrAfter = freshAtOrAfter,
+                context = dateContext,
+                bookingHorizonDays = horizonDays ?: EMPTY_WINDOW_HORIZON_DAYS,
+                maxDays = EMPTY_WINDOW_MAX_DAYS,
+                defaultDays = EMPTY_WINDOW_DEFAULT_DAYS,
             )
-
-        return PoiAvailabilitySlice(
+        return CampgroundWindow(
             poiId = poiId,
-            startDate = result.startDate,
-            endDate = result.endDate,
+            campground = campground,
+            window = window,
             earliestDate = dateContext.earliestDate,
-            latestDate = result.latestDate,
-            allCampsites = allCampsites,
-            campsites = campsites,
-            batch = result.batch,
-            reopensOnByCampsite = result.reopensOnByCampsite,
-            pollingSupported = pollingSupported,
+            // The fallback above only bounds the window it had to compute;
+            // with no provider there is no horizon to publish as truth.
+            latestDate = horizonDays?.let { dateResolver.latestDate(dateContext, it) },
+            campgroundCampsites = allCampsites,
+            campsites = emptyList(),
+            streams = emptyList(),
+            provider = policy.servingProvider(campground)?.id,
+            campgroundRef = null,
+            cache = null,
+            pollingSupported = policy.pollingSupported(campground),
+            reopensOnByCampsite = emptyMap(),
         )
     }
 
@@ -129,15 +131,15 @@ internal class CampsiteAvailabilityController(
         // to what *this* caller could set, so `atc` is simply absent for them.
         requester: UserId? = null,
     ): PoiCampsitesAvailabilityResponseDto {
-        val slice = poiAvailabilitySlice(poiId, siteTypes, startDate, endDate)
-        val watchCaps = watchCapabilityService.capabilitiesFor(slice.allCampsites, requester)
-        val fused = slice.fusedWindow()
+        val campgroundWindow = poiAvailabilitySlice(poiId, siteTypes, startDate, endDate)
+        val watchCaps = watchCapabilityService.capabilitiesFor(campgroundWindow.campgroundCampsites, requester)
+        val fused = campgroundWindow.fusedWindow()
 
         return PoiCampsitesAvailabilityResponseDto(
             poiId = poiId,
-            startDate = slice.startDate.toString(),
-            endDate = slice.endDate.toString(),
-            latestDate = slice.latestDate?.toString(),
+            startDate = campgroundWindow.window.startDate.toString(),
+            endDate = campgroundWindow.window.endDate.toString(),
+            latestDate = campgroundWindow.latestDate?.toString(),
             state = fused.state,
             season = seasonElement(fused.season),
             cache = fused.cache,

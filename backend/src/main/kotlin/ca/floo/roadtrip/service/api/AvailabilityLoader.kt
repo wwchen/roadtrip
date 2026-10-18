@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.api
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampgroundObservations
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.availability.AvailabilityCell
 import ca.floo.roadtrip.service.availability.requiredCells
@@ -13,11 +14,17 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
+data class FetchedObservations(
+    val observations: CampgroundObservations,
+    val servedBy: BookingProvider?,
+)
+
 data class LoadedCells(
     val cells: List<CampsiteDayObservation>,
     val hit: Boolean,
     val ageSeconds: Long,
     val ttlSeconds: Long,
+    val fetched: FetchedObservations?,
 )
 
 /**
@@ -44,7 +51,7 @@ class AvailabilityLoader(
 
     suspend fun load(
         request: Request,
-        fetch: suspend () -> CampgroundObservations,
+        fetch: suspend () -> FetchedObservations,
     ): LoadedCells {
         val repo = availabilityRepo
         if (repo == null || request.targets.isEmpty()) return fetchedCells(fetch(), request)
@@ -63,25 +70,26 @@ class AvailabilityLoader(
         }
 
         val fetched = fetch()
-        recordFetched(repo, request, fetched)
+        recordFetched(repo, request, fetched.observations)
 
         val latest = repo.readCurrent(dbIds, dates)
         return if (cellsOf(latest).containsAll(required)) {
-            storedCells(request, latest, hit = false)
+            storedCells(request, latest, hit = false, fetched = fetched)
         } else {
             fetchedCells(fetched, request)
         }
     }
 
     private fun fetchedCells(
-        fetched: CampgroundObservations,
+        fetched: FetchedObservations,
         request: Request,
     ): LoadedCells =
         LoadedCells(
-            cells = fetched.observations,
+            cells = fetched.observations.observations,
             hit = false,
             ageSeconds = 0,
             ttlSeconds = effectiveTtlSeconds(request),
+            fetched = fetched,
         )
 
     private fun recordFetched(
@@ -128,6 +136,7 @@ class AvailabilityLoader(
         request: Request,
         rows: List<AvailabilityRepo.CurrentCell>,
         hit: Boolean,
+        fetched: FetchedObservations? = null,
     ): LoadedCells =
         LoadedCells(
             cells =
@@ -142,6 +151,7 @@ class AvailabilityLoader(
             hit = hit,
             ageSeconds = maxAgeSeconds(rows, Instant.now(clock)),
             ttlSeconds = effectiveTtlSeconds(request),
+            fetched = fetched,
         )
 
     private fun observedAtByCell(rows: List<AvailabilityRepo.CurrentCell>): Map<AvailabilityCell, Instant> =

@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campgroundObservations
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
+import ca.floo.roadtrip.fixtures.testCampgroundReadPath
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.CampsiteKind
@@ -26,7 +27,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -42,8 +42,8 @@ class CampgroundCellCacheTest : SharedDbTest() {
     fun `a filtered check then an unfiltered one over the same window is one provider call`() {
         val fixture = checkFixture()
 
-        val filtered = fixture.slice(siteTypes = listOf(CampsiteKind.TENT))
-        val unfiltered = fixture.slice(siteTypes = emptyList())
+        val filtered = fixture.window(siteTypes = listOf(CampsiteKind.TENT))
+        val unfiltered = fixture.window(siteTypes = emptyList())
 
         assertEquals(1, fixture.provider.calls.size, "the unfiltered check called the vendor again")
         assertEquals(
@@ -55,21 +55,30 @@ class CampgroundCellCacheTest : SharedDbTest() {
         )
 
         assertEquals(2, filtered.campsites.size)
-        assertFalse(filtered.batch!!.cacheBlock.hit, "the first check had nothing stored to serve")
+        assertEquals(false, filtered.cache?.hit, "the first check had nothing stored to serve")
         assertEquals(4, unfiltered.campsites.size)
-        assertTrue(unfiltered.batch!!.cacheBlock.hit, "the whole campground's cells were already stored")
-        assertEquals(fixture.allCampsiteIds, unfiltered.batch!!.observations.mapNotNullTo(mutableSetOf()) { it.campsiteId })
+        assertEquals(true, unfiltered.cache?.hit, "the whole campground's cells were already stored")
+        assertEquals(fixture.allCampsiteIds, unfiltered.streams.mapTo(mutableSetOf()) { it.campsiteId })
+        assertTrue(unfiltered.streams.all { stream -> stream.statuses.all { it == AvailabilityStatus.AVAILABLE } })
     }
 
     @Test
     fun `a filtered check answers only about the campsites it asked for`() {
         val fixture = checkFixture()
 
-        val filtered = fixture.slice(siteTypes = listOf(CampsiteKind.TENT))
+        val filtered = fixture.window(siteTypes = listOf(CampsiteKind.TENT))
 
+        assertEquals(1, fixture.provider.calls.size)
+        assertEquals(
+            fixture.allCampsiteIds,
+            fixture.provider.calls
+                .single()
+                .campsites
+                .mapTo(mutableSetOf()) { it.id },
+        )
         assertEquals(
             filtered.campsites.mapTo(mutableSetOf()) { it.id },
-            filtered.batch!!.observations.mapNotNullTo(mutableSetOf()) { it.campsiteId },
+            filtered.streams.mapTo(mutableSetOf()) { it.campsiteId },
         )
     }
 
@@ -101,10 +110,10 @@ class CampgroundCellCacheTest : SharedDbTest() {
     fun `a full window looks up no reopen date`() {
         val fixture = checkFixture(status = AvailabilityStatus.RESERVED, reopensAfterWindow = true)
 
-        val slice = fixture.slice(siteTypes = emptyList())
+        val window = fixture.window(siteTypes = emptyList())
 
-        assertEquals(emptyMap(), slice.reopensOnByCampsite)
-        assertNull(slice.fusedWindow().season)
+        assertEquals(emptyMap(), window.reopensOnByCampsite)
+        assertNull(window.fusedWindow().season)
     }
 
     @Test
@@ -178,21 +187,22 @@ class CampgroundCellCacheTest : SharedDbTest() {
                 dateResolver = dateResolver,
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
+        val readPath =
+            testCampgroundReadPath(
+                providers = providers,
+                dateResolver = dateResolver,
+                failoverFetcher = FailoverAvailabilityFetcher(ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))),
+                availabilityRepo = AvailabilityRepo(ctx),
+                clock = clock,
+                snapshotFreshnessTtl = { freshnessTtl },
+            )
         val controller =
             CampsiteAvailabilityController(
                 campgroundRepo = campgroundRepo,
                 campsitesRepo = campsitesRepo,
                 catalogService = testCampsiteCatalogService(ctx, campsitesRepo, targets),
-                availabilityService =
-                    CampsiteAvailabilityService(
-                        availabilityProviders = providers,
-                        dateResolver = dateResolver,
-                        failoverFetcher = FailoverAvailabilityFetcher(ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))),
-                        bookingHorizons = BookingHorizonResolver(providers, dateResolver),
-                        availabilityRepo = AvailabilityRepo(ctx),
-                        clock = clock,
-                        snapshotFreshnessTtl = { freshnessTtl },
-                    ),
+                policy = readPath.policy,
+                reader = readPath.reader,
                 dateResolver = dateResolver,
                 watchCapabilityService =
                     WatchCapabilityService(
@@ -220,10 +230,10 @@ private class CheckFixture(
     val endDate: LocalDate,
     val reopenDate: LocalDate,
 ) {
-    fun slice(
+    fun window(
         siteTypes: List<CampsiteKind>,
         freshAtOrAfter: Instant? = null,
-    ): PoiAvailabilitySlice =
+    ): CampgroundWindow =
         runBlocking {
             controller.poiAvailabilitySlice(
                 poiId = TEST_POI_ID,
@@ -237,8 +247,5 @@ private class CheckFixture(
     fun fusedWeek(
         siteTypes: List<CampsiteKind>,
         freshAtOrAfter: Instant? = null,
-    ): FusedWindow {
-        val slice = slice(siteTypes, freshAtOrAfter)
-        return slice.fusedWindow()
-    }
+    ): FusedWindow = window(siteTypes, freshAtOrAfter).fusedWindow()
 }

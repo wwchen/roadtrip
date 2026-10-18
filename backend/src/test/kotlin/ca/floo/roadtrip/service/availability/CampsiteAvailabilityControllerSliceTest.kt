@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_HORIZON_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
+import ca.floo.roadtrip.fixtures.testCampgroundReadPath
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampgroundObservations
@@ -57,19 +58,20 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                 )
             }
 
-        assertEquals(fixture.startDate, slice.startDate)
-        assertEquals(fixture.endDate, slice.endDate)
+        assertEquals(ResolvedDateWindow(fixture.startDate, fixture.endDate), slice.window)
         assertEquals(fixture.earliestDate, slice.earliestDate)
         // The horizon comes from the serving provider's capabilities.
         assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), slice.latestDate)
-        assertEquals(2, slice.allCampsites.size)
+        assertEquals(2, slice.campgroundCampsites.size)
         assertEquals(1, slice.campsites.size)
-        assertNotNull(slice.batch)
+        assertEquals(slice.campsites.map { it.id }, slice.streams.map { it.campsiteId })
+        assertNotNull(slice.cache)
+        assertEquals(BookingProvider.RECGOV, slice.provider)
     }
 
     @Test
-    fun `slice has a null batch when no campsite matches the site type filter`() {
-        val fixture = sliceTestController(siteTypes = listOf(CampsiteKind.TENT))
+    fun `a filter matching no campsite still carries the window and the horizon`() {
+        val fixture = sliceTestController(siteTypes = listOf(CampsiteKind.TENT, CampsiteKind.TENT))
 
         val slice =
             runBlocking {
@@ -82,10 +84,13 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
             }
 
         assertEquals(0, slice.campsites.size)
-        assertNull(slice.batch)
-        // The filter matched nothing, but the campground still has a serving
-        // provider, so the horizon comes from its real booking horizon.
+        assertEquals(emptyList(), slice.streams)
+        assertNull(slice.cache)
+        assertEquals(emptyMap(), slice.reopensOnByCampsite)
+        assertEquals(ResolvedDateWindow(fixture.startDate, fixture.endDate), slice.window)
+        assertEquals(2, slice.campgroundCampsites.size)
         assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), slice.latestDate)
+        assertEquals(BookingProvider.RECGOV, slice.provider)
     }
 
     @Test
@@ -171,7 +176,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
     }
 
     @Test
-    fun `slice has no latest date when no provider claims the campground`() {
+    fun `a window over a campground no provider claims has no latest date and no provider`() {
         val fixture = sliceTestController(siteTypes = listOf(CampsiteKind.TENT), providers = emptyList())
 
         val slice =
@@ -185,12 +190,13 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
             }
 
         assertNull(slice.latestDate)
+        assertNull(slice.provider)
     }
 
     /**
      * Builds a controller over a fresh POI/campground with one seeded campsite
      * per entry in [siteTypes]. Mirrors the fake repos/services
-     * `CampsiteAvailabilityServiceTest` builds: real repos over the shared test
+     * `CampgroundAvailabilityReaderTest` builds: real repos over the shared test
      * DB, a [FakeAvailabilityProvider] standing in for rec.gov, and a
      * failover fetcher stubbed to answer with a canned batch instead of
      * calling out. `catalogService` and `watchCapabilityService` are wired
@@ -232,19 +238,20 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                 ),
             )
 
+        val readPath =
+            testCampgroundReadPath(
+                providers = providers,
+                dateResolver = dateResolver,
+                failoverFetcher = CannedBatchFetcher(),
+                availabilityRepo = null,
+            )
         val controller =
             CampsiteAvailabilityController(
                 campgroundRepo = campgroundRepo,
                 campsitesRepo = campsitesRepo,
                 catalogService = testCampsiteCatalogService(ctx, campsitesRepo, targets),
-                availabilityService =
-                    CampsiteAvailabilityService(
-                        availabilityProviders = providers,
-                        dateResolver = dateResolver,
-                        failoverFetcher = CannedBatchFetcher(),
-                        bookingHorizons = BookingHorizonResolver(providers, dateResolver),
-                        availabilityRepo = null,
-                    ),
+                policy = readPath.policy,
+                reader = readPath.reader,
                 dateResolver = dateResolver,
                 watchCapabilityService =
                     WatchCapabilityService(

@@ -4,13 +4,15 @@ import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.config.CampsiteAvailabilityConfig
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
+import ca.floo.roadtrip.fixtures.testCampgroundReadPath
 import ca.floo.roadtrip.fixtures.testCampsiteCatalogService
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.CampsiteKind
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -20,17 +22,17 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.route.routeTestApplication
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
-import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
+import ca.floo.roadtrip.service.availability.CampgroundWindow
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
-import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
-import ca.floo.roadtrip.service.availability.PoiAvailabilitySlice
 import ca.floo.roadtrip.service.availability.PoiAvailabilitySliceLookup
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.testCampground
+import ca.floo.roadtrip.service.availability.streamsFor
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
 import io.ktor.client.HttpClient
@@ -521,18 +523,19 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
                 dateResolver = dateResolver,
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
+        val readPath =
+            testCampgroundReadPath(
+                providers = providers,
+                dateResolver = dateResolver,
+                failoverFetcher = FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))),
+                availabilityRepo = AvailabilityRepo(ctx),
+            )
         return CampsiteAvailabilityController(
             campgroundRepo = campgroundRepo,
             campsitesRepo = campsitesRepo,
             catalogService = testCampsiteCatalogService(ctx, campsitesRepo, targets),
-            availabilityService =
-                CampsiteAvailabilityService(
-                    availabilityProviders = providers,
-                    dateResolver = dateResolver,
-                    failoverFetcher = FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))),
-                    bookingHorizons = BookingHorizonResolver(providers, dateResolver),
-                    availabilityRepo = AvailabilityRepo(ctx),
-                ),
+            policy = readPath.policy,
+            reader = readPath.reader,
             dateResolver = dateResolver,
             watchCapabilityService =
                 WatchCapabilityService(
@@ -559,7 +562,7 @@ private class FakePoiAvailabilitySliceLookup(
         startDate: LocalDate?,
         endDate: LocalDate?,
         freshAtOrAfter: Instant?,
-    ): PoiAvailabilitySlice {
+    ): CampgroundWindow {
         if (poiId == RATE_LIMITED_POI_ID) throw AvailabilityProviderError.RateLimited()
         val campsite = campsiteFixture(id = poiId * FAKE_SLICE_CAMPSITE_ID_MULTIPLIER, campgroundId = poiId)
         val observations =
@@ -572,24 +575,21 @@ private class FakePoiAvailabilitySliceLookup(
                     AvailabilityStatus.RESERVED,
                 ),
             )
-        return PoiAvailabilitySlice(
+        val window = ResolvedDateWindow(windowStart, windowEnd)
+        return CampgroundWindow(
             poiId = poiId,
-            startDate = windowStart,
-            endDate = windowEnd,
+            campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
+            window = window,
             earliestDate = windowStart,
             latestDate = windowStart.plusDays(BOOKING_HORIZON_DAYS),
-            allCampsites = listOf(campsite),
+            campgroundCampsites = listOf(campsite),
             campsites = listOf(campsite),
-            batch =
-                AvailabilityObservationBatch(
-                    provider = "recgov",
-                    startDate = windowStart,
-                    endDate = windowEnd,
-                    observations = observations,
-                    cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
-                ),
-            reopensOnByCampsite = emptyMap(),
+            streams = streamsFor(listOf(campsite), window, observations),
+            provider = BookingProvider.RECGOV,
+            campgroundRef = null,
+            cache = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
             pollingSupported = pollingSupported,
+            reopensOnByCampsite = emptyMap(),
         )
     }
 }

@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.fixtures.availableIds
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.DayClassification
@@ -80,26 +79,24 @@ class AvailabilityResponseTest {
     }
 
     @Test
-    fun `a batch without a scope serializes with no scope_ref key`() {
+    fun `observations without a campground ref serialize with no scope_ref key`() {
         val body =
             encodeApiJson(
                 availabilityResponseFromObservations(
-                    AvailabilityObservationBatch(
-                        provider = "recgov",
-                        startDate = LocalDate.parse("2026-06-10"),
-                        endDate = LocalDate.parse("2026-06-11"),
-                        observations =
-                            listOf(
-                                CampsiteDayObservation(
-                                    campsiteId = 100,
-                                    date = LocalDate.parse("2026-06-10"),
-                                    observedAt = Instant.parse("2026-06-01T00:00:00Z"),
-                                    status = AvailabilityStatus.AVAILABLE,
-                                ),
+                    provider = "recgov",
+                    startDate = LocalDate.parse("2026-06-10"),
+                    endDate = LocalDate.parse("2026-06-11"),
+                    observations =
+                        listOf(
+                            CampsiteDayObservation(
+                                campsiteId = 100,
+                                date = LocalDate.parse("2026-06-10"),
+                                observedAt = Instant.parse("2026-06-01T00:00:00Z"),
+                                status = AvailabilityStatus.AVAILABLE,
                             ),
-                        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 60),
-                        scope = null,
-                    ),
+                        ),
+                    cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 60),
+                    campgroundRef = null,
                     seasonBlock = null,
                     pollingSupported = true,
                     earliestDate = LocalDate.parse("2026-06-10"),
@@ -116,46 +113,44 @@ class AvailabilityResponseTest {
         val observedAt = Instant.parse("2026-06-01T00:05:00Z")
         val dto =
             availabilityResponseFromObservations(
-                AvailabilityObservationBatch(
-                    provider = "recgov",
-                    startDate = LocalDate.parse("2026-06-10"),
-                    endDate = LocalDate.parse("2026-06-12"),
-                    observations =
-                        listOf(
-                            CampsiteDayObservation(
-                                campsiteId = 100,
-                                date = LocalDate.parse("2026-06-10"),
-                                observedAt = olderObservedAt,
-                                status = AvailabilityStatus.RESERVED,
-                            ),
-                            CampsiteDayObservation(
-                                campsiteId = 100,
-                                date = LocalDate.parse("2026-06-10"),
-                                observedAt = observedAt,
-                                status = AvailabilityStatus.AVAILABLE,
-                            ),
-                            CampsiteDayObservation(
-                                campsiteId = 200,
-                                date = LocalDate.parse("2026-06-10"),
-                                observedAt = observedAt,
-                                status = AvailabilityStatus.RESERVED,
-                            ),
-                            CampsiteDayObservation(
-                                campsiteId = 100,
-                                date = LocalDate.parse("2026-06-11"),
-                                observedAt = observedAt,
-                                status = AvailabilityStatus.RESERVED,
-                            ),
-                            CampsiteDayObservation(
-                                campsiteId = 200,
-                                date = LocalDate.parse("2026-06-11"),
-                                observedAt = observedAt,
-                                status = AvailabilityStatus.UNKNOWN,
-                            ),
+                provider = "recgov",
+                startDate = LocalDate.parse("2026-06-10"),
+                endDate = LocalDate.parse("2026-06-12"),
+                observations =
+                    listOf(
+                        CampsiteDayObservation(
+                            campsiteId = 100,
+                            date = LocalDate.parse("2026-06-10"),
+                            observedAt = olderObservedAt,
+                            status = AvailabilityStatus.RESERVED,
                         ),
-                    cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 3, ttlSeconds = 60),
-                    scope = BookingProviderRef.RecGov(facilityId = "232447"),
-                ),
+                        CampsiteDayObservation(
+                            campsiteId = 100,
+                            date = LocalDate.parse("2026-06-10"),
+                            observedAt = observedAt,
+                            status = AvailabilityStatus.AVAILABLE,
+                        ),
+                        CampsiteDayObservation(
+                            campsiteId = 200,
+                            date = LocalDate.parse("2026-06-10"),
+                            observedAt = observedAt,
+                            status = AvailabilityStatus.RESERVED,
+                        ),
+                        CampsiteDayObservation(
+                            campsiteId = 100,
+                            date = LocalDate.parse("2026-06-11"),
+                            observedAt = observedAt,
+                            status = AvailabilityStatus.RESERVED,
+                        ),
+                        CampsiteDayObservation(
+                            campsiteId = 200,
+                            date = LocalDate.parse("2026-06-11"),
+                            observedAt = observedAt,
+                            status = AvailabilityStatus.UNKNOWN,
+                        ),
+                    ),
+                cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 3, ttlSeconds = 60),
+                campgroundRef = BookingProviderRef.RecGov(facilityId = "232447"),
                 seasonBlock = null,
                 pollingSupported = true,
                 earliestDate = LocalDate.parse("2026-06-10"),
@@ -175,28 +170,26 @@ class AvailabilityResponseTest {
         val observedAt = Instant.parse("2026-06-01T00:00:00Z")
         val dto =
             availabilityResponseFromObservations(
-                AvailabilityObservationBatch(
-                    provider = "aspira",
-                    startDate = LocalDate.parse("2026-06-10"),
-                    endDate = LocalDate.parse("2026-06-12"),
-                    observations =
-                        listOf(
-                            CampsiteDayObservation(
-                                campsiteId = 100,
-                                date = LocalDate.parse("2026-06-10"),
-                                observedAt = observedAt,
-                                status = AvailabilityStatus.AVAILABLE,
-                            ),
+                provider = "aspira",
+                startDate = LocalDate.parse("2026-06-10"),
+                endDate = LocalDate.parse("2026-06-12"),
+                observations =
+                    listOf(
+                        CampsiteDayObservation(
+                            campsiteId = 100,
+                            date = LocalDate.parse("2026-06-10"),
+                            observedAt = observedAt,
+                            status = AvailabilityStatus.AVAILABLE,
                         ),
-                    cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
-                    scope =
-                        BookingProviderRef.Aspira(
-                            tenant = "pc",
-                            transactionLocationId = 4189,
-                            mapId = -2147483388,
-                            resourceLocationId = null,
-                        ),
-                ),
+                    ),
+                cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
+                campgroundRef =
+                    BookingProviderRef.Aspira(
+                        tenant = "pc",
+                        transactionLocationId = 4189,
+                        mapId = -2147483388,
+                        resourceLocationId = null,
+                    ),
                 seasonBlock = null,
                 pollingSupported = true,
                 earliestDate = LocalDate.parse("2026-06-10"),

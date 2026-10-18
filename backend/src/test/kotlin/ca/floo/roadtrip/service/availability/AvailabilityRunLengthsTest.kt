@@ -1,24 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
-import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import org.junit.jupiter.api.Test
-import java.time.Instant
-import java.time.LocalDate
 import kotlin.test.assertEquals
-
-private val observedAt: Instant = Instant.parse("2026-08-23T12:00:00Z")
-private val day0: LocalDate = LocalDate.of(2026, 9, 4)
-
-private fun observations(vararg statuses: AvailabilityStatus): List<CampsiteDayObservation> =
-    statuses.mapIndexed { index, status ->
-        CampsiteDayObservation(
-            campsiteId = 1L,
-            date = day0.plusDays(index.toLong()),
-            observedAt = observedAt,
-            status = status,
-        )
-    }
 
 class AvailabilityRunLengthsTest {
     @Test
@@ -28,20 +12,18 @@ class AvailabilityRunLengthsTest {
 
     @Test
     fun `all available is one full run`() {
-        val days = observations(*Array(5) { AvailabilityStatus.AVAILABLE })
-        assertEquals(5, longestRunNights(days))
+        assertEquals(5, longestRunNights(List(5) { AvailabilityStatus.AVAILABLE }))
     }
 
     @Test
     fun `all reserved has no run`() {
-        val days = observations(*Array(5) { AvailabilityStatus.RESERVED })
-        assertEquals(0, longestRunNights(days))
+        assertEquals(0, longestRunNights(List(5) { AvailabilityStatus.RESERVED }))
     }
 
     @Test
     fun `run at the leading boundary counts`() {
         val days =
-            observations(
+            listOf(
                 AvailabilityStatus.AVAILABLE,
                 AvailabilityStatus.AVAILABLE,
                 AvailabilityStatus.RESERVED,
@@ -52,7 +34,7 @@ class AvailabilityRunLengthsTest {
     @Test
     fun `run at the trailing boundary counts`() {
         val days =
-            observations(
+            listOf(
                 AvailabilityStatus.RESERVED,
                 AvailabilityStatus.AVAILABLE,
                 AvailabilityStatus.AVAILABLE,
@@ -63,7 +45,7 @@ class AvailabilityRunLengthsTest {
     @Test
     fun `longest of several runs wins`() {
         val days =
-            observations(
+            listOf(
                 AvailabilityStatus.AVAILABLE,
                 AvailabilityStatus.RESERVED,
                 AvailabilityStatus.AVAILABLE,
@@ -78,7 +60,7 @@ class AvailabilityRunLengthsTest {
     @Test
     fun `first come does not count toward a run`() {
         val days =
-            observations(
+            listOf(
                 AvailabilityStatus.AVAILABLE,
                 AvailabilityStatus.FIRST_COME,
                 AvailabilityStatus.AVAILABLE,
@@ -87,23 +69,13 @@ class AvailabilityRunLengthsTest {
     }
 
     @Test
-    fun `a missing date breaks a run`() {
+    fun `an unanswered night breaks a run`() {
         val days =
             listOf(
-                CampsiteDayObservation(1L, day0, observedAt, AvailabilityStatus.AVAILABLE),
-                CampsiteDayObservation(1L, day0.plusDays(2), observedAt, AvailabilityStatus.AVAILABLE),
+                AvailabilityStatus.AVAILABLE,
+                AvailabilityStatus.UNKNOWN,
+                AvailabilityStatus.AVAILABLE,
             )
         assertEquals(1, longestRunNights(days))
-    }
-
-    @Test
-    fun `unordered input is scanned in date order`() {
-        val days =
-            listOf(
-                CampsiteDayObservation(1L, day0.plusDays(2), observedAt, AvailabilityStatus.AVAILABLE),
-                CampsiteDayObservation(1L, day0, observedAt, AvailabilityStatus.AVAILABLE),
-                CampsiteDayObservation(1L, day0.plusDays(1), observedAt, AvailabilityStatus.AVAILABLE),
-            )
-        assertEquals(3, longestRunNights(days))
     }
 }

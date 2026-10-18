@@ -6,11 +6,11 @@ import ca.floo.roadtrip.model.api.AvailabilityErrorDto
 import ca.floo.roadtrip.model.api.AvailabilityResponseDto
 import ca.floo.roadtrip.model.api.AvailabilityWindowState
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.DayClassification
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import java.time.Instant
@@ -52,8 +52,12 @@ fun dayClassificationsFromObservations(
     }
 }
 
-fun availabilityDatesFromObservations(batch: AvailabilityObservationBatch): List<String> =
-    dayClassificationsFromObservations(batch.startDate, batch.endDate, batch.observations)
+fun availabilityDatesFromObservations(
+    startDate: LocalDate,
+    endDate: LocalDate,
+    observations: List<CampsiteDayObservation>,
+): List<String> =
+    dayClassificationsFromObservations(startDate, endDate, observations)
         .filter { it.availableCampsiteIds.orEmpty().isNotEmpty() }
         .map { it.date }
 
@@ -84,25 +88,29 @@ internal fun campsiteWindowStatuses(
 }
 
 internal fun availabilityResponseFromObservations(
-    batch: AvailabilityObservationBatch,
+    provider: String,
+    campgroundRef: BookingProviderRef?,
+    startDate: LocalDate,
+    endDate: LocalDate,
+    observations: List<CampsiteDayObservation>,
+    cacheBlock: AvailabilityCacheBlock,
     pollingSupported: Boolean,
     earliestDate: LocalDate,
     seasonBlock: AvailabilitySeasonBlock?,
 ): AvailabilityResponseDto {
-    val perDay = dayClassificationsFromObservations(batch.startDate, batch.endDate, batch.observations)
+    val perDay = dayClassificationsFromObservations(startDate, endDate, observations)
     val state = classifyWindowState(perDay)
     return availabilityResponseDto(
-        provider = batch.provider,
-        startDate = batch.startDate,
-        endDate = batch.endDate,
+        provider = provider,
+        startDate = startDate,
+        endDate = endDate,
         perDay = perDay,
         state = state,
         seasonBlock = seasonBlock.takeIf { state == StreamWindowState.CLOSED_FOR_SEASON },
-        cacheBlock = batch.cacheBlock,
+        cacheBlock = cacheBlock,
         pollingSupported = pollingSupported,
         earliestDate = earliestDate,
-        scopeRef = batch.scope?.serialize(),
-        campsiteId = batch.campsiteId,
+        scopeRef = campgroundRef?.serialize(),
     )
 }
 

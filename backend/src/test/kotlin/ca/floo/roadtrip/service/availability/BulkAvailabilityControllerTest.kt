@@ -5,11 +5,14 @@ import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.api.BulkAvailabilityView
 import ca.floo.roadtrip.model.api.StayAvailabilityStatus
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.availability.ResolvedDateWindow
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteKind
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.service.availability.provider.testCampground
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -284,12 +287,12 @@ private class FakePoiAvailabilitySliceLookup(
         startDate: LocalDate?,
         endDate: LocalDate?,
         freshAtOrAfter: Instant?,
-    ): PoiAvailabilitySlice {
+    ): CampgroundWindow {
         recorder?.record(freshAtOrAfter)
         return if (meter != null) meter.track { resolve(poiId) } else resolve(poiId)
     }
 
-    private suspend fun resolve(poiId: Long): PoiAvailabilitySlice =
+    private suspend fun resolve(poiId: Long): CampgroundWindow =
         when (poiId) {
             RATE_LIMITED_POI_ID -> throw AvailabilityProviderError.RateLimited()
             UNKNOWN_POI_ID -> throw AvailabilityServiceError.NotFound
@@ -314,17 +317,31 @@ private fun observationsForRun(
         CampsiteDayObservation(campsiteId, windowStart.plusDays(offset.toLong()), observedAt, AvailabilityStatus.AVAILABLE)
     }
 
-private fun batchOf(observations: List<CampsiteDayObservation>): AvailabilityObservationBatch =
-    AvailabilityObservationBatch(
-        provider = "recgov",
-        startDate = windowStart,
-        endDate = windowEnd,
-        observations = observations,
-        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
+private fun windowOf(
+    poiId: Long,
+    campsites: List<Campsite>,
+    observations: List<CampsiteDayObservation>,
+): CampgroundWindow {
+    val window = ResolvedDateWindow(windowStart, windowEnd)
+    return CampgroundWindow(
+        poiId = poiId,
+        campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
+        window = window,
+        earliestDate = windowStart,
+        latestDate = windowLatest,
+        campgroundCampsites = campsites,
+        campsites = campsites,
+        streams = streamsFor(campsites, window, observations),
+        provider = BookingProvider.RECGOV,
+        campgroundRef = null,
+        cache = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0).takeIf { campsites.isNotEmpty() },
+        pollingSupported = true,
+        reopensOnByCampsite = emptyMap(),
     )
+}
 
 /** Three campsites under [poiId] whose longest bookable runs are 1, 5 and 3 nights; the 5-night one sleeps 2. */
-private fun rankedSlice(poiId: Long): PoiAvailabilitySlice {
+private fun rankedSlice(poiId: Long): CampgroundWindow {
     val shortRun = campsiteFixture(id = poiId * 1000 + 1, campgroundId = poiId, name = "Short run")
     val longRun = campsiteFixture(id = poiId * 1000 + 2, campgroundId = poiId, name = "Long run").copy(maxPeople = 2)
     val midRun = campsiteFixture(id = poiId * 1000 + 3, campgroundId = poiId, name = "Mid run")
@@ -332,49 +349,14 @@ private fun rankedSlice(poiId: Long): PoiAvailabilitySlice {
         observationsForRun(shortRun.id, nights = 1) +
             observationsForRun(longRun.id, nights = 5) +
             observationsForRun(midRun.id, nights = 3)
-    val campsites = listOf(shortRun, longRun, midRun)
-    return PoiAvailabilitySlice(
-        poiId = poiId,
-        startDate = windowStart,
-        endDate = windowEnd,
-        earliestDate = windowStart,
-        latestDate = windowLatest,
-        allCampsites = campsites,
-        campsites = campsites,
-        batch = batchOf(observations),
-        reopensOnByCampsite = emptyMap(),
-        pollingSupported = true,
-    )
+    return windowOf(poiId, listOf(shortRun, longRun, midRun), observations)
 }
 
 /** One campsite under [poiId] with a single bookable night. */
-private fun simpleSlice(poiId: Long): PoiAvailabilitySlice {
+private fun simpleSlice(poiId: Long): CampgroundWindow {
     val campsite = campsiteFixture(id = poiId * 1000, campgroundId = poiId)
-    return PoiAvailabilitySlice(
-        poiId = poiId,
-        startDate = windowStart,
-        endDate = windowEnd,
-        earliestDate = windowStart,
-        latestDate = windowLatest,
-        allCampsites = listOf(campsite),
-        campsites = listOf(campsite),
-        batch = batchOf(observationsForRun(campsite.id, nights = 1)),
-        reopensOnByCampsite = emptyMap(),
-        pollingSupported = true,
-    )
+    return windowOf(poiId, listOf(campsite), observationsForRun(campsite.id, nights = 1))
 }
 
 /** No campsite matched the requested site types: resolved, but nothing to rank. */
-private fun noSitesSlice(poiId: Long): PoiAvailabilitySlice =
-    PoiAvailabilitySlice(
-        poiId = poiId,
-        startDate = windowStart,
-        endDate = windowEnd,
-        earliestDate = windowStart,
-        latestDate = windowLatest,
-        allCampsites = emptyList(),
-        campsites = emptyList(),
-        batch = null,
-        reopensOnByCampsite = emptyMap(),
-        pollingSupported = true,
-    )
+private fun noSitesSlice(poiId: Long): CampgroundWindow = windowOf(poiId, emptyList(), emptyList())
