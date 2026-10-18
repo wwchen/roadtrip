@@ -3,35 +3,12 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.model.api.AvailabilityCellDto
 import ca.floo.roadtrip.model.api.AvailabilityDayDto
 import ca.floo.roadtrip.model.api.AvailabilityWindowState
-import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
-import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.service.api.StreamWindowState
-import ca.floo.roadtrip.service.api.campsiteWindowStatuses
 import ca.floo.roadtrip.service.api.classifyStreamWindowState
 import ca.floo.roadtrip.service.api.rollupStatus
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
-
-/** The campground week, fused from the per-campsite streams. */
-internal data class FusedWindow(
-    val state: AvailabilityWindowState,
-    val season: AvailabilitySeasonBlock?,
-    val cache: AvailabilityCacheBlock?,
-    val days: List<AvailabilityDayDto>,
-)
-
-/**
- * One campsite's window, narrowed from the slice's batch: a status per date and
- * whether the stream is closed for the season. Polling support is not here — it
- * is the serving provider's answer, the same for every stream in the slice.
- */
-internal class CampsiteStream(
-    val campsiteId: Long,
-    val statuses: List<AvailabilityStatus>,
-    val closedForSeason: Boolean,
-    val cache: AvailabilityCacheBlock,
-)
 
 /**
  * Fuses one POI's campsite streams into the campground week the wire carries:
@@ -48,31 +25,19 @@ internal fun fusePoiWindow(
         return FusedWindow(AvailabilityWindowState.EMPTY, season = null, cache = null, days = emptyList())
     }
 
-    val observationsByCampsite = batch.observations.groupBy { it.campsiteId }
     val streams =
-        slice.campsites.sortedBy { it.id }.map { campsite ->
-            val statuses =
-                campsiteWindowStatuses(
-                    startDate = slice.startDate,
-                    endDate = slice.endDate,
-                    observations = observationsByCampsite[campsite.id].orEmpty(),
-                )
-            CampsiteStream(
-                campsiteId = campsite.id,
-                statuses = statuses,
-                closedForSeason = classifyStreamWindowState(statuses) == StreamWindowState.CLOSED_FOR_SEASON,
-                cache = batch.cacheBlock,
-            )
-        }
-
-    val closedForSeason = streams.all { it.closedForSeason }
+        streamsFor(
+            campsites = slice.campsites,
+            window = ResolvedDateWindow(slice.startDate, slice.endDate),
+            observations = batch.observations,
+        )
+    val closedForSeason =
+        streams.all { classifyStreamWindowState(it.statuses) == StreamWindowState.CLOSED_FOR_SEASON }
     val dayCount = ChronoUnit.DAYS.between(slice.startDate, slice.endDate).toInt()
     return FusedWindow(
         state = if (closedForSeason) AvailabilityWindowState.CLOSED_FOR_SEASON else AvailabilityWindowState.SUCCESS,
         season = slice.reopensOn().takeIf { closedForSeason },
-        // One batch backs every campsite in a slice today, so its block is also
-        // the stalest; the max keeps the rule right should the streams diverge.
-        cache = streams.map { it.cache }.maxByOrNull { it.ageSeconds },
+        cache = batch.cacheBlock,
         // A closed week has no grid to draw — clients gate on `state` — so the
         // days are the wire's own dead weight.
         days =
