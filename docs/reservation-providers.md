@@ -109,10 +109,12 @@ its own `AutoCloseable` (e.g. `RecGovAvailabilityClient`,
 `CampflareAvailabilityClient`). The adapter boundary is where those shapes
 become provider-neutral `CampgroundObservations` values.
 
-There is no runtime fallback-mode registry either. Availability services
-enumerate candidate providers from the catalog row via
-`AvailabilityTargetResolver`, and `FailoverAvailabilityFetcher` walks that
-ordered candidate list on retryable failure. This is how a Campflare catalog
+There is no runtime fallback-mode registry either. On the read path
+`AvailabilityReadPolicy.supportingProviders` enumerates the providers that
+claim the campground, and `FailoverAvailabilityFetcher` walks that ordered
+candidate list on retryable failure. The poller enumerates its own candidates
+through `AvailabilityTargetResolver`, which resolves a campsite to its
+providers; the two paths share the fetcher and the port, not the enumeration. This is how a Campflare catalog
 row can naturally fall through to a linked rec.gov alias without a
 Campflare-specific service branch.
 
@@ -774,8 +776,10 @@ This shape gives us three properties that hold regardless of UI changes:
   shrink together.
 
 Adapters do not own polling cadence — the platform poller does. The poller
-uses `AvailabilityTargetResolver` to resolve the same provider target as live
-availability, then calls the provider through the same availability port.
+resolves its own targets through `AvailabilityTargetResolver` and calls the
+provider through the same availability port; the read path resolves candidates
+through `AvailabilityReadPolicy` instead, so the two agree on the port and the
+fetcher rather than on how candidates are found.
 Cadence, backoff, dedup, and the "should we poll right now" decision all live
 above the adapter, inside the generic poller.
 

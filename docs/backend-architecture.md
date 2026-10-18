@@ -270,7 +270,7 @@ routes
   -> availability controller
   -> CampgroundAvailabilityReader        (AvailabilityReadPolicy: window, provider, TTL)
   -> AvailabilityLoader                  (LoadedCells: stored cells, else a fetch)
-  -> FailoverAvailabilityFetcher         (target resolver's ordered candidates)
+  -> FailoverAvailabilityFetcher         (the providers claiming this campground, in order)
   -> service.availability.provider
   -> provider adapter                    (returns CampgroundObservations)
   -> CampgroundWindow                    (the read model: streams of cells)
