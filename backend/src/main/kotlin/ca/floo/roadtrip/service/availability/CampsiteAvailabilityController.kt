@@ -131,7 +131,7 @@ internal class CampsiteAvailabilityController(
     ): PoiCampsitesAvailabilityResponseDto {
         val slice = poiAvailabilitySlice(poiId, siteTypes, startDate, endDate)
         val watchCaps = watchCapabilityService.capabilitiesFor(slice.allCampsites, requester)
-        val fused = fusePoiWindow(slice, slice.earliestDate)
+        val fused = slice.fusedWindow()
 
         return PoiCampsitesAvailabilityResponseDto(
             poiId = poiId,

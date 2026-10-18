@@ -102,7 +102,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                     endDate = fixture.endDate,
                 )
             }
-        val fused = fusePoiWindow(slice, slice.earliestDate)
+        val fused = slice.fusedWindow()
 
         assertEquals(BUSY_CAMPGROUND_SITES, slice.campsites.size)
         assertEquals(

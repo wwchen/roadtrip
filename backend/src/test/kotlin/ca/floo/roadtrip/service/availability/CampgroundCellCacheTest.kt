@@ -104,7 +104,7 @@ class CampgroundCellCacheTest : SharedDbTest() {
         val slice = fixture.slice(siteTypes = emptyList())
 
         assertEquals(emptyMap(), slice.reopensOnByCampsite)
-        assertNull(fusePoiWindow(slice, slice.earliestDate).season)
+        assertNull(slice.fusedWindow().season)
     }
 
     @Test
@@ -239,6 +239,6 @@ private class CheckFixture(
         freshAtOrAfter: Instant? = null,
     ): FusedWindow {
         val slice = slice(siteTypes, freshAtOrAfter)
-        return fusePoiWindow(slice, slice.earliestDate)
+        return slice.fusedWindow()
     }
 }

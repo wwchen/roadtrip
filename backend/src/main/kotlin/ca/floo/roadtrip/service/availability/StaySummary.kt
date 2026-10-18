@@ -2,9 +2,9 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.api.BulkPoiSummaryDto
 import ca.floo.roadtrip.model.api.StayAvailabilityStatus
+import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.Campsite
-import ca.floo.roadtrip.service.api.campsiteWindowStatuses
 
 /** A campground with at most this many campsites open for the whole stay reads as "few left". */
 internal const val FEW_LEFT_MAX_SITES = 2
@@ -20,11 +20,11 @@ internal fun List<Campsite>.fittingGroup(groupSize: Int?): List<Campsite> {
 }
 
 /**
- * How the slice's stay looks, over the slice's own campsites.
+ * How the stay looks, over the campsites whose streams are given.
  *
  * A campsite is open for the stay when every night of the window is bookable
  * online — `first_come` is not, because nobody can reserve it. The status is
- * decided here rather than in a browser, from the same per-night statuses the
+ * decided here rather than in a browser, from the same per-night streams the
  * week grid fuses: open, or few left. With nothing open, only the campsites the
  * provider said anything about are judged — one it said nothing about is not in
  * the answer — and the stay is:
@@ -40,32 +40,30 @@ internal fun List<Campsite>.fittingGroup(groupSize: Int?): List<Campsite> {
  *   provider did not return is the usual case, and calling it full would be a
  *   guess.
  */
-internal fun PoiAvailabilitySlice.staySummary(): BulkPoiSummaryDto {
-    val batch = batch
-    if (batch == null || campsites.isEmpty()) {
-        return BulkPoiSummaryDto(status = StayAvailabilityStatus.NO_DATA, openSites = 0, checkedSites = campsites.size)
+internal fun staySummaryOf(
+    streams: List<CampsiteStream>,
+    checkedSites: Int,
+    cache: AvailabilityCacheBlock?,
+): BulkPoiSummaryDto {
+    if (streams.isEmpty()) {
+        return BulkPoiSummaryDto(status = StayAvailabilityStatus.NO_DATA, openSites = 0, checkedSites = checkedSites)
     }
-    val observationsByCampsite = batch.observations.groupBy { it.campsiteId }
-    val streams =
-        campsites.map { campsite ->
-            campsiteWindowStatuses(startDate, endDate, observationsByCampsite[campsite.id].orEmpty())
-        }
-    val openSites = streams.count { nights -> nights.all { it.isOnlineBookable } }
-    val answered = streams.filter { nights -> nights.any { it != AvailabilityStatus.UNKNOWN } }
+    val openSites = streams.count { stream -> stream.statuses.all { it.isOnlineBookable } }
+    val answered = streams.filter { stream -> stream.statuses.any { it != AvailabilityStatus.UNKNOWN } }
     val status =
         when {
             openSites > FEW_LEFT_MAX_SITES -> StayAvailabilityStatus.OPEN
             openSites > 0 -> StayAvailabilityStatus.FEW_LEFT
             answered.isEmpty() -> StayAvailabilityStatus.NO_DATA
-            answered.all { nights -> AvailabilityStatus.CLOSED in nights } -> StayAvailabilityStatus.CLOSED_FOR_SEASON
-            answered.all { nights -> nights.any { it.rulesOutStay } } -> StayAvailabilityStatus.FULL
+            answered.all { AvailabilityStatus.CLOSED in it.statuses } -> StayAvailabilityStatus.CLOSED_FOR_SEASON
+            answered.all { stream -> stream.statuses.any { it.rulesOutStay } } -> StayAvailabilityStatus.FULL
             else -> StayAvailabilityStatus.NO_DATA
         }
     return BulkPoiSummaryDto(
         status = status,
         openSites = openSites,
-        checkedSites = campsites.size,
-        cache = batch.cacheBlock,
+        checkedSites = checkedSites,
+        cache = cache,
     )
 }
 

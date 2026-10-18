@@ -3,6 +3,8 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.model.api.AvailabilityCellDto
 import ca.floo.roadtrip.model.api.AvailabilityDayDto
 import ca.floo.roadtrip.model.api.AvailabilityWindowState
+import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
+import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.service.api.StreamWindowState
 import ca.floo.roadtrip.service.api.classifyStreamWindowState
@@ -13,31 +15,28 @@ import java.time.temporal.ChronoUnit
 /**
  * Fuses one POI's campsite streams into the campground week the wire carries:
  * the day's rollup over every campsite, one cell per campsite, and the
- * watchability of both. Pure — every input is already on the slice, including
- * the one polling answer its serving provider gives.
+ * watchability of both. Pure — the streams are already derived, and the one
+ * polling answer its serving provider gives arrives with them.
  */
-internal fun fusePoiWindow(
-    slice: PoiAvailabilitySlice,
+internal fun fuseWindow(
+    streams: List<CampsiteStream>,
+    window: ResolvedDateWindow,
     earliestDate: LocalDate,
+    pollingSupported: Boolean,
+    cache: AvailabilityCacheBlock?,
+    season: AvailabilitySeasonBlock?,
 ): FusedWindow {
-    val batch = slice.batch
-    if (batch == null || slice.campsites.isEmpty()) {
+    if (streams.isEmpty()) {
         return FusedWindow(AvailabilityWindowState.EMPTY, season = null, cache = null, days = emptyList())
     }
 
-    val streams =
-        streamsFor(
-            campsites = slice.campsites,
-            window = ResolvedDateWindow(slice.startDate, slice.endDate),
-            observations = batch.observations,
-        )
     val closedForSeason =
         streams.all { classifyStreamWindowState(it.statuses) == StreamWindowState.CLOSED_FOR_SEASON }
-    val dayCount = ChronoUnit.DAYS.between(slice.startDate, slice.endDate).toInt()
+    val dayCount = ChronoUnit.DAYS.between(window.startDate, window.endDate).toInt()
     return FusedWindow(
         state = if (closedForSeason) AvailabilityWindowState.CLOSED_FOR_SEASON else AvailabilityWindowState.SUCCESS,
-        season = slice.reopensOn().takeIf { closedForSeason },
-        cache = batch.cacheBlock,
+        season = season.takeIf { closedForSeason },
+        cache = cache,
         // A closed week has no grid to draw — clients gate on `state` — so the
         // days are the wire's own dead weight.
         days =
@@ -47,9 +46,9 @@ internal fun fusePoiWindow(
                 (0 until dayCount).map { offset ->
                     fusedDay(
                         streams = streams,
-                        pollingSupported = slice.pollingSupported,
+                        pollingSupported = pollingSupported,
                         offset = offset,
-                        date = slice.startDate.plusDays(offset.toLong()),
+                        date = window.startDate.plusDays(offset.toLong()),
                         earliestDate = earliestDate,
                     )
                 }

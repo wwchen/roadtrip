@@ -8,6 +8,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.service.api.rollupStatus
 import org.junit.jupiter.api.Test
 import java.time.Instant
@@ -73,7 +74,7 @@ class PoiAvailabilityFusionTest {
 
     @Test
     fun `a campsite nobody observed is unknown, not closed`() {
-        val fused = fusePoiWindow(sliceOf(mapOf(7L to emptyMap())), windowStart)
+        val fused = fusedOf(sliceOf(mapOf(7L to emptyMap())), windowStart)
 
         assertEquals(AvailabilityStatus.UNKNOWN, fused.days.single().status)
         assertEquals(
@@ -94,7 +95,7 @@ class PoiAvailabilityFusionTest {
 
         // Ported through fuse: a campsite with zero observations across the
         // whole window rolls every day up to unknown, with an unknown cell.
-        val fused = fusePoiWindow(sliceOf(mapOf(7L to emptyMap()), days = 3), windowStart)
+        val fused = fusedOf(sliceOf(mapOf(7L to emptyMap()), days = 3), windowStart)
 
         assertEquals(List(3) { AvailabilityStatus.UNKNOWN }, fused.days.map { it.status })
         assertTrue(
@@ -109,7 +110,7 @@ class PoiAvailabilityFusionTest {
     @Test
     fun `collects each campsite status for the date`() {
         val fused =
-            fusePoiWindow(
+            fusedOf(
                 sliceOf(
                     mapOf(
                         7L to mapOf(windowStart to AvailabilityStatus.RESERVED),
@@ -134,7 +135,7 @@ class PoiAvailabilityFusionTest {
     fun `orders campsites numerically`() {
         val available = mapOf(windowStart to AvailabilityStatus.AVAILABLE)
         val fused =
-            fusePoiWindow(
+            fusedOf(
                 sliceOf(mapOf(10L to available, 9L to available, 100L to available)),
                 windowStart,
             )
@@ -151,7 +152,7 @@ class PoiAvailabilityFusionTest {
     @Test
     fun `a campsite with no row for the date is unknown`() {
         val fused =
-            fusePoiWindow(
+            fusedOf(
                 sliceOf(
                     streams = mapOf(7L to mapOf(windowStart to AvailabilityStatus.AVAILABLE)),
                     days = 2,
@@ -176,7 +177,7 @@ class PoiAvailabilityFusionTest {
 
         assertEquals(
             setOf(7L),
-            fusePoiWindow(slice, windowStart)
+            fusedOf(slice, windowStart)
                 .days
                 .single()
                 .cells.keys,
@@ -186,7 +187,7 @@ class PoiAvailabilityFusionTest {
     @Test
     fun `produces one day per date in the window`() {
         val fused =
-            fusePoiWindow(
+            fusedOf(
                 sliceOf(
                     streams =
                         mapOf(
@@ -218,7 +219,7 @@ class PoiAvailabilityFusionTest {
     @Test
     fun `a reserved cell on a polling provider is watchable and lifts the day`() {
         val fused =
-            fusePoiWindow(
+            fusedOf(
                 sliceOf(
                     mapOf(
                         1L to mapOf(windowStart to AvailabilityStatus.AVAILABLE),
@@ -241,7 +242,7 @@ class PoiAvailabilityFusionTest {
     @Test
     fun `a provider that cannot poll internally has no watchable cell`() {
         val fused =
-            fusePoiWindow(
+            fusedOf(
                 sliceOf(
                     mapOf(1L to mapOf(windowStart to AvailabilityStatus.RESERVED)),
                     pollingSupported = false,
@@ -262,7 +263,7 @@ class PoiAvailabilityFusionTest {
     @Test
     fun `a date before the earliest bookable date is not watchable`() {
         val fused =
-            fusePoiWindow(
+            fusedOf(
                 sliceOf(
                     streams =
                         mapOf(
@@ -285,7 +286,7 @@ class PoiAvailabilityFusionTest {
 
     @Test
     fun `no campsites at all is empty, not closed for season`() {
-        val fused = fusePoiWindow(sliceOf(emptyMap()), windowStart)
+        val fused = fusedOf(sliceOf(emptyMap()), windowStart)
 
         assertEquals(AvailabilityWindowState.EMPTY, fused.state)
         assertEquals(emptyList(), fused.days)
@@ -296,7 +297,7 @@ class PoiAvailabilityFusionTest {
     @Test
     fun `every campsite closed for season closes the week`() {
         val fused =
-            fusePoiWindow(
+            fusedOf(
                 sliceOf(
                     streams =
                         mapOf(
@@ -323,7 +324,7 @@ class PoiAvailabilityFusionTest {
                     reopensOnByCampsite = mapOf(2L to LocalDate.parse("2027-05-01")),
                 )
 
-        val fused = fusePoiWindow(slice, windowStart)
+        val fused = fusedOf(slice, windowStart)
 
         assertEquals(AvailabilityWindowState.CLOSED_FOR_SEASON, fused.state)
         assertNull(fused.season)
@@ -332,7 +333,7 @@ class PoiAvailabilityFusionTest {
     @Test
     fun `a closed-for-season week with no reopen date carries no season block`() {
         val fused =
-            fusePoiWindow(
+            fusedOf(
                 sliceOf(mapOf(1L to mapOf(windowStart to AvailabilityStatus.CLOSED))),
                 windowStart,
             )
@@ -344,7 +345,7 @@ class PoiAvailabilityFusionTest {
     @Test
     fun `one open campsite keeps the week open`() {
         val fused =
-            fusePoiWindow(
+            fusedOf(
                 sliceOf(
                     streams =
                         mapOf(
@@ -364,7 +365,7 @@ class PoiAvailabilityFusionTest {
     fun `carries the stalest freshness block across the streams`() {
         val stale = AvailabilityCacheBlock(hit = true, ageSeconds = 900, ttlSeconds = 600)
         val fused =
-            fusePoiWindow(
+            fusedOf(
                 sliceOf(
                     streams = mapOf(1L to mapOf(windowStart to AvailabilityStatus.AVAILABLE)),
                     cacheBlock = stale,
@@ -376,9 +377,24 @@ class PoiAvailabilityFusionTest {
     }
 }
 
+private fun fusedOf(
+    slice: PoiAvailabilitySlice,
+    earliestDate: LocalDate,
+): FusedWindow {
+    val window = ResolvedDateWindow(slice.startDate, slice.endDate)
+    return fuseWindow(
+        streams = streamsFor(slice.campsites, window, slice.batch?.observations.orEmpty()),
+        window = window,
+        earliestDate = earliestDate,
+        pollingSupported = slice.pollingSupported,
+        cache = slice.batch?.cacheBlock,
+        season = slice.reopensOn(),
+    )
+}
+
 /** The one fused day of a single-date window with one campsite per status. */
 private fun fusedDay(vararg statuses: AvailabilityStatus) =
-    fusePoiWindow(
+    fusedOf(
         sliceOf(
             statuses
                 .mapIndexed { index, status -> (index + 1).toLong() to mapOf(windowStart to status) }

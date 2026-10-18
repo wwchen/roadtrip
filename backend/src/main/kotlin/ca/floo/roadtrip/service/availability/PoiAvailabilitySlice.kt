@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.api.AvailabilityResponseDto
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import java.time.LocalDate
@@ -50,6 +51,21 @@ internal fun PoiAvailabilitySlice.reopensOn(): AvailabilitySeasonBlock? =
         .mapNotNull { reopensOnByCampsite[it.id] }
         .minOrNull()
         ?.let { AvailabilitySeasonBlock(reopensOn = it.toString()) }
+
+internal fun PoiAvailabilitySlice.window(): ResolvedDateWindow = ResolvedDateWindow(startDate, endDate)
+
+internal fun PoiAvailabilitySlice.streams(): List<CampsiteStream> =
+    batch?.let { streamsFor(campsites, window(), it.observations) }.orEmpty()
+
+internal fun PoiAvailabilitySlice.fusedWindow(): FusedWindow =
+    fuseWindow(
+        streams = streams(),
+        window = window(),
+        earliestDate = earliestDate,
+        pollingSupported = pollingSupported,
+        cache = batch?.cacheBlock,
+        season = reopensOn(),
+    )
 
 /**
  * One envelope per campsite, each narrowed to that campsite's observations.
