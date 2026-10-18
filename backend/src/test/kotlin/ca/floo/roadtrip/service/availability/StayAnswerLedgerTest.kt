@@ -22,9 +22,11 @@ private fun await(latch: CountDownLatch) {
     if (!latch.await(LATCH_TIMEOUT_SECONDS, TimeUnit.SECONDS)) fail("latch never fired")
 }
 
+private val parkedOrDone = setOf(Thread.State.WAITING, Thread.State.TERMINATED)
+
 private fun awaitParkedOrDone(thread: Thread) {
     val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(PARK_TIMEOUT_MS)
-    while (thread.state !in setOf(Thread.State.TERMINATED, Thread.State.WAITING, Thread.State.BLOCKED)) {
+    while (thread.state !in parkedOrDone) {
         if (System.nanoTime() > deadline) fail("thread never parked or finished: ${thread.state}")
         Thread.onSpinWait()
     }
