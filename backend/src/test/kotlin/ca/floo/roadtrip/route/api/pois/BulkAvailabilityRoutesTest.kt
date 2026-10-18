@@ -421,11 +421,16 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
-    fun `a max_age_seconds exactly at the floor or the ceiling is kept, the range being inclusive`() =
+    fun `a max_age_seconds exactly at the floor is kept, and exactly at the ceiling is accepted`() =
         testApplication {
             val cutoffs = mutableListOf<Instant?>()
             application { routeTestApplication { maxAgeRoutesUnderTest(cutoffs) } }
 
+            // Only the floor half discriminates: a clamp that dropped an equal value would fall back to
+            // the ceiling and fail. The ceiling is also the default (one config value, by design: the
+            // range is floor..default), so "sent the ceiling, kept" and "sent nothing, defaulted" give
+            // the same cutoff and this half cannot tell them apart. It pins only that the ceiling is
+            // accepted; do not split the config value to sharpen it.
             postStay(maxAgeSeconds = "${maxAgeFloor.seconds}")
             postStay(maxAgeSeconds = "${maxAgeCeiling.seconds}")
 
