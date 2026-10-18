@@ -45,8 +45,7 @@ internal data class PoiAvailabilitySlice(
 
 /**
  * One envelope per campsite, each narrowed to that campsite's observations.
- * Both read endpoints shape their response from this, so a change to the
- * envelope lands in one place. Empty when no campsite matched the filter.
+ * Empty when no campsite matched the filter.
  */
 internal fun PoiAvailabilitySlice.perCampsiteEnvelopes(): List<CampsiteEnvelope> {
     val batch = batch ?: return emptyList()

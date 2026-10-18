@@ -108,7 +108,7 @@ internal class StayCheckController(
     )
 
     /**
-     * One answer per requested POI, each as it lands, and never fewer. POIs start
+     * One answer per requested POI, each as it lands, bar the one race below. POIs start
      * in request order — the caller sends the nearest first — at most
      * [StayCheckConfig.fanOutConcurrency] at a time. One that outlives
      * [StayCheckConfig.perPoiTimeout] answers [STAY_TIMEOUT_ERROR] — outcome
@@ -116,7 +116,7 @@ internal class StayCheckController(
      * so does every POI yet to answer; a read that ended without an answer at all
      * answers the unclassified failure. Each failure is classified by [stayFailureOf]
      * into the answer's outcome, reason and retryability. So the flow completes by
-     * its deadline, with every POI in it. Cancelling the collector cancels every
+     * its deadline, with every POI in it bar that race. Cancelling the collector cancels every
      * read in flight.
      *
      * The flow ends with exactly one [StayStreamItem.Done], after every answer: it
@@ -125,8 +125,15 @@ internal class StayCheckController(
      * below makes to pick its error code, emitted once rather than derived a second
      * way — every POI answers either way, so only the server can say which answers
      * are real. A read that merely ended without a result still completes the check:
-     * the stream did not run out of time. Nothing follows `Done`: the sweep leaves
-     * no POI unanswered, so a late read finds its answer already given.
+     * the stream did not run out of time. The sweep claims every index, so a read
+     * that finishes after it finds its answer already given, sends nothing, and
+     * nothing follows `Done`. There is one narrow window in which that is not so.
+     * `answer` claims an index with `answered.add` and only then sends; a read that
+     * wins the claim on another thread and is preempted before the send leaves the
+     * sweep walking past an index it sees as taken, and the send then lands after
+     * `Done`, or is dropped by a channel `finally` has closed. Either way that POI
+     * is never answered. It needs preemption between two adjacent non-suspending
+     * statements, so it is very rare, but "every POI answers" holds only outside it.
      *
      * The reads are deliberately not the flow's children. A per-POI timeout lands
      * at a read's next suspension, so a read stuck in a blocking call — a database
