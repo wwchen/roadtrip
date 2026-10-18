@@ -111,7 +111,6 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                 .first()
                 .cells.size,
         )
-        assertEquals(BUSY_CAMPGROUND_SITES, slice.perCampsiteEnvelopes().size)
         // The serving provider was picked once for the slice; nothing asked the
         // target resolver about a campsite, at any campground size.
         assertEquals(0, fixture.targets.campsiteResolves)

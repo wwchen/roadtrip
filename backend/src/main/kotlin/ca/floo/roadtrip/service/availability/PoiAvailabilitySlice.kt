@@ -1,20 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.model.api.AvailabilityResponseDto
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.Campsite
-import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import java.time.LocalDate
-
-/**
- * One campsite's shaped availability, plus the observations it was built from
- * so a caller can derive more (run lengths) without re-filtering the batch.
- */
-internal data class CampsiteEnvelope(
-    val response: AvailabilityResponseDto,
-    val observations: List<CampsiteDayObservation>,
-)
 
 /**
  * One POI's resolved availability read, before it is shaped for a specific
@@ -42,29 +30,3 @@ internal data class PoiAvailabilitySlice(
      */
     val pollingSupported: Boolean,
 )
-
-/**
- * One envelope per campsite, each narrowed to that campsite's observations.
- * Empty when no campsite matched the filter.
- */
-internal fun PoiAvailabilitySlice.perCampsiteEnvelopes(): List<CampsiteEnvelope> {
-    val batch = batch ?: return emptyList()
-    return campsites.map { campsite ->
-        val forCampsite = batch.observations.filter { it.campsiteId == campsite.id }
-        CampsiteEnvelope(
-            response =
-                availabilityResponseFromObservations(
-                    batch =
-                        batch.copy(
-                            observations = forCampsite,
-                            campsiteId = campsite.id,
-                            startDate = startDate,
-                            endDate = endDate,
-                        ),
-                    pollingSupported = pollingSupported,
-                    earliestDate = earliestDate,
-                ),
-            observations = forCampsite,
-        )
-    }
-}

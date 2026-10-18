@@ -325,6 +325,17 @@ not a separate change.
 > never on that endpoint's wire. `AvailabilityResponseDto` survives as an internal
 > type; it left the generated types with the scan's body.
 
+> **Follow-up.** It did not survive for long. With the scan gone its only
+> remaining callers were the rec.gov and Aspira oracle tests, so the whole chain
+> behind it — `perCampsiteEnvelopes`, `CampsiteEnvelope`,
+> `availabilityResponseFromObservations`, `availabilityResponseDto`,
+> `AvailabilityResponseDto`, and the `DayClassification` shaping under them —
+> was deleted in a follow-up change, and those tests now assert vendor parsing
+> against the `AvailabilityObservationBatch` the adapters produce. A
+> `@Serializable` type sitting in `model/api/` with no contract row is the kind
+> of thing a future route picks up by autocomplete and starts serving
+> ungoverned.
+
 ## Configuration
 
 `BulkAvailabilityConfig` keeps every bound it has. Two renames:
