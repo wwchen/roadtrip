@@ -121,7 +121,7 @@ internal class BulkAvailabilityController(
             poiId = slice.poiId,
             startDate = slice.startDate.toString(),
             endDate = slice.endDate.toString(),
-            summary = staySummaryOf(slice.streams(), slice.campsites.size, slice.batch?.cacheBlock),
+            summary = staySummaryOf(slice.streams(), slice.checkedSites(), slice.batch?.cacheBlock),
         )
 
     private fun rank(

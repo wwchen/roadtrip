@@ -8,7 +8,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
-import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.service.api.rollupStatus
 import org.junit.jupiter.api.Test
 import java.time.Instant
@@ -380,17 +379,7 @@ class PoiAvailabilityFusionTest {
 private fun fusedOf(
     slice: PoiAvailabilitySlice,
     earliestDate: LocalDate,
-): FusedWindow {
-    val window = ResolvedDateWindow(slice.startDate, slice.endDate)
-    return fuseWindow(
-        streams = streamsFor(slice.campsites, window, slice.batch?.observations.orEmpty()),
-        window = window,
-        earliestDate = earliestDate,
-        pollingSupported = slice.pollingSupported,
-        cache = slice.batch?.cacheBlock,
-        season = slice.reopensOn(),
-    )
-}
+): FusedWindow = slice.copy(earliestDate = earliestDate).fusedWindow()
 
 /** The one fused day of a single-date window with one campsite per status. */
 private fun fusedDay(vararg statuses: AvailabilityStatus) =

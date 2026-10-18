@@ -143,7 +143,7 @@ class StaySummaryTest {
     }
 
     @Test
-    fun `fusion and the stay summary agree on closed for season for one set of streams`() {
+    fun `fusion and the stay summary agree on closed for season where a whole closure is the only closure`() {
         val closed = listOf(AvailabilityStatus.CLOSED, AvailabilityStatus.CLOSED)
         val open = listOf(AvailabilityStatus.AVAILABLE, AvailabilityStatus.AVAILABLE)
         val taken = listOf(AvailabilityStatus.RESERVED, AvailabilityStatus.RESERVED)
@@ -161,6 +161,19 @@ class StaySummaryTest {
             assertEquals(expectedClosed, fused.state == AvailabilityWindowState.CLOSED_FOR_SEASON)
             assertEquals(expectedClosed, summary.status == StayAvailabilityStatus.CLOSED_FOR_SEASON)
         }
+    }
+
+    @Test
+    fun `a stay that runs into the closure is closed to the summary but not to the week grid`() {
+        val closing = listOf(AvailabilityStatus.RESERVED, AvailabilityStatus.CLOSED)
+        val streams = streamsOf(listOf(site(1) to closing, site(2) to closing))
+        val window = ResolvedDateWindow(stayStart, stayEnd)
+
+        val fused = fuseWindow(streams, window, stayStart, pollingSupported = true, cache = cache, season = null)
+        val summary = staySummaryOf(streams, streams.size, cache)
+
+        assertEquals(StayAvailabilityStatus.CLOSED_FOR_SEASON, summary.status)
+        assertEquals(AvailabilityWindowState.SUCCESS, fused.state)
     }
 
     @Test

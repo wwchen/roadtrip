@@ -57,6 +57,8 @@ internal fun PoiAvailabilitySlice.window(): ResolvedDateWindow = ResolvedDateWin
 internal fun PoiAvailabilitySlice.streams(): List<CampsiteStream> =
     batch?.let { streamsFor(campsites, window(), it.observations) }.orEmpty()
 
+internal fun PoiAvailabilitySlice.checkedSites(): Int = campsites.map { it.id }.distinct().size
+
 internal fun PoiAvailabilitySlice.fusedWindow(): FusedWindow =
     fuseWindow(
         streams = streams(),
