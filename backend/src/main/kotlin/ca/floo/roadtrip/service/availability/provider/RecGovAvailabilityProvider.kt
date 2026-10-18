@@ -62,6 +62,9 @@ class RecGovAvailabilityProvider(
             return availability(campground, startDate, endDate)
         }
         val recgovId = recgovIdOrThrow(campground)
+        // The facility-month payloads cover the campground whatever the filter,
+        // so every covered campsite's cells are already in them: keying them
+        // costs nothing and saves the next, wider request a refetch.
         val campsiteIdByVendorId = scope.covered.associate { vendorSiteIdFor(it) to it.id }
         return runWithErrorMapping {
             catalogBatch(recgovId, campsiteIdByVendorId, startDate, endDate)
