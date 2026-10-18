@@ -76,62 +76,42 @@ private val observedAt: Instant = Instant.parse("2026-08-20T00:00:00Z")
 
 class BulkAvailabilityControllerTest {
     @Test
-    fun `response entries mirror the requested poi ids in order including duplicates`() {
+    fun `a poi whose lookup throws an unmapped exception answers failed, unknown, and does not fail its neighbours`() {
         runTest {
-            val response = bulkController().availabilityForPois(request(poiIds = listOf(3L, 1L, 3L)))
-            assertEquals(listOf(3L, 1L, 3L), response.pois.map { it.poiId })
+            val answers = bulkController().stayAnswers(stayRequest(listOf(1L, CRASHING_POI_ID, 2L))).answers()
+
+            assertEquals(setOf(1L, CRASHING_POI_ID, 2L), answers.map { it.poiId }.toSet())
+            val crashed = answers.single { it.poiId == CRASHING_POI_ID }
+            assertEquals(StayOutcome.FAILED, crashed.outcome)
+            assertEquals(StayFailureReason.UNKNOWN, crashed.reason)
+            assertNull(crashed.stay)
+            val neighbours = answers.filter { it.poiId != CRASHING_POI_ID }
+            assertEquals(listOf(StayOutcome.ANSWERED, StayOutcome.ANSWERED), neighbours.map { it.outcome })
         }
     }
 
     @Test
-    fun `campsites below min nights are dropped and the rest sort by run descending`() {
+    fun `an unknown poi answers failed, not_found`() {
         runTest {
-            // POI 1 has three sites with longest runs of 1, 5 and 3 nights.
-            val response = bulkController().availabilityForPois(request(poiIds = listOf(1L), minNights = 3))
-            val campsites = response.pois.single().campsites
-            assertNotNull(campsites)
-            assertEquals(listOf(5, 3), campsites.map { it.longestRunNights })
+            val answer = bulkController().stayAnswers(stayRequest(listOf(UNKNOWN_POI_ID))).answers().single()
+
+            assertEquals(StayOutcome.FAILED, answer.outcome)
+            assertEquals(StayFailureReason.NOT_FOUND, answer.reason)
+            assertNull(answer.stay)
         }
     }
 
     @Test
-    fun `a poi whose provider fails reports an error and does not fail its neighbours`() {
+    fun `a poi with no matching campsites answers with no_data over zero sites, not a failure`() {
         runTest {
-            val response = bulkController().availabilityForPois(request(poiIds = listOf(1L, RATE_LIMITED_POI_ID)))
-            assertNotNull(response.pois[0].campsites)
-            assertEquals("rate_limited", response.pois[1].error)
-            assertNull(response.pois[1].campsites)
-        }
-    }
+            val answer = bulkController().stayAnswers(stayRequest(listOf(NO_SITES_POI_ID))).answers().single()
 
-    @Test
-    fun `a poi whose lookup throws an unmapped exception reports unknown and does not fail its neighbours`() {
-        runTest {
-            val response =
-                bulkController().availabilityForPois(request(poiIds = listOf(1L, CRASHING_POI_ID, 2L)))
-            assertNotNull(response.pois[0].campsites)
-            assertEquals("unknown", response.pois[1].error)
-            assertNull(response.pois[1].campsites)
-            assertNotNull(response.pois[2].campsites)
-        }
-    }
-
-    @Test
-    fun `an unknown poi reports not_found`() {
-        runTest {
-            val response = bulkController().availabilityForPois(request(poiIds = listOf(UNKNOWN_POI_ID)))
-            assertEquals("not_found", response.pois.single().error)
-        }
-    }
-
-    @Test
-    fun `a poi with no matching campsites resolves with an empty list not an error`() {
-        runTest {
-            val response = bulkController().availabilityForPois(request(poiIds = listOf(NO_SITES_POI_ID)))
-            val campsites = response.pois.single().campsites
-            assertNotNull(campsites)
-            assertEquals(0, campsites.size)
-            assertNull(response.pois.single().error)
+            assertEquals(StayOutcome.ANSWERED, answer.outcome)
+            val stay = assertNotNull(answer.stay)
+            assertEquals(StayAvailabilityStatus.NO_DATA, stay.status)
+            assertEquals(0, stay.checkedSites)
+            assertNull(stay.observedAt)
+            assertNull(answer.reason)
         }
     }
 
@@ -349,17 +329,9 @@ class BulkAvailabilityControllerTest {
     }
 
     @Test
-    fun `a group size leaves out the campsites too small for it, in both reads`() {
+    fun `a group size leaves out the campsites too small for it`() {
         runTest {
             // POI 1's long-run site sleeps 2; the other two state no capacity.
-            val campsites =
-                bulkController()
-                    .availabilityForPois(request(poiIds = listOf(1L), groupSize = 4))
-                    .pois
-                    .single()
-                    .campsites
-            assertEquals(listOf(3, 1), assertNotNull(campsites).map { it.longestRunNights })
-
             val stay =
                 bulkController()
                     .stayAnswers(stayRequest(listOf(1L), groupSize = 4))
@@ -367,33 +339,6 @@ class BulkAvailabilityControllerTest {
                     .single()
                     .stay
             assertEquals(2, assertNotNull(stay).checkedSites)
-        }
-    }
-
-    @Test
-    fun `a fresh request only reuses observations younger than the fresh tolerance`() {
-        runTest {
-            val now = Instant.parse("2026-10-12T12:00:00Z")
-            val config =
-                BulkAvailabilityConfig(
-                    maxPois = TEST_MAX_POIS,
-                    fanOutConcurrency = TEST_FAN_OUT_CONCURRENCY,
-                    tolerance = Duration.ofHours(2),
-                    ipPoiLimitPerMinute = TEST_IP_POI_LIMIT_PER_MINUTE,
-                    freshTolerance = Duration.ofMinutes(1),
-                )
-            val recorder = CutoffRecorder()
-            val controller =
-                BulkAvailabilityController(
-                    sliceLookup = FakePoiAvailabilitySliceLookup(recorder),
-                    config = config,
-                    clock = Clock.fixed(now, ZoneOffset.UTC),
-                )
-
-            controller.availabilityForPois(request(poiIds = listOf(2L)))
-            controller.availabilityForPois(request(poiIds = listOf(2L), fresh = true))
-
-            assertEquals(listOf(now.minus(Duration.ofHours(2)), now.minus(Duration.ofMinutes(1))), recorder.cutoffs)
         }
     }
 
@@ -425,22 +370,11 @@ class BulkAvailabilityControllerTest {
     }
 
     @Test
-    fun `every poi in one fan out is measured against the same freshness cutoff`() {
+    fun `every poi in one stay check is measured against the same freshness cutoff`() {
         runTest {
             val recorder = CutoffRecorder()
-            bulkController(recorder = recorder)
-                .availabilityForPois(request(poiIds = listOf(1L, 2L, 3L)))
+            bulkController(recorder = recorder).stayAnswers(stayRequest(listOf(1L, 2L, 3L))).answers()
             assertEquals(1, recorder.cutoffs.distinct().size)
-        }
-    }
-
-    @Test
-    fun `concurrent poi resolution never exceeds the configured fan out`() {
-        runTest {
-            val meter = ConcurrencyMeter()
-            bulkController(fanOutConcurrency = 2, meter = meter)
-                .availabilityForPois(request(poiIds = (1L..8L).toList()))
-            assertEquals(2, meter.peak)
         }
     }
 }
@@ -472,23 +406,6 @@ private fun List<StayStreamItem>.answers(): List<StayAnswerDto> = filterIsInstan
 
 /** The stream's answers; its terminal item is checked by the tests that care about it. */
 private suspend fun Flow<StayStreamItem>.answers(): List<StayAnswerDto> = toList().answers()
-
-private fun request(
-    poiIds: List<Long>,
-    minNights: Int = 1,
-    siteTypes: List<CampsiteKind> = emptyList(),
-    groupSize: Int? = null,
-    fresh: Boolean = false,
-): BulkAvailabilityRequest =
-    BulkAvailabilityRequest(
-        poiIds = poiIds,
-        startDate = null,
-        endDate = null,
-        minNights = minNights,
-        siteTypes = siteTypes,
-        groupSize = groupSize,
-        fresh = fresh,
-    )
 
 private fun stayRequest(
     poiIds: List<Long>,
@@ -654,7 +571,7 @@ private fun simpleSlice(poiId: Long): PoiAvailabilitySlice {
     )
 }
 
-/** No campsite matched the requested site types: resolved, but nothing to rank. */
+/** No campsite matched the requested site types: resolved, but nothing to check. */
 private fun noSitesSlice(poiId: Long): PoiAvailabilitySlice =
     PoiAvailabilitySlice(
         poiId = poiId,

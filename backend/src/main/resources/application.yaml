@@ -21,7 +21,7 @@ roadtrip:
       idle-reschedule: 300s
       governor-starved-retry: 15s
     bulk:
-      # A bulk scan is the one read that can turn one request into many
+      # The stay check is the one read that can turn one request into many
       # upstream calls, so each bound is stated here rather than compiled in.
       max-pois: 50
       # Must stay below db.max-pool-size (currently 4, unset anywhere so it's
@@ -29,7 +29,8 @@ roadtrip:
       # connection through AvailabilityRepo.recordObservations.
       fan-out-concurrency: 3
       tolerance: 2h
-      # The same, for a request asking for fresh data (the map's Check again).
+      # The floor of the age a request may ask for (max_age_seconds, as the map's
+      # Check again does); tolerance above is the default and the ceiling.
       fresh-tolerance: 1m
       # A streamed stay check finishes only when every campground has answered;
       # one that takes longer than this answers `timeout` instead.
@@ -40,8 +41,8 @@ roadtrip:
       # A quiet stream writes a keep-alive this often, inside the idle timeouts of
       # the proxies in front of it and of the client (at most 20s).
       stream-heartbeat: 15s
-      # Campgrounds one caller may ask about per minute, across both bulk reads:
-      # each one is an upstream call. At least max-pois.
+      # Campgrounds one caller may ask about per minute: each one is an upstream
+      # call. At least max-pois.
       ip-poi-limit-per-minute: 150
     campsite:
       # Per-IP ceiling on the single-POI availability read. Higher than bulk's

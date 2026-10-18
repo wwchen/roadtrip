@@ -39,7 +39,7 @@ internal class CampsiteAvailabilityController(
 
     /**
      * One POI's resolved availability, shared by the detail endpoint and the
-     * bulk endpoint.
+     * stay check.
      *
      * @throws AvailabilityServiceError on unknown POI/campground or a bad date window.
      * @throws ca.floo.roadtrip.model.availability.AvailabilityProviderError on upstream failure.

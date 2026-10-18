@@ -10,7 +10,6 @@ data class AvailabilityResponseDto(
     val provider: String,
     @SerialName("scope_ref") val scopeRef: String? = null,
     @SerialName("campsite_id") val campsiteId: Long? = null,
-    @SerialName("longest_run_nights") val longestRunNights: Int? = null,
     @SerialName("checked_at") val checkedAt: String,
     @SerialName("start_date") val startDate: String,
     @SerialName("end_date") val endDate: String,

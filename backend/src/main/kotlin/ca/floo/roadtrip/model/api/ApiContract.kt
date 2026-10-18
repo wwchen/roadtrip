@@ -328,17 +328,7 @@ object ApiContract {
             ),
             ApiEndpoint(
                 ApiMethod.POST,
-                "/api/pois/availability/bulk",
-                BulkAvailabilityRequestDto::class,
-                ApiBody(HTTP_OK, BulkAvailabilityResponseDto::class),
-                listOf(
-                    ApiBody(HTTP_BAD_REQUEST, AvailabilityErrorDto::class),
-                    ApiBody(HTTP_SERVICE_UNAVAILABLE, AvailabilityErrorDto::class),
-                ),
-            ),
-            ApiEndpoint(
-                ApiMethod.POST,
-                "/api/pois/availability/bulk/stream",
+                "/api/pois/availability/stays",
                 StayCheckRequestDto::class,
                 ApiBody(
                     HTTP_OK,

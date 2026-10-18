@@ -130,20 +130,6 @@ export interface AvailabilityPollersSummary {
   claimed: number;
 }
 
-export interface AvailabilityResponseDto {
-  provider: string;
-  scope_ref?: string;
-  campsite_id?: number;
-  longest_run_nights?: number;
-  checked_at: string;
-  start_date: string;
-  end_date: string;
-  state: string;
-  season?: unknown;
-  availability: AvailabilityDayDto[];
-  cache: AvailabilityCacheBlock;
-}
-
 export interface AvailabilityRunSchema {
   id: number;
   poller_id: number;
@@ -270,28 +256,6 @@ export interface BuildInfoDto {
   env: string;
   sha: string;
   branch: string;
-}
-
-export interface BulkAvailabilityRequestDto {
-  poi_ids?: number[];
-  start_date?: string;
-  end_date?: string;
-  min_nights?: number;
-  site_type?: string[];
-  group_size?: number;
-  fresh?: boolean;
-}
-
-export interface BulkAvailabilityResponseDto {
-  pois: BulkPoiAvailabilityDto[];
-}
-
-export interface BulkPoiAvailabilityDto {
-  poi_id: number;
-  start_date?: string;
-  end_date?: string;
-  campsites?: AvailabilityResponseDto[];
-  error?: string;
 }
 
 export interface CampgroundDetailsRequestDto {
@@ -890,8 +854,7 @@ export const API_ENDPOINTS = [
   { method: 'GET', path: '/api/health/ready', request: null, requestRequired: true, success: { status: 200, type: 'ReadinessResponseDto' }, errors: [{ status: 503, type: 'ReadinessResponseDto' }] },
   { method: 'GET', path: '/api/me', request: null, requestRequired: true, success: { status: 200, type: 'MeResponseDto' }, errors: [] },
   { method: 'POST', path: '/api/pois', request: 'PoisRequestSchema', requestRequired: true, success: { status: 200, type: 'PoiFeatureCollectionSchema' }, errors: [{ status: 400, type: 'ApiErrorSchema' }] },
-  { method: 'POST', path: '/api/pois/availability/bulk', request: 'BulkAvailabilityRequestDto', requestRequired: true, success: { status: 200, type: 'BulkAvailabilityResponseDto' }, errors: [{ status: 400, type: 'AvailabilityErrorDto' }, { status: 503, type: 'AvailabilityErrorDto' }] },
-  { method: 'POST', path: '/api/pois/availability/bulk/stream', request: 'StayCheckRequestDto', requestRequired: true, success: { status: 200, type: null, events: { answer: 'StayAnswerDto', done: 'StayCheckDoneDto' } }, errors: [{ status: 400, type: 'AvailabilityErrorDto' }, { status: 503, type: 'AvailabilityErrorDto' }] },
+  { method: 'POST', path: '/api/pois/availability/stays', request: 'StayCheckRequestDto', requestRequired: true, success: { status: 200, type: null, events: { answer: 'StayAnswerDto', done: 'StayCheckDoneDto' } }, errors: [{ status: 400, type: 'AvailabilityErrorDto' }, { status: 503, type: 'AvailabilityErrorDto' }] },
   { method: 'POST', path: '/api/pois/on-route', request: 'OnRouteRequestDto', requestRequired: true, success: { status: 200, type: 'PoisOnRouteResponseSchema' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 503, type: 'ApiErrorSchema' }] },
   { method: 'GET', path: '/api/pois/search', request: null, requestRequired: true, success: { status: 200, type: 'PoiSearchResponseSchema' }, errors: [] },
   { method: 'GET', path: '/api/pois/{id}', request: null, requestRequired: true, success: { status: 200, type: 'PoiDetailFeatureSchema' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 404, type: 'ApiErrorSchema' }] },

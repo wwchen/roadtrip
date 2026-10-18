@@ -41,7 +41,7 @@ export type WatchCapabilities = AvailabilityWatchCapabilitiesDto;
 export type PoiCampsitesAvailabilityResponse = PoiCampsitesAvailabilityResponseDto;
 export type StayAnswer = StayAnswerDto;
 
-export const STAY_STREAM_URL = '/api/pois/availability/bulk/stream';
+export const STAY_STREAM_URL = '/api/pois/availability/stays';
 
 /** The stay stream's event names, as its contract row declares them (`API_ENDPOINTS`). */
 export const STAY_ANSWER_EVENT = 'answer';

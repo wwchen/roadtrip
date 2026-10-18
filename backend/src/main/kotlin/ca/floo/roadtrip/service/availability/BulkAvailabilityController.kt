@@ -1,8 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.BulkAvailabilityConfig
-import ca.floo.roadtrip.model.api.BulkAvailabilityResponseDto
-import ca.floo.roadtrip.model.api.BulkPoiAvailabilityDto
 import ca.floo.roadtrip.model.api.StayAnswerDto
 import ca.floo.roadtrip.model.api.StayCheckOutcome
 import ca.floo.roadtrip.model.api.StayOutcome
@@ -13,10 +11,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.channelFlow
@@ -40,18 +35,6 @@ private val log = LoggerFactory.getLogger("BulkAvailabilityController")
  * or is still waiting when the stream reaches [BulkAvailabilityConfig.streamTimeout].
  */
 internal const val STAY_TIMEOUT_ERROR = "timeout"
-
-internal data class BulkAvailabilityRequest(
-    val poiIds: List<Long>,
-    val startDate: LocalDate?,
-    val endDate: LocalDate?,
-    val minNights: Int,
-    val siteTypes: List<CampsiteKind>,
-    /** Campsites that sleep fewer are left out; null leaves capacity unchecked. */
-    val groupSize: Int? = null,
-    /** Answer only from observations [BulkAvailabilityConfig.freshTolerance] old or younger. */
-    val fresh: Boolean = false,
-)
 
 /** A stay to check at many campgrounds, as the stream answers it. */
 internal data class StayCheckRequest(
@@ -104,11 +87,10 @@ private sealed interface PoiRead {
 }
 
 /**
- * Bulk reads across many POIs, over the same per-POI slice the detail endpoint
- * uses so they cannot drift: the per-campsite scan ([availabilityForPois]),
- * answered whole, and the stay check ([stayAnswers]), answered as a stream. Each
- * POI's failure is captured at the fan-out boundary, so one bad vendor never
- * blanks the rest.
+ * The stay check ([stayAnswers]): one stay read across many POIs, over the same
+ * per-POI slice the detail endpoint uses so they cannot drift, and answered as a
+ * stream. Each POI's failure is captured at the fan-out boundary, so one bad
+ * vendor never blanks the rest.
  */
 internal class BulkAvailabilityController(
     private val sliceLookup: PoiAvailabilitySliceLookup,
@@ -124,27 +106,6 @@ internal class BulkAvailabilityController(
         config,
         clock,
     )
-
-    suspend fun availabilityForPois(request: BulkAvailabilityRequest): BulkAvailabilityResponseDto {
-        val query = SliceQuery(request.siteTypes, request.startDate, request.endDate, request.groupSize, freshAtOrAfter(request.fresh))
-        val gate = Semaphore(config.fanOutConcurrency)
-
-        val entries =
-            coroutineScope {
-                request.poiIds
-                    .map { poiId ->
-                        async {
-                            gate.withPermit {
-                                when (val read = read(poiId, query)) {
-                                    is PoiRead.Resolved -> rank(read.slice, request.minNights)
-                                    is PoiRead.Failed -> BulkPoiAvailabilityDto(poiId = poiId, error = read.error)
-                                }
-                            }
-                        }
-                    }.awaitAll()
-            }
-        return BulkAvailabilityResponseDto(pois = entries)
-    }
 
     /**
      * One answer per requested POI, each as it lands, and never fewer. POIs start
@@ -226,8 +187,6 @@ internal class BulkAvailabilityController(
     /** The oldest instant an observation may carry and still answer: [maxAge] before now. */
     private fun cutoffFor(maxAge: Duration): Instant = Instant.now(clock).minus(maxAge)
 
-    private fun freshAtOrAfter(fresh: Boolean): Instant = cutoffFor(if (fresh) config.freshTolerance else config.tolerance)
-
     private suspend fun read(
         poiId: Long,
         query: SliceQuery,
@@ -250,23 +209,4 @@ internal class BulkAvailabilityController(
             log.error("bulk availability poi={} failed: {}", poiId, causeChain(e), e)
             PoiRead.Failed(AvailabilityProviderError.Unknown(e).code)
         }
-
-    private fun rank(
-        slice: PoiAvailabilitySlice,
-        minNights: Int,
-    ): BulkPoiAvailabilityDto {
-        val campsites =
-            slice
-                .perCampsiteEnvelopes()
-                .map { it.response.copy(longestRunNights = longestRunNights(it.observations)) }
-                .filter { (it.longestRunNights ?: 0) >= minNights }
-                .sortedByDescending { it.longestRunNights ?: 0 }
-
-        return BulkPoiAvailabilityDto(
-            poiId = slice.poiId,
-            startDate = slice.startDate.toString(),
-            endDate = slice.endDate.toString(),
-            campsites = campsites,
-        )
-    }
 }

@@ -35,7 +35,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The one row whose 200 is an event stream. */
-private const val STAY_STREAM = "/api/pois/availability/bulk/stream"
+private const val STAY_STREAM = "/api/pois/availability/stays"
 
 private const val WATCHES = "/api/watches"
 private const val WATCH_DELETE = "/api/watches/{id}/delete"

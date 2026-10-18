@@ -42,7 +42,7 @@ private const val GEOCODE = "/api/geocode"
 private const val SLACK_INTERACTIVITY = "/api/slack/interactivity"
 
 /** A row whose 200 is an event stream of `answer` and `done`. */
-private const val STAY_STREAM = "/api/pois/availability/bulk/stream"
+private const val STAY_STREAM = "/api/pois/availability/stays"
 private const val STREAM_HEARTBEAT_SECONDS = 15L
 
 /** A body shaped like `HealthResponseDto`, which is not the class the `/api/build-info` row names. */

@@ -3,26 +3,29 @@ package ca.floo.roadtrip.config
 import java.time.Duration
 
 /**
- * Caps and timings for the bulk availability read. A bulk scan is the one read
- * that can turn a single request into many upstream calls, so every bound here
- * is operationally tunable.
+ * Caps and timings for the stay check. It is the one read that can turn a single
+ * request into many upstream calls, so every bound here is operationally tunable.
  */
 data class BulkAvailabilityConfig(
     val maxPois: Int,
     val fanOutConcurrency: Int,
-    /** How old a stored observation may be and still answer, rather than asking the provider again. */
+    /**
+     * How old a stored observation may be and still answer, rather than asking the
+     * provider again: the default age, and the ceiling of what a request may ask for.
+     */
     val tolerance: Duration,
     /**
-     * How many campgrounds one caller may ask about per minute, across both bulk
-     * reads. Charged per POI, not per request: one request fans out to an upstream
+     * How many campgrounds one caller may ask about per minute. Charged per POI,
+     * not per request: one request fans out to an upstream
      * call per POI, so a request count would let a caller's upstream load grow with
      * the request size. At least [maxPois], so a request the cap allows can pass.
      */
     val ipPoiLimitPerMinute: Int,
     /**
-     * [tolerance] for a request that asks for fresh data (`fresh: true`, the map's
-     * Check again). Short rather than zero, so a double-click does not ask every
-     * provider twice; never longer than [tolerance], which it defaults down to.
+     * The floor of the age a request may ask for (`max_age_seconds`, as the map's
+     * Check again does): a shorter one is raised to it. Short rather than zero, so a
+     * double-click does not ask every provider twice; never longer than [tolerance],
+     * which it defaults down to.
      */
     val freshTolerance: Duration = minOf(tolerance, Duration.ofSeconds(DEFAULT_FRESH_TOLERANCE_SECONDS)),
     /**

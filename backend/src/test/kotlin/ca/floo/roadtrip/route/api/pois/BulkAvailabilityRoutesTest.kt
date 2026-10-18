@@ -34,7 +34,6 @@ import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
-import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -50,7 +49,6 @@ import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
@@ -80,6 +78,13 @@ private const val TEST_PER_POI_TIMEOUT_SECONDS = 30L
 private const val UNKNOWN_CAMPSITE_POI_ID = 999_999L
 private const val FORWARDED_FOR_HEADER = "X-Forwarded-For"
 
+/** The stay check's path. */
+private const val STAYS_PATH = "/api/pois/availability/stays"
+
+/** The per-campsite scan's path, and the stay check's earlier one: neither answers anything now. */
+private const val REMOVED_SCAN_PATH = "/api/pois/availability/bulk"
+private const val REMOVED_STREAM_PATH = "/api/pois/availability/bulk/stream"
+
 /** [FakePoiAvailabilitySliceLookup]'s campsite id is derived from the poi id by this factor. */
 private const val FAKE_SLICE_CAMPSITE_ID_MULTIPLIER = 1000L
 
@@ -103,12 +108,56 @@ private const val MAX_AGE_A_YEAR_SECONDS = 31_536_000L
 
 class BulkAvailabilityRoutesTest {
     @Test
+    fun `the stay check answers at its own path`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post(STAYS_PATH) {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            assertEquals(ContentType.Text.EventStream, resp.contentType()?.withoutParameters())
+            assertEquals(listOf("answer", "done"), streamEvents(resp.bodyAsText()).map { it.first })
+        }
+
+    @Test
+    fun `the per-campsite scan is gone`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post(REMOVED_SCAN_PATH) {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+
+            assertEquals(HttpStatusCode.NotFound, resp.status)
+        }
+
+    @Test
+    fun `the old stream path is gone`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post(REMOVED_STREAM_PATH) {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
+                }
+
+            assertEquals(HttpStatusCode.NotFound, resp.status)
+        }
+
+    @Test
     fun `rejects a request with more poi ids than the configured cap`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1,2,3,4,5,6]}""")
                 }
@@ -124,7 +173,7 @@ class BulkAvailabilityRoutesTest {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1],"start_date":"not-a-date"}""")
                 }
@@ -140,7 +189,7 @@ class BulkAvailabilityRoutesTest {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1]}""")
                 }
@@ -156,7 +205,7 @@ class BulkAvailabilityRoutesTest {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1],"start_date":"$windowStart"}""")
                 }
@@ -172,7 +221,7 @@ class BulkAvailabilityRoutesTest {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1,2],"start_date":"$windowEnd","end_date":"$windowStart"}""")
                 }
@@ -183,28 +232,12 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
-    fun `rejects a non-positive min_nights`() =
-        testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
-
-            val resp =
-                client.post("/api/pois/availability/bulk") {
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"poi_ids":[1],"min_nights":0}""")
-                }
-
-            assertEquals(HttpStatusCode.BadRequest, resp.status)
-            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("bad_min_nights", body["error"]!!.jsonPrimitive.content)
-        }
-
-    @Test
     fun `rejects an empty poi_ids list`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[]}""")
                 }
@@ -220,7 +253,7 @@ class BulkAvailabilityRoutesTest {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(
                         """{"poi_ids":[1],"start_date":"2026-07-04","end_date":"2026-07-06",""" +
@@ -240,7 +273,7 @@ class BulkAvailabilityRoutesTest {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1""")
                 }
@@ -256,7 +289,7 @@ class BulkAvailabilityRoutesTest {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":"x"}""")
                 }
@@ -267,47 +300,12 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
-    fun `returns 200 with per-poi entries when one poi fails`() =
-        testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
-
-            val resp =
-                client.post("/api/pois/availability/bulk") {
-                    contentType(ContentType.Application.Json)
-                    setBody(
-                        """{"poi_ids":[1,$RATE_LIMITED_POI_ID],""" +
-                            """"start_date":"$windowStart","end_date":"$windowEnd"}""",
-                    )
-                }
-
-            assertEquals(HttpStatusCode.OK, resp.status)
-            val pois = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["pois"]!!.jsonArray
-            assertEquals(2, pois.size)
-            assertEquals("rate_limited", pois[1].jsonObject["error"]!!.jsonPrimitive.content)
-
-            // The successful poi's stream: one campsite, one cell keyed by its own id.
-            val successfulPoiCampsiteId = 1L * FAKE_SLICE_CAMPSITE_ID_MULTIPLIER
-            val cells =
-                pois[0]
-                    .jsonObject["campsites"]!!
-                    .jsonArray[0]
-                    .jsonObject["availability"]!!
-                    .jsonArray[0]
-                    .jsonObject["cells"]!!
-                    .jsonObject
-            assertEquals(setOf(successfulPoiCampsiteId.toString()), cells.keys)
-            val cell = cells[successfulPoiCampsiteId.toString()]!!.jsonObject
-            assertEquals("available", cell["status"]!!.jsonPrimitive.content)
-            assertEquals(false, cell["watchable"]!!.jsonPrimitive.boolean)
-        }
-
-    @Test
     fun `the stream answers each poi as an event, then says it is done`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk/stream") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(
                         """{"poi_ids":[1,$RATE_LIMITED_POI_ID],""" +
@@ -351,7 +349,7 @@ class BulkAvailabilityRoutesTest {
             }
 
             val resp =
-                client.post("/api/pois/availability/bulk/stream") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1,$STALLED_POI_ID],"start_date":"$windowStart","end_date":"$windowEnd"}""")
                 }
@@ -458,7 +456,7 @@ class BulkAvailabilityRoutesTest {
 
             // Unknown keys are ignored on the wire, so an old client still gets an answer, at the default age.
             val resp =
-                client.post("/api/pois/availability/bulk/stream") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd","fresh":true}""")
                 }
@@ -473,7 +471,7 @@ class BulkAvailabilityRoutesTest {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk/stream") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(
                         """{"poi_ids":[1,$BEYOND_HORIZON_POI_ID,$RATE_LIMITED_POI_ID],""" +
@@ -513,7 +511,7 @@ class BulkAvailabilityRoutesTest {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk/stream") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1],"start_date":"$windowStart"}""")
                 }
@@ -525,39 +523,12 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
-    fun `the stream and the scan share one per-caller limit`() =
-        testApplication {
-            application {
-                routeTestApplication {
-                    bulkAvailabilityRoutesUnderTest(rateLimit = IpRateLimiter(perMinute = 1, nowMs = { 0L }))
-                }
-            }
-            val body = """{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}"""
-
-            val scan =
-                client.post("/api/pois/availability/bulk") {
-                    contentType(ContentType.Application.Json)
-                    setBody(body)
-                }
-            assertEquals(HttpStatusCode.OK, scan.status)
-
-            val stream =
-                client.post("/api/pois/availability/bulk/stream") {
-                    contentType(ContentType.Application.Json)
-                    setBody(body)
-                }
-            assertEquals(HttpStatusCode.ServiceUnavailable, stream.status)
-            val refused = Json.parseToJsonElement(stream.bodyAsText()).jsonObject
-            assertEquals("ip_throttled", refused["error"]!!.jsonPrimitive.content)
-        }
-
-    @Test
     fun `rejects a non-positive group_size`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
 
             val resp =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1],"group_size":0,"start_date":"$windowStart","end_date":"$windowEnd"}""")
                 }
@@ -566,52 +537,6 @@ class BulkAvailabilityRoutesTest {
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("bad_group_size", body["error"]!!.jsonPrimitive.content)
         }
-
-    @Test
-    fun `a reserved cell is watchable when the provider can be polled`() =
-        testApplication {
-            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
-
-            assertEquals(true, reservedCellWatchable(client))
-        }
-
-    @Test
-    fun `a reserved cell is not watchable when the provider cannot be polled`() =
-        testApplication {
-            application {
-                routeTestApplication { bulkAvailabilityRoutesUnderTest(pollingSupported = false) }
-            }
-
-            // The same cell the detail endpoint would call unwatchable: `watchable`
-            // is one predicate, and polling support is part of it on both endpoints.
-            assertEquals(false, reservedCellWatchable(client))
-        }
-
-    /** The bulk cell for the window's second (reserved) night on the one campsite. */
-    private suspend fun reservedCellWatchable(client: HttpClient): Boolean {
-        val resp =
-            client.post("/api/pois/availability/bulk") {
-                contentType(ContentType.Application.Json)
-                setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
-            }
-        assertEquals(HttpStatusCode.OK, resp.status)
-        val campsiteId = 1L * FAKE_SLICE_CAMPSITE_ID_MULTIPLIER
-        val day =
-            Json
-                .parseToJsonElement(resp.bodyAsText())
-                .jsonObject["pois"]!!
-                .jsonArray[0]
-                .jsonObject["campsites"]!!
-                .jsonArray[0]
-                .jsonObject["availability"]!!
-                .jsonArray[1]
-                .jsonObject
-        assertEquals("reserved", day["status"]!!.jsonPrimitive.content)
-        return day["cells"]!!
-            .jsonObject[campsiteId.toString()]!!
-            .jsonObject["watchable"]!!
-            .jsonPrimitive.boolean
-    }
 
     @Test
     fun `throttles by ip`() =
@@ -624,14 +549,14 @@ class BulkAvailabilityRoutesTest {
             }
 
             val first =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
                 }
             assertEquals(HttpStatusCode.OK, first.status)
 
             val second =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
                 }
@@ -650,7 +575,7 @@ class BulkAvailabilityRoutesTest {
             }
 
             suspend fun streamOf(poiIds: String) =
-                client.post("/api/pois/availability/bulk/stream") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[$poiIds],"start_date":"$windowStart","end_date":"$windowEnd"}""")
                 }
@@ -671,14 +596,14 @@ class BulkAvailabilityRoutesTest {
             }
 
             val malformed =
-                client.post("/api/pois/availability/bulk/stream") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[],"start_date":"$windowStart","end_date":"$windowEnd"}""")
                 }
             assertEquals(HttpStatusCode.BadRequest, malformed.status)
 
             val valid =
-                client.post("/api/pois/availability/bulk/stream") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
                 }
@@ -697,7 +622,7 @@ class BulkAvailabilityRoutesTest {
             }
 
             suspend fun postVia(forwardedFor: String) =
-                client.post("/api/pois/availability/bulk") {
+                client.post(STAYS_PATH) {
                     contentType(ContentType.Application.Json)
                     header(FORWARDED_FOR_HEADER, forwardedFor)
                     setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
@@ -712,7 +637,7 @@ class BulkAvailabilityRoutesTest {
 
     /** One stay-stream POST for POI 1, with [maxAgeSeconds] written into the body as given, or left out when null. */
     private suspend fun ApplicationTestBuilder.postStay(maxAgeSeconds: String?): HttpResponse =
-        client.post("/api/pois/availability/bulk/stream") {
+        client.post(STAYS_PATH) {
             contentType(ContentType.Application.Json)
             val maxAge = maxAgeSeconds?.let { ""","max_age_seconds":$it""" }.orEmpty()
             setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"$maxAge}""")
@@ -732,7 +657,6 @@ class BulkAvailabilityRoutesTest {
 
     private fun Route.bulkAvailabilityRoutesUnderTest(
         rateLimit: IpRateLimiter? = null,
-        pollingSupported: Boolean = true,
         streamTimeout: Duration = BulkAvailabilityConfig.default.streamTimeout,
         perPoiTimeout: Duration = BulkAvailabilityConfig.default.perPoiTimeout,
         tolerance: Duration = Duration.ZERO,
@@ -752,7 +676,7 @@ class BulkAvailabilityRoutesTest {
             )
         val controller =
             BulkAvailabilityController(
-                sliceLookup = FakePoiAvailabilitySliceLookup(pollingSupported, cutoffs),
+                sliceLookup = FakePoiAvailabilitySliceLookup(cutoffs),
                 config = config,
                 clock = clock,
             )
@@ -765,14 +689,14 @@ class BulkAvailabilityRoutesTest {
 }
 
 /**
- * Registering `POST /api/pois/availability/bulk` sits right next to the
+ * Registering `POST /api/pois/availability/stays` sits right next to the
  * pre-existing `GET /api/pois/{id}/campsites/availability` under `/api/pois`.
  * Ktor must keep routing a numeric POI id through the `{id}` parameter node
  * rather than losing it to the new literal `availability` segment.
  */
 class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
     @Test
-    fun `the pre-existing detail endpoint still routes correctly once bulk is registered`() =
+    fun `the pre-existing detail endpoint still routes correctly once the stay check is registered`() =
         testApplication {
             application {
                 routeTestApplication {
@@ -790,7 +714,7 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
             val resp = client.get("/api/pois/$UNKNOWN_CAMPSITE_POI_ID/campsites/availability")
 
             // A route-collision would surface as Ktor's bare 404 (no JSON body)
-            // or a 405/400 from the bulk route's parser. A structured
+            // or a 405/400 from the stay check's parser. A structured
             // `not_found` body proves the {id} detail handler ran.
             assertEquals(HttpStatusCode.NotFound, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
@@ -853,7 +777,6 @@ private fun streamEvents(body: String): List<Pair<String, String>> =
  * upstream failure.
  */
 private class FakePoiAvailabilitySliceLookup(
-    private val pollingSupported: Boolean = true,
     private val cutoffs: MutableList<Instant?>? = null,
 ) : PoiAvailabilitySliceLookup {
     override suspend fun poiAvailabilitySlice(
@@ -896,7 +819,7 @@ private class FakePoiAvailabilitySliceLookup(
                     observations = observations,
                     cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
                 ),
-            pollingSupported = pollingSupported,
+            pollingSupported = true,
         )
     }
 }

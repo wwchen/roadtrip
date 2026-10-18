@@ -1,10 +1,12 @@
 package ca.floo.roadtrip.route.api.pois
 
 import ca.floo.roadtrip.config.BulkAvailabilityConfig
-import ca.floo.roadtrip.model.api.BulkAvailabilityRequestDto
 import ca.floo.roadtrip.model.api.StayAnswerDto
+import ca.floo.roadtrip.model.api.StayAvailabilityStatus
 import ca.floo.roadtrip.model.api.StayCheckDoneDto
+import ca.floo.roadtrip.model.api.StayCheckOutcome
 import ca.floo.roadtrip.model.api.StayCheckRequestDto
+import ca.floo.roadtrip.model.api.StayOutcome
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.BAD_REQUEST_ERROR
@@ -19,9 +21,10 @@ import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.respondEventStream
 import ca.floo.roadtrip.route.common.siteTypeWireList
 import ca.floo.roadtrip.route.common.unknownSiteTypeDetail
+import ca.floo.roadtrip.route.common.wireName
+import ca.floo.roadtrip.route.common.wireNameList
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
-import ca.floo.roadtrip.service.availability.BulkAvailabilityRequest
 import ca.floo.roadtrip.service.availability.StayCheckRequest
 import ca.floo.roadtrip.service.availability.StayStreamItem
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
@@ -42,7 +45,7 @@ import java.time.LocalDate
  * raw `kotlinx.serialization` exception text — never safe to put on the wire.
  */
 private val bulkValidationErrorCodes =
-    setOf(BAD_REQUEST_ERROR, "too_many_pois", "bad_min_nights", "bad_group_size", "bad_date_window", "end_before_start")
+    setOf(BAD_REQUEST_ERROR, "too_many_pois", "bad_group_size", "bad_date_window", "end_before_start")
 
 internal fun Route.bulkAvailabilityRoutes(
     controller: BulkAvailabilityController,
@@ -51,31 +54,7 @@ internal fun Route.bulkAvailabilityRoutes(
 ) {
     route("/api") {
         route("/pois") {
-            post("/availability/bulk") {
-                val dto = call.receiveJsonBody<BulkAvailabilityRequestDto>().orRefuse(call) ?: return@post
-                val siteTypes = call.siteTypesOrRefuse(dto.siteTypes) ?: return@post
-                val request = validatedOrRefuse(call) { dto.validated(config, siteTypes) } ?: return@post
-                if (throttled(rateLimit, request.poiIds.size)) return@post
-
-                call.respondEncodedJson(controller.availabilityForPois(request), HttpStatusCode.OK)
-            }.describeApi(
-                tag = "availability",
-                summary = "Per-campsite availability across many campground POIs",
-                description =
-                    "Body: { poi_ids: [pois.id, ...1..${config.maxPois}], start_date, end_date, " +
-                        "min_nights?, site_type?, group_size?, fresh? }. Returns one entry per requested " +
-                        "POI, in request order, each carrying its campsites — one envelope per campsite, " +
-                        "each day a single cell — filtered to `longest_run_nights >= min_nights` and " +
-                        "sorted descending, or an error code: a POI failing never fails the request. " +
-                        "`group_size` keeps campsites that sleep at least that many, and those with no " +
-                        "stated capacity. `fresh: true` answers only from observations at most " +
-                        "${config.freshTolerance} old, asking the providers again for the rest. " +
-                        "Each requested POI is charged against the caller's ${config.ipPoiLimitPerMinute} a " +
-                        "minute, shared with the stay stream; over it answers 503 `ip_throttled`. " +
-                        "`site_type` accepts: $siteTypeWireList.",
-            ).access(RouteAccess.Anonymous)
-
-            post("/availability/bulk/stream") {
+            post("/availability/stays") {
                 val dto = call.receiveJsonBody<StayCheckRequestDto>().orRefuse(call) ?: return@post
                 val siteTypes = call.siteTypesOrRefuse(dto.siteTypes) ?: return@post
                 val request = validatedOrRefuse(call) { dto.validated(config, siteTypes) } ?: return@post
@@ -93,33 +72,46 @@ internal fun Route.bulkAvailabilityRoutes(
             }.describeApi(
                 tag = "availability",
                 summary = "How one stay looks at many campground POIs, streamed as each answers",
-                description =
-                    "Body: { poi_ids: [pois.id, ...1..${config.maxPois}], start_date, end_date, " +
-                        "site_type?, group_size?, max_age_seconds? }. Answers 200 as a text/event-stream: one " +
-                        "`${StayAnswerDto.EVENT}` event per requested POI as it lands — POIs start in " +
-                        "request order, so send the nearest first — each with an `outcome`: `answered`, " +
-                        "with `stay` saying how the stay looks there (`open`, `few_left`, `full`, " +
-                        "`closed_for_season` or `no_data`, and how many sites are open every night from " +
-                        "start_date up to end_date); `refused`, the dates cannot work there, with a " +
-                        "`reason`; `failed`, with a `reason` and whether asking again can help " +
-                        "(`retryable`); or `timed_out`. Then one `${StayCheckDoneDto.EVENT}` event, whose " +
-                        "`outcome` is `complete`, or `deadline_reached` when the stream's deadline cut the " +
-                        "check short and the server answered `timed_out` for the POIs still waiting; then " +
-                        "the stream closes. A POI that takes longer than ${config.perPoiTimeout} answers " +
-                        "`timed_out`, and so does every POI yet " +
-                        "to answer once the stream reaches ${config.streamTimeout}; a quiet stream sends a " +
-                        "keep-alive comment every ${config.streamHeartbeat}. A refused request answers " +
-                        "JSON with the status, as before any event is sent. Each requested POI is charged " +
-                        "against the caller's ${config.ipPoiLimitPerMinute} a minute, shared with the scan; " +
-                        "over it answers 503 `ip_throttled`. `site_type` accepts: $siteTypeWireList.",
+                description = stayCheckDescription(config),
             ).access(RouteAccess.Anonymous)
         }
     }
 }
 
 /**
+ * What the stay check's documentation says, built from the config and the enums
+ * the body is written from so the published text cannot drift from either: each
+ * vocabulary is read off its serializer, each bound off the config that enforces it.
+ */
+internal fun stayCheckDescription(config: BulkAvailabilityConfig): String =
+    "Body: { poi_ids: [pois.id, ...1..${config.maxPois}], start_date, end_date, " +
+        "site_type?, group_size?, max_age_seconds? }. Answers 200 as a text/event-stream: one " +
+        "`${StayAnswerDto.EVENT}` event per requested POI as it lands — POIs start in " +
+        "request order, so send the nearest first — each with an `outcome` of ${wireNameList<StayOutcome>()}. " +
+        "`${StayOutcome.ANSWERED.wireName()}` carries `stay`: how the stay looks there " +
+        "(${wireNameList<StayAvailabilityStatus>()}), and how many sites are open every night from " +
+        "start_date up to end_date. `${StayOutcome.REFUSED.wireName()}` means the dates cannot work there, " +
+        "with a `reason`. `${StayOutcome.FAILED.wireName()}` carries a `reason` and whether asking again " +
+        "can help (`retryable`). `${StayOutcome.TIMED_OUT.wireName()}` means the POI did not answer in time. " +
+        "Then one `${StayCheckDoneDto.EVENT}` event, whose `outcome` is ${wireNameList<StayCheckOutcome>()}: " +
+        "`${StayCheckOutcome.DEADLINE_REACHED.wireName()}` when the stream's deadline cut the check short and " +
+        "the server answered `${StayOutcome.TIMED_OUT.wireName()}` for the POIs still waiting; then the " +
+        "stream closes. A POI that takes longer than ${config.perPoiTimeout} answers " +
+        "`${StayOutcome.TIMED_OUT.wireName()}`, and so does every POI yet to answer once the stream reaches " +
+        "${config.streamTimeout}; a quiet stream sends a keep-alive comment every ${config.streamHeartbeat}. " +
+        "`max_age_seconds` is how old a stored observation may be and still answer, rather than asking " +
+        "the providers again. It is clamped into the server's range, not obeyed: raised to " +
+        "${config.freshTolerance.seconds} seconds if lower (so a caller cannot force a refetch of every " +
+        "campground on every request), lowered to ${config.tolerance.seconds} seconds if higher, and " +
+        "${config.tolerance.seconds} seconds when left out. An out-of-range value is never a 400. " +
+        "A refused request answers JSON with the status before any event is sent. Each requested POI is " +
+        "charged against the caller's ${config.ipPoiLimitPerMinute} a minute; over it answers 503 " +
+        "`ip_throttled`. `site_type` accepts: $siteTypeWireList. Per-campsite detail for one POI is " +
+        "`GET /api/pois/{id}/campsites/availability`."
+
+/**
  * Refuses with 503 when asking about [poiCount] more campgrounds would put the
- * caller over the endpoints' shared per-caller budget; true when it did. Checked
+ * caller over the per-caller budget; true when it did. Checked
  * once the request is known valid, since what it costs is its size — a refused
  * malformed body never reaches a provider, so it spends nothing.
  */
@@ -165,25 +157,6 @@ private suspend fun <T> validatedOrRefuse(
         }
         is RouteBodyResult.Valid -> validated.value
     }
-
-private fun BulkAvailabilityRequestDto.validated(
-    config: BulkAvailabilityConfig,
-    siteTypes: List<CampsiteKind>,
-): BulkAvailabilityRequest {
-    requirePoiIds(poiIds, config)
-    require(minNights >= 1) { "bad_min_nights" }
-    requireGroupSize(groupSize)
-    val (start, end) = requiredWindow(startDate, endDate)
-    return BulkAvailabilityRequest(
-        poiIds = poiIds,
-        startDate = start,
-        endDate = end,
-        minNights = minNights,
-        siteTypes = siteTypes,
-        groupSize = groupSize,
-        fresh = fresh,
-    )
-}
 
 private fun StayCheckRequestDto.validated(
     config: BulkAvailabilityConfig,
