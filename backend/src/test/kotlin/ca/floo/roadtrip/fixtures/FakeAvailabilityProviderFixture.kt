@@ -37,7 +37,7 @@ data class FakeAvailabilityCall(
  * By default it is an enabled, internally pollable provider whose
  * [availability] throws — most callers only need identity and capabilities
  * because a fetcher stub answers instead. Pass [onAvailability] to serve a
- * canned batch or to inject an error; [calls] records every invocation.
+ * canned observations or to inject an error; [calls] records every invocation.
  */
 class FakeAvailabilityProvider(
     override val id: BookingProvider = BookingProvider.RECGOV,
@@ -45,7 +45,7 @@ class FakeAvailabilityProvider(
     bookingHorizonDays: Int = FAKE_PROVIDER_HORIZON_DAYS,
     maxPollWindowDays: Int = FAKE_PROVIDER_MAX_POLL_WINDOW_DAYS,
     private val enabled: Boolean = true,
-    private val parentRefOverride: ((Campground) -> BookingProviderRef?)? = null,
+    private val campgroundRefOverride: ((Campground) -> BookingProviderRef?)? = null,
     private val onAvailability: (suspend (FakeAvailabilityCall) -> CampgroundObservations)? = null,
 ) : AvailabilityProvider {
     override val capabilities: AvailabilityProviderCapabilities =
@@ -61,8 +61,8 @@ class FakeAvailabilityProvider(
 
     override fun isEnabled(): Boolean = enabled
 
-    override fun parentRefFor(campground: Campground): BookingProviderRef? =
-        if (parentRefOverride != null) parentRefOverride.invoke(campground) else super.parentRefFor(campground)
+    override fun campgroundRefFor(campground: Campground): BookingProviderRef? =
+        if (campgroundRefOverride != null) campgroundRefOverride.invoke(campground) else super.campgroundRefFor(campground)
 
     override suspend fun availability(
         campground: Campground,

@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 data class AvailabilityPollerSchema(
     val id: Long,
     val provider: String,
-    @SerialName("parent_ref") val parentRef: String,
+    @SerialName("parent_ref") val campgroundRef: String,
     @SerialName("poi_id") val poiId: Long,
     val active: Boolean,
     @SerialName("next_run_at") val nextRunAt: String,

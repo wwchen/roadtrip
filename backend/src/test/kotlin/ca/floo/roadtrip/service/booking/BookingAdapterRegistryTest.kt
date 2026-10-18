@@ -46,7 +46,7 @@ class BookingAdapterRegistryTest {
         val target = registry.targetFor(BookingAction.ADD_TO_CART, BookingProviderRef.RecGov("100"), TEST_CAMPSITE_ID, TEST_VENDOR_ID)
 
         assertEquals(BookingProvider.RECGOV, target?.providerId)
-        assertEquals(BookingProviderRef.RecGov("100"), target?.parentRef)
+        assertEquals(BookingProviderRef.RecGov("100"), target?.campgroundRef)
         assertEquals(TEST_CAMPSITE_ID, target?.campsiteId)
         assertEquals(TEST_VENDOR_ID, target?.vendorSiteId)
     }
@@ -103,7 +103,7 @@ class BookingAdapterRegistryTest {
     private fun target(): BookingTarget =
         BookingTarget(
             providerId = BookingProvider.RECGOV,
-            parentRef = BookingProviderRef.RecGov("100"),
+            campgroundRef = BookingProviderRef.RecGov("100"),
             campsiteId = TEST_CAMPSITE_ID,
             vendorSiteId = TEST_VENDOR_ID,
         )

@@ -34,14 +34,14 @@ internal class FakeBookingAdapter(
     override fun canFulfil(user: UserId): Boolean = credentialed(user)
 
     override fun targetFor(
-        parentRef: BookingProviderRef,
+        campgroundRef: BookingProviderRef,
         campsiteId: Long,
         vendorSiteId: String,
     ): BookingTarget? {
-        if (parentRef.provider != id) return null
+        if (campgroundRef.provider != id) return null
         return BookingTarget(
             providerId = id,
-            parentRef = parentRef,
+            campgroundRef = campgroundRef,
             campsiteId = campsiteId,
             vendorSiteId = vendorSiteId,
         )
@@ -54,7 +54,7 @@ internal class FakeBookingAdapter(
         supportsAddToCart &&
             action == BookingAction.ADD_TO_CART &&
             target.providerId == id &&
-            target.parentRef.provider == id &&
+            target.campgroundRef.provider == id &&
             target.vendorSiteId.isNotBlank()
 
     override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {

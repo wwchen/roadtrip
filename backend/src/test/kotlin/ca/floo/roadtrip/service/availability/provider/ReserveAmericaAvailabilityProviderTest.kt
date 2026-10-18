@@ -52,7 +52,7 @@ class ReserveAmericaAvailabilityProviderTest {
                     enabled = true,
                 )
 
-            val batch =
+            val campgroundObservations =
                 adapter.availability(
                     campground = testCampground(bookingProvider = "reserveamerica", bookingProviderRef = "NY:489"),
                     campsites =
@@ -65,13 +65,13 @@ class ReserveAmericaAvailabilityProviderTest {
 
             assertEquals(BookingProvider.RESERVEAMERICA, adapter.id)
             assertEquals(false, adapter.capabilities.supportsInternalPolling)
-            assertEquals(BookingProviderRef.ReserveAmerica(contractCode = "NY", parkId = "489"), batch.campgroundRef)
-            assertEquals(2, batch.observations.size)
+            assertEquals(BookingProviderRef.ReserveAmerica(contractCode = "NY", parkId = "489"), campgroundObservations.campgroundRef)
+            assertEquals(2, campgroundObservations.observations.size)
             assertEquals(
                 listOf(AvailabilityStatus.RESERVED, AvailabilityStatus.AVAILABLE),
-                batch.observations.sortedBy { it.date }.map { it.status },
+                campgroundObservations.observations.sortedBy { it.date }.map { it.status },
             )
-            assertEquals(setOf(253488L), batch.observations.map { it.campsiteId }.toSet())
+            assertEquals(setOf(253488L), campgroundObservations.observations.map { it.campsiteId }.toSet())
         }
 
     @Test

@@ -645,7 +645,7 @@ class TriggerActionHandlerTest {
             val delivered =
                 handler.fire(
                     fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
-                    openings = listOf(triggerOpening(parentRef = BookingProviderRef.Campflare("campflare-1"))),
+                    openings = listOf(triggerOpening(campgroundRef = BookingProviderRef.Campflare("campflare-1"))),
                 )
 
             assertFalse(delivered)
@@ -767,7 +767,7 @@ class TriggerActionHandlerTest {
 
             handler.fire(
                 fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
-                openings = listOf(triggerOpening(parentRef = BookingProviderRef.Campflare("campflare-1"))),
+                openings = listOf(triggerOpening(campgroundRef = BookingProviderRef.Campflare("campflare-1"))),
             )
 
             assertEquals(listOf(AtcOutcome.NO_TARGET), metrics.fires.map { it.outcome })
@@ -971,14 +971,14 @@ class TriggerActionHandlerTest {
         override fun canFulfil(user: UserId): Boolean = true
 
         override fun targetFor(
-            parentRef: BookingProviderRef,
+            campgroundRef: BookingProviderRef,
             campsiteId: Long,
             vendorSiteId: String,
         ): BookingTarget? {
-            if (parentRef !is BookingProviderRef.RecGov) return null
+            if (campgroundRef !is BookingProviderRef.RecGov) return null
             return BookingTarget(
                 providerId = id,
-                parentRef = parentRef,
+                campgroundRef = campgroundRef,
                 campsiteId = campsiteId,
                 vendorSiteId = vendorSiteId,
             )
@@ -991,7 +991,7 @@ class TriggerActionHandlerTest {
             canAddToCart &&
                 action == BookingAction.ADD_TO_CART &&
                 target.providerId == BookingProvider.RECGOV &&
-                target.parentRef is BookingProviderRef.RecGov
+                target.campgroundRef is BookingProviderRef.RecGov
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
             requests += request
@@ -1009,16 +1009,16 @@ class TriggerActionHandlerTest {
         }
     }
 
-    private fun triggerOpening(parentRef: BookingProviderRef = BookingProviderRef.RecGov(facilityId = "100")): TriggerOpening {
+    private fun triggerOpening(campgroundRef: BookingProviderRef = BookingProviderRef.RecGov(facilityId = "100")): TriggerOpening {
         val providerId =
-            when (parentRef) {
+            when (campgroundRef) {
                 is BookingProviderRef.RecGov -> BookingProvider.RECGOV
                 is BookingProviderRef.Campflare -> BookingProvider.CAMPFLARE
                 is BookingProviderRef.Aspira -> BookingProvider.ASPIRA
                 is BookingProviderRef.ReserveAmerica -> BookingProvider.RESERVEAMERICA
                 is BookingProviderRef.ReserveCalifornia -> BookingProvider.RESERVECALIFORNIA
             }
-        val campground = campgroundForRef(parentRef)
+        val campground = campgroundForRef(campgroundRef)
         val campsite =
             campsiteFixture(
                 id = 7L,

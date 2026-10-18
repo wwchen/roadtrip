@@ -235,7 +235,7 @@ private class CheckFixture(
         freshAtOrAfter: Instant? = null,
     ): CampgroundWindow =
         runBlocking {
-            controller.poiAvailabilitySlice(
+            controller.campgroundWindow(
                 poiId = TEST_POI_ID,
                 siteTypes = siteTypes,
                 startDate = startDate,

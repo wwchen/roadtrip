@@ -32,7 +32,7 @@ class AvailabilityBookingTargetResolverTest {
         FakeAvailabilityProvider(
             id = BookingProvider.CAMPFLARE,
             bookingHorizonDays = FAKE_PROVIDER_YEAR_HORIZON_DAYS,
-            parentRefOverride = { BookingProviderRef.Campflare(TEST_CAMPFLARE_PARENT_ID) },
+            campgroundRefOverride = { BookingProviderRef.Campflare(TEST_CAMPFLARE_PARENT_ID) },
         )
     private val recgovProvider =
         FakeAvailabilityProvider(
@@ -52,7 +52,7 @@ class AvailabilityBookingTargetResolverTest {
         val target = resolver.targetFor(BookingAction.ADD_TO_CART, resolved)
 
         assertEquals(BookingProvider.RECGOV, target?.providerId)
-        assertEquals(BookingProviderRef.RecGov(TEST_RECGOV_PARENT_ID), target?.parentRef)
+        assertEquals(BookingProviderRef.RecGov(TEST_RECGOV_PARENT_ID), target?.campgroundRef)
         assertEquals(TEST_CAMPSITE_ID, target?.campsiteId)
         assertEquals(TEST_CAMPFLARE_PARENT_ID, target?.vendorSiteId)
     }
@@ -79,7 +79,7 @@ class AvailabilityBookingTargetResolverTest {
             )
 
         assertEquals(BookingProvider.RECGOV, target?.providerId)
-        assertEquals(BookingProviderRef.RecGov(TEST_RECGOV_PARENT_ID), target?.parentRef)
+        assertEquals(BookingProviderRef.RecGov(TEST_RECGOV_PARENT_ID), target?.campgroundRef)
         // The cart needs the REC.GOV site id, not the Campflare catalog uuid.
         assertEquals(TEST_RECGOV_SITE_ID, target?.vendorSiteId)
     }
@@ -163,7 +163,7 @@ class AvailabilityBookingTargetResolverTest {
 
         // Null, and that is the point. No aspira adapter is registered, so the
         // declared ref finds none; the candidate walk then asks the recgov
-        // provider, whose default parentRefFor reads the same aspira columns
+        // provider, whose default campgroundRefFor reads the same aspira columns
         // and also yields an aspira ref. Unbookable — and, load-bearingly,
         // "bc:1:2:3" never becomes a vendorSiteId anywhere.
         assertNull(target)

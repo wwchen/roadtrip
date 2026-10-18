@@ -45,7 +45,7 @@ class RecGovBookingAdapterTest {
             )
 
         assertEquals(BookingProvider.RECGOV, target?.providerId)
-        assertEquals(BookingProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID), target?.parentRef)
+        assertEquals(BookingProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID), target?.campgroundRef)
         assertEquals(TEST_CAMPSITE_ID, target?.campsiteId)
         assertEquals(TEST_VENDOR_ID, target?.vendorSiteId)
     }
@@ -76,7 +76,7 @@ class RecGovBookingAdapterTest {
         val provider = provider()
 
         assertFalse(provider.can(BookingAction.ADD_TO_CART, recgovTarget(providerId = BookingProvider.ASPIRA)))
-        assertFalse(provider.can(BookingAction.ADD_TO_CART, recgovTarget(parentRef = BookingProviderRef.Aspira("bc", 1L, 2L, null))))
+        assertFalse(provider.can(BookingAction.ADD_TO_CART, recgovTarget(campgroundRef = BookingProviderRef.Aspira("bc", 1L, 2L, null))))
         assertFalse(provider.can(BookingAction.ADD_TO_CART, recgovTarget(vendorId = "")))
     }
 
@@ -449,12 +449,12 @@ class RecGovBookingAdapterTest {
 
     private fun recgovTarget(
         providerId: BookingProvider = BookingProvider.RECGOV,
-        parentRef: BookingProviderRef = BookingProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID),
+        campgroundRef: BookingProviderRef = BookingProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID),
         vendorId: String = TEST_VENDOR_ID,
     ): BookingTarget =
         BookingTarget(
             providerId = providerId,
-            parentRef = parentRef,
+            campgroundRef = campgroundRef,
             campsiteId = TEST_CAMPSITE_ID,
             vendorSiteId = vendorId,
         )

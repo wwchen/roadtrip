@@ -167,7 +167,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val t = resolver.resolve(reservable)!!
 
             assertEquals(poiB, t.parentPoiId)
-            assertEquals("232447", t.parentRef!!.parentRefKey)
+            assertEquals("232447", t.campgroundRef!!.campgroundRefKey)
         }
 
     @Test
@@ -205,7 +205,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals("upper-pines-site-100", reservable.dataProviderRef.serialize())
             assertEquals(poi, target.parentPoiId)
             assertEquals(BookingProvider.CAMPFLARE, target.provider.id)
-            assertEquals("upper-pines-campground-447", target.parentRef!!.parentRefKey)
+            assertEquals("upper-pines-campground-447", target.campgroundRef!!.campgroundRefKey)
             assertEquals("upper-pines-site-100", target.provider.vendorSiteIdFor(target.campsite))
             // No rec.gov alias on the row, so rec.gov never claims it.
             assertEquals(listOf(BookingProvider.CAMPFLARE), target.candidates.map { it.id })
@@ -240,7 +240,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 ).resolve(reservable)!!
 
             assertEquals(BookingProvider.RECGOV, target.provider.id)
-            assertEquals("232447", target.parentRef!!.parentRefKey)
+            assertEquals("232447", target.campgroundRef!!.campgroundRefKey)
             assertEquals("330257", target.provider.vendorSiteIdFor(target.campsite))
         }
 
@@ -323,7 +323,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals("campflare", reservable.dataProviderRef.provider.id)
             assertEquals("upper-pines-site-100", reservable.dataProviderRef.serialize())
             assertEquals(BookingProvider.RECGOV, target.provider.id)
-            assertEquals("232447", target.parentRef!!.parentRefKey)
+            assertEquals("232447", target.campgroundRef!!.campgroundRefKey)
         }
 
     @Test
@@ -357,7 +357,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(BookingProvider.CAMPFLARE, target.candidates[0].id)
             assertEquals(BookingProvider.RECGOV, target.candidates[1].id)
             assertEquals(target.candidates[0], target.provider)
-            assertEquals(target.candidates[0].parentRefFor(target.campground), target.parentRef)
+            assertEquals(target.candidates[0].campgroundRefFor(target.campground), target.campgroundRef)
         }
 
     @Test
@@ -386,7 +386,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(1, target.candidates.size)
             assertEquals(BookingProvider.RECGOV, target.candidates[0].id)
             assertEquals(BookingProvider.RECGOV, target.provider.id)
-            assertEquals("232447", target.parentRef!!.parentRefKey)
+            assertEquals("232447", target.campgroundRef!!.campgroundRefKey)
         }
 
     @Test
@@ -418,7 +418,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
 
             assertEquals(1, target.candidates.size)
             assertEquals(BookingProvider.RECGOV, target.provider.id)
-            assertEquals("232447", target.parentRef!!.parentRefKey)
+            assertEquals("232447", target.campgroundRef!!.campgroundRefKey)
         }
 
     @Test

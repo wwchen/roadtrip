@@ -39,7 +39,7 @@ class ReserveAmericaAvailabilityProvider(
     override fun isEnabled(): Boolean = enabled
 
     override fun supportsCampground(campground: Campground): Boolean {
-        val ref = claimedRef(campground) ?: return false
+        val ref = claimedCampgroundRef(campground) ?: return false
         return isEnabled() && ref is BookingProviderRef.ReserveAmerica && ref.contractCode in tenantsByCode
     }
 
@@ -54,7 +54,7 @@ class ReserveAmericaAvailabilityProvider(
         val data = fetch(tenant, reserveAmericaRef.parkId, startDate, endDate)
         val observations =
             campsites.flatMap { campsite ->
-                observationsForReservable(
+                observationsForCampsite(
                     campsiteId = campsite.id,
                     byDate = data.statuses[campsite.reserveAmericaVendorId()].orEmpty(),
                     dates = dates(startDate, endDate),
@@ -95,7 +95,7 @@ class ReserveAmericaAvailabilityProvider(
             )
         }
 
-    private fun observationsForReservable(
+    private fun observationsForCampsite(
         campsiteId: Long,
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
@@ -111,7 +111,7 @@ class ReserveAmericaAvailabilityProvider(
         }
 
     private fun reserveAmericaRefOrThrow(campground: Campground): BookingProviderRef.ReserveAmerica =
-        (claimedRef(campground) as? BookingProviderRef.ReserveAmerica)
+        (claimedCampgroundRef(campground) as? BookingProviderRef.ReserveAmerica)
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =

@@ -16,7 +16,7 @@ internal open class FailoverAvailabilityFetcher(
 ) {
     data class AttemptRecord(
         val provider: BookingProvider,
-        val parentRef: BookingProviderRef?,
+        val campgroundRef: BookingProviderRef?,
         val outcome: FetchOutcome,
         val durationMs: Int,
         val error: String?,
@@ -49,7 +49,7 @@ internal open class FailoverAvailabilityFetcher(
             attempts +=
                 AttemptRecord(
                     provider = provider.id,
-                    parentRef = provider.parentRefFor(campground),
+                    campgroundRef = provider.campgroundRefFor(campground),
                     outcome = attempt.outcome,
                     durationMs = durationMs,
                     error = attempt.error,

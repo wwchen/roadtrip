@@ -24,10 +24,10 @@ import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.CampgroundWindow
+import ca.floo.roadtrip.service.availability.CampgroundWindowLookup
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
-import ca.floo.roadtrip.service.availability.PoiAvailabilitySliceLookup
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -65,13 +65,13 @@ private const val RATE_LIMITED_POI_ID = 100L
 private const val UNKNOWN_CAMPSITE_POI_ID = 999_999L
 private const val FORWARDED_FOR_HEADER = "X-Forwarded-For"
 
-/** [FakePoiAvailabilitySliceLookup]'s campsite id is derived from the poi id by this factor. */
-private const val FAKE_SLICE_CAMPSITE_ID_MULTIPLIER = 1000L
+/** [FakeCampgroundWindowLookup]'s campsite id is derived from the poi id by this factor. */
+private const val FAKE_WINDOW_CAMPSITE_ID_MULTIPLIER = 1000L
 
 private val windowStart: LocalDate = LocalDate.of(2026, 9, 1)
 private val windowEnd: LocalDate = LocalDate.of(2026, 9, 8)
 
-/** rec.gov's horizon, so the faked slice's ceiling is a real provider's. */
+/** rec.gov's horizon, so the faked window's ceiling is a real provider's. */
 private const val BOOKING_HORIZON_DAYS = 180L
 private val observedAt: Instant = Instant.parse("2026-08-20T00:00:00Z")
 
@@ -260,7 +260,7 @@ class BulkAvailabilityRoutesTest {
             assertEquals("rate_limited", pois[1].jsonObject["error"]!!.jsonPrimitive.content)
 
             // The successful poi's stream: one campsite, one cell keyed by its own id.
-            val successfulPoiCampsiteId = 1L * FAKE_SLICE_CAMPSITE_ID_MULTIPLIER
+            val successfulPoiCampsiteId = 1L * FAKE_WINDOW_CAMPSITE_ID_MULTIPLIER
             val cells =
                 pois[0]
                     .jsonObject["campsites"]!!
@@ -382,7 +382,7 @@ class BulkAvailabilityRoutesTest {
                 setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
             }
         assertEquals(HttpStatusCode.OK, resp.status)
-        val campsiteId = 1L * FAKE_SLICE_CAMPSITE_ID_MULTIPLIER
+        val campsiteId = 1L * FAKE_WINDOW_CAMPSITE_ID_MULTIPLIER
         val day =
             Json
                 .parseToJsonElement(resp.bodyAsText())
@@ -465,7 +465,7 @@ class BulkAvailabilityRoutesTest {
             )
         val controller =
             BulkAvailabilityController(
-                sliceLookup = FakePoiAvailabilitySliceLookup(pollingSupported),
+                windowLookup = FakeCampgroundWindowLookup(pollingSupported),
                 config = config,
             )
         if (rateLimit != null) {
@@ -491,7 +491,7 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
                     campsiteRoutes(campsiteAvailabilityController(), CampsiteAvailabilityConfig.default)
                     bulkAvailabilityRoutes(
                         BulkAvailabilityController(
-                            sliceLookup = FakePoiAvailabilitySliceLookup(),
+                            windowLookup = FakeCampgroundWindowLookup(),
                             config = BulkAvailabilityConfig.default,
                         ),
                         BulkAvailabilityConfig.default,
@@ -548,15 +548,15 @@ class BulkAvailabilityRouteCollisionTest : SharedDbTest() {
 }
 
 /**
- * Stands in for [CampsiteAvailabilityController.poiAvailabilitySlice] without
+ * Stands in for [CampsiteAvailabilityController.campgroundWindow] without
  * a database. Every POI resolves to one campsite with a single bookable night
  * followed by a reserved one, except [RATE_LIMITED_POI_ID], which reports an
  * upstream failure.
  */
-private class FakePoiAvailabilitySliceLookup(
+private class FakeCampgroundWindowLookup(
     private val pollingSupported: Boolean = true,
-) : PoiAvailabilitySliceLookup {
-    override suspend fun poiAvailabilitySlice(
+) : CampgroundWindowLookup {
+    override suspend fun campgroundWindow(
         poiId: Long,
         siteTypes: List<CampsiteKind>,
         startDate: LocalDate?,
@@ -564,7 +564,7 @@ private class FakePoiAvailabilitySliceLookup(
         freshAtOrAfter: Instant?,
     ): CampgroundWindow {
         if (poiId == RATE_LIMITED_POI_ID) throw AvailabilityProviderError.RateLimited()
-        val campsite = campsiteFixture(id = poiId * FAKE_SLICE_CAMPSITE_ID_MULTIPLIER, campgroundId = poiId)
+        val campsite = campsiteFixture(id = poiId * FAKE_WINDOW_CAMPSITE_ID_MULTIPLIER, campgroundId = poiId)
         val observations =
             listOf(
                 CampsiteDayObservation(campsite.id, windowStart, observedAt, AvailabilityStatus.AVAILABLE),

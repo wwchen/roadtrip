@@ -150,14 +150,14 @@ internal class AvailabilityRunService(
         runId: Long,
     ) {
         results.filter { it.window != null }.forEach { r ->
-            val refKey = r.parentRef?.parentRefKey ?: return@forEach
+            val refKey = r.campgroundRef?.campgroundRefKey ?: return@forEach
             val key = r.provider.id to refKey
             val attempts = attemptsByGroup[key].orEmpty()
             if (attempts.isEmpty()) {
                 recordFetchCall(
                     runId = runId,
                     provider = r.provider.id,
-                    parentRef = refKey,
+                    campgroundRef = refKey,
                     campsiteCount = r.campsites.size,
                     window = r.window!!,
                     outcome = r.outcome,
@@ -170,7 +170,7 @@ internal class AvailabilityRunService(
                 recordFetchCall(
                     runId = runId,
                     provider = attempt.provider,
-                    parentRef = attempt.parentRef?.parentRefKey ?: refKey,
+                    campgroundRef = attempt.campgroundRef?.campgroundRefKey ?: refKey,
                     campsiteCount = r.campsites.size,
                     window = r.window!!,
                     outcome = attempt.outcome,
@@ -188,7 +188,7 @@ internal class AvailabilityRunService(
     private fun recordFetchCall(
         runId: Long,
         provider: BookingProvider,
-        parentRef: String,
+        campgroundRef: String,
         campsiteCount: Int,
         window: ResolvedDateWindow,
         outcome: FetchOutcome,
@@ -200,7 +200,7 @@ internal class AvailabilityRunService(
             AvailabilityFetchCallRepo.NewCall(
                 runId = runId,
                 provider = provider.id,
-                parentRef = parentRef,
+                campgroundRef = campgroundRef,
                 campsiteCount = campsiteCount,
                 windowStart = window.startDate,
                 windowEnd = window.endDate,

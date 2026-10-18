@@ -78,12 +78,12 @@ internal fun availabilityResponseDto(
     cacheBlock: AvailabilityCacheBlock,
     pollingSupported: Boolean,
     earliestDate: LocalDate,
-    scopeRef: String? = null,
+    campgroundRef: String? = null,
     campsiteId: Long? = null,
 ): AvailabilityResponseDto =
     AvailabilityResponseDto(
         provider = provider,
-        scopeRef = scopeRef,
+        campgroundRef = campgroundRef,
         campsiteId = campsiteId,
         checkedAt = Instant.now().toString(),
         startDate = startDate.toString(),

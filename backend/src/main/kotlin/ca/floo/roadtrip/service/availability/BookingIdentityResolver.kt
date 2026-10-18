@@ -24,7 +24,7 @@ internal class BookingIdentityResolver(
         servingProvider: AvailabilityProvider?,
     ): BookingProviderRef? =
         campground.bookingIdentities().firstOrNull { tenants.sells(it.provider) }
-            ?: servingProvider?.claimedRef(campground)
+            ?: servingProvider?.claimedCampgroundRef(campground)
             ?: campground.bookingRef()
 
     /**

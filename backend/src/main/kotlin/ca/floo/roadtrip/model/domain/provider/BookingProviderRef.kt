@@ -16,7 +16,7 @@ sealed interface BookingProviderRef {
      * as the poller's `parent_ref` grouping key and in traces/metrics, so it is
      * a *stored* value — changing a variant's rendering orphans live pollers.
      */
-    val parentRefKey: String
+    val campgroundRefKey: String
 
     fun serialize(): String
 
@@ -28,7 +28,7 @@ sealed interface BookingProviderRef {
     ) : BookingProviderRef {
         override val provider: BookingProvider = BookingProvider.ASPIRA
 
-        override val parentRefKey: String get() = mapId.toString()
+        override val campgroundRefKey: String get() = mapId.toString()
 
         override fun serialize(): String {
             val parts =
@@ -47,7 +47,7 @@ sealed interface BookingProviderRef {
     ) : BookingProviderRef {
         override val provider: BookingProvider = BookingProvider.RECGOV
 
-        override val parentRefKey: String get() = facilityId
+        override val campgroundRefKey: String get() = facilityId
 
         override fun serialize(): String = facilityId
     }
@@ -57,7 +57,7 @@ sealed interface BookingProviderRef {
     ) : BookingProviderRef {
         override val provider: BookingProvider = BookingProvider.CAMPFLARE
 
-        override val parentRefKey: String get() = campgroundId
+        override val campgroundRefKey: String get() = campgroundId
 
         override fun serialize(): String = campgroundId
     }
@@ -68,7 +68,7 @@ sealed interface BookingProviderRef {
     ) : BookingProviderRef {
         override val provider: BookingProvider = BookingProvider.RESERVEAMERICA
 
-        override val parentRefKey: String get() = parkId
+        override val campgroundRefKey: String get() = parkId
 
         override fun serialize(): String = "${contractCode ?: "null"}:$parkId"
     }
@@ -79,7 +79,7 @@ sealed interface BookingProviderRef {
     ) : BookingProviderRef {
         override val provider: BookingProvider = BookingProvider.RESERVECALIFORNIA
 
-        override val parentRefKey: String get() = facilityIds.joinToString(",")
+        override val campgroundRefKey: String get() = facilityIds.joinToString(",")
 
         override fun serialize(): String = "$placeId:${facilityIds.joinToString(",")}"
     }

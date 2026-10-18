@@ -109,7 +109,7 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
     }
 
     @Test
-    fun `upsertActive inserts once per provider+parentRef and revives a dormant poller`() {
+    fun `upsertActive inserts once per provider+campgroundRef and revives a dormant poller`() {
         val repo = AvailabilityPollerRepo(ctx)
         val poi = insertPoi()
         val id1 = repo.upsertActive("recgov", "232447", poi, pullNextRunAt = null)

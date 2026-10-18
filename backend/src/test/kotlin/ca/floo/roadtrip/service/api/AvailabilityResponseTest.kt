@@ -47,7 +47,7 @@ class AvailabilityResponseTest {
                     cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
                     pollingSupported = true,
                     earliestDate = LocalDate.parse("2026-06-10"),
-                    scopeRef = BookingProviderRef.RecGov(facilityId = "232447").serialize(),
+                    campgroundRef = BookingProviderRef.RecGov(facilityId = "232447").serialize(),
                 ),
             )
         val json = Json.parseToJsonElement(body).jsonObject

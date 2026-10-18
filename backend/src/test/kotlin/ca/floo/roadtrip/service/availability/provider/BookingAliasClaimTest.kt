@@ -43,7 +43,7 @@ private const val RESERVEAMERICA_REF = "$RESERVEAMERICA_CONTRACT:$RESERVEAMERICA
 
 /**
  * The V59 shape: one Campflare-primary campground that rec.gov also sells,
- * claimed by both providers through one rule. The rec.gov `parentRefKey` is a
+ * claimed by both providers through one rule. The rec.gov `campgroundRefKey` is a
  * stored poller key, so it has to come out of the alias unchanged.
  */
 class BookingAliasClaimTest {
@@ -55,8 +55,8 @@ class BookingAliasClaimTest {
         val provider = recgovProvider(enabled = true)
 
         assertTrue(provider.supportsCampground(aliasedCampground))
-        assertEquals(RECGOV_FACILITY_ID, provider.parentRefFor(aliasedCampground)!!.parentRefKey)
-        assertEquals(BookingProvider.RECGOV, provider.parentRefFor(aliasedCampground)!!.provider)
+        assertEquals(RECGOV_FACILITY_ID, provider.campgroundRefFor(aliasedCampground)!!.campgroundRefKey)
+        assertEquals(BookingProvider.RECGOV, provider.campgroundRefFor(aliasedCampground)!!.provider)
     }
 
     @Test
@@ -64,7 +64,7 @@ class BookingAliasClaimTest {
         val provider = campflareProvider(enabled = true)
 
         assertTrue(provider.supportsCampground(aliasedCampground))
-        assertEquals(CAMPFLARE_CAMPGROUND_ID, provider.parentRefFor(aliasedCampground)!!.parentRefKey)
+        assertEquals(CAMPFLARE_CAMPGROUND_ID, provider.campgroundRefFor(aliasedCampground)!!.campgroundRefKey)
     }
 
     @Test
@@ -82,7 +82,7 @@ class BookingAliasClaimTest {
         val unaliased = campground(bookingAliases = emptyList())
 
         assertFalse(recgovProvider(enabled = true).supportsCampground(unaliased))
-        assertNull(recgovProvider(enabled = true).parentRefFor(unaliased))
+        assertNull(recgovProvider(enabled = true).campgroundRefFor(unaliased))
         assertTrue(campflareProvider(enabled = true).supportsCampground(unaliased))
     }
 
@@ -144,7 +144,7 @@ class BookingAliasClaimTest {
                     }
                 }
 
-            val batch =
+            val campgroundObservations =
                 RecGovAvailabilityProvider(client, enabled = true).availability(
                     campground = aliasedCampground,
                     campsites =
@@ -162,8 +162,8 @@ class BookingAliasClaimTest {
                     endDate = LocalDate.parse("2026-07-02"),
                 )
 
-            assertEquals(listOf(100L), batch.observations.map { it.campsiteId })
-            assertEquals(listOf(AvailabilityStatus.AVAILABLE), batch.observations.map { it.status })
+            assertEquals(listOf(100L), campgroundObservations.observations.map { it.campsiteId })
+            assertEquals(listOf(AvailabilityStatus.AVAILABLE), campgroundObservations.observations.map { it.status })
         }
 
     @Test
@@ -173,19 +173,19 @@ class BookingAliasClaimTest {
                 campground(bookingAliases = listOf(BookingAlias(provider = BookingProvider.ASPIRA, ref = ASPIRA_REF)))
             val provider = aspiraProvider()
 
-            assertEquals(ASPIRA_MAP_ID, provider.parentRefFor(aliased)!!.parentRefKey)
-            assertEquals(BookingProvider.ASPIRA, provider.parentRefFor(aliased)!!.provider)
+            assertEquals(ASPIRA_MAP_ID, provider.campgroundRefFor(aliased)!!.campgroundRefKey)
+            assertEquals(BookingProvider.ASPIRA, provider.campgroundRefFor(aliased)!!.provider)
 
             // Throws if the fetch path still reads the (campflare) primary ref
             // instead of the claimed Aspira alias.
-            val batch =
+            val campgroundObservations =
                 provider.availability(
                     campground = aliased,
                     campsites = listOf(aliasClaimCampsite),
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-02"),
                 )
-            assertEquals(ASPIRA_MAP_ID, (batch.campgroundRef as BookingProviderRef.Aspira).mapId.toString())
+            assertEquals(ASPIRA_MAP_ID, (campgroundObservations.campgroundRef as BookingProviderRef.Aspira).mapId.toString())
         }
 
     @Test
@@ -197,19 +197,19 @@ class BookingAliasClaimTest {
                 )
             val provider = reserveAmericaProvider()
 
-            assertEquals(RESERVEAMERICA_PARK_ID, provider.parentRefFor(aliased)!!.parentRefKey)
-            assertEquals(BookingProvider.RESERVEAMERICA, provider.parentRefFor(aliased)!!.provider)
+            assertEquals(RESERVEAMERICA_PARK_ID, provider.campgroundRefFor(aliased)!!.campgroundRefKey)
+            assertEquals(BookingProvider.RESERVEAMERICA, provider.campgroundRefFor(aliased)!!.provider)
 
             // Throws if the fetch path still reads the (campflare) primary ref
             // instead of the claimed ReserveAmerica alias.
-            val batch =
+            val campgroundObservations =
                 provider.availability(
                     campground = aliased,
                     campsites = listOf(aliasClaimCampsite),
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-02"),
                 )
-            assertEquals(RESERVEAMERICA_PARK_ID, (batch.campgroundRef as BookingProviderRef.ReserveAmerica).parkId)
+            assertEquals(RESERVEAMERICA_PARK_ID, (campgroundObservations.campgroundRef as BookingProviderRef.ReserveAmerica).parkId)
         }
 
     private fun campground(bookingAliases: List<BookingAlias>): Campground =

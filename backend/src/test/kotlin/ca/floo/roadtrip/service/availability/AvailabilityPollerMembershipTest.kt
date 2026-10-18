@@ -141,7 +141,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
 
     /**
      * In-memory fake keyed by campsite id, so a test can control exactly
-     * which (provider, parentRef, parentPoiId) each campsite resolves to
+     * which (provider, campgroundRef, parentPoiId) each campsite resolves to
      * without seeding real provider-ref rows.
      */
     private class FakeTargetResolver : AvailabilityTargetResolver {
@@ -150,12 +150,12 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         fun stub(
             campsite: Campsite,
             provider: BookingProvider,
-            parentRef: BookingProviderRef,
+            campgroundRef: BookingProviderRef,
             parentPoiId: Long,
             dateContext: PoiDateContext,
             supportsInternalPolling: Boolean = true,
         ) {
-            val campground = fakeCampground(provider, parentRef)
+            val campground = fakeCampground(provider, campgroundRef)
             byCampsiteId[campsite.id] =
                 ResolvedAvailabilityTarget(
                     campsite = campsite,
@@ -168,7 +168,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
 
         private fun fakeCampground(
             provider: BookingProvider,
-            parentRef: BookingProviderRef,
+            campgroundRef: BookingProviderRef,
         ): Campground =
             Campground(
                 id = 1L,
@@ -194,9 +194,9 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
                 createdAt = Instant.EPOCH,
                 updatedAt = Instant.EPOCH,
                 deletedAt = null,
-                dataProviderRef = DataProviderRef.RecGov(id = parentRef.serialize()),
+                dataProviderRef = DataProviderRef.RecGov(id = campgroundRef.serialize()),
                 bookingProvider = provider.id,
-                bookingProviderRef = parentRef.serialize(),
+                bookingProviderRef = campgroundRef.serialize(),
             )
 
         override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? = byCampsiteId[campsite.id]
@@ -208,7 +208,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     }
 
     @Test
-    fun `two watches on same parentRef link to ONE poller`() {
+    fun `two watches on same campgroundRef link to ONE poller`() {
         val poi = insertPoi()
         val campsiteA = insertCampsite(poi, "site-a")
         val campsiteB = insertCampsite(poi, "site-b")
@@ -245,9 +245,9 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     }
 
     @Test
-    fun `two POIs sharing a parentRef produce ONE poller`() {
+    fun `two POIs sharing a campgroundRef produce ONE poller`() {
         // Two distinct POI rows (e.g. two campsites under the same campground)
-        // resolving to the same vendor parentRef must coalesce to one poller.
+        // resolving to the same vendor campgroundRef must coalesce to one poller.
         val poiX = insertPoi("Site Cluster X")
         val poiY = insertPoi("Site Cluster Y")
         val campsiteX = insertCampsite(poiX, "site-x")
@@ -284,7 +284,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     }
 
     @Test
-    fun `watch spanning two parentRefs links two pollers`() {
+    fun `watch spanning two campgroundRefs links two pollers`() {
         val poi = insertPoi()
         val campsiteA = insertCampsite(poi, "site-a")
         val campsiteB = insertCampsite(poi, "site-b")
@@ -307,7 +307,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val membership = AvailabilityPollerMembership(scopeResolver, targets)
         val repo = AvailabilityPollerRepo(ctx)
 
-        // POI-scope watch expands to both reservables, which resolve to two distinct parentRefs.
+        // POI-scope watch expands to both reservables, which resolve to two distinct campgroundRefs.
         val watchId = insertActiveWatch(poiId = poi)
 
         membership.sync(watch(watchId), repo, null)
@@ -361,7 +361,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         assertEquals(1, firstLinks.size)
         val firstPollerId = firstLinks.single()
 
-        // Target set changes: same reservable now resolves to a different parentRef
+        // Target set changes: same reservable now resolves to a different campgroundRef
         // (e.g. the campground's provider ref was corrected).
         targets.stub(
             campsiteRepo.findById(campsiteA)!!,

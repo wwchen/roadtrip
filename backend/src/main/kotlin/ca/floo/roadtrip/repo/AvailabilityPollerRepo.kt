@@ -38,7 +38,7 @@ class AvailabilityPollerRepo(
     data class Poller(
         override val id: Long,
         val provider: String,
-        val parentRef: String,
+        val campgroundRef: String,
         val poiId: Long,
         val active: Boolean,
         val nextRunAt: OffsetDateTime,
@@ -67,7 +67,7 @@ class AvailabilityPollerRepo(
     }
 
     /**
-     * Atomically create or revive the poller for (provider, parentRef).
+     * Atomically create or revive the poller for (provider, campgroundRef).
      * Called whenever a watch is linked to this vendor call unit. Re-uses
      * the existing row (UNIQUE(provider, parent_ref)) so coalesced watches
      * always land on the same poller.
@@ -80,7 +80,7 @@ class AvailabilityPollerRepo(
      */
     fun upsertActive(
         provider: String,
-        parentRef: String,
+        campgroundRef: String,
         poiId: Long,
         pullNextRunAt: OffsetDateTime?,
     ): Long {
@@ -89,7 +89,7 @@ class AvailabilityPollerRepo(
         return ctx
             .insertInto(AVAILABILITY_POLLER)
             .set(AVAILABILITY_POLLER.PROVIDER, provider)
-            .set(AVAILABILITY_POLLER.PARENT_REF, parentRef)
+            .set(AVAILABILITY_POLLER.PARENT_REF, campgroundRef)
             .set(AVAILABILITY_POLLER.POI_ID, poiId)
             .set(AVAILABILITY_POLLER.ACTIVE, true)
             .set(AVAILABILITY_POLLER.NEXT_RUN_AT, insertNextRun)
@@ -545,7 +545,7 @@ class AvailabilityPollerRepo(
         Poller(
             id = r.get(AVAILABILITY_POLLER.ID)!!,
             provider = r.get(AVAILABILITY_POLLER.PROVIDER)!!,
-            parentRef = r.get(AVAILABILITY_POLLER.PARENT_REF)!!,
+            campgroundRef = r.get(AVAILABILITY_POLLER.PARENT_REF)!!,
             poiId = r.get(AVAILABILITY_POLLER.POI_ID)!!,
             active = r.get(AVAILABILITY_POLLER.ACTIVE)!!,
             nextRunAt = r.get(AVAILABILITY_POLLER.NEXT_RUN_AT)!!,

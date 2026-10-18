@@ -14,6 +14,6 @@ internal data class ResolvedAvailabilityTarget(
     val dateContext: PoiDateContext,
     val candidates: List<AvailabilityProvider> = listOf(provider),
 ) {
-    val parentRef: BookingProviderRef?
-        get() = provider.parentRefFor(campground)
+    val campgroundRef: BookingProviderRef?
+        get() = provider.campgroundRefFor(campground)
 }

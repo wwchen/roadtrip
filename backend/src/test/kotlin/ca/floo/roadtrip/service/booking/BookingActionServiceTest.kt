@@ -79,7 +79,7 @@ class BookingActionServiceTest {
             // name taken off the adapter would read the vendor, Aspira NextGen.
             val adapter = FakeBookingAdapter(id = BookingProvider.ASPIRA)
             val outcome =
-                service(adapter = adapter, parentRef = bcParksRef)
+                service(adapter = adapter, campgroundRef = bcParksRef)
                     .addToCart(caller, TEST_CAMPSITE_ID, arrival, checkout)
 
             assertEquals(
@@ -94,7 +94,7 @@ class BookingActionServiceTest {
             // Campflare parent ref, rec.gov-only registry: nothing to book with.
             val adapter = FakeBookingAdapter()
             val outcome =
-                service(adapter = adapter, parentRef = BookingProviderRef.Campflare("cf-1"))
+                service(adapter = adapter, campgroundRef = BookingProviderRef.Campflare("cf-1"))
                     .addToCart(caller, TEST_CAMPSITE_ID, arrival, checkout)
 
             assertEquals(AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET), outcome)
@@ -213,13 +213,13 @@ class BookingActionServiceTest {
     private fun service(
         adapter: FakeBookingAdapter = FakeBookingAdapter(),
         campsite: Campsite? = campsite(),
-        parentRef: BookingProviderRef = BookingProviderRef.RecGov("232447"),
+        campgroundRef: BookingProviderRef = BookingProviderRef.RecGov("232447"),
         freshlyUnavailableNights: Set<LocalDate> = emptySet(),
     ): BookingActionService {
         val registry = BookingAdapterRegistry(listOf(adapter))
         return BookingActionService(
             campsites = { campsite },
-            availabilityTargets = FakeTargetResolver(campsite, parentRef),
+            availabilityTargets = FakeTargetResolver(campsite, campgroundRef),
             bookingTargets = AvailabilityBookingTargetResolver(registry),
             availability = { _, nights -> nights.filter { it in freshlyUnavailableNights }.toSet() },
             bookings = registry,
@@ -240,7 +240,7 @@ class BookingActionServiceTest {
 
     private class FakeTargetResolver(
         private val campsite: Campsite?,
-        private val parentRef: BookingProviderRef,
+        private val campgroundRef: BookingProviderRef,
     ) : AvailabilityTargetResolver {
         override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? {
             val known = this.campsite ?: return null
@@ -248,11 +248,11 @@ class BookingActionServiceTest {
                 campsite = known,
                 provider =
                     FakeAvailabilityProvider(
-                        id = parentRef.provider,
+                        id = campgroundRef.provider,
                         bookingHorizonDays = FAKE_PROVIDER_YEAR_HORIZON_DAYS,
-                        parentRefOverride = { parentRef },
+                        campgroundRefOverride = { campgroundRef },
                     ),
-                campground = testCampground(bookingProvider = parentRef.provider.id, bookingProviderRef = "232447"),
+                campground = testCampground(bookingProvider = campgroundRef.provider.id, bookingProviderRef = "232447"),
                 parentPoiId = 100L,
                 dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
             )

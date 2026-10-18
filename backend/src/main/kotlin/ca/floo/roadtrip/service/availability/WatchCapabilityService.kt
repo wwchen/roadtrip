@@ -134,7 +134,7 @@ internal class WatchCapabilityService(
     internal fun addToCartProviderName(
         owner: UserId,
         scope: ResolvedWatchScope,
-    ): String? = addToCartClaim(owner, scope)?.let { (target, _) -> tenants.displayName(target.parentRef) }
+    ): String? = addToCartClaim(owner, scope)?.let { (target, _) -> tenants.displayName(target.campgroundRef) }
 
     /**
      * The claim a hold on this scope is about: the first adapter [requester]
@@ -199,7 +199,7 @@ internal class WatchCapabilityService(
                 AddToCartCapabilityDto(
                     state = state,
                     provider = claim?.second?.id?.id,
-                    providerDisplay = claim?.let { (target, _) -> tenants.displayName(target.parentRef) },
+                    providerDisplay = claim?.let { (target, _) -> tenants.displayName(target.campgroundRef) },
                 ),
         )
     }

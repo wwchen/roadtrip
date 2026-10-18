@@ -36,10 +36,10 @@ internal data class BulkAvailabilityRequest(
 /**
  * The one [CampsiteAvailabilityController] method this controller fans out
  * over. Extracted so tests can fake per-POI outcomes without a database;
- * [CampsiteAvailabilityController.poiAvailabilitySlice] satisfies it directly.
+ * [CampsiteAvailabilityController.campgroundWindow] satisfies it directly.
  */
-internal fun interface PoiAvailabilitySliceLookup {
-    suspend fun poiAvailabilitySlice(
+internal fun interface CampgroundWindowLookup {
+    suspend fun campgroundWindow(
         poiId: Long,
         siteTypes: List<CampsiteKind>,
         startDate: LocalDate?,
@@ -49,12 +49,12 @@ internal fun interface PoiAvailabilitySliceLookup {
 }
 
 /**
- * Bulk read across many POIs. Fans out over the same per-POI slice the detail
+ * Bulk read across many POIs. Fans out over the same per-POI campground window the detail
  * endpoint uses, so the two cannot drift, and captures each POI's failure at
  * the fan-out boundary so one bad vendor never blanks the scan.
  */
 internal class BulkAvailabilityController(
-    private val sliceLookup: PoiAvailabilitySliceLookup,
+    private val windowLookup: CampgroundWindowLookup,
     private val config: BulkAvailabilityConfig,
     private val clock: Clock = Clock.systemUTC(),
 ) {
@@ -63,7 +63,7 @@ internal class BulkAvailabilityController(
         config: BulkAvailabilityConfig,
         clock: Clock = Clock.systemUTC(),
     ) : this(
-        PoiAvailabilitySliceLookup(campsiteController::poiAvailabilitySlice),
+        CampgroundWindowLookup(campsiteController::campgroundWindow),
         config,
         clock,
     )
@@ -88,7 +88,7 @@ internal class BulkAvailabilityController(
     ): BulkPoiAvailabilityDto =
         try {
             val campgroundWindow =
-                sliceLookup.poiAvailabilitySlice(
+                windowLookup.campgroundWindow(
                     poiId = poiId,
                     siteTypes = request.siteTypes,
                     startDate = request.startDate,

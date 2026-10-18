@@ -53,7 +53,7 @@ class ReserveCaliforniaAvailabilityProvider(
         val observations =
             campsites.flatMap { campsite ->
                 val found = byUnit[campsite.reserveCaliforniaVendorId()]
-                observationsForReservable(
+                observationsForCampsite(
                     campsiteId = campsite.id,
                     byDate = found?.second.orEmpty(),
                     dates = dates,
@@ -85,7 +85,7 @@ class ReserveCaliforniaAvailabilityProvider(
             }
         }
 
-    private fun observationsForReservable(
+    private fun observationsForCampsite(
         campsiteId: Long,
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,

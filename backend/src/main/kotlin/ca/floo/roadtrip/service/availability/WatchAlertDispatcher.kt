@@ -222,7 +222,7 @@ internal class WatchAlertDispatcher(
             // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
             val bookingUrl =
                 target?.let { tgt ->
-                    tgt.parentRef?.let { ref -> tgt.provider.reservationUrl(r, ref, t.targetDate) }
+                    tgt.campgroundRef?.let { ref -> tgt.provider.reservationUrl(r, ref, t.targetDate) }
                 }
             TriggerOpening(
                 campsite = r,
@@ -240,7 +240,7 @@ internal class WatchAlertDispatcher(
                         // The same registry that names the booking site on the
                         // campground page, so an alert and the drawer call the
                         // vendor the same thing.
-                        bookingSystem = campgroundCta.bookingSystem(target?.parentRef),
+                        bookingSystem = campgroundCta.bookingSystem(target?.campgroundRef),
                         vendor =
                             target
                                 ?.provider

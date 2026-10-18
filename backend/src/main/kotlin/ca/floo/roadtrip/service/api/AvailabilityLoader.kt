@@ -60,7 +60,7 @@ class AvailabilityLoader(
         val dbIds = request.targets.map { it.dbId }.distinct()
         val required = requiredCells(dbIds, dates)
         val cached = repo.readCurrent(dbIds, dates)
-        // Per cell, not per batch: the store answers this request when every
+        // Per cell, not per window: the store answers this request when every
         // cell it asked about has a current observation that is fresh enough.
         // The upstream call cannot be narrowed below a campground window behind
         // `AvailabilityProvider`, so one unanswered cell still costs one

@@ -254,7 +254,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
     }
 
-    /** Links [watchId] onto its (provider, parentRef) poller via the production
+    /** Links [watchId] onto its (provider, campgroundRef) poller via the production
      *  membership path, then returns the single resulting poller. */
     private fun linkWatch(
         provider: AvailabilityProvider,
@@ -511,7 +511,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         var calls: Int = 0
         var lastStart: LocalDate? = null
         var lastEnd: LocalDate? = null
-        var lastReservableCount: Int = 0
+        var lastCampsiteCount: Int = 0
         var mdcRunIdDuringCall: String? = null
 
         override val id: BookingProvider = BookingProvider.RECGOV
@@ -533,7 +533,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             calls++
             lastStart = startDate
             lastEnd = endDate
-            lastReservableCount = campsites.size
+            lastCampsiteCount = campsites.size
             mdcRunIdDuringCall = MDC.get("run_id")
             val observations =
                 campsites.map { campsite ->
@@ -549,7 +549,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override fun reservationUrlTemplate(
             campsite: Campsite,
-            parentRef: BookingProviderRef,
+            campgroundRef: BookingProviderRef,
         ): String = "https://example.test/book/${vendorSiteIdFor(campsite)}?d=${ReservationUrlTemplate.START_DATE}"
     }
 
@@ -609,7 +609,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertEquals(1, fetchCalls.size)
             assertEquals("ok", fetchCalls[0].outcome)
             assertEquals(3, fetchCalls[0].campsiteCount)
-            assertEquals("232447", fetchCalls[0].parentRef)
+            assertEquals("232447", fetchCalls[0].campgroundRef)
         }
 
     @Test
@@ -1305,7 +1305,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
             executorFor(provider, limiter = grantingLimiter).handle(poller)
 
-            // Single-provider, single-parentRef, single-dateContext poller -> K = 1 bucket.
+            // Single-provider, single-campgroundRef, single-dateContext poller -> K = 1 bucket.
             assertEquals(1, provider.calls)
             assertEquals(1, grantingLimiter.requests.size)
             assertEquals("recgov" to 1L, grantingLimiter.requests.single())
@@ -1359,7 +1359,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // is past, so link manually to exercise the empty-live-watch tick).
             val pollerRepo = AvailabilityPollerRepo(ctx)
             val pollerId =
-                pollerRepo.upsertActive(provider = "recgov", parentRef = "232447", poiId = poiId, pullNextRunAt = now())
+                pollerRepo.upsertActive(provider = "recgov", campgroundRef = "232447", poiId = poiId, pullNextRunAt = now())
             pollerRepo.linkWatch(watchId, pollerId)
             val poller = pollerRepo.findById(pollerId)!!
 
@@ -1533,10 +1533,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertEquals(2, fetchCalls.size, "one row per failover attempt")
             assertEquals("campflare", fetchCalls[0].provider)
             assertEquals("rate_limited", fetchCalls[0].outcome)
-            assertEquals("cf-1", fetchCalls[0].parentRef)
+            assertEquals("cf-1", fetchCalls[0].campgroundRef)
             assertEquals("recgov", fetchCalls[1].provider)
             assertEquals("ok", fetchCalls[1].outcome)
-            assertEquals("232447", fetchCalls[1].parentRef)
+            assertEquals("232447", fetchCalls[1].campgroundRef)
         }
 
     private data class AttemptSpec(
@@ -1567,7 +1567,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                         attempts.map { spec ->
                             FailoverAvailabilityFetcher.AttemptRecord(
                                 provider = spec.provider,
-                                parentRef = BookingProviderRef.RecGov(facilityId = spec.parentId),
+                                campgroundRef = BookingProviderRef.RecGov(facilityId = spec.parentId),
                                 outcome = spec.outcome,
                                 durationMs = spec.durationMs,
                                 error = spec.error,

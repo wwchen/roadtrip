@@ -43,14 +43,14 @@ private const val WINDOW_LENGTH_DAYS = 7L
 /** Enough sites that a per-campsite lookup would be an obvious cost. */
 private const val BUSY_CAMPGROUND_SITES = 50
 
-class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
+class CampsiteAvailabilityControllerWindowTest : SharedDbTest() {
     @Test
-    fun `slice carries the resolved window and the filtered campsites`() {
-        val fixture = sliceTestController(siteTypes = listOf(CampsiteKind.TENT, CampsiteKind.RV))
+    fun `window carries the resolved window and the filtered campsites`() {
+        val fixture = windowTestController(siteTypes = listOf(CampsiteKind.TENT, CampsiteKind.RV))
 
-        val slice =
+        val campgroundWindow =
             runBlocking {
-                fixture.controller.poiAvailabilitySlice(
+                fixture.controller.campgroundWindow(
                     poiId = TEST_POI_ID,
                     siteTypes = listOf(CampsiteKind.TENT),
                     startDate = fixture.startDate,
@@ -58,24 +58,24 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                 )
             }
 
-        assertEquals(ResolvedDateWindow(fixture.startDate, fixture.endDate), slice.window)
-        assertEquals(fixture.earliestDate, slice.earliestDate)
+        assertEquals(ResolvedDateWindow(fixture.startDate, fixture.endDate), campgroundWindow.window)
+        assertEquals(fixture.earliestDate, campgroundWindow.earliestDate)
         // The horizon comes from the serving provider's capabilities.
-        assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), slice.latestDate)
-        assertEquals(2, slice.campgroundCampsites.size)
-        assertEquals(1, slice.campsites.size)
-        assertEquals(slice.campsites.map { it.id }, slice.streams.map { it.campsiteId })
-        assertNotNull(slice.cache)
-        assertEquals(BookingProvider.RECGOV, slice.provider)
+        assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), campgroundWindow.latestDate)
+        assertEquals(2, campgroundWindow.campgroundCampsites.size)
+        assertEquals(1, campgroundWindow.campsites.size)
+        assertEquals(campgroundWindow.campsites.map { it.id }, campgroundWindow.streams.map { it.campsiteId })
+        assertNotNull(campgroundWindow.cache)
+        assertEquals(BookingProvider.RECGOV, campgroundWindow.provider)
     }
 
     @Test
     fun `a filter matching no campsite still carries the window and the horizon`() {
-        val fixture = sliceTestController(siteTypes = listOf(CampsiteKind.TENT, CampsiteKind.TENT))
+        val fixture = windowTestController(siteTypes = listOf(CampsiteKind.TENT, CampsiteKind.TENT))
 
-        val slice =
+        val campgroundWindow =
             runBlocking {
-                fixture.controller.poiAvailabilitySlice(
+                fixture.controller.campgroundWindow(
                     poiId = TEST_POI_ID,
                     siteTypes = listOf(CampsiteKind.CABIN),
                     startDate = fixture.startDate,
@@ -83,49 +83,49 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                 )
             }
 
-        assertEquals(0, slice.campsites.size)
-        assertEquals(emptyList(), slice.streams)
-        assertNull(slice.cache)
-        assertEquals(emptyMap(), slice.reopensOnByCampsite)
-        assertEquals(ResolvedDateWindow(fixture.startDate, fixture.endDate), slice.window)
-        assertEquals(2, slice.campgroundCampsites.size)
-        assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), slice.latestDate)
-        assertEquals(BookingProvider.RECGOV, slice.provider)
+        assertEquals(0, campgroundWindow.campsites.size)
+        assertEquals(emptyList(), campgroundWindow.streams)
+        assertNull(campgroundWindow.cache)
+        assertEquals(emptyMap(), campgroundWindow.reopensOnByCampsite)
+        assertEquals(ResolvedDateWindow(fixture.startDate, fixture.endDate), campgroundWindow.window)
+        assertEquals(2, campgroundWindow.campgroundCampsites.size)
+        assertEquals(fixture.earliestDate.plusDays(FAKE_PROVIDER_HORIZON_DAYS.toLong()), campgroundWindow.latestDate)
+        assertEquals(BookingProvider.RECGOV, campgroundWindow.provider)
     }
 
     @Test
-    fun `shaping a many-campsite slice resolves no per-campsite target`() {
-        val fixture = sliceTestController(siteTypes = List(BUSY_CAMPGROUND_SITES) { CampsiteKind.TENT })
+    fun `shaping a many-campsite window resolves no per-campsite target`() {
+        val fixture = windowTestController(siteTypes = List(BUSY_CAMPGROUND_SITES) { CampsiteKind.TENT })
 
-        val slice =
+        val campgroundWindow =
             runBlocking {
-                fixture.controller.poiAvailabilitySlice(
+                fixture.controller.campgroundWindow(
                     poiId = TEST_POI_ID,
                     siteTypes = listOf(CampsiteKind.TENT),
                     startDate = fixture.startDate,
                     endDate = fixture.endDate,
                 )
             }
-        val fused = slice.fusedWindow()
+        val fused = campgroundWindow.fusedWindow()
 
-        assertEquals(BUSY_CAMPGROUND_SITES, slice.campsites.size)
+        assertEquals(BUSY_CAMPGROUND_SITES, campgroundWindow.campsites.size)
         assertEquals(
             BUSY_CAMPGROUND_SITES,
             fused.days
                 .first()
                 .cells.size,
         )
-        assertEquals(BUSY_CAMPGROUND_SITES, slice.perCampsiteEnvelopes().size)
-        // The serving provider was picked once for the slice; nothing asked the
+        assertEquals(BUSY_CAMPGROUND_SITES, campgroundWindow.perCampsiteEnvelopes().size)
+        // The serving provider was picked once for the window; nothing asked the
         // target resolver about a campsite, at any campground size.
         assertEquals(0, fixture.targets.campsiteResolves)
-        assertTrue(slice.pollingSupported)
+        assertTrue(campgroundWindow.pollingSupported)
     }
 
     /**
      * The detail endpoint's real per-campsite cost, measured end to end.
      *
-     * `availabilityForPoi` is the whole path — slice, watch capabilities,
+     * `availabilityForPoi` is the whole path — window, watch capabilities,
      * fusion — and watch capabilities are the only part that needs a
      * per-campsite target at all. One resolution per campsite is the floor;
      * this pins it there, because the three capability questions each used to
@@ -133,7 +133,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
      */
     @Test
     fun `a detail request resolves each campsite exactly once`() {
-        val fixture = sliceTestController(siteTypes = List(BUSY_CAMPGROUND_SITES) { CampsiteKind.TENT })
+        val fixture = windowTestController(siteTypes = List(BUSY_CAMPGROUND_SITES) { CampsiteKind.TENT })
 
         val response =
             runBlocking {
@@ -155,16 +155,16 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
     }
 
     @Test
-    fun `slice reports no polling support when the serving provider cannot poll`() {
+    fun `window reports no polling support when the serving provider cannot poll`() {
         val fixture =
-            sliceTestController(
+            windowTestController(
                 siteTypes = listOf(CampsiteKind.TENT),
                 providers = listOf(FakeAvailabilityProvider(BookingProvider.RECGOV, supportsInternalPolling = false)),
             )
 
-        val slice =
+        val campgroundWindow =
             runBlocking {
-                fixture.controller.poiAvailabilitySlice(
+                fixture.controller.campgroundWindow(
                     poiId = TEST_POI_ID,
                     siteTypes = listOf(CampsiteKind.TENT),
                     startDate = fixture.startDate,
@@ -172,16 +172,16 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                 )
             }
 
-        assertFalse(slice.pollingSupported)
+        assertFalse(campgroundWindow.pollingSupported)
     }
 
     @Test
     fun `a window over a campground no provider claims has no latest date and no provider`() {
-        val fixture = sliceTestController(siteTypes = listOf(CampsiteKind.TENT), providers = emptyList())
+        val fixture = windowTestController(siteTypes = listOf(CampsiteKind.TENT), providers = emptyList())
 
-        val slice =
+        val campgroundWindow =
             runBlocking {
-                fixture.controller.poiAvailabilitySlice(
+                fixture.controller.campgroundWindow(
                     poiId = TEST_POI_ID,
                     siteTypes = listOf(CampsiteKind.CABIN),
                     startDate = fixture.startDate,
@@ -189,8 +189,8 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                 )
             }
 
-        assertNull(slice.latestDate)
-        assertNull(slice.provider)
+        assertNull(campgroundWindow.latestDate)
+        assertNull(campgroundWindow.provider)
     }
 
     /**
@@ -198,16 +198,16 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
      * per entry in [siteTypes]. Mirrors the fake repos/services
      * `CampgroundAvailabilityReaderTest` builds: real repos over the shared test
      * DB, a [FakeAvailabilityProvider] standing in for rec.gov, and a
-     * failover fetcher stubbed to answer with a canned batch instead of
+     * failover fetcher stubbed to answer with a canned observations instead of
      * calling out. `catalogService` and `watchCapabilityService` are wired
      * with real implementations because the constructor requires them, and
      * `watchCapabilityService` now shares `targets`, so it is load-bearing
      * for the resolution-count assertions above.
      */
-    private fun sliceTestController(
+    private fun windowTestController(
         siteTypes: List<CampsiteKind>,
         providers: List<AvailabilityProvider> = listOf(FakeAvailabilityProvider(BookingProvider.RECGOV)),
-    ): SliceFixture {
+    ): WindowFixture {
         ctx.cleanCanonicalCatalogFixtures()
         val fixture =
             ctx.seedCatalogPoi(
@@ -242,7 +242,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
             testCampgroundReadPath(
                 providers = providers,
                 dateResolver = dateResolver,
-                failoverFetcher = CannedBatchFetcher(),
+                failoverFetcher = CannedFetcher(),
                 availabilityRepo = null,
             )
         val controller =
@@ -262,7 +262,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
             )
         val earliest = dateResolver.contextForPoi(TEST_POI_ID).earliestDate
         val start = earliest.plusDays(WINDOW_START_OFFSET_DAYS)
-        return SliceFixture(
+        return WindowFixture(
             controller = controller,
             targets = targets,
             earliestDate = earliest,
@@ -272,7 +272,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
     }
 }
 
-private data class SliceFixture(
+private data class WindowFixture(
     val controller: CampsiteAvailabilityController,
     val targets: CountingTargetResolver,
     val earliestDate: LocalDate,
@@ -298,9 +298,9 @@ private class CountingTargetResolver(
 /**
  * Failover fetcher stub: skips the real upstream call and answers every
  * requested campsite AVAILABLE for the start of the fetch window, so the
- * slice's batch-shaping is observable without any provider I/O.
+ * window's window-shaping is observable without any provider I/O.
  */
-private class CannedBatchFetcher : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))) {
+private class CannedFetcher : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))) {
     override suspend fun fetch(
         providers: List<AvailabilityProvider>,
         campground: Campground,

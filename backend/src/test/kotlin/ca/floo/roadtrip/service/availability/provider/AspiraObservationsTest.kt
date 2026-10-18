@@ -98,7 +98,7 @@ class AspiraObservationsTest {
                 )
 
             val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
-            val batch =
+            val campgroundObservations =
                 provider.availability(
                     campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
                     campsites =
@@ -117,9 +117,9 @@ class AspiraObservationsTest {
                     endDate = LocalDate.parse("2026-07-02"),
                 )
 
-            assertTrue(batch.observations.isNotEmpty())
-            assertEquals(setOf(BC_PARKS_TEST_CAMPSITE_ID), batch.observations.map { it.campsiteId }.toSet())
-            assertTrue(batch.observations.all { it.status == AvailabilityStatus.UNKNOWN })
+            assertTrue(campgroundObservations.observations.isNotEmpty())
+            assertEquals(setOf(BC_PARKS_TEST_CAMPSITE_ID), campgroundObservations.observations.map { it.campsiteId }.toSet())
+            assertTrue(campgroundObservations.observations.all { it.status == AvailabilityStatus.UNKNOWN })
         }
 
     @Test
@@ -167,7 +167,7 @@ class AspiraObservationsTest {
                 )
             val dto = window.fusedWindow()
 
-            assertEquals(provider.parentRefFor(campground), observations.campgroundRef)
+            assertEquals(provider.campgroundRefFor(campground), observations.campgroundRef)
             assertEquals("wa:-999:-999:null", window.campgroundRef?.serialize())
             assertEquals(listOf(1L, 3L), dto.days[0].availableIds)
             assertEquals(4, dto.days[0].statuses.size)

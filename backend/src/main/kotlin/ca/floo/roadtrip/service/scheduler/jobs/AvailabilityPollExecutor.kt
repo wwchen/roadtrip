@@ -79,7 +79,7 @@ internal class AvailabilityPollExecutor(
                         windowFor = plan.windowFor,
                         fetch = { campground, provider, rows, windows ->
                             val result = fetchWithFailover(rows, windows.fetch)
-                            val refKey = provider.parentRefFor(campground)?.parentRefKey ?: "unknown"
+                            val refKey = provider.campgroundRefFor(campground)?.campgroundRefKey ?: "unknown"
                             attemptsByGroup[provider.id to refKey] = result.attempts
                             result.observations ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
                         },

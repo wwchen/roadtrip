@@ -167,7 +167,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     /**
      * Watch service whose registry maps the test POI source ('test') to a
      * recgov adapter, so a POI with a `{"recgov_id": ...}` provider_ref
-     * resolves to a real (recgov, parentRef) poller. Used to exercise poller
+     * resolves to a real (recgov, campgroundRef) poller. Used to exercise poller
      * membership on watch mutation.
      */
     private fun watchServiceWithRecgov(): AvailabilityWatchService {

@@ -29,13 +29,13 @@ class CatalogAvailabilityBatcherTest {
     @Test
     fun `groups same-campground targets into one fetch call`() =
         runBlocking {
-            // Two targets share provider + parentRef → exactly one fetch call.
+            // Two targets share provider + campgroundRef → exactly one fetch call.
             val provider = fakeProvider()
             val ref = BookingProviderRef.RecGov(facilityId = "232447")
             val targets =
                 listOf(
-                    resolvedTarget(campsiteId = 100L, provider = provider, parentRef = ref),
-                    resolvedTarget(campsiteId = 101L, provider = provider, parentRef = ref),
+                    resolvedTarget(campsiteId = 100L, provider = provider, campgroundRef = ref),
+                    resolvedTarget(campsiteId = 101L, provider = provider, campgroundRef = ref),
                 )
             var calls = 0
             val results =
@@ -137,7 +137,7 @@ class CatalogAvailabilityBatcherTest {
                         vendor = "campflare",
                         vendorId = "upper-pines-site-100",
                         provider = provider,
-                        parentRef = BookingProviderRef.RecGov("232447"),
+                        campgroundRef = BookingProviderRef.RecGov("232447"),
                     ),
                 )
 
@@ -175,12 +175,12 @@ class CatalogAvailabilityBatcherTest {
     private fun resolvedTarget(
         campsiteId: Long,
         provider: AvailabilityProvider,
-        parentRef: BookingProviderRef,
+        campgroundRef: BookingProviderRef,
         parentPoiId: Long = 1L,
         vendor: String = "recgov",
         vendorId: String = campsiteId.toString(),
     ): ResolvedAvailabilityTarget {
-        val campground = campgroundForRef(parentRef)
+        val campground = campgroundForRef(campgroundRef)
         return ResolvedAvailabilityTarget(
             campsite = campsite(campsiteId, vendor, vendorId),
             provider = provider,

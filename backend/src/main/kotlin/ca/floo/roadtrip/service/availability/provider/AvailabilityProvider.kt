@@ -46,9 +46,9 @@ interface AvailabilityProvider {
      * nowhere. One rule for every provider — a Campflare row that rec.gov also
      * sells is claimed by both, through the primary and the alias respectively.
      */
-    fun claimedRef(campground: Campground): BookingProviderRef? = campground.bookingRefFor(id)
+    fun claimedCampgroundRef(campground: Campground): BookingProviderRef? = campground.bookingRefFor(id)
 
-    fun supportsCampground(campground: Campground): Boolean = isEnabled() && claimedRef(campground) != null
+    fun supportsCampground(campground: Campground): Boolean = isEnabled() && claimedCampgroundRef(campground) != null
 
     /**
      * Derives the provider-specific [BookingProviderRef] from [campground],
@@ -56,7 +56,7 @@ interface AvailabilityProvider {
      * Returns null when this provider cannot derive a ref (should not happen
      * if [supportsCampground] returned true).
      */
-    fun parentRefFor(campground: Campground): BookingProviderRef? = claimedRef(campground)
+    fun campgroundRefFor(campground: Campground): BookingProviderRef? = claimedCampgroundRef(campground)
 
     /**
      * @throws AvailabilityProviderError on upstream failure (rate limit, WAF block,
@@ -78,22 +78,22 @@ interface AvailabilityProvider {
 
     /**
      * User-facing reservation URL *template* for [campsite] under a campground
-     * whose parent scope is [parentRef], or null when this provider exposes no
+     * whose campground ref is [campgroundRef], or null when this provider exposes no
      * stable deep link. The template may embed the [ReservationUrlTemplate]
      * placeholders (filled by the caller for a chosen window) or be a static URL.
      * Pure and cheap — no upstream call, no throw.
      */
     fun reservationUrlTemplate(
         campsite: Campsite,
-        parentRef: BookingProviderRef,
+        campgroundRef: BookingProviderRef,
     ): String? = null
 
     fun reservationUrl(
         campsite: Campsite,
-        parentRef: BookingProviderRef,
+        campgroundRef: BookingProviderRef,
         date: LocalDate,
     ): String? =
-        reservationUrlTemplate(campsite, parentRef)?.let {
+        reservationUrlTemplate(campsite, campgroundRef)?.let {
             ReservationUrlTemplate.fill(it, date, date.plusDays(1))
         }
 }

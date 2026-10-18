@@ -21,7 +21,7 @@ class AvailabilityFetchCallRepoTest : SharedDbTest() {
     private fun seedPoller(poiId: Long): Long =
         AvailabilityPollerRepo(ctx).upsertActive(
             provider = "recgov",
-            parentRef = "232447",
+            campgroundRef = "232447",
             poiId = poiId,
             pullNextRunAt = null,
         )
@@ -37,7 +37,7 @@ class AvailabilityFetchCallRepoTest : SharedDbTest() {
             AvailabilityFetchCallRepo.NewCall(
                 runId = runId,
                 provider = "recgov",
-                parentRef = "232447",
+                campgroundRef = "232447",
                 campsiteCount = 235,
                 windowStart = LocalDate.parse("2026-07-17"),
                 windowEnd = LocalDate.parse("2026-07-31"),
@@ -51,7 +51,7 @@ class AvailabilityFetchCallRepoTest : SharedDbTest() {
         assertEquals("rate_limited", rows[0].outcome)
         assertEquals(235, rows[0].campsiteCount)
         assertEquals("recgov", rows[0].provider)
-        assertEquals("232447", rows[0].parentRef)
+        assertEquals("232447", rows[0].campgroundRef)
         assertEquals(LocalDate.parse("2026-07-17"), rows[0].windowStart)
         assertEquals(LocalDate.parse("2026-07-31"), rows[0].windowEnd)
         assertEquals(240941, rows[0].durationMs)
@@ -69,7 +69,7 @@ class AvailabilityFetchCallRepoTest : SharedDbTest() {
                 AvailabilityFetchCallRepo.NewCall(
                     runId = runId,
                     provider = "recgov",
-                    parentRef = "232447",
+                    campgroundRef = "232447",
                     campsiteCount = 1,
                     windowStart = LocalDate.parse("2026-07-17"),
                     windowEnd = LocalDate.parse("2026-07-31"),

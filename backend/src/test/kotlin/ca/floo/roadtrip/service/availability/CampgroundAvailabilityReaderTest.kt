@@ -116,7 +116,7 @@ class CampgroundAvailabilityReaderTest : SharedDbTest() {
             }
 
         assertEquals(true, window.cache?.hit)
-        assertEquals(recgov.parentRefFor(campground), window.campgroundRef)
+        assertEquals(recgov.campgroundRefFor(campground), window.campgroundRef)
     }
 
     @Test

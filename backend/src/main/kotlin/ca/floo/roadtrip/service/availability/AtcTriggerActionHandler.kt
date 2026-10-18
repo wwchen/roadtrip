@@ -73,7 +73,7 @@ internal class AtcTriggerActionHandler(
         val nextTarget = next.request.target
         // What the delivered report calls this booking site. The ref names the
         // tenant, so the report reads the same name the drawer and the alert do.
-        val bookingSystem = tenants.displayName(nextTarget.parentRef)
+        val bookingSystem = tenants.displayName(nextTarget.campgroundRef)
         val startedAt = System.nanoTime()
         val result =
             runCatchingCancellable { bookings.addToCart(next.request) }

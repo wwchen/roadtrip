@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability.provider
 
-internal data class AspiraCatalogCampsite(
+internal data class AspiraCampsite(
     val campsiteId: Long,
     val resourceId: String,
     val mapId: Int,

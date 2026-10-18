@@ -24,6 +24,6 @@ internal data class GroupFetchResult(
     val error: String?,
     val providerError: AvailabilityProviderError? = null,
 ) {
-    val parentRef: BookingProviderRef?
-        get() = provider.parentRefFor(campground)
+    val campgroundRef: BookingProviderRef?
+        get() = provider.campgroundRefFor(campground)
 }

@@ -22,13 +22,13 @@ internal class BookingAdapterRegistry(
 
     fun targetFor(
         action: BookingAction,
-        parentRef: BookingProviderRef,
+        campgroundRef: BookingProviderRef,
         campsiteId: Long,
         vendorSiteId: String,
     ): BookingTarget? =
         byId.values
             .asSequence()
-            .mapNotNull { it.targetFor(parentRef, campsiteId, vendorSiteId) }
+            .mapNotNull { it.targetFor(campgroundRef, campsiteId, vendorSiteId) }
             .firstOrNull { can(action, it) }
 
     fun can(

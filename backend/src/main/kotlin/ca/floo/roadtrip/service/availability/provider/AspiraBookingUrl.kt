@@ -27,7 +27,7 @@ internal object AspiraBookingUrl {
     /**
      * Booking-page template for a campsite, or null when neither the
      * campsite's own typed [campsiteMapId] / [campsiteResourceLocationId] nor
-     * its [parentRef] carries the transaction-location and map ids the link
+     * its [campgroundRef] carries the transaction-location and map ids the link
      * needs. The site-level values win; the campground ref fills what the site
      * omits (e.g. `resourceLocationId` is per-site, `transactionLocationId` is
      * campground-wide).
@@ -36,9 +36,9 @@ internal object AspiraBookingUrl {
         host: String,
         campsiteMapId: Long?,
         campsiteResourceLocationId: Long?,
-        parentRef: BookingProviderRef?,
+        campgroundRef: BookingProviderRef?,
     ): String? {
-        val parent = parentRef as? BookingProviderRef.Aspira ?: return null
+        val parent = campgroundRef as? BookingProviderRef.Aspira ?: return null
         val transactionLocationId = parent.transactionLocationId
         val mapId = campsiteMapId ?: parent.mapId
         val resourceLocationId = campsiteResourceLocationId ?: parent.resourceLocationId

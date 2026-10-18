@@ -222,7 +222,7 @@ private fun AvailabilityPollerRepo.PollerListItem.toSchema(): AvailabilityPoller
     AvailabilityPollerSchema(
         id = poller.id,
         provider = poller.provider,
-        parentRef = poller.parentRef,
+        campgroundRef = poller.campgroundRef,
         poiId = poller.poiId,
         active = poller.active,
         nextRunAt = poller.nextRunAt.toString(),

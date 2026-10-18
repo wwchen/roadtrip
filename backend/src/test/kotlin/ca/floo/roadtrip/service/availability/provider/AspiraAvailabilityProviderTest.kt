@@ -73,7 +73,7 @@ class AspiraAvailabilityProviderTest {
                     enabled = true,
                 )
 
-            val batch =
+            val campgroundObservations =
                 adapter.availability(
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483615:-2147483624"),
                     campsites =
@@ -97,7 +97,14 @@ class AspiraAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-06-19"),
                 )
 
-            val byCampsiteId = batch.observations.filter { it.date == LocalDate.parse("2026-06-17") }.associateBy { it.campsiteId }
+            val byCampsiteId =
+                campgroundObservations.observations
+                    .filter {
+                        it.date ==
+                            LocalDate.parse(
+                                "2026-06-17",
+                            )
+                    }.associateBy { it.campsiteId }
             assertEquals(1, mapFetches)
             assertEquals(0, occupancyFetches)
             assertEquals(AvailabilityStatus.AVAILABLE, byCampsiteId[100]!!.status)
@@ -136,7 +143,7 @@ class AspiraAvailabilityProviderTest {
                     occupancyEnabled = true,
                 )
 
-            val batch =
+            val campgroundObservations =
                 adapter.availability(
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:-2147483624"),
                     campsites =
@@ -160,7 +167,7 @@ class AspiraAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-06-18"),
                 )
 
-            val byCampsiteId = batch.observations.associateBy { it.campsiteId }
+            val byCampsiteId = campgroundObservations.observations.associateBy { it.campsiteId }
             assertEquals(0, mapFetches)
             assertEquals(AvailabilityStatus.AVAILABLE, byCampsiteId[100]!!.status)
             assertEquals(AvailabilityStatus.RESERVED, byCampsiteId[200]!!.status)
@@ -191,7 +198,7 @@ class AspiraAvailabilityProviderTest {
                     occupancyEnabled = false,
                 )
 
-            val batch =
+            val campgroundObservations =
                 adapter.availability(
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:null"),
                     campsites =
@@ -208,7 +215,7 @@ class AspiraAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-06-18"),
                 )
 
-            val observation = batch.observations.single()
+            val observation = campgroundObservations.observations.single()
             assertEquals(100, observation.campsiteId)
             assertEquals(AvailabilityStatus.AVAILABLE, observation.status)
         }
@@ -294,7 +301,7 @@ class AspiraAvailabilityProviderTest {
                         bookingProviderRef = null,
                     ),
                 )
-            val batch =
+            val campgroundObservations =
                 adapter.availability(
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:null"),
                     campsites = campsites,
@@ -303,7 +310,7 @@ class AspiraAvailabilityProviderTest {
                 )
 
             val dates =
-                batch
+                campgroundObservations
                     .asWindow(BookingProvider.ASPIRA, campsites, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-03"))
                     .fusedWindow()
                     .days
@@ -330,7 +337,7 @@ class AspiraAvailabilityProviderTest {
                 kind = null,
                 sourcePayload = null,
             )
-        val parentRef =
+        val campgroundRef =
             BookingProviderRef.Aspira(
                 tenant = "wa",
                 transactionLocationId = -2147483630,
@@ -341,7 +348,7 @@ class AspiraAvailabilityProviderTest {
         val url =
             adapter.reservationUrl(
                 campsite = reservable,
-                parentRef = parentRef,
+                campgroundRef = campgroundRef,
                 date = LocalDate.parse("2026-07-10"),
             )!!
 
@@ -370,7 +377,7 @@ class AspiraAvailabilityProviderTest {
                 sourcePayload = null,
             )
         // The park container, which holds no resources of its own.
-        val parentRef =
+        val campgroundRef =
             BookingProviderRef.Aspira(
                 tenant = "bc",
                 transactionLocationId = -2147483505,
@@ -381,7 +388,7 @@ class AspiraAvailabilityProviderTest {
         val url =
             adapter.reservationUrl(
                 campsite = bench,
-                parentRef = parentRef,
+                campgroundRef = campgroundRef,
                 date = LocalDate.parse("2026-08-22"),
             )!!
 
@@ -405,7 +412,7 @@ class AspiraAvailabilityProviderTest {
                 bookingProviderRef = null,
                 sourcePayload = null,
             )
-        val parentRef =
+        val campgroundRef =
             BookingProviderRef.Aspira(
                 tenant = "bc",
                 transactionLocationId = -2147483505,
@@ -416,7 +423,7 @@ class AspiraAvailabilityProviderTest {
         val url =
             adapter.reservationUrl(
                 campsite = orphan,
-                parentRef = parentRef,
+                campgroundRef = campgroundRef,
                 date = LocalDate.parse("2026-08-22"),
             )!!
 

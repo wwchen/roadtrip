@@ -35,7 +35,7 @@ class CampflareAvailabilityProvider(
 
     override fun reservationUrlTemplate(
         campsite: Campsite,
-        parentRef: BookingProviderRef,
+        campgroundRef: BookingProviderRef,
     ): String? = RecGovBookingUrl.templateFromUrl(campsite.reservationUrl)
 
     override suspend fun availability(
@@ -55,7 +55,7 @@ class CampflareAvailabilityProvider(
         val days = dates(startDate, endDate)
         val observations =
             campsites.flatMap { campsite ->
-                observationsForReservable(
+                observationsForCampsite(
                     campsiteId = campsite.id,
                     byDate = byCampsiteId[vendorSiteIdFor(campsite)]?.availability.orEmpty(),
                     dates = days,
@@ -81,7 +81,7 @@ class CampflareAvailabilityProvider(
             )
         }
 
-    private fun observationsForReservable(
+    private fun observationsForCampsite(
         campsiteId: Long,
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
@@ -97,7 +97,7 @@ class CampflareAvailabilityProvider(
         }
 
     private fun campflareIdOrThrow(campground: Campground): String =
-        (claimedRef(campground) as? BookingProviderRef.Campflare)?.campgroundId
+        (claimedCampgroundRef(campground) as? BookingProviderRef.Campflare)?.campgroundId
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =

@@ -236,7 +236,7 @@ private fun availabilityDashboardController(
     )
 
 /**
- * Assembles the campsite read-slice controller. Mirrors [availabilityWatchController]:
+ * Assembles the campsite read controller. Mirrors [availabilityWatchController]:
  * composition stays here, so the route file remains a pure HTTP shell.
  */
 private fun campsiteAvailabilityController(

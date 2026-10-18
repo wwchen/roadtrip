@@ -337,8 +337,8 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val pollerRepo = AvailabilityPollerRepo(ctx)
         val linked = pollerRepo.pollerIdsForWatch(watch.id)
         assertEquals(2, linked.size)
-        val parentRefs = linked.map { pollerRepo.findById(it)!!.parentRef }.toSet()
-        assertEquals(setOf("232447", "232999"), parentRefs)
+        val campgroundRefs = linked.map { pollerRepo.findById(it)!!.campgroundRef }.toSet()
+        assertEquals(setOf("232447", "232999"), campgroundRefs)
     }
 
     @Test
@@ -353,7 +353,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val poller = pollerRepo.findById(linked.single())!!
         assertTrue(poller.active)
         assertEquals("recgov", poller.provider)
-        assertEquals("232447", poller.parentRef)
+        assertEquals("232447", poller.campgroundRef)
     }
 
     @Test

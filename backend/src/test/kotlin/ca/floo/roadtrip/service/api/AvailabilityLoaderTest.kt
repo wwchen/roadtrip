@@ -53,7 +53,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
             fetchEndDate = windowEnd,
         )
 
-    private fun batch(observations: List<CampsiteDayObservation>) =
+    private fun campgroundObservations(observations: List<CampsiteDayObservation>) =
         FetchedObservations(
             observations = CampgroundObservations(campgroundRef = null, observations = observations),
             servedBy = BookingProvider.RECGOV,
@@ -137,7 +137,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
             runBlocking {
                 loader.load(request()) {
                     fetchCount++
-                    batch(
+                    campgroundObservations(
                         listOf(siteA, siteB).flatMap { site ->
                             windowDates().map { date -> observation(site, date) }
                         },
@@ -156,7 +156,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
             runBlocking {
                 loader.load(request()) {
                     fetchCount++
-                    batch(
+                    campgroundObservations(
                         listOf(siteA, siteB).flatMap { site ->
                             windowDates().map { date -> observation(site, date) }
                         },
@@ -184,7 +184,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
             runBlocking {
                 loader.load(request()) {
                     fetchCount++
-                    batch(
+                    campgroundObservations(
                         listOf(siteA, siteB).flatMap { site ->
                             windowDates().map { date -> observation(site, date) }
                         },
@@ -207,7 +207,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         val result =
             runBlocking {
                 loader.load(request()) {
-                    batch(listOf(observation(siteA, windowStart)))
+                    campgroundObservations(listOf(observation(siteA, windowStart)))
                 }
             }
 
@@ -248,7 +248,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         runBlocking {
             loader.load(request(targets = listOf(siteA))) {
                 fetchCount++
-                batch(
+                campgroundObservations(
                     listOf(siteA, siteB).flatMap { site ->
                         windowDates().map { date -> observation(site, date) }
                     },
@@ -279,7 +279,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         // later request think the cell had been looked at.
         runBlocking {
             loader.load(request(targets = listOf(siteA))) {
-                batch(listOf(observation(siteB, windowStart)))
+                campgroundObservations(listOf(observation(siteB, windowStart)))
             }
         }
 
@@ -300,7 +300,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
 
         runBlocking {
             loader.load(request(targets = listOf(siteA)).copy(fetchEndDate = windowEnd.plusDays(2))) {
-                batch(listOf(observation(siteB, windowStart)))
+                campgroundObservations(listOf(observation(siteB, windowStart)))
             }
         }
 
@@ -320,7 +320,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
         val result =
             runBlocking {
                 loader.load(request(targets = listOf(siteA)).copy(fetchEndDate = windowStart.plusDays(1))) {
-                    batch(listOf(observation(siteA, windowStart), observation(siteB, windowStart)))
+                    campgroundObservations(listOf(observation(siteA, windowStart), observation(siteB, windowStart)))
                 }
             }
 
@@ -351,7 +351,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
             runBlocking {
                 loader.load(request()) {
                     fetchCount++
-                    batch(
+                    campgroundObservations(
                         listOf(siteA, siteB).flatMap { site ->
                             windowDates().map { date ->
                                 val status =

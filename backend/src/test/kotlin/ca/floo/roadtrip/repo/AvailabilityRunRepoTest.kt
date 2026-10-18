@@ -22,7 +22,7 @@ class AvailabilityRunRepoTest : SharedDbTest() {
     private fun seedPoller(): Long =
         AvailabilityPollerRepo(ctx).upsertActive(
             provider = "recgov",
-            parentRef = "232447",
+            campgroundRef = "232447",
             poiId = seedPoi(),
             pullNextRunAt = null,
         )

@@ -31,7 +31,7 @@ internal interface BookingAdapter : Dispatchable<BookingProvider> {
     fun canFulfil(user: UserId): Boolean
 
     fun targetFor(
-        parentRef: BookingProviderRef,
+        campgroundRef: BookingProviderRef,
         campsiteId: Long,
         vendorSiteId: String,
     ): BookingTarget?

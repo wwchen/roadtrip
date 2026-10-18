@@ -115,14 +115,14 @@ internal class RecGovBookingAdapter(
     override fun canFulfil(user: UserId): Boolean = credentials?.isConfigured(id, user) == true
 
     override fun targetFor(
-        parentRef: BookingProviderRef,
+        campgroundRef: BookingProviderRef,
         campsiteId: Long,
         vendorSiteId: String,
     ): BookingTarget? {
-        if (parentRef !is BookingProviderRef.RecGov) return null
+        if (campgroundRef !is BookingProviderRef.RecGov) return null
         return BookingTarget(
             providerId = id,
-            parentRef = parentRef,
+            campgroundRef = campgroundRef,
             campsiteId = campsiteId,
             vendorSiteId = vendorSiteId,
         )
@@ -134,7 +134,7 @@ internal class RecGovBookingAdapter(
     ): Boolean =
         action == BookingAction.ADD_TO_CART &&
             target.providerId == id &&
-            target.parentRef is BookingProviderRef.RecGov &&
+            target.campgroundRef is BookingProviderRef.RecGov &&
             target.vendorSiteId.isNotBlank()
 
     override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {

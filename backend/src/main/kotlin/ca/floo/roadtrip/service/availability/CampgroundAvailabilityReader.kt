@@ -64,7 +64,7 @@ internal class CampgroundAvailabilityReader(
             campsites = campsites,
             streams = streams,
             provider = loaded.fetched?.servedBy ?: read.provider.id,
-            campgroundRef = loaded.fetched?.observations?.campgroundRef ?: read.provider.parentRefFor(campground),
+            campgroundRef = loaded.fetched?.observations?.campgroundRef ?: read.provider.campgroundRefFor(campground),
             cache = AvailabilityCacheBlock(loaded.hit, loaded.ageSeconds, loaded.ttlSeconds),
             pollingSupported = policy.pollingSupported(campground),
             reopensOnByCampsite = reopensOnByCampsite(streams, windows.target, read.freshAtOrAfter),

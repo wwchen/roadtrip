@@ -55,7 +55,7 @@ class RecGovAvailabilityProvider(
 
     override fun reservationUrlTemplate(
         campsite: Campsite,
-        parentRef: BookingProviderRef,
+        campgroundRef: BookingProviderRef,
     ): String = RecGovBookingUrl.template(vendorSiteIdFor(campsite))
 
     private suspend fun fetchMonths(
@@ -73,18 +73,18 @@ class RecGovAvailabilityProvider(
                     .awaitAll()
 
             val merged = mergeCampsites(payloads)
-            val catalogSites = campsiteIdByVendorId.keys.associateWith { siteId -> merged[siteId].orEmpty() }
+            val statusByDateByVendorId = campsiteIdByVendorId.keys.associateWith { siteId -> merged[siteId].orEmpty() }
             val dates = datesInWindow(startDate, endDate)
             val observedAtByDate = dates.associateWith { observedAt }
 
             CampgroundObservations(
                 campgroundRef = BookingProviderRef.RecGov(facilityId = recgovId),
-                observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, campsiteIdByVendorId),
+                observations = observationsFromCampsites(statusByDateByVendorId, dates, observedAtByDate, campsiteIdByVendorId),
             )
         }
 
     private fun recgovIdOrThrow(campground: Campground): String =
-        (claimedRef(campground) as? BookingProviderRef.RecGov)?.facilityId
+        (claimedCampgroundRef(campground) as? BookingProviderRef.RecGov)?.facilityId
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =

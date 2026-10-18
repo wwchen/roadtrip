@@ -55,9 +55,9 @@ internal class DbAvailabilityTargetResolver(
                 .findByPoi(poller.poiId)
                 .mapNotNull { resolve(it) }
                 .filter {
-                    val ref = it.parentRef
+                    val ref = it.campgroundRef
                     ref != null &&
-                        ref.parentRefKey == poller.parentRef &&
+                        ref.campgroundRefKey == poller.campgroundRef &&
                         it.provider.id.name
                             .lowercase() == poller.provider
                 }.distinctBy { it.campsite.id }

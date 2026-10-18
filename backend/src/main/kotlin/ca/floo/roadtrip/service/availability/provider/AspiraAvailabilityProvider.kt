@@ -57,7 +57,7 @@ class AspiraAvailabilityProvider(
     override fun isEnabled(): Boolean = enabled
 
     override fun supportsCampground(campground: Campground): Boolean {
-        val ref = claimedRef(campground) ?: return false
+        val ref = claimedCampgroundRef(campground) ?: return false
         return isEnabled() && ref is BookingProviderRef.Aspira && ref.tenant in tenantsByCode
     }
 
@@ -94,8 +94,8 @@ class AspiraAvailabilityProvider(
         val resourceLocationId = aspiraRef.resourceLocationId?.let { intOrThrow("resourceLocationId", it) }
         return runWithErrorMapping {
             if (occupancyEnabled && resourceLocationId != null) {
-                fetchCatalogOccupancy(
-                    scope = aspiraRef,
+                fetchOccupancy(
+                    campgroundRef = aspiraRef,
                     host = tenant.host,
                     resourceLocationId = resourceLocationId,
                     campsites = targets,
@@ -103,8 +103,8 @@ class AspiraAvailabilityProvider(
                     days = ChronoUnit.DAYS.between(startDate, endDate).toInt(),
                 )
             } else {
-                fetchCatalog(
-                    scope = aspiraRef,
+                fetchResourceStatus(
+                    campgroundRef = aspiraRef,
                     host = tenant.host,
                     campsites = targets,
                     startDate = startDate,
@@ -117,8 +117,8 @@ class AspiraAvailabilityProvider(
     private fun aspiraTarget(
         campsite: Campsite,
         mapId: Int,
-    ): AspiraCatalogCampsite =
-        AspiraCatalogCampsite(
+    ): AspiraCampsite =
+        AspiraCampsite(
             campsiteId = campsite.id,
             resourceId = campsite.aspiraResourceId(),
             mapId = mapId,
@@ -134,9 +134,9 @@ class AspiraAvailabilityProvider(
 
     override fun reservationUrlTemplate(
         campsite: Campsite,
-        parentRef: BookingProviderRef,
+        campgroundRef: BookingProviderRef,
     ): String? {
-        val aspiraRef = parentRef as? BookingProviderRef.Aspira ?: return null
+        val aspiraRef = campgroundRef as? BookingProviderRef.Aspira ?: return null
         val tenant = tenantsByCode[aspiraRef.tenant] ?: return null
         // A park's sites are split across sibling loop maps, so the site's own
         // map is the grid its "Book" link belongs on; the parent fills the gaps.
@@ -145,21 +145,21 @@ class AspiraAvailabilityProvider(
             tenant.host,
             campsiteRef?.mapId,
             campsiteRef?.resourceLocationId,
-            parentRef,
+            campgroundRef,
         )
     }
 
-    private suspend fun fetchCatalog(
-        scope: BookingProviderRef.Aspira,
+    private suspend fun fetchResourceStatus(
+        campgroundRef: BookingProviderRef.Aspira,
         host: String,
-        campsites: List<AspiraCatalogCampsite>,
+        campsites: List<AspiraCampsite>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): CampgroundObservations {
         val days = daysBetween(startDate, endDate)
         val targets = campsites.distinctBy { it.campsiteId }
         if (targets.isEmpty()) {
-            return CampgroundObservations(campgroundRef = scope, observations = emptyList())
+            return CampgroundObservations(campgroundRef = campgroundRef, observations = emptyList())
         }
 
         val observedAt = Instant.now()
@@ -175,29 +175,29 @@ class AspiraAvailabilityProvider(
 
         val resourceRows =
             targets.map { target ->
-                CatalogResourceDays(
+                ResourceDays(
                     campsiteId = target.campsiteId,
                     days = dataByMap[target.mapId]?.byResource?.get(target.resourceId),
                     observedAt = observedAt,
                 )
             }
         return CampgroundObservations(
-            campgroundRef = scope,
-            observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days),
+            campgroundRef = campgroundRef,
+            observations = observationsFromResourceDays(resourceRows, startDate, days),
         )
     }
 
-    private suspend fun fetchCatalogOccupancy(
-        scope: BookingProviderRef.Aspira,
+    private suspend fun fetchOccupancy(
+        campgroundRef: BookingProviderRef.Aspira,
         host: String,
         resourceLocationId: Int,
-        campsites: List<AspiraCatalogCampsite>,
+        campsites: List<AspiraCampsite>,
         today: LocalDate,
         days: Int,
     ): CampgroundObservations {
         val targets = campsites.distinctBy { it.campsiteId }
         if (targets.isEmpty()) {
-            return CampgroundObservations(campgroundRef = scope, observations = emptyList())
+            return CampgroundObservations(campgroundRef = campgroundRef, observations = emptyList())
         }
 
         val observations =
@@ -205,9 +205,9 @@ class AspiraAvailabilityProvider(
                 val arrival = today.plusDays(offset.toLong())
                 val checkout = arrival.plusDays(1)
                 val data = availabilityClient.fetchOccupancy(host, resourceLocationId, arrival, checkout)
-                observationsFromOccupancyCatalogArrivalDay(targets, data.resourceOccupancy, arrival, Instant.now())
+                observationsFromOccupancyArrivalDay(targets, data.resourceOccupancy, arrival, Instant.now())
             }
-        return CampgroundObservations(campgroundRef = scope, observations = observations)
+        return CampgroundObservations(campgroundRef = campgroundRef, observations = observations)
     }
 
     private fun tenantForRef(ref: BookingProviderRef.Aspira): BookingTenant =
@@ -221,7 +221,7 @@ class AspiraAvailabilityProvider(
     private fun mapIdOrThrow(mapId: Long): Int = intOrThrow("mapId", mapId)
 
     private fun aspiraRefOrThrow(campground: Campground): BookingProviderRef.Aspira =
-        (claimedRef(campground) as? BookingProviderRef.Aspira)
+        (claimedCampgroundRef(campground) as? BookingProviderRef.Aspira)
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
 
     private fun intOrThrow(
@@ -268,8 +268,8 @@ private fun Campsite.aspiraResourceId(): String =
         else -> dataProviderRef.serialize()
     }
 
-private fun observationsFromLinkedResourceCatalog(
-    resources: List<CatalogResourceDays>,
+private fun observationsFromResourceDays(
+    resources: List<ResourceDays>,
     start: LocalDate,
     days: Int,
 ): List<CampsiteDayObservation> =
@@ -284,8 +284,8 @@ private fun observationsFromLinkedResourceCatalog(
         }
     }
 
-private fun observationsFromOccupancyCatalogArrivalDay(
-    resources: List<AspiraCatalogCampsite>,
+private fun observationsFromOccupancyArrivalDay(
+    resources: List<AspiraCampsite>,
     occupancyRows: List<ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy>,
     arrival: LocalDate,
     observedAt: Instant,
@@ -308,7 +308,7 @@ private fun observationsFromOccupancyCatalogArrivalDay(
     }
 }
 
-private data class CatalogResourceDays(
+private data class ResourceDays(
     val campsiteId: Long,
     val days: List<Int>?,
     val observedAt: Instant,

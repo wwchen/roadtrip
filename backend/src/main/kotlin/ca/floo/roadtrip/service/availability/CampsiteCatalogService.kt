@@ -65,7 +65,7 @@ internal class CampsiteCatalogService(
         campsite: Campsite,
         resolved: ResolvedAvailabilityTarget?,
     ): String? =
-        resolved?.parentRef?.let { ref ->
+        resolved?.campgroundRef?.let { ref ->
             resolved.provider.reservationUrlTemplate(campsite, ref)
         }
 }

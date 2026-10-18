@@ -28,7 +28,7 @@ internal class AvailabilityBookingTargetResolver(
         declaredTarget(action, resolved)?.let { return it }
 
         for (provider in resolved.candidates) {
-            val ref = provider.parentRefFor(resolved.campground) ?: continue
+            val ref = provider.campgroundRefFor(resolved.campground) ?: continue
             val target =
                 bookings.targetFor(
                     action,
@@ -53,8 +53,8 @@ internal class AvailabilityBookingTargetResolver(
         resolved: ResolvedAvailabilityTarget,
     ): BookingTarget? =
         resolved.campsite.bookingIdentities().firstNotNullOfOrNull { identity ->
-            val parentRef = resolved.campground.bookingRefFor(identity.provider) ?: return@firstNotNullOfOrNull null
-            bookings.targetFor(action, parentRef, resolved.campsite.id, identity.ref)
+            val campgroundRef = resolved.campground.bookingRefFor(identity.provider) ?: return@firstNotNullOfOrNull null
+            bookings.targetFor(action, campgroundRef, resolved.campsite.id, identity.ref)
         }
 }
 

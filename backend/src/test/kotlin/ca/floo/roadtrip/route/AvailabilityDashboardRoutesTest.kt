@@ -72,9 +72,9 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
                 source = "recgov",
             ).poiId
 
-    /** Seeds an active poller for (recgov, [parentRef]) with one attached watch. */
-    private fun seedPoller(parentRef: String = "232447"): Long {
-        val poiId = seedPoi("poi-$parentRef")
+    /** Seeds an active poller for (recgov, [campgroundRef]) with one attached watch. */
+    private fun seedPoller(campgroundRef: String = "232447"): Long {
+        val poiId = seedPoi("poi-$campgroundRef")
         val ownerId = seedOwner()
         val watchId =
             ctx
@@ -92,7 +92,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
         ctx.execute("INSERT INTO availability_watch_target (watch_id, poi_id) VALUES (?, ?)", watchId, poiId)
         val pollers = AvailabilityPollerRepo(ctx)
         val pollerId =
-            pollers.upsertActive(provider = "recgov", parentRef = parentRef, poiId = poiId, pullNextRunAt = null)
+            pollers.upsertActive(provider = "recgov", campgroundRef = campgroundRef, poiId = poiId, pullNextRunAt = null)
         pollers.linkWatch(watchId, pollerId)
         return pollerId
     }
@@ -313,7 +313,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
             recordObservation(fixture.campsiteId, "2026-07-04", now.minusMinutes(1), available = true)
             val pollerId =
                 AvailabilityPollerRepo(ctx)
-                    .upsertActive(provider = "recgov", parentRef = "dashboard-cg", poiId = fixture.poiId, pullNextRunAt = null)
+                    .upsertActive(provider = "recgov", campgroundRef = "dashboard-cg", poiId = fixture.poiId, pullNextRunAt = null)
             val runRepo = AvailabilityRunRepo(ctx)
             val olderRun = runRepo.start(pollerId, now.minusMinutes(3))
             runRepo.complete(olderRun, snapshotCount = 1, completedAt = now.minusMinutes(3), durationMs = 10)

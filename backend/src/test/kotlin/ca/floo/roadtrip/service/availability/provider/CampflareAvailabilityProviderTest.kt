@@ -56,7 +56,7 @@ class CampflareAvailabilityProviderTest {
                 }
             val provider = CampflareAvailabilityProvider(client, enabled = true, configured = true)
 
-            val batch =
+            val campgroundObservations =
                 provider.availability(
                     campground =
                         testCampground(
@@ -84,12 +84,12 @@ class CampflareAvailabilityProviderTest {
                 ),
                 observedCall,
             )
-            assertEquals(BookingProviderRef.Campflare(campgroundId = "upper-pines-campground-447"), batch.campgroundRef)
-            assertEquals(2, batch.observations.size)
-            assertEquals(setOf(100L), batch.observations.map { it.campsiteId }.toSet())
+            assertEquals(BookingProviderRef.Campflare(campgroundId = "upper-pines-campground-447"), campgroundObservations.campgroundRef)
+            assertEquals(2, campgroundObservations.observations.size)
+            assertEquals(setOf(100L), campgroundObservations.observations.map { it.campsiteId }.toSet())
             assertEquals(
                 listOf(AvailabilityStatus.AVAILABLE, AvailabilityStatus.RESERVED),
-                batch.observations.sortedBy { it.date }.map { it.status },
+                campgroundObservations.observations.sortedBy { it.date }.map { it.status },
             )
         }
 
@@ -112,7 +112,7 @@ class CampflareAvailabilityProviderTest {
                 }
             val provider = CampflareAvailabilityProvider(client, enabled = true, configured = true)
 
-            val batch =
+            val campgroundObservations =
                 provider.availability(
                     campground =
                         testCampground(
@@ -128,7 +128,10 @@ class CampflareAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-06-03"),
                 )
 
-            assertEquals(listOf(AvailabilityStatus.UNKNOWN, AvailabilityStatus.UNKNOWN), batch.observations.map { it.status })
+            assertEquals(
+                listOf(AvailabilityStatus.UNKNOWN, AvailabilityStatus.UNKNOWN),
+                campgroundObservations.observations.map { it.status },
+            )
         }
 
     @Test

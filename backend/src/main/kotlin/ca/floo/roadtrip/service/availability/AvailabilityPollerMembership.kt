@@ -11,7 +11,7 @@ import java.time.OffsetDateTime
  * watch-write time rather than needing a separate reconciliation pass.
  *
  * Resolves the watch's campsite set to its vendor call units (distinct
- * (provider, parentRefKey) pairs) and reconciles `availability_watch_poller`
+ * (provider, campgroundRefKey) pairs) and reconciles `availability_watch_poller`
  * to exactly that set, creating/reviving pollers as needed via
  * [AvailabilityPollerRepo.upsertActive]. Pollers are the coalesced unit:
  * many watches on the same parent campground share one poller row.
@@ -25,7 +25,7 @@ internal class AvailabilityPollerMembership(
      * holds no links — its links are cleared and any poller left without
      * links is deactivated. An ACTIVE watch's campsite set is resolved to
      * targets, deduped to one representative poi per distinct
-     * (provider, parentRefKey), upserted into a poller each, and the
+     * (provider, campgroundRefKey), upserted into a poller each, and the
      * watch's links replaced with exactly that set.
      *
      * [tighterCadencePull] is forwarded to [AvailabilityPollerRepo.upsertActive]
@@ -51,10 +51,10 @@ internal class AvailabilityPollerMembership(
 
         val keyToPoi = LinkedHashMap<Pair<String, String>, Long>()
         for (target in resolved) {
-            val ref = target.parentRef ?: continue
+            val ref = target.campgroundRef ?: continue
             val key =
                 target.provider.id.name
-                    .lowercase() to ref.parentRefKey
+                    .lowercase() to ref.campgroundRefKey
             keyToPoi.putIfAbsent(key, target.parentPoiId)
         }
 
@@ -63,7 +63,7 @@ internal class AvailabilityPollerMembership(
                 .map { (key, poiId) ->
                     repo.upsertActive(
                         provider = key.first,
-                        parentRef = key.second,
+                        campgroundRef = key.second,
                         poiId = poiId,
                         pullNextRunAt = tighterCadencePull,
                     )

@@ -70,7 +70,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
             val availabilityClient = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
             val provider = ReserveCaliforniaAvailabilityProvider(availabilityClient = availabilityClient, enabled = true)
 
-            val batch =
+            val campgroundObservations =
                 provider.availability(
                     campground = testCampground(bookingProvider = "reservecalifornia", bookingProviderRef = "690:611,612"),
                     campsites =
@@ -84,16 +84,19 @@ class ReserveCaliforniaAvailabilityProviderTest {
             assertEquals(BookingProvider.RESERVECALIFORNIA, provider.id)
             assertEquals(false, provider.capabilities.supportsInternalPolling)
             assertEquals(183, provider.capabilities.bookingHorizonDays)
-            assertEquals(BookingProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611L, 612L)), batch.campgroundRef)
-            assertEquals(3, batch.observations.size)
-            assertEquals(setOf(43793L), batch.observations.map { it.campsiteId }.toSet())
+            assertEquals(
+                BookingProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611L, 612L)),
+                campgroundObservations.campgroundRef,
+            )
+            assertEquals(3, campgroundObservations.observations.size)
+            assertEquals(setOf(43793L), campgroundObservations.observations.map { it.campsiteId }.toSet())
             assertEquals(
                 listOf(
                     AvailabilityStatus.UNKNOWN,
                     AvailabilityStatus.AVAILABLE,
                     AvailabilityStatus.UNKNOWN,
                 ),
-                batch.observations.sortedBy { it.date }.map { it.status },
+                campgroundObservations.observations.sortedBy { it.date }.map { it.status },
             )
         }
 
@@ -160,7 +163,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
                     clock = Clock.fixed(fixed, ZoneOffset.UTC),
                 )
 
-            val batch =
+            val campgroundObservations =
                 provider.availability(
                     campground = testCampground(bookingProvider = "reservecalifornia", bookingProviderRef = "690:611"),
                     campsites =
@@ -171,8 +174,11 @@ class ReserveCaliforniaAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-12-17"),
                 )
 
-            assertEquals(listOf(fixed, fixed), batch.observations.map { it.observedAt })
-            assertEquals(listOf(AvailabilityStatus.UNKNOWN, AvailabilityStatus.UNKNOWN), batch.observations.map { it.status })
+            assertEquals(listOf(fixed, fixed), campgroundObservations.observations.map { it.observedAt })
+            assertEquals(
+                listOf(AvailabilityStatus.UNKNOWN, AvailabilityStatus.UNKNOWN),
+                campgroundObservations.observations.map { it.status },
+            )
         }
 
     private fun startServer(executor: ExecutorService? = null) {

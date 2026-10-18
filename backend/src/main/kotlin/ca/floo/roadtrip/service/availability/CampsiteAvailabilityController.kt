@@ -21,7 +21,7 @@ internal const val EMPTY_WINDOW_MAX_DAYS = 60
 internal const val EMPTY_WINDOW_HORIZON_DAYS = 365
 
 /**
- * Use-case orchestration for the POI campsite read slice: the campsite catalog
+ * Use-case orchestration for the POI campsite read path: the campsite catalog
  * listing and the per-campsite availability envelope. Routes stay an HTTP
  * shell — they parse params, call this controller, and map
  * [AvailabilityServiceError] / provider errors to status codes.
@@ -48,7 +48,7 @@ internal class CampsiteAvailabilityController(
      * @throws AvailabilityServiceError on unknown POI/campground or a bad date window.
      * @throws ca.floo.roadtrip.model.availability.AvailabilityProviderError on upstream failure.
      */
-    suspend fun poiAvailabilitySlice(
+    suspend fun campgroundWindow(
         poiId: Long,
         siteTypes: List<CampsiteKind>,
         startDate: LocalDate?,
@@ -131,15 +131,15 @@ internal class CampsiteAvailabilityController(
         // to what *this* caller could set, so `atc` is simply absent for them.
         requester: UserId? = null,
     ): PoiCampsitesAvailabilityResponseDto {
-        val campgroundWindow = poiAvailabilitySlice(poiId, siteTypes, startDate, endDate)
-        val watchCaps = watchCapabilityService.capabilitiesFor(campgroundWindow.campgroundCampsites, requester)
-        val fused = campgroundWindow.fusedWindow()
+        val readWindow = campgroundWindow(poiId, siteTypes, startDate, endDate)
+        val watchCaps = watchCapabilityService.capabilitiesFor(readWindow.campgroundCampsites, requester)
+        val fused = readWindow.fusedWindow()
 
         return PoiCampsitesAvailabilityResponseDto(
             poiId = poiId,
-            startDate = campgroundWindow.window.startDate.toString(),
-            endDate = campgroundWindow.window.endDate.toString(),
-            latestDate = campgroundWindow.latestDate?.toString(),
+            startDate = readWindow.window.startDate.toString(),
+            endDate = readWindow.window.endDate.toString(),
+            latestDate = readWindow.latestDate?.toString(),
             state = fused.state,
             season = seasonElement(fused.season),
             cache = fused.cache,

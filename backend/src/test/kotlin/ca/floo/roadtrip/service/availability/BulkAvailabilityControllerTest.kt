@@ -34,12 +34,12 @@ private const val CRASHING_POI_ID = 104L
 private const val TEST_MAX_POIS = 50
 private const val TEST_FAN_OUT_CONCURRENCY = 8
 private const val TEST_IP_RATE_LIMIT_PER_MINUTE = 10
-private const val NORMAL_SLICE_DELAY_MS = 20L
+private const val NORMAL_WINDOW_DELAY_MS = 20L
 
 private val windowStart: LocalDate = LocalDate.of(2026, 9, 1)
 private val windowEnd: LocalDate = LocalDate.of(2026, 9, 8)
 
-/** rec.gov's horizon, so the faked slice's ceiling is a real provider's. */
+/** rec.gov's horizon, so the faked window's ceiling is a real provider's. */
 private const val BOOKING_HORIZON_DAYS = 180L
 private val windowLatest: LocalDate = windowStart.plusDays(BOOKING_HORIZON_DAYS)
 private val observedAt: Instant = Instant.parse("2026-08-20T00:00:00Z")
@@ -175,7 +175,7 @@ class BulkAvailabilityControllerTest {
             val recorder = CutoffRecorder()
             val controller =
                 BulkAvailabilityController(
-                    sliceLookup = FakePoiAvailabilitySliceLookup(recorder),
+                    windowLookup = FakeCampgroundWindowLookup(recorder),
                     config = config,
                     clock = Clock.fixed(now, ZoneOffset.UTC),
                 )
@@ -214,7 +214,7 @@ private fun bulkController(
     meter: ConcurrencyMeter? = null,
 ): BulkAvailabilityController =
     BulkAvailabilityController(
-        sliceLookup = FakePoiAvailabilitySliceLookup(recorder, meter),
+        windowLookup = FakeCampgroundWindowLookup(recorder, meter),
         config =
             BulkAvailabilityConfig(
                 maxPois = TEST_MAX_POIS,
@@ -272,16 +272,16 @@ private class ConcurrencyMeter {
 }
 
 /**
- * Stands in for [CampsiteAvailabilityController.poiAvailabilitySlice] without
+ * Stands in for [CampsiteAvailabilityController.campgroundWindow] without
  * a database. Behaviour is keyed off the requested POI id: most ids resolve
- * to a canned slice, a handful of reserved ids script a provider failure, a
+ * to a canned window, a handful of reserved ids script a provider failure, a
  * not-found, a timeout, or an empty (no matching site type) result.
  */
-private class FakePoiAvailabilitySliceLookup(
+private class FakeCampgroundWindowLookup(
     private val recorder: CutoffRecorder? = null,
     private val meter: ConcurrencyMeter? = null,
-) : PoiAvailabilitySliceLookup {
-    override suspend fun poiAvailabilitySlice(
+) : CampgroundWindowLookup {
+    override suspend fun campgroundWindow(
         poiId: Long,
         siteTypes: List<CampsiteKind>,
         startDate: LocalDate?,
@@ -297,14 +297,14 @@ private class FakePoiAvailabilitySliceLookup(
             RATE_LIMITED_POI_ID -> throw AvailabilityProviderError.RateLimited()
             UNKNOWN_POI_ID -> throw AvailabilityServiceError.NotFound
             CRASHING_POI_ID -> throw RuntimeException("boom: unmapped failure")
-            NO_SITES_POI_ID -> noSitesSlice(poiId)
+            NO_SITES_POI_ID -> noSitesWindow(poiId)
             RANKED_POI_ID -> {
-                delay(NORMAL_SLICE_DELAY_MS)
-                rankedSlice(poiId)
+                delay(NORMAL_WINDOW_DELAY_MS)
+                rankedWindow(poiId)
             }
             else -> {
-                delay(NORMAL_SLICE_DELAY_MS)
-                simpleSlice(poiId)
+                delay(NORMAL_WINDOW_DELAY_MS)
+                simpleWindow(poiId)
             }
         }
 }
@@ -341,7 +341,7 @@ private fun windowOf(
 }
 
 /** Three campsites under [poiId] whose longest bookable runs are 1, 5 and 3 nights; the 5-night one sleeps 2. */
-private fun rankedSlice(poiId: Long): CampgroundWindow {
+private fun rankedWindow(poiId: Long): CampgroundWindow {
     val shortRun = campsiteFixture(id = poiId * 1000 + 1, campgroundId = poiId, name = "Short run")
     val longRun = campsiteFixture(id = poiId * 1000 + 2, campgroundId = poiId, name = "Long run").copy(maxPeople = 2)
     val midRun = campsiteFixture(id = poiId * 1000 + 3, campgroundId = poiId, name = "Mid run")
@@ -353,10 +353,10 @@ private fun rankedSlice(poiId: Long): CampgroundWindow {
 }
 
 /** One campsite under [poiId] with a single bookable night. */
-private fun simpleSlice(poiId: Long): CampgroundWindow {
+private fun simpleWindow(poiId: Long): CampgroundWindow {
     val campsite = campsiteFixture(id = poiId * 1000, campgroundId = poiId)
     return windowOf(poiId, listOf(campsite), observationsForRun(campsite.id, nights = 1))
 }
 
 /** No campsite matched the requested site types: resolved, but nothing to rank. */
-private fun noSitesSlice(poiId: Long): CampgroundWindow = windowOf(poiId, emptyList(), emptyList())
+private fun noSitesWindow(poiId: Long): CampgroundWindow = windowOf(poiId, emptyList(), emptyList())

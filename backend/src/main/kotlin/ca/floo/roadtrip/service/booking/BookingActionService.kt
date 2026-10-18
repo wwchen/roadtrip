@@ -157,7 +157,7 @@ internal class BookingActionService(
                 ?: return AddToCartOutcome.Refused(BookingActionCodes.UNSUPPORTED_TARGET)
         // The booking site's own name, from the ref the hold would use. Known as
         // soon as a target is, so every refusal from here down can name it.
-        val providerDisplay = tenants.displayName(target.parentRef)
+        val providerDisplay = tenants.displayName(target.campgroundRef)
         // The registry disagreeing with the resolver means the two are out of
         // step; report it as the same "we cannot book this" the gate does.
         val adapter =

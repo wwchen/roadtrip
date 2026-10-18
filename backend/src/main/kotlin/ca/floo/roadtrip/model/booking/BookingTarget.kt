@@ -5,7 +5,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 
 data class BookingTarget(
     val providerId: BookingProvider,
-    val parentRef: BookingProviderRef,
+    val campgroundRef: BookingProviderRef,
     val campsiteId: Long,
     val vendorSiteId: String,
 )

@@ -46,7 +46,7 @@ class RecGovAvailabilityProviderTest {
                 }
             val adapter = RecGovAvailabilityProvider(client, enabled = true)
 
-            val batch =
+            val campgroundObservations =
                 adapter.availability(
                     campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
                     campsites =
@@ -57,7 +57,7 @@ class RecGovAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-07-02"),
                 )
 
-            val observation = batch.observations.single()
+            val observation = campgroundObservations.observations.single()
             assertEquals(330257, observation.campsiteId)
             assertEquals(LocalDate.parse("2026-07-01"), observation.date)
             assertEquals(AvailabilityStatus.AVAILABLE, observation.status)
@@ -84,7 +84,7 @@ class RecGovAvailabilityProviderTest {
                 }
             val adapter = RecGovAvailabilityProvider(client, enabled = true)
 
-            val batch =
+            val campgroundObservations =
                 adapter.availability(
                     campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
                     campsites =
@@ -95,7 +95,7 @@ class RecGovAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-07-02"),
                 )
 
-            val observation = batch.observations.single()
+            val observation = campgroundObservations.observations.single()
             assertEquals(1000, observation.campsiteId)
             assertEquals(AvailabilityStatus.AVAILABLE, observation.status)
         }
@@ -144,7 +144,7 @@ class RecGovAvailabilityProviderTest {
                     campsiteFixture(id = 330257, vendor = "recgov", vendorId = "330257"),
                     campsiteFixture(id = 330258, vendor = "recgov", vendorId = "330258"),
                 )
-            val batch =
+            val campgroundObservations =
                 adapter.availability(
                     campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
                     campsites = campsites,
@@ -153,7 +153,7 @@ class RecGovAvailabilityProviderTest {
                 )
 
             val dates =
-                batch
+                campgroundObservations
                     .asWindow(BookingProvider.RECGOV, campsites, LocalDate.parse("2026-07-01"), LocalDate.parse("2026-07-03"))
                     .fusedWindow()
                     .days

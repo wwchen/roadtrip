@@ -66,7 +66,7 @@ internal fun CampgroundWindow.perCampsiteEnvelopes(): List<CampsiteEnvelope> {
                         cacheBlock = cache,
                         pollingSupported = pollingSupported,
                         earliestDate = earliestDate,
-                        scopeRef = campgroundRef?.serialize(),
+                        campgroundRef = campgroundRef?.serialize(),
                         campsiteId = stream.campsiteId,
                     ),
                 stream = stream,
