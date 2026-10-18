@@ -31,16 +31,6 @@ internal open class FailoverAvailabilityFetcher(
         val attempts: List<AttemptRecord>,
     )
 
-    /**
-     * [campgroundCampsites] is the campground's whole campsite set and
-     * [campsites] the narrower set this read answers for. Which one a candidate
-     * is given is that candidate's `coversCampgroundPerCall`: a vendor whose one
-     * call covers the campground gets all of them, so every campsite's cells are
-     * stored; a vendor that answers per part of a campground gets the narrower
-     * set, because covering the rest would cost it another upstream call per
-     * part. Picked per candidate rather than once, since failover can land on a
-     * vendor of the other shape.
-     */
     open suspend fun fetch(
         providers: List<AvailabilityProvider>,
         campground: Campground,

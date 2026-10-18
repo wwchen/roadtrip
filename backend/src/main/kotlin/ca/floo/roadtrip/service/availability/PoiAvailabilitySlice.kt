@@ -23,11 +23,6 @@ internal data class PoiAvailabilitySlice(
     val allCampsites: List<Campsite>,
     val campsites: List<Campsite>,
     val batch: AvailabilityObservationBatch?,
-    /**
-     * Per campsite of [campsites], the earliest stored date it is bookable.
-     * Empty for the campsites that are bookable inside the window — they have no
-     * reopening to report — and for a slice with no batch.
-     */
     val reopensOnByCampsite: Map<Long, LocalDate>,
     /**
      * Whether the campground's serving provider can be polled for openings. A

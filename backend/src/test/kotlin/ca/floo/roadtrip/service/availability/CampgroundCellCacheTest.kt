@@ -37,12 +37,6 @@ private const val WINDOW_LENGTH_DAYS = 7L
 private val fixedNow: Instant = Instant.parse("2026-07-30T12:00:00Z")
 private val freshnessTtl: Duration = Duration.ofMinutes(30)
 
-/**
- * What the base-unit cache buys and what it must not confuse: one upstream call
- * per campground whatever a request filtered to, answers narrowed above the
- * port, and a season block that reads the same whether it was just fetched or
- * served from the store.
- */
 class CampgroundCellCacheTest : SharedDbTest() {
     @Test
     fun `a filtered check then an unfiltered one over the same window is one provider call`() {
@@ -52,8 +46,6 @@ class CampgroundCellCacheTest : SharedDbTest() {
         val unfiltered = fixture.slice(siteTypes = emptyList())
 
         assertEquals(1, fixture.provider.calls.size, "the unfiltered check called the vendor again")
-        // The one call was about the campground, not about the tent filter that
-        // set it off.
         assertEquals(
             fixture.allCampsiteIds,
             fixture.provider.calls
@@ -75,7 +67,6 @@ class CampgroundCellCacheTest : SharedDbTest() {
 
         val filtered = fixture.slice(siteTypes = listOf(CampsiteKind.TENT))
 
-        // The call covered four campsites; the answer is about two.
         assertEquals(
             filtered.campsites.mapTo(mutableSetOf()) { it.id },
             filtered.batch!!.observations.mapNotNullTo(mutableSetOf()) { it.campsiteId },
@@ -84,10 +75,6 @@ class CampgroundCellCacheTest : SharedDbTest() {
 
     @Test
     fun `a closed window keeps its reopen date when the answer comes from the store`() {
-        // The reopen date used to be a by-product of the call that fetched: the
-        // same request twice said `closed_for_season` with a date and then
-        // without one. It is read from stored cells now, so a cache hit says
-        // what the fetch said.
         val fixture = checkFixture(status = AvailabilityStatus.CLOSED, reopensAfterWindow = true)
 
         val fetched = fixture.fusedWeek(siteTypes = emptyList())
@@ -101,8 +88,6 @@ class CampgroundCellCacheTest : SharedDbTest() {
 
     @Test
     fun `a filtered check is not told when another kind reopens`() {
-        // Cabins shut for the winter, tents open later in the fetch window: the
-        // cabin caller must be told nothing rather than told the tents' date.
         val fixture = checkFixture(status = AvailabilityStatus.CLOSED, reopensAfterWindow = true, reopeningKind = CampsiteKind.TENT)
 
         val cabins = fixture.fusedWeek(siteTypes = listOf(CampsiteKind.CABIN))
@@ -114,10 +99,6 @@ class CampgroundCellCacheTest : SharedDbTest() {
 
     @Test
     fun `a full window looks up no reopen date`() {
-        // `reserved` every night is full, not closed, and a full window shows no
-        // season block — so there is nothing to look up. The stay check reads
-        // mostly-full campgrounds and never renders a reopen date, so looking one
-        // up per POI would be a round trip per POI for an answer nobody reads.
         val fixture = checkFixture(status = AvailabilityStatus.RESERVED, reopensAfterWindow = true)
 
         val slice = fixture.slice(siteTypes = emptyList())
@@ -128,8 +109,6 @@ class CampgroundCellCacheTest : SharedDbTest() {
 
     @Test
     fun `a closed window stops reporting a reopen date nobody has looked at since`() {
-        // The stored AVAILABLE cell is older than this read's freshness cutoff,
-        // so it is not evidence that the campground reopens then.
         val fixture = checkFixture(status = AvailabilityStatus.CLOSED, reopensAfterWindow = true)
 
         val fresh = fixture.fusedWeek(siteTypes = emptyList())
@@ -164,8 +143,6 @@ class CampgroundCellCacheTest : SharedDbTest() {
         val clock = Clock.fixed(fixedNow, ZoneOffset.UTC)
         val dateResolver = AvailabilityDateResolver(PoiRepo(ctx))
         val windowStart = dateResolver.contextForPoi(TEST_POI_ID).earliestDate.plusDays(WINDOW_START_OFFSET_DAYS)
-        // Past the target window, inside the wider window the fetch covers:
-        // exactly the reach a reopen date is for.
         val reopenDate = windowStart.plusDays(WINDOW_LENGTH_DAYS + 3)
 
         val provider =
@@ -210,8 +187,6 @@ class CampgroundCellCacheTest : SharedDbTest() {
                     CampsiteAvailabilityService(
                         availabilityProviders = providers,
                         dateResolver = dateResolver,
-                        // The real fetcher, so the counted call is the one the
-                        // port actually makes.
                         failoverFetcher = FailoverAvailabilityFetcher(ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))),
                         bookingHorizons = BookingHorizonResolver(providers, dateResolver),
                         availabilityRepo = AvailabilityRepo(ctx),

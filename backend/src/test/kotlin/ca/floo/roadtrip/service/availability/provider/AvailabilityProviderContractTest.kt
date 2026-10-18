@@ -71,11 +71,6 @@ class AvailabilityProviderContractTest {
     @Test
     fun `every adapter answers for every campsite it is given, and keys every observation`() =
         runBlocking {
-            // The port's contract, the same for all five: base-unit facts over the
-            // campsites of the campground. An adapter that answered for fewer
-            // would leave the rest of the campground with no stored cell, and the
-            // next read would call the vendor again; one that returned a row it
-            // could not key would return something nothing above can store.
             for (case in portContractCases()) {
                 val batch =
                     case.provider.availability(
@@ -100,11 +95,6 @@ class AvailabilityProviderContractTest {
     @Test
     fun `aspira's occupancy path follows the campground's ref, not the campsites it is handed`() =
         runBlocking {
-            // The occupancy path is a capability of the campground — its ref names
-            // a resource location or it does not. It used to be chosen when the
-            // campsites the caller happened to pass all sat under one location, so
-            // the same campground took different paths, with different
-            // classifiers, depending on who asked.
             var occupancyFetches = 0
             var mapFetches = 0
             val client =
@@ -122,7 +112,6 @@ class AvailabilityProviderContractTest {
             val onOneLocation = listOf(aspiraContractCampsite(1, ASPIRA_REF_RESOURCE_LOCATION_ID))
             val onTwoLocations = onOneLocation + aspiraContractCampsite(2, 200)
 
-            // A ref with no resource location: the per-map path, whatever the list.
             for (campsites in listOf(onOneLocation, onTwoLocations)) {
                 adapter.availability(
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:null"),
@@ -133,7 +122,6 @@ class AvailabilityProviderContractTest {
             }
             assertEquals(0, occupancyFetches, "a campground whose ref names no resource location has no occupancy path")
 
-            // A ref that names one: the occupancy path, whatever the list.
             for (campsites in listOf(onOneLocation, onTwoLocations)) {
                 adapter.availability(
                     campground =
@@ -153,12 +141,6 @@ class AvailabilityProviderContractTest {
     @Test
     fun `aspira's occupancy answer is UNKNOWN for a resource it did not mention`() =
         runBlocking {
-            // The occupancy response enumerates the resources under the location
-            // it was asked about, so a target it does not mention was asked about
-            // and not mentioned. The campsites carry no location of their own to
-            // narrow the targets by: `AspiraCatalogCampsite.resourceLocationId`
-            // holds the resource id, in a different namespace from the location
-            // id on a campground's ref.
             val adapter =
                 AspiraAvailabilityProvider(
                     tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
@@ -248,10 +230,8 @@ class AvailabilityProviderContractTest {
 
 private val portContractDate: LocalDate = LocalDate.parse("2026-06-01")
 
-/** The resource location the test campground's own ref names. */
 private const val ASPIRA_REF_RESOURCE_LOCATION_ID = 100
 
-/** One vendor's adapter, a campground it claims, and the campsites of it. */
 private class PortContractCase(
     val label: String,
     val provider: AvailabilityProvider,
@@ -269,9 +249,6 @@ private fun portContractCases(): List<PortContractCase> =
     )
 
 private fun recgovPortCase(): PortContractCase {
-    // Only one of the two campsites is in the payload: the other is a catalog row
-    // the facility no longer lists, and "asked and not mentioned" is UNKNOWN —
-    // still a fact about a base unit.
     val client =
         object : RecGovAvailabilityClient {
             override suspend fun fetchMonth(

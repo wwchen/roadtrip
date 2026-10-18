@@ -52,7 +52,6 @@ class AspiraAvailabilityProvider(
             supportsInternalPolling = true,
             bookingHorizonDays = ASPIRA_BOOKING_HORIZON_DAYS,
             maxPollWindowDays = ASPIRA_MAX_POLL_WINDOW_DAYS,
-            // Per map, and a campground's campsites sit across sibling maps.
             coversCampgroundPerCall = false,
         )
 
@@ -93,13 +92,6 @@ class AspiraAvailabilityProvider(
                 parentMapId,
             )
         }
-        // The campground's own ref, and nothing else. This used to fall back to
-        // "the single distinct resource location across the campsites I was
-        // handed", which made the path a function of the caller's list: a list
-        // covering one location took the occupancy path, a wider one covering
-        // several fell to `fetchCatalog`'s per-map fetches and a different
-        // classifier, for the same campground and the same question. A capability
-        // gate has to be a property of the campground to mean anything.
         val resourceLocationId = aspiraRef.resourceLocationId?.let { intOrThrow("resourceLocationId", it) }
         return runWithErrorMapping {
             if (occupancyEnabled && resourceLocationId != null) {
@@ -107,11 +99,6 @@ class AspiraAvailabilityProvider(
                     scope = aspiraRef,
                     host = tenant.host,
                     resourceLocationId = resourceLocationId,
-                    // Every target: the occupancy response enumerates the
-                    // resources under this location, so a target it does not
-                    // mention was asked about and not mentioned, which is
-                    // UNKNOWN. The campsites carry no location of their own to
-                    // narrow by — see `AspiraCatalogCampsite.resourceLocationId`.
                     campsites = targets,
                     today = startDate,
                     days = ChronoUnit.DAYS.between(startDate, endDate).toInt(),
@@ -177,10 +164,6 @@ class AspiraAvailabilityProvider(
         }
 
         val observedAt = Instant.now()
-        // A campground's campsites can sit across sibling maps, and covering the
-        // campground means fetching all of them. They are independent calls, so
-        // the window costs one round trip's latency rather than one per map —
-        // the same shape rec.gov uses for its months.
         val dataByMap =
             coroutineScope {
                 targets
@@ -358,7 +341,6 @@ private fun daysBetween(
     endDate: LocalDate,
 ): Int = ChronoUnit.DAYS.between(startDate, endDate).toInt()
 
-/** A campground whose campsites resolve to nothing upstream: no base units to report. */
 private fun emptyBatch(
     scope: BookingProviderRef.Aspira,
     startDate: LocalDate,

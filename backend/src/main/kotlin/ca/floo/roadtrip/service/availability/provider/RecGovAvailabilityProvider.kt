@@ -24,7 +24,6 @@ import ca.floo.roadtrip.client.recgov.Campsite as RecGovCampsite
 
 private const val RECGOV_BOOKING_HORIZON_DAYS: Int = 180
 
-/** The widest window that never needs a fifth facility-month call; see the commit. */
 private const val RECGOV_MAX_POLL_WINDOW_DAYS: Int = 90
 
 class RecGovAvailabilityProvider(
@@ -49,10 +48,6 @@ class RecGovAvailabilityProvider(
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
         val recgovId = recgovIdOrThrow(campground)
-        // The facility-month payloads cover the campground whatever set out this
-        // call, so every campsite's cells are in them already. This map is how a
-        // vendor site id becomes a base unit; a site it has no entry for is a row
-        // we cannot key, and it is dropped rather than returned unkeyed.
         val campsiteIdByVendorId = campsites.associate { vendorSiteIdFor(it) to it.id }
         return runWithErrorMapping {
             fetchMonths(recgovId, campsiteIdByVendorId, startDate, endDate)
@@ -154,7 +149,6 @@ private fun monthsCovering(
     return out
 }
 
-/** Only sites that resolve to a campsite: an unkeyed row is not a base-unit fact. */
 private fun observationsFromCampsites(
     merged: Map<String, Map<String, String>>,
     dates: List<LocalDate>,

@@ -68,9 +68,6 @@ internal fun fusePoiWindow(
     val dayCount = ChronoUnit.DAYS.between(slice.startDate, slice.endDate).toInt()
     return FusedWindow(
         state = if (closedForSeason) AvailabilityWindowState.CLOSED_FOR_SEASON else AvailabilityWindowState.SUCCESS,
-        // Reduced over the campsites this slice answers for, from stored cells:
-        // a cabin-filtered read is never told when the tents reopen, and a read
-        // served from the store says the same as the one that fetched.
         season = slice.reopensOn().takeIf { closedForSeason },
         // One batch backs every campsite in a slice today, so its block is also
         // the stalest; the max keeps the rule right should the streams diverge.
