@@ -23,7 +23,9 @@ import java.time.temporal.ChronoUnit
 import ca.floo.roadtrip.client.recgov.Campsite as RecGovCampsite
 
 private const val RECGOV_BOOKING_HORIZON_DAYS: Int = 180
-private const val RECGOV_MAX_POLL_WINDOW_DAYS: Int = 60
+
+/** The widest window that never needs a fifth facility-month call; see the commit. */
+private const val RECGOV_MAX_POLL_WINDOW_DAYS: Int = 90
 
 class RecGovAvailabilityProvider(
     private val availabilityClient: RecGovAvailabilityClient,

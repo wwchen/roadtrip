@@ -120,8 +120,12 @@ request time is never served from a capture).
 ## Adapter design notes
 
 - `RecGovAvailabilityProvider` capabilities: `supportsInternalPolling = true`,
-  `bookingHorizonDays = 180`, `maxPollWindowDays = 60` (one month-shaped fetch
-  shape per tick, so a poll never fans out into ungoverned sub-calls).
+  `bookingHorizonDays = 180`, `maxPollWindowDays = 90`. 90 is the widest window
+  that never needs a fifth facility-month call: measured across every start date
+  in a year, 90 days asks for 4 months on 338 of them and 3 on the rest, while 91
+  needs a 5th on one date and 92 on four. It is also the reach a reopen date
+  needs, since a closed window's date is read from stored cells and a window is
+  stored as wide as the fetch that covered it.
 - `availability` merges the facility-month payloads and keys them by the
   campsites it was given, stamping `campsiteId` on every observation. A site in
   the payload that no campsite resolves to is dropped: an unkeyed row is not a
