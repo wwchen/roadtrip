@@ -104,6 +104,7 @@ git commit -m "refactor(availability): one type for a campsite's window of statu
 ```kotlin
 @Test fun `fusion and the stay summary agree on closed for season for one set of streams`()
 ```
+In `StaySummaryTest`, which owns the summary's classification.
 Both must classify the same streams the same way; today each re-derives it.
 
 - [ ] **Step 2: Run to verify it fails**
@@ -127,6 +128,7 @@ Existing assertions must not change — only how the fixtures build their input.
 - Delete: `backend/src/main/kotlin/ca/floo/roadtrip/model/availability/AvailabilityObservationBatch.kt`
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/provider/AvailabilityProvider.kt`, all five adapters in that package, `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/FailoverAvailabilityFetcher.kt`
 - Modify (the poller path holds the same type): `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/GroupFetchResult.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/CatalogAvailabilityBatcher.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/service/scheduler/jobs/AvailabilityPollExecutor.kt:84`, `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/AvailabilityRunService.kt:131`
+- Modify (test fixtures construct the old type): `backend/src/test/kotlin/ca/floo/roadtrip/fixtures/FakeAvailabilityProviderFixture.kt` and any sibling fixture that builds a batch — `grep -rln AvailabilityObservationBatch backend/src/test` is the list
 - Test: `backend/src/test/kotlin/ca/floo/roadtrip/service/availability/provider/AvailabilityProviderContractTest.kt`, `backend/src/test/kotlin/ca/floo/roadtrip/service/availability/FailoverAvailabilityFetcherTest.kt` (the error and cooldown paths keep their assertions; only the result's shape changes)
 
 **Interfaces:**
@@ -303,7 +305,7 @@ The reader asks the policy, calls the loader with the fetcher as its fetch, buil
 **Files:**
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/api/AvailabilityResponseMapper.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/PoiAvailabilityFusion.kt`
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/CampgroundWindowResponses.kt`
-- Move: `campsiteWindowStatuses`, `classifyStreamWindowState` and `StreamWindowState` from `service/api/AvailabilityResponseMapper.kt` into the response layer beside the model, so it has one home rather than two
+- Move: `campsiteWindowStatuses` only, from `service/api/AvailabilityResponseMapper.kt` into the response layer beside the model, updating `CampsiteStream.kt`'s import. `classifyStreamWindowState` and `StreamWindowState` stay where they are — the mapper uses them for its own window classification
 - Test: `backend/src/test/kotlin/ca/floo/roadtrip/service/availability/CampgroundWindowResponsesTest.kt`
 
 **Interfaces:**
