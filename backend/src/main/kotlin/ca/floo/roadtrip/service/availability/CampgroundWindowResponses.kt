@@ -39,7 +39,7 @@ internal fun CampgroundWindow.perCampsiteEnvelopes(): List<CampsiteEnvelope> {
         .distinct()
         .mapNotNull { streamsById[it] }
         .map { stream ->
-            val state = classifyObservedWindowState(stream.statuses, stream.observed)
+            val state = classifyStreamWindowState(stream.statuses)
             CampsiteEnvelope(
                 response =
                     availabilityResponseDto(
@@ -50,12 +50,7 @@ internal fun CampgroundWindow.perCampsiteEnvelopes(): List<CampsiteEnvelope> {
                             (0 until dayCount).map { offset ->
                                 dayClassificationFromCampsiteStatuses(
                                     date = window.startDate.plusDays(offset.toLong()).toString(),
-                                    statuses =
-                                        if (stream.observed[offset]) {
-                                            mapOf(stream.campsiteId to stream.statuses[offset])
-                                        } else {
-                                            emptyMap()
-                                        },
+                                    statuses = mapOf(stream.campsiteId to stream.statuses[offset]),
                                 )
                             },
                         state = state,

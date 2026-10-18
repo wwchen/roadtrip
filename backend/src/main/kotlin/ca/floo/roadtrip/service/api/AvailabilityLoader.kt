@@ -32,7 +32,7 @@ data class LoadedCells(
  * interval rows are fresh enough or a live upstream call is needed.
  */
 class AvailabilityLoader(
-    private val availabilityRepo: AvailabilityRepo?,
+    private val availabilityRepo: AvailabilityRepo,
     private val clock: Clock = Clock.systemUTC(),
 ) {
     data class CampsiteTarget(
@@ -53,13 +53,10 @@ class AvailabilityLoader(
         request: Request,
         fetch: suspend () -> FetchedObservations,
     ): LoadedCells {
-        val repo = availabilityRepo
-        if (repo == null || request.targets.isEmpty()) return fetchedCells(fetch(), request)
-
         val dates = datesInWindow(request.startDate, request.endDate)
         val dbIds = request.targets.map { it.dbId }.distinct()
         val required = requiredCells(dbIds, dates)
-        val cached = repo.readCurrent(dbIds, dates)
+        val cached = availabilityRepo.readCurrent(dbIds, dates)
         // Per cell, not per window: the store answers this request when every
         // cell it asked about has a current observation that is fresh enough.
         // The upstream call cannot be narrowed below a campground window behind
@@ -70,30 +67,12 @@ class AvailabilityLoader(
         }
 
         val fetched = fetch()
-        recordFetched(repo, request, fetched.observations)
+        recordFetched(request, fetched.observations)
 
-        val latest = repo.readCurrent(dbIds, dates)
-        return if (cellsOf(latest).containsAll(required)) {
-            storedCells(request, latest, hit = false, fetched = fetched)
-        } else {
-            fetchedCells(fetched, request)
-        }
+        return storedCells(request, availabilityRepo.readCurrent(dbIds, dates), hit = false, fetched = fetched)
     }
 
-    private fun fetchedCells(
-        fetched: FetchedObservations,
-        request: Request,
-    ): LoadedCells =
-        LoadedCells(
-            cells = fetched.observations.observations,
-            hit = false,
-            ageSeconds = 0,
-            ttlSeconds = effectiveTtlSeconds(request),
-            fetched = fetched,
-        )
-
     private fun recordFetched(
-        repo: AvailabilityRepo,
         request: Request,
         fetched: CampgroundObservations,
     ) {
@@ -129,7 +108,7 @@ class AvailabilityLoader(
                     )
             }
         }
-        repo.recordObservations(request.runId, observations)
+        availabilityRepo.recordObservations(request.runId, observations)
     }
 
     private fun storedCells(
@@ -156,9 +135,6 @@ class AvailabilityLoader(
 
     private fun observedAtByCell(rows: List<AvailabilityRepo.CurrentCell>): Map<AvailabilityCell, Instant> =
         rows.associate { AvailabilityCell(it.campsiteId, it.targetDate) to it.observedAt.toInstant() }
-
-    private fun cellsOf(rows: List<AvailabilityRepo.CurrentCell>): Set<AvailabilityCell> =
-        rows.mapTo(mutableSetOf()) { AvailabilityCell(it.campsiteId, it.targetDate) }
 
     private fun maxAgeSeconds(
         rows: List<AvailabilityRepo.CurrentCell>,

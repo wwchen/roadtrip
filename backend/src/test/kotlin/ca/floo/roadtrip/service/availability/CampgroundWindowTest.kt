@@ -78,7 +78,7 @@ class CampgroundWindowTest {
     }
 
     @Test
-    fun `an unobserved night ships no cell while the stream still reads unknown`() {
+    fun `every night of the window ships a cell, unknown where nothing was seen`() {
         val observations =
             listOf(
                 observation(LOW_ID, 0, AvailabilityStatus.AVAILABLE),
@@ -100,19 +100,20 @@ class CampgroundWindowTest {
                 .drop(1)
                 .toSet(),
         )
-        assertEquals(listOf(setOf(LOW_ID), emptySet(), setOf(LOW_ID)), days.map { it.cells.keys })
+        assertEquals(List(NIGHTS.toInt()) { setOf(LOW_ID) }, days.map { it.cells.keys })
+        assertEquals(AvailabilityStatus.UNKNOWN, days[1].cells.getValue(LOW_ID).status)
         assertEquals(AvailabilityStatus.UNKNOWN, days[1].status)
         assertEquals(AvailabilityStatus.UNKNOWN, days[2].cells.getValue(LOW_ID).status)
     }
 
     @Test
-    fun `a window the provider said nothing about reads empty, not success`() {
+    fun `a campsite the provider said nothing about ships unknown cells and reads success`() {
         val window = windowOver(listOf(campsite(LOW_ID)), observations = emptyList())
 
         val response = window.perCampsiteEnvelopes().single().response
 
-        assertEquals("empty", response.state)
-        assertTrue(response.availability.all { it.cells.isEmpty() })
+        assertEquals("success", response.state)
+        assertTrue(response.availability.all { it.cells.getValue(LOW_ID).status == AvailabilityStatus.UNKNOWN })
     }
 
     @Test

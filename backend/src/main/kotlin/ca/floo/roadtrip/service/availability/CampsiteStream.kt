@@ -11,7 +11,6 @@ import java.time.temporal.ChronoUnit
 internal data class CampsiteStream(
     val campsiteId: Long,
     val statuses: List<AvailabilityStatus>,
-    val observed: List<Boolean>,
 )
 
 internal fun streamsFor(
@@ -20,31 +19,23 @@ internal fun streamsFor(
     observations: List<CampsiteDayObservation>,
 ): List<CampsiteStream> {
     val observationsByCampsite = observations.groupBy { it.campsiteId }
-    val dayCount = ChronoUnit.DAYS.between(window.startDate, window.endDate).toInt()
     return campsites
         .map { it.id }
         .distinct()
         .sorted()
         .map { campsiteId ->
-            val campsiteObservations = observationsByCampsite[campsiteId].orEmpty()
-            val observedDates = campsiteObservations.mapTo(mutableSetOf()) { it.date }
             CampsiteStream(
                 campsiteId = campsiteId,
                 statuses =
                     campsiteWindowStatuses(
                         startDate = window.startDate,
                         endDate = window.endDate,
-                        observations = campsiteObservations,
+                        observations = observationsByCampsite[campsiteId].orEmpty(),
                     ),
-                observed = (0 until dayCount).map { offset -> window.startDate.plusDays(offset.toLong()) in observedDates },
             )
         }
 }
 
-/**
- * One campsite's window as a status per date: the latest observation for each
- * date, `UNKNOWN` where the campsite went unobserved.
- */
 internal fun campsiteWindowStatuses(
     startDate: LocalDate,
     endDate: LocalDate,
@@ -81,32 +72,14 @@ internal enum class StreamWindowState(
     ZERO_AVAILABLE("zero_available"),
 }
 
-/**
- * The same rule over one campsite's per-date statuses, where an unobserved date
- * is already `UNKNOWN` and so indistinguishable from an observed one.
- */
-internal fun classifyStreamWindowState(statuses: List<AvailabilityStatus>): StreamWindowState = windowState(statuses)
+private val successStatuses: Set<AvailabilityStatus> =
+    setOf(AvailabilityStatus.AVAILABLE, AvailabilityStatus.FIRST_COME, AvailabilityStatus.UNKNOWN)
 
-internal fun classifyObservedWindowState(
-    statuses: List<AvailabilityStatus>,
-    observed: List<Boolean>,
-): StreamWindowState = windowState(statuses.zip(observed) { status, seen -> status.takeIf { seen } })
-
-/** Null is a date nobody observed; the rollup of an observed date is never null. */
-private fun windowState(perDay: List<AvailabilityStatus?>): StreamWindowState {
-    if (perDay.all { it == null }) return StreamWindowState.EMPTY
-    val allObserved = perDay.all { it != null }
-    val anySuccess =
-        perDay.any {
-            it == null ||
-                it == AvailabilityStatus.AVAILABLE ||
-                it == AvailabilityStatus.FIRST_COME ||
-                it == AvailabilityStatus.UNKNOWN
-        }
-    return when {
-        allObserved && perDay.all { it == AvailabilityStatus.CLOSED } -> StreamWindowState.CLOSED_FOR_SEASON
-        anySuccess -> StreamWindowState.SUCCESS
-        allObserved && perDay.all { it == AvailabilityStatus.RESERVED } -> StreamWindowState.ZERO_AVAILABLE
+internal fun classifyStreamWindowState(statuses: List<AvailabilityStatus>): StreamWindowState =
+    when {
+        statuses.isEmpty() -> StreamWindowState.EMPTY
+        statuses.all { it == AvailabilityStatus.CLOSED } -> StreamWindowState.CLOSED_FOR_SEASON
+        statuses.any { it in successStatuses } -> StreamWindowState.SUCCESS
+        statuses.all { it == AvailabilityStatus.RESERVED } -> StreamWindowState.ZERO_AVAILABLE
         else -> StreamWindowState.SUCCESS
     }
-}

@@ -316,21 +316,6 @@ class AvailabilityLoaderTest : SharedDbTest() {
     }
 
     @Test
-    fun `a miss the store cannot complete hands back everything the vendor said`() {
-        val result =
-            runBlocking {
-                loader.load(request(targets = listOf(siteA)).copy(fetchEndDate = windowStart.plusDays(1))) {
-                    campgroundObservations(listOf(observation(siteA, windowStart), observation(siteB, windowStart)))
-                }
-            }
-
-        assertFalse(result.hit)
-        assertEquals(0, result.ageSeconds)
-        assertEquals(snapshotTtl.seconds, result.ttlSeconds)
-        assertEquals(setOf(siteA, siteB), result.cells.map { it.campsiteId }.toSet())
-    }
-
-    @Test
     fun `a window with one stale cell reports a miss, not a hit`() {
         seedStoredWindow(AvailabilityStatus.RESERVED, observedAt = fixedNow.minusSeconds(60))
         val staleDate = windowStart.plusDays(1)

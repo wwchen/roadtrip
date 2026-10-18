@@ -14,6 +14,7 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteKind
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
@@ -243,7 +244,7 @@ class CampsiteAvailabilityControllerWindowTest : SharedDbTest() {
                 providers = providers,
                 dateResolver = dateResolver,
                 failoverFetcher = CannedFetcher(),
-                availabilityRepo = null,
+                availabilityRepo = AvailabilityRepo(ctx),
             )
         val controller =
             CampsiteAvailabilityController(

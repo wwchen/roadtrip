@@ -46,6 +46,7 @@ class CampgroundAvailabilityReaderTest : SharedDbTest() {
     private lateinit var campground: Campground
     private lateinit var campsites: List<Campsite>
     private var poiId = 0L
+    private var catalogId = 0L
 
     @BeforeEach
     fun seed() {
@@ -62,6 +63,7 @@ class CampgroundAvailabilityReaderTest : SharedDbTest() {
             )
         ctx.seedCampsite(campgroundId = fixture.catalogId, vendorId = "svc-100")
         poiId = fixture.poiId
+        catalogId = fixture.catalogId
         campground = CampgroundRepo(ctx).findByPoi(fixture.poiId)!!
         campsites = CampsiteRepo(ctx).findByCampground(fixture.catalogId)
     }
@@ -73,7 +75,7 @@ class CampgroundAvailabilityReaderTest : SharedDbTest() {
         fetcher: FailoverAvailabilityFetcher = CapturingFetcher(),
         clock: Clock = Clock.systemUTC(),
         snapshotFreshnessTtl: (AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
-        availabilityRepo: AvailabilityRepo? = null,
+        availabilityRepo: AvailabilityRepo = AvailabilityRepo(ctx),
     ): CampgroundAvailabilityReader =
         testCampgroundReadPath(
             providers = providers,
@@ -153,7 +155,7 @@ class CampgroundAvailabilityReaderTest : SharedDbTest() {
 
     @Test
     fun `a campground-wide fetch is narrowed to the campsites the request named`() {
-        val unnamedCampsite = campsites.first().id + 1
+        val unnamedCampsite = ctx.seedCampsite(campgroundId = catalogId, vendorId = "svc-101")
         val fetcher = CapturingFetcher(alsoReportsCampsite = unnamedCampsite)
 
         val window =
@@ -165,7 +167,7 @@ class CampgroundAvailabilityReaderTest : SharedDbTest() {
     @Test
     fun `the model's streams cover the campsites the read answers for, and no others`() {
         val named = campsites.first()
-        val unnamed = campsites.first().copy(id = named.id + 1)
+        val unnamed = named.copy(id = ctx.seedCampsite(campgroundId = catalogId, vendorId = "svc-101"))
         val fetcher = CapturingFetcher(alsoReportsCampsite = unnamed.id)
 
         val window =

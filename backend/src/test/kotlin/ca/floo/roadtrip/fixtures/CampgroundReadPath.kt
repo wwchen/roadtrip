@@ -21,7 +21,7 @@ internal fun testCampgroundReadPath(
     providers: List<AvailabilityProvider>,
     dateResolver: AvailabilityDateResolver,
     failoverFetcher: FailoverAvailabilityFetcher,
-    availabilityRepo: AvailabilityRepo?,
+    availabilityRepo: AvailabilityRepo,
     clock: Clock = Clock.systemUTC(),
     snapshotFreshnessTtl: (AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
 ): CampgroundReadPath {

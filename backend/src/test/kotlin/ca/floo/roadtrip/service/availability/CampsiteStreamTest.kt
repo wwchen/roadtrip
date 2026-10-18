@@ -30,20 +30,6 @@ class CampsiteStreamTest {
     }
 
     @Test
-    fun `a stream records which of its nights were observed`() {
-        val observations =
-            listOf(
-                observation(SITE_LOW, 0, AvailabilityStatus.UNKNOWN),
-                observation(SITE_LOW, 2, AvailabilityStatus.RESERVED),
-            )
-
-        val stream = streamsFor(listOf(campsiteFixture(id = SITE_LOW)), window, observations).single()
-
-        assertEquals(listOf(true, false, true), stream.observed)
-        assertEquals(listOf(false, false, false), streamsFor(listOf(campsiteFixture(id = SITE_LOW)), window, emptyList()).single().observed)
-    }
-
-    @Test
     fun `statuses follow the window's dates in order`() {
         val observations =
             listOf(
