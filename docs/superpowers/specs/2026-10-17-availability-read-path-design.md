@@ -57,7 +57,7 @@ else gets a noun.
 | `poiAvailabilitySlice(...)` | `campgroundWindow(poiId, …)` | drops the poi/campsite collision in one name |
 | `catalogAvailability`, `catalogSites`, `AspiraCatalogCampsite` | drop "catalog" | a third word for "the campsites we know about" |
 | `lastReservableCount`, `observationsForReservable` | campsite | leftovers from the Reservable→Campsite rename (#407) |
-| `parentRef` / `scope` / `claimedRef` | `campgroundRef` | one campground identity at a vendor, not three |
+| `parentRef` / `scope` / `claimedRef` | `campgroundRef` | one campground identity at a vendor, not three — Kotlin side only: `availability_fetch_call.parent_ref` and `AvailabilityPollerSchema`'s `@SerialName("parent_ref")` are a column and a wire field and do not move |
 
 POI and campground stay distinct: a POI is a map pin that may have a campground,
 so `findByPoi` is honest.
@@ -101,9 +101,14 @@ Dependency direction is one-way: the response layer sees only the model, nothing
 above the loader knows SQL, and nothing below the controller knows what a request
 filtered to.
 
-The poller stays outside this. It keeps `PollerFetchPlan`, uses the fetcher, port
-and repo, and never touches the policy or the read model — a second writer into
-the same cells, not a second reader of the same model.
+The poller keeps its own policy: `PollerFetchPlan`, its own window, its own
+cadence. It never touches `AvailabilityReadPolicy` or `CampgroundWindow` — it is a
+second writer into the same cells, not a second reader of the same model. It does
+share the port and the fetcher, so when the port's return type changes the
+poller's path changes with it: `GroupFetchResult`, `CatalogAvailabilityBatcher`,
+`AvailabilityPollExecutor` and `AvailabilityRunService.writeObservations` all hold
+the old batch type today and move to `CampgroundObservations`. That is a type
+change, not a behaviour change, and it is in scope.
 
 ### The read model
 
@@ -117,6 +122,8 @@ internal data class CampgroundWindow(
     val campgroundCampsites: List<Campsite>,
     val campsites: List<Campsite>,
     val streams: List<CampsiteStream>,
+    val provider: BookingProvider,
+    val campgroundRef: BookingProviderRef?,
     val cache: AvailabilityCacheBlock,
     val pollingSupported: Boolean,
     val reopensOnByCampsite: Map<Long, LocalDate>,
@@ -127,6 +134,12 @@ Data only. Every derivation is a free function over it, so the model cannot grow
 behaviour and become the next god-object. `streams` is built once by the reader,
 which removes the four rebuildings of `campsiteWindowStatuses` that exist today
 (fusion, `staySummary`, the per-campsite envelopes, and the season-block gate).
+
+`provider` and `campgroundRef` are on the model because the wire needs them:
+`AvailabilityResponseDto` carries `provider` and `scope_ref`, which today come
+off the batch. The policy knows the serving provider typed, which is better than
+the string literal each adapter writes today, and the observations carry the
+campground's vendor ref.
 
 `campsites` is what this read answers for; `campgroundCampsites` is what the
 fetch covered. Both are needed: the first narrows every answer, the second is
@@ -209,7 +222,8 @@ is green on `make test` before the next starts.
 
 ## Non-goals
 
-- The poller's own path, beyond the renames it shares.
+- The poller's policy, window and cadence. Its *types* follow the port, per the
+  architecture note above.
 - `maxPollWindowDays` and the fetch-window policy's *values*: this moves where
   they are decided, not what they are.
 - ReserveAmerica's park matrix carrying sibling campgrounds' cells, which needs a

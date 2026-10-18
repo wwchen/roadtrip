@@ -92,6 +92,7 @@ git commit -m "refactor(availability): one type for a campsite's window of statu
 **Files:**
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/PoiAvailabilityFusion.kt`
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/StaySummary.kt`
+- Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/CampsiteAvailabilityController.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/BulkAvailabilityController.kt` — the call sites, which until Task 6 still hold a `PoiAvailabilitySlice` and must build `streams`, `cache` and `season` from it
 - Test: `backend/src/test/kotlin/ca/floo/roadtrip/service/availability/PoiAvailabilityFusionTest.kt`, `backend/src/test/kotlin/ca/floo/roadtrip/service/availability/StaySummaryTest.kt`
 
 **Interfaces:**
@@ -125,6 +126,7 @@ Existing assertions must not change — only how the fixtures build their input.
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/model/availability/CampgroundObservations.kt`
 - Delete: `backend/src/main/kotlin/ca/floo/roadtrip/model/availability/AvailabilityObservationBatch.kt`
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/provider/AvailabilityProvider.kt`, all five adapters in that package, `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/FailoverAvailabilityFetcher.kt`
+- Modify (the poller path holds the same type): `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/GroupFetchResult.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/CatalogAvailabilityBatcher.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/service/scheduler/jobs/AvailabilityPollExecutor.kt:84`, `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/AvailabilityRunService.kt:131`
 - Test: `backend/src/test/kotlin/ca/floo/roadtrip/service/availability/provider/AvailabilityProviderContractTest.kt`, `backend/src/test/kotlin/ca/floo/roadtrip/service/availability/FailoverAvailabilityFetcherTest.kt` (the error and cooldown paths keep their assertions; only the result's shape changes)
 
 **Interfaces:**
@@ -152,11 +154,11 @@ In the contract test, assert the port's return type carries no window, provider 
 
 - [ ] **Step 3: Introduce `CampgroundObservations` and change the port and five adapters to return it**
 
-Each adapter drops `provider = "..."`, `startDate`, `endDate`, `cacheBlock = directFetchCacheBlock()` and `campsiteId`; `scope` becomes `campgroundRef`. Delete `directFetchCacheBlock` from every adapter.
+Each adapter drops `provider = "..."`, `startDate`, `endDate`, `cacheBlock = directFetchCacheBlock()` and `campsiteId`; `scope` becomes `campgroundRef`. Delete `directFetchCacheBlock` from every adapter. `GroupFetchResult.batch` becomes `observations`, and `AvailabilityRunService.writeObservations` reads `result.observations.observations` — a type change only; it keeps filtering to the group's campsite ids.
 
-- [ ] **Step 4: Run the provider package's tests to verify they pass**
+- [ ] **Step 4: Run the provider package and the poll executor to verify they pass**
 
-Run: `./gradlew :backend:test --tests 'ca.floo.roadtrip.service.availability.provider.*' -x :backend:contractLedgerCheck`
+Run: `./gradlew :backend:test --tests 'ca.floo.roadtrip.service.availability.provider.*' --tests 'ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutorTest' -x :backend:contractLedgerCheck`
 
 - [ ] **Step 5: Commit**
 
@@ -259,12 +261,12 @@ The last is the Review Focus case. No DB: the policy is pure given its collabora
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/CampgroundWindow.kt`
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/CampgroundAvailabilityReader.kt`
 - Delete: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/PoiAvailabilitySlice.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/CampsiteAvailabilityService.kt`
-- Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/CampsiteAvailabilityController.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/BulkAvailabilityController.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/di/ServiceModule.kt`
+- Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/CampsiteAvailabilityController.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/BulkAvailabilityController.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/di/RouteModule.kt:275`
 - Test: `backend/src/test/kotlin/ca/floo/roadtrip/service/availability/CampgroundCellCacheTest.kt`, `backend/src/test/kotlin/ca/floo/roadtrip/service/availability/CampsiteAvailabilityControllerSliceTest.kt`
 
 **Interfaces:**
 - Consumes: `streamsFor` (1), `CampgroundObservations` (3), `LoadedCells` (4), `AvailabilityReadPolicy` (5).
-- Produces: `CampgroundWindow` exactly as the spec's read model block defines it, and
+- Produces: `CampgroundWindow` exactly as the spec's read model block defines it — including `provider: BookingProvider` from the policy and `campgroundRef: BookingProviderRef?` from the observations, which are what `AvailabilityResponseDto.provider` and `scope_ref` are built from — and
   ```kotlin
   internal class CampgroundAvailabilityReader(
       private val policy: AvailabilityReadPolicy,
@@ -288,7 +290,7 @@ Plus the two existing payoff tests, re-pointed at the model: a filtered read the
 
 - [ ] **Step 3: Implement `CampgroundWindow` and `CampgroundAvailabilityReader`; move the reopen-date lookup into the reader**
 
-The reader asks the policy, calls the loader with the fetcher as its fetch, builds streams once, looks up reopen dates for the campsites whose stream classifies `CLOSED_FOR_SEASON`, and returns the model. The controller resolves the POI, campsites and filter, then passes through. Wire both in `ServiceModule`.
+The reader asks the policy, calls the loader with the fetcher as its fetch, builds streams once, looks up reopen dates for the campsites whose stream classifies `CLOSED_FOR_SEASON`, and returns the model. The controller resolves the POI, campsites and filter, then passes through. Wire both in `RouteModule` where `CampsiteAvailabilityService` is built today.
 
 - [ ] **Step 4: Run the availability service tests to verify they pass**
 
@@ -301,6 +303,7 @@ The reader asks the policy, calls the loader with the fetcher as its fetch, buil
 **Files:**
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/api/AvailabilityResponseMapper.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/PoiAvailabilityFusion.kt`
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/service/availability/CampgroundWindowResponses.kt`
+- Move: `campsiteWindowStatuses`, `classifyStreamWindowState` and `StreamWindowState` from `service/api/AvailabilityResponseMapper.kt` into the response layer beside the model, so it has one home rather than two
 - Test: `backend/src/test/kotlin/ca/floo/roadtrip/service/availability/CampgroundWindowResponsesTest.kt`
 
 **Interfaces:**
@@ -334,6 +337,8 @@ The guard that exists today in `PoiAvailabilityFusionTest`, moved to the model's
 
 `poiAvailabilitySlice` → `campgroundWindow`; `parentRef`/`scope`/`claimedRef` → `campgroundRef`; `lastReservableCount` and `observationsForReservable` → campsite wording; drop "catalog" from `AspiraCatalogCampsite` and any `catalogSites` locals. `AvailabilityCell` and `AvailabilityRepo.CurrentCell` are PR 2's, not this one's.
 
+Kotlin identifiers only. `availability_fetch_call.parent_ref` is a column and `AvailabilityPollerSchema`'s `@SerialName("parent_ref")` is a wire field: both keep their names, so a renamed property carries the old `@SerialName`. Changing either is a migration or a wire break, and neither is in this PR.
+
 - [ ] **Step 2: Run the full suite to verify nothing changed**
 
 Run: `make test`
@@ -349,5 +354,5 @@ If any assertion had to change, revert that file from this commit and raise it a
 
 - `make test` green, `:backend:contractLedgerCheck` green, `make api-types` no diff.
 - `CampsiteAvailabilityService` and `PoiAvailabilitySlice` no longer exist.
-- `grep -rn "AvailabilityObservationBatch" backend/src` returns nothing.
+- `grep -rn "AvailabilityObservationBatch" backend/src` returns nothing, poller path included.
 - One PR against `master` (or against #803's branch if that has not merged), with the costs and any behaviour change named in the body.
