@@ -27,7 +27,6 @@ private const val UNSTUBBED_AVAILABILITY = "FakeAvailabilityProvider.availabilit
 /** One recorded [FakeAvailabilityProvider.availability] call. */
 data class FakeAvailabilityCall(
     val campground: Campground,
-    /** The campsites the call was asked to cover. */
     val campsites: List<Campsite>,
     val startDate: LocalDate,
     val endDate: LocalDate,
@@ -79,12 +78,6 @@ class FakeAvailabilityProvider(
     }
 }
 
-/**
- * What an adapter answers: one status per `(campsite, night)` for every campsite
- * the call was given, each keyed — the base-unit shape the port requires. Every
- * shipping adapter fetches its campground whatever the caller filtered to, so
- * this is also why a filtered read warms the whole campground.
- */
 fun campgroundBatch(
     call: FakeAvailabilityCall,
     provider: BookingProvider,

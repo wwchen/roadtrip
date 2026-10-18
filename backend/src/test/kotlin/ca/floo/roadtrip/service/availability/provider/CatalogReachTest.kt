@@ -12,11 +12,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import ca.floo.roadtrip.client.recgov.Campsite as RecGovCampsite
 
-/**
- * What a call is asked to cover, which is the vendor's own call shape: a vendor
- * that answers a campground per call covers it, and one that answers per part of
- * a campground is not asked to cover parts nobody needs.
- */
 class CatalogReachTest {
     @Test
     fun `a vendor that answers per campground part is not asked to cover the rest`() {
@@ -28,9 +23,6 @@ class CatalogReachTest {
             )
         val recgov = RecGovAvailabilityProvider(fakeMonthClient(emptyMap()), enabled = true)
 
-        // Aspira fetches per map, so covering a campground costs one call per
-        // sibling map; the campground-wide vendors answer the campground whatever
-        // they are handed.
         assertFalse(aspira.capabilities.coversCampgroundPerCall)
         assertTrue(recgov.capabilities.coversCampgroundPerCall)
     }

@@ -53,23 +53,6 @@ class AvailabilityRepo(
      * and contribute no transition. The count of transitions is the caller's
      * `snapshot_count`; the bookable subset feeds alert dispatch.
      *
-     * Three statements whatever the size: one read of the current row per cell,
-     * one bump of the cells that did not change, one insert of the runs that did.
-     * It used to be a SELECT plus a write *per observation*, which at a
-     * campground's whole window is thousands of round trips holding a pooled
-     * connection — the shape that put a stay check's write time in seconds.
-     *
-     * A cell named twice in one call is one observation of it: the latest
-     * `observedAt` wins. Two rows chained in the same instant would invent a
-     * status run nobody saw, and they cannot both chain off one current row.
-     *
-     * Two writers to the same cell can still both read the same current row and
-     * both chain a run onto it — a drawer read overlapping a poll tick, or two
-     * differently-filtered checks of one campground, which now cover the same
-     * cells rather than disjoint ones. The loser's row is redundant (it says what
-     * the winner just said, moments apart), so `ON CONFLICT DO NOTHING` drops it
-     * and reports no transition for it, rather than failing the write and with it
-     * a whole campground's request.
      */
     fun recordObservations(
         runId: Long?,
@@ -94,7 +77,6 @@ class AvailabilityRepo(
 
     private fun Observation.cell(): Pair<Long, LocalDate> = campsiteId to targetDate
 
-    /** One observation per cell: the latest the caller handed us. */
     private fun latestPerCell(observations: List<Observation>): Map<Pair<Long, LocalDate>, Observation> {
         val latest = LinkedHashMap<Pair<Long, LocalDate>, Observation>(observations.size)
         for (observation in observations) {
@@ -104,7 +86,6 @@ class AvailabilityRepo(
         return latest
     }
 
-    /** The current status-run of each cell, by cell; absent when the cell has none. */
     private fun currentStatusRuns(
         txn: DSLContext,
         observations: Collection<Observation>,
@@ -129,7 +110,6 @@ class AvailabilityRepo(
                     )
             }.toMap()
 
-    /** [seen] pairs a row id with when it was observed; one list, so the two cannot come apart. */
     private fun bumpObservedAt(
         txn: DSLContext,
         seen: List<Pair<Long, Instant>>,
@@ -148,12 +128,6 @@ class AvailabilityRepo(
             ).execute()
     }
 
-    /**
-     * Inserts one status run per changed cell, chained to the row the read above
-     * found current. Returns a transition only for the rows that actually landed:
-     * `ON CONFLICT DO NOTHING` drops a run whose predecessor another writer has
-     * already chained a successor onto.
-     */
     private fun insertStatusRuns(
         txn: DSLContext,
         changed: List<Observation>,
@@ -270,27 +244,6 @@ class AvailabilityRepo(
             }
     }
 
-    /**
-     * Per campsite, the earliest date from [from] on whose current observation
-     * says it is bookable, counting only cells observed at or after
-     * [freshAtOrAfter] — the stored-fact answer to "when does this reopen".
-     *
-     * A base-unit read: it says nothing about whose question it is. The caller
-     * passes the campsites its answer is about and reduces over them, which is
-     * why a reopen date survives a cache hit — it is a fact in the table, not a
-     * by-product of the call that happened to fetch.
-     *
-     * The freshness cutoff is the point. A reopen date is shown to a user as
-     * current, so a cell nobody has looked at since an earlier, wider window was
-     * fetched is not evidence of anything — the same rule
-     * [freshlyUnavailableDates] applies to the dates it blocks on. Without it an
-     * AVAILABLE cell stored weeks ago would keep being published as the date a
-     * campground reopens long after it filled.
-     *
-     * Reaches only as far as stored cells do: a window is stored as wide as the
-     * fetch that covered it, so a campground whose season starts past that has no
-     * answer here until a fetch reaches it.
-     */
     fun earliestBookableDates(
         campsiteIds: List<Long>,
         from: LocalDate,
@@ -556,7 +509,6 @@ class AvailabilityRepo(
 
 private const val DEFAULT_SUMMARY_WINDOW_HOURS: Int = 24 * 7
 
-/** The statuses that count as bookable, as the column stores them. One source: the enum. */
 private val bookableLiterals: Array<String> =
     AvailabilityStatus.entries
         .filter { it.isOnlineBookable }

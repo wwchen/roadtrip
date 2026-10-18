@@ -53,10 +53,6 @@ class ReserveAmericaAvailabilityProvider(
         val reserveAmericaRef = reserveAmericaRefOrThrow(campground)
         val tenant = tenantForRef(reserveAmericaRef)
         val data = fetch(tenant, reserveAmericaRef.parkId, startDate, endDate)
-        // One park matrix per call, so every campsite's cells are already in this
-        // response. The matrix can also carry sibling campgrounds of the park,
-        // whose cells we could key and store too — that needs a caller that knows
-        // those campgrounds, and is left alone here.
         val observations =
             campsites.flatMap { campsite ->
                 observationsForReservable(

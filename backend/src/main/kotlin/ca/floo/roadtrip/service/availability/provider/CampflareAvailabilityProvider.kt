@@ -54,8 +54,6 @@ class CampflareAvailabilityProvider(
                 .orEmpty()
                 .associateBy { it.campsiteId }
         val days = dates(startDate, endDate)
-        // One bulk call per campground, so every campsite's cells are already in
-        // this response.
         val observations =
             campsites.flatMap { campsite ->
                 observationsForReservable(

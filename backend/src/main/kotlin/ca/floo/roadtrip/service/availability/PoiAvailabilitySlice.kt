@@ -36,11 +36,6 @@ internal data class PoiAvailabilitySlice(
     val allCampsites: List<Campsite>,
     val campsites: List<Campsite>,
     val batch: AvailabilityObservationBatch?,
-    /**
-     * Per campsite of [campsites], the earliest stored date it is bookable.
-     * Empty for the campsites that are bookable inside the window — they have no
-     * reopening to report — and for a slice with no batch.
-     */
     val reopensOnByCampsite: Map<Long, LocalDate>,
     /**
      * Whether the campground's serving provider can be polled for openings. A
@@ -50,11 +45,6 @@ internal data class PoiAvailabilitySlice(
     val pollingSupported: Boolean,
 )
 
-/**
- * The slice's own reopen date: the earliest across the campsites it answers for.
- * Null when none of them has one stored, which is also what a window nobody has
- * fetched past looks like.
- */
 internal fun PoiAvailabilitySlice.reopensOn(): AvailabilitySeasonBlock? =
     campsites
         .mapNotNull { reopensOnByCampsite[it.id] }
@@ -82,8 +72,6 @@ internal fun PoiAvailabilitySlice.perCampsiteEnvelopes(): List<CampsiteEnvelope>
                         ),
                     pollingSupported = pollingSupported,
                     earliestDate = earliestDate,
-                    // This campsite's own date, not the campground's: the stream
-                    // is about one campsite, so its season block is too.
                     seasonBlock =
                         reopensOnByCampsite[campsite.id]?.let { AvailabilitySeasonBlock(reopensOn = it.toString()) },
                 ),

@@ -51,8 +51,6 @@ class ReserveCaliforniaAvailabilityProvider(
                 .flatMap { grid -> grid.statuses.map { (unitId, byDate) -> unitId to (grid.observedAt to byDate) } }
                 .toMap()
         val dates = dates(startDate, endDate)
-        // The grids come per facility id off the campground's ref, not per
-        // campsite, so every campsite's cells are already here.
         val observations =
             campsites.flatMap { campsite ->
                 val found = byUnit[campsite.reserveCaliforniaVendorId()]

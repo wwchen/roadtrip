@@ -289,6 +289,5 @@ class BookingAliasClaimTest {
         )
 }
 
-/** One campsite, so an adapter that shapes its fetch per campsite has something to ask about. */
 private val aliasClaimCampsite =
     campsiteFixture(id = 1, vendor = "aspira", vendorId = "1", bookingProvider = "aspira", bookingProviderRef = null)

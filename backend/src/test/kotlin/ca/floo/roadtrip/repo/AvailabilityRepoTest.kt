@@ -190,10 +190,6 @@ class AvailabilityRepoTest : SharedDbTest() {
 
     @Test
     fun `a cell named twice in one call is one observation, the latest`() {
-        // A batch can mention a cell twice — two payloads covering one day, a
-        // vendor repeating a resource. That is one observation of that cell, not
-        // a status run from one to the other: nothing was seen to change in the
-        // instant between them.
         val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val t1 = Instant.parse("2026-06-18T10:00:00Z")
@@ -218,17 +214,6 @@ class AvailabilityRepoTest : SharedDbTest() {
 
     @Test
     fun `a cell whose chain already has a successor is left alone, not failed`() {
-        // Two writers to one cell — a drawer read and a poll tick, or two
-        // differently-filtered checks of the same campground, which now cover
-        // the same cells — can both chain a new run onto the row they each read
-        // as current. The second one's row is redundant, not an error: it says
-        // what the first already said, moments apart. Failing the transaction
-        // would fail a whole campground's write, and with it the request.
-        //
-        // The state is built by hand because the window it opens in practice is
-        // a few milliseconds wide: `successor` is the row the other writer
-        // inserted, dated behind `current` so `current` is still the one this
-        // write picks up.
         val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val t1 = Instant.parse("2026-06-18T10:00:00Z")
@@ -299,10 +284,6 @@ class AvailabilityRepoTest : SharedDbTest() {
 
     @Test
     fun `earliestBookableDates ignores a cell nobody has observed lately`() {
-        // A reopen date is published to a user as current. An AVAILABLE cell left
-        // behind by an earlier, wider window is not evidence that the campground
-        // reopens then — the same rule freshlyUnavailableDates applies to the
-        // dates it blocks on.
         val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val longAgo = Instant.parse("2026-05-01T10:00:00Z")
@@ -323,9 +304,6 @@ class AvailabilityRepoTest : SharedDbTest() {
 
     @Test
     fun `earliestBookableDates reads the current row of a cell, not its history`() {
-        // The cell was bookable and is not any more: its chain still holds the
-        // AVAILABLE run, and reporting that as a reopening would publish a date
-        // the vendor has already withdrawn.
         val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val first = Instant.parse("2026-06-18T10:00:00Z")

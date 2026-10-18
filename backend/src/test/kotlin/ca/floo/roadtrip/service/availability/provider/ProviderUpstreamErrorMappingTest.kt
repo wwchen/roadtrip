@@ -206,6 +206,5 @@ class ProviderUpstreamErrorMappingTest {
     }
 }
 
-/** One campsite, so an adapter that shapes its fetch per campsite has something to ask about. */
 private val errorMappingCampsite =
     campsiteFixture(id = 1, vendor = "aspira", vendorId = "1", bookingProvider = "aspira", bookingProviderRef = null)

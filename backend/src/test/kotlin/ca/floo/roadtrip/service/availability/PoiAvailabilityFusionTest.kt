@@ -316,10 +316,6 @@ class PoiAvailabilityFusionTest {
 
     @Test
     fun `the week's reopen date ignores campsites the slice does not answer for`() {
-        // The direct guard on the reduction: a date held for a campsite outside
-        // `campsites` is not this answer's to report, however it got into the
-        // map. Reduce over `allCampsites` here and a cabin-filtered read starts
-        // reporting when the tents reopen.
         val slice =
             sliceOf(mapOf(1L to mapOf(windowStart to AvailabilityStatus.CLOSED)))
                 .copy(

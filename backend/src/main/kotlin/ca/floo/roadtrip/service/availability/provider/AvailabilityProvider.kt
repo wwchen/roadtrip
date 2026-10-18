@@ -59,44 +59,6 @@ interface AvailabilityProvider {
     fun parentRefFor(campground: Campground): BookingProviderRef? = claimedRef(campground)
 
     /**
-     * Per-day availability for the campground over the half-open window
-     * `[startDate, endDate)`, as base-unit facts: one observation per
-     * `(campsite, night)`, each carrying the DB id of the campsite it is about.
-     *
-     * [campsites] is the campsites of [campground] to cover — a campground-level
-     * set. Adapters use it to resolve their vendor's site ids to DB campsite ids
-     * (rec.gov's site ids, Aspira's resources) and to shape the fetch (Aspira's
-     * map ids). It is not a filter and no answer is narrowed by it: narrowing an
-     * answer is the caller's job, above this port, and an adapter that reduced
-     * over this list would be answering a question it cannot see.
-     *
-     * Both callers pass the campground's set. A read serving a request passes it
-     * whatever the request filtered to, because the upstream call covers the
-     * campground either way: pass less and the cells of the campsites the filter
-     * dropped are paid for and thrown away, and the next request calls the vendor
-     * again for a campground just called. The poller arrives here with the same
-     * list for a different reason — `DbAvailabilityTargetResolver.resolve(poller)`
-     * resolves a poller to its POI's campsites under its `(provider, parentRef)`
-     * group, so a watch scoped to one campsite still polls the catalog it sits
-     * in, which is what `poller fetches the full campground catalog even when a
-     * watch scopes one site` pins.
-     *
-     * Two rules follow from "base-unit facts", and both are the contract:
-     *
-     * - **Every observation names a campsite.** A vendor row an adapter cannot
-     *   resolve to one of [campsites] is not a fact about a base unit; it is
-     *   dropped, not returned with a null campsite id. Nothing above this port
-     *   can store or serve such a row.
-     * - **No answer-level derivation.** Whether a window is closed for the
-     *   season, when it reopens, how many sites a stay has — all of that is
-     *   derived above, from stored cells, by a caller that knows which campsites
-     *   its answer is about. An adapter that reduced over [campsites] would be
-     *   answering a question it cannot see.
-     *
-     * Call-shaping stays inside the adapter: one campground is one call here, but
-     * may be several upstream (rec.gov by facility-month, Aspira per map,
-     * ReserveAmerica a park matrix that can span sibling campgrounds).
-     *
      * @throws AvailabilityProviderError on upstream failure (rate limit, WAF block,
      *   5xx, parse error, or unsupported capability).
      */

@@ -93,9 +93,6 @@ internal class CampsiteAvailabilityController(
             availabilityService.fetchAvailability(
                 campground = campground,
                 campsites = campsites,
-                // The campground's own set, not the request's: one upstream call
-                // covers the campground, so every campsite's cells are stored and
-                // the next read of any of them needs no vendor call.
                 campgroundCampsites = allCampsites,
                 startDate = startDate,
                 endDate = endDate,

@@ -21,21 +21,6 @@ data class AvailabilityProviderCapabilities(
      * sub-calls. Zero means "don't poll" (unsupported stub).
      */
     val maxPollWindowDays: Int,
-    /**
-     * Whether one call to this vendor covers a campground, whichever of its
-     * campsites the caller names. True for a vendor whose response is the
-     * campground (rec.gov's facility-months, Campflare's bulk call,
-     * ReserveAmerica's park matrix, ReserveCalifornia's facility grids): a caller
-     * hands it the whole campground, every campsite's cells get stored, and the
-     * next read of any of them needs no call.
-     *
-     * False for a vendor that answers per part of a campground — Aspira fetches
-     * per map, and a campground's campsites sit across sibling maps. Covering the
-     * campground there means one call per map, so a caller that only needs some
-     * of them pays for the rest. Those callers hand such a vendor the campsites
-     * they need, which costs the next, wider read a fetch and is the trade the
-     * vendor's shape forces.
-     */
     val coversCampgroundPerCall: Boolean = true,
 ) {
     companion object {

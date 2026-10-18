@@ -87,12 +87,6 @@ internal fun availabilityResponseFromObservations(
     batch: AvailabilityObservationBatch,
     pollingSupported: Boolean,
     earliestDate: LocalDate,
-    /**
-     * Derived above from stored cells; the batch carries no answer-level fact.
-     * Required rather than defaulted to null: a caller that forgot it would
-     * silently drop the reopen date, which is the bug this stopped being a
-     * by-product of the fetch to fix.
-     */
     seasonBlock: AvailabilitySeasonBlock?,
 ): AvailabilityResponseDto {
     val perDay = dayClassificationsFromObservations(batch.startDate, batch.endDate, batch.observations)
