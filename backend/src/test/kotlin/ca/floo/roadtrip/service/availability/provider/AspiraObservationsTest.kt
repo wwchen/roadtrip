@@ -98,16 +98,25 @@ class AspiraObservationsTest {
             val batch =
                 provider.availability(
                     campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
+                    campsites =
+                        listOf(
+                            aspiraCampsite(
+                                BC_PARKS_TEST_CAMPSITE_ID,
+                                BC_PARKS_TEST_RESOURCE_ID,
+                                dataProviderRef =
+                                    DataProviderRef.BcParksCampsite(
+                                        tenant = "bc",
+                                        resourceLocationId = BC_PARKS_TEST_RESOURCE_ID.toLong(),
+                                    ),
+                            ),
+                        ),
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-02"),
                 )
 
-            // The map rows parse, but nothing names a campsite, so every
-            // observation stays unkeyed and no cell can be attributed to one.
             assertTrue(batch.observations.isNotEmpty())
-            assertTrue(batch.observations.all { it.campsiteId == null })
-            assertEquals(emptyMap(), batch.statusesOn(0))
-            assertEquals(emptyList(), batch.availableIdsOn(0))
+            assertEquals(setOf(BC_PARKS_TEST_CAMPSITE_ID), batch.observations.map { it.campsiteId }.toSet())
+            assertTrue(batch.observations.all { it.status == AvailabilityStatus.UNKNOWN })
         }
 
     @Test
@@ -179,7 +188,7 @@ class AspiraObservationsTest {
                     aspiraCampsite(4, "4"),
                 )
             val batch =
-                provider.catalogAvailability(
+                provider.availability(
                     campground = aspiraCampground("wa", -999),
                     campsites = campsites,
                     startDate = LocalDate.parse("2026-07-01"),
@@ -220,7 +229,7 @@ class AspiraObservationsTest {
                     aspiraCampsite(3, "3"),
                 )
             val batch =
-                provider.catalogAvailability(
+                provider.availability(
                     campground = aspiraCampground("pc", -999),
                     campsites = campsites,
                     startDate = LocalDate.parse("2026-07-09"),
@@ -274,7 +283,7 @@ class AspiraObservationsTest {
                     ),
                 )
             val batch =
-                provider.catalogAvailability(
+                provider.availability(
                     campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
                     campsites = campsites,
                     startDate = LocalDate.parse("2026-08-22"),
@@ -328,7 +337,7 @@ class AspiraObservationsTest {
                     ),
                 )
             val batch =
-                provider.catalogAvailability(
+                provider.availability(
                     campground = aspiraCampground("bc", ALICE_LAKE_PARENT_MAP_ID),
                     campsites = campsites,
                     startDate = LocalDate.parse("2026-08-22"),
@@ -366,7 +375,7 @@ class AspiraObservationsTest {
             val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
             val campsites = listOf(aspiraCampsite(100, "100"))
             val batch =
-                provider.catalogAvailability(
+                provider.availability(
                     campground = aspiraCampground("pc", -999),
                     campsites = campsites,
                     startDate = LocalDate.parse("2026-07-01"),
@@ -413,7 +422,7 @@ class AspiraObservationsTest {
                     aspiraCampsite(300, "300", DataProviderRef.AspiraCampsite(tenant = "pc", resourceLocationId = 300)),
                 )
             val batch =
-                provider.catalogAvailability(
+                provider.availability(
                     campground = aspiraCampground("pc", -999, resourceLocationId = -123),
                     campsites = campsites,
                     startDate = LocalDate.parse("2026-06-17"),

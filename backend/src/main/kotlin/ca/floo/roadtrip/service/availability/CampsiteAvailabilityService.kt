@@ -11,9 +11,8 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
-import ca.floo.roadtrip.service.api.StreamWindowState
 import ca.floo.roadtrip.service.api.campsiteWindowStatuses
-import ca.floo.roadtrip.service.api.classifyStreamWindowState
+import ca.floo.roadtrip.service.api.isClosedForSeason
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import java.time.Clock
 import java.time.Duration
@@ -126,7 +125,7 @@ internal class CampsiteAvailabilityService(
                             endDate = window.endDate,
                             observations = observationsByCampsite[campsite.id].orEmpty(),
                         )
-                    classifyStreamWindowState(statuses) == StreamWindowState.CLOSED_FOR_SEASON
+                    isClosedForSeason(statuses)
                 }.map { it.id }
         return repo.earliestBookableDates(closed, window.startDate, freshAtOrAfter)
     }

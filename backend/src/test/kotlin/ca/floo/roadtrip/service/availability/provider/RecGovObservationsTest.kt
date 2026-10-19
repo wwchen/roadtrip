@@ -59,7 +59,7 @@ class RecGovObservationsTest {
                 campsiteFixture(id = siteId.toLong(), vendor = "recgov", vendorId = siteId)
             }
         return runBlocking {
-            p.catalogAvailability(testCampground(), campsites, today, today.plusDays(days.toLong()))
+            p.availability(testCampground(), campsites, today, today.plusDays(days.toLong()))
         }
     }
 
@@ -69,7 +69,7 @@ class RecGovObservationsTest {
     ): AvailabilityObservationBatch =
         runBlocking {
             RecGovAvailabilityProvider(client, enabled = true)
-                .availability(testCampground(), today, today.plusDays(days.toLong()))
+                .availability(testCampground(), emptyList(), today, today.plusDays(days.toLong()))
         }
 
     private fun testCampground(): Campground =
@@ -248,7 +248,7 @@ class RecGovObservationsTest {
         val p = RecGovAvailabilityProvider(clientReturning(emptyMap()), enabled = true)
         val batch =
             runBlocking {
-                p.catalogAvailability(testCampground(), campsites, today, today.plusDays(1))
+                p.availability(testCampground(), campsites, today, today.plusDays(1))
             }
 
         assertEquals(AvailabilityStatus.UNKNOWN, batch.rollupOn(0))

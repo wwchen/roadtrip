@@ -551,6 +551,7 @@ private fun rankedSlice(poiId: Long): PoiAvailabilitySlice {
         allCampsites = campsites,
         campsites = campsites,
         batch = batchOf(observations),
+        reopensOnByCampsite = emptyMap(),
         pollingSupported = true,
     )
 }
@@ -567,6 +568,7 @@ private fun simpleSlice(poiId: Long): PoiAvailabilitySlice {
         allCampsites = listOf(campsite),
         campsites = listOf(campsite),
         batch = batchOf(observationsForRun(campsite.id, nights = 1)),
+        reopensOnByCampsite = emptyMap(),
         pollingSupported = true,
     )
 }
@@ -582,5 +584,6 @@ private fun noSitesSlice(poiId: Long): PoiAvailabilitySlice =
         allCampsites = emptyList(),
         campsites = emptyList(),
         batch = null,
+        reopensOnByCampsite = emptyMap(),
         pollingSupported = true,
     )

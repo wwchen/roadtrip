@@ -179,7 +179,7 @@ class FailoverAvailabilityFetcherTest {
         clock: FakeClock,
     ): FailoverAvailabilityFetcher = FailoverAvailabilityFetcher(cooldowns = tracker, clock = { clock.now })
 
-@Test
+    @Test
     fun `each candidate is handed the campsites its own call shape can cover`() =
         runBlocking {
             val clock = FakeClock()
@@ -224,7 +224,13 @@ class FailoverAvailabilityFetcherTest {
 
             val result =
                 withTimeoutOrNull(CALLER_TIMEOUT_MS) {
-                    fetcherWith(trackerWith(clock), clock).fetch(listOf(stalled, next), testCampground, listOf(campsite(1L)), window)
+                    fetcherWith(trackerWith(clock), clock)
+                        .fetch(
+                            providers = listOf(stalled, next),
+                            campground = testCampground,
+                            campsites = listOf(campsite(1L)),
+                            window = window,
+                        )
                 }
 
             assertNull(result)
@@ -242,7 +248,13 @@ class FailoverAvailabilityFetcherTest {
 
             val result =
                 withTimeoutOrNull(CALLER_TIMEOUT_MS) {
-                    fetcherWith(trackerWith(clock), clock).fetch(listOf(stalled), testCampground, listOf(campsite(1L)), window)
+                    fetcherWith(trackerWith(clock), clock)
+                        .fetch(
+                            providers = listOf(stalled),
+                            campground = testCampground,
+                            campsites = listOf(campsite(1L)),
+                            window = window,
+                        )
                 }
 
             assertNull(result, "an OTHER attempt would have answered; the cancellation should have")
