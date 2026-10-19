@@ -20,7 +20,7 @@ buildscript {
         classpath("org.testcontainers:postgresql:1.21.4")
         classpath("org.flywaydb:flyway-core:13.2.0")
         classpath("org.flywaydb:flyway-database-postgresql:13.2.0")
-        classpath("org.postgresql:postgresql:42.7.13")
+        classpath("org.postgresql:postgresql:42.7.14")
     }
 }
 
@@ -28,14 +28,14 @@ plugins {
     application
     kotlin("jvm")
     kotlin("plugin.serialization")
-    id("io.ktor.plugin") version "3.5.2"
-    id("org.flywaydb.flyway") version "13.4.0"
+    id("io.ktor.plugin") version "3.6.0"
+    id("org.flywaydb.flyway") version "13.10.3"
     id("nu.studer.jooq") version "10.2.1"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
     id("dev.detekt") version "2.0.0-alpha.6"
     // Line/branch coverage. `./gradlew :backend:koverXmlReport` produces the XML the
     // CI job uploads to Codecov.
-    id("org.jetbrains.kotlinx.kover") version "0.9.9"
+    id("org.jetbrains.kotlinx.kover") version "0.9.11"
 }
 
 ktlint {
@@ -115,18 +115,18 @@ repositories {
     mavenCentral()
 }
 
-val ktorVersion = "3.5.2"
-val jooqVersion = "3.21.7"
-val postgresVersion = "42.7.13"
+val ktorVersion = "3.6.0"
+val jooqVersion = "3.21.9"
+val postgresVersion = "42.7.14"
 val flywayVersion = "13.2.0"
 val testcontainersVersion = "1.21.4"
 val bucket4jVersion = "8.10.1"
 val timeshapeVersion = "2026b.29"
-val resendVersion = "4.22.0"
-val nimbusJoseVersion = "10.9.1"
+val resendVersion = "4.28.0"
+val nimbusJoseVersion = "10.10"
 val junitVersion = "6.1.3"
 val koinVersion = "4.2.2"
-val playwrightVersion = "1.62.0"
+val playwrightVersion = "1.63.0"
 val backendImageName = "roadtrip/backend"
 val backendPort = 8765
 
@@ -187,7 +187,7 @@ dependencies {
     implementation("io.ktor:ktor-client-core:$ktorVersion")
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
-    implementation("ch.qos.logback:logback-classic:1.6.3")
+    implementation("ch.qos.logback:logback-classic:1.6.5")
     // JSON log encoder that emits the fully-formatted message (SLF4J {}
     // placeholders interpolated). Replaces Logback's built-in JsonEncoder,
     // which logged the raw pattern + a separate arguments array. 8.x targets
@@ -200,7 +200,7 @@ dependencies {
     // version the agent embeds: opentelemetry-instrumentation-bom 2.29.0
     // (OTEL_JAVAAGENT_VERSION in the Dockerfile) imports opentelemetry-bom
     // 1.63.0. Bump both together.
-    implementation("io.opentelemetry:opentelemetry-api:1.65.0")
+    implementation("io.opentelemetry:opentelemetry-api:1.67.0")
 
     // Self-documenting /api/docs at runtime from Ktor's routing tree.
     implementation("io.ktor:ktor-server-swagger:$ktorVersion")
@@ -246,8 +246,8 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     // In-memory metric reader, so OtelRoadtripMetricsTest can assert the exact
     // instrument names and attributes the dashboards and alert rules query.
-    testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.65.0")
-    testImplementation("io.opentelemetry:opentelemetry-sdk-testing:1.65.0")
+    testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.67.0")
+    testImplementation("io.opentelemetry:opentelemetry-sdk-testing:1.67.0")
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
     testImplementation("io.ktor:ktor-client-cio:$ktorVersion")
     // MockEngine lets SlackNotifier / AvailabilityClient tests assert request
