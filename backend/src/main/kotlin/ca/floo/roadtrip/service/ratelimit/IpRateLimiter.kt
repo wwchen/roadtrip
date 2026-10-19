@@ -4,6 +4,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 private const val MILLIS_PER_MINUTE = 60_000.0
+private const val TOKENS_PER_CALL = 1.0
 
 // Keys are unauthenticated caller IPs, so the map has to be bounded. A bucket
 // left untouched long enough to refill completely is indistinguishable from a
@@ -29,8 +30,8 @@ class IpRateLimiter(
     private val nowMs: () -> Long = System::currentTimeMillis,
 ) {
     private class Bucket(
-        var tokens: Double,
-        var lastRefillMs: Long,
+        val tokens: Double,
+        val lastRefillMs: Long,
     )
 
     private val buckets = ConcurrentHashMap<String, Bucket>()
@@ -40,22 +41,16 @@ class IpRateLimiter(
     fun allow(key: String): Boolean {
         val now = nowMs()
         evictStale(now)
-        val bucket =
-            buckets.compute(key) { _, existing ->
-                val b = existing ?: Bucket(perMinute.toDouble(), now)
-                val delta = now - b.lastRefillMs
-                b.tokens = (b.tokens + delta * refillPerMs).coerceAtMost(perMinute.toDouble())
-                b.lastRefillMs = now
-                b
-            }!!
-        return synchronized(bucket) {
-            if (bucket.tokens >= 1.0) {
-                bucket.tokens -= 1.0
-                true
-            } else {
-                false
-            }
+        var granted = false
+        buckets.compute(key) { _, existing ->
+            val previous = existing ?: Bucket(perMinute.toDouble(), now)
+            val delta = now - previous.lastRefillMs
+            val refilled =
+                (previous.tokens + delta * refillPerMs).coerceAtMost(perMinute.toDouble())
+            granted = refilled >= TOKENS_PER_CALL
+            Bucket(if (granted) refilled - TOKENS_PER_CALL else refilled, now)
         }
+        return granted
     }
 
     private fun evictStale(now: Long) {
@@ -68,8 +63,10 @@ class IpRateLimiter(
         }
         val last = lastSweepMs.get()
         if (now - last < SWEEP_INTERVAL_MS || !lastSweepMs.compareAndSet(last, now)) return
-        buckets.entries.removeIf { entry ->
-            synchronized(entry.value) { now - entry.value.lastRefillMs >= IDLE_EVICT_MS }
+        for (key in buckets.keys) {
+            buckets.computeIfPresent(key) { _, bucket ->
+                if (now - bucket.lastRefillMs >= IDLE_EVICT_MS) null else bucket
+            }
         }
     }
 }
