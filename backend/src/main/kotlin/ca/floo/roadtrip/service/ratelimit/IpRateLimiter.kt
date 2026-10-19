@@ -31,8 +31,8 @@ class IpRateLimiter(
     private val nowMs: () -> Long = System::currentTimeMillis,
 ) {
     private class Bucket(
-        var tokens: Double,
-        var lastRefillMs: Long,
+        val tokens: Double,
+        val lastRefillMs: Long,
     )
 
     private val buckets = ConcurrentHashMap<String, Bucket>()
@@ -47,22 +47,16 @@ class IpRateLimiter(
         require(cost in 1..perMinute) { "a call costs between 1 and the bucket's $perMinute tokens (got $cost)" }
         val now = nowMs()
         evictStale(now)
-        val bucket =
-            buckets.compute(key) { _, existing ->
-                val b = existing ?: Bucket(perMinute.toDouble(), now)
-                val delta = now - b.lastRefillMs
-                b.tokens = (b.tokens + delta * refillPerMs).coerceAtMost(perMinute.toDouble())
-                b.lastRefillMs = now
-                b
-            }!!
-        return synchronized(bucket) {
-            if (bucket.tokens >= cost) {
-                bucket.tokens -= cost
-                true
-            } else {
-                false
-            }
+        var granted = false
+        buckets.compute(key) { _, existing ->
+            val previous = existing ?: Bucket(perMinute.toDouble(), now)
+            val delta = now - previous.lastRefillMs
+            val refilled =
+                (previous.tokens + delta * refillPerMs).coerceAtMost(perMinute.toDouble())
+            granted = refilled >= cost
+            Bucket(if (granted) refilled - cost else refilled, now)
         }
+        return granted
     }
 
     private fun evictStale(now: Long) {
@@ -75,8 +69,10 @@ class IpRateLimiter(
         }
         val last = lastSweepMs.get()
         if (now - last < SWEEP_INTERVAL_MS || !lastSweepMs.compareAndSet(last, now)) return
-        buckets.entries.removeIf { entry ->
-            synchronized(entry.value) { now - entry.value.lastRefillMs >= IDLE_EVICT_MS }
+        for (key in buckets.keys) {
+            buckets.computeIfPresent(key) { _, bucket ->
+                if (now - bucket.lastRefillMs >= IDLE_EVICT_MS) null else bucket
+            }
         }
     }
 }
