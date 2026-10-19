@@ -14,7 +14,7 @@ internal class StayAnswerLedger(
         index: Int,
         send: () -> Unit,
     ) = lock.withLock {
-        if (!answered[index]) {
+        if (!finished && !answered[index]) {
             send()
             answered[index] = true
         }
