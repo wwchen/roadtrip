@@ -8,6 +8,13 @@ import java.time.Duration
  */
 data class StayCheckConfig(
     val maxPois: Int,
+    /**
+     * How many POIs of **one** check are read at a time — its vendor calls in
+     * flight, paced so a [maxPois]-POI check does not reach every provider at
+     * once, and so [perPoiTimeout] clocks a read that has actually started.
+     * Per check, not per process: concurrent checks each get their own bound,
+     * and nothing caps how many run at once.
+     */
     val fanOutConcurrency: Int,
     /**
      * How old a stored observation may be and still answer, rather than asking the
@@ -68,10 +75,6 @@ data class StayCheckConfig(
     companion object {
         private const val DEFAULT_MAX_POIS = 50
 
-        // Must stay below db.max-pool-size (currently DbConfig.DEFAULT_MAX_POOL_SIZE = 4):
-        // each concurrent POI can hold a pooled connection through
-        // AvailabilityRepo.recordObservations, so fan-out at or above the pool size
-        // guarantees Hikari connection-acquisition timeouts.
         private const val DEFAULT_FAN_OUT_CONCURRENCY = 3
         private const val DEFAULT_MAX_AGE_HOURS = 2L
 

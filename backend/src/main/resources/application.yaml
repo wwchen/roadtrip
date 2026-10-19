@@ -24,9 +24,11 @@ roadtrip:
       # The stay check is the one read that can turn one request into many
       # upstream calls, so each bound is stated here rather than compiled in.
       max-pois: 50
-      # Must stay below db.max-pool-size (currently 4, unset anywhere so it's
-      # the DbConfig default) — each concurrent POI can hold a pooled
-      # connection through AvailabilityRepo.recordObservations.
+      # Campgrounds of one check read at a time: its vendor calls in flight.
+      # Per check, not per process — concurrent checks are not capped, and the
+      # db pool is not what this bounds (a POI read holds no connection across
+      # its vendor call, and an over-subscribed pool queues inside
+      # db.connection-timeout rather than failing).
       fan-out-concurrency: 3
       # How old a stored observation may be and still answer: the age a request
       # gets when it names none, and the ceiling of what it may ask for.
