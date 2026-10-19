@@ -68,7 +68,7 @@ fun main(args: Array<String>) {
             .mapTo(HashSet()) { Triple(it[METHOD_FIELD], it[PATH_FIELD], it[STATUS_FIELD]) }
     val unexercised =
         ApiContract.endpoints
-            .filter { it.success.body != null }
+            .filter { it.success.body != null || it.success.isEventStream }
             .filterNot {
                 Triple(it.method.wireValue, it.path, it.success.status.toString()) in produced
             }.map { "${it.method.wireValue} ${it.path} (${it.success.status})" }

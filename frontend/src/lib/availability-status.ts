@@ -4,6 +4,7 @@
 // place that maps the wire values to display strings.
 
 import type { AvailabilityStatus } from '@/api/generated/api-types';
+import { entryOf } from '@/lib/entry-of';
 
 export type { AvailabilityStatus };
 
@@ -80,9 +81,7 @@ const STATUS_META: Readonly<Record<AvailabilityStatus, Readonly<AvailabilityStat
  */
 export function normalizeAvailabilityStatus(raw: unknown): AvailabilityStatus {
   const value = String(raw || '').toLowerCase();
-  return Object.prototype.hasOwnProperty.call(STATUS_META, value)
-    ? (value as AvailabilityStatus)
-    : 'unknown';
+  return entryOf(STATUS_META, value) ? (value as AvailabilityStatus) : 'unknown';
 }
 
 export function availabilityStatusMeta(raw: unknown): Readonly<AvailabilityStatusMeta> {

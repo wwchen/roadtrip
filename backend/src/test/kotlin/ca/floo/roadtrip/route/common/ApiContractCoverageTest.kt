@@ -42,7 +42,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The endpoint count the plan fixed for this phase; a row added or dropped is a deliberate change. Includes the two campground routes. */
+/** The endpoint count the plan fixed for this phase; a row added or dropped is a deliberate change. Includes the two campground routes and the stay check. */
 private const val CONTRACT_ROW_COUNT = 48
 
 /** The first and last status any HTTP response can carry, and the last 2xx. */
@@ -165,6 +165,13 @@ class ApiContractCoverageTest {
 
     @Test
     fun `the contract declares every row the plan fixed`() = assertEquals(CONTRACT_ROW_COUNT, ApiContract.endpoints.size)
+
+    @Test
+    fun `the stay check is one row at its own path, and neither old bulk path is a row`() {
+        val paths = ApiContract.endpoints.map { it.path }
+        assertEquals(1, paths.count { it == "/api/pois/availability/stays" })
+        assertEquals(emptyList(), paths.filter { it.startsWith("/api/pois/availability/bulk") })
+    }
 
     @Test
     fun `no contract row is declared twice`() {

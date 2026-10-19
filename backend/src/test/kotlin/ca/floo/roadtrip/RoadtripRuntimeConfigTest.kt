@@ -109,7 +109,7 @@ class RoadtripRuntimeConfigTest {
     }
 
     @Test
-    fun `the shipped availability yaml states the campsite limit beside the bulk one`() {
+    fun `the shipped availability yaml states the campsite limit beside the stay check's`() {
         assertEquals(
             30,
             AppConfig

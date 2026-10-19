@@ -34,6 +34,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** The one row whose 200 is an event stream. */
+private const val STAY_STREAM = "/api/pois/availability/stays"
+
 private const val WATCHES = "/api/watches"
 private const val WATCH_DELETE = "/api/watches/{id}/delete"
 private const val FORCE_POLLER = "/api/availability/pollers/{id}/force"
@@ -93,6 +96,29 @@ class OpenApiContractDocumentTest {
         assertEquals("${SCHEMA_PREFIX}CheckNowCooldownDto", schemaRef(responses.getValue("429")))
         assertEquals("${SCHEMA_PREFIX}CheckNowResponseDto", schemaRef(responses.getValue("200")))
         assertEquals(API_ERROR_REF, schemaRef(responses.getValue("404")))
+    }
+
+    @Test
+    fun `an event stream is published as text-event-stream, its events named and their data schemas listed`() {
+        val doc = applied(STAY_STREAM to PathItem(post = Operation()))
+        val ok = responses(doc, STAY_STREAM, "post").getValue("200").jsonObject
+        val content = ok.getValue("content").jsonObject
+
+        assertNull(content["application/json"], "the 200 is a stream, not a JSON body")
+        val oneOf =
+            content
+                .getValue("text/event-stream")
+                .jsonObject
+                .getValue("schema")
+                .jsonObject
+                .getValue("oneOf")
+                .jsonArray
+        assertEquals(
+            listOf("#/components/schemas/StayAnswerDto", "#/components/schemas/StayCheckDoneDto"),
+            oneOf.map { schemaRefOf(it) },
+        )
+        val description = ok.getValue("description").jsonPrimitive.content
+        assertTrue("`answer`" in description && "`done`" in description, description)
     }
 
     @Test

@@ -1,5 +1,5 @@
 import { StrictMode, type ReactNode } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import { AppProviders } from './AppProviders';
 import { initSandboxChrome } from './sandbox/sandbox-chrome';
 import { installIconSprite } from '@ui/icon-sprite';
@@ -50,7 +50,7 @@ function logUnhandledRejections(): void {
  * is looked up: it belongs to the document rather than to any page, and a glyph
  * that renders before it lands keeps the href it was given.
  */
-export function mountPage(node: ReactNode): void {
+export function mountPage(node: ReactNode): Root | null {
   logUnhandledRejections();
   installIconSprite();
   initSandboxChrome();
@@ -59,11 +59,13 @@ export function mountPage(node: ReactNode): void {
   const el = document.getElementById(ROOT_ELEMENT_ID);
   if (!el) {
     console.error(`page shell has no #${ROOT_ELEMENT_ID} element; nothing was mounted`);
-    return;
+    return null;
   }
-  createRoot(el).render(
+  const root = createRoot(el);
+  root.render(
     <StrictMode>
       <AppProviders>{node}</AppProviders>
     </StrictMode>,
   );
+  return root;
 }

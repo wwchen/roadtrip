@@ -262,7 +262,7 @@ map id from each campsite's own `booking_provider_ref` (falling back to the
 campground's) and fetches each distinct map once; reading the campground's map
 id alone left 56 of Alice Lake's 110 sites with no data at all.
 
-Used for: drawer week grid, bulk score endpoint, alert poller. Called
+Used for: drawer week grid, the stay check, alert poller. Called
 at request time by `AspiraAvailabilityClient`; not captured by an
 ETL fetcher. The reservable catalog comes from
 `/api/resourcelocation/resources` instead — `resourceAvailabilities`

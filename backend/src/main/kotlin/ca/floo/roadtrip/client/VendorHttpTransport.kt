@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.client
 
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.future.await
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -50,6 +52,9 @@ internal object VendorHttpTransport {
             try {
                 httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).await()
             } catch (e: Exception) {
+                // A caller that timed out or went away gets its cancellation back, not
+                // this vendor's failure — a deadline above relies on it to land.
+                currentCoroutineContext().ensureActive()
                 throw fail("$vendor request failed: ${e.javaClass.name}: ${e.message}", null, e)
             }
         if (response.statusCode() !in successStatus) {

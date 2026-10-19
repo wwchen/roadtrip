@@ -2,22 +2,33 @@ package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.model.api.ApiErrorSchema
 import ca.floo.roadtrip.model.api.BuildInfoDto
+import ca.floo.roadtrip.model.api.StayAnswerDto
+import ca.floo.roadtrip.model.api.StayCheckDoneDto
+import ca.floo.roadtrip.model.api.StayCheckOutcome
+import ca.floo.roadtrip.model.api.StayFailureReason
+import ca.floo.roadtrip.model.api.StayOutcome
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.encodeApiJson
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.respondEventStream
 import io.ktor.client.request.get
 import io.ktor.client.request.post
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.call
 import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.path
+import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.sse.SSEServerContent
 import io.ktor.server.testing.testApplication
+import io.ktor.sse.ServerSentEvent
+import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -29,6 +40,10 @@ private const val GEOCODE = "/api/geocode"
 
 /** The one row that declares nothing at all at 400, so a `StatusPages` 400 on it is undeclared. */
 private const val SLACK_INTERACTIVITY = "/api/slack/interactivity"
+
+/** A row whose 200 is an event stream of `answer` and `done`. */
+private const val STAY_STREAM = "/api/pois/availability/stays"
+private const val STREAM_HEARTBEAT_SECONDS = 15L
 
 /** A body shaped like `HealthResponseDto`, which is not the class the `/api/build-info` row names. */
 private const val WRONG_DTO_BODY = """{"status":"ok","now":17}"""
@@ -255,6 +270,83 @@ class ContractBodyCheckTest {
             }
             assertDrifted(client.get(BUILD_INFO).status)
             violation("GET $BUILD_INFO -> 400", "declares no body")
+        }
+
+    @Test
+    fun `a stream of the events the row declares passes, and counts as exercised`() =
+        testApplication {
+            application {
+                routeTestApplication(fixture = true) {
+                    post(STAY_STREAM) {
+                        call.respondEventStream(Duration.ofSeconds(STREAM_HEARTBEAT_SECONDS)) {
+                            val failed =
+                                StayAnswerDto(
+                                    poiId = 1,
+                                    outcome = StayOutcome.FAILED,
+                                    reason = StayFailureReason.RATE_LIMITED,
+                                    retryable = true,
+                                )
+                            send(StayAnswerDto.EVENT, StayAnswerDto.serializer(), failed)
+                            val done = StayCheckDoneDto(outcome = StayCheckOutcome.COMPLETE)
+                            send(StayCheckDoneDto.EVENT, StayCheckDoneDto.serializer(), done)
+                        }
+                    }.access(RouteAccess.Anonymous)
+                }
+            }
+            val response = client.post(STAY_STREAM)
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertTrue(response.bodyAsText().contains("rate_limited"))
+        }
+
+    /**
+     * A stream's status is on the wire before its events are, so drift in one
+     * cannot be rewritten to [CONTRACT_DRIFT_STATUS]: it is recorded, and the
+     * ledger gate fails the build on it.
+     */
+    @Test
+    fun `an event the row does not declare is recorded as drift`() =
+        testApplication {
+            application {
+                routeTestApplication(fixture = true) {
+                    post(STAY_STREAM) {
+                        call.respond(SSEServerContent(call) { send(ServerSentEvent(data = "{}", event = "surprise")) })
+                    }.access(RouteAccess.Anonymous)
+                }
+            }
+            client.post(STAY_STREAM).bodyAsText()
+            violation("POST $STAY_STREAM -> 200", "`surprise` event, which the row does not declare")
+        }
+
+    @Test
+    fun `an event whose data is not its DTO is recorded as drift`() =
+        testApplication {
+            application {
+                routeTestApplication(fixture = true) {
+                    post(STAY_STREAM) {
+                        call.respond(
+                            SSEServerContent(call) {
+                                send(ServerSentEvent(data = """{"poi_id":1,"bogus":true}""", event = StayAnswerDto.EVENT))
+                            },
+                        )
+                    }.access(RouteAccess.Anonymous)
+                }
+            }
+            client.post(STAY_STREAM).bodyAsText()
+            violation("POST $STAY_STREAM -> 200", "`answer` event: the body does not strict-decode")
+        }
+
+    @Test
+    fun `a stream at a status the row declares no events at is refused before it is sent`() =
+        testApplication {
+            application {
+                routeTestApplication(fixture = true) {
+                    get(BUILD_INFO) {
+                        call.respond(SSEServerContent(call) { send(ServerSentEvent(data = "{}", event = "x")) })
+                    }.access(RouteAccess.Anonymous)
+                }
+            }
+            assertDrifted(client.get(BUILD_INFO).status)
+            violation("GET $BUILD_INFO -> 200", "declares no events there")
         }
 
     @Test

@@ -80,7 +80,10 @@ catalog season data and is a follow-up.
 2. **M2** — local filters with match / miss / no-data facets; Add dates stores the window only.
 3. **M3** — Check availability polls the in-view set via the bulk endpoint (new summary view),
    checking state, re-sorted result list. See "M3 design" below.
-4. **M4** — pins recolour by status, legend colour key with counts, Only ones we can check.
+4. **M4** — the check streams its answers, one request for the whole view, and each card's dot
+   takes its status colour. Pins keep the campground colour for now (2026-10-12); recolouring
+   them, the legend's colour key with counts, and Only ones we can check are not in it. See
+   "M4 design" below.
 5. **M5** — mobile parity (bottom sheet, folded filter summary, status strip, progress bar).
 
 ## M2 design (2026-09-13, revised)
@@ -245,6 +248,9 @@ one control that talks to booking providers, and a date tweak should not fan out
 
 ### Backend: the bulk endpoint's `summary` view
 
+Superseded by M4: the summary moved to its own streamed route, and `view` is gone from the bulk
+scan. The fields, the summary and the status rules below are the stream's now.
+
 `POST /api/pois/availability/bulk` takes two more request fields, and keeps its contract row:
 
 | Field | Type | Meaning |
@@ -287,7 +293,8 @@ the summary is about every night of the window, so a shorter run would be a diff
 
 ### Frontend
 
-- **The check** (`features/trip/useStayCheck.ts`, pure half in `stay-check.ts`). It asks
+- **The check** (`features/trip/useStayCheck.ts`, pure half in `stay-check.ts`; M4 replaced
+  the batches with one stream). It asks
   about the in-view cards (the ≤50 rendered) that are `availability_supported`, in at most
   `MAX_REQUESTS_PER_CHECK` = 4 sequential requests, each given `CHECK_REQUEST_TIMEOUT_MS`
   (60 s) before the check stops as timed out. The first check answers from recent
@@ -319,6 +326,77 @@ the summary is about every night of the window, so a shorter run would be a diff
 - **One read.** `useInViewCampgrounds` reads the check once, orders the cards by it and hands
   the same value to `TripResults`, so a card's line and its place cannot disagree. The head's
   "Checked 4m ago" re-reads the clock every 30 s (`useNow`).
+
+## M4 design (2026-10-12)
+
+Pins keep the campground colour for now; the status colour goes on the list's cards. And the
+check asks once: one request carries every id, and the answer streams back a campground at a
+time, so cards fill in as each provider answers rather than a batch at a time.
+
+### Backend: the stay stream
+
+`POST /api/pois/availability/bulk/stream` takes `StayCheckRequestDto` — `poi_ids`
+(1..`bulk.max-pois`), `start_date`, `end_date`, `site_type`, `group_size` and `fresh`, as M3's
+summary view did, with no `min_nights` — and answers `text/event-stream`:
+
+| Event | Data | When |
+|---|---|---|
+| `answer` | `StayAnswerDto`: `poi_id`, and `summary` (`BulkPoiSummaryDto`, as in M3) or `error` | once per requested POI, as it lands |
+| `done` | `StayCheckDoneDto`: `answered` | once, last; the stream then closes |
+
+`BulkAvailabilityController.stayAnswers` starts the POIs in request order — the client sends
+them in the list's own order, nearest first, never the order a previous check sorted them into
+— at most `bulk.fan-out-concurrency` at a time. A POI that outlives `bulk.per-poi-timeout`
+(45 s) answers `timeout`, and once the whole stream reaches `bulk.stream-timeout` (2 min) so does
+every POI yet to answer; a read that ends with no answer at all (a stray cancellation) answers
+`unknown`. So every requested POI answers, and the stream reaches `done` by its deadline. A
+per-POI timeout lands at a read's next suspension — a vendor call's await is one, which is why
+`VendorHttpTransport`, Aspira's client and `FailoverAvailabilityFetcher` hand a caller's
+cancellation back rather than reporting it as a provider failure (failover would otherwise go on
+to ask the next provider) — so a read stuck in a blocking call, a database lock wait, outlives
+it. The reads are therefore not the flow's children: at the deadline the stream answers for a
+stuck one and ends, and the read, cancelled, finishes on its own with its late answer dropped.
+A quiet stream writes a keep-alive comment every `bulk.stream-heartbeat`
+(15 s, at most `MAX_STREAM_HEARTBEAT_SECONDS` = 20 s), inside the idle timeouts of the proxies
+in front of it and of the client. A refused request (`400`, `503 ip_throttled`) answers
+JSON before any event. The per-IP limit is charged per campground, not per request
+(`bulk.ip-poi-limit-per-minute`, 150 — three full checks a minute), shared by the stream and the
+scan, and checked once a request is known valid: one request fans out to an upstream call per
+POI, so counting requests would let a caller's upstream load grow with the request size. The
+client hanging up cancels every read still in flight.
+
+There is no run id and nothing is stored: the stream is the run, and a reload starts a new
+check. The per-campsite scan (`POST /api/pois/availability/bulk`) keeps its row, without `view`
+or `summary`, and has no client.
+
+The event-stream wiring is generic and knows nothing of stays: `route/common/EventStreams.kt`
+(`respondEventStream`, over Ktor's SSE plugin) and the contract's event-stream rows
+(`ApiBody(status, events = …)`; see "The API Contract" in `docs/backend-architecture.md`).
+
+### Frontend
+
+- **Library.** `lib/event-stream.ts`'s `readEventStream` parses any `text/event-stream` body
+  the way `EventSource` does — which cannot POST — reporting every chunk to `onActivity`, and
+  `lib/deadline.ts`'s `withIdleTimeout`
+  cuts a task off after a stretch of silence rather than a total, for work whose length is
+  open-ended. `api/http.ts`'s `jsonPostStream` POSTs JSON and hands back the body, throwing an
+  `HttpError` with the envelope's code on a refusal.
+- **Client.** `api/availability-api.ts`'s `streamStays` yields each `answer`, then `done`, and
+  skips an event it does not know.
+- **The check** (`useStayCheck`) is one stream. Each answer is recorded as it lands and `done`
+  finishes it, with every campground answered. A stream that closes before `done`, or reaches it
+  with one unanswered, stopped part way (`failed`). One that writes nothing at all — not even a
+  keep-alive — for `CHECK_IDLE_TIMEOUT_MS` (60 s) has lost its connection and is `timed_out`;
+  keep-alives count as life, so how long the providers take stays the backend's to bound — its
+  stream deadline holds even for a read that cannot be cancelled. The throttle and its
+  cooldown, Check again's `fresh`, the store and the list are M3's.
+- **Ran out of time** is said apart from couldn't check: a `timeout` card reads "Too slow to
+  answer — check again", and the head counts them ("1 too slow to answer") apart from the
+  unknowns, since asking again may well answer.
+- **Card dots** take the status colour once the card's answer lands (`stayToneOf`): open, few
+  left, full — closed for the season too, since there is nowhere to stay either way and the line
+  says which — and hollow for no data or couldn't check. Until then, and in the route list, the
+  dot keeps the campground colour.
 
 ## Out of scope for the issue
 

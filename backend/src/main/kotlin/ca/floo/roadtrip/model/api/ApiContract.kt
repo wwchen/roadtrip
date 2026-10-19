@@ -15,15 +15,37 @@ import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import kotlin.reflect.KClass
 
 /**
+ * One named event a `text/event-stream` body carries: its `event:` name, and the
+ * DTO its `data:` line is the JSON encoding of.
+ */
+data class ApiEvent(
+    val name: String,
+    val data: KClass<*>,
+)
+
+/**
  * One body a route can serialize, and the status it serves it at.
  *
- * [body] is null only where the answer carries none: a 204, or the empty text
- * the Slack webhook acks with.
+ * [body] is the JSON DTO, null only where the answer carries none: a 204, or the
+ * empty text the Slack webhook acks with — or an event stream, which carries
+ * [events] instead. A body is one or the other, never both: a stream is
+ * `text/event-stream`, each event's data a DTO of its own, and the generator,
+ * the OpenAPI document and the body check all read the events off the row the
+ * way they read [body].
  */
 data class ApiBody(
     val status: Int,
     val body: KClass<*>? = null,
-)
+    val events: List<ApiEvent> = emptyList(),
+) {
+    init {
+        require(body == null || events.isEmpty()) { "an ApiBody is a JSON body or an event stream, not both (status $status)" }
+        require(events.map { it.name }.distinct().size == events.size) { "an event stream names each event once (status $status)" }
+    }
+
+    /** Whether the route answers this status as a `text/event-stream`. */
+    val isEventStream: Boolean get() = events.isNotEmpty()
+}
 
 /**
  * One HTTP endpoint, as data.
@@ -306,9 +328,16 @@ object ApiContract {
             ),
             ApiEndpoint(
                 ApiMethod.POST,
-                "/api/pois/availability/bulk",
-                BulkAvailabilityRequestDto::class,
-                ApiBody(HTTP_OK, BulkAvailabilityResponseDto::class),
+                "/api/pois/availability/stays",
+                StayCheckRequestDto::class,
+                ApiBody(
+                    HTTP_OK,
+                    events =
+                        listOf(
+                            ApiEvent(StayAnswerDto.EVENT, StayAnswerDto::class),
+                            ApiEvent(StayCheckDoneDto.EVENT, StayCheckDoneDto::class),
+                        ),
+                ),
                 listOf(
                     ApiBody(HTTP_BAD_REQUEST, AvailabilityErrorDto::class),
                     ApiBody(HTTP_SERVICE_UNAVAILABLE, AvailabilityErrorDto::class),

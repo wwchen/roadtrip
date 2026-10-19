@@ -1,19 +1,39 @@
 package ca.floo.roadtrip.client.aspira
 
+import ca.floo.roadtrip.client.ScriptedHttpClient
 import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
+import java.util.concurrent.CompletableFuture
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Port 1 is reserved and never listening, so connect is refused immediately. */
 private const val REFUSED_HOST = "127.0.0.1:1"
 private const val TEST_THROTTLE_MS = 300L
+private const val TEST_CALLER_TIMEOUT_MS = 50L
 
 class AspiraAvailabilityClientTest {
+    @Test
+    fun `a caller's timeout cancels the request rather than reading as Aspira failing`() =
+        runTest {
+            val client = HttpAspiraAvailabilityClient(httpClient = ScriptedHttpClient { CompletableFuture() }, throttleMs = 0)
+            val day = LocalDate.of(2026, 7, 31)
+
+            val answered =
+                withTimeoutOrNull(TEST_CALLER_TIMEOUT_MS) {
+                    client.fetch("aspira.test", mapId = 1, startDate = day, endDate = day.plusDays(1))
+                }
+
+            assertNull(answered)
+        }
+
     @Test
     fun `throttle still applies after a transport failure`() =
         runBlocking {

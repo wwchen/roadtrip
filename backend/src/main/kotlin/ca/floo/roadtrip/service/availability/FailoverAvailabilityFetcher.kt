@@ -8,6 +8,8 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import java.time.Instant
 
 internal open class FailoverAvailabilityFetcher(
@@ -40,6 +42,9 @@ internal open class FailoverAvailabilityFetcher(
 
         val attempts = mutableListOf<AttemptRecord>()
         for (provider in sorted) {
+            // A caller that timed out or went away wants no answer, so the next
+            // provider is not asked — however the last one reported the cancellation.
+            currentCoroutineContext().ensureActive()
             val begin = clock()
             val attempt = attemptFetch(provider, campground, campsites, window)
             val durationMs = elapsedMs(begin, clock())
@@ -98,6 +103,8 @@ internal open class FailoverAvailabilityFetcher(
         } catch (e: AvailabilityProviderError) {
             Attempt(outcome = e.toFetchOutcome(), batch = null, error = e.message ?: e::class.simpleName, providerError = e)
         } catch (e: Throwable) {
+            // The caller's cancellation is not this provider failing: hand it back.
+            currentCoroutineContext().ensureActive()
             Attempt(outcome = FetchOutcome.OTHER, batch = null, error = e.message ?: e.javaClass.simpleName)
         }
 

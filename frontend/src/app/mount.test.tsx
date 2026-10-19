@@ -1,12 +1,21 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import type { Root } from 'react-dom/client';
 import { jsonResponse, stubFetch } from '@/test/fetch-stub';
 import { mountPage } from './mount';
+
+const mounted: Root[] = [];
+
+function mount(node: Parameters<typeof mountPage>[0]): void {
+  const root = mountPage(node);
+  if (root) mounted.push(root);
+}
 
 beforeEach(() => {
   document.body.innerHTML = '';
 });
 
 afterEach(() => {
+  for (const root of mounted.splice(0)) root.unmount();
   vi.unstubAllGlobals();
 });
 
@@ -16,7 +25,7 @@ test('mounting a page starts the sandbox chrome', async () => {
   const fetched = stubFetch(jsonResponse({ env: 'prod', sha: 'abc', branch: 'master' }));
   document.body.innerHTML = '<div id="root"></div>';
 
-  mountPage(<p>page</p>);
+  mount(<p>page</p>);
   await vi.waitFor(() => expect(fetched.requests.length).toBe(chromeUrls.length));
 
   expect(fetched.requests.map((r) => r.url).sort()).toEqual([...chromeUrls].sort());
@@ -26,7 +35,7 @@ test('mounting a page installs the icon sprite', async () => {
   const fetched = stubFetch(jsonResponse({ env: 'prod', sha: 'abc', branch: 'master' }));
   document.body.innerHTML = '<div id="root"></div>';
 
-  mountPage(<p>page</p>);
+  mount(<p>page</p>);
   await vi.waitFor(() => expect(fetched.requests.length).toBe(chromeUrls.length));
 
   // A masked symbol, whose `mask="url(#k-warning-fill)"` only resolves when the
@@ -38,7 +47,7 @@ test('the chrome still starts when the shell has no mount point, and says so', a
   const fetched = stubFetch(jsonResponse({ env: 'prod', sha: 'abc', branch: 'master' }));
   const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-  mountPage(<p>page</p>);
+  mount(<p>page</p>);
   await vi.waitFor(() => expect(fetched.requests.length).toBe(chromeUrls.length));
 
   expect(document.querySelector('#root')).toBeNull();
@@ -51,7 +60,7 @@ test('logs a promise rejection nobody handled', async () => {
   const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
   document.body.innerHTML = '<div id="root"></div>';
 
-  mountPage(<p>page</p>);
+  mount(<p>page</p>);
   const event = new Event('unhandledrejection') as Event & { reason?: unknown };
   event.reason = new Error('nobody awaited this');
   window.dispatchEvent(event);

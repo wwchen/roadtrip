@@ -8,6 +8,9 @@
 // URL would leak.
 export const CREDENTIALS: RequestCredentials = 'same-origin';
 
+/** What a streaming route answers: its events, or the JSON refusal it sends before any. */
+const EVENT_STREAM_ACCEPT = 'text/event-stream, application/json';
+
 export interface RequestOptions {
   signal?: AbortSignal;
 }
@@ -32,14 +35,15 @@ export class HttpError extends Error {
   }
 }
 
-export function jsonPost(
-  url: string,
-  body: unknown,
-  { signal }: RequestOptions = {},
-): Promise<Response> {
+export function jsonPost(url: string, body: unknown, options: RequestOptions = {}): Promise<Response> {
+  return postJson(url, body, options);
+}
+
+/** The one JSON POST every helper here sends; [accept] names what the caller reads back, when it is not JSON. */
+function postJson(url: string, body: unknown, { signal }: RequestOptions, accept?: string): Promise<Response> {
   return fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(accept ? { Accept: accept } : {}) },
     body: JSON.stringify(body),
     credentials: CREDENTIALS,
     signal,
@@ -66,6 +70,24 @@ export async function jsonPostOk<T = unknown>(
   const response = await jsonPost(url, body, options);
   if (!response.ok) throw await attachErrorCode(new HttpError(url, response.status), response);
   return response.json() as Promise<T>;
+}
+
+/**
+ * POST [body] as JSON and hand back the answer's body as a stream, for a route
+ * that answers `text/event-stream`. A refusal — any non-2xx, which such a route
+ * sends as JSON before it starts streaming — throws an `HttpError` carrying the
+ * envelope's `code`, as `jsonPostOk` does.
+ */
+export async function jsonPostStream(
+  url: string,
+  body: unknown,
+  options: RequestOptions = {},
+): Promise<ReadableStream<Uint8Array>> {
+  const response = await postJson(url, body, options, EVENT_STREAM_ACCEPT);
+  if (!response.ok) throw await attachErrorCode(new HttpError(url, response.status), response);
+  // Only a bodiless status (204, 205, 304) answers without one — never a stream.
+  if (!response.body) throw new Error(`${url}: HTTP ${response.status} carried no body to stream`);
+  return response.body;
 }
 
 export async function jsonPutOk<T = unknown>(

@@ -47,15 +47,47 @@ class WireVocabularyTest {
     }
 
     @Test
-    fun `the bulk availability view vocabulary keeps its wire strings`() {
-        assertEquals(listOf("campsites", "summary"), serialNames(BulkAvailabilityView.serializer()))
-    }
-
-    @Test
     fun `the stay status vocabulary keeps its wire strings`() {
         assertEquals(
             listOf("open", "few_left", "full", "closed_for_season", "no_data"),
             serialNames(StayAvailabilityStatus.serializer()),
+        )
+    }
+
+    @Test
+    fun `the stay outcome vocabulary keeps its wire strings`() {
+        assertEquals(
+            listOf("answered", "refused", "timed_out", "failed"),
+            serialNames(StayOutcome.serializer()),
+        )
+    }
+
+    @Test
+    fun `the stay check outcome vocabulary keeps its wire strings`() {
+        assertEquals(
+            listOf("complete", "deadline_reached"),
+            serialNames(StayCheckOutcome.serializer()),
+        )
+    }
+
+    @Test
+    fun `the stay failure reason vocabulary keeps its wire strings`() {
+        assertEquals(
+            listOf(
+                "start_before_earliest",
+                "beyond_booking_horizon",
+                "window_too_long",
+                "rate_limited",
+                "upstream_blocked",
+                "upstream_5xx",
+                "upstream_unreachable",
+                "provider_misconfigured",
+                "unsupported",
+                "not_found",
+                "unknown_campground",
+                "unknown",
+            ),
+            serialNames(StayFailureReason.serializer()),
         )
     }
 

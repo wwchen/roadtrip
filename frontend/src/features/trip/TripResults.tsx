@@ -12,8 +12,7 @@
 // the route immediately after it is computed.
 import { useState, type ReactNode } from 'react';
 import { Button, EmptyState, Icon } from '@ui';
-import { token } from '@tokens';
-import type { StayAvailabilityStatus } from '@/api/availability-api';
+import { entryOf } from '@/lib/entry-of';
 import { filterCopy, inViewCopy, listCopy, routeListCopy, stayCopy } from '@/lib/strings';
 import { useNow } from '@/lib/use-now';
 import { relativeTime } from '@/lib/watch-format';
@@ -26,7 +25,7 @@ import { formatDateShort } from './DateWindowFields';
 import { facetsFor, type FacetState } from './facets';
 import { formatDistanceAlongRoute } from './route-summary';
 import type { ResultsList } from './results-list';
-import { stayTallies } from './stay-check';
+import { stayTallies, stayToneOf, type StayTone } from './stay-check';
 import type { TripCard } from './trip-cards';
 import type { CurrentStayCheck } from './useStayCheck';
 import { shouldAutoFocus } from '@/domain/trip/viewport';
@@ -47,13 +46,20 @@ const FACET_APPEARANCE: Record<FacetState, { icon: string; className: string; st
   'no-data': { icon: 'help', className: 'tb-facet tb-facet--no-data', stateWord: filterCopy.noData },
 };
 
-/** A stay result line's colour, by status. */
-const STAY_CLASS: Record<StayAvailabilityStatus, string> = {
+/** A stay result line's colour, by tone. */
+const STAY_LINE_CLASS: Record<StayTone, string> = {
   open: 'tb-stay tb-stay--open',
-  few_left: 'tb-stay tb-stay--few',
+  few: 'tb-stay tb-stay--few',
   full: 'tb-stay tb-stay--full',
-  closed_for_season: 'tb-stay tb-stay--full',
-  no_data: 'tb-stay tb-stay--unknown',
+  unknown: 'tb-stay tb-stay--unknown',
+};
+
+/** A card's dot once the check has answered for it; until then it keeps the campground colour. */
+const STAY_DOT_CLASS: Record<StayTone, string> = {
+  open: 'tb-card-dot tb-card-dot--open',
+  few: 'tb-card-dot tb-card-dot--few',
+  full: 'tb-card-dot tb-card-dot--full',
+  unknown: 'tb-card-dot tb-card-dot--unknown',
 };
 
 interface RouteProps {
@@ -135,6 +141,7 @@ export function TripResults(props: TripResultsProps) {
                   sub={card.agency || card.sub}
                   meta={<ViewportMeta card={card} stayCheck={props.stayCheck} />}
                   facets={<FacetRow card={card} />}
+                  tone={toneFor(card.summary.id, props.stayCheck)}
                 />
               )}
             />
@@ -185,16 +192,19 @@ function Card({
   sub,
   meta,
   facets,
+  tone = null,
 }: {
   card: TripCard;
   onOpen: (card: TripCard) => void;
   sub: string;
   meta: ReactNode;
   facets?: ReactNode;
+  /** How the check answered for this card; null keeps the dot the campground colour. */
+  tone?: StayTone | null;
 }) {
   return (
     <button type="button" className="tb-card" data-id={String(card.id)} onClick={() => onOpen(card)}>
-      <span className="tb-card-dot" style={{ background: token('--rt-layer-cg') }} />
+      <span className={tone ? STAY_DOT_CLASS[tone] : 'tb-card-dot'} aria-hidden="true" />
       <span className="tb-card-body">
         <span className="tb-card-head">
           <span className="tb-card-name">{card.name}</span>
@@ -284,6 +294,7 @@ function StayStatus({ check }: { check: CurrentStayCheck }) {
         ),
         ...(tallies.closed > 0 ? [stayCopy.closed(tallies.closed)] : []),
         ...(tallies.refused > 0 ? [stayCopy.refused(tallies.refused)] : []),
+        ...(tallies.timedOut > 0 ? [stayCopy.timedOutCount(tallies.timedOut)] : []),
         ...(tallies.unknown > 0 ? [stayCopy.unknown(tallies.unknown)] : []),
         ...(check.observedAt ? [stayCopy.checkedAgo(relativeTime(check.observedAt, now))] : []),
       ];
@@ -294,6 +305,12 @@ function StayStatus({ check }: { check: CurrentStayCheck }) {
   );
 }
 
+/** The tone of a card's answer from the check; null before it answers, or when it was not asked. */
+function toneFor(id: number, check: CurrentStayCheck | null): StayTone | null {
+  const result = check?.results[id];
+  return result ? stayToneOf(result) : null;
+}
+
 /** One card's answer from the check; nothing for a card the check did not ask about. */
 function StayLine({ id, check }: { id: number; check: CurrentStayCheck }) {
   const result = check.results[id];
@@ -302,7 +319,10 @@ function StayLine({ id, check }: { id: number; check: CurrentStayCheck }) {
       <span className="tb-stay tb-stay--unknown">{stayCopy.pending}</span>
     ) : null;
   }
-  if (result.kind === 'error') return <span className="tb-stay tb-stay--unknown">{stayCopy.errorFor(result.code)}</span>;
+  const className = STAY_LINE_CLASS[stayToneOf(result)];
+  if (result.kind === 'error') return <span className={className}>{stayCopy.errorFor(result.outcome, result.reason)}</span>;
   const { status, open_sites: openSites } = result.summary;
-  return <span className={STAY_CLASS[status]}>{stayCopy.result[status](openSites)}</span>;
+  // A status a newer server added reads as no data, matching its tone.
+  const line = entryOf(stayCopy.result, status) ?? stayCopy.result.no_data;
+  return <span className={className}>{line(openSites)}</span>;
 }

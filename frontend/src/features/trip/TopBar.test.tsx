@@ -2,16 +2,19 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createTestQueryClient } from '@/test/query-client';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
+import { STAY_ANSWER_EVENT, STAY_DONE_EVENT, STAY_STREAM_URL } from '@/api/availability-api';
 import type { CampgroundSummary } from '@/api/campground-api';
-import type { CampgroundSearchResponseDto } from '@/api/generated/api-types';
+import type { CampgroundSearchResponseDto, StaySummaryDto } from '@/api/generated/api-types';
 import { COPIED_STATE_MS, decodeRouteState, encodeRouteState } from '@/lib/share-links';
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
 import { useMapStore } from '@/stores/mapStore';
 import { useStayCheckStore } from '@/stores/stayCheckStore';
 import { useTripStore } from '@/stores/tripStore';
+import { RECHECK_MAX_AGE_SECONDS } from './stay-check';
 import { MAX_IN_VIEW_CARDS } from './useCampgroundSummaries';
 import type { PinFeature } from '@/map/pins';
 import { FakeMap } from '@/test/fake-map';
+import { eventStreamResponse, openEventStream, type StubEvent } from '@/test/fetch-stub';
 
 // The topbar reaches the camera through MapProvider's context; the fake records the
 // flyTo calls a browse-mode pick makes.
@@ -44,9 +47,9 @@ let poiResults: unknown[];
 let geocodeResults: unknown[];
 let campgroundSearch: CampgroundSearchResponseDto;
 let campgroundSummaries: Record<number, CampgroundSummary>;
-/** What the bulk availability stub answers a request body with. */
-let bulkAvailability: (body: { poi_ids: number[] }) => Response | Promise<Response>;
-let bulkBodies: Array<Record<string, unknown>>;
+/** What the stay stream stub answers a request body with; [signal] is the request's own. */
+let stayStream: (body: { poi_ids: number[] }, signal: AbortSignal | null | undefined) => Response | Promise<Response>;
+let stayBodies: Array<Record<string, unknown>>;
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -59,8 +62,8 @@ beforeEach(() => {
   // `reset` keeps a throttle's cooldown on purpose (it is the caller's, not the stay's); a test starts clean.
   useStayCheckStore.getState().reset();
   useStayCheckStore.setState({ retryAt: null });
-  bulkBodies = [];
-  bulkAvailability = () => json({}, 404);
+  stayBodies = [];
+  stayStream = () => json({}, 404);
   // `hiddenAgencies`/`hiddenOverlays` too: the legend's state is app-wide, and the
   // results-list tests below hide agencies that would otherwise leak into the next test.
   useMapStore.setState({
@@ -118,10 +121,10 @@ beforeEach(() => {
       if (url.startsWith('/api/route')) return json(ROUTE_BODY);
       if (url.startsWith('/api/pois/on-route')) return json({ type: 'FeatureCollection', features: [] });
       if (url.startsWith('/api/campgrounds/search')) return json(campgroundSearch);
-      if (url.startsWith('/api/pois/availability/bulk')) {
+      if (url === STAY_STREAM_URL) {
         const body = JSON.parse(String(init?.body)) as { poi_ids: number[] } & Record<string, unknown>;
-        bulkBodies.push(body);
-        return bulkAvailability(body);
+        stayBodies.push(body);
+        return stayStream(body, init?.signal);
       }
       if (url.startsWith('/api/campgrounds/details')) {
         const body = JSON.parse(String(init?.body)) as { campground_ids: number[] };
@@ -1109,10 +1112,17 @@ describe('the in-view list', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Sunday, September 13, 2026' }));
     };
     const cardNames = () => [...document.querySelectorAll('.tb-card-name')].map((el) => el.textContent);
+    const dotOf = (name: string) =>
+      screen.getByText(name).closest('.tb-card')!.querySelector('.tb-card-dot') as HTMLElement;
+    /** An answered stay, observed just now (no `observed_at`) and not from the cache. */
+    const answer = (poiId: number, stay: Pick<StaySummaryDto, 'status' | 'open_sites' | 'checked_sites'>): StubEvent => ({
+      event: STAY_ANSWER_EVENT,
+      data: { poi_id: poiId, outcome: 'answered', stay: { ...stay, from_cache: false } },
+    });
+    const done = (): StubEvent => ({ event: STAY_DONE_EVENT, data: { outcome: 'complete' } });
 
     test('asks about the checkable cards for the stay and shows each one its answer', async () => {
-      bulkAvailability = () =>
-        json({ pois: [{ poi_id: 21, start_date: '2026-09-11', end_date: '2026-09-13', summary: { status: 'open', open_sites: 8, checked_sites: 132 } }] });
+      stayStream = () => eventStreamResponse([answer(21, { status: 'open', open_sites: 8, checked_sites: 132 }), done()]);
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
@@ -1122,23 +1132,32 @@ describe('the in-view list', () => {
 
       await waitFor(() => expect(screen.getByText('8 sites open')).toBeInTheDocument());
       // Zephyr Cove is not checkable online, so it is not asked about.
-      expect(bulkBodies).toEqual([
-        { poi_ids: [21], start_date: '2026-09-11', end_date: '2026-09-13', site_type: [], view: 'summary' },
-      ]);
+      expect(stayBodies).toEqual([{ poi_ids: [21], start_date: '2026-09-11', end_date: '2026-09-13', site_type: [] }]);
       expect(screen.getByText('Fri Sep 11 → Sun Sep 13 · 1 with a site · 0 full · Checked just now')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument();
     });
 
-    test('re-sorts the list by the answers once every one is back', async () => {
+    test('a check that finishes cleanly leaves no note beside the button', async () => {
+      stayStream = () => eventStreamResponse([answer(21, { status: 'open', open_sites: 8, checked_sites: 132 }), done()]);
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument());
+      expect(screen.getByText('8 sites open')).toBeInTheDocument();
+      expect(screen.queryByRole('status')).toBeNull();
+    });
+
+    test('one request asks about every card, each filling in as it answers, and the list re-sorts once all are back', async () => {
       campgroundSummaries[22] = { ...campgroundSummaries[22]!, availability_supported: true };
-      bulkAvailability = ({ poi_ids }) =>
-        json({
-          pois: poi_ids.map((id) =>
-            id === 21
-              ? { poi_id: 21, summary: { status: 'full', open_sites: 0, checked_sites: 206 } }
-              : { poi_id: 22, summary: { status: 'few_left', open_sites: 2, checked_sites: 170 } },
-          ),
-        });
+      let stream!: ReturnType<typeof openEventStream>;
+      stayStream = (_, signal) => {
+        stream = openEventStream(signal);
+        return stream.response;
+      };
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Zephyr Cove')).toBeInTheDocument());
@@ -1146,16 +1165,85 @@ describe('the in-view list', () => {
 
       pickStay();
       fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+      await waitFor(() => expect(screen.getByText('Checking 0 of 2…')).toBeInTheDocument());
 
-      await waitFor(() => expect(screen.getByText('2 sites left')).toBeInTheDocument());
-      expect(screen.getByText('Full')).toBeInTheDocument();
+      act(() => stream.send(answer(21, { status: 'full', open_sites: 0, checked_sites: 206 })));
+      await waitFor(() => expect(screen.getByText('Full')).toBeInTheDocument());
+      expect(screen.getByText('Checking 1 of 2…')).toBeInTheDocument();
+      // While it runs, every card keeps its place.
+      expect(cardNames()).toEqual(['Fallen Leaf', 'Zephyr Cove']);
+
+      act(() => {
+        stream.send(answer(22, { status: 'few_left', open_sites: 2, checked_sites: 170 }));
+        stream.send(done());
+        stream.close();
+      });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument());
+      expect(screen.getByText('2 sites left')).toBeInTheDocument();
       expect(cardNames()).toEqual(['Zephyr Cove', 'Fallen Leaf']);
-      // One request per campground here: two ids fit in two batches.
-      expect(bulkBodies.map((body) => body.poi_ids)).toEqual([[21], [22]]);
+      expect(stayBodies.map((body) => body.poi_ids)).toEqual([[21, 22]]);
+    });
+
+    test('Check again asks in the list\'s own order, not the order the answers sorted it into', async () => {
+      campgroundSummaries[22] = { ...campgroundSummaries[22]!, availability_supported: true };
+      stayStream = () =>
+        eventStreamResponse([
+          answer(21, { status: 'full', open_sites: 0, checked_sites: 206 }),
+          answer(22, { status: 'open', open_sites: 9, checked_sites: 170 }),
+          done(),
+        ]);
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Zephyr Cove')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+      await waitFor(() => expect(cardNames()).toEqual(['Zephyr Cove', 'Fallen Leaf']));
+      fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+
+      await waitFor(() => expect(stayBodies).toHaveLength(2));
+      expect(stayBodies.map((body) => body.poi_ids)).toEqual([
+        [21, 22],
+        [21, 22],
+      ]);
+    });
+
+    test("each answered card's dot takes the colour of its answer", async () => {
+      campgroundSummaries[22] = { ...campgroundSummaries[22]!, availability_supported: true };
+      stayStream = () =>
+        eventStreamResponse([
+          answer(21, { status: 'open', open_sites: 8, checked_sites: 132 }),
+          { event: STAY_ANSWER_EVENT, data: { poi_id: 22, outcome: 'failed', reason: 'rate_limited', retryable: true } },
+          done(),
+        ]);
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Zephyr Cove')).toBeInTheDocument());
+      expect(dotOf('Fallen Leaf').className).toBe('tb-card-dot');
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+
+      await waitFor(() => expect(dotOf('Fallen Leaf')).toHaveClass('tb-card-dot--open'));
+      expect(dotOf('Zephyr Cove')).toHaveClass('tb-card-dot--unknown');
+    });
+
+    test('a stream cut off before it is done says the check stopped part way, keeping what landed', async () => {
+      campgroundSummaries[22] = { ...campgroundSummaries[22]!, availability_supported: true };
+      stayStream = () => eventStreamResponse([answer(21, { status: 'open', open_sites: 8, checked_sites: 132 })]);
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Zephyr Cove')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('The check stopped part way. Try again.'));
+      expect(screen.getByText('8 sites open')).toBeInTheDocument();
     });
 
     test('a throttled check says so beside the button, which waits out the minute even for new dates', async () => {
-      bulkAvailability = () => json({ error: 'ip_throttled' }, 503);
+      stayStream = () => json({ error: 'ip_throttled' }, 503);
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
@@ -1192,7 +1280,8 @@ describe('the in-view list', () => {
     });
 
     test('a campground that refuses the dates says why', async () => {
-      bulkAvailability = () => json({ pois: [{ poi_id: 21, error: 'beyond_booking_horizon' }] });
+      stayStream = () =>
+        eventStreamResponse([{ event: STAY_ANSWER_EVENT, data: { poi_id: 21, outcome: 'refused', reason: 'beyond_booking_horizon' } }, done()]);
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
@@ -1206,8 +1295,23 @@ describe('the in-view list', () => {
       expect(screen.queryByText(/unknown/)).toBeNull();
     });
 
-    test('Check again asks the providers afresh; the first check does not', async () => {
-      bulkAvailability = () => json({ pois: [{ poi_id: 21, summary: { status: 'full', open_sites: 0, checked_sites: 132 } }] });
+    test('a campground that ran out of time says so, and is counted apart as worth asking again', async () => {
+      stayStream = () =>
+        eventStreamResponse([{ event: STAY_ANSWER_EVENT, data: { poi_id: 21, outcome: 'timed_out' } }, done()]);
+      withViewport();
+      mount();
+      await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
+
+      pickStay();
+      fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+
+      await waitFor(() => expect(screen.getByText('Too slow to answer — check again')).toBeInTheDocument());
+      expect(screen.getByText(/· 1 too slow to answer/)).toBeInTheDocument();
+      expect(screen.queryByText(/unknown/)).toBeNull();
+    });
+
+    test('Check again asks for a short age; the first check names none', async () => {
+      stayStream = () => eventStreamResponse([answer(21, { status: 'full', open_sites: 0, checked_sites: 132 }), done()]);
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
@@ -1217,9 +1321,11 @@ describe('the in-view list', () => {
       await waitFor(() => expect(screen.getByRole('button', { name: 'Check again' })).toBeInTheDocument());
       fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
 
-      await waitFor(() => expect(bulkBodies).toHaveLength(2));
-      expect(bulkBodies[0]).not.toHaveProperty('fresh');
-      expect(bulkBodies[1]).toMatchObject({ fresh: true });
+      await waitFor(() => expect(stayBodies).toHaveLength(2));
+      expect(stayBodies[0]).not.toHaveProperty('max_age_seconds');
+      expect(stayBodies[0]).not.toHaveProperty('fresh');
+      expect(stayBodies[1]).toMatchObject({ max_age_seconds: RECHECK_MAX_AGE_SECONDS });
+      expect(stayBodies[1]).not.toHaveProperty('fresh');
     });
 
     test('below the zoom gate the button waits without claiming nothing is checkable', () => {
@@ -1233,8 +1339,13 @@ describe('the in-view list', () => {
     });
 
     test('new site filters mid-check stop it, and its late answers land nowhere', async () => {
-      let answer!: (response: Response) => void;
-      bulkAvailability = () => new Promise<Response>((resolve) => (answer = resolve));
+      let stream!: ReturnType<typeof openEventStream>;
+      let requestSignal: AbortSignal | null | undefined;
+      stayStream = (_, signal) => {
+        requestSignal = signal;
+        stream = openEventStream(signal);
+        return stream.response;
+      };
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());
@@ -1246,9 +1357,10 @@ describe('the in-view list', () => {
       fireEvent.click(screen.getByRole('radio', { name: 'Tent' }));
       expect(screen.queryByText('Checking 0 of 1…')).toBeNull();
       expect(screen.getByRole('button', { name: 'Check availability' })).toBeInTheDocument();
+      expect(requestSignal?.aborted).toBe(true);
 
       await act(async () => {
-        answer(json({ pois: [{ poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 132 } }] }));
+        stream.send(answer(21, { status: 'open', open_sites: 8, checked_sites: 132 }));
       });
       expect(useStayCheckStore.getState().results).toEqual({});
       expect(screen.queryByText('8 sites open')).toBeNull();
@@ -1256,30 +1368,32 @@ describe('the in-view list', () => {
 
     test('leaving mid-check stops it and keeps what had landed, finished', async () => {
       campgroundSummaries[22] = { ...campgroundSummaries[22]!, availability_supported: true };
-      let answerSecond!: (response: Response) => void;
-      bulkAvailability = ({ poi_ids }) =>
-        poi_ids[0] === 21
-          ? json({ pois: [{ poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 132 } }] })
-          : new Promise<Response>((resolve) => (answerSecond = resolve));
+      let stream!: ReturnType<typeof openEventStream>;
+      stayStream = (_, signal) => {
+        stream = openEventStream(signal);
+        return stream.response;
+      };
       withViewport();
       const { unmount } = mount();
       await waitFor(() => expect(screen.getByText('Zephyr Cove')).toBeInTheDocument());
 
       pickStay();
       fireEvent.click(screen.getByRole('button', { name: 'Check availability' }));
+      await waitFor(() => expect(screen.getByText('Checking 0 of 2…')).toBeInTheDocument());
+      act(() => stream.send(answer(21, { status: 'open', open_sites: 8, checked_sites: 132 })));
       await waitFor(() => expect(screen.getByText('8 sites open')).toBeInTheDocument());
 
       unmount();
       expect(useStayCheckStore.getState().running).toBe(false);
 
       await act(async () => {
-        answerSecond(json({ pois: [{ poi_id: 22, summary: { status: 'full', open_sites: 0, checked_sites: 170 } }] }));
+        stream.send(answer(22, { status: 'full', open_sites: 0, checked_sites: 170 }));
       });
       expect(Object.keys(useStayCheckStore.getState().results)).toEqual(['21']);
     });
 
     test('new dates leave the old answers behind', async () => {
-      bulkAvailability = () => json({ pois: [{ poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 132 } }] });
+      stayStream = () => eventStreamResponse([answer(21, { status: 'open', open_sites: 8, checked_sites: 132 }), done()]);
       withViewport();
       mount();
       await waitFor(() => expect(screen.getByText('Fallen Leaf')).toBeInTheDocument());

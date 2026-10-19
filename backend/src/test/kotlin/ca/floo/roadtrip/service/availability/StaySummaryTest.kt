@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 private const val POI_ID = 7L
 private const val CACHE_AGE_SECONDS = 240L
@@ -34,7 +35,6 @@ class StaySummaryTest {
         assertEquals(1, summary.openSites)
         assertEquals(2, summary.checkedSites)
         assertEquals(StayAvailabilityStatus.FEW_LEFT, summary.status)
-        assertEquals(cache, summary.cache)
     }
 
     @Test
@@ -139,6 +139,59 @@ class StaySummaryTest {
     }
 
     @Test
+    fun `a summary reports the oldest observation behind it as an instant`() {
+        val older = Instant.parse("2026-08-30T06:30:00Z")
+        val newer = Instant.parse("2026-09-01T00:00:00Z")
+        val observations =
+            listOf(
+                CampsiteDayObservation(1, stayStart, newer, AvailabilityStatus.AVAILABLE),
+                CampsiteDayObservation(1, stayStart.plusDays(1), older, AvailabilityStatus.AVAILABLE),
+                CampsiteDayObservation(2, stayStart, newer, AvailabilityStatus.RESERVED),
+            )
+        val summary = sliceOver(listOf(site(1), site(2)), observations).staySummary()
+
+        // The instant itself, not an age: the cache block's age is relative to a clock the browser never saw.
+        assertEquals("2026-08-30T06:30:00Z", summary.observedAt)
+    }
+
+    @Test
+    fun `from_cache is true when the loader served without asking the provider`() {
+        val served = listOf(AvailabilityStatus.AVAILABLE, AvailabilityStatus.AVAILABLE)
+
+        assertEquals(true, slice(site(1) to served).staySummary().fromCache)
+        assertEquals(false, slice(site(1) to served, cacheBlock = cache.copy(hit = false)).staySummary().fromCache)
+    }
+
+    @Test
+    fun `observed_at is absent when no observation backs the answer`() {
+        val served = listOf(AvailabilityStatus.AVAILABLE, AvailabilityStatus.AVAILABLE)
+        val resolved = slice(site(1) to served)
+
+        // The site_type filter left no campsites, so nothing was read: there is no batch.
+        val noBatch = resolved.copy(campsites = emptyList(), batch = null).staySummary()
+        // group_size emptied the list after the slice resolved: the batch is there, no site is in the answer.
+        val noneFit = resolved.copy(campsites = emptyList()).staySummary()
+
+        for (summary in listOf(noBatch, noneFit)) {
+            assertEquals(0, summary.checkedSites)
+            assertNull(summary.observedAt)
+            assertEquals(false, summary.fromCache)
+            assertEquals(StayAvailabilityStatus.NO_DATA, summary.status)
+        }
+        assertEquals(observedAt.toString(), resolved.staySummary().observedAt)
+    }
+
+    @Test
+    fun `observed_at is absent when campsites were checked but the provider returned nothing`() {
+        // The batch is there and the site is in the answer, but not one night was observed.
+        val summary = slice(site(1) to emptyList()).staySummary()
+
+        assertEquals(1, summary.checkedSites)
+        assertNull(summary.observedAt)
+        assertEquals(StayAvailabilityStatus.NO_DATA, summary.status)
+    }
+
+    @Test
     fun `a group keeps the sites that sleep it and the ones that do not say`() {
         val sites = listOf(site(1, maxPeople = 2), site(2, maxPeople = 6), site(3, maxPeople = null))
 
@@ -156,6 +209,7 @@ private fun site(
 private fun slice(
     vararg sites: Pair<Campsite, List<AvailabilityStatus>>,
     extra: List<CampsiteDayObservation> = emptyList(),
+    cacheBlock: AvailabilityCacheBlock = cache,
 ): PoiAvailabilitySlice {
     val observations =
         sites.flatMap { (campsite, nights) ->
@@ -163,8 +217,16 @@ private fun slice(
                 CampsiteDayObservation(campsite.id, stayStart.plusDays(offset.toLong()), observedAt, status)
             }
         } + extra
-    val campsites = sites.map { it.first }
-    return PoiAvailabilitySlice(
+    return sliceOver(sites.map { it.first }, observations, cacheBlock)
+}
+
+/** A slice over the stay whose batch holds exactly [observations]. */
+private fun sliceOver(
+    campsites: List<Campsite>,
+    observations: List<CampsiteDayObservation>,
+    cacheBlock: AvailabilityCacheBlock = cache,
+): PoiAvailabilitySlice =
+    PoiAvailabilitySlice(
         poiId = POI_ID,
         startDate = stayStart,
         endDate = stayEnd,
@@ -178,8 +240,7 @@ private fun slice(
                 startDate = stayStart,
                 endDate = stayEnd,
                 observations = observations,
-                cacheBlock = cache,
+                cacheBlock = cacheBlock,
             ),
         pollingSupported = true,
     )
-}

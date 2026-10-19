@@ -4,7 +4,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 private const val MILLIS_PER_MINUTE = 60_000.0
-private const val TOKENS_PER_CALL = 1.0
 
 // Keys are unauthenticated caller IPs, so the map has to be bounded. A bucket
 // left untouched long enough to refill completely is indistinguishable from a
@@ -17,7 +16,9 @@ private const val MAX_KEYS = 10_000
 /**
  * In-memory per-key token bucket, refilled continuously at [perMinute] tokens
  * per minute up to a burst capacity of [perMinute]. Keys are typically caller
- * IPs; each key gets its own bucket.
+ * IPs; each key gets its own bucket. A call costs one token unless it says
+ * otherwise — a request that fans out to many upstream calls can be charged for
+ * each of them.
  *
  * Unlike [VendorRateLimiter] (durable, Postgres-backed, guards *outbound*
  * vendor budgets), this limiter is process-local and guards *inbound* abuse on
@@ -38,7 +39,12 @@ class IpRateLimiter(
     private val refillPerMs = perMinute / MILLIS_PER_MINUTE
     private val lastSweepMs = AtomicLong(nowMs())
 
-    fun allow(key: String): Boolean {
+    /** Whether [key] may spend [cost] tokens now; spends them when it may. Never more than [perMinute] at once. */
+    fun allow(
+        key: String,
+        cost: Int = 1,
+    ): Boolean {
+        require(cost in 1..perMinute) { "a call costs between 1 and the bucket's $perMinute tokens (got $cost)" }
         val now = nowMs()
         evictStale(now)
         var granted = false
@@ -47,8 +53,8 @@ class IpRateLimiter(
             val delta = now - previous.lastRefillMs
             val refilled =
                 (previous.tokens + delta * refillPerMs).coerceAtMost(perMinute.toDouble())
-            granted = refilled >= TOKENS_PER_CALL
-            Bucket(if (granted) refilled - TOKENS_PER_CALL else refilled, now)
+            granted = refilled >= cost
+            Bucket(if (granted) refilled - cost else refilled, now)
         }
         return granted
     }

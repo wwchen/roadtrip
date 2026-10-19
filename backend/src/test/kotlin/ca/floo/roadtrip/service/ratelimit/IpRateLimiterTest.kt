@@ -26,6 +26,16 @@ class IpRateLimiterTest {
     }
 
     @Test
+    fun `a costly call spends that many tokens, and is denied when fewer are left`() {
+        val limiter = IpRateLimiter(perMinute = 5, nowMs = { 0L })
+
+        assertTrue(limiter.allow("ip", cost = 3))
+        assertFalse(limiter.allow("ip", cost = 3), "two left, three asked: denied, and nothing spent")
+        assertTrue(limiter.allow("ip", cost = 2))
+        assertFalse(limiter.allow("ip"))
+    }
+
+    @Test
     fun `refills tokens continuously as time passes`() {
         var now = 0L
         // 60/min = one token per second.

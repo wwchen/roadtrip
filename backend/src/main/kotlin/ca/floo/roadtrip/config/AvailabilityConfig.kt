@@ -6,7 +6,7 @@ data class AvailabilityConfig(
     val forcePullCooldown: Duration,
     val providerCooldown: Duration,
     val poller: AvailabilityPollerConfig,
-    val bulk: BulkAvailabilityConfig,
+    val stays: StayCheckConfig,
     val campsite: CampsiteAvailabilityConfig,
 ) {
     companion object {
@@ -15,7 +15,7 @@ data class AvailabilityConfig(
                 forcePullCooldown = config.requiredDuration("force-pull-cooldown"),
                 providerCooldown = config.requiredDuration("provider-cooldown"),
                 poller = AvailabilityPollerConfig.fromConfig(config.section("poller")),
-                bulk = BulkAvailabilityConfig.fromConfig(config.section("bulk")),
+                stays = StayCheckConfig.fromConfig(config.section("stays")),
                 campsite = CampsiteAvailabilityConfig.fromConfig(config.section("campsite")),
             )
     }

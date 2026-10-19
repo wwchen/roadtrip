@@ -262,8 +262,8 @@ boundaries as typed values.
 
 ## Availability Flow
 
-Availability is stricter because routes, drawer views, bulk lookups, and watch
-polling must resolve the same provider targets.
+Availability is stricter because routes, drawer views, the map's stay check, and
+watch polling must resolve the same provider targets.
 
 ```
 routes
@@ -279,6 +279,33 @@ Route code never parses provider references and never calls vendor adapters
 directly. Provider-specific richness stays inside the adapter or in explicit
 extension points owned by the availability-provider layer.
 `AvailabilityObservationBatch.scope` is the typed `BookingProviderRef` the adapter fetched under; adapters never put vendor ids in generic fields.
+
+The stay check, `POST /api/pois/availability/stays`, is the one route that fans
+one request out to many POIs, so it gets its own controller, `StayCheckController`.
+The route parses and validates the body, charges the per-caller budget, and frames
+the stream; the controller owns the fan-out, the per-POI and whole-stream
+deadlines, and the isolation of one POI's failure from the rest.
+`stayFailureOf` (in `StayFailureClassifier.kt`), beside it, turns each failure into
+an `outcome`, `reason` and `retryable`, so no browser has to. Each POI is read
+through the same `poiAvailabilitySlice` the per-POI availability route uses, so
+the two cannot disagree about which campsites a POI has or what a night's status
+is. Per-campsite detail is not a bulk read: callers ask
+`GET /api/pois/{id}/campsites/availability` for one POI.
+
+What bounds that fan-out is worth stating exactly, because the obvious reading is
+wrong. `fan-out-concurrency` is a semaphore built per collection of the stream, so
+it bounds the POI reads of **one** check — its vendor calls in flight — and nothing
+bounds how many checks run at once: the route is anonymous and `IpRateLimiter` is
+per-IP. The database pool is not what it protects. A POI read holds no pooled
+connection across its vendor call (`AvailabilityLoader` reads, fetches, writes, and
+reads again as separate jOOQ calls on a `DataSource`-backed `DSLContext`, the longest
+hold being the `recordObservations` transaction), and a pool asked for more
+connections than it has queues inside `db.connection-timeout` instead of failing —
+measured at three times `max-pool-size` without one acquisition timeout. If a wait
+ever does expire, the controller catches it as that POI's `failed` answer rather than
+the stream's. Bounding live vendor load across checks would be a new policy, and
+`VendorRateLimiter` — durable, per-vendor, today wired only into the poller — is the
+port it belongs in.
 
 ## ETL Flow
 
@@ -379,6 +406,23 @@ JSON means `application/json`, any `application/*+json` — `problem+json` and t
 JSON is drift rather than a skip: the row's claim is that the status carries that
 DTO. A status the row declares body-less, or does not declare at all, is skipped,
 which is what leaves Slack's empty `text/plain` acks alone.
+
+A row's 2xx may be an event stream instead of a body: `ApiBody(status, events =
+listOf(ApiEvent(name, Dto::class), …))` declares a `text/event-stream` answer and
+the class each named event's `data` carries. A body and events are exclusive, and
+names are unique. Such a route answers through `route/common/EventStreams.kt`
+(`respondEventStream`, over Ktor's SSE plugin), which encodes each event's data
+with `roadtripApiJson` and writes a keep-alive comment while the stream is quiet; a
+refusal still answers JSON, because it is sent before any event. The generated row
+carries `events: { name: 'Type' }`, and the document publishes the status under
+`text/event-stream` as a `oneOf` of the events' schemas. The body check cannot
+rewrite a stream to `599` — its 200 is on the wire before any drift shows — so it
+tees it: every byte reaches the client as written, a copy is kept, and once the
+stream closes each event's name is checked against the row and its data
+strict-decoded into that event's class, the same comparison as a body. A drift is
+recorded as a ledger violation, which fails `:backend:contractLedgerCheck`; a clean
+stream records the row as exercised, with its events. A stream at a status the row
+declares no events for is refused before anything is sent.
 
 The bodies a `StatusPages` handler writes are checked too — the `SettingsError`
 vocabulary among them. Ktor catches a handler's throw on the engine call, which

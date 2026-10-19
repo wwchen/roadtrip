@@ -27,11 +27,18 @@ import io.ktor.server.routing.RoutingPipelineCall
 import io.ktor.server.routing.path
 import io.ktor.server.routing.routing
 import io.ktor.util.AttributeKey
+import io.ktor.utils.io.ByteChannel
+import io.ktor.utils.io.ByteWriteChannel
+import io.ktor.utils.io.readAvailable
+import io.ktor.utils.io.writeFully
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.serializer
 import org.slf4j.LoggerFactory
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
@@ -86,7 +93,10 @@ internal fun contractDigest(endpoints: List<ApiEndpoint> = ApiContract.endpoints
     val canonical =
         endpoints.joinToString("\n") { row ->
             val bodies =
-                (listOf(row.success) + row.errors).joinToString(",") { "${it.status}=${it.body?.qualifiedName}" }
+                (listOf(row.success) + row.errors).joinToString(",") { body ->
+                    val events = body.events.joinToString(";") { "${it.name}:${it.data.qualifiedName}" }
+                    "${body.status}=${body.body?.qualifiedName}" + if (events.isEmpty()) "" else "{$events}"
+                }
             "${row.method.wireValue} ${row.path} required=${row.requestRequired} [$bodies]"
         }
     return MessageDigest
@@ -186,9 +196,13 @@ internal val ContractBodyCheck =
         }
         on(ResponseRendered) { call, content ->
             val matched = call.contractRoute(content) ?: return@on null
+            val status = call.sendStatusOf(content)
+            if (content.isEventStream()) {
+                return@on ContractLedger.watchEventStream(matched.leaf, status, content, fixture)
+            }
             ContractLedger
-                .check(matched.leaf, matched.access, call.sendStatusOf(content), content, fixture)
-                ?.let { TextContent(it, ContentType.Text.Plain, HttpStatusCode(CONTRACT_DRIFT_STATUS, CONTRACT_DRIFT_REASON)) }
+                .check(matched.leaf, matched.access, status, content, fixture)
+                ?.let(::driftResponse)
         }
     }
 
@@ -213,6 +227,47 @@ private fun ContentType.isJson(): Boolean =
         (contentSubtype == JSON_SUBTYPE || contentSubtype.endsWith(JSON_SUBTYPE_SUFFIX))
 
 private fun OutgoingContent.isJson(): Boolean = contentType?.withoutParameters()?.isJson() == true
+
+private fun OutgoingContent.isEventStream(): Boolean = contentType?.withoutParameters() == ContentType.Text.EventStream
+
+/** What a drifted response is rewritten to, so the test that produced it fails. */
+private fun driftResponse(message: String): OutgoingContent =
+    TextContent(message, ContentType.Text.Plain, HttpStatusCode(CONTRACT_DRIFT_STATUS, CONTRACT_DRIFT_REASON))
+
+private const val STREAM_COPY_BUFFER_BYTES = 8192
+private const val SSE_FIELD_EVENT = "event"
+private const val SSE_FIELD_DATA = "data"
+private const val SSE_COMMENT_PREFIX = ':'
+private const val SSE_FIELD_SEPARATOR = ':'
+
+/** One event as a stream framed it: its name (null when it gave none) and its data lines, joined. */
+private data class FramedEvent(
+    val name: String?,
+    val data: String,
+)
+
+/**
+ * The events of a `text/event-stream` body, framed the way a browser frames
+ * them: blank lines end an event, `:` lines are comments (keep-alives), and a
+ * field's value drops the one space after its colon.
+ */
+private fun framedEvents(stream: String): List<FramedEvent> =
+    stream
+        .replace("\r\n", "\n")
+        .split("\n\n")
+        .mapNotNull { block ->
+            var name: String? = null
+            val data = mutableListOf<String>()
+            block.lines().filter { it.isNotEmpty() && it.first() != SSE_COMMENT_PREFIX }.forEach { line ->
+                val field = line.substringBefore(SSE_FIELD_SEPARATOR)
+                val value = line.substringAfter(SSE_FIELD_SEPARATOR, "").removePrefix(" ")
+                when (field) {
+                    SSE_FIELD_EVENT -> name = value
+                    SSE_FIELD_DATA -> data += value
+                }
+            }
+            if (name == null && data.isEmpty()) null else FramedEvent(name, data.joinToString("\n"))
+        }
 
 /**
  * The row this response is answerable to.
@@ -399,6 +454,101 @@ internal object ContractLedger {
             "the contract declares ${expected.qualifiedName} at $status, but the route answered " +
                 "${content.contentType}, which the check cannot read as JSON. Serve the DTO as JSON, " +
                 "or take the body off the row.",
+        )
+    }
+
+    /**
+     * A streamed response on a contracted row, passed through to the client byte
+     * for byte and checked once the stream ends.
+     *
+     * An event stream cannot be read at Render the way a JSON body is — its
+     * events are written after — so the check copies what the route writes as it
+     * writes it and holds each event to the row afterwards: the name has to be
+     * one the row declares, and the data has to strict-decode into that event's
+     * DTO and re-encode to the same JSON. By then the status is on the wire, so a
+     * drift is recorded rather than rewritten: the ledger gate fails the build on
+     * it, and the log carries the message. A stream at a status the row declares
+     * no events for is refused before anything is sent.
+     */
+    fun watchEventStream(
+        leaf: RouteLeaf,
+        status: Int,
+        content: OutgoingContent,
+        fixture: Boolean,
+    ): OutgoingContent? {
+        val row = rowsByLeaf[leaf] ?: return null
+        val declared =
+            row.bodyAt(status)?.takeIf { it.isEventStream }
+                ?: return driftResponse(
+                    fail(
+                        leaf,
+                        status,
+                        fixture,
+                        "the route answered a text/event-stream at $status, but the contract declares no events " +
+                            "there. Add ApiBody($status, events = …) to the row in model/api/ApiContract.kt.",
+                    ),
+                )
+        val streamed =
+            content as? OutgoingContent.WriteChannelContent
+                ?: return driftResponse(
+                    fail(leaf, status, fixture, "the route streamed as ${content::class.simpleName}, which the check cannot read."),
+                )
+        return object : OutgoingContent.WriteChannelContent() {
+            override val contentType = streamed.contentType
+            override val status = streamed.status
+            override val headers = streamed.headers
+
+            override suspend fun writeTo(channel: ByteWriteChannel) {
+                val captured = ByteArrayOutputStream()
+                val tee = ByteChannel()
+                coroutineScope {
+                    val writer =
+                        launch {
+                            try {
+                                streamed.writeTo(tee)
+                            } finally {
+                                tee.flushAndClose()
+                            }
+                        }
+                    val buffer = ByteArray(STREAM_COPY_BUFFER_BYTES)
+                    while (true) {
+                        val read = tee.readAvailable(buffer, 0, buffer.size)
+                        if (read == -1) break
+                        if (read > 0) {
+                            channel.writeFully(buffer, 0, read)
+                            channel.flush()
+                            captured.write(buffer, 0, read)
+                        }
+                    }
+                    writer.join()
+                }
+                checkStream(leaf, status, declared, captured.toString(Charsets.UTF_8), fixture)
+            }
+        }
+    }
+
+    private fun checkStream(
+        leaf: RouteLeaf,
+        status: Int,
+        declared: ApiBody,
+        stream: String,
+        fixture: Boolean,
+    ) {
+        val byName = declared.events.associateBy { it.name }
+        for (event in framedEvents(stream)) {
+            val name = event.name ?: return run { fail(leaf, status, fixture, "the stream sent an event with no name.") }
+            val expected =
+                byName[name]?.data
+                    ?: return run {
+                        fail(leaf, status, fixture, "the stream sent a `$name` event, which the row does not declare.")
+                    }
+            compare(leaf, status, expected, event.data)?.let { return run { fail(leaf, status, fixture, "`$name` event: $it") } }
+        }
+        record(
+            if (fixture) LEDGER_EXPECTED_EXERCISED else LEDGER_EXERCISED,
+            leaf,
+            status,
+            declared.events.joinToString(",") { "${it.name}=${it.data.qualifiedName}" },
         )
     }
 

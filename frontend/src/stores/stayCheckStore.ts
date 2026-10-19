@@ -7,7 +7,7 @@
 // change to either leaves the old answers behind rather than showing them as if
 // they were about the new stay.
 import { create } from 'zustand';
-import type { StaySummary } from '@/api/availability-api';
+import type { StayFailureReason, StayOutcome, StaySummaryDto } from '@/api/availability-api';
 import type { CampsiteKind } from '@/api/generated/api-types';
 
 /** What a check asks: the stay, and the site filters that narrow which campsites count. */
@@ -20,8 +20,14 @@ export interface StayQuery {
   groupSize: number | null;
 }
 
-/** One campground's answer: how the stay looks there, or the code it failed with. */
-export type StayResult = { kind: 'summary'; summary: StaySummary } | { kind: 'error'; code: string };
+/**
+ * One campground's answer: how the stay looks there, or the outcome the server
+ * classified its failure as. [reason] is null for a timeout, which has none;
+ * [retryable] is null wherever the server did not say, so it is never guessed.
+ */
+export type StayResult =
+  | { kind: 'summary'; summary: StaySummaryDto }
+  | { kind: 'error'; outcome: StayOutcome; reason: StayFailureReason | null; retryable: boolean | null };
 
 /** Why a check stopped before every campground answered. */
 export type StayCheckFailure = 'throttled' | 'timed_out' | 'failed';
@@ -39,7 +45,7 @@ export interface StayCheckState {
   /** When a throttled check may be tried again, in epoch ms; null when nothing is cooling down. */
   retryAt: number | null;
   begin: (query: StayQuery, ids: readonly number[]) => void;
-  /** Adds a batch of answers, observed no later than [observedAt]. */
+  /** Adds answers as they land, observed no later than [observedAt]. */
   record: (results: Readonly<Record<number, StayResult>>, observedAt: string) => void;
   finish: (failure: StayCheckFailure | null, retryAt?: number | null) => void;
   reset: () => void;

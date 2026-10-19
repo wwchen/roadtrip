@@ -222,8 +222,11 @@ export const InViewChecked = inViewStory(
     query: { start: '2026-09-11', end: '2026-09-13', siteType: null, groupSize: null },
     asked: [1, 2],
     results: {
-      1: { kind: 'summary', summary: { status: 'open', open_sites: 8, checked_sites: 40 } },
-      2: { kind: 'error', code: 'beyond_booking_horizon' },
+      1: {
+        kind: 'summary',
+        summary: { status: 'open', open_sites: 8, checked_sites: 40, observed_at: new Date().toISOString(), from_cache: false },
+      },
+      2: { kind: 'error', outcome: 'refused', reason: 'beyond_booking_horizon', retryable: null },
     },
     running: false,
     observedAt: new Date().toISOString(),

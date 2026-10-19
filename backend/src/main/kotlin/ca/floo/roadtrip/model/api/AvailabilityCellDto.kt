@@ -16,8 +16,8 @@ data class AvailabilityCellDto(
 ) {
     companion object {
         /**
-         * The one watchability predicate, so the fused campground week and the
-         * per-campsite bulk envelope can never answer it differently: a status a
+         * The one watchability predicate, so the fused campground week and any
+         * other shape of a cell can never answer it differently: a status a
          * watch could fire on, a provider the poller can reach, and a date the
          * vendor will still quote.
          */

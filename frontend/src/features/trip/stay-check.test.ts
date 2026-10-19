@@ -1,62 +1,90 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
-import type { BulkAvailabilityResponseDto, StayAvailabilityStatus } from '@/api/generated/api-types';
+import { describe, expect, test } from 'vitest';
+import type { StayAnswer } from '@/api/availability-api';
+import type { StayAvailabilityStatus, StayOutcome, StaySummaryDto } from '@/api/generated/api-types';
 import type { StayResult } from '@/stores/stayCheckStore';
-import { batchesOf, observedAtOf, rankByStay, resultsOf, StayCheckTimeout, stayTallies, withDeadline } from './stay-check';
+import { rankByStay, resultOf, stayTallies, stayToneOf } from './stay-check';
 
+const stay = (status: StayAvailabilityStatus, openSites = 0): StaySummaryDto => ({
+  status,
+  open_sites: openSites,
+  checked_sites: 10,
+  observed_at: '2026-10-12T11:56:00Z',
+  from_cache: true,
+});
 const summary = (status: StayAvailabilityStatus, openSites = 0): StayResult => ({
   kind: 'summary',
-  summary: { status, open_sites: openSites, checked_sites: 10 },
+  summary: stay(status, openSites),
 });
-const failure: StayResult = { kind: 'error', code: 'rate_limited' };
+const failure: StayResult = { kind: 'error', outcome: 'failed', reason: 'rate_limited', retryable: true };
+const refusal: StayResult = { kind: 'error', outcome: 'refused', reason: 'beyond_booking_horizon', retryable: null };
+const timeout: StayResult = { kind: 'error', outcome: 'timed_out', reason: null, retryable: null };
+/** An outcome a newer server might send that this build has never heard of. */
+const future: StayResult = { kind: 'error', outcome: 'some_future_outcome' as StayOutcome, reason: null, retryable: null };
 const card = (id: number) => ({ summary: { id } });
 
-describe('batchesOf', () => {
-  test('splits into at most the given number of near-equal runs, in order', () => {
-    expect(batchesOf([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 4)).toEqual([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10]]);
-  });
-
-  test('fewer ids than batches is one id per batch', () => {
-    expect(batchesOf([1, 2], 4)).toEqual([[1], [2]]);
-  });
-
-  test('no ids is no batches', () => {
-    expect(batchesOf([], 4)).toEqual([]);
-  });
-});
-
-describe('resultsOf', () => {
-  test('keys each entry by its POI, as a summary or an error', () => {
-    const response: BulkAvailabilityResponseDto = {
-      pois: [
-        { poi_id: 21, summary: { status: 'open', open_sites: 8, checked_sites: 40 } },
-        { poi_id: 22, error: 'rate_limited' },
-      ],
-    };
-
-    expect(resultsOf(response)).toEqual({
-      21: { kind: 'summary', summary: { status: 'open', open_sites: 8, checked_sites: 40 } },
-      22: { kind: 'error', code: 'rate_limited' },
+describe('resultOf', () => {
+  test('an answered stay is its summary', () => {
+    expect(resultOf({ poi_id: 21, outcome: 'answered', stay: stay('open', 8) })).toEqual({
+      kind: 'summary',
+      summary: stay('open', 8),
     });
   });
-});
 
-describe('observedAtOf', () => {
-  test('backs the time off by the stalest cache age in the response', () => {
-    const now = Date.parse('2026-10-12T12:00:00Z');
-    const response: BulkAvailabilityResponseDto = {
-      pois: [
-        { poi_id: 1, summary: { status: 'full', open_sites: 0, checked_sites: 3, cache: { hit: true, age_seconds: 60, ttl_seconds: 600 } } },
-        { poi_id: 2, summary: { status: 'open', open_sites: 5, checked_sites: 9, cache: { hit: true, age_seconds: 240, ttl_seconds: 600 } } },
-        { poi_id: 3, error: 'rate_limited' },
-      ],
-    };
-
-    expect(observedAtOf(response, now)).toBe('2026-10-12T11:56:00.000Z');
+  test('reads a refused answer from its outcome, not from a code list', () => {
+    // `window_too_long` was never in the browser's own list of refusals; the server says it is one.
+    expect(resultOf({ poi_id: 22, outcome: 'refused', reason: 'window_too_long' })).toEqual({
+      kind: 'error',
+      outcome: 'refused',
+      reason: 'window_too_long',
+      retryable: null,
+    });
   });
 
-  test('is now when nothing reports an age', () => {
-    const now = Date.parse('2026-10-12T12:00:00Z');
-    expect(observedAtOf({ pois: [{ poi_id: 1, error: 'not_found' }] }, now)).toBe('2026-10-12T12:00:00.000Z');
+  test('reads retryability from the server rather than inferring it', () => {
+    const answer = (retryable: boolean): StayAnswer => ({ poi_id: 1, outcome: 'failed', reason: 'unknown', retryable });
+
+    // `unknown` is not retryable and `rate_limited` is: whichever the server says is what the result carries.
+    expect(resultOf(answer(false))).toMatchObject({ retryable: false });
+    expect(resultOf(answer(true))).toMatchObject({ retryable: true });
+    expect(resultOf({ poi_id: 2, outcome: 'timed_out' })).toEqual({
+      kind: 'error',
+      outcome: 'timed_out',
+      reason: null,
+      retryable: null,
+    });
+  });
+
+  test('an outcome it has never seen is an error result, not a throw', () => {
+    expect(resultOf({ poi_id: 1, outcome: 'some_future_outcome' as StayOutcome })).toEqual(future);
+  });
+
+  test('an answered outcome without its stay is not a summary', () => {
+    expect(resultOf({ poi_id: 1, outcome: 'answered' })).toMatchObject({ kind: 'error', outcome: 'answered' });
+  });
+});
+
+describe('stayToneOf', () => {
+  test('reads each status, with closed for the season as full and a failure as unknown', () => {
+    const statuses: StayAvailabilityStatus[] = ['open', 'few_left', 'full', 'closed_for_season', 'no_data'];
+
+    expect(statuses.map((status) => stayToneOf(summary(status)))).toEqual(['open', 'few', 'full', 'full', 'unknown']);
+    expect(stayToneOf(failure)).toBe('unknown');
+  });
+});
+
+describe('an unrecognised outcome or status', () => {
+  test('ranks and tones as unknown, behind every known status and ahead of the unasked', () => {
+    expect(stayToneOf(future)).toBe('unknown');
+    // A status a newer server added: neither lookup may come back undefined.
+    const newStatus = summary('brand_new' as StayAvailabilityStatus, 0);
+    expect(stayToneOf(newStatus)).toBe('unknown');
+
+    const cards = [card(1), card(2), card(3), card(4), card(5)];
+    const results = { 1: future, 2: newStatus, 3: summary('no_data'), 4: summary('open', 1) };
+
+    // 5 was never asked about. 1 and 2 are the unrecognised pair: the same rank and no open
+    // sites each, so they keep the order they arrived in.
+    expect(rankByStay(cards, results).map((c) => c.summary.id)).toEqual([4, 3, 1, 2, 5]);
   });
 });
 
@@ -86,6 +114,23 @@ describe('rankByStay', () => {
 });
 
 describe('stayTallies', () => {
+  // A regression guard, not a test that drove the code: under the old string-matching
+  // an unfamiliar value fell to `unknown` too, so this was true before it was written.
+  // It pins that forward-compatibility property across the move to `outcome`.
+  test('tallies an outcome it has never seen as unknown', () => {
+    const results = { 1: future, 2: summary('open', 1), 3: { ...future, outcome: 'answered' as StayOutcome } };
+
+    expect(stayTallies([1, 2, 3], results)).toEqual({
+      withSite: 1,
+      full: 0,
+      closed: 0,
+      refused: 0,
+      timedOut: 0,
+      unknown: 2,
+      answered: 3,
+    });
+  });
+
   test('counts somewhere to stay, full, closed and unknown over the ids asked about', () => {
     const results: Record<number, StayResult> = {
       1: summary('open', 5),
@@ -97,52 +142,20 @@ describe('stayTallies', () => {
       99: summary('open', 3),
     };
 
-    expect(stayTallies([1, 2, 3, 4, 5, 6, 7, 8], { ...results, 8: { kind: 'error', code: 'beyond_booking_horizon' } })).toEqual({
+    expect(
+      stayTallies([1, 2, 3, 4, 5, 6, 7, 8, 9], {
+        ...results,
+        8: refusal,
+        9: timeout,
+      }),
+    ).toEqual({
       withSite: 2,
       full: 1,
       closed: 1,
       refused: 1,
+      timedOut: 1,
       unknown: 2,
-      answered: 7,
+      answered: 8,
     });
-  });
-});
-
-describe('withDeadline', () => {
-  afterEach(() => vi.useRealTimers());
-
-  /** A request that never answers, and rejects the way fetch does once its signal aborts. */
-  const stalled = (signal: AbortSignal) =>
-    new Promise<never>((_, reject) =>
-      signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))),
-    );
-
-  test('a request that outlives the deadline is aborted and reported as a timeout', async () => {
-    vi.useFakeTimers();
-    const pending = withDeadline(stalled, new AbortController().signal, 1_000);
-    const outcome = pending.catch((error: unknown) => error);
-
-    await vi.advanceTimersByTimeAsync(1_000);
-
-    expect(await outcome).toBeInstanceOf(StayCheckTimeout);
-  });
-
-  test("a cancel is the caller's own abort, not a timeout", async () => {
-    vi.useFakeTimers();
-    const parent = new AbortController();
-    const outcome = withDeadline(stalled, parent.signal, 1_000).catch((error: unknown) => error);
-
-    parent.abort();
-
-    const error = await outcome;
-    expect(error).not.toBeInstanceOf(StayCheckTimeout);
-    expect((error as DOMException).name).toBe('AbortError');
-  });
-
-  test('an answer in time is returned, and leaves no timer behind', async () => {
-    vi.useFakeTimers();
-
-    await expect(withDeadline(async () => 'answer', new AbortController().signal, 1_000)).resolves.toBe('answer');
-    expect(vi.getTimerCount()).toBe(0);
   });
 });

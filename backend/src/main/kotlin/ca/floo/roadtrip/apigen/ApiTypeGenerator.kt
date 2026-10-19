@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.apigen
 
+import ca.floo.roadtrip.model.api.ApiBody
 import ca.floo.roadtrip.model.api.ApiContract
 import ca.floo.roadtrip.model.api.ApiEndpoint
 import ca.floo.roadtrip.model.api.guardBodyClasses
@@ -79,14 +80,10 @@ internal fun walkContract(endpoints: List<ApiEndpoint> = ApiContract.endpoints):
                 path = endpoint.path,
                 request = endpoint.request?.let { requests.declaredName(it) },
                 requestRequired = endpoint.requestRequired,
-                success =
-                    TsBody(
-                        endpoint.success.status,
-                        endpoint.success.body?.let { responses.declaredName(it) },
-                    ),
+                success = responses.tsBody(endpoint.success),
                 errors =
                     endpoint.errors
-                        .map { body -> TsBody(body.status, body.body?.let { responses.declaredName(it) }) }
+                        .map { body -> responses.tsBody(body) }
                         .distinct()
                         .sortedWith(compareBy({ it.status }, { it.type.orEmpty() })),
             )
@@ -117,6 +114,14 @@ internal fun generateApiTypes(endpoints: List<ApiEndpoint> = ApiContract.endpoin
         endpoints = walk.rows.sortedWith(compareBy({ it.path }, { it.method })),
     )
 }
+
+/** A row's body as the renderers read it; an event's data is a response body like any other. */
+private fun DescriptorWalk.tsBody(body: ApiBody): TsBody =
+    TsBody(
+        status = body.status,
+        type = body.body?.let { declaredName(it) },
+        events = body.events.map { TsEvent(it.name, declaredName(it.data)) },
+    )
 
 /** The claimed declaration name for a contract row's class, walking it on first mention. */
 private fun DescriptorWalk.declaredName(kClass: KClass<*>): String =
@@ -209,7 +214,11 @@ private fun renderEndpoints(endpoints: List<TsEndpoint>): String =
         append("] as const;\n")
     }
 
-private fun renderBody(body: TsBody): String = "{ status: ${body.status}, type: ${quoted(body.type)} }"
+private fun renderBody(body: TsBody): String {
+    if (body.events.isEmpty()) return "{ status: ${body.status}, type: ${quoted(body.type)} }"
+    val events = body.events.joinToString { "${key(it.name)}: '${it.type}'" }
+    return "{ status: ${body.status}, type: ${quoted(body.type)}, events: { $events } }"
+}
 
 private fun quoted(name: String?): String = name?.let { "'$it'" } ?: "null"
 

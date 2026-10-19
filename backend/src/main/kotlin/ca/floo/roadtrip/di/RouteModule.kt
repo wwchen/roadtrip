@@ -23,10 +23,10 @@ import ca.floo.roadtrip.route.api.campgrounds.campgroundRoutes
 import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
 import ca.floo.roadtrip.route.api.health.healthRoutes
-import ca.floo.roadtrip.route.api.pois.bulkAvailabilityRoutes
 import ca.floo.roadtrip.route.api.pois.campsiteRoutes
 import ca.floo.roadtrip.route.api.pois.poiRoutes
 import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
+import ca.floo.roadtrip.route.api.pois.stayCheckRoutes
 import ca.floo.roadtrip.route.api.route.routeRoutes
 import ca.floo.roadtrip.route.api.settings.recgovSettingsRoutes
 import ca.floo.roadtrip.route.api.settings.settingsRoutes
@@ -55,12 +55,12 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.BookingIdentityResolver
-import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
+import ca.floo.roadtrip.service.availability.StayCheckController
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.configuredSnapshotFreshnessTtl
@@ -163,9 +163,9 @@ internal fun Application.registerKoinRoutes() {
                 identities = bookingIdentities,
             )
         campsiteRoutes(campsiteController, config.availability.campsite)
-        bulkAvailabilityRoutes(
-            BulkAvailabilityController(campsiteController, config.availability.bulk),
-            config.availability.bulk,
+        stayCheckRoutes(
+            StayCheckController(campsiteController, config.availability.stays),
+            config.availability.stays,
         )
         slackInteractivity?.let { wiring ->
             slackInteractivityRoute(wiring.verifier, wiring.handler, schedulerScope)

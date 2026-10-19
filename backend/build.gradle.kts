@@ -242,6 +242,8 @@ dependencies {
     jooqGenerator("org.testcontainers:postgresql:$testcontainersVersion")
 
     testImplementation(kotlin("test"))
+    // Virtual time, so timeout and deadline tests run in no real time and cannot race a slow runner.
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     // In-memory metric reader, so OtelRoadtripMetricsTest can assert the exact
     // instrument names and attributes the dashboards and alert rules query.
     testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.65.0")

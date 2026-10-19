@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailability
 import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
+import ca.floo.roadtrip.fixtures.bookableDates
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
@@ -11,7 +12,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.domain.provider.BookingAlias
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
@@ -299,7 +299,7 @@ class AspiraAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-07-03"),
                 )
 
-            val dates = availabilityDatesFromObservations(batch)
+            val dates = batch.bookableDates()
             assertEquals(listOf("2026-07-01", "2026-07-02"), dates)
         }
 

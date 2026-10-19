@@ -19,7 +19,8 @@
 // Anything that varies is a function, so a caller cannot assemble a sentence out
 // of fragments and get the word order wrong.
 
-import type { StayAvailabilityStatus, StayRefusalCode } from '@/api/availability-api';
+import type { StayAvailabilityStatus, StayFailureReason, StayOutcome } from '@/api/availability-api';
+import { entryOf } from './entry-of';
 
 /**
  * What we call recreation.gov to users — the one name, matching the vendor's own
@@ -180,12 +181,13 @@ export const listCopy = {
 } as const;
 
 /**
- * What a card says when its campground refused the stay itself, by the code it
- * refused with. Any other code is an outage, and reads as `stayCopy.error`.
+ * What a card says when its campground refused the stay itself, by the reason it
+ * refused with. A refusal for a reason not listed reads as `stayCopy.refusedLine`.
  */
-const STAY_REFUSAL_COPY: Readonly<Record<StayRefusalCode, string>> = {
+const STAY_REFUSAL_COPY: Readonly<Partial<Record<StayFailureReason, string>>> = {
   beyond_booking_horizon: 'Not bookable this far ahead yet',
   start_before_earliest: 'Too soon to book online',
+  window_too_long: 'Too long a stay to book online',
 };
 
 /** The availability check (M3): its button, its progress, and each card's answer. */
@@ -201,18 +203,31 @@ export const stayCopy = {
   summary: (range: string, withSite: number, full: number) => `${range} · ${withSite} with a site · ${full} full`,
   closed: (count: number) => `${count} closed for the season`,
   refused: (count: number) => `${count} not bookable for these dates`,
+  timedOutCount: (count: number) => `${count} too slow to answer`,
   unknown: (count: number) => `${count} unknown`,
   checkedAgo: (ago: string) => `Checked ${ago}`,
   throttled: 'Too many checks in a row — try again in a minute.',
   noneCheckable: 'None of the campgrounds in view can be checked online.',
   failed: 'The check stopped part way. Try again.',
   timedOut: 'The booking sites took too long to answer. Try again.',
-  /** A card still waiting for its batch. */
+  /** A card still waiting for its answer. */
   pending: 'Checking…',
   /** A card whose campground could not be asked. */
   error: "Couldn't check",
-  /** A card's line for a failed answer: why, when the code says, else `error`. */
-  errorFor: (code: string) => (code in STAY_REFUSAL_COPY ? STAY_REFUSAL_COPY[code as StayRefusalCode] : stayCopy.error),
+  /** A card whose campground ran out of time: unlike `error`, asking again may well answer. */
+  timedOutLine: 'Too slow to answer — check again',
+  /** A card whose campground refused the stay for a reason with no copy of its own. */
+  refusedLine: 'Not bookable for these dates',
+  /**
+   * A card's line for an answer that is not a stay, by the outcome the server gave
+   * it: a refusal says why, a timeout says to ask again, and anything else — a
+   * failure, or an outcome this build has never heard of — is `error`.
+   */
+  errorFor: (outcome: StayOutcome, reason: StayFailureReason | null) => {
+    if (outcome === 'timed_out') return stayCopy.timedOutLine;
+    if (outcome !== 'refused') return stayCopy.error;
+    return (reason === null ? undefined : entryOf(STAY_REFUSAL_COPY, reason)) ?? stayCopy.refusedLine;
+  },
   /** A card's answer, by status; `open` is the count of sites open every night. */
   result: {
     open: (open: number) => `${open} sites open`,

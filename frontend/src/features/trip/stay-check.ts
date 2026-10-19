@@ -1,98 +1,61 @@
-// The pure half of the availability check: how the asked ids are split into
-// requests, how a response becomes answers, and how answered cards are ordered
-// and counted. `useStayCheck` runs it; the list and the head read the results.
-import type { BulkAvailabilityResponseDto } from '@/api/generated/api-types';
-import { isStayRefusal, type StayAvailabilityStatus } from '@/api/availability-api';
+// The pure half of the availability check: how a campground's answer becomes
+// its result, and how answered cards are ordered and counted. `useStayCheck`
+// runs the check; the list and the head read the results.
+import { isAnswered, type StayAnswer, type StayAvailabilityStatus } from '@/api/availability-api';
+import { entryOf } from '@/lib/entry-of';
 import type { StayResult } from '@/stores/stayCheckStore';
 
-const MS_PER_SECOND = 1000;
+/**
+ * The longest a check's stream may go without sending anything — an answer, or
+ * the keep-alive the backend writes while it has none, at least every 20 s
+ * (`StayCheckConfig.MAX_STREAM_HEARTBEAT_SECONDS`). A stream this quiet
+ * has lost its connection; without a limit the check, and its button, would stay
+ * running until the page was reloaded. How long the providers take is not this
+ * limit's business: the backend bounds that itself (`availability.stays.per-poi-timeout`
+ * and `stream-timeout`) and answers `timed_out` for whoever ran out.
+ */
+export const CHECK_IDLE_TIMEOUT_MS = 60_000;
 
 /**
- * The code an entry carrying neither a summary nor an error is recorded under:
- * the backend's own for a failure it could not classify (`AvailabilityProviderError.Unknown`).
+ * The age a re-check asks for: short, so what comes back is fresh, but not zero, so a
+ * double-click does not ask every provider twice. It is a request, not a guarantee: the
+ * server clamps whatever it is sent into its own range and may serve something older. A
+ * first check names no age and gets the endpoint's default max age.
  */
-const UNCLASSIFIED_ERROR = 'unknown';
+export const RECHECK_MAX_AGE_SECONDS = 60;
 
 /**
- * At most this many requests per check. Each request answers a batch at once, so
- * more requests fill the cards in sooner, one batch at a time; fewer keep a check
- * well inside the endpoint's per-IP limit, which a second check soon after has to
- * fit in too.
+ * A campground's answer: its summary when it answered, else the outcome the server
+ * classified it as. Anything that is not an answered stay lands on the error arm,
+ * an outcome this build has never heard of included, so a newer server adding one
+ * degrades to "couldn't check" rather than breaking the list.
  */
-export const MAX_REQUESTS_PER_CHECK = 4;
-
-/**
- * The longest one request of a check may take. The backend gives a provider's
- * call no deadline the browser can see, so without one a stalled provider would
- * leave the check running, and its button off, until the page was reloaded.
- */
-export const CHECK_REQUEST_TIMEOUT_MS = 60_000;
-
-/** A request of a check that ran out of time, as opposed to one the caller cancelled. */
-export class StayCheckTimeout extends Error {
-  constructor() {
-    super('availability check request timed out');
-    this.name = 'StayCheckTimeout';
-  }
+export function resultOf(answer: StayAnswer): StayResult {
+  if (isAnswered(answer)) return { kind: 'summary', summary: answer.stay };
+  return {
+    kind: 'error',
+    outcome: answer.outcome,
+    reason: answer.reason ?? null,
+    retryable: answer.retryable ?? null,
+  };
 }
 
-/**
- * [request], given a signal that aborts when [parent] does or after [timeoutMs].
- * Rejects with `StayCheckTimeout` when it was the time that ran out, and with the
- * request's own error otherwise — a cancel included.
- */
-export async function withDeadline<T>(
-  request: (signal: AbortSignal) => Promise<T>,
-  parent: AbortSignal,
-  timeoutMs: number,
-): Promise<T> {
-  const controller = new AbortController();
-  let timedOut = false;
-  const cancel = (): void => controller.abort();
-  parent.addEventListener('abort', cancel);
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-  try {
-    return await request(controller.signal);
-  } catch (error) {
-    throw timedOut && !parent.aborted ? new StayCheckTimeout() : error;
-  } finally {
-    clearTimeout(timer);
-    parent.removeEventListener('abort', cancel);
-  }
-}
+/** How a result reads at a glance — the colour its line and its card's dot take. */
+export type StayTone = 'open' | 'few' | 'full' | 'unknown';
 
-/** The ids split into at most [maxBatches] runs of near-equal size, order kept. */
-export function batchesOf(ids: readonly number[], maxBatches: number): number[][] {
-  if (ids.length === 0) return [];
-  const size = Math.ceil(ids.length / maxBatches);
-  const batches: number[][] = [];
-  for (let start = 0; start < ids.length; start += size) batches.push(ids.slice(start, start + size));
-  return batches;
-}
+/** Closed for the season reads as full: there is nowhere to stay either way, and the line says which. */
+const STATUS_TONE: Record<StayAvailabilityStatus, StayTone> = {
+  open: 'open',
+  few_left: 'few',
+  full: 'full',
+  closed_for_season: 'full',
+  no_data: 'unknown',
+};
 
-/** One answer per entry: its summary, else its error code. */
-export function resultsOf(response: BulkAvailabilityResponseDto): Record<number, StayResult> {
-  const results: Record<number, StayResult> = {};
-  for (const entry of response.pois) {
-    results[entry.poi_id] = entry.summary
-      ? { kind: 'summary', summary: entry.summary }
-      : { kind: 'error', code: entry.error ?? UNCLASSIFIED_ERROR };
-  }
-  return results;
-}
-
-/**
- * When the response's oldest answer was observed: [now] less the stalest cache
- * age it reports. The backend serves recent observations without asking the
- * provider again, so "checked just now" would be wrong for an answer read from
- * an hour-old poll.
- */
-export function observedAtOf(response: BulkAvailabilityResponseDto, now: number): string {
-  const stalest = Math.max(0, ...response.pois.map((entry) => entry.summary?.cache?.age_seconds ?? 0));
-  return new Date(now - stalest * MS_PER_SECOND).toISOString();
+/** A summary's tone by its status; a failed answer, or a status it does not know, could not tell. */
+export function stayToneOf(result: StayResult): StayTone {
+  if (result.kind !== 'summary') return 'unknown';
+  return entryOf(STATUS_TONE, result.summary.status) ?? 'unknown';
 }
 
 /** Where a status sorts once a check is back: bookable first, then the ones that say why not. */
@@ -108,7 +71,8 @@ const UNCHECKED_RANK = ERROR_RANK + 1;
 
 function rankOf(result: StayResult | undefined): number {
   if (!result) return UNCHECKED_RANK;
-  return result.kind === 'summary' ? STATUS_RANK[result.summary.status] : ERROR_RANK;
+  if (result.kind !== 'summary') return ERROR_RANK;
+  return entryOf(STATUS_RANK, result.summary.status) ?? ERROR_RANK;
 }
 
 function openSitesOf(result: StayResult | undefined): number {
@@ -144,7 +108,9 @@ export interface StayTallies {
   closed: number;
   /** Refused the dates themselves: past their booking horizon, or too soon. */
   refused: number;
-  /** No data, or the check failed for it. */
+  /** Ran out of time to answer — worth a Check again, unlike the unknowns. */
+  timedOut: number;
+  /** No data, or the check failed for it, or an outcome this build does not know. */
   unknown: number;
   /** How many of the asked ids have answered. */
   answered: number;
@@ -155,16 +121,16 @@ export function stayTallies(
   asked: readonly number[],
   results: Readonly<Record<number, StayResult>>,
 ): StayTallies {
-  const tallies: StayTallies = { withSite: 0, full: 0, closed: 0, refused: 0, unknown: 0, answered: 0 };
+  const tallies: StayTallies = { withSite: 0, full: 0, closed: 0, refused: 0, timedOut: 0, unknown: 0, answered: 0 };
   for (const id of asked) {
     const result = results[id];
     if (!result) continue;
     tallies.answered += 1;
     if (result.kind === 'error') {
-      if (isStayRefusal(result.code)) tallies.refused += 1;
+      if (result.outcome === 'refused') tallies.refused += 1;
+      else if (result.outcome === 'timed_out') tallies.timedOut += 1;
       else tallies.unknown += 1;
-    }
-    else if (result.summary.status === 'open' || result.summary.status === 'few_left') tallies.withSite += 1;
+    } else if (result.summary.status === 'open' || result.summary.status === 'few_left') tallies.withSite += 1;
     else if (result.summary.status === 'full') tallies.full += 1;
     else if (result.summary.status === 'closed_for_season') tallies.closed += 1;
     else tallies.unknown += 1;

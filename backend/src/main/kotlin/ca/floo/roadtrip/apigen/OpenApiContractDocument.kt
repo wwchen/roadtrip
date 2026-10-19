@@ -140,9 +140,9 @@ internal object OpenApiContractDocument {
             responses =
                 (listOf(names.success) + names.errors + accessResponses(access, guardSchemas))
                     .distinct()
-                    .groupBy({ it.status }, { it.type })
+                    .groupBy { it.status }
                     .toSortedMap()
-                    .mapValues { (status, schemas) -> ReferenceOr.Value(responseFor(status, schemas)) },
+                    .mapValues { (status, bodies) -> ReferenceOr.Value(responseFor(status, bodies)) },
         )
 
     /**
@@ -164,18 +164,39 @@ internal object OpenApiContractDocument {
             TsBody(body.status, guardSchemas.getValue(requireNotNull(body.body)))
         }
 
+    /**
+     * One status's response: its JSON schemas under `application/json`, and an
+     * event stream's events under `text/event-stream` — as the `oneOf` of their
+     * data schemas, with the event names in the description, since a schema has
+     * no way to say which `event:` line carries which.
+     */
     private fun responseFor(
         status: Int,
-        schemas: List<String?>,
+        bodies: List<TsBody>,
     ): Response {
-        val description = HttpStatusCode.fromValue(status).description
-        val refs = schemas.filterNotNull().distinct().map { ReferenceOr.schema(it) }
-        if (refs.isEmpty()) return Response(description = description)
-        val schema: ReferenceOr<JsonSchema> = refs.singleOrNull() ?: ReferenceOr.value(JsonSchema(oneOf = refs))
-        return Response(
-            description = description,
-            content = mapOf(ContentType.Application.Json to MediaType(schema = schema)),
-        )
+        val statusText = HttpStatusCode.fromValue(status).description
+        val json = schemaOf(bodies.mapNotNull { it.type })
+        val events = bodies.flatMap { it.events }.distinct()
+        val stream = schemaOf(events.map { it.type })
+        val content =
+            buildMap {
+                json?.let { put(ContentType.Application.Json, MediaType(schema = it)) }
+                stream?.let { put(ContentType.Text.EventStream, MediaType(schema = it)) }
+            }
+        val description =
+            if (events.isEmpty()) {
+                statusText
+            } else {
+                "$statusText — a text/event-stream of: " + events.joinToString { "`${it.name}` (${it.type})" }
+            }
+        return if (content.isEmpty()) Response(description = description) else Response(description = description, content = content)
+    }
+
+    /** The one schema, or the `oneOf` of several; null for none. */
+    private fun schemaOf(names: List<String>): ReferenceOr<JsonSchema>? {
+        val refs = names.distinct().map { ReferenceOr.schema(it) }
+        if (refs.isEmpty()) return null
+        return refs.singleOrNull() ?: ReferenceOr.value(JsonSchema(oneOf = refs))
     }
 
     /** One walk's products, cached together so the names and the schemas can never be from different walks. */
