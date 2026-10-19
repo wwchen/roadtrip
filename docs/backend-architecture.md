@@ -292,6 +292,21 @@ the two cannot disagree about which campsites a POI has or what a night's status
 is. Per-campsite detail is not a bulk read: callers ask
 `GET /api/pois/{id}/campsites/availability` for one POI.
 
+What bounds that fan-out is worth stating exactly, because the obvious reading is
+wrong. `fan-out-concurrency` is a semaphore built per collection of the stream, so
+it bounds the POI reads of **one** check — its vendor calls in flight — and nothing
+bounds how many checks run at once: the route is anonymous and `IpRateLimiter` is
+per-IP. The database pool is not what it protects. A POI read holds no pooled
+connection across its vendor call (`AvailabilityLoader` reads, fetches, writes, and
+reads again as separate jOOQ calls on a `DataSource`-backed `DSLContext`, the longest
+hold being the `recordObservations` transaction), and a pool asked for more
+connections than it has queues inside `db.connection-timeout` instead of failing —
+measured at three times `max-pool-size` without one acquisition timeout. If a wait
+ever does expire, the controller catches it as that POI's `failed` answer rather than
+the stream's. Bounding live vendor load across checks would be a new policy, and
+`VendorRateLimiter` — durable, per-vendor, today wired only into the poller — is the
+port it belongs in.
+
 ## ETL Flow
 
 ```

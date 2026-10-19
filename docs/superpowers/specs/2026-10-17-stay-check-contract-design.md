@@ -348,8 +348,18 @@ not a separate change.
 Nothing outside `backend/src` sets any `roadtrip.availability.*` key — no deploy
 config, compose file or CI workflow — so the rename costs nothing operationally.
 The existing invariants (`minMaxAge <= defaultMaxAge`,
-`ipPoiLimitPerMinute >= maxPois`, `fanOutConcurrency < db.max-pool-size`) carry
-over unchanged, with their `require` messages updated to the new names.
+`ipPoiLimitPerMinute >= maxPois`) carry over unchanged, with their `require`
+messages updated to the new names.
+
+> **Correction.** This section also listed `fanOutConcurrency < db.max-pool-size`
+> among the invariants carried over "with their `require` messages updated". It was
+> never one: `BulkAvailabilityConfig.init` did not check it and neither does
+> `StayCheckConfig.init`. It was a comment, and measurement has since shown it to be
+> false in both directions — a POI read holds no pooled connection across its vendor
+> call, and three times `max-pool-size` in concurrent reads queued inside
+> `db.connection-timeout` without one acquisition timeout. The comment is gone; what
+> `fan-out-concurrency` really bounds is stated in `StayCheckConfig` and in
+> `docs/backend-architecture.md`.
 
 > **Correction.** As first written, this section said no deploy config, compose
 > file or YAML set any `availability.bulk.*` key, because "the defaults all live in

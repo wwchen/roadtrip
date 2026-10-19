@@ -269,6 +269,16 @@ override. Pure optimization: no contract change, no response-shape change.
   config file, so the fan-out ships at 3. Raising one without the other
   reproduces pool exhaustion and trips `/api/health/ready`. The invariant is
   stated in comments at both sites but is not enforced in code.
+
+  > **Correction.** This risk was never measured and is wrong. A POI read holds a
+  > connection per jOOQ call and releases it — none is held across the vendor fetch,
+  > the longest hold being the `recordObservations` transaction (~150ms for 140
+  > observations) — and a pool asked for more than it has queues inside
+  > `db.connection-timeout`: twelve concurrent full POI reads against
+  > `max-pool-size` 4 completed with zero acquisition timeouts. The fan-out
+  > semaphore is also built per request, so it never bounded anything
+  > process-wide to begin with. The comments are gone; `StayCheckConfig` and
+  > `docs/backend-architecture.md` now state what the bound really is.
 - **The `poiAvailabilitySlice` extraction touches the live detail endpoint.**
   Behavior parity via the existing tests is the gate.
 
