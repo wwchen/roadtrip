@@ -11,6 +11,8 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
+import ca.floo.roadtrip.service.api.campsiteWindowStatuses
+import ca.floo.roadtrip.service.api.isClosedForSeason
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import java.time.Clock
 import java.time.Duration
@@ -25,6 +27,7 @@ internal data class CampsiteAvailabilityResult(
     /** The serving provider's booking horizon, for the client's date picker. */
     val latestDate: LocalDate,
     val batch: AvailabilityObservationBatch,
+    val reopensOnByCampsite: Map<Long, LocalDate>,
 )
 
 internal class CampsiteAvailabilityService(
@@ -32,7 +35,7 @@ internal class CampsiteAvailabilityService(
     private val dateResolver: AvailabilityDateResolver,
     private val failoverFetcher: FailoverAvailabilityFetcher,
     private val bookingHorizons: BookingHorizonResolver,
-    availabilityRepo: AvailabilityRepo? = null,
+    private val availabilityRepo: AvailabilityRepo? = null,
     private val clock: Clock = Clock.systemUTC(),
     private val snapshotFreshnessTtl: (provider: AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
 ) {
@@ -41,6 +44,7 @@ internal class CampsiteAvailabilityService(
     suspend fun fetchAvailability(
         campground: Campground,
         campsites: List<Campsite>,
+        campgroundCampsites: List<Campsite>,
         startDate: LocalDate?,
         endDate: LocalDate?,
         dateContext: PoiDateContext,
@@ -67,6 +71,7 @@ internal class CampsiteAvailabilityService(
         val windows = AvailabilityWindows(target = targetWindow, fetch = fetchWindow)
 
         val supportingProviders = availabilityProviders.filter { it.supportsCampground(campground) }
+        val freshAt = freshAtOrAfter ?: Instant.now(clock).minus(snapshotFreshnessTtl(provider))
 
         val batch =
             availabilityLoader.loadOrFetch(
@@ -79,7 +84,7 @@ internal class CampsiteAvailabilityService(
                     targets = campsites.map { AvailabilityLoader.CampsiteTarget(dbId = it.id) },
                     startDate = windows.target.startDate,
                     endDate = windows.target.endDate,
-                    freshAtOrAfter = freshAtOrAfter ?: Instant.now(clock).minus(snapshotFreshnessTtl(provider)),
+                    freshAtOrAfter = freshAt,
                 ),
             ) {
                 val result =
@@ -87,6 +92,7 @@ internal class CampsiteAvailabilityService(
                         providers = supportingProviders,
                         campground = campground,
                         campsites = campsites,
+                        campgroundCampsites = campgroundCampsites,
                         window = ResolvedDateWindow(windows.fetch.startDate, windows.fetch.endDate),
                     )
                 result.batch ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
@@ -98,7 +104,30 @@ internal class CampsiteAvailabilityService(
             // providerFor above already found a provider for this campground, so the same pick here can't miss.
             latestDate = bookingHorizons.latestDate(campground, dateContext)!!,
             batch = batch,
+            reopensOnByCampsite = reopensOnByCampsite(campsites, batch, windows.target, freshAt),
         )
+    }
+
+    private fun reopensOnByCampsite(
+        campsites: List<Campsite>,
+        batch: AvailabilityObservationBatch,
+        window: ResolvedDateWindow,
+        freshAtOrAfter: Instant,
+    ): Map<Long, LocalDate> {
+        val repo = availabilityRepo ?: return emptyMap()
+        val observationsByCampsite = batch.observations.groupBy { it.campsiteId }
+        val closed =
+            campsites
+                .filter { campsite ->
+                    val statuses =
+                        campsiteWindowStatuses(
+                            startDate = window.startDate,
+                            endDate = window.endDate,
+                            observations = observationsByCampsite[campsite.id].orEmpty(),
+                        )
+                    isClosedForSeason(statuses)
+                }.map { it.id }
+        return repo.earliestBookableDates(closed, window.startDate, freshAtOrAfter)
     }
 
     private fun providerFor(campground: Campground): AvailabilityProvider =

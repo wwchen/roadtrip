@@ -189,6 +189,137 @@ class AvailabilityRepoTest : SharedDbTest() {
     }
 
     @Test
+    fun `a cell named twice in one call is one observation, the latest`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val t1 = Instant.parse("2026-06-18T10:00:00Z")
+        val t2 = Instant.parse("2026-06-18T10:00:01Z")
+
+        val transitions =
+            repo.recordObservations(
+                null,
+                listOf(
+                    AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.RESERVED, t1),
+                    AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t2),
+                ),
+            )
+
+        assertEquals(1, transitions.size)
+        assertEquals(AvailabilityStatus.AVAILABLE, transitions.single().status)
+        assertEquals(1, ctx.fetchCount(ctx.selectFrom(ca.floo.roadtrip.db.generated.tables.Availability.AVAILABILITY)))
+        val current = repo.readCurrent(listOf(campsiteId), listOf(date)).single()
+        assertEquals(AvailabilityStatus.AVAILABLE, current.status)
+        assertEquals(t2, current.observedAt.toInstant())
+    }
+
+    @Test
+    fun `a cell whose chain already has a successor is left alone, not failed`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val t1 = Instant.parse("2026-06-18T10:00:00Z")
+        repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.RESERVED, t1)))
+        val currentId = currentRowId(campsiteId)
+        insertStatusRun(
+            campsiteId = campsiteId,
+            status = "available",
+            lastObservedAt = t1.minusSeconds(1),
+            previousId = currentId,
+        )
+
+        val transitions =
+            repo.recordObservations(
+                null,
+                listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t1.plusSeconds(60))),
+            )
+
+        assertEquals(emptyList(), transitions, "the run the other writer already inserted is not this write's transition")
+        assertEquals(2, ctx.fetchCount(ctx.selectFrom(ca.floo.roadtrip.db.generated.tables.Availability.AVAILABILITY)))
+    }
+
+    private fun currentRowId(campsiteId: Long): Long =
+        ctx
+            .fetchOne("SELECT id FROM availability WHERE campsite_id = ?", campsiteId)!!
+            .get("id", Long::class.java)
+
+    private fun insertStatusRun(
+        campsiteId: Long,
+        status: String,
+        lastObservedAt: Instant,
+        previousId: Long,
+    ) {
+        ctx
+            .query(
+                """
+                INSERT INTO availability (campsite_id, target_date, status, last_observed_at, previous_id)
+                VALUES (?, ?::date, ?::availability_status, ?::timestamptz, ?)
+                """.trimIndent(),
+                campsiteId,
+                date,
+                status,
+                OffsetDateTime.ofInstant(lastObservedAt, ZoneOffset.UTC),
+                previousId,
+            ).execute()
+    }
+
+    @Test
+    fun `earliestBookableDates takes the first bookable date per campsite`() {
+        val a = seedCampsite("100")
+        val b = seedCampsite("200")
+        val repo = AvailabilityRepo(ctx)
+        val observedAt = Instant.parse("2026-06-18T10:00:00Z")
+        repo.recordObservations(
+            null,
+            listOf(
+                AvailabilityRepo.Observation(a, date, AvailabilityStatus.CLOSED, observedAt),
+                AvailabilityRepo.Observation(a, date.plusDays(2), AvailabilityStatus.AVAILABLE, observedAt),
+                AvailabilityRepo.Observation(a, date.plusDays(4), AvailabilityStatus.AVAILABLE, observedAt),
+                AvailabilityRepo.Observation(b, date.plusDays(1), AvailabilityStatus.RESERVED, observedAt),
+            ),
+        )
+
+        val dates = repo.earliestBookableDates(listOf(a, b), date, observedAt.minusSeconds(60))
+
+        assertEquals(mapOf(a to date.plusDays(2)), dates, "only a bookable cell is a reopening, and only the first one")
+    }
+
+    @Test
+    fun `earliestBookableDates ignores a cell nobody has observed lately`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val longAgo = Instant.parse("2026-05-01T10:00:00Z")
+        repo.recordObservations(
+            null,
+            listOf(AvailabilityRepo.Observation(campsiteId, date.plusDays(2), AvailabilityStatus.AVAILABLE, longAgo)),
+        )
+
+        val cutoff = Instant.parse("2026-06-18T10:00:00Z")
+
+        assertEquals(emptyMap(), repo.earliestBookableDates(listOf(campsiteId), date, cutoff))
+        assertEquals(
+            mapOf(campsiteId to date.plusDays(2)),
+            repo.earliestBookableDates(listOf(campsiteId), date, longAgo.minusSeconds(1)),
+            "the same cell counts for a caller whose cutoff it is fresh enough for",
+        )
+    }
+
+    @Test
+    fun `earliestBookableDates reads the current row of a cell, not its history`() {
+        val campsiteId = seedCampsite("100")
+        val repo = AvailabilityRepo(ctx)
+        val first = Instant.parse("2026-06-18T10:00:00Z")
+        repo.recordObservations(
+            null,
+            listOf(AvailabilityRepo.Observation(campsiteId, date.plusDays(2), AvailabilityStatus.AVAILABLE, first)),
+        )
+        repo.recordObservations(
+            null,
+            listOf(AvailabilityRepo.Observation(campsiteId, date.plusDays(2), AvailabilityStatus.RESERVED, first.plusSeconds(60))),
+        )
+
+        assertEquals(emptyMap(), repo.earliestBookableDates(listOf(campsiteId), date, first.minusSeconds(1)))
+    }
+
+    @Test
     fun `markElapsedAsPast adds a past status-run for elapsed cells only`() {
         val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)

@@ -41,41 +41,10 @@ class CampflareAvailabilityProvider(
 
     override suspend fun availability(
         campground: Campground,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch {
-        val campgroundId = campflareIdOrThrow(campground)
-        val data = fetch(campgroundId, startDate, endDate)
-        val cg = data.campgrounds[campgroundId]
-        val observations =
-            cg
-                ?.campsiteAvailability
-                .orEmpty()
-                .flatMap { campsite ->
-                    observationsForReservable(
-                        campsiteId = null,
-                        byDate = campsite.availability,
-                        dates = dates(startDate, endDate),
-                        data = data,
-                    )
-                }
-        return batch(
-            campgroundId = campgroundId,
-            startDate = startDate,
-            endDate = endDate,
-            observations = observations,
-        )
-    }
-
-    override suspend fun catalogAvailability(
-        campground: Campground,
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        if (campsites.isEmpty()) {
-            return availability(campground, startDate, endDate)
-        }
         val campgroundId = campflareIdOrThrow(campground)
         val data = fetch(campgroundId, startDate, endDate)
         val byCampsiteId =
@@ -116,7 +85,7 @@ class CampflareAvailabilityProvider(
         }
 
     private fun observationsForReservable(
-        campsiteId: Long?,
+        campsiteId: Long,
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
         data: CampflareAvailability,

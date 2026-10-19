@@ -21,6 +21,7 @@ data class AvailabilityProviderCapabilities(
      * sub-calls. Zero means "don't poll" (unsupported stub).
      */
     val maxPollWindowDays: Int,
+    val coversCampgroundPerCall: Boolean = true,
 ) {
     companion object {
         /** Reasonable starting point for a stub; can be flipped on as features land. */

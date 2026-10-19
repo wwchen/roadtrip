@@ -298,6 +298,7 @@ private class CannedBatchFetcher : FailoverAvailabilityFetcher(cooldowns = Provi
         providers: List<AvailabilityProvider>,
         campground: Campground,
         campsites: List<Campsite>,
+        campgroundCampsites: List<Campsite>,
         window: ResolvedDateWindow,
     ): FailoverResult {
         val observedAt = Instant.parse("2026-07-30T12:00:00Z")

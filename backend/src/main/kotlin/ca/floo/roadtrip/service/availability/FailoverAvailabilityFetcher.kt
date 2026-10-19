@@ -35,6 +35,7 @@ internal open class FailoverAvailabilityFetcher(
         providers: List<AvailabilityProvider>,
         campground: Campground,
         campsites: List<Campsite>,
+        campgroundCampsites: List<Campsite> = campsites,
         window: ResolvedDateWindow,
     ): FailoverResult {
         val sorted = cooldowns.sortHealthyFirst(providers) { it.id }
@@ -46,7 +47,8 @@ internal open class FailoverAvailabilityFetcher(
             // provider is not asked — however the last one reported the cancellation.
             currentCoroutineContext().ensureActive()
             val begin = clock()
-            val attempt = attemptFetch(provider, campground, campsites, window)
+            val covers = provider.capabilities.coversCampgroundPerCall
+            val attempt = attemptFetch(provider, campground, if (covers) campgroundCampsites else campsites, window)
             val durationMs = elapsedMs(begin, clock())
 
             attempts +=
@@ -93,7 +95,7 @@ internal open class FailoverAvailabilityFetcher(
     ): Attempt =
         try {
             val batch =
-                provider.catalogAvailability(
+                provider.availability(
                     campground = campground,
                     campsites = campsites,
                     startDate = window.startDate,

@@ -199,6 +199,7 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
 
         override suspend fun availability(
             campground: Campground,
+            campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")

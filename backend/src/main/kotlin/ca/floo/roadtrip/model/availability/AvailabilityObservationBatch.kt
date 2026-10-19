@@ -9,7 +9,6 @@ data class AvailabilityObservationBatch(
     val endDate: LocalDate,
     val observations: List<CampsiteDayObservation>,
     val cacheBlock: AvailabilityCacheBlock,
-    val seasonBlock: AvailabilitySeasonBlock? = null,
     val scope: BookingProviderRef? = null,
     val campsiteId: Long? = null,
 )

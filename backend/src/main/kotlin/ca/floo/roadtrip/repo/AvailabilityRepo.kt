@@ -53,56 +53,115 @@ class AvailabilityRepo(
      * and contribute no transition. The count of transitions is the caller's
      * `snapshot_count`; the bookable subset feeds alert dispatch.
      *
-     * Known, accepted race: two writers to the SAME cell in the same instant (a
-     * live drawer fetch overlapping a poll) can both read the current row and both
-     * insert `previous_id` = that row, tripping `availability_previous_id_uq`. Left
-     * unguarded — low-probability on this single-instance, low-write backend, and
-     * self-healing: the poller records the tick as a failed run and re-polls next
-     * cadence, and the drawer read is retryable. Serialize per-cell (advisory lock
-     * or SELECT … FOR UPDATE) if it ever shows up in practice.
      */
     fun recordObservations(
         runId: Long?,
         observations: List<Observation>,
     ): List<CellTransition> {
         if (observations.isEmpty()) return emptyList()
+        val latest = latestPerCell(observations)
         return ctx.transactionResult { config ->
             val txn = DSL.using(config)
-            val transitions = mutableListOf<CellTransition>()
-            for (obs in observations) {
-                val observedAt = OffsetDateTime.ofInstant(obs.observedAt, ZoneOffset.UTC)
-                val current =
-                    txn
-                        .select(AVAILABILITY.ID, AVAILABILITY.STATUS)
-                        .from(AVAILABILITY)
-                        .where(AVAILABILITY.CAMPSITE_ID.eq(obs.campsiteId))
-                        .and(AVAILABILITY.TARGET_DATE.eq(obs.targetDate))
-                        .orderBy(AVAILABILITY.LAST_OBSERVED_AT.desc(), AVAILABILITY.ID.desc())
-                        .limit(1)
-                        .fetchOne()
-                val newStatus = obs.status.toDb()
-                if (current != null && current.get(AVAILABILITY.STATUS) == newStatus) {
-                    txn
-                        .update(AVAILABILITY)
-                        .set(AVAILABILITY.LAST_OBSERVED_AT, observedAt)
-                        .where(AVAILABILITY.ID.eq(current.get(AVAILABILITY.ID)))
-                        .execute()
-                } else {
-                    txn
-                        .insertInto(AVAILABILITY)
-                        .set(AVAILABILITY.CAMPSITE_ID, obs.campsiteId)
-                        .set(AVAILABILITY.TARGET_DATE, obs.targetDate)
-                        .set(AVAILABILITY.STATUS, newStatus)
-                        .set(AVAILABILITY.LAST_OBSERVED_AT, observedAt)
-                        .set(AVAILABILITY.PREVIOUS_ID, current?.get(AVAILABILITY.ID))
-                        .set(AVAILABILITY.RUN_ID, runId)
-                        .execute()
-                    transitions += CellTransition(obs.campsiteId, obs.targetDate, obs.status)
-                }
-            }
-            transitions
+            val current = currentStatusRuns(txn, latest.values)
+            val unchanged = latest.values.filter { current[it.cell()]?.status == it.status }
+            val changed = latest.values.filter { current[it.cell()]?.status != it.status }
+            bumpObservedAt(txn, unchanged.mapNotNull { observation -> current[observation.cell()]?.id?.to(observation.observedAt) })
+            insertStatusRuns(txn, changed, current, runId)
         }
     }
+
+    private data class CurrentStatusRun(
+        val id: Long,
+        val status: AvailabilityStatus,
+    )
+
+    private fun Observation.cell(): Pair<Long, LocalDate> = campsiteId to targetDate
+
+    private fun latestPerCell(observations: List<Observation>): Map<Pair<Long, LocalDate>, Observation> {
+        val latest = LinkedHashMap<Pair<Long, LocalDate>, Observation>(observations.size)
+        for (observation in observations) {
+            val held = latest[observation.cell()]
+            if (held == null || !observation.observedAt.isBefore(held.observedAt)) latest[observation.cell()] = observation
+        }
+        return latest
+    }
+
+    private fun currentStatusRuns(
+        txn: DSLContext,
+        observations: Collection<Observation>,
+    ): Map<Pair<Long, LocalDate>, CurrentStatusRun> =
+        txn
+            .resultQuery(
+                """
+                SELECT DISTINCT ON (a.campsite_id, a.target_date)
+                    a.id, a.campsite_id, a.target_date, a.status
+                FROM availability a
+                JOIN unnest(?::bigint[], ?::date[]) AS cell(campsite_id, target_date)
+                  ON a.campsite_id = cell.campsite_id AND a.target_date = cell.target_date
+                ORDER BY a.campsite_id, a.target_date, a.last_observed_at DESC, a.id DESC
+                """.trimIndent(),
+                observations.map { it.campsiteId }.toTypedArray(),
+                observations.map { it.targetDate }.toTypedArray(),
+            ).fetch { r ->
+                (r.get("campsite_id", Long::class.java) to r.get("target_date", LocalDate::class.java)) to
+                    CurrentStatusRun(
+                        id = r.get("id", Long::class.java),
+                        status = AvailabilityStatus.parse(r.get("status", String::class.java)),
+                    )
+            }.toMap()
+
+    private fun bumpObservedAt(
+        txn: DSLContext,
+        seen: List<Pair<Long, Instant>>,
+    ) {
+        if (seen.isEmpty()) return
+        txn
+            .query(
+                """
+                UPDATE availability AS a
+                SET last_observed_at = seen.observed_at
+                FROM unnest(?::bigint[], ?::timestamptz[]) AS seen(id, observed_at)
+                WHERE a.id = seen.id
+                """.trimIndent(),
+                seen.map { it.first }.toTypedArray(),
+                seen.map { utc(it.second) }.toTypedArray(),
+            ).execute()
+    }
+
+    private fun insertStatusRuns(
+        txn: DSLContext,
+        changed: List<Observation>,
+        current: Map<Pair<Long, LocalDate>, CurrentStatusRun>,
+        runId: Long?,
+    ): List<CellTransition> {
+        if (changed.isEmpty()) return emptyList()
+        return txn
+            .resultQuery(
+                """
+                INSERT INTO availability (campsite_id, target_date, status, last_observed_at, previous_id, run_id)
+                SELECT run.campsite_id, run.target_date, run.status::availability_status,
+                       run.observed_at, run.previous_id, ?::bigint
+                FROM unnest(?::bigint[], ?::date[], ?::text[], ?::timestamptz[], ?::bigint[])
+                     AS run(campsite_id, target_date, status, observed_at, previous_id)
+                ON CONFLICT DO NOTHING
+                RETURNING campsite_id, target_date, status
+                """.trimIndent(),
+                runId,
+                changed.map { it.campsiteId }.toTypedArray(),
+                changed.map { it.targetDate }.toTypedArray(),
+                changed.map { it.status.toDb().literal }.toTypedArray(),
+                changed.map { utc(it.observedAt) }.toTypedArray(),
+                changed.map { current[it.cell()]?.id }.toTypedArray(),
+            ).fetch { r ->
+                CellTransition(
+                    r.get("campsite_id", Long::class.java),
+                    r.get("target_date", LocalDate::class.java),
+                    AvailabilityStatus.parse(r.get("status", String::class.java)),
+                )
+            }
+    }
+
+    private fun utc(instant: Instant): OffsetDateTime = OffsetDateTime.ofInstant(instant, ZoneOffset.UTC)
 
     /**
      * Insert a terminal `past` status-run for every cell whose current row has an
@@ -183,6 +242,37 @@ class AvailabilityRepo(
                     observedAt = r.get("last_observed_at", OffsetDateTime::class.java),
                 )
             }
+    }
+
+    fun earliestBookableDates(
+        campsiteIds: List<Long>,
+        from: LocalDate,
+        freshAtOrAfter: Instant,
+    ): Map<Long, LocalDate> {
+        if (campsiteIds.isEmpty()) return emptyMap()
+        return ctx
+            .resultQuery(
+                """
+                SELECT campsite_id, min(target_date) AS reopens_on
+                FROM (
+                    SELECT DISTINCT ON (campsite_id, target_date)
+                        campsite_id, target_date, status, last_observed_at
+                    FROM availability
+                    WHERE campsite_id = ANY(?::bigint[])
+                      AND target_date >= ?::date
+                    ORDER BY campsite_id, target_date, last_observed_at DESC, id DESC
+                ) cur
+                WHERE cur.status::text = ANY(?::text[])
+                  AND cur.last_observed_at >= ?::timestamptz
+                GROUP BY campsite_id
+                """.trimIndent(),
+                campsiteIds.distinct().toTypedArray(),
+                from,
+                bookableLiterals,
+                utc(freshAtOrAfter),
+            ).fetch { r ->
+                r.get("campsite_id", Long::class.java) to r.get("reopens_on", LocalDate::class.java)
+            }.toMap()
     }
 
     /**
@@ -418,6 +508,12 @@ class AvailabilityRepo(
 }
 
 private const val DEFAULT_SUMMARY_WINDOW_HOURS: Int = 24 * 7
+
+private val bookableLiterals: Array<String> =
+    AvailabilityStatus.entries
+        .filter { it.isOnlineBookable }
+        .map { it.wireValue }
+        .toTypedArray()
 
 private fun AvailabilityStatus.toDb(): DbAvailabilityStatus =
     DbAvailabilityStatus.entries.firstOrNull { it.literal == wireValue }

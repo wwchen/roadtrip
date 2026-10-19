@@ -1945,6 +1945,7 @@ private object FakeRecgovProvider : ca.floo.roadtrip.service.availability.provid
 
     override suspend fun availability(
         campground: Campground,
+        campsites: List<ca.floo.roadtrip.model.domain.Campsite>,
         startDate: java.time.LocalDate,
         endDate: java.time.LocalDate,
     ): ca.floo.roadtrip.model.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")

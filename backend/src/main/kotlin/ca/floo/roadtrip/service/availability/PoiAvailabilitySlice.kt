@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.model.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.model.domain.Campsite
 import java.time.LocalDate
 
@@ -23,6 +24,7 @@ internal data class PoiAvailabilitySlice(
     val allCampsites: List<Campsite>,
     val campsites: List<Campsite>,
     val batch: AvailabilityObservationBatch?,
+    val reopensOnByCampsite: Map<Long, LocalDate>,
     /**
      * Whether the campground's serving provider can be polled for openings. A
      * property of that one provider, so it is picked once per slice and folded
@@ -30,3 +32,14 @@ internal data class PoiAvailabilitySlice(
      */
     val pollingSupported: Boolean,
 )
+
+/**
+ * The slice's own reopen date: the earliest across the campsites it answers for.
+ * Null when none of them has one stored, which is also what a window nobody has
+ * fetched past looks like.
+ */
+internal fun PoiAvailabilitySlice.reopensOn(): AvailabilitySeasonBlock? =
+    campsites
+        .mapNotNull { reopensOnByCampsite[it.id] }
+        .minOrNull()
+        ?.let { AvailabilitySeasonBlock(reopensOn = it.toString()) }

@@ -83,12 +83,6 @@ class FailoverAvailabilityFetcherTest {
 
         override suspend fun availability(
             campground: Campground,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-
-        override suspend fun catalogAvailability(
-            campground: Campground,
             campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
@@ -186,6 +180,38 @@ class FailoverAvailabilityFetcherTest {
     ): FailoverAvailabilityFetcher = FailoverAvailabilityFetcher(cooldowns = tracker, clock = { clock.now })
 
     @Test
+    fun `each candidate is handed the campsites its own call shape can cover`() =
+        runBlocking {
+            val clock = FakeClock()
+            val perCampground =
+                ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyBatch()) }
+            val perPart =
+                object : ScriptedProvider(BookingProvider.ASPIRA) {
+                    init {
+                        scriptReturns(emptyBatch("aspira"))
+                    }
+
+                    override val capabilities: AvailabilityProviderCapabilities =
+                        super.capabilities.copy(coversCampgroundPerCall = false)
+                }
+            val answered = listOf(campsite(1L))
+            val wholeCampground = answered + campsite(2L)
+
+            for (provider in listOf(perCampground, perPart)) {
+                fetcherWith(trackerWith(clock), clock).fetch(
+                    providers = listOf(provider),
+                    campground = testCampground,
+                    campsites = answered,
+                    campgroundCampsites = wholeCampground,
+                    window = window,
+                )
+            }
+
+            assertEquals(wholeCampground, perCampground.lastCampsites, "one call covers the campground, so cover it")
+            assertEquals(answered, perPart.lastCampsites, "covering the rest would cost this vendor another call per part")
+        }
+
+    @Test
     fun `a caller that times out is handed its cancellation, and no other provider is asked`() =
         runTest {
             val clock = FakeClock()
@@ -198,7 +224,13 @@ class FailoverAvailabilityFetcherTest {
 
             val result =
                 withTimeoutOrNull(CALLER_TIMEOUT_MS) {
-                    fetcherWith(trackerWith(clock), clock).fetch(listOf(stalled, next), testCampground, listOf(campsite(1L)), window)
+                    fetcherWith(trackerWith(clock), clock)
+                        .fetch(
+                            providers = listOf(stalled, next),
+                            campground = testCampground,
+                            campsites = listOf(campsite(1L)),
+                            window = window,
+                        )
                 }
 
             assertNull(result)
@@ -216,7 +248,13 @@ class FailoverAvailabilityFetcherTest {
 
             val result =
                 withTimeoutOrNull(CALLER_TIMEOUT_MS) {
-                    fetcherWith(trackerWith(clock), clock).fetch(listOf(stalled), testCampground, listOf(campsite(1L)), window)
+                    fetcherWith(trackerWith(clock), clock)
+                        .fetch(
+                            providers = listOf(stalled),
+                            campground = testCampground,
+                            campsites = listOf(campsite(1L)),
+                            window = window,
+                        )
                 }
 
             assertNull(result, "an OTHER attempt would have answered; the cancellation should have")
@@ -417,14 +455,14 @@ class FailoverAvailabilityFetcherTest {
                         scriptReturns(emptyBatch())
                     }
 
-                    override suspend fun catalogAvailability(
+                    override suspend fun availability(
                         campground: Campground,
                         campsites: List<Campsite>,
                         startDate: LocalDate,
                         endDate: LocalDate,
                     ): AvailabilityObservationBatch {
                         clock.advance(125)
-                        return super.catalogAvailability(campground, campsites, startDate, endDate)
+                        return super.availability(campground, campsites, startDate, endDate)
                     }
                 }
 

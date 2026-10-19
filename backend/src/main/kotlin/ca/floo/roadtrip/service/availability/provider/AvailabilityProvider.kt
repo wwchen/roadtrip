@@ -59,29 +59,15 @@ interface AvailabilityProvider {
     fun parentRefFor(campground: Campground): BookingProviderRef? = claimedRef(campground)
 
     /**
-     * Per-day availability for the half-open window `[startDate, endDate)`.
-     *
      * @throws AvailabilityProviderError on upstream failure (rate limit, WAF block,
      *   5xx, parse error, or unsupported capability).
      */
     suspend fun availability(
         campground: Campground,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch
-
-    /**
-     * POI-scoped availability narrowed to the campsites linked to the POI.
-     * Most providers can answer from the campground-level endpoint, so the
-     * default delegates to [availability]. Providers with a parent/child map
-     * split can override this to classify the actual linked resources.
-     */
-    suspend fun catalogAvailability(
-        campground: Campground,
         campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): AvailabilityObservationBatch = availability(campground, startDate, endDate)
+    ): AvailabilityObservationBatch
 
     /** The campsite's id on this vendor: its primary, else this provider's alias, else the catalog ref. */
     fun vendorSiteIdFor(campsite: Campsite): String =

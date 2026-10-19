@@ -303,7 +303,7 @@ class PoiAvailabilityFusionTest {
                             1L to mapOf(windowStart to AvailabilityStatus.CLOSED),
                             2L to mapOf(windowStart to AvailabilityStatus.CLOSED),
                         ),
-                    seasonBlock = AvailabilitySeasonBlock(reopensOn = "2027-05-01"),
+                    reopensOn = LocalDate.parse("2027-05-01"),
                 ),
                 windowStart,
             )
@@ -312,6 +312,21 @@ class PoiAvailabilityFusionTest {
         assertEquals(AvailabilitySeasonBlock(reopensOn = "2027-05-01"), fused.season)
         // Clients gate the grid on `state`, so a closed week carries no days.
         assertEquals(emptyList(), fused.days)
+    }
+
+    @Test
+    fun `the week's reopen date ignores campsites the slice does not answer for`() {
+        val slice =
+            sliceOf(mapOf(1L to mapOf(windowStart to AvailabilityStatus.CLOSED)))
+                .copy(
+                    allCampsites = listOf(campsiteFixture(id = 1L), campsiteFixture(id = 2L)),
+                    reopensOnByCampsite = mapOf(2L to LocalDate.parse("2027-05-01")),
+                )
+
+        val fused = fusePoiWindow(slice, windowStart)
+
+        assertEquals(AvailabilityWindowState.CLOSED_FOR_SEASON, fused.state)
+        assertNull(fused.season)
     }
 
     @Test
@@ -336,7 +351,7 @@ class PoiAvailabilityFusionTest {
                             1L to mapOf(windowStart to AvailabilityStatus.CLOSED),
                             2L to mapOf(windowStart to AvailabilityStatus.AVAILABLE),
                         ),
-                    seasonBlock = AvailabilitySeasonBlock(reopensOn = "2027-05-01"),
+                    reopensOn = LocalDate.parse("2027-05-01"),
                 ),
                 windowStart,
             )
@@ -380,7 +395,7 @@ private fun fusedDay(vararg statuses: AvailabilityStatus) =
 private fun sliceOf(
     streams: Map<Long, Map<LocalDate, AvailabilityStatus>>,
     days: Long = ONE_DAY,
-    seasonBlock: AvailabilitySeasonBlock? = null,
+    reopensOn: LocalDate? = null,
     cacheBlock: AvailabilityCacheBlock = freshCache,
     pollingSupported: Boolean = true,
 ): PoiAvailabilitySlice {
@@ -406,9 +421,9 @@ private fun sliceOf(
                     endDate = endDate,
                     observations = observations,
                     cacheBlock = cacheBlock,
-                    seasonBlock = seasonBlock,
                 )
             },
+        reopensOnByCampsite = reopensOn?.let { date -> campsites.associate { it.id to date } }.orEmpty(),
         pollingSupported = pollingSupported,
     )
 }

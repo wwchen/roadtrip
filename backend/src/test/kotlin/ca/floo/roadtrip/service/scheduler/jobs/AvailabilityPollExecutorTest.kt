@@ -527,12 +527,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override suspend fun availability(
             campground: Campground,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-
-        override suspend fun catalogAvailability(
-            campground: Campground,
             campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
@@ -578,12 +572,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            campground: Campground,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-
-        override suspend fun catalogAvailability(
             campground: Campground,
             campsites: List<Campsite>,
             startDate: LocalDate,
@@ -1579,6 +1567,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 providers: List<AvailabilityProvider>,
                 campground: Campground,
                 campsites: List<Campsite>,
+                campgroundCampsites: List<Campsite>,
                 window: ResolvedDateWindow,
             ): FailoverAvailabilityFetcher.FailoverResult =
                 FailoverAvailabilityFetcher.FailoverResult(
