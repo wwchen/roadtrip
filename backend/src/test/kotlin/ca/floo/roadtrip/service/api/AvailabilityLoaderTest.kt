@@ -19,6 +19,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -100,6 +101,56 @@ class AvailabilityLoaderTest : SharedDbTest() {
         assertTrue(result.observations.all { it.status == AvailabilityStatus.RESERVED })
         assertEquals(windowStart, result.startDate)
         assertEquals(windowEnd, result.endDate)
+    }
+
+    @Test
+    fun `a target repeated in the request does not defeat stored coverage`() {
+        // Coverage is a question about cells, not about how many times the
+        // caller named a campsite: the request below needs the same four cells
+        // the fresh store already answers.
+        seedStoredWindow(AvailabilityStatus.RESERVED, observedAt = fixedNow.minusSeconds(60))
+
+        val result =
+            runBlocking {
+                loader.loadOrFetch(request(targets = listOf(siteA, siteB, siteA))) {
+                    fail("every requested cell is stored and fresh; a repeated target must not force a fetch")
+                }
+            }
+
+        assertTrue(result.cacheBlock.hit)
+        assertEquals(4, result.observations.size)
+    }
+
+    @Test
+    fun `one stale cell in an otherwise fresh window costs exactly one fetch`() {
+        seedStoredWindow(AvailabilityStatus.RESERVED, observedAt = fixedNow.minusSeconds(60))
+        repo.recordObservations(
+            null,
+            listOf(
+                AvailabilityRepo.Observation(
+                    siteB,
+                    windowStart.plusDays(1),
+                    AvailabilityStatus.RESERVED,
+                    fixedNow.minus(snapshotTtl).minusSeconds(60),
+                ),
+            ),
+        )
+
+        var fetchCount = 0
+        val result =
+            runBlocking {
+                loader.loadOrFetch(request()) {
+                    fetchCount++
+                    batch(
+                        listOf(siteA, siteB).flatMap { site ->
+                            windowDates().map { date -> observation(site, date) }
+                        },
+                    )
+                }
+            }
+
+        assertEquals(1, fetchCount)
+        assertFalse(result.cacheBlock.hit)
     }
 
     @Test
@@ -185,26 +236,82 @@ class AvailabilityLoaderTest : SharedDbTest() {
     }
 
     @Test
-    fun `observations for campsites outside the target set are not persisted`() {
-        val outsider =
-            ctx.seedCampsite(
-                campgroundId = ctx.seedCampground(name = "Other CG", sourceId = "loader-other"),
-                vendorId = "loader-x",
-            )
-
+    fun `a narrowed request keeps every cell the vendor answered`() {
+        // Whatever a batch carries, the loader keeps it: dropping the cells
+        // outside the request's targets means the next wider check pays again
+        // for a campground already called.
+        //
+        // No shipping adapter exercises this yet — each one keys its
+        // observations off the campsite list it was handed, so a filtered
+        // request's batch is already narrow. Widening that list is a port
+        // change (fetch scope vs answer scope) and is not this commit; see the
+        // `catalogAvailability` kdoc. This holds the loader to the right side
+        // of that seam in the meantime.
+        var fetchCount = 0
         runBlocking {
             loader.loadOrFetch(request(targets = listOf(siteA))) {
+                fetchCount++
                 batch(
-                    listOf(
-                        observation(siteA, windowStart),
-                        observation(siteA, windowStart.plusDays(1)),
-                        observation(outsider, windowStart),
-                    ),
+                    listOf(siteA, siteB).flatMap { site ->
+                        windowDates().map { date -> observation(site, date) }
+                    },
                 )
             }
         }
 
-        assertTrue(repo.readCurrent(listOf(outsider), windowDates()).isEmpty())
-        assertEquals(2, repo.readCurrent(listOf(siteA), windowDates()).size)
+        assertEquals(4, repo.readCurrent(listOf(siteA, siteB), windowDates()).size)
+
+        val unfiltered =
+            runBlocking {
+                loader.loadOrFetch(request()) {
+                    fetchCount++
+                    fail("the narrowed fetch already answered every cell of the wider request")
+                }
+            }
+
+        assertEquals(1, fetchCount)
+        assertTrue(unfiltered.cacheBlock.hit)
+        assertEquals(4, unfiltered.observations.size)
+    }
+
+    @Test
+    fun `the UNKNOWN backfill stays with the request's own targets`() {
+        // Keeping more of what the vendor said must not widen what we claim
+        // coverage for: a campsite this request never targeted and the vendor
+        // never answered gets no row, rather than an UNKNOWN that would make a
+        // later request think the cell had been looked at.
+        runBlocking {
+            loader.loadOrFetch(request(targets = listOf(siteA))) {
+                batch(listOf(observation(siteB, windowStart)))
+            }
+        }
+
+        val stored =
+            repo
+                .readCurrent(listOf(siteA, siteB), windowDates())
+                .associate { (it.campsiteId to it.targetDate) to it.status }
+
+        assertEquals(AvailabilityStatus.UNKNOWN, stored[siteA to windowStart])
+        assertEquals(AvailabilityStatus.UNKNOWN, stored[siteA to windowStart.plusDays(1)])
+        assertEquals(AvailabilityStatus.AVAILABLE, stored[siteB to windowStart])
+        assertNull(stored[siteB to windowStart.plusDays(1)])
+    }
+
+    @Test
+    fun `the direct-from-fetch response stays with the request's own targets`() {
+        // The vendor answered a shorter window than the request asked for, so
+        // the store cannot cover it and the fetched batch is served as-is. It
+        // now carries campsites this request is not about; they must not reach
+        // the response.
+        val result =
+            runBlocking {
+                loader.loadOrFetch(request(targets = listOf(siteA))) {
+                    batch(listOf(observation(siteA, windowStart), observation(siteB, windowStart)))
+                        .copy(endDate = windowStart.plusDays(1))
+                }
+            }
+
+        assertFalse(result.cacheBlock.hit)
+        assertEquals(listOf(siteA), result.observations.map { it.campsiteId })
     }
 }
