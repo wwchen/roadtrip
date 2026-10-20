@@ -24,9 +24,8 @@ import {
 } from './basemaps';
 
 /**
- * The map's opening view: the continental US, as the vanilla map opens it
- * (`web/app.js`). Phase 4a's values said they matched and did not — they opened on
- * California at z5, which also made the first POI fetch a different request.
+ * The map's opening view: the continental US. These values decide the first POI
+ * fetch's bbox, so a drifted centre or zoom changes that request too.
  */
 const INITIAL_CENTER: [number, number] = [-98.5, 39.5];
 const INITIAL_ZOOM = 3.6;

@@ -1,8 +1,6 @@
 // The QueryClient and its defaults.
 //
-// Replaces the hand-rolled refetch bus: the legacy pages re-fetched on
-// `roadtrip:*` CustomEvents and on ad-hoc timers, with each caller deciding when
-// its data was stale. These defaults make that one policy.
+// One staleness policy for every caller, rather than each deciding for itself.
 import { QueryClient } from '@tanstack/react-query';
 import { HttpError } from '@/api/http';
 
@@ -55,9 +53,8 @@ export function createQueryClient(): QueryClient {
         gcTime: DEFAULT_GC_TIME_MS,
         retry: shouldRetry,
         retryDelay,
-        // The legacy pages did not re-request on tab focus, and the map's
-        // viewport fetch loop is already driven by moveend. Refetching every
-        // query on focus would be a behavior change, not a migration.
+        // The map's viewport fetch loop is already driven by moveend, so
+        // refetching every query on focus would re-request for nothing.
         refetchOnWindowFocus: false,
       },
       mutations: {

@@ -1,9 +1,6 @@
 // Server state for the watches page.
 //
-// Replaces web/watches/watches-page.js's `loadWatches()` + module-level caches.
-// Every mutation invalidates rather than hand-patching local arrays, which is
-// what the legacy page's `await loadWatches()` after each write was doing by
-// hand.
+// Every mutation invalidates rather than hand-patching local arrays.
 import { useMemo } from 'react';
 import {
   useMutation,
@@ -30,9 +27,9 @@ import {
 } from '@/domain/watch/queries';
 import { queryKeys } from '@/queries/keys';
 
-/** Matches the legacy page: one request per status, 200 rows each. */
+/** One request per status, 200 rows each. */
 const WATCH_LIST_LIMIT = 200;
-/** The statuses the page shows, in the order the legacy page merged them. */
+/** The statuses the page shows, in the order they merge. */
 const LISTED_STATUSES: readonly WatchStatus[] = ['active', 'paused', 'done'] as const;
 
 /**
@@ -43,7 +40,7 @@ export function isUnauthorized(error: unknown): boolean {
   return isWatchUnauthorized(error);
 }
 
-/** Ascending by start date, blanks last. Ported from the legacy `byStartDate`. */
+/** Ascending by start date, blanks last. */
 function byStartDate(a: Watch, b: Watch): number {
   const da = a.start_date ?? '';
   const db = b.start_date ?? '';
@@ -66,10 +63,9 @@ export interface WatchesResult {
 /**
  * The page's watch list: three status queries merged.
  *
- * Kept as three requests rather than one unfiltered call to match the legacy
- * behavior exactly — the route's default limit and ordering differ from
- * per-status pagination, so a single call would silently change which watches
- * appear once a user has more than a page of them.
+ * Three requests rather than one unfiltered call: the route's default limit and
+ * ordering differ from per-status pagination, so a single call would change which
+ * watches appear once a user has more than a page of them.
  */
 export function useWatches(): WatchesResult {
   const results = useQueries({
@@ -106,9 +102,9 @@ export function useWatches(): WatchesResult {
 /**
  * Display names for the POIs the given watches point at.
  *
- * One query per distinct id, so TanStack Query's cache replaces the legacy
- * module-level `poiNameCache` Map — including across a page's own re-mounts. A
- * failed lookup resolves to `POI {id}` rather than rejecting: a missing name must
+ * One query per distinct id, so TanStack Query's cache holds the names —
+ * including across a page's own re-mounts. A failed lookup resolves to
+ * `POI {id}` rather than rejecting: a missing name must
  * not blank out the row.
  */
 export function usePoiNames(watches: Watch[]): Map<number, string> {
@@ -133,9 +129,9 @@ interface WatchWriteHandlers {
  *
  * `onError` exists for one case: a session that expires between loading the page
  * and pressing a button. The write 401s, but the list queries already succeeded,
- * so nothing would re-derive `isSignedOut` and the click would fail silently —
- * the legacy page called `renderSignedOut()` here. Invalidating the lists makes
- * them refetch, 401 in turn, and surface the sign-in prompt.
+ * so nothing would re-derive `isSignedOut` and the click would fail silently.
+ * Invalidating the lists makes them refetch, 401 in turn, and surface the sign-in
+ * prompt.
  */
 function useWatchWriteHandlers(): WatchWriteHandlers {
   const queryClient = useQueryClient();

@@ -519,9 +519,9 @@ class PoiRegistryValidatorTest {
     }
 
     /**
-     * The tenant cross-check used to be skipped whenever *any* earlier loop had
-     * already found something, so an operator fixed the slug, redeployed, and
-     * only then learned about the tenant typo. One boot, both errors.
+     * The tenant cross-check runs even when an earlier loop has already found
+     * something. One boot, both errors — skipping it means an operator fixes the
+     * slug, redeploys, and only then learns about the tenant typo.
      */
     @Test
     fun `an unrelated registry error does not hide the tenant cross-check`() {

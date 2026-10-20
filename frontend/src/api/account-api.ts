@@ -38,7 +38,7 @@ export type Profile = ProfileDto;
 /**
  * The Slack token is never returned. `slack_configured` says whether one is
  * stored and `slack_token_hint` is a redacted fragment for display — the
- * write-only SecretField pattern Phase 3 rebuilds.
+ * write-only `SecretField` pattern.
  */
 export type Notifications = NotificationsDto;
 

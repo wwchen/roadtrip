@@ -23,7 +23,7 @@ import {
   type StopsTransition,
 } from '@/domain/trip/stops';
 
-/** Matches the vanilla's flyTo calls, which all used the same easing. */
+/** One easing for every flyTo call. */
 const FLY_SPEED = 1.6;
 /** A region fit is a bigger move than a flyTo, so it gets the route fit's timing. */
 const REGION_FIT_DURATION_MS = 700;

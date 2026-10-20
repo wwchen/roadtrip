@@ -174,9 +174,9 @@ class RecGovBookingAdapterTest {
     @Test
     fun `a refused re-login reports why it was refused, not a blanket expiry`() =
         runBlocking {
-            // Every refusal used to be rewritten to recgov_session_expired with
-            // "re-login in Settings" — told to the user who had just REMOVED
-            // their credentials, and to the one whose companion was simply full.
+            // A blanket recgov_session_expired with "re-login in Settings" would
+            // be told to the user who has just REMOVED their credentials, and to
+            // the one whose companion is simply full.
             val refusals =
                 mapOf(
                     RecGovSessionCodes.MFA_REQUIRED to BookingFailureCategory.CALLER_ACTION,

@@ -176,8 +176,8 @@ internal class AtcTriggerActionHandler(
     private fun elapsedMsSince(startedAtNanos: Long): Int = ((System.nanoTime() - startedAtNanos) / NANOS_PER_MILLI).toInt()
 
     /**
-     * Sends the outcome and logs when nobody heard it — "held but never told"
-     * used to look like a clean run. [request]/[response] are the booking
+     * Sends the outcome and logs when nobody heard it, so "held but never told"
+     * cannot pass for a clean run. [request]/[response] are the booking
      * provider's; an exit that never reached it passes [noCompanionRequest] and
      * a null response, with the reason in [error]/[detail].
      */

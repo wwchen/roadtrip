@@ -3,16 +3,13 @@
    popover portals into — the editor inside that host brings its own sheet
    (`domain/watch/watch-editor.css`).
  *
- * A near-verbatim lift of the `cg-*` rules that lived in a 1,000-line inline
- * `<style>` block in the vanilla `index.html`. The class names are deliberately
- * unchanged: this is the one place in the migration where keeping the legacy names
- * is worth more than tidying them, because it lets the two grids be compared
- * side by side while both exist, and because the rules are load-bearing in ways
+ * The `cg-*` class names stay as they are: the rules are load-bearing in ways
  * that are easy to break silently (the sticky first column and its resize handle,
- * the horizontal scroll container, the reduced-motion opt-out).
+ * the horizontal scroll container, the reduced-motion opt-out), and renaming them
+ * buys nothing the grid can check.
  *
- * Two changes from the original, both required:
- *   - every literal colour is now composed from a channel token (`--rt-c-*-rgb`),
+ * Two rules this sheet must keep:
+ *   - every literal colour is composed from a channel token (`--rt-c-*-rgb`),
  *     which the colour guardrail insists on for new files. Note it scans comments
  *     too, so do not write a literal one here to explain the rule;
  *   - the width custom properties (`--rt-site-column-width`,

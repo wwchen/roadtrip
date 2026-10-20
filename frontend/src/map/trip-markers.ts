@@ -54,8 +54,8 @@ function markerElement(index: number, count: number): HTMLElement {
     // The destination is a square, so the ends of a trip are distinguishable
     // without reading their letters.
     `border-radius: ${role === 'destination' ? '4px' : '50%'}`,
-    // The design system's elevation-2 shadow, rather than the vanilla's inline
-    // rgba — a raw colour here would also trip the colour checker.
+    // The design system's elevation-2 shadow: a raw rgba here would trip the
+    // colour checker.
     'box-shadow: var(--rt-e2)',
     'display: grid',
     'place-items: center',

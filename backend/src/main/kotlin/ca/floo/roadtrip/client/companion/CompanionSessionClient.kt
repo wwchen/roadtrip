@@ -82,10 +82,10 @@ private val successStatusRange = 200..299
 /**
  * Every route the backend calls on the companion, over one transport.
  *
- * The ATC fire path used to have a client of its own, which re-implemented this
- * one's request builder, token header, JSON reader and success range — and
- * drifted, so a bug fixed here stayed alive there. There is one companion, one
- * shared secret and one set of connection settings, so there is one client.
+ * There is one companion, one shared secret and one set of connection settings,
+ * so there is one client. A second one for the ATC fire path would re-implement
+ * this one's request builder, token header, JSON reader and success range, and
+ * drift from it, leaving a bug fixed here alive there.
  *
  * **Nothing throws** except cancellation. Every failure — transport, malformed
  * body, an upstream refusal — comes back as a typed result, because the settings

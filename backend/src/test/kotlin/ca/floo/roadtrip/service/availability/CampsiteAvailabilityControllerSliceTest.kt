@@ -122,9 +122,9 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
      *
      * `availabilityForPoi` is the whole path — slice, watch capabilities,
      * fusion — and watch capabilities are the only part that needs a
-     * per-campsite target at all. One resolution per campsite is the floor;
-     * this pins it there, because the three capability questions each used to
-     * walk the scope for themselves and charge 3N.
+     * per-campsite target at all. One resolution per campsite is the floor, and
+     * this pins it there: the three capability questions each walking the scope
+     * for themselves would charge 3N.
      */
     @Test
     fun `a detail request resolves each campsite exactly once`() {

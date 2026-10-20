@@ -95,8 +95,7 @@ export function useOnRoutePois(): OnRoutePois {
     if (features) setRoutePois(features);
   }, [features, routeActive, setRoutePois]);
 
-  // The only signal a failure has. The pins already on screen stay, which is what
-  // the vanilla's `console.warn` and early return amounted to.
+  // The only signal a failure has. The pins already on screen stay.
   useEffect(() => {
     if (query.error) console.warn('on-route POI fetch failed', query.error);
   }, [query.error]);

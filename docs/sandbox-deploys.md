@@ -126,12 +126,11 @@ directory, so unlike a PID read a moment earlier it cannot be stale and name a
 lock somebody has since acquired. Waiting is bounded by
 `ROADTRIP_SANDBOX_LOCK_WAIT_SECONDS` (default **60**).
 
-This exists because a holder killed mid-flight used to leak the lock forever.
-On 2026-08-18 the wedged daemon stranded a `roadtrip-sb-2` teardown while it held
-the lock; recovery SIGKILLed the process and the directory survived with nothing
-able to reclaim it, so every teardown — and the sweep, every 30 minutes — failed
-for two days. The full disk was only the trigger: any SIGKILL of the holder does
-it, including the stale-deploy clearing that runs on the way in.
+This exists because a holder killed mid-flight would otherwise leak the lock
+forever: the directory outlives the process, and with nothing able to reclaim it
+every teardown — and the sweep, every 30 minutes — fails until someone clears it
+by hand. Any SIGKILL of the holder does it, including the stale-deploy clearing
+that runs on the way in.
 
 After a PR has a sandbox status comment that has not been torn down or started
 teardown, pushing a new commit to that PR automatically reruns the sandbox
@@ -222,8 +221,8 @@ the older action until it picks up master.
 ### Sweep (every 30 minutes)
 
 `sandbox-sweep.yml` is the safety net for anything the close path missed:
-teardowns that failed, PRs closed before that job existed, and sandboxes on PRs
-that simply stay open. It lists every logical-owner marker on the host and tears
+teardowns that failed, PRs closed without one, and sandboxes on PRs that simply
+stay open. It lists every logical-owner marker on the host and tears
 down any sandbox that
 
 - belongs to a PR that is closed or no longer exists, or
@@ -258,11 +257,10 @@ named volume. There is no list of things to spare, so nothing rots when another
 stack lands on the host.
 
 Prune never removes a resource still referenced by a container, so "unused" is
-Docker's judgement rather than ours. Images are no longer pruned dangling-only
-in the sweep: since the sweep runs the same `reclaim.sh prune --scope host` as
-a prod deploy, it now also applies the host's keep-5-per-repository tag
-retention, deleting older tags by reference every 30 minutes rather than
-waiting for `deploy.sh` to run. `deploy.sh` itself prunes twice: once in
+Docker's judgement rather than ours. The sweep runs the same
+`reclaim.sh prune --scope host` as a prod deploy, so it also applies the host's
+keep-5-per-repository tag retention, deleting older tags by reference every
+30 minutes rather than waiting for `deploy.sh` to run. `deploy.sh` itself prunes twice: once in
 preflight, before it measures free space, and once after a successful deploy.
 Untagged managed digests expire after `ROADTRIP_IMAGE_RETENTION` (default
 **72h**); tagged images are governed by the keep-N window only.
@@ -295,16 +293,15 @@ is unused most of the time and is still never a candidate, because it has a name
 Only the label-scoped pass uses `--all`, and that one sees nothing but our own.
 
 Dataset volumes are collected the same way. Every data tree SHA gets its own
-`roadtrip-data-<sha>`, and the image prune only drops the `data:<sha>` tags — the
-volumes those images were unpacked into used to outlive them, one full dataset
-copy each, forever. How far back a rollback reaches is set by the image
+`roadtrip-data-<sha>`, and the image prune drops the `data:<sha>` tags. How far
+back a rollback reaches is set by the image
 retention, not by a separate volume policy: `_ensure_data_volume` repopulates a
 missing volume from its data image, so an old volume is a cache, not the record.
 
 ### Automatic rollback
 
-A prod deploy whose health gate fails no longer leaves the broken container
-serving. `deploy.sh prod` dumps the backend's last log lines as before, then
+A prod deploy whose health gate fails does not leave the broken container
+serving. `deploy.sh prod` dumps the backend's last log lines, then
 redeploys the previous release through the same `_deploy_prod` path and exits
 non-zero either way — the deploy is still a failure, production is just not
 running the failure. `deploy.yml` reads the transcript and says which of three

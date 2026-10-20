@@ -58,10 +58,9 @@ export function TopBar({ alerts }: TopBarProps) {
   /**
    * The row being typed in, and what is in it.
    *
-   * One draft, not one per row: the vanilla re-rendered every row from
-   * `trip.stops`, so only the focused input could hold text that was not a stop's
-   * name — moving focus discarded it. Keeping that means a half-typed query cannot
-   * linger in a row the user has left.
+   * One draft, not one per row: only the focused input can hold text that is not
+   * a stop's name, so a half-typed query cannot linger in a row the user has
+   * left.
    */
   const [draft, setDraft] = useState<{ row: number; text: string } | null>(null);
   const [activeResult, setActiveResult] = useState(NO_ACTIVE_RESULT);
@@ -122,7 +121,7 @@ export function TopBar({ alerts }: TopBarProps) {
     if (event.key === 'Enter') {
       event.preventDefault();
       // Enter with nothing selected takes the first row, which is what a user who
-      // typed a full name and hit Enter expects — and what the vanilla did.
+      // typed a full name and hit Enter expects.
       const chosen = results[activeResult >= 0 ? activeResult : 0];
       if (chosen) {
         planner.pickResult(row, chosen);
@@ -179,8 +178,8 @@ export function TopBar({ alerts }: TopBarProps) {
         })}
       </div>
 
-      {/* `#tb-alerts` sat here in the vanilla DOM too: under the rows, above the
-          actions. It renders nothing at all for a user with no watches. */}
+      {/* `#tb-alerts`: under the rows, above the actions. It renders nothing at
+          all for a user with no watches. */}
       {alerts}
 
       {/* The ids on this row and the controls below it are the smoke suite's
@@ -225,8 +224,8 @@ export function TopBar({ alerts }: TopBarProps) {
             the same gate decides what `useSharedTrip` writes into the address bar —
             so the button appears exactly when the visible URL is worth copying.
 
-            No id: `SmokeTest.kt` pins `#tb-share-route` absent, which is the
-            *vanilla's* id for a control 4e dropped. This is a different control. */}
+            No id: `SmokeTest.kt` pins `#tb-share-route` absent, and this is not
+            that control. */}
         {shareable ? (
           <button
             type="button"

@@ -64,10 +64,9 @@ export function StopRow({
   /**
    * Whether this row can go, as opposed to just be emptied.
    *
-   * The vanilla's `canRemove`. It is not the same as `draggable`, which is what an
-   * earlier version of this component used: in a two-row directions trip every row
-   * is draggable but neither can be removed, so an empty endpoint was showing an X
-   * that `removeStopAt` deliberately no-ops.
+   * Not the same as `draggable`: in a two-row directions trip every row is
+   * draggable but neither can be removed, so keying off `draggable` puts an X on
+   * an empty endpoint that `removeStopAt` deliberately no-ops.
    */
   const removable = mode !== 'directions' || count >= 3;
 
@@ -131,9 +130,9 @@ export function StopRow({
       {/* An empty structural row has nothing to clear and cannot be removed, so it
           gets no button rather than a button that does nothing.
 
-          The label names the row, where the vanilla labelled every X simply "Clear":
-          a screen reader on a three-stop trip announced four identical "Clear"
-          buttons, counting the one that clears the whole trip. */}
+          The label names the row. Labelled simply "Clear", a screen reader on a
+          three-stop trip announces four identical buttons, counting the one that
+          clears the whole trip. */}
       {filled || removable ? (
         <button
           type="button"

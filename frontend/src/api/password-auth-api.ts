@@ -15,9 +15,8 @@ const NO_CONTENT = 204;
 /**
  * Thrown on a non-2xx response.
  *
- * A named subclass of Error rather than a new error type: the message,
- * `instanceof Error`, and `.code` all match what web/api/password-auth-api.js
- * threw, so existing handling is unchanged — it just gives `.code` a type.
+ * A named subclass of Error rather than a new error type, so `instanceof Error`
+ * and the message still work for any caller — it just gives `.code` a type.
  */
 export class PasswordAuthError extends Error {
   /** The `error` field of the response body, when it carried one. */

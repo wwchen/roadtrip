@@ -235,9 +235,9 @@ class AspiraCampgroundsEtlTest {
         )
 
     /**
-     * The negative-selection hole: every input that was not maps, inventory or
-     * dictionaries used to become a geometry source, so a typo'd slug quietly
-     * indexed nothing. Now it fails the parse.
+     * The negative-selection hole: treating every input that is not maps,
+     * inventory or dictionaries as a geometry source lets a typo'd slug quietly
+     * index nothing. It fails the parse instead.
      */
     @Test
     fun `an input that is neither declared geometry nor a known feed fails parse`() {

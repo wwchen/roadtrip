@@ -30,9 +30,9 @@ describe('the registry', () => {
     expect(BASEMAPS[DEFAULT_BASEMAP].style.dark).toBeTruthy();
   });
 
-  // The bug this whole split exists for: Light and Dark used to be entries here,
-  // so one control chose both the cartography and the brightness and picking a map
-  // could leave a bright basemap inside a dark UI.
+  // Light and Dark as entries here would make one control choose both the
+  // cartography and the brightness, so picking a map could leave a bright basemap
+  // inside a dark UI.
   test('no entry is a brightness — that is the theme, not a map', () => {
     const names = Object.values(BASEMAPS).map((b) => b.name);
     expect(names).not.toContain('Light');

@@ -34,9 +34,8 @@ export function Drawer({ open, onClose, children }: DrawerProps) {
   const [handle, setHandle] = useState<HTMLElement | null>(null);
   const { full } = useDrawerDrag(root, handle, onClose);
 
-  // Stay mounted through the exit transition, then leave. The vanilla version kept
-  // one drawer element alive for the life of the page and toggled classes; here the
-  // content is a React subtree, so it unmounts — but not before it has slid out.
+  // Stay mounted through the exit transition, then leave: the content is a React
+  // subtree, so it unmounts — but not before it has slid out.
   const [mounted, setMounted] = useState(open);
   const [entered, setEntered] = useState(false);
 

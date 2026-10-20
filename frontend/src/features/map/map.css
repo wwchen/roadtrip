@@ -29,8 +29,7 @@
    sides AND overflows the bottom by the padding, which scrolls the whole page by
    20px and hides MapLibre's attribution under the fold. Taking the shell out of
    flow makes it full-bleed regardless of what the host page's chrome does — the
-   same thing `#map { position: absolute; inset: 0 }` achieved on the unpadded
-   vanilla page. Caught in a browser; no unit test can see it. */
+   Caught in a browser; no unit test can see it. */
 .rt-map-shell {
   position: fixed;
   /* Full-bleed except for whatever a fixed deployment bar has taken off the top

@@ -302,8 +302,8 @@ function AvailabilityWeekView({
         // with — so for a Slack provider the extra step buys nothing.
         await mutations.save(selectedDate, buildTriggerPayload(triggerStateOf(null)));
       } catch (caught) {
-        // The day panel has no error line of its own, and the vanilla toggle only
-        // restored its label and logged — so this is the one report the user gets.
+        // The day panel has no error line of its own, so this is the one report
+        // the user gets.
         reportWatchFailure(caught);
       }
     },

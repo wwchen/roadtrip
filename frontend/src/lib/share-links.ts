@@ -192,11 +192,9 @@ export function clearVisiblePoiUrl(): void {
 /**
  * Write the trip into the visible URL, preserving every other parameter.
  *
- * Not `replaceVisibleUrl(routeShareUrl(...))`, which is what the vanilla's
- * `updateRouteAddressUrl` amounted to: `routeShareUrl` builds from `pathname`, so
- * writing it drops `?poi=`. In the vanilla the two writers never collided often
- * enough to notice; here the drawer writes `?poi=` on every pin click, so editing a
- * trip with a drawer open would silently un-share the POI.
+ * Not `replaceVisibleUrl(routeShareUrl(...))`: `routeShareUrl` builds from
+ * `pathname`, so writing it drops `?poi=`. The drawer writes `?poi=` on every pin
+ * click, so editing a trip with a drawer open would silently un-share the POI.
  *
  * A trip that cannot be shared removes the parameter rather than writing an empty
  * one — that is what clearing the trip looks like from here.

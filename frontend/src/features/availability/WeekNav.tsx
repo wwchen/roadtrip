@@ -32,9 +32,7 @@ export interface WeekNavProps {
    * load-bearing: `.cg-cal-host` positions itself with `position: absolute; top:
    * 100%`, so it needs a positioned ancestor that is *this row* — `.cg-week-nav` is
    * `position: relative` for exactly that reason. Rendered anywhere else it resolves
-   * against the drawer instead and lands hundreds of pixels below the viewport,
-   * which is what it did before this slot existed. The vanilla appended it to the
-   * clicked button's `parentElement`, which is the same element.
+   * against the drawer instead and lands hundreds of pixels below the viewport.
    */
   calendar?: ReactNode;
 }

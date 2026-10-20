@@ -81,9 +81,9 @@ span several sibling grid maps under one `resourceLocationId` — Sasquatch's 17
 sites sit on Hicks (`-2147483419`), Bench (`-2147483418`), Lakeside
 (`-2147483417`) and Group (`-2147483416`), all under `resourceLocationId`
 `-2147483539`. No child covers the whole POI there, so the leaf's own container
-`mapId` stays. 52 of BC's 147 campground leaves are in this shape; picking one
-child (the ETL used to take the numerically smallest) sent every one of their
-"Book" links into a single arbitrary loop.
+`mapId` stays. 52 of BC's 147 campground leaves are in this shape; picking any
+one child would send every one of their "Book" links into a single arbitrary
+loop.
 
 ## Endpoint catalog
 

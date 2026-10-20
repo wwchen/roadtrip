@@ -39,9 +39,8 @@ export function buildRouteIndex(line: LineString | null | undefined): RouteIndex
  * which was built with real great-circle lengths. So the answer is accurate even
  * though the search is cheap.
  *
- * Returns 0 for a point with no index to project onto, which is what the vanilla did:
- * the card list is sorted by this value, and an unindexed route has no order to
- * impose anyway.
+ * Returns 0 for a point with no index to project onto: the card list is sorted by
+ * this value, and an unindexed route has no order to impose anyway.
  */
 export function distanceAlongRouteKm(
   index: RouteIndex | null,

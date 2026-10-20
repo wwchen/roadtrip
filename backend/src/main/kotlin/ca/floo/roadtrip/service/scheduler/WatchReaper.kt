@@ -13,8 +13,8 @@ import java.time.Duration
 private val defaultReapInterval: Duration = Duration.ofMinutes(5)
 
 /**
- * Owns elapsed-watch teardown, the one lifecycle concern the poll tick used to
- * carry. A watch elapses with no user action (its `end_date` simply passes), so
+ * Owns elapsed-watch teardown, the one lifecycle concern that is not the poll
+ * tick's. A watch elapses with no user action (its `end_date` simply passes), so
  * something must notice; that is this sweep, not the executor.
  *
  * Correctness never depends on the reaper running promptly: liveness is a

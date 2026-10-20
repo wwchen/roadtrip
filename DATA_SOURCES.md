@@ -162,8 +162,8 @@ Kept so the research isn't repeated, not because any of it is scheduled.
   `ev_pricing` text. No fetcher, registry row, or map layer exists today.
 - **State park polygons** — USGS PAD-US 4.0 (`Mang_Type='STAT'`,
   `Des_Tp IN ('SP','SRA')`, public domain, ArcGIS REST with CORS). A prebuilt
-  `state-parks.geojson` used to be served from `/data/`; it was dropped with
-  the legacy importer, and the map renders no park-polygon layer today.
+  `state-parks.geojson` is not served, and the map renders no park-polygon
+  layer.
 - **Hipcamp** — no public API, Cloudflare-protected, ToS prohibits scraping.
   If it ever matters, deep-link to their map centered on the current view
   rather than embedding listings.

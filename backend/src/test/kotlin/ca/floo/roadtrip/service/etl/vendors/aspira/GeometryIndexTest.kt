@@ -114,8 +114,8 @@ class GeometryIndexTest {
 
     /**
      * A declared source that lands nothing is the shape of a format or
-     * `name_property` mismatch, and of upstream renaming a column. It used to
-     * read as an ordinary INFO line beside the healthy sources.
+     * `name_property` mismatch, and of upstream renaming a column — none of which
+     * an ordinary INFO line beside the healthy sources would show.
      */
     @Test
     fun `a declared source that contributes no keys warns, naming the slug`() {

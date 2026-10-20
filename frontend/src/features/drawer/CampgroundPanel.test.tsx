@@ -18,9 +18,9 @@ const campground = (properties: Record<string, unknown> = {}) => ({
     category: 'campground',
     name: 'Bowman Bay',
     // Region arrives nested, and only nested: the flattener derives `state` from
-    // `address` (or `region`) and overwrites whatever was flat — `web/core.js:177`
-    // does the same, so a fixture with a bare `state: 'WA'` would render no region
-    // here and misrepresent the endpoint. Pinned in poi.test.ts.
+    // `address` (or `region`) and overwrites whatever was flat, so a fixture with
+    // a bare `state: 'WA'` would render no region here and misrepresent the
+    // endpoint. Pinned in poi.test.ts.
     address: { state: 'WA' },
     agency: 'Washington State Parks',
     // The containing park is the backend's own column now, not an inference from

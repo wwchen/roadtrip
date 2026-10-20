@@ -26,11 +26,11 @@ export interface Basemap {
 /**
  * Every basemap on offer — a **cartography**, not a brightness.
  *
- * Light and Dark used to sit in this list beside Streets and Terrain, which made
- * one control choose two unrelated things: picking Terrain in a dark UI handed you
- * a bright tan map, and "match the theme" swapped the whole cartography rather than
- * its brightness. Brightness is the app's theme now and never appears here; each
- * entry carries the light and dark tiles for the same map instead.
+ * Brightness is the app's theme and never appears here; each entry carries the
+ * light and dark tiles for the same map. Light and Dark beside Streets and Terrain
+ * would make one control choose two unrelated things: Terrain in a dark UI handing
+ * back a bright tan map, and "match the theme" swapping the whole cartography
+ * rather than its brightness.
  */
 export const BASEMAPS: Readonly<Record<string, Basemap>> = {
   streets: {
@@ -118,9 +118,8 @@ export function basemapStyle(key: string, mode: ThemeMode): string {
 /**
  * Esri World Imagery, as an optional underlay.
  *
- * Kept as data rather than as the legacy `installSatellite()` function, because that
- * read a checkbox by id and mutated the shared `state.map`. The provider owns
- * insertion now; this is just the source and layer it inserts.
+ * Data rather than an install function that reads a checkbox and mutates the map:
+ * the provider owns insertion, and this is just the source and layer it inserts.
  */
 export const SATELLITE_SOURCE_ID = 'esri-imagery';
 export const SATELLITE_LAYER_ID = 'esri-imagery-raster';

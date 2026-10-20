@@ -29,10 +29,9 @@ const SHARED_FLY_SPEED = 1.6;
  * Reads through `usePoiDetail`, which is the same query key the drawer uses, so the
  * hydration is one request shared with the drawer rather than a second fetch.
  *
- * Deliberately fires only once. The vanilla version guarded with a `restored` flag
- * for the same reason: the camera move is a courtesy on arrival, and re-running it
- * whenever the detail re-settles would yank the map out from under someone who had
- * since panned away.
+ * Deliberately fires only once: the camera move is a courtesy on arrival, and
+ * re-running it whenever the detail re-settles would yank the map out from under
+ * someone who had since panned away.
  */
 export function useDeepLinkedPoi(): void {
   const { map, styleEpoch } = useMapContext();
@@ -60,16 +59,16 @@ export function useDeepLinkedPoi(): void {
 
   const restored = useRef(false);
   useEffect(() => {
-    // `styleEpoch` is this port's `isMapReadyForSharedLink`: `flyTo` before the
-    // style is up is silently dropped, which is the bug the vanilla
-    // `restoreAfterMapReady` dance existed to avoid.
+    // `flyTo` before the style is up is silently dropped, so this waits on
+    // `styleEpoch`.
     if (!data || !map || !styleEpoch || restored.current) return;
 
     const properties = data.properties;
     const geometry = data.geometry as Parameters<typeof geomCenter>[0];
     // `hasCoordinates` and not just a finite check on the centroid: `geomCenter`
-    // answers `[0, 0]` for a geometry it could not read, which is finite, so the
-    // vanilla guard flew to null island for a POI whose geometry failed to load.
+    // answers `[0, 0]` for a geometry it could not read, which is finite, so a
+    // bare finite check flies to null island for a POI whose geometry failed to
+    // load.
     const [lng, lat] = geomCenter(geometry);
     if (!hasCoordinates(geometry) || !Number.isFinite(lng) || !Number.isFinite(lat)) return;
     restored.current = true;

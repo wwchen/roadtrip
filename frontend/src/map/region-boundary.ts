@@ -47,9 +47,9 @@ export interface RegionPalette {
 /**
  * The palette a region draws in, by the kind of region it is.
  *
- * A table rather than a `switch`, and it reuses the tokens the vanilla map's own
- * park polygons were defined for — `--rt-map-np-*` and `--rt-map-sp-*` have been
- * in `tokens.css` since then with nothing painting them. An administrative
+ * A table rather than a `switch`, reusing the park-polygon tokens
+ * `--rt-map-np-*` and `--rt-map-sp-*`, which sit in `tokens.css` with nothing
+ * else painting them. An administrative
  * region (a state, a province, a country) borrows the boundary colour the static
  * state lines already use, so the two read as the same kind of line.
  */

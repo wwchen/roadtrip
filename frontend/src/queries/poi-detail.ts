@@ -19,7 +19,7 @@ export function usePoiDetail(id: string | number | null): UseQueryResult<FlatPoi
     enabled: id != null,
     // A POI's detail row changes on an ETL cadence, not on a human one, and the
     // endpoint sets its own Cache-Control. Re-fetching on every reselect of the
-    // same pin would be a regression against the legacy per-id promise cache.
+    // same pin would re-request what has not changed.
     staleTime: 5 * 60_000,
   });
 }

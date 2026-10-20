@@ -47,12 +47,11 @@ export function formatDistance(km: number): string {
  * array (PAD-US ships some parks as GeometryCollection with mixed polygon
  * parts).
  *
- * An empty or missing geometry yields the origin rather than NaNs — carried over
- * from `web/core.js`. Note what that means: `[0, 0]` is a *coordinate*, in the
- * Gulf of Guinea, and it passes every `Number.isFinite` check a caller might
- * make. The vanilla `flyTo` paths guarded on exactly that and so flew to null
- * island for a POI whose geometry failed to load. Callers that move the camera
- * should gate on `hasCoordinates` first; this function's contract is unchanged.
+ * An empty or missing geometry yields the origin rather than NaNs. Note what that
+ * means: `[0, 0]` is a *coordinate*, in the Gulf of Guinea, and it passes every
+ * `Number.isFinite` check a caller might make, so a camera move gated on finite
+ * coordinates alone flies to null island for a POI whose geometry failed to load.
+ * Callers that move the camera gate on `hasCoordinates` first.
  */
 /**
  * Whether a geometry carries any coordinate at all.
