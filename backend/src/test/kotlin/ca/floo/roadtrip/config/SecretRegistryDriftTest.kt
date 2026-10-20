@@ -10,12 +10,11 @@ import kotlin.test.assertTrue
  * The registry and `application*.yaml` must agree about which secrets the
  * backend consumes.
  *
- * This is the mechanism that replaces the sync scripts. Historically the list
- * of secret names lived in four hand-maintained places and drifted — at the
- * time this was written `CAMPFLARE_TOKEN` and `ROADTRIP_EMAIL_FROM` were read
- * by the backend but documented nowhere. Adding a `${'$'}{SOMETHING}` placeholder
- * without registering it, or registering a backend secret nothing reads, now
- * fails here instead of being discovered in production.
+ * This is the mechanism that keeps one list of secret names instead of four
+ * hand-maintained ones that drift — a secret the backend reads and nothing
+ * documents, or one documented and never read. Adding a `${'$'}{SOMETHING}` placeholder
+ * without registering it, or registering a backend secret nothing reads, fails
+ * here rather than in production.
  */
 class SecretRegistryDriftTest {
     private val resourcesDir = File(repoRoot, "backend/src/main/resources")

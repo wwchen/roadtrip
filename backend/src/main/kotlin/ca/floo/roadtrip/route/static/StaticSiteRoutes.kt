@@ -19,15 +19,9 @@ import java.io.File
  * `/watches.html`) are registered from it — see `urlFormsOf`, which is also what
  * makes the root page's second form `/` itself rather than `/index`.
  *
- * Registering both forms from this list is what retired the hand-written
- * `/availability` route that used to sit below: the extensionless alias it existed
- * to provide is exactly what this loop generates.
- *
- * **These routes plus `/assets` and `/data` are now the whole static surface.** The
- * `/web` mount is gone — the three files still under it moved into the React tree —
- * and so is the flat catch-all that used to serve the vanilla site. Nothing resolves
- * by Ktor's scoring any more, and nothing under `staticDir` is reachable except
- * through a mount named here.
+ * **These routes plus `/assets` and `/data` are the whole static surface.** There
+ * is no flat catch-all: nothing resolves by Ktor's scoring, and nothing under
+ * `staticDir` is reachable except through a mount named here.
  */
 private val pages = listOf("watches.html", "availability.html", "poi.html", INDEX_FILE)
 
@@ -55,10 +49,10 @@ internal fun Route.staticSiteRoutes(
     staticFiles(ASSETS_PATH, File(frontendDir, ASSETS_DIR))
         .access(RouteAccess.Anonymous)
 
-    // The GeoJSON overlays (state boundaries) and the imported source data. The one
-    // static tree that is repo data rather than build output, which is why it
-    // outlived `web/`: `map/state-lines.ts` fetches `/data/us-states.geojson` at
-    // runtime, and bundling multi-megabyte geometry into the page would be worse.
+    // The GeoJSON overlays (state boundaries) and the imported source data: the one
+    // static tree that is repo data rather than build output. `map/state-lines.ts`
+    // fetches `/data/us-states.geojson` at runtime, and bundling multi-megabyte
+    // geometry into the page would be worse.
     staticFiles("/$DATA_DIR", File(staticDir, DATA_DIR)) {
         exclude { it.path.contains(RAW_DATA_SEGMENT) }
         contentType { f ->
@@ -73,12 +67,10 @@ internal fun Route.staticSiteRoutes(
     // Answered as a 404 rather than by handing respondFile a path that does not
     // exist, which throws and would surface as a 500.
     //
-    // The flat catch-all that used to sit below is deleted. It was kept "because the
-    // root is a real directory a deploy can drop a file into", but that cuts the
-    // other way: `staticDir` is `/app/static` in a container and the CHECKOUT ITSELF
-    // on a host, where it answered `/README.md`, `/Makefile` and `/gradlew`. Nothing
-    // needs it — every page is explicit, `/assets` and `/data` have their own mounts
-    // — so the exposure bought nothing. Its absence is pinned by a test.
+    // No flat catch-all below. `staticDir` is `/app/static` in a container and the
+    // CHECKOUT ITSELF on a host, where one would answer `/README.md`, `/Makefile`
+    // and `/gradlew`. Every page here is explicit and `/assets` and `/data` have
+    // their own mounts, so nothing needs it. Its absence is pinned by a test.
     for (page in pages) {
         for (path in urlFormsOf(page)) {
             get(path) {

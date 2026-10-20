@@ -1,8 +1,8 @@
 // What the alerts panel says about a watch.
 //
-// The pure half of web/topbar/alerts.js: the ordering, the bar label, the done-state
-// inference, and the Slack deep-link contract. Everything here is testable without a
-// watch list, a network call or a DOM.
+// The pure half: the ordering, the bar label, the done-state inference, and the
+// Slack deep-link contract. Everything here is testable without a watch list, a
+// network call or a DOM.
 import type { Watch, WatchStatus } from '@/api/watches-api';
 import { watchFallbackName } from '@/lib/watch-format';
 

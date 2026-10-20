@@ -7,19 +7,17 @@ const checkedOf = (e: Event): boolean => (e.target as HTMLInputElement).checked;
 /**
  * Basemap choice and the satellite underlay.
  *
- * The DOM half of web/basemap.js, which Phase 4a deliberately left out of
- * `basemaps.ts`: `initBasemapPicker` filled a `<select>` by element id and
- * `bindSatelliteToggle` read a checkbox the same way. Both are props now, and the
- * map lifecycle they drive lives in `MapProvider` — this component only renders
- * the choice.
+ * The DOM half of the basemap registry in `basemaps.ts`. The choice and the
+ * satellite toggle are props, and the map lifecycle they drive lives in
+ * `MapProvider` — this component only renders the choice.
  *
  * A swatch grid rather than a `<select>`: the picker's job is "what will this
  * look like", which a dropdown of names can't answer.
  *
- * Cartography only. Light and Dark used to sit in this grid as if they were peers
- * of Streets and Terrain, so one control chose two unrelated things and picking a
- * map could un-darken the UI. Brightness is the app's theme now; every cartography
- * here has tiles for both modes, and the swatch previews the pair this mode loads.
+ * Cartography only — brightness is the app's theme, not a basemap. Light and Dark
+ * as peers of Streets and Terrain would make one control choose two unrelated
+ * things, so picking a map could un-darken the UI. Every cartography here has tiles
+ * for both modes, and the swatch previews the pair this mode loads.
  */
 export function BasemapPicker() {
   const { basemapKey, setBasemap, satellite, setSatellite } = useMapContext();

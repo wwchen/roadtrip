@@ -1,9 +1,7 @@
 // Server state for the availability dashboard.
 //
-// Replaces the imperative `refresh()` closures in each legacy tab module. Those
-// re-read their own form with `new FormData` on every submit and wrote results
-// straight into `innerHTML`; here the applied filters are state, the queries key
-// off them, and TanStack Query owns loading/error/refetch.
+// The applied filters are state, the queries key off them, and TanStack Query
+// owns loading, error and refetch.
 import {
   useMutation,
   useQuery,
@@ -81,9 +79,9 @@ export function useRuns(filters: RunFilters): UseQueryResult<RunsListResponse> {
 /**
  * True when the changes filter names exactly one target.
  *
- * The backend rejects neither-or-both, so the legacy tab checked this before
- * fetching (`if (!campsiteId === !poiId)`) and so does the query's `enabled`.
- * Exported because the tab renders a different message for the invalid case.
+ * The backend rejects neither-or-both, so the query's `enabled` checks it before
+ * fetching. Exported because the tab renders a different message for the invalid
+ * case.
  */
 export function hasOneChangeTarget({ poiId, campsiteId }: ChangeFilters): boolean {
   return Boolean(poiId) !== Boolean(campsiteId);
@@ -109,12 +107,11 @@ export function useChanges(filters: ChangeFilters): UseQueryResult<ChangesListRe
 
 /**
  * Per-date stats for a POI. POI only — a campsite-scoped view has no summary
- * endpoint, and the legacy tab hid the panel in that case.
+ * endpoint, so the panel is hidden there.
  *
  * A failure resolves to no panel rather than an error: these stats are context
- * beside the change list, and the legacy tab swallowed the error for that reason.
- * `retry: false` keeps a failing summary from re-requesting behind a panel the
- * operator cannot see.
+ * beside the change list. `retry: false` keeps a failing summary from
+ * re-requesting behind a panel the operator cannot see.
  */
 export function useChangesSummary(poiId: string): UseQueryResult<ChangesSummaryResponse> {
   return useQuery({
@@ -129,8 +126,7 @@ export function useChangesSummary(poiId: string): UseQueryResult<ChangesSummaryR
  * "Check now" — move a poller's next run to roughly now.
  *
  * Invalidates the poller list on success because the accepted response moves
- * `next_run_at`, so the row's scheduling columns are immediately stale. The
- * legacy handler called `refresh()` for the same reason.
+ * `next_run_at`, so the row's scheduling columns are immediately stale.
  *
  * A 404 also invalidates: it means the row is describing a poller that no longer
  * exists, so the list itself is what is wrong. Note that `forcePoller` resolves

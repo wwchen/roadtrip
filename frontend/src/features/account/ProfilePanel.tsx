@@ -51,8 +51,6 @@ export interface ProfilePanelProps {
 }
 
 /**
- * Rebuild of web/account/profile-panel.js.
- *
  * Editable display name, read-only login email with a verified badge.
  *
  * Theme still travels in `ProfileValues` and this panel's payload — it is one

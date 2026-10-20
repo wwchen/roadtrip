@@ -2,11 +2,8 @@
 //
 // One entry point rather than two imports per page, because the failure mode of
 // forgetting one is invisible. `mountPage` calls this, so the guarantee is
-// structural: a page that mounts at all has the chrome. (Until Phase 5 this was a
-// pair of `<script type="module">` tags injected into every HTML entry by a Vite
-// plugin and served from the legacy `web/` tree; the tag list was pinned by a test
-// for exactly the same reason. Calling one function from the shared mount is the
-// same guarantee without a build-time indirection.)
+// structural: a page that mounts at all has the chrome, with no build-time
+// indirection to keep in step.
 import './sandbox.css';
 import { initSandboxBanner } from './sandbox-banner';
 

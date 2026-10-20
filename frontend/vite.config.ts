@@ -38,9 +38,9 @@ export default defineConfig({
       // The `--rt-*` token bridge. Aliased rather than imported by path because it
       // is not ordinary source: `src/tokens/tokens.css` beside it is the single
       // source of truth for colour and this module is the only sanctioned way to
-      // read one from JS, so the specifier says so at every call site. It used to
-      // point outside the Vite root, at `web/design-system/tokens.js`, which is why
-      // it needed a hand-written `.d.ts`; it is a plain tsconfig `paths` entry now.
+      // read one from JS, so the specifier says so at every call site. It is a plain
+      // tsconfig `paths` entry inside the Vite root, so it needs no hand-written
+      // `.d.ts`.
       '@tokens': here('./src/tokens/tokens.ts'),
     },
   },

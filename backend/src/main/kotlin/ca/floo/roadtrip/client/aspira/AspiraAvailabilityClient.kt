@@ -9,7 +9,7 @@ import java.time.LocalDate
  * Aspira availability + occupancy fetch surface. The HTTP-backed
  * implementation ([HttpAspiraAvailabilityClient]) reads Aspira NextGen's
  * public `/api/availability/map` endpoint. Same vendor as the deeplink
- * builder ([web/aspira.js], RFC 0006); powers reservation.pc.gc.ca,
+ * builder (RFC 0006); powers reservation.pc.gc.ca,
  * washington.goingtocamp.com, discovercamping.ca. Tests pass fakes.
  *
  * Wire shape (verified by manual probe 2026-06-07):

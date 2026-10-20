@@ -1,8 +1,7 @@
 // The watches page's deep links.
 //
 // `?action=create|modify|delete` with `id`, `poi_id`, `start_date`. Notification
-// links point here, so the shapes are a published contract — preserved exactly
-// from web/watches/watches-page.js.
+// links point here, so the shapes are a published contract.
 import { useEffect, useRef, useState } from 'react';
 
 export const ACTION_CREATE = 'create';
@@ -39,17 +38,16 @@ export function readUrlAction(search: string): WatchUrlAction | null {
  *
  * Clearing it matters: `?action=delete&id=7` must not re-fire on a refresh or a
  * back-navigation. `replaceState` rather than `pushState` so Back still leaves
- * the page instead of walking through cleared URLs. Drops the whole search, as
- * the original did, not just the params it read.
+ * the page instead of walking through cleared URLs. Drops the whole search, not
+ * just the params it read.
  *
  * The action is consumed exactly once, on the first settled load, and is dropped
- * for good if it was not allowed at that moment — matching the legacy page, which
- * called `applyUrlAction` once at init behind `if (!signedOut)` and never again.
- * That matters because one of these actions deletes a watch: a notification link
- * opened with an expired session, or one whose list load failed outright, must not
- * fire later and silently — not when the user signs back in from the still-vanilla
- * topbar, and not off the back of a Retry press. Nothing is cleared when an action
- * is dropped, so the URL still shows what was ignored.
+ * for good if it was not allowed at that moment. That matters because one of these
+ * actions deletes a watch: a notification link opened with an expired session, or
+ * one whose list load failed outright, must not fire later and silently — not when
+ * the user signs back in from the topbar, and not off the back of a Retry press.
+ * Nothing is cleared when an action is dropped, so the URL still shows what was
+ * ignored.
  *
  * Note the asymmetry this implies: a condition that should DROP the action goes in
  * `allowed`, while `ready` only decides when to look. A reason-not-to-act placed in

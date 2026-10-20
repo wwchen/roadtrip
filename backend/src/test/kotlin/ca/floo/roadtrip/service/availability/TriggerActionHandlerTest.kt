@@ -495,7 +495,7 @@ class TriggerActionHandlerTest {
         runBlocking {
             // End to end through the real adapter, fanout and renderer: proves
             // producer and renderer agree on the companion's own reason. This
-            // owner was asked for a code; the mail used to say "session expired".
+            // owner was asked for a code, so the mail must not say "session expired".
             val emailClient = RecordingEmailClient()
             val adapter =
                 RecGovBookingAdapter(

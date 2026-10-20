@@ -80,13 +80,11 @@ export function routeSummary(properties: RouteProperties | null | undefined): Ro
 /**
  * The per-leg breakdown, or nothing when there is nothing to break down.
  *
- * A two-stop trip has exactly one leg, which is the total already on screen — the
- * vanilla showed the breakdown only for three or more stops, and this returns an
- * empty list rather than one redundant line.
+ * A two-stop trip has exactly one leg, which is the total already on screen, so
+ * this returns an empty list rather than one redundant line.
  *
- * One deliberate change: legs use the same `formatDrivingTime` as the total, where
- * the vanilla printed raw minutes. A 6-hour leg reading "372 min" is not an
- * improvement over "6h 12m".
+ * Legs use the same `formatDrivingTime` as the total: a 6-hour leg reading
+ * "372 min" is not an improvement over "6h 12m".
  */
 export function routeLegLines(
   properties: RouteProperties | null | undefined,
@@ -114,8 +112,7 @@ const ROUTE_ERROR_MESSAGES = new Map<string, string>([
  * Turn a routing failure into a sentence.
  *
  * A `Map`, not an object literal: a code naming an `Object.prototype` member
- * would otherwise resolve up the prototype chain and return a function — the same
- * defect the settings-error port fixed in Phase 3.
+ * would otherwise resolve up the prototype chain and return a function.
  *
  * The fallback names the HTTP status, because a routing failure with no code we
  * recognise is usually infrastructural and the number is the only actionable

@@ -44,7 +44,7 @@ private val challengeEndingCodes =
 /**
  * Projects the stored rec.gov account into the wire shape the settings document
  * carries. The document is rec.gov's own settings surface, so it names one
- * provider even though storage no longer does.
+ * provider even though storage does not.
  *
  * Credentials read back as unconfigured when there is no [cipher]: the sealed
  * password cannot be opened without the key, so offering to log in with it would

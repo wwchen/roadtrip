@@ -1,14 +1,10 @@
 # Frontend Component Architecture
 
 The frontend is **React + TypeScript in `frontend/`**, built by Vite, with components
-from the npm-published LDS design system behind `@ui`. **`web/` is gone entirely** — Phase 5
-deleted the vanilla app, and the three files it left behind (the colour tokens, their JS
-bridge, and the sandbox chrome) have since moved into this tree.
+from the npm-published LDS design system behind `@ui`. The colour tokens, their JS bridge,
+and the sandbox chrome live in this tree.
 
-Read [docs/react-migration-plan.md](react-migration-plan.md) alongside this. That doc is
-the long form — how each surface was ported, and a Gotchas section that is the accumulated
-cost of getting LDS, MapLibre and TanStack Query wrong at least once each. This doc is the
-short version: where a component goes and what it may import.
+This doc says where a component goes and what it may import.
 
 ## Before you build: check `@ui`
 
@@ -73,9 +69,7 @@ assemble a sentence out of fragments and get the word order wrong.
 
 `VENDOR` is the one name for recreation.gov, and it is **Recreation.gov** — the
 `booking_providers` row's `display_name`, so the copy constant and the registry
-spell the vendor the same way. The product used to say "Recreation.gov",
-"recreation.gov" and "rec.gov" for the same vendor across banners, field labels
-and booking rows.
+spell the vendor the same way.
 
 Aria labels stay next to the control that computes them: they describe state, not
 prose. The account and POI surfaces still hold their own copy; move a surface in
@@ -260,9 +254,6 @@ in it.**
   and any `unhandledrejection`; both go to `console.error`, which is the only
   reporting path this app has.
 
-Both used to be `<link>`/`<script>` tags injected into every entry by a Vite plugin and
-served by Ktor from `web/`. They are bundled now; the plugin is gone.
-
 Four entries exist: `index.html` (map), `availability.html`, `watches.html`, and `poi.html`. Ktor serves
 each from `frontend/dist` and there is no fallback behind them, so an unbuilt tree 404s the
 whole site rather than degrading. Storybook is a development tool and is not a Ktor route or
@@ -381,9 +372,6 @@ from `@tokens` after a runtime swap so the map and charts re-resolve computed co
 
 ## Reference
 
-- [docs/react-migration-plan.md](react-migration-plan.md) — the migration's full history,
-  every locked decision, and the Gotchas list. Read the Gotchas before your first LDS
-  form, MapLibre effect or query key.
 - [docs/backend-architecture.md](backend-architecture.md) — the API these clients call.
 - [docs/reservation-providers.md](reservation-providers.md) — required reading before
   anything touching availability, watches or a provider integration.

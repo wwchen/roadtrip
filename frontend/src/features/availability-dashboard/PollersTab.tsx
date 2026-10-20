@@ -14,14 +14,14 @@ import {
 import { TAB_RUNS, type TabRoute } from './useTabRoute';
 import type { ForcePollerCooldown } from '@/api/availability-dashboard-api';
 
-/** Order matches the legacy select: any first, then the two concrete states. */
+/** Any first, then the two concrete states. */
 const ACTIVE_OPTIONS = [
   { value: '', label: 'any' },
   { value: 'true', label: 'active' },
   { value: 'false', label: 'dormant' },
 ];
 
-/** The legacy select opened on `active`, not on `any`. */
+/** The select opens on `active`, not on `any`. */
 const DEFAULT_FILTERS: PollerFilters = { active: 'true' };
 
 const NONE = '—';
@@ -45,15 +45,13 @@ export interface PollersTabProps {
 /**
  * Feedback for one "check now" press, keyed by poller id.
  *
- * Per-row rather than one banner because the legacy tab put the message in the
- * row it belonged to, and several rows can be in flight at once.
+ * Per-row rather than one banner: the message belongs to the row it came from,
+ * and several rows can be in flight at once.
  *
- * **Cleared when fresh list data arrives**, which is what the legacy tab got for
- * free: its `refresh()` rebuilt `resultsEl.innerHTML`, destroying the feedback
- * span along with the row. Holding these in React state instead means they
- * outlive the row unless something clears them — and a permanent "queued" badge
- * beside a poller whose run happened long ago is worse than no badge, as is a
- * "try again in 42s" whose number never ticks down and never expires.
+ * **Cleared on a timer.** Held in React state, a message outlives its row unless
+ * something clears it — and a permanent "queued" badge beside a poller whose run
+ * happened long ago is worse than no badge, as is a "try again in 42s" whose
+ * number never ticks down and never expires.
  */
 type Feedback = Readonly<Record<string, string>>;
 
@@ -70,16 +68,13 @@ const QUEUED = 'queued';
 const FEEDBACK_TTL_MS = 6000;
 
 /**
- * Rebuild of web/components/availability/pollers-tab.js.
- *
  * A poller is the coalesced per-(provider, parent_ref) schedulable; many watches
  * share one. Clicking an id goes to the runs tab filtered to that poller, which
  * is the page's provenance trail and a published URL.
  */
 export function PollersTab({ route }: PollersTabProps) {
-  // Applied filters, not live form state: the legacy form only refetched on
-  // Apply/Reset, and a select that refetched on change would fire a request per
-  // keystroke of arrow-key browsing.
+  // Applied filters, not live form state: a select that refetched on change
+  // would fire a request per keystroke of arrow-key browsing.
   const [filters, setFilters] = useState<PollerFilters>(DEFAULT_FILTERS);
   const [draft, setDraft] = useState<ActiveFilter>(DEFAULT_FILTERS.active);
   const [feedback, setFeedback] = useState<Feedback>({});
@@ -89,10 +84,8 @@ export function PollersTab({ route }: PollersTabProps) {
   const force = useForcePoller();
 
   // Expire row messages a few seconds after the last one, rather than tying them
-  // to the list refetch. Clearing on fresh data was the first attempt and it is
-  // wrong twice over: the invalidation refetch lands almost immediately, so the
-  // confirmation is never readable — which is the legacy tab's own flaw, since its
-  // `refresh()` wiped the span as soon as it returned.
+  // to the list refetch: the invalidation refetch lands almost immediately, so a
+  // confirmation cleared by fresh data is never readable.
   //
   // One timer for the whole map, reset on each new message, so several rows in
   // flight need no per-key bookkeeping.

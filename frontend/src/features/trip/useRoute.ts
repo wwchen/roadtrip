@@ -99,9 +99,9 @@ export function useRoute(): TripRoute {
     // A routing refusal is deterministic — the same two adjacent stops are the
     // same on the retry — so retrying only delays the message.
     retry: false,
-    // The road between two points does not change while the tab is open, and the
-    // vanilla fetched once per edit. Without this, remounting the topbar (a
-    // basemap change, a drawer opening) would re-request an identical route.
+    // The road between two points does not change while the tab is open. Without
+    // this, remounting the topbar (a basemap change, a drawer opening) would
+    // re-request an identical route.
     staleTime: Infinity,
   });
 

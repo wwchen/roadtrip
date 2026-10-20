@@ -18,8 +18,8 @@ const MINUTES_PER_HOUR = 60;
 /**
  * An ISO timestamp as the dashboard shows it: `2026-07-08 14:30:00`.
  *
- * Purely textual, exactly as the legacy helper was — it drops the `T`, any
- * fractional seconds, and a trailing `Z` without parsing the string. That means
+ * Purely textual: it drops the `T`, any fractional seconds, and a trailing `Z`
+ * without parsing the string. That means
  * **no timezone conversion**: a UTC timestamp is displayed in UTC. Reading it as
  * a Date and reformatting would silently shift every column on this page to the
  * viewer's timezone, which for an operational dashboard whose backend logs in UTC

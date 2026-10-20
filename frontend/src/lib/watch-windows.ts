@@ -48,8 +48,7 @@ function coerceAddToCartState(raw: unknown): AddToCartState {
  * The wire block as sets.
  *
  * Accepts an already-normalised value too, because the popover receives whichever
- * of the two shapes its caller happened to hold — the same tolerance the vanilla
- * `normalizeWatchCapabilities` had, for the same reason.
+ * of the two shapes its caller happens to hold.
  */
 export function normalizeWatchCapabilities(
   value: WireWatchCapabilities | WatchCapabilities | null | undefined,

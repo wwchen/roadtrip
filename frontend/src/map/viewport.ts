@@ -26,11 +26,10 @@ export const CAMPGROUND_CATEGORY = 'campground';
  * The categories requested at every zoom.
  *
  * Park polygons (`national-park`, `state-park`) are deliberately absent, and the
- * React map has no park layers for the same reason: they are expensive to ship
- * and clutter at low zoom, so the vanilla map stopped requesting them and left
- * its park toggles behind as hidden DOM stubs. Reintroducing parks means a
- * tile-rendered path plus a polygon overlay — adding the category here alone
- * would fetch data nothing paints.
+ * map has no park layers for the same reason: they are expensive to ship and
+ * clutter at low zoom. Reintroducing parks means a tile-rendered path plus a
+ * polygon overlay — adding the category here alone would fetch data nothing
+ * paints.
  */
 export const BASE_VIEWPORT_CATEGORIES: readonly string[] = [
   'planet_fitness_location',
@@ -86,10 +85,9 @@ export interface ViewportRequestInput extends MapViewport {
  * whether they were asked for. The server strips `campground` below
  * `CG_ZOOM_THRESHOLD`, so without that distinction a cached low-zoom response
  * would be reused by a contained higher-zoom view that *should* include
- * campgrounds — leaving them invisible until the user panned somewhere new. The
- * vanilla loop computed the same flag from the raw and the floored zoom
- * separately; `Math.floor(z) >= 6` and `z >= 6` are the same predicate, so this
- * uses the floored value for both.
+ * campgrounds — leaving them invisible until the user panned somewhere new.
+ * `Math.floor(z) >= 6` and `z >= 6` are the same predicate, so this uses the
+ * floored value for both.
  */
 export function viewportRequestFor({
   bbox,

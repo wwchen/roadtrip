@@ -22,23 +22,19 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-// Trip-critical smoke. Mirrors the deleted qa/smoke.spec.mjs: cold load →
-// /api/pois → Banff drawer. Gated on QA_BASE_URL so `gradle test` skips it
-// unless a stack is already up. Run via `make qa`.
+// Trip-critical smoke: cold load → /api/pois → Banff drawer. Gated on
+// QA_BASE_URL so `gradle test` skips it unless a stack is already up. Run via
+// `make qa`.
 //
 // **`/` is the React app.** Two kinds of selector appear below, and which one a
 // step uses is deliberate:
 //
-//   the topbar's `tb-*` ids and classes, which the React components reproduce
-//       verbatim (see the notes in `StopRow.tsx` and `TopBar.tsx`) — the topbar is
-//       the one surface whose DOM contract was worth preserving, because these
-//       assertions are what proves the rewritten planner behaves;
-//   roles and accessible names for everything React reshaped — the drawer
-//       (`aside.rt-drawer`, `role=dialog`) and the legend (`.rt-legend*`). Where the
-//       vanilla's hooks were ids on hand-built DOM (`#cg-drawer`, `#panel`,
-//       `#cg-agency-legend input[data-cg-agency]`), the port has real roles and
-//       names, so the smoke asks for those rather than pinning class names that only
-//       exist for CSS.
+//   the topbar's `tb-*` ids and classes, which its components carry as a DOM
+//       contract (see the notes in `StopRow.tsx` and `TopBar.tsx`) — these
+//       assertions are what proves the planner behaves;
+//   roles and accessible names everywhere else — the drawer (`aside.rt-drawer`,
+//       `role=dialog`) and the legend (`.rt-legend*`) — rather than class names
+//       that only exist for CSS.
 @EnabledIfEnvironmentVariable(named = "QA_BASE_URL", matches = ".+")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SmokeTest {
@@ -64,9 +60,9 @@ class SmokeTest {
     /**
      * The POI drawer, once it has finished sliding in.
      *
-     * The vanilla's `#cg-drawer.open` has no counterpart: React's drawer
-     * (`features/drawer/Drawer.tsx`) unmounts when it closes rather than keeping one
-     * element alive and toggling a class, so "open" is a dialog being present at all.
+     * The drawer (`features/drawer/Drawer.tsx`) unmounts when it closes rather
+     * than keeping one element alive and toggling a class, so "open" is a dialog
+     * being present at all.
      * `--open` is still in the selector because that class lands a frame later, and an
      * assertion that fires mid-animation reads a half-positioned panel.
      */
@@ -118,7 +114,7 @@ class SmokeTest {
             // 2. Drive search → result click, rather than clicking the dot on the
             // map: a picked POI result opens its drawer by id (`useTripPlanner`'s
             // `pickResult`), which dodges the pixel-rounding of hitting a 6px circle.
-            // The topbar keeps the vanilla's DOM: the search input is
+            // The topbar's DOM: the search input is
             // `.tb-row[data-i="0"] .tb-input`, and dropdown rows are `.tb-result`
             // whose `.tb-kind` chip says what they are. The geocoder also answers
             // "ADDR" rows for this query, so filter on the chip to avoid picking an
@@ -161,9 +157,9 @@ class SmokeTest {
             assertThat(drawer.locator("h2")).containsText("Tunnel Mountain")
             assertTrue(page.url().contains("poi="), "opening a POI should update the visible URL")
 
-            // The drawer inherited the vanilla app's very high stacking level, but
-            // search now exists only in the topbar. A detail view must not trap the
-            // primary search/navigation surface on desktop.
+            // The drawer sits at a very high stacking level, and search exists
+            // only in the topbar. A detail view must not trap the primary
+            // search/navigation surface on desktop.
             val topbar = page.locator("#topbar")
             assertThat(topbar).isVisible()
             assertThat(topbar.locator(".tb-input").first()).isVisible()
@@ -171,8 +167,7 @@ class SmokeTest {
             val drawerZ = page.evaluate("() => Number(getComputedStyle(document.querySelector('.rt-drawer')).zIndex)") as Number
             assertTrue(topbarZ.toInt() > drawerZ.toInt(), "desktop drawer should remain below the topbar")
 
-            // The CTAs are LDS buttons rendered as anchors, in the actions row —
-            // `a.cg-btn-primary` was the vanilla's hand-built equivalent.
+            // The CTAs are LDS buttons rendered as anchors, in the actions row.
             val reserveBtn = drawer.locator(".rt-poi-actions a[href]").first()
             assertThat(reserveBtn).isVisible()
             val href = reserveBtn.getAttribute("href") ?: ""
@@ -904,11 +899,11 @@ class SmokeTest {
 
             page.locator("#tb-directions").click()
             page.waitForSelector(".tb-row[data-i=\"1\"] .tb-input")
-            // The corridor slider is NOT here yet, and that is the port's doing: it
-            // lives inside the results list now, which appears with a live route,
-            // because without one there is nothing for a radius to be a radius of.
-            // The vanilla built the row up front and hid it, so this assertion used to
-            // pass against a `display: none` control.
+            // The corridor slider is NOT here yet: it lives inside the results
+            // list, which appears with a live route, because without one there is
+            // nothing for a radius to be a radius of. It is absent rather than
+            // hidden, so this assertion cannot pass against a `display: none`
+            // control.
             assertThat(page.locator("#tb-corridor-range")).hasCount(0)
             val destination = page.locator(".tb-row[data-i=\"1\"] .tb-input")
             destination.fill("route destination")
@@ -955,23 +950,21 @@ class SmokeTest {
         }
     }
 
-    // Every production React page. Three
-    // purely visual bugs reached review during the migration (uncoloured error text, an
-    // input that dropped every keystroke after the first, and a 0x0 map canvas); every
-    // one passed tsc, the unit suite, the bundle and the colour-token check, because
+    // Every production React page. A purely visual failure — uncoloured error
+    // text, an input that drops every keystroke after the first, a 0x0 map canvas
+    // — passes tsc, the unit suite, the bundle and the colour-token check, because
     // none of those can see a page that renders wrongly or not at all.
     //
     // The assertions are deliberately shallow: the page's own heading, plus a
     // non-empty #root. A non-empty root is the real signal — it means the hashed
     // bundle resolved, parsed and mounted. A 404 on `/assets/*`, a broken entry, or a
-    // crash during mount all leave it empty, and those are the failures the strangler
-    // seam can actually produce.
+    // crash during mount all leave it empty.
     //
     // Nothing here depends on being signed in. Both headings render outside the
     // signed-out branch, so this passes whether or not the smoke stack has a session.
     @Test
     @Timeout(value = 2, unit = TimeUnit.MINUTES)
-    fun `migrated pages mount and render`() {
+    fun `every production page mounts and renders`() {
         val context =
             browser.newContext(
                 Browser
@@ -1027,9 +1020,9 @@ class SmokeTest {
 
     // The map container must have real dimensions. MapLibre sizes its WebGL canvas
     // from the container, so an unsized one yields a 0x0 canvas: a map that
-    // initialises without error, passes every unit test, and draws nothing. Phase 4a
-    // hit exactly that in the React provider, and 4b hit it again through the shell's
-    // body padding — neither is visible to tsc, to jsdom or to the bundle.
+    // initialises without error, passes every unit test, and draws nothing. Neither
+    // the provider's own sizing nor the shell's body padding is visible to tsc, to
+    // jsdom or to the bundle.
     @Test
     @Timeout(value = 2, unit = TimeUnit.MINUTES)
     fun `the map container has non-zero dimensions`() {

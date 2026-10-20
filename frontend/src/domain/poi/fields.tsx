@@ -15,10 +15,9 @@ import { useTripStore } from '@/stores/tripStore';
 /**
  * A feature's lng/lat, or undefineds.
  *
- * Every drawer type needs it and every one of them got it differently in the
- * vanilla tree — park read it off the click's `lngLat`, the others destructured
- * `geometry.coordinates` without checking. Hydrated geometry comes back from
- * `/api/pois/{id}` as whatever the provider stored, so the check is not paranoia.
+ * Every drawer type needs it, and one helper rather than a destructure per type.
+ * Hydrated geometry comes back from `/api/pois/{id}` as whatever the provider
+ * stored, so the check is not paranoia.
  */
 export function coordinatesOf(feature: PoiFeature): [number | undefined, number | undefined] {
   const coords = (feature.geometry as { coordinates?: unknown } | undefined)?.coordinates;
@@ -41,7 +40,7 @@ export const subline = (parts: (string | null | undefined | false)[]): string =>
  * `mapStore.userLocation` is written by the map's locate-me control
  * (`useUserLocation`), by the topbar's locate button, and by the
  * current-location route helper. Until one of them has a fix this is
- * empty, which is what the vanilla drawer shows without a location too.
+ * empty.
  */
 export function useDistanceTo(lng: number | undefined, lat: number | undefined): string {
   const userLocation = useMapStore((s) => s.userLocation);
@@ -74,10 +73,8 @@ export interface DirectionsButtonProps {
 /**
  * "Directions" / "Add stop", depending on whether a trip is being built.
  *
- * The vanilla version was an HTML string with `data-*` attributes, picked up by a
- * delegated listener in the vanilla chrome — indirection
- * that existed so the drawer did not import the topbar. `tripStore` is that seam
- * now, so the button calls it directly and the data attributes go away.
+ * `tripStore` is the seam between the drawer and the topbar, so the button calls
+ * it directly rather than carrying `data-*` attributes for a delegated listener.
  *
  * Icon-only, with the label in `aria-label` and `title`, exactly as before: the
  * tooltip is what discloses that the action changes meaning mid-trip.
@@ -96,12 +93,11 @@ export function DirectionsButton({ name, lng, lat, kind = 'PLACE', onAdded }: Di
       onClick={() => {
         // `addPoiToTrip`, not `tripStore.addStop`: the POI is the DESTINATION and
         // the mode becomes directions, which a bare append does not do. Pressing
-        // this in browse mode with `addStop` left the POI as the search row and the
-        // planner in browse mode — a parity break against the vanilla's
-        // `addTripStopFromExternal`, invisible until 4e mounted the topbar.
+        // this in browse mode with `addStop` leaves the POI as the search row and
+        // the planner in browse mode.
         addPoiToTrip({ name: name || 'Selected place', lng: lng as number, lat: lat as number, kind });
-        // The vanilla handler closed the drawer after adding, so the map and the
-        // trip row are both visible immediately.
+        // Close the drawer after adding, so the map and the trip row are both
+        // visible immediately.
         onAdded();
       }}
     >
@@ -202,10 +198,8 @@ function UpstreamValue({ value }: { value: unknown }) {
 /**
  * One `Call …` button per number in a provider's phone field.
  *
- * The splitting and `tel:` rules come from `lib/phone.ts` — one source of truth for
- * "what counts as a number". It had two renderers while `web/` existed; this is the
- * one that outlived it, and `phone.test.ts` now pins those rules directly rather
- * than through the string builder.
+ * The splitting and `tel:` rules come from `lib/phone.ts` — one source of truth
+ * for "what counts as a number" — and `phone.test.ts` pins those rules directly.
  */
 export function CallButtons({ phone }: { phone: unknown }) {
   return (

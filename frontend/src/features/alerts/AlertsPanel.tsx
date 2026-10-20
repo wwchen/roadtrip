@@ -1,12 +1,10 @@
 // The nav's availability-alerts row.
 //
-// Port of web/topbar/alerts.js' rendering half: a bar that appears when the user has
-// any watches, expanding into a table of them with per-row pause/resume, edit and
-// delete — and the Slack deep-link behaviour that points at a row without acting on it.
+// A bar that appears when the user has any watches, expanding into a table of them
+// with per-row pause/resume, edit and delete — and the Slack deep-link behaviour
+// that points at a row without acting on it.
 //
-// The editor is 4d's `WatchEditor`, which is the second consumer that port was written
-// for: the vanilla mounted the same `mountWatchEditor` controller here and in the
-// availability grid.
+// The editor is `WatchEditor`, shared with the availability grid.
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '@ui';
 import { signIn } from '@/api/auth-api';
@@ -302,9 +300,9 @@ function watchWindow(watch: Watch): string {
 /**
  * Trigger kinds as icons, from a table.
  *
- * Data-driven so a new kind renders without touching the row, which is what the
- * vanilla's `TRIGGER_HTML` map bought — and here an unknown kind renders as its own
- * text with no escaping question, because React does not interpolate markup.
+ * Data-driven so a new kind renders without touching the row, and an unknown kind
+ * renders as its own text with no escaping question, because React does not
+ * interpolate markup.
  */
 function Triggers({ watch }: { watch: Watch }) {
   const kinds = Array.isArray(watch.trigger_kinds) ? watch.trigger_kinds : [];

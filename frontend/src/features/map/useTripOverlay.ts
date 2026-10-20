@@ -1,16 +1,14 @@
 // The trip's presence on the map: the route line, the corridor fill, the markers.
 //
-// The React half of `drawRoute` / `updateCorridor` / `fitMapToRoute` / `syncMarkers`
-// from web/topbar.js — the imperative halves live in `map/route-overlay.ts` and
-// `map/trip-markers.ts`.
+// The React half of the route line, the corridor fill and the markers; the
+// imperative halves live in `map/route-overlay.ts` and `map/trip-markers.ts`.
 //
 // The corridor is ONE derived value (`corridor` below) rather than something two
-// effects each compute, and that is the fix for a bug an adversarial review of 4e
-// found: the install effect preferred the server's polygon and then recorded the
-// current radius as installed, so after a basemap change — which re-runs the install
-// — the fill silently reverted to the radius the route was fetched at while the
-// slider and the campground count said something else, with no path back until the
-// route itself changed. A single memo cannot disagree with itself.
+// effects each compute. Two of them disagree: an install effect that prefers the
+// server's polygon and then records the current radius as installed reverts the
+// fill, after a basemap change re-runs it, to the radius the route was fetched at
+// while the slider and the campground count say something else — with no path back
+// until the route itself changes. A single memo cannot disagree with itself.
 import { useEffect, useMemo, useRef } from 'react';
 import { computeCorridor, routeLine, serverCorridor } from '@/lib/trip-corridor';
 import {

@@ -681,11 +681,11 @@ describe('the smoke suite selectors', () => {
     expect(document.querySelector('#tb-corridor-range')).toBeNull();
   });
 
-  // `SmokeTest.kt:730` asserts this id has count 0. It is the VANILLA's id for a
-  // control 4e dropped; the share button above is a different control and carries
-  // no id, so the backend assertion stays true. Pinned here so a future rename
-  // cannot break a Kotlin test this tree cannot run.
-  test('the share button does not claim the vanilla’s dropped id', () => {
+  // `SmokeTest.kt:730` asserts this id has count 0: the share button above is a
+  // different control and carries no id, so the backend assertion stays true.
+  // Pinned here so a future rename cannot break a Kotlin test this tree cannot
+  // run.
+  test('the share button does not claim the #tb-share-route id', () => {
     useTripStore.setState({
       mode: 'directions',
       stops: [

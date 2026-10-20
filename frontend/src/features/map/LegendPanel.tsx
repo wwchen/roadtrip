@@ -23,24 +23,20 @@ export interface LegendPanelProps {
  * The layers panel: what is on the map, how much of it is in view, and what to
  * filter out.
  *
- * Port of `#panel` from index.html plus the collapse/drawer behaviour from
- * web/app.js's two IIFEs. Everything it filters is applied by `useMapOverlays`;
- * this component only reads counts and writes the hidden sets, so a legend click
- * never refetches.
+ * Everything it filters is applied by `useMapOverlays`; this component only reads
+ * counts and writes the hidden sets, so a legend click never refetches.
  *
- * **The search box is deliberately not here.** `#search` and `web/search.js`
- * filtered a client-side index that nothing has populated since the slim
- * `/api/pois` response stopped shipping names — `registerSearchItems` has no
- * callers, so the box could never return a result. Cross-viewport search is a
- * backend call the topbar owns (Phase 4e). See docs/react-migration-plan.md.
+ * **The search box is deliberately not here.** A client-side index cannot answer:
+ * the slim `/api/pois` response ships no names. Cross-viewport search is a backend
+ * call the topbar owns.
  */
 export function LegendPanel({ pois }: LegendPanelProps) {
   const { map } = useMapContext();
   const [collapsed, setCollapsed] = useState(false);
   const [open, setOpen] = useState(false);
 
-  // Tapping the map closes the sheet, as it did on the vanilla page. Bound only
-  // while it is open so an ordinary map click does no work.
+  // Tapping the map closes the sheet. Bound only while it is open so an ordinary
+  // map click does no work.
   useEffect(() => {
     if (!map || !open) return;
     const close = () => setOpen(false);

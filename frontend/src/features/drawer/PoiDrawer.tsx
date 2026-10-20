@@ -57,15 +57,14 @@ export function PoiDrawer({ renderCampgroundAvailability }: PoiDrawerProps = {})
   return (
     <Drawer open={open} onClose={close}>
       {query.isPending ? (
-        // The vanilla equivalent was a "Loading…" header injected before the
-        // fetch — same idea, same place in the layout, so the panel does not jump
-        // when the content arrives.
+        // In the same place in the layout as the loaded content, so the panel
+        // does not jump when the content arrives.
         <div className="rt-drawer-loading">Loading…</div>
       ) : null}
 
       {loadFailed ? (
-        // The legacy path had no error branch at all: `openHydratedDrawer` had no
-        // `.catch`, so a failed hydration left "Loading…" on screen indefinitely.
+        // Without this branch a failed hydration leaves "Loading…" on screen
+        // indefinitely.
         <div className="rt-drawer-error">
           <EmptyState
             icon="close-circle-fill"

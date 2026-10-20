@@ -109,11 +109,10 @@ private suspend fun ApplicationCall.respondOutcome(outcome: AddToCartOutcome) =
 /**
  * Three categories, three statuses — and no vendor codes in the HTTP shell.
  *
- * The provider's own code still goes out in the body, because that is what the
- * frontend turns into a sentence. What the route no longer does is *interpret*
- * it: two hand-kept sets of rec.gov codes lived here, so the route had to import
- * `RecGovSessionCodes` to build them, and any code missing from both silently
- * became a 502.
+ * The provider's own code goes out in the body, because that is what the frontend
+ * turns into a sentence. The route does not *interpret* it: hand-kept sets of
+ * rec.gov codes here would mean importing `RecGovSessionCodes` to build them, and
+ * a code missing from every set silently becoming a 502.
  */
 private fun BookingFailureCategory.status(): HttpStatusCode =
     when (this) {

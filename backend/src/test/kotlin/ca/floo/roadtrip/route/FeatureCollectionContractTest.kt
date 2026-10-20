@@ -39,7 +39,7 @@ import kotlin.test.assertEquals
 //     geometry + {category, subcategory?, agency?} per feature. Anything
 //     richer would inflate the bbox payload and undo the perf refactor.
 //   - poiDetailFeature (wide): drives popup/drawer hydration via
-//     GET /api/pois/{id}. Same shape /api/pois used to ship inline.
+//     GET /api/pois/{id}.
 //
 // Pure unit, no DB.
 class FeatureCollectionContractTest {

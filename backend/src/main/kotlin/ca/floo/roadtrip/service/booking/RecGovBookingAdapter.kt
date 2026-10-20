@@ -208,12 +208,11 @@ internal class RecGovBookingAdapter(
     /**
      * The re-login's own answer, not a stand-in for it.
      *
-     * Every refusal used to be rewritten to `recgov_session_expired` with
-     * "re-login in Settings" — so a user with no credentials stored, a companion
-     * at its browser cap, and a profile busy behind someone else's MFA challenge
-     * were all told to do the one thing that could not help. The companion
-     * already answers with the reason; passing it through is both less code and
-     * the truth.
+     * The companion answers with the reason, and passing it through is both less
+     * code and the truth. Rewriting every refusal to `recgov_session_expired` with
+     * "re-login in Settings" would tell a user with no credentials stored, a
+     * companion at its browser cap, and a profile busy behind someone else's MFA
+     * challenge to do the one thing that cannot help any of them.
      */
     private suspend fun reLogin(
         client: RecGovProfileSessionPort,

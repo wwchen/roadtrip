@@ -8,13 +8,12 @@ a POI or reservable into provider-ready targets, then call the adapter.
 
 ## Why an abstraction
 
-The dispatch logic used to live in parallel paths (single-id availability and
-watch polling), each parsing legacy `provider_ref` JSON inline and importing
-per-provider helper functions. Adding a third provider meant editing several
-files; forgetting one was a silent bug. The current shape stores typed
-`data_provider(_ref)` and `booking_provider(_ref)` columns and resolves them
-through `RefResolver` plus one registry lookup behind
-`AvailabilityTargetResolver`.
+One seam carries every dispatch. Typed `data_provider(_ref)` and
+`booking_provider(_ref)` columns resolve through `RefResolver` plus one registry
+lookup behind `AvailabilityTargetResolver`, so single-id availability and watch
+polling ask the same question of the same place. Per-provider branching at the
+call site is the failure this prevents: adding a provider would mean editing
+every path that parses a ref, and missing one is a silent bug.
 
 This doc is the contract. **A new availability provider is a typed ref plus a
 provider class under `service/availability/provider/` and one row in the
@@ -538,8 +537,7 @@ Two rules are the contract:
 - **Every observation names a campsite.** A vendor row an adapter cannot resolve
   to one of `campsites` is not a fact about a base unit, so it is dropped rather
   than returned with a null campsite id — nothing above the port can store or
-  serve such a row. The campground-rollup path that used to produce them is
-  gone.
+  serve such a row.
 - **No answer-level derivation below the port.** Whether a window is closed for
   the season, when it reopens, how many sites a stay has: all of it is derived
   above, from stored cells, by a caller that knows which campsites its answer is
@@ -565,12 +563,10 @@ in the window — the others have no reopening to report — and the slice reduc
 over the campsites it answers for. A cabin-filtered read is therefore never told
 when the tents reopen.
 
-Reading it from the table is also what makes it survive a cache hit. It used to
-be a by-product of the call that fetched: the loader passed the fetched batch's
-block on a miss and had none to pass on a hit, so the same request twice answered
-`closed_for_season` with a `reopens_on` and then without one. The reach is now
-the reach of stored cells, which is as wide as the fetch window that covered
-them.
+Reading it from the table is also what makes it survive a cache hit: it is not a
+by-product of the call that fetched, so the same request twice answers
+`closed_for_season` the same way. The reach is the reach of stored cells, which
+is as wide as the fetch window that covered them.
 
 ### What the poller passes
 
@@ -640,8 +636,8 @@ rolled back past the alias-aware resolver reads only `booking_provider` /
 `booking_provider_ref`, so those campgrounds stop matching the rec.gov pollers
 entirely.
 
-**The aliased-pin CTA no longer needs the companion URL.** As of phase 4b the
-drawer resolves an aliased pin's booking identity through `BookingIdentityResolver`
+**The aliased-pin CTA does not need the companion URL.** The drawer resolves an
+aliased pin's booking identity through `BookingIdentityResolver`
 and the registry's `sells`, not through `BookingAdapterRegistry`, so a profile
 shipped without `companion-base-url` still renders Reserve on Recreation.gov on
 every aliased row. The companion is still required for the `atc` action itself:
@@ -804,12 +800,9 @@ default in code (`AvailabilityPollerConfig`) and are overridable in
 The watch rung is the nullable `availability_watch.cadence_sec`; the POI rung
 is `pois.cadence_override_sec`, resolved against a poller's representative POI
 (`AvailabilityPollerRepo.cadenceOverrideForPoller`). A poller takes the
-tightest (min) resolved cadence across its live watches. Both override columns
-have existed since PR4 — what kept the lower rungs dead was the caller: the
-watch API used to receive an explicit `cadence_sec: 60` on every create, so
-the watch rung always won. Watch creation now omits `cadence_sec` by default,
-so a watch with no real preference actually reaches the POI override and the
-global default.
+tightest (min) resolved cadence across its live watches. Watch creation omits
+`cadence_sec` unless the caller asks for one, so a watch with no real preference
+reaches the POI override and then the global default.
 
 ## How a watch becomes API calls
 

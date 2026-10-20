@@ -1,8 +1,8 @@
 // The viewport POI fetch loop.
 //
-// Port of web/app.js's `load()` closure — one round-trip per pan, debounced, with
-// the in-flight request cancelled when the user keeps moving, and a containment
-// cache in front of it. Four mechanisms in the original, and where each went:
+// One round-trip per pan, debounced, with the in-flight request cancelled when the
+// user keeps moving, and a containment cache in front of it. Four mechanisms, and
+// where each lives:
 //
 //   250ms moveend debounce  -> still hand-rolled here. It is a property of the
 //                              gesture, not of the fetch, so it belongs on the
@@ -26,10 +26,9 @@
 //                              already scoped to its own bbox, so clipping it
 //                              is a no-op.
 //   route-mode suppression  -> `enabled: !routeActive`, plus painting the trip
-//                              corridor's own POIs instead. The vanilla code
-//                              aborted the in-flight fetch by hand at two call
-//                              sites to stop a late viewport response repainting
-//                              over the route's; disabling the query does both.
+//                              corridor's own POIs instead. Disabling the query
+//                              also stops a late viewport response repainting
+//                              over the route's.
 //
 // This hook owns fetching and bucketing only. Nothing here touches the map:
 // `useMapOverlays` paints what this returns, and `LegendPanel` counts it.
@@ -193,12 +192,11 @@ export function useViewportPois(): ViewportPois {
   /**
    * The last pins a viewport fetch actually returned.
    *
-   * **Repaint on success only, which is what the vanilla loop did.** `useQuery`
-   * has no data for a key it has not fetched yet, so without this every pan would
-   * blank the map for the duration of the round trip (a new bbox is a new key),
-   * and a failed fetch would blank it and leave it blank — where `refreshBbox`
-   * logged the error and returned, keeping the pins already on screen. An empty
-   * *successful* response still clears them, because that is a real answer.
+   * **Repaint on success only.** `useQuery` has no data for a key it has not
+   * fetched yet, so without this every pan would blank the map for the duration of
+   * the round trip (a new bbox is a new key), and a failed fetch would blank it and
+   * leave it blank. An empty *successful* response still clears the pins, because
+   * that is a real answer.
    */
   const lastFetched = useRef<PinFeature[]>(NO_FEATURES);
   useEffect(() => {
@@ -206,7 +204,7 @@ export function useViewportPois(): ViewportPois {
   }, [query.data]);
 
   // The only signal a failure has: nothing renders it, and the pins stay as they
-  // were. Same as the vanilla loop's console.error.
+  // were.
   useEffect(() => {
     if (query.error) console.error('viewport POI fetch failed:', query.error);
   }, [query.error]);

@@ -88,8 +88,8 @@ class PlanetFitnessEtlTest {
         }
     }
 
-    // Hours used to survive the import only inside `payload.tags`, and everything
-    // that reads a gym reads columns — so no caller ever saw them.
+    // Everything that reads a gym reads columns, so hours left inside
+    // `payload.tags` reach no caller.
     @Test
     fun `transform promotes opening hours out of the tag bag`() {
         val envelope = RawCaptureStore.parseEnvelope(fixtureFile())

@@ -25,11 +25,10 @@ export interface TabNavProps {
  *    looking at; this changes a property of what you are already looking at."
  *    Using it here would contradict the component on purpose.
  *
- * So: anchors, as the legacy page had them. They carry a real `href`, so the tabs
- * are middle-clickable, copyable and crawlable, and `aria-current="page"` marks
- * the active one. `preventDefault` keeps the switch client-side; a modified click
- * (new tab, new window) is left to the browser, which the legacy handler got
- * wrong by swallowing every click.
+ * So: anchors. They carry a real `href`, so the tabs are middle-clickable,
+ * copyable and crawlable, and `aria-current="page"` marks the active one.
+ * `preventDefault` keeps the switch client-side; a modified click (new tab, new
+ * window) is left to the browser rather than swallowed.
  */
 export function TabNav({ route }: TabNavProps) {
   return (

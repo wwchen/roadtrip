@@ -309,11 +309,10 @@ class AvailabilityPollerRepo(
      * for that run, not a correctness bug.
      *
      * Delegates the watch row mapping to [AvailabilityWatchRepo] rather than
-     * re-deriving it, so the two repos can't drift on shape. The watch now
-     * stores target-set rows instead of a single direct campsite column, so
-     * this select no longer joins the campsite catalog directly —
-     * [AvailabilityWatchRepo.fromRecord] loads each watch's target set
-     * itself.
+     * re-deriving it, so the two repos can't drift on shape. A watch stores
+     * target-set rows rather than a single campsite column, so this select does
+     * not join the campsite catalog — [AvailabilityWatchRepo.fromRecord] loads
+     * each watch's target set itself.
      */
     fun liveWatchesForPoller(pollerId: Long): List<AvailabilityWatchRepo.Watch> =
         ctx

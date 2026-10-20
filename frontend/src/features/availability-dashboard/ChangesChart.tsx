@@ -17,12 +17,9 @@ import type { AvailabilityChange } from '@/api/availability-dashboard-api';
 /**
  * Chart.js, from npm and tree-shaken.
  *
- * The legacy page pulled `chart.umd.min.js` and the date adapter from jsDelivr as
- * two blocking `<script>` tags, then guarded every use with
- * `typeof Chart === 'undefined'` because a CDN can simply not answer. Bundling
- * removes the runtime dependency on a third party, pins the version in the
- * lockfile, and makes that guard unnecessary — an import either resolves at build
- * time or the build fails.
+ * Bundled rather than pulled from a CDN: no runtime dependency on a third party,
+ * the version pinned in the lockfile, and no `typeof Chart === 'undefined'` guard
+ * at every use — an import either resolves at build time or the build fails.
  *
  * Registered piecewise rather than via `Chart.register(...registerables)`: this is
  * one stepped line chart on a time axis, and the auto-registration pulls in every

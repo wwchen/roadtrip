@@ -61,10 +61,10 @@ export interface SearchResult {
 /**
  * Category → pin kind.
  *
- * A `Map`, because the vanilla's `switch` listed two spellings for three of the
- * categories (`planet_fitness_location` / `planet-fitness`,
- * `tesla_supercharger` / `supercharger`) — a table makes the aliases obvious
- * instead of hiding them in fallthrough cases.
+ * A `Map`: three of the categories have two spellings
+ * (`planet_fitness_location` / `planet-fitness`, `tesla_supercharger` /
+ * `supercharger`), and a table makes the aliases obvious instead of hiding them
+ * in fallthrough cases.
  */
 const KIND_BY_CATEGORY = new Map<string, SearchKind>([
   ['campground', 'CG'],
@@ -166,9 +166,9 @@ export function geocodeSearchResults(
 /**
  * POIs first, then geocoded places, capped.
  *
- * The ordering is the product decision the vanilla comment argued for: a POI hit
- * opens a drawer with hours, availability and booking links, where a geocoded place
- * is a coordinate and a name. So the long tail stays the fallback, not the lede.
+ * The ordering is a product decision: a POI hit opens a drawer with hours,
+ * availability and booking links, where a geocoded place is a coordinate and a
+ * name. So the long tail stays the fallback, not the lede.
  */
 export function mergeSearchResults(
   pois: readonly SearchResult[],
@@ -186,9 +186,9 @@ export function sectionFor(result: SearchResult): string {
 /**
  * Section headers, computed once for a whole result list.
  *
- * Returns the header to render *before* each row, or null — the vanilla tracked a
- * `prevSection` variable while building HTML, which is the same thing expressed as
- * mutation rather than as data.
+ * Returns the header to render *before* each row, or null: the section
+ * boundaries as data, rather than a `prevSection` variable mutated while
+ * rendering.
  */
 export function sectionHeaders(results: readonly SearchResult[]): (string | null)[] {
   let previous: string | null = null;
@@ -207,8 +207,7 @@ export const isSearchable = (query: string): boolean =>
 /**
  * The zoom a picked result flies to.
  *
- * An address is a building, a place is a town, and a POI sits between them —
- * carried over from the vanilla's three call sites, which used 14 / 10 / 13.
+ * An address is a building, a place is a town, and a POI sits between them.
  */
 export function zoomForResult(result: SearchResult): number {
   if (result.source === 'poi') return 13;

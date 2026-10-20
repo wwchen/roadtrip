@@ -16,8 +16,8 @@ import kotlin.test.assertEquals
  *
  * Worth testing directly because the failure modes are silent. A missing
  * `/assets` mount serves a page whose HTML loads and whose bundles 404; a
- * catch-all left in place after Phase 5 would serve the repo's own flat files to
- * anyone who guessed a name.
+ * catch-all here would serve the repo's own flat files to anyone who guessed a
+ * name.
  */
 class StaticSiteRoutesTest {
     /**
@@ -54,9 +54,8 @@ class StaticSiteRoutesTest {
         block(client)
     }
 
-    // Both URL forms come from one `pages` entry — which is what retired the
-    // hand-written `get("/availability")` route that used to provide the
-    // extensionless alias.
+    // Both URL forms come from one `pages` entry, so the extensionless alias
+    // needs no hand-written route of its own.
     @Test
     fun `every page is served from the build on both URL forms`() =
         serving(staticTree(), builtTree()) { client ->
@@ -89,9 +88,9 @@ class StaticSiteRoutesTest {
             assertEquals(BUNDLE, response.bodyAsText())
         }
 
-    // Phase 5 deleted `web/`, so there is no vanilla file left to degrade to. An
-    // unbuilt frontend is a 404 — not a 500, which is what respondFile on a missing
-    // path would produce, and not a 200 serving something stale.
+    // There is nothing to degrade to: an unbuilt frontend is a 404 — not a 500,
+    // which is what respondFile on a missing path would produce, and not a 200
+    // serving something stale.
     @Test
     fun `a page with no build is a 404`() =
         serving(staticTree(), createTempDirectory("rt-frontend-empty").toFile()) { client ->
@@ -100,9 +99,9 @@ class StaticSiteRoutesTest {
             }
         }
 
-    // The flat catch-all went with `web/` and the root `index.html`. It is what used
-    // to answer `/README.md` on a host where staticDir is the checkout itself, so its
-    // absence is a property worth pinning rather than an implementation detail.
+    // A flat catch-all would answer `/README.md` on a host where staticDir is the
+    // checkout itself, so its absence is a property worth pinning rather than an
+    // implementation detail.
     @Test
     fun `nothing outside the declared mounts is served`() =
         serving(staticTree(), builtTree()) { client ->

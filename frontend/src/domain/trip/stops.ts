@@ -161,18 +161,16 @@ export function removeStopAt(
 
   // An empty endpoint in a two-row trip: there is nothing to clear and the row
   // cannot go, since directions mode has no state with fewer than two rows.
-  //
-  // The vanilla wrote `if (wasFilled) { clear in place }` inside this guard,
-  // which cannot fire: in a two-row trip every row is structural, so a filled
-  // one returned above. Dropped rather than translated.
+  // A filled row in a two-row trip has already returned above, so there is no
+  // clear-in-place case to handle here.
   if (mode === 'directions' && stops.length <= 2) {
     return { stops: stops.slice(), mode, focusRow: null };
   }
 
   const next = stops.filter((_, i) => i !== index);
   if (next.length === 0) return { stops: [], mode: 'browse', focusRow: null };
-  // One waypoint is not a route. The survivor becomes the browse selection,
-  // which is what the vanilla did — and it is why this returns a mode at all.
+  // One waypoint is not a route: the survivor becomes the browse selection,
+  // which is why this returns a mode at all.
   if (next.length === 1) {
     return { stops: next, mode: 'browse', focusRow: null };
   }
@@ -182,9 +180,8 @@ export function removeStopAt(
 /**
  * Drag-reorder: move the row at `from` to sit at `to`.
  *
- * Splice-out-then-splice-in, so dragging down past a row lands *after* it — the
- * same arithmetic as the vanilla drop handler, which is what makes a dragged row
- * end up where the drop indicator was.
+ * Splice-out-then-splice-in, so dragging down past a row lands *after* it, which
+ * is what makes a dragged row end up where the drop indicator was.
  */
 export function reorderStops(
   stops: readonly StopSlot[],

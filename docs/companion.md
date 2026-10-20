@@ -226,8 +226,8 @@ save if it cannot, because the profile is keyed by user rather than by account �
 without it the previous account's session survives, refresh-first login revives
 it, and a hold lands on the account the user just replaced.
 
-`profile_destroyed: false` therefore no longer means "the wipe failed"; it means
-no companion is configured at all, so there was no saved session to erase. A
+`profile_destroyed: false` means no companion is configured at all, so there was
+no saved session to erase. A
 failed sign-out alone does not block removal — `logout` is the graceful half and
 `destroy` is the load-bearing one — so `companion_signed_out` is still reported
 separately.
@@ -429,10 +429,9 @@ Docker log discovery ships its stdout/stderr to Loki.
 
 ### No auth check at boot
 
-The companion runs **no** rec.gov auth check when it starts. It used to, and
-that check signed in the single legacy profile — a browser process that,
-once every route became profile-scoped, belonged to nobody. Profiles are
-launched on demand and kept warm by the armed set instead. A consequence:
+The companion runs **no** rec.gov auth check when it starts. Every route is
+profile-scoped, so a companion-wide sign-in would belong to nobody. Profiles
+are launched on demand and kept warm by the armed set. A consequence:
 `GET /health` without a `profile_id` reports `recgov_auth.login_status:
 "unchecked"` until something explicitly runs an unscoped check. That is
 accurate rather than degraded — there is no companion-wide session to report.

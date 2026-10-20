@@ -43,8 +43,8 @@ const OPAQUE_MASK = '••••••••••';
 /**
  * A write-only secret input.
  *
- * Replaces `web/design-system/secret-field.js`. The server never returns the secret
- * — only whether one is stored and a redacted `hint` — so this field can show a
+ * The server never returns the secret — only whether one is stored and a redacted
+ * `hint` — so this field can show a
  * masked placeholder and accept a replacement, but never display or round-trip the
  * real value.
  *
@@ -52,19 +52,17 @@ const OPAQUE_MASK = '••••••••••';
  * client depends on: `updateNotifications` omits `slack_token` entirely when it is
  * null, because the backend reads a missing key as "unchanged".
  *
- * **This port fixes two bugs the original had, both from one root cause:** the
- * legacy state machine used `mode: 'replacing'` for two different things — "the user
- * clicked Replace" and "there is nothing stored, so just show an input". With no
- * secret stored it therefore opened in `replacing` mode, which meant:
+ * **Presentation and value are separate state, and must stay separate.** One flag
+ * meaning both "the user clicked Replace" and "there is nothing stored, so show an
+ * input" opens in replacing mode with no secret stored, which costs two bugs:
  *
- *  1. `getValue()` returned `''` rather than `null`, so saving an unrelated field
- *     sent `slack_token: ""` — a value the user never entered.
- *  2. `isDirty()` was true from the moment the panel opened, since dirty was
- *     `getMode() === 'replacing'`. Save was enabled with nothing edited, and a
- *     discard-changes guard would fire on a form nobody had touched.
+ *  1. the reported value is `''` rather than `null`, so saving an unrelated field
+ *     sends `slack_token: ""` — a value the user never entered;
+ *  2. the field is dirty from the moment the panel opens, so Save is enabled with
+ *     nothing edited and a discard-changes guard fires on an untouched form.
  *
- * Here the two are separate: `replacing` is local presentation state, while the
- * reported value is `null` until something is actually typed. An empty input reads
+ * So `replacing` is local presentation state, while the reported value is `null`
+ * until something is actually typed. An empty input reads
  * as "no secret supplied", never as "store an empty secret" — clearing a stored
  * secret is a different, explicit action (`clearSlack`), not an empty save.
  */

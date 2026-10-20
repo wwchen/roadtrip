@@ -11,11 +11,11 @@ import kotlin.test.assertEquals
 /**
  * Which day counts as "already elapsed" is a per-campground question.
  *
- * Marking a cell `past` used to key off one UTC `today` for the whole run, so a
- * Pacific campground's rows flipped at 17:00 local (16:00 in winter) — while the
- * date window, and everything else that decides a date, resolves in the
- * campground's own zone. The gap is not cosmetic: the cube serves the flipped
- * row to the client, and the next poll sees `past` -> `available`, emits a
+ * Marking a cell `past` resolves in the campground's own zone, like the date
+ * window and everything else that decides a date. One UTC `today` for the whole
+ * run flips a Pacific campground's rows at 17:00 local (16:00 in winter), and
+ * that gap is not cosmetic: the cube serves the flipped row to the client, and
+ * the next poll sees `past` -> `available`, emits a
  * transition, and fires a watch alert for an opening that never happened.
  */
 class AvailabilityElapsedCutoffsTest {
