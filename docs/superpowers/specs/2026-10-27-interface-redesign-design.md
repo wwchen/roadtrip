@@ -170,6 +170,103 @@ to settings. We take that cost because a filter button is an admission the
 ranking cannot be trusted, and because the existing panel is the proof that such
 a button grows.
 
+## Component hierarchy
+
+The layering from `docs/frontend-components.md` is unchanged — `@ui` primitives,
+then `domain/` for things that know what a place or a night is, then `features/`
+for surfaces, then `pages/` for composition, and no feature imports another. What
+follows is the hierarchy this design adds inside those rules.
+
+**The structural trick:** *if two screens would state the same fact, they must
+share one component, and that component decides where the fact renders.* The
+non-repetition rule becomes a property of the component graph rather than a note
+reviewers have to remember.
+
+### New in `@ui` (generic; knows nothing about campgrounds)
+
+| Component | Why it is a primitive |
+|---|---|
+| `Sheet` | The detented bottom sheet: `peek \| half \| full`, controlled, drag and programmatic. Nothing in it is campground-specific. |
+| `SheetHeader` | Compacts as the sheet rises instead of repeating what the body already said. |
+| `SheetSection` | Declares the detent at which its content first appears. This is what makes "a fact belongs to exactly one height" a **type-level** rule: content without a declared level does not render. |
+| `Stepper` | Numeric +/− row. Absorbs `GroupSizeStepper`, which was a feature component doing a primitive's job. |
+| `ChoiceChips` | Multi-select chip row for rig preferences. LDS has `Checkbox` and `SegmentedControl`; neither is this shape. |
+| `DefinitionRow` | The label/value row the *Full* detent is made of. |
+
+`MonthCalendar` already exists as a local addition and is the date-pinning
+control; nothing new is needed for *when*.
+
+**Verify before building any of them.** `frontend/node_modules/` was not
+installed when this was written, so the table above is reasoned from `@ui`'s
+re-export surface rather than from LDS's component list. The first step of
+phase 1 is reading the installed `@lew-ds/` source — the frontend doc's standing
+instruction — and deleting any row LDS already covers. "Check `@ui` first" is the
+rule this design is least entitled to break.
+
+### New in `domain/`
+
+These know the vocabulary and own no surface. They are where the redesign's
+rules actually live:
+
+- `domain/place/PlaceVerdict` — name, the reason line, the deciding facts. **One
+  component, two consumers** (the Where candidate card and the Place peek), so
+  the two screens cannot drift into saying it differently.
+- `domain/place/NightsStrip` — per-night rollups: open count, chosen, shut.
+- `domain/place/SeasonBars` — the weekend horizon, for open-*when*.
+- `domain/place/AlertRow` — the shut-night offer; the only creator of a watch.
+- `domain/place/CadenceLine` — the "cancellations land 3–4 times a week"
+  sentence, from changes history.
+- `domain/trip/NightRow` — one night in its four states.
+- `domain/poi/blocks.ts` — **kept as-is**. It stays the only place the order
+  lives; `SheetSection` levels are layered onto the existing groups, with
+  `RULE_BEFORE_GROUP` as the half/full boundary it already describes.
+
+### New in `features/`
+
+- `features/where/` — `QuestionPill`, `CandidatePins` (the imperative MapLibre
+  layer, per the existing map exception), `CandidateCard`.
+- `features/place/` — `PlaceSheet`, which composes `Sheet` with the block order;
+  this replaces both `PoiDrawer` and `PoiPageShell`'s variant split.
+- `features/nights/` — `NightsList`.
+- `features/rig/` — `RigPanel`, mounted in the existing `SettingsHost`.
+
+### Dependency direction
+
+```
+pages/{where,place,nights}
+   └── features/{where,place,nights,rig}
+          └── domain/{place,trip,poi}
+                 └── @ui  ──  @lew-ds/lds-react
+```
+
+`PlaceVerdict` is imported by two features, which is exactly why it is in
+`domain/` and not in either of them.
+
+## Storybook is the catalog, and it comes first
+
+Storybook is already configured (`frontend/.storybook/`, a11y and docs addons,
+stories beside their components). This design makes it the place the interface is
+judged, not an afterthought:
+
+- **Build order inside every phase is primitive → domain → feature → screen, and
+  each one lands with its stories before it is wired to real data.** The design
+  is reviewable in Storybook before a single query runs, which is what the
+  throwaway HTML mockups were standing in for.
+- **A story per state, and the state list is the wire's, not ours.** Every
+  availability state, both watch gates, all four cart gate states, each night
+  state, and every empty state. A state that has no story is a state nobody has
+  looked at.
+- **Screen-level stories** for the four answer states compose features over
+  mocked query data. Production composition still belongs in `pages/`; these are
+  the visual equivalent of the page tests that already do this.
+- **The phone is the default viewport** in `preview.tsx`, with a desktop story
+  per screen as the second case rather than the first.
+- **The rules live next to the components.** An autodocs page carries the
+  where × when matrix, the detent table, and the one-component-two-consumers
+  rule, so the next person reads them in the catalog instead of in this spec.
+- `npm run build-storybook` stays a verification step, so a broken catalog
+  fails the build the way a stale `api-types.ts` already does.
+
 ## What this needs from the backend
 
 Layering per `AGENTS.md`: every item below is a route over a service over a repo,
@@ -249,7 +346,10 @@ One design, four shippable pieces, each a plan of its own:
 4. **Your nights** — trips, the night states, the did-you-get-it prompt.
 
 Phase 1 touches no backend contract and is the honest test of whether the
-non-repetition rule holds in real copy with real data.
+non-repetition rule holds in real copy with real data. It also front-loads every
+new `@ui` primitive — `Sheet`, `SheetHeader`, `SheetSection`, `DefinitionRow` —
+so phases 2 to 4 compose an existing catalog rather than inventing one each.
+`Stepper` and `ChoiceChips` arrive with the rig profile in phase 2.
 
 ## Risks
 
@@ -270,12 +370,13 @@ non-repetition rule holds in real copy with real data.
 
 ## Testing
 
-- Each screen gets a Storybook story per answer state, including every empty and
-  gated state, since those are the states this design is actually about.
-- Phone viewport is the default in stories and tests; desktop is the same
-  components with more room, verified second.
+Story coverage is specified above and not restated here; what follows is what
+has to be *asserted* rather than looked at.
+
 - A test per non-repetition rule: no fact rendered at two sheet heights, and no
-  candidate fact duplicated between pin and card.
+  candidate fact duplicated between pin and card. `SheetSection` makes the first
+  one mostly structural, so the test guards the escape hatches.
+- Phone viewport is the default in tests as well as stories.
 - The existing page tests move with their surfaces; deleted surfaces take their
   tests with them.
 - Copy assertions read from `lib/strings.ts`, never inline literals.
