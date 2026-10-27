@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import re
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path, PurePosixPath
 
@@ -19,6 +21,17 @@ AWAIT_IMAGES_ACTION = (
 # there.
 SHELL_PATH_REFERENCE = re.compile(r"\$\{(SCRIPT_DIR|REPO_ROOT)\}/([A-Za-z0-9._/-]+)")
 SHELL_REFERENCE_ROOTS = {"SCRIPT_DIR": "scripts", "REPO_ROOT": ""}
+
+
+COMPANION_KEY_SCRIPT = "scripts/companion-image-key.sh"
+
+
+def companion_key_inputs() -> list[str]:
+    declared = re.search(
+        r"COMPANION_IMAGE_INPUTS=\(([^)]*)\)", (ROOT / COMPANION_KEY_SCRIPT).read_text()
+    )
+    assert declared, "COMPANION_IMAGE_INPUTS not found"
+    return declared.group(1).split()
 
 
 def workflow(name: str) -> dict:
@@ -51,10 +64,76 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("github.event_name == 'push' ||", app.get("if", ""))
         self.assertIn('docker push "$IMAGE:${SHA}"', job_commands(app))
 
-        for job_name, tree in (("companion-image", "companion"), ("data-image", "data")):
-            commands = job_commands(jobs[job_name])
-            self.assertIn(f"git rev-parse HEAD:{tree}", commands)
-            self.assertIn("docker push", commands)
+        data_commands = job_commands(jobs["data-image"])
+        self.assertIn("git rev-parse HEAD:data", data_commands)
+        self.assertIn("docker push", data_commands)
+
+        companion_commands = job_commands(jobs["companion-image"])
+        self.assertIn(COMPANION_KEY_SCRIPT, companion_commands)
+        self.assertNotIn("git rev-parse HEAD:companion", companion_commands)
+        self.assertIn("docker push", companion_commands)
+
+    def test_companion_image_is_keyed_on_everything_its_build_reads(self) -> None:
+        deploy_commands = job_commands(workflow("deploy.yml")["jobs"]["deploy"])
+        self.assertIn(COMPANION_KEY_SCRIPT, deploy_commands)
+        self.assertNotIn("git rev-parse HEAD:companion", deploy_commands)
+
+        inputs = companion_key_inputs()
+        copied = {
+            PurePosixPath(source).parts[0]
+            for line in (ROOT / "companion" / "Dockerfile").read_text().splitlines()
+            if line.startswith("COPY ") and "--from" not in line
+            for source in line.split()[1:-1]
+        }
+        self.assertTrue(copied)
+        self.assertTrue(copied <= set(inputs), f"{copied - set(inputs)} copied but not in the key")
+
+        steps = workflow("ci.yml")["jobs"]["changes"]["steps"]
+        filters = yaml.safe_load(
+            next(step for step in steps if step.get("id") == "filter")["with"]["filters"]
+        )
+        for path in inputs:
+            watched = f"{path}/**" if (ROOT / path).is_dir() else path
+            self.assertIn(watched, filters["companion_image"], f"{path} does not rebuild the image")
+
+    def test_companion_key_moves_with_each_input_and_only_those(self) -> None:
+        inputs = companion_key_inputs()
+
+        def git(repo: Path, *args: str) -> str:
+            return subprocess.run(
+                ["git", *args], cwd=repo, check=True, capture_output=True, text=True
+            ).stdout.strip()
+
+        def key(repo: Path) -> str:
+            return subprocess.run(
+                ["bash", str(ROOT / COMPANION_KEY_SCRIPT)],
+                cwd=repo, check=True, capture_output=True, text=True,
+            ).stdout.strip()
+
+        def edit(repo: Path, path: str) -> None:
+            target = repo / (path if "." in path else f"{path}/file.txt")
+            target.parent.mkdir(exist_ok=True)
+            target.write_text(target.read_text() + "x" if target.exists() else "x")
+            git(repo, "add", "-A")
+            git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", path)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            git(repo, "init", "-q")
+            for path in (*inputs, "frontend"):
+                edit(repo, path)
+            baseline = key(repo)
+            self.assertRegex(baseline, r"^[0-9a-f]{40}$")
+
+            edit(repo, "frontend")
+            self.assertEqual(baseline, key(repo))
+
+            seen = {baseline}
+            for path in inputs:
+                edit(repo, path)
+                moved = key(repo)
+                self.assertNotIn(moved, seen, f"editing {path} did not move the key")
+                seen.add(moved)
 
     def test_production_only_pulls_images(self) -> None:
         deploy = (ROOT / "scripts" / "deploy.sh").read_text()

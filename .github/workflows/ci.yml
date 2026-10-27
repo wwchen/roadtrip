@@ -68,6 +68,8 @@ jobs:
               - 'scripts/check-color-tokens.mjs'
               - 'scripts/check-feature-boundaries.mjs'
               - 'scripts/check-feature-boundaries.test.mjs'
+              - 'scripts/check-package-boundaries.mjs'
+              - 'scripts/check-package-boundaries.test.mjs'
               - 'scripts/check-css-blocks.mjs'
               - 'scripts/check-token-usage.mjs'
               - '.github/workflows/ci.yml'
@@ -78,6 +80,8 @@ jobs:
               - '.github/workflows/ci.yml'
             companion_image:
               - 'companion/**'
+              - 'package.json'
+              - 'package-lock.json'
               - '.github/workflows/ci.yml'
             data_image:
               - 'data/**'
@@ -246,6 +250,11 @@ jobs:
         working-directory: frontend
         run: npm run build-storybook
 
+      - name: Check package boundaries
+        run: |
+          node --test scripts/check-package-boundaries.test.mjs
+          node scripts/check-package-boundaries.mjs
+
       - name: Check color tokens
         run: node scripts/check-color-tokens.mjs
 
@@ -296,11 +305,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag and push companion image by tree SHA
+      - name: Tag and push companion image by input hash
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          TREE_SHA="$(git rev-parse HEAD:companion)"
-          IMAGE="ghcr.io/${{ github.repository }}/recgov-companion:${TREE_SHA}"
+          INPUT_HASH="$(scripts/companion-image-key.sh)"
+          IMAGE="ghcr.io/${{ github.repository }}/recgov-companion:${INPUT_HASH}"
           docker tag roadtrip/recgov-companion "$IMAGE"
           docker push "$IMAGE"
 
