@@ -63,6 +63,11 @@ describe('naming a site', () => {
     expect(siteTitleText({ data_provider_ref: '4711' })).toBe('Site #4711');
   });
 
+  test('the loop qualifies a numbered site too, not only a named one', () => {
+    expect(siteTitleText({ loop_name: 'Loop A', data_provider_ref: '4711' })).toBe('Loop A / Site #4711');
+    expect(siteTitleText({ loop_name: 'Loop A', id: 4711 })).toBe('Loop A / Site #4711');
+  });
+
   test('a site with nothing to call it is not named at all, and a loop does not name it', () => {
     expect(siteTitleText({})).toBe('');
     expect(siteTitleText({ loop_name: 'Loop A' })).toBe('');

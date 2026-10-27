@@ -63,10 +63,7 @@ export function nightsOf(start: string, end: string): readonly string[] {
 function namesOf(campsites: readonly Campsite[] | undefined): ReadonlyMap<number, string> {
   if (!campsites) return NO_SITE_NAMES;
   const names = new Map<number, string>();
-  for (const site of campsites) {
-    const label = siteTitleText(site);
-    if (label) names.set(site.id, label);
-  }
+  for (const site of campsites) names.set(site.id, siteTitleText(site));
   return names;
 }
 

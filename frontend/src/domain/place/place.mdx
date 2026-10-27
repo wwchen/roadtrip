@@ -189,11 +189,12 @@ than the rollup of the nights it did answer.
 
 ### One read serves both detents
 
-`usePlaceNights` makes **two** requests for the whole screen and no more: the week
-from `GET /api/pois/{id}/campsites/availability`, and the campsite catalog from
-`GET /api/pois/{id}/campsites`. It publishes `days`, `dates`, `campsites` and
-`siteNames` off them, and the strip at Half and the grid at Full are both fed from
-that one view. Neither owns a query.
+`usePlaceNights` makes **two** requests and no more — the screen as a whole makes
+others, the stay check among them, but these two are the whole of the per-night
+read: the week from `GET /api/pois/{id}/campsites/availability`, and the campsite
+catalog from `GET /api/pois/{id}/campsites`. It publishes `days`, `dates`,
+`campsites` and `siteNames` off them, and the strip at Half and the grid at Full
+are both fed from that one view. Neither owns a query.
 
 This is the invariant most likely to be broken by the next feature, so it is worth
 stating plainly: **raising the sheet to Full must not issue a request.** A grid
