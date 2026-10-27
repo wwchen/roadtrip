@@ -400,37 +400,52 @@ Do not expand this into one plan.
 
 ### 11. Secrets
 
-**Keep SOPS. Extend `secrets/registry.yaml`; do not replace either.** The existing
+**Narrow SOPS to where it earns its weight; let Vercel own its own.** The existing
 system is SOPS with age recipients in `secrets/.sops.yaml`, vaults that are dotenv
 files with encrypted values and plaintext keys so `git diff` shows *which* secret
-changed, and `manage.py` wrapping the `sops` binary. Its load-bearing property is that
-`docker-compose.secrets.yml` is *generated* from the registry's `consumers` field, so
-a wrong entry means the container genuinely does not receive the secret — the metadata
-cannot disagree with reality. `manage.py check` runs in CI and pre-commit.
+changed, and `manage.py` wrapping the `sops` binary — 945 LOC there, 176 in
+`docs/secrets.md`, and a key ceremony across 6 recipients. Its load-bearing property
+is that `docker-compose.secrets.yml` is *generated* from the registry's `consumers`
+field, so a wrong entry means the container genuinely does not receive the secret —
+the metadata cannot disagree with reality. `manage.py check` runs in CI and
+pre-commit.
 
 **The structural problem is that SOPS is a file-based store committed to git and
-Vercel is an API-based store.** They do not compose; one has to be authoritative.
+Vercel is an API-based store.** Bridging them means one holds values it does not
+serve, and something has to keep the two in step.
 
-Two ways to resolve it, and the choice matters more than it looks:
+**Resolve it by accepting two stores, not by syncing them.** The registry's real job
+is recording *which* secrets exist, *who* consumes them, and *where* absence is fatal.
+That job does not require it to hold every value. So it gains a `store` field —
+`sops`, `vercel`, or `supabase-integration` — and `check` verifies names, placement
+and `required_in`, never values.
 
-**Chosen — SOPS stays authoritative and pushes.** Add `vercel` as a consumer type.
-`manage.py push vercel` decrypts and sets Vercel environment variables from the
-registry; `manage.py check` verifies the names present in Vercel match the registry's
-`vercel` consumers — names and presence, never values. One source of truth, drift
-still mechanically detectable, `manage.py set NAME` still rotates one value.
+| Tier | Store | Why |
+| --- | --- | --- |
+| Boot-critical mini-ca infra: `POSTGRES_PASSWORD`, `GRAFANA_DB_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, `GRAFANA_SLACK_WEBHOOK_URL`, `CLOUDFLARE_TUNNEL_TOKEN` | **SOPS** | Encrypted in git has *no runtime dependency*. The box boots with nothing reachable |
+| Worker and companion runtime: tokens, API keys, `BOOKING_CREDENTIAL_ENCRYPTION_KEY` | **SOPS** | Already works, already generated into Compose |
+| Next.js runtime: `MAPBOX_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_TOKEN_ENCRYPTION_KEY` | **Vercel** | Set once, where the consumer already reads from |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | **Supabase↔Vercel integration** | First-party and automatic; managed by nobody |
+| Preview `DATABASE_URL` | **injected per deploy** | Dynamic; see below |
 
-The cost, stated plainly: Vercel's environment store becomes a second place
-production secrets exist in plaintext at rest. Today every value lives encrypted in
-git and decrypted only into a container on mini-ca. This widens the trust surface to
-Vercel's platform, and that is a real change, not a formality.
+This deprecates SOPS for exactly the half where it was awkward, and keeps it where
+its defining property is load-bearing. No `push` command, no decrypt-and-sync, no age
+key in CI, and no production value sitting in plaintext in two places.
 
-**Rejected — put the age key in Vercel and decrypt at runtime.** Commit the vaults,
-give Vercel one secret, let the app decrypt. Tempting because Vercel then holds a
-single value. Rejected because that one key unlocks every environment at once,
-per-value rotation stops working (`manage.py set NAME` would require a redeploy),
-and the serverless runtime would need sops or an age implementation on the cold path.
-Concentrating all environments behind one key in the newly-added trust surface is
-worse than putting the individual values there.
+**Why not deprecate SOPS entirely.** Both replacements lose something real. An
+unversioned `.env` on the box gives up change history, the registry → Compose
+generation that makes consumer drift impossible, and reproducible setup. A hosted
+store — 1Password, say — makes mini-ca's boot depend on an external service being
+reachable, and that includes `POSTGRES_PASSWORD`, so Postgres itself cannot start
+during an outage of the secret manager. SOPS-in-git has no such dependency, and for
+the tier that must come up unattended that is the whole point.
+
+Full deprecation becomes available only when nothing runs on mini-ca. C1 forbids
+that, so it is a non-goal rather than a later step.
+
+**Also rejected — the age key in Vercel, decrypting at runtime.** One key would
+unlock every environment at once, per-value rotation would need a redeploy, and the
+cold path would need sops or an age implementation.
 
 Where the 20 current secrets land:
 
@@ -463,10 +478,9 @@ code. The registry already records the way out — both are `required_in: []`, m
 absence degrades the feature rather than failing boot, and the code must actually do
 so. So preview simply does not receive them, and `manage.py check` fails if it does.
 
-CI needs to run `push vercel`, which means CI needs an age key, which means a new
-recipient in `.sops.yaml` and a new place a decryption key lives. That is a
-deliberate addition to the threat model in `docs/secrets.md`, not an implementation
-detail.
+Accepting two stores keeps CI out of it: nothing decrypts in CI, so `.sops.yaml`
+gains no recipient and the 6 that exist stay the whole list. `docs/secrets.md`'s
+threat model needs a section on the Vercel tier, but not a new key holder.
 
 #### Three hazards
 
