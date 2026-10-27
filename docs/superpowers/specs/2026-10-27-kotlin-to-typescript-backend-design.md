@@ -106,9 +106,22 @@ contract.
 
 Two connection strings, not one:
 
-- **Next.js** uses the transaction-mode pooler. This requires `prepare: false` in
-  postgres.js; prepared statements fail confusingly otherwise.
+- **Next.js** uses the transaction-mode pooler.
 - **The worker** is long-lived and takes a direct session-mode connection.
+
+**`prepare: false` is pooler- and version-dependent, not a universal rule.** An
+earlier draft of this section said transaction pooling simply requires it, and that is
+wrong. Task 6 stood up a real PgBouncer in transaction mode and found `prepare: true`
+survived: PgBouncer tracks prepared statements from 1.21 and enables that by default
+from 1.24. Modelling a strict pooler took setting `MAX_PREPARED_STATEMENTS=0`
+explicitly.
+
+So the setting has to be determined per deployment rather than assumed. Getting it
+wrong is costly in both directions: `prepare: false` against a pooler that supports
+statements gives up prepared-statement performance for nothing, and `prepare: true`
+against one that does not fails confusingly under concurrency. Determine it for the
+chosen pooler at its pinned version, and record the answer beside the connection
+string rather than in someone's memory.
 
 `FOR UPDATE SKIP LOCKED` works identically under transaction pooling on all three
 targets, so the scheduler's claim-lease mechanism is portable unchanged.
