@@ -100,6 +100,10 @@ install: install-hooks
 # checkApiTypes and contractLedgerCheck both run over the backend's own classpath,
 # so they need the same compile (and therefore the same Docker) :backend:test
 # already needs. ci.yml runs them in backend-tests, never in gradle-lint.
+#
+# Second deliberate divergence: schema-equivalence.mjs runs here but has no
+# ci.yml job yet. It boots the amd64-only PostGIS image plus Flyway, so where a
+# slow container job belongs in the workflow graph is still open.
 test: _ensure-hooks
 	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :backend:checkApiTypes :backend:contractLedgerCheck :detekt-rules:test
 	# npm run build includes the TypeScript check before bundling.
@@ -107,6 +111,9 @@ test: _ensure-hooks
 	# Rebuild every workspace that has a build script so no consumer below
 	# resolves a stale packages/*/dist.
 	npm run build
+	# Prove the Drizzle migrations still reproduce the Flyway schema. Needs
+	# packages/db/dist, so it has to follow the build above.
+	node scripts/schema-equivalence.mjs
 	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
 	node --test scripts/check-package-boundaries.test.mjs && node scripts/check-package-boundaries.mjs
 	node scripts/check-color-tokens.mjs
