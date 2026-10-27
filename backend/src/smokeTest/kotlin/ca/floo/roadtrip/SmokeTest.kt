@@ -139,9 +139,12 @@ class SmokeTest {
             )
             pinResult.first().click()
 
-            // 3. The sheet renders with name + reserve link. (Tunnel Mountain is
-            // a Parks Canada pin — no recgov_id — so the sheet skips the
-            // nights strip and shows the provider CTA the backend promoted.)
+            // 3. The sheet renders with name + reserve link. (Tunnel Mountain is a
+            // Parks Canada pin and is availability-supported all the same: the CI
+            // fixture seeds booking_provider 'aspira' with a ref, and
+            // `availability_supported` is "this row names a booking identity", not
+            // "this row has a recgov_id". So the sheet opens at Half with the nights
+            // strip, beside the provider CTA the backend promoted.)
             val sheet = sheetOf(page, "Tunnel Mountain")
             assertThat(sheet).isVisible(
                 com.microsoft.playwright.assertions.LocatorAssertions
@@ -152,6 +155,7 @@ class SmokeTest {
             // "...- Village 2" / "...- Trailer Court"; the loose "Tunnel
             // Mountain" prefix is enough to confirm we landed on the
             // right cluster regardless of which sibling sort-orders first.
+            assertThat(sheet.locator("h2")).containsText("Tunnel Mountain")
             assertTrue(page.url().contains("poi="), "opening a POI should update the visible URL")
 
             val topbar = page.locator("#topbar")
@@ -437,11 +441,13 @@ class SmokeTest {
             assertTrue(canvas != null, "the MapLibre canvas has no bounding box")
             page.mouse().click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2)
 
-            assertThat(sheetOf(page, "Rendered Gym")).isVisible(
+            val gymSheet = sheetOf(page, "Rendered Gym")
+            assertThat(gymSheet).isVisible(
                 com.microsoft.playwright.assertions.LocatorAssertions
                     .IsVisibleOptions()
                     .setTimeout(MAP_READY_TIMEOUT_MS),
             )
+            assertThat(gymSheet.locator("h2")).containsText("Rendered Gym")
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors while rendering a viewport POI: ${pageErrors.joinToString(" | ")}",
@@ -505,6 +511,7 @@ class SmokeTest {
                     .IsVisibleOptions()
                     .setTimeout(15_000.0),
             )
+            assertThat(sheet.locator("h2")).containsText("Shared Gym")
             assertTrue(page.url().contains("poi=4242"), "shared POI should be represented by the visible URL")
             assertTrue(
                 pageErrors.isEmpty(),
@@ -602,6 +609,7 @@ class SmokeTest {
             )
             // The agency shares the eyebrow with the type — "Campground · <agency>" —
             // which is what identifies the place before its name locates it.
+            assertThat(sheet.locator("h2")).containsText("Clear Lake SP Cabins")
             assertThat(sheet.getByText("Campground · California State Parks")).isVisible()
             sheet
                 .getByRole(AriaRole.BUTTON, Locator.GetByRoleOptions().setName("Clear Lake SP Cabins"))

@@ -6,6 +6,20 @@
   font-family: var(--rt-sans);
 }
 
+/* The place's name is the screen's heading, so it is an element and not a weight.
+   The row's own typography still decides how it looks. */
+.rt-place-verdict__name {
+  margin: 0;
+  font: inherit;
+}
+
+/* A live region, so "Checking…" becoming "3 sites open" is announced — the one
+   transition this screen exists for. It wraps the tag rather than replacing it, so
+   the region is in the DOM before the answer lands. */
+.rt-place-verdict__answer {
+  display: inline-flex;
+}
+
 .rt-place-verdict__detail {
   margin: 0;
   color: var(--rt-muted);

@@ -93,6 +93,28 @@ describe('PlaceVerdict', () => {
     expect(screen.queryByText(/reopens/i)).not.toBeInTheDocument();
   });
 
+  test('states the place-level from price beside the other deciding facts', () => {
+    render(<PlaceVerdict name="Upper Pines" origin={null} answer={summary()} priceFrom="From $36" fits="Fits 6" />);
+
+    expect(screen.getByText('From $36 · Fits 6')).toBeInTheDocument();
+  });
+
+  test('the answer is a live region, so an arriving verdict is announced', () => {
+    const { container } = render(<PlaceVerdict name="Upper Pines" answer={null} origin={null} />);
+    const live = container.querySelector('[role="status"]');
+
+    expect(live).not.toBeNull();
+    expect(live).toHaveTextContent(stayCopy.pending);
+  });
+
+  test('the name is a heading only where the surface asks for one', () => {
+    const { container, rerender } = render(<PlaceVerdict name="Upper Pines" answer={summary()} origin={null} />);
+    expect(container.querySelector('h2')).toBeNull();
+
+    rerender(<PlaceVerdict name="Upper Pines" nameAs="h2" answer={summary()} origin={null} />);
+    expect(container.querySelector('h2')).toHaveTextContent('Upper Pines');
+  });
+
   test('lists the reasons it was ranked', () => {
     render(
       <PlaceVerdict name="Upper Pines" origin={null} answer={summary()} reasons={['Near water', 'Shade']} />,

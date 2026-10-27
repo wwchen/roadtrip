@@ -1,3 +1,4 @@
+import { createElement } from 'react';
 import { isAnswered, type StayAnswer, type StayAvailabilityStatus } from '@/api/availability-api';
 import { entryOf } from '@/lib/entry-of';
 import { placeCopy, stayCopy } from '@/lib/strings';
@@ -19,6 +20,7 @@ const STATUS_TONE = {
 
 export interface PlaceVerdictProps {
   name: string;
+  nameAs?: 'h2' | 'h3';
   answer: StayAnswer | null;
   origin: DriveOrigin | null;
   reasons?: readonly string[];
@@ -53,18 +55,32 @@ function verdictOf(answer: StayAnswer): Verdict {
   };
 }
 
-export function PlaceVerdict({ name, answer, origin, reasons = [], priceFrom, fits, reopensOn }: PlaceVerdictProps) {
+export function PlaceVerdict({
+  name,
+  nameAs,
+  answer,
+  origin,
+  reasons = [],
+  priceFrom,
+  fits,
+  reopensOn,
+}: PlaceVerdictProps) {
   const verdict = answer === null ? null : verdictOf(answer);
   const observedAt = verdict?.observedAt;
   const now = useNow(CHECKED_AGO_TICK_MS, observedAt !== undefined);
   const facts = [priceFrom, fits].filter((fact): fact is string => fact !== undefined);
+  const title = nameAs ? createElement(nameAs, { className: 'rt-place-verdict__name' }, name) : name;
 
   return (
     <div className="rt-place-verdict">
       <Row
-        title={name}
+        title={title}
         subtitle={origin ? driveTimeLabel(origin) : undefined}
-        trail={<Tag status={verdict?.tone}>{verdict ? verdict.line : stayCopy.pending}</Tag>}
+        trail={
+          <span className="rt-place-verdict__answer" role="status">
+            <Tag status={verdict?.tone}>{verdict ? verdict.line : stayCopy.pending}</Tag>
+          </span>
+        }
       />
       {verdict?.closedForSeason && reopensOn ? (
         <p className="rt-place-verdict__detail">{stayCopy.reopens(formatWatchDate(reopensOn) ?? reopensOn)}</p>

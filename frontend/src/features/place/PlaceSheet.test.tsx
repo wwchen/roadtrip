@@ -84,10 +84,62 @@ describe('PlaceSheet', () => {
     expect(rendered).toEqual(expectedOrderFromBlocks());
   });
 
-  test('peek answers whether to go, and says nothing about which nights', () => {
+  test('peek carries the one action it names, and says nothing about which nights', () => {
     render(<PlaceSheet {...props} arrival="cold" blocks={everyBlock} />);
+    expect(screen.getByTestId(blockTestId('actions'))).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: /nights/i })).not.toBeInTheDocument();
-    expect(screen.queryByTestId(blockTestId('actions'))).not.toBeInTheDocument();
+    expect(screen.queryByTestId(blockTestId('availability'))).not.toBeInTheDocument();
+    expect(screen.queryByTestId(blockTestId('glance'))).not.toBeInTheDocument();
+  });
+
+  test('the sheet is a heading at every height, so the place it is about is one', () => {
+    const { container } = render(<PlaceSheet {...props} arrival="cold" blocks={everyBlock} />);
+    expect(container.querySelector('h2')).toHaveTextContent(NAME);
+
+    raise(1);
+    expect(container.querySelector('h2')).toHaveTextContent(NAME);
+
+    raise(1);
+    expect(container.querySelector('h2')).toHaveTextContent(NAME);
+  });
+
+  test('a shut grid states the reason the server gave instead of a strip of nights', () => {
+    const failure = <span data-testid="nights-failure" />;
+    render(<PlaceSheet {...props} arrival="from-map" nightsFailure={failure} />);
+    expect(screen.getByTestId('nights-failure')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /nights/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/no data/i)).not.toBeInTheDocument();
+  });
+
+  test('a place with nothing but a failed grid still opens its stay section', () => {
+    const failure = <span data-testid="nights-failure" />;
+    const { container } = render(
+      <PlaceSheet
+        {...props}
+        arrival="from-map"
+        nights={{ ...props.nights, days: [], dates: [] }}
+        nightsFailure={failure}
+      />,
+    );
+    expect(container.querySelector('.rt-place-sheet__stay')).not.toBeNull();
+    expect(screen.getByTestId('nights-failure')).toBeInTheDocument();
+  });
+
+  test('a dismissable sheet offers a close control and answers Escape', async () => {
+    const onClose = vi.fn();
+    render(<PlaceSheet {...props} arrival="cold" onClose={onClose} />);
+
+    const close = screen.getByRole('button', { name: /close/i });
+    fireEvent.click(close);
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(close, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  test('a sheet with nowhere to close to draws no close control', () => {
+    render(<PlaceSheet {...props} arrival="cold" />);
+    expect(screen.queryByRole('button', { name: /close/i })).not.toBeInTheDocument();
   });
 
   test('the sheet never draws the blocks its header replaces, at any height', () => {

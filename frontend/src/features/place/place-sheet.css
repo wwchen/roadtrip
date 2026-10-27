@@ -15,8 +15,13 @@
   font-size: var(--rt-place-sheet-subtitle-size);
 }
 
+/* A heading element, sized like the body text around it: the sheet is the screen,
+   so the name is its h2, not a bolder paragraph. */
 .rt-place-sheet__name {
+  margin: 0;
+  font: inherit;
   font-family: var(--rt-sans);
+  font-weight: 700;
 }
 
 .rt-place-sheet__stay {
@@ -33,6 +38,9 @@
   position: absolute;
   left: 0;
   bottom: 0;
+  /* The sheet's own depth: this is what the map shows while the sheet has nothing
+     to show, so it has to clear the same overlays. */
+  z-index: var(--rt-z-place-sheet);
   width: 100%;
   max-width: var(--rt-sheet-max-width);
   box-sizing: border-box;

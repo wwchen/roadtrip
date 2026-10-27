@@ -17,17 +17,21 @@ const ARRIVAL_DETENT = {
 
 const PLACE_SHEET_TESTID = 'place-sheet';
 
+const NAME_HEADING = 'h2';
+
 const PEEK_DETENT: SheetDetent = 'peek';
 const HALF_DETENT: SheetDetent = 'half';
 const FULL_DETENT: SheetDetent = 'full';
 
+const PEEK_GROUP_COUNT = 1;
 const HALF_GROUP_COUNT = 3;
 const SHEET_OMITS: readonly PoiBlockId[] = ['hero', 'identity'];
 
 const sheetBlocks = (ids: readonly PoiBlockId[]): readonly PoiBlockId[] =>
   ids.filter((id) => !SHEET_OMITS.includes(id));
 
-const HALF_BLOCKS = sheetBlocks(POI_BLOCK_GROUPS.slice(0, HALF_GROUP_COUNT).flat());
+const PEEK_BLOCKS = sheetBlocks(POI_BLOCK_GROUPS.slice(0, PEEK_GROUP_COUNT).flat());
+const HALF_BLOCKS = sheetBlocks(POI_BLOCK_GROUPS.slice(PEEK_GROUP_COUNT, HALF_GROUP_COUNT).flat());
 const FULL_BLOCKS = sheetBlocks([
   ...POI_BLOCK_GROUPS.slice(HALF_GROUP_COUNT).flat(),
   ...POI_FOOTER_BLOCKS,
@@ -51,9 +55,11 @@ export interface PlaceSheetProps {
   verdict?: ComponentProps<typeof PlaceVerdict>;
   notice?: ReactNode;
   nights: ComponentProps<typeof NightsStrip>;
+  nightsFailure?: ReactNode;
   alert?: ComponentProps<typeof AlertRow>;
   siteNames?: ReadonlyMap<number, string>;
   blocks: PoiBlockSlots;
+  onClose?: () => void;
 }
 
 export function PlaceSheet({
@@ -63,21 +69,24 @@ export function PlaceSheet({
   verdict,
   notice,
   nights,
+  nightsFailure,
   alert,
   siteNames,
   blocks,
+  onClose,
 }: PlaceSheetProps) {
   const [detent, setDetent] = useState<SheetDetent>(ARRIVAL_DETENT[arrival]);
 
   const selected = nights.days.find((day) => day.date === nights.selected) ?? null;
-  const hasStay = nights.dates.length > 0 || alert !== undefined;
+  const hasStay = nights.dates.length > 0 || alert !== undefined || nightsFailure !== undefined;
+  const peekBlocks = slotsFor(blocks, PEEK_BLOCKS);
   const halfBlocks = slotsFor(blocks, HALF_BLOCKS);
   const fullBlocks = slotsFor(blocks, FULL_BLOCKS);
   const secondary = subtitle ? <p className="rt-place-sheet__subtitle">{subtitle}</p> : null;
   const named = (
     <div className="rt-place-sheet__compact">
       {secondary}
-      <strong className="rt-place-sheet__name">{name}</strong>
+      <h2 className="rt-place-sheet__name">{name}</h2>
     </div>
   );
 
@@ -88,13 +97,14 @@ export function PlaceSheet({
       detent={detent}
       onDetentChange={setDetent}
       label={name}
+      {...(onClose ? { onClose } : null)}
     >
       <SheetHeader
         full={
           verdict ? (
             <>
               {secondary}
-              <PlaceVerdict {...verdict} />
+              <PlaceVerdict {...verdict} nameAs={NAME_HEADING} />
             </>
           ) : (
             named
@@ -106,10 +116,19 @@ export function PlaceSheet({
       {hasStay ? (
         <SheetSection from={HALF_DETENT}>
           <div className="rt-place-sheet__stay">
-            <NightsStrip {...nights} />
-            <NightSites day={selected} names={siteNames} />
+            {nightsFailure ?? (
+              <>
+                <NightsStrip {...nights} />
+                <NightSites day={selected} names={siteNames} />
+              </>
+            )}
             {alert ? <AlertRow {...alert} /> : null}
           </div>
+        </SheetSection>
+      ) : null}
+      {peekBlocks ? (
+        <SheetSection from={PEEK_DETENT}>
+          <PoiPageShell blocks={peekBlocks} />
         </SheetSection>
       ) : null}
       {halfBlocks ? (
