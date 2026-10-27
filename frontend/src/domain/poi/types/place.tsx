@@ -62,6 +62,8 @@ export interface PlaceTypeSpec {
   websiteLabel?: string;
   /** Whether to offer `tel:` buttons for the record's phone numbers. */
   call?: boolean;
+  /** Whether a record with no street address is named by its coordinates instead. */
+  locatedByPoint?: boolean;
 }
 
 export interface PlacePoiPageProps extends PoiTypeProps {
@@ -155,7 +157,7 @@ export function PlacePoiPage({ feature, variant, onClose, render, spec }: PlaceP
   };
 
   return renderPoiPage(
-    { name, subtitle: address || coordinatesLabel(lng, lat), blocks },
+    { name, subtitle: address || (spec.locatedByPoint ? coordinatesLabel(lng, lat) : ''), blocks },
     { render, variant },
   );
 }

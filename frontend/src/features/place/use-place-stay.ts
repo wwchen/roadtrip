@@ -2,13 +2,13 @@ import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { streamStays, type StayAnswer } from '@/api/availability-api';
 import type { CampsiteKind, StayCheckOutcome } from '@/api/generated/api-types';
+import { stayCopy } from '@/lib/strings';
 import { queryKeys } from '@/queries/keys';
 
 export interface PlaceStay {
   start: string;
   end: string;
   siteType: CampsiteKind | null;
-  groupSize: number | null;
 }
 
 export type PlaceStayState =
@@ -20,7 +20,11 @@ export type PlaceStayCheck = PlaceStayState & { retry: () => void };
 
 const SERVER_DEFAULT_MAX_AGE_SECONDS: number | null = null;
 
+const PARTY_SIZE_IS_PHASE_TWO: number | null = null;
+
 const RETRY_AUTOMATICALLY = false;
+
+const DEADLINE_REACHED: StayCheckOutcome = 'deadline_reached';
 
 interface StayRead {
   answer: StayAnswer | null;
@@ -35,12 +39,21 @@ function stateOf(read: StayRead | undefined, failed: boolean): PlaceStayState {
   return { kind: 'unanswered', outcome: read.outcome };
 }
 
+export function stayRetryLine(outcome: StayCheckOutcome | null): string {
+  return outcome === DEADLINE_REACHED ? stayCopy.timedOut : stayCopy.failed;
+}
+
 export function usePlaceStay(poiId: number, stay: PlaceStay): PlaceStayCheck {
   const query = useQuery({
-    queryKey: queryKeys.stays.forPoi(poiId, stay.start, stay.end, stay.siteType, stay.groupSize),
+    queryKey: queryKeys.stays.forPoi(poiId, stay.start, stay.end, stay.siteType),
     retry: RETRY_AUTOMATICALLY,
     queryFn: async ({ signal }): Promise<StayRead> => {
-      const request = { ...stay, poiIds: [poiId], maxAgeSeconds: SERVER_DEFAULT_MAX_AGE_SECONDS };
+      const request = {
+        ...stay,
+        poiIds: [poiId],
+        groupSize: PARTY_SIZE_IS_PHASE_TWO,
+        maxAgeSeconds: SERVER_DEFAULT_MAX_AGE_SECONDS,
+      };
       const read: StayRead = { answer: null, outcome: null };
       for await (const event of streamStays(request, { signal })) {
         if (event.kind === 'done') read.outcome = event.done.outcome;
