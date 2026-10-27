@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -16,13 +16,14 @@ const POSTGIS_IMAGE = 'postgis/postgis:16-3.4';
 const FLYWAY_IMAGE = 'flyway/flyway:13.2.0';
 
 const MAINTENANCE_DB = 'postgres';
-const DB_NAME = 'roadtrip_reference';
+const REFERENCE_DB = 'roadtrip_reference';
 const DB_USER = 'reference';
 const DB_PASSWORD = 'reference';
 const DB_PORT = 5432;
 
 const READY_ATTEMPTS = 120;
 const READY_INTERVAL_MS = 1000;
+const MIN_REFERENCE_TABLES = 20;
 const MAX_OUTPUT_BYTES = 256 * 1024 * 1024;
 
 const BOOKKEEPING = [
@@ -33,6 +34,8 @@ const BOOKKEEPING = [
 const PREAMBLE = [/^SET\s/i, /^SELECT\s+pg_catalog\.set_config\(/i];
 const DOLLAR_TAG = /^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/;
 const QUALIFIED_IDENTIFIER = /\b[a-z_][a-z0-9_]*\.(?:[a-z_][a-z0-9_]*|"[^"]+")/;
+const CREATE_TABLE = /^(CREATE (?:UNLOGGED )?TABLE [^\n]*\(\n)([\s\S]*)(\n\)[^\n]*;)$/;
+const TABLE_CONSTRAINT = /^\s*CONSTRAINT /;
 const ESCAPE_STRING_PREFIX = /(?:^|[^A-Za-z0-9_])[eE]$/;
 
 function splitStatements(sql) {
@@ -98,14 +101,35 @@ function splitStatements(sql) {
 const sortKey = (statement) => QUALIFIED_IDENTIFIER.exec(statement)?.[0] ?? statement;
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
+function sortTableColumns(statement) {
+  const match = CREATE_TABLE.exec(statement);
+  if (!match) return statement;
+  const [, head, body, tail] = match;
+  const lines = body.split('\n').map((line) => line.replace(/,$/, ''));
+  const columns = lines.filter((line) => !TABLE_CONSTRAINT.test(line)).sort(compare);
+  const constraints = lines.filter((line) => TABLE_CONSTRAINT.test(line));
+  return `${head}${[...columns, ...constraints].join(',\n')}${tail}`;
+}
+
 export function normalize(sql) {
-  const kept = splitStatements(sql).filter(
-    (statement) =>
-      !PREAMBLE.some((pattern) => pattern.test(statement)) &&
-      !BOOKKEEPING.some((pattern) => pattern.test(statement)),
-  );
+  const kept = splitStatements(sql)
+    .filter(
+      (statement) =>
+        !PREAMBLE.some((pattern) => pattern.test(statement)) &&
+        !BOOKKEEPING.some((pattern) => pattern.test(statement)),
+    )
+    .map(sortTableColumns);
   kept.sort((a, b) => compare(sortKey(a), sortKey(b)) || compare(a, b));
   return kept.length === 0 ? '' : `${kept.join('\n\n')}\n`;
+}
+
+export function assertPlausibleSchema(sql) {
+  const tables = (sql.match(/^CREATE (?:UNLOGGED )?TABLE /gm) ?? []).length;
+  if (tables < MIN_REFERENCE_TABLES) {
+    throw new Error(
+      `Schema dump has ${tables} CREATE TABLE statements, expected at least ${MIN_REFERENCE_TABLES}; refusing to treat it as a schema`,
+    );
+  }
 }
 
 async function docker(...args) {
@@ -130,41 +154,12 @@ async function waitForPostgres(container) {
   throw new Error(`Postgres in ${container} was not ready after ${READY_ATTEMPTS} attempts`);
 }
 
-async function createCleanDatabase(container) {
-  await docker(
-    'exec',
-    container,
-    'psql',
-    '-U',
-    DB_USER,
-    '-d',
-    MAINTENANCE_DB,
-    '-v',
-    'ON_ERROR_STOP=1',
-    '-c',
-    `CREATE DATABASE ${DB_NAME} TEMPLATE template0`,
-  );
+async function hostPort(container) {
+  const mapping = (await docker('port', container, `${DB_PORT}/tcp`)).split('\n')[0].trim();
+  return mapping.slice(mapping.lastIndexOf(':') + 1);
 }
 
-async function migrate(container) {
-  await docker(
-    'run',
-    '--rm',
-    '--network',
-    `container:${container}`,
-    '-v',
-    `${MIGRATION_DIR}:${MIGRATION_MOUNT}:ro`,
-    FLYWAY_IMAGE,
-    `-url=jdbc:postgresql://127.0.0.1:${DB_PORT}/${DB_NAME}`,
-    `-user=${DB_USER}`,
-    `-password=${DB_PASSWORD}`,
-    `-locations=filesystem:${MIGRATION_MOUNT}`,
-    '-postgresql.transactional.lock=false',
-    'migrate',
-  );
-}
-
-export async function writeReference(outPath) {
+export async function withPostgis(use) {
   const container = `roadtrip-schema-reference-${randomUUID().slice(0, 8)}`;
   await docker(
     'run',
@@ -172,6 +167,8 @@ export async function writeReference(outPath) {
     '--rm',
     '--name',
     container,
+    '-p',
+    `127.0.0.1::${DB_PORT}`,
     '-e',
     `POSTGRES_USER=${DB_USER}`,
     '-e',
@@ -180,25 +177,75 @@ export async function writeReference(outPath) {
   );
   try {
     await waitForPostgres(container);
-    await createCleanDatabase(container);
-    await migrate(container);
-    const raw = await docker(
-      'exec',
-      container,
-      'pg_dump',
-      '-U',
-      DB_USER,
-      '-d',
-      DB_NAME,
-      '--schema-only',
-      '--no-owner',
-      '--no-privileges',
-    );
-    await mkdir(path.dirname(path.resolve(outPath)), { recursive: true });
-    await writeFile(outPath, normalize(raw));
+    const port = await hostPort(container);
+    return await use({
+      async createDatabase(name) {
+        await docker(
+          'exec',
+          container,
+          'psql',
+          '-U',
+          DB_USER,
+          '-d',
+          MAINTENANCE_DB,
+          '-v',
+          'ON_ERROR_STOP=1',
+          '-c',
+          `CREATE DATABASE ${name} TEMPLATE template0`,
+        );
+      },
+      connectionString(name) {
+        return `postgres://${DB_USER}:${DB_PASSWORD}@127.0.0.1:${port}/${name}`;
+      },
+      async migrateFlyway(name) {
+        await docker(
+          'run',
+          '--rm',
+          '--network',
+          `container:${container}`,
+          '-v',
+          `${MIGRATION_DIR}:${MIGRATION_MOUNT}:ro`,
+          FLYWAY_IMAGE,
+          `-url=jdbc:postgresql://127.0.0.1:${DB_PORT}/${name}`,
+          `-user=${DB_USER}`,
+          `-password=${DB_PASSWORD}`,
+          `-locations=filesystem:${MIGRATION_MOUNT}`,
+          '-postgresql.transactional.lock=false',
+          'migrate',
+        );
+      },
+      async dump(name) {
+        const raw = await docker(
+          'exec',
+          container,
+          'pg_dump',
+          '-U',
+          DB_USER,
+          '-d',
+          name,
+          '--schema-only',
+          '--no-owner',
+          '--no-privileges',
+        );
+        const normalized = normalize(raw);
+        assertPlausibleSchema(normalized);
+        return normalized;
+      },
+    });
   } finally {
     await docker('rm', '-f', container).catch(() => {});
   }
+}
+
+export async function writeReference(outPath) {
+  await rm(outPath, { force: true });
+  const reference = await withPostgis(async (postgres) => {
+    await postgres.createDatabase(REFERENCE_DB);
+    await postgres.migrateFlyway(REFERENCE_DB);
+    return postgres.dump(REFERENCE_DB);
+  });
+  await mkdir(path.dirname(path.resolve(outPath)), { recursive: true });
+  await writeFile(outPath, reference);
 }
 
 async function main() {

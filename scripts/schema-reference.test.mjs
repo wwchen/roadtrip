@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { normalize, writeReference } from './schema-reference.mjs';
+import { assertPlausibleSchema, normalize, withPostgis, writeReference } from './schema-reference.mjs';
 
 const PREAMBLE = `--
 -- PostgreSQL database dump
@@ -67,6 +67,41 @@ test('normalization sorts statements by object and keeps dollar-quoted bodies wh
 
 test('normalization ignores statement order in the input', () => {
   assert.equal(normalize(dump([...STATEMENTS].reverse())), normalize(RAW));
+});
+
+test('normalization sorts table columns but leaves constraints after them', () => {
+  const flywayOrder =
+    'CREATE TABLE public.t (\n    id bigint NOT NULL,\n    name text,\n    added_later integer DEFAULT 0 NOT NULL,\n    CONSTRAINT t_a_check CHECK ((added_later >= 0)),\n    CONSTRAINT t_b_check CHECK ((id > 0))\n);';
+  const drizzleOrder =
+    'CREATE TABLE public.t (\n    added_later integer DEFAULT 0 NOT NULL,\n    id bigint NOT NULL,\n    name text,\n    CONSTRAINT t_a_check CHECK ((added_later >= 0)),\n    CONSTRAINT t_b_check CHECK ((id > 0))\n);';
+  assert.equal(normalize(flywayOrder), normalize(drizzleOrder));
+  assert.equal(
+    normalize(flywayOrder),
+    'CREATE TABLE public.t (\n    added_later integer DEFAULT 0 NOT NULL,\n    id bigint NOT NULL,\n    name text,\n    CONSTRAINT t_a_check CHECK ((added_later >= 0)),\n    CONSTRAINT t_b_check CHECK ((id > 0))\n);\n',
+  );
+});
+
+test('normalization still distinguishes column types, nullability and defaults', () => {
+  const base = 'CREATE TABLE public.t (\n    id bigint NOT NULL,\n    name text\n);';
+  assert.notEqual(normalize(base), normalize(base.replace('name text', 'name text NOT NULL')));
+  assert.notEqual(normalize(base), normalize(base.replace('name text', 'name varchar')));
+  assert.notEqual(normalize(base), normalize(base.replace('name text', "name text DEFAULT 'x'::text")));
+});
+
+test('an empty or near-empty schema is not accepted as a reference', () => {
+  assert.throws(() => assertPlausibleSchema(normalize('')), /CREATE TABLE/);
+  assert.throws(() => assertPlausibleSchema(normalize(RAW)), /CREATE TABLE/);
+});
+
+test('one container serves several databases and refuses to dump an unmigrated one', async () => {
+  await withPostgis(async (postgres) => {
+    await postgres.createDatabase('migrated');
+    await postgres.createDatabase('untouched');
+    await postgres.migrateFlyway('migrated');
+    assert.match(postgres.connectionString('migrated'), /^postgres:\/\/.+@127\.0\.0\.1:\d+\/migrated$/);
+    assert.match(await postgres.dump('migrated'), /CREATE TABLE public\.app_user /);
+    await assert.rejects(postgres.dump('untouched'), /CREATE TABLE/);
+  });
 });
 
 test('reference dump contains the objects Drizzle cannot express', async (context) => {
