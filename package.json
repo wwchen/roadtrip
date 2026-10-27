@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "companion",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

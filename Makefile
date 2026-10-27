@@ -103,12 +103,13 @@ install: install-hooks
 test: _ensure-hooks
 	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :backend:checkApiTypes :backend:contractLedgerCheck :detekt-rules:test
 	# npm run build includes the TypeScript check before bundling.
-	cd frontend && npm ci && npm run lint && npm run test && npm run build && npm run build-storybook
+	npm ci
+	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
 	node scripts/check-color-tokens.mjs
 	node scripts/check-css-blocks.mjs
 	node scripts/check-token-usage.mjs
 	node scripts/check-worktree-sparse-paths.mjs
-	cd companion && npm ci --ignore-scripts && npm test
+	npm run test --workspace campsite-companion
 	ruff check --isolated --target-version py39 --select E4,E7,E9,F,B,UP secrets/ scripts/
 	python3 -m unittest discover -s scripts -p 'test_*.py'
 	python3 secrets/manage.py generate --check

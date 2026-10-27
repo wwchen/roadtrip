@@ -41,6 +41,7 @@
       "frontend",
       "gradle",
       "grafana",
+      "packages",
       "postgres-init",
       "rfcs",
       "scripts",
