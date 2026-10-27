@@ -1,0 +1,77 @@
+.rt-sheet {
+  --rt-sheet-peek: 0.26;
+  --rt-sheet-half: 0.52;
+  --rt-sheet-full: 0.92;
+  --rt-sheet-height: var(--rt-sheet-peek);
+  --rt-sheet-max-width: 420px;
+  --rt-sheet-handle-width: 36px;
+  --rt-sheet-handle-height: 4px;
+  --rt-sheet-grabber-height: 28px;
+  --rt-sheet-gutter: 16px;
+  --rt-sheet-motion: 220ms cubic-bezier(0.2, 0, 0, 1);
+
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: var(--rt-sheet-max-width);
+  height: calc(var(--rt-sheet-height) * 100%);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--rt-surface);
+  color: var(--rt-text);
+  border: 1px solid var(--rt-border);
+  border-bottom: 0;
+  border-radius: var(--rt-r-lg) var(--rt-r-lg) 0 0;
+  box-shadow: 0 -4px 24px rgb(0 0 0 / 0.18);
+  overflow: hidden;
+}
+.rt-sheet[data-detent='peek'] { --rt-sheet-height: var(--rt-sheet-peek); }
+.rt-sheet[data-detent='half'] { --rt-sheet-height: var(--rt-sheet-half); }
+.rt-sheet[data-detent='full'] { --rt-sheet-height: var(--rt-sheet-full); }
+
+.rt-sheet[data-dragging] {
+  height: var(--rt-sheet-drag-height);
+  transition: none;
+  user-select: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .rt-sheet { transition: height var(--rt-sheet-motion); }
+}
+
+.rt-sheet-grabber {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: var(--rt-sheet-grabber-height);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: grab;
+  touch-action: none;
+}
+.rt-sheet[data-dragging] .rt-sheet-grabber { cursor: grabbing; }
+.rt-sheet-handle {
+  width: var(--rt-sheet-handle-width);
+  height: var(--rt-sheet-handle-height);
+  border-radius: var(--rt-sheet-handle-height);
+  background: var(--rt-faint);
+}
+.rt-sheet-grabber:hover .rt-sheet-handle,
+.rt-sheet-grabber:focus-visible .rt-sheet-handle { background: var(--rt-muted); }
+.rt-sheet-grabber:focus-visible {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: -2px;
+}
+
+.rt-sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--rt-sheet-gutter) var(--rt-sheet-gutter);
+}
+.rt-sheet-section + .rt-sheet-section { margin-top: var(--rt-sheet-gutter); }
