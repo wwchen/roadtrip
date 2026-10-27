@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   requestPoiCampsitesAvailability,
@@ -7,6 +7,14 @@ import {
   type PoiCampsitesAvailabilityResponse,
 } from '@/api/availability-api';
 import { fetchPoiCampsites, type Campsite } from '@/api/campsite-api';
+import {
+  AvailabilityRequestError,
+  GENERIC_AVAILABILITY_ERROR,
+  classifyAvailabilityErrorCode,
+  formatAvailabilityError,
+  retryingHelps,
+  type AvailabilityErrorBody,
+} from '@/lib/availability-errors';
 import { addLocalDays, localYmd, parseLocalYmd } from '@/lib/local-date';
 import { nightsCopy } from '@/lib/strings';
 import {
@@ -23,7 +31,10 @@ const CATALOG_STALE_MS = 5 * 60_000;
 
 const RETRY_AUTOMATICALLY = false;
 
-const GRID_READ_FAILED = 'the per-night availability read failed';
+export interface PlaceNightsFailure {
+  reason: string;
+  retry: (() => void) | null;
+}
 
 export interface PlaceNightsView {
   days: readonly AvailabilityDay[];
@@ -31,6 +42,7 @@ export interface PlaceNightsView {
   siteNames: ReadonlyMap<number, string>;
   capabilities: WatchCapabilities;
   reopensOn: string | undefined;
+  failure: PlaceNightsFailure | null;
 }
 
 const NO_DAYS: readonly AvailabilityDay[] = [];
@@ -77,7 +89,14 @@ export function usePlaceNights(poiId: number, stay: PlaceStay): PlaceNightsView 
         siteType,
         signal,
       });
-      if (!response.ok) throw new Error(GRID_READ_FAILED);
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as AvailabilityErrorBody | null;
+        throw new AvailabilityRequestError(
+          formatAvailabilityError(body, response.status),
+          response.status,
+          typeof body?.error === 'string' ? body.error : null,
+        );
+      }
       return (await response.json()) as PoiCampsitesAvailabilityResponse;
     },
   });
@@ -90,6 +109,11 @@ export function usePlaceNights(poiId: number, stay: PlaceStay): PlaceNightsView 
 
   const served = grid.data;
   const campsites = catalog.data?.campsites;
+
+  const { refetch } = grid;
+  const retry = useCallback(() => {
+    void refetch();
+  }, [refetch]);
 
   const dates = useMemo(() => nightsOf(stay.start, stay.end), [stay.start, stay.end]);
   const siteNames = useMemo(() => namesOf(campsites), [campsites]);
@@ -107,5 +131,16 @@ export function usePlaceNights(poiId: number, stay: PlaceStay): PlaceNightsView 
     siteNames,
     capabilities,
     reopensOn: seasonReopensOn(served?.season),
+    failure: served ? null : failureOf(grid.error, retry),
+  };
+}
+
+export function failureOf(error: unknown, retry: () => void): PlaceNightsFailure | null {
+  if (error == null) return null;
+  const stated = error instanceof AvailabilityRequestError ? error : null;
+  const kind = classifyAvailabilityErrorCode(stated?.code ?? null);
+  return {
+    reason: stated?.message || GENERIC_AVAILABILITY_ERROR,
+    retry: retryingHelps(kind) ? retry : null,
   };
 }

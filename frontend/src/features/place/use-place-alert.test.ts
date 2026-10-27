@@ -33,6 +33,7 @@ function nightsView(over: Partial<PlaceNightsView> = {}): PlaceNightsView {
     siteNames: new Map(),
     capabilities: CAN_EMAIL,
     reopensOn: undefined,
+    failure: null,
     ...over,
   };
 }
