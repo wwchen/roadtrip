@@ -28,6 +28,15 @@ describe('AlertRow', () => {
     expect(screen.getByText(gateCopy.watchSignedOut)).toBeInTheDocument();
   });
 
+  test('a signed-out row cannot be built without the step that unlocks it', () => {
+    // @ts-expect-error a signed-out row requires onSignIn
+    const missing = <AlertRow night={NIGHT} gate="signed-out" onCreate={noop} />;
+    // @ts-expect-error only a signed-out row takes onSignIn
+    const surplus = <AlertRow night={NIGHT} gate="ready" onCreate={noop} onSignIn={noop} />;
+
+    expect([missing, surplus]).toHaveLength(2);
+  });
+
   test('falls back to inert text only when blocked', () => {
     render(<AlertRow night={NIGHT} gate="blocked" onCreate={noop} />);
 

@@ -5,11 +5,11 @@ import { AlertRow } from './AlertRow';
 const PHONE_FRAME: CSSProperties = { width: 390, padding: 16, boxSizing: 'border-box' };
 const DESKTOP_FRAME: CSSProperties = { width: 720, padding: 24, boxSizing: 'border-box' };
 const NIGHT = '2026-10-27';
+const BASE = { night: NIGHT, onCreate: () => undefined };
 
 const meta = {
   title: 'Place/AlertRow',
   component: AlertRow,
-  args: { night: NIGHT, gate: 'ready', onCreate: () => undefined, onSignIn: () => undefined },
   decorators: [
     (Story, { parameters }) => (
       <div style={parameters.desktop ? DESKTOP_FRAME : PHONE_FRAME}>
@@ -33,10 +33,10 @@ const meta = {
 } satisfies Meta<typeof AlertRow>;
 
 export default meta;
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj<typeof AlertRow>;
 
-export const Ready: Story = {};
-export const Pending: Story = { args: { pending: true } };
-export const SignedOut: Story = { args: { gate: 'signed-out' } };
-export const Blocked: Story = { args: { gate: 'blocked' } };
-export const Desktop: Story = { parameters: { desktop: true } };
+export const Ready: Story = { args: { ...BASE, gate: 'ready' } };
+export const Pending: Story = { args: { ...BASE, gate: 'ready', pending: true } };
+export const SignedOut: Story = { args: { ...BASE, gate: 'signed-out', onSignIn: () => undefined } };
+export const Blocked: Story = { args: { ...BASE, gate: 'blocked' } };
+export const Desktop: Story = { args: { ...BASE, gate: 'ready' }, parameters: { desktop: true } };
