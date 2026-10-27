@@ -103,6 +103,8 @@ const COMPONENT_LOCAL = new Set([
   '--rt-sheet-close-size',
   '--rt-sheet-close-icon',
   '--rt-sheet-motion',
+  '--rt-sheet-top-clearance',
+  '--rt-sheet-top-gap',
   // The sheet's width cap and gutter, declared at :root in ui/sheet.css because
   // features/place/place-sheet.css reads them for the loading and error chrome that stands in
   // for the sheet while it has nothing to show, and that chrome sits outside .rt-sheet.

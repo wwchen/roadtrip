@@ -17,6 +17,8 @@
   --rt-sheet-close-size: 44px;
   --rt-sheet-close-icon: 18px;
   --rt-sheet-motion: 220ms cubic-bezier(0.2, 0, 0, 1);
+  --rt-sheet-top-clearance: 0px;
+  --rt-sheet-top-gap: 8px;
 
   position: absolute;
   left: 0;
@@ -28,6 +30,7 @@
   width: 100%;
   max-width: var(--rt-sheet-max-width);
   height: calc(var(--rt-sheet-height) * 100%);
+  max-height: calc(100% - var(--rt-sheet-top-clearance) - var(--rt-sheet-top-gap));
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -50,6 +53,9 @@
   height: var(--rt-sheet-drag-height);
   transition: none;
   user-select: none;
+}
+@media (min-width: 768px) {
+  .rt-sheet { --rt-sheet-top-clearance: var(--rt-topbar-bottom, 0px); }
 }
 @media (prefers-reduced-motion: no-preference) {
   .rt-sheet { transition: height var(--rt-sheet-motion), max-width var(--rt-sheet-motion); }

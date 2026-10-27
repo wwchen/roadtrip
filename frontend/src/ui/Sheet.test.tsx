@@ -14,6 +14,13 @@ const DETENT_STYLE = {
   '--rt-sheet-full': String(DETENT_RATIOS.full),
 } as React.CSSProperties;
 const GRABBER_Y = 800;
+const TOP_CLEARANCE_PX = 300;
+const TOP_GAP_PX = 8;
+const CLEARED_STYLE = {
+  ...DETENT_STYLE,
+  '--rt-sheet-top-clearance': `${TOP_CLEARANCE_PX}px`,
+  '--rt-sheet-top-gap': `${TOP_GAP_PX}px`,
+} as React.CSSProperties;
 
 const grabber = () => screen.getByRole('button', { name: /upper pines/i });
 
@@ -219,6 +226,20 @@ describe('Sheet', () => {
       drag(GRABBER_Y - SCREEN_HEIGHT);
 
       expect(onDetentChange).toHaveBeenCalledWith('full');
+    });
+
+    test('never drags past the room left below the topbar', () => {
+      render(
+        <Sheet detent="peek" onDetentChange={noop} label={LABEL} style={CLEARED_STYLE} data-testid="sheet" />,
+      );
+      vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(SCREEN_HEIGHT);
+
+      fireEvent.pointerDown(grabber(), { pointerId: 1, clientY: GRABBER_Y, button: 0 });
+      fireEvent.pointerMove(grabber(), { pointerId: 1, clientY: GRABBER_Y - SCREEN_HEIGHT });
+
+      expect(screen.getByTestId('sheet').style.getPropertyValue('--rt-sheet-drag-height')).toBe(
+        `${SCREEN_HEIGHT - TOP_CLEARANCE_PX - TOP_GAP_PX}px`,
+      );
     });
 
     test('lowers the sheet when dragged down', () => {

@@ -25,6 +25,9 @@ const CLOSE_ICON = 'close';
 const BODY_TAB_STOP = 0;
 const DRAG_HEIGHT_PROPERTY = '--rt-sheet-drag-height';
 const DRAGGING_ATTRIBUTE = 'data-dragging';
+const TOP_CLEARANCE_PROPERTY = '--rt-sheet-top-clearance';
+const TOP_GAP_PROPERTY = '--rt-sheet-top-gap';
+const NO_LENGTH = 0;
 const DETENT_RATIO_PROPERTY: Record<SheetDetent, string> = {
   peek: '--rt-sheet-peek',
   half: '--rt-sheet-half',
@@ -54,14 +57,21 @@ const tapped = (detent: SheetDetent): SheetDetent => (detent === 'full' ? 'peek'
 
 type DetentHeights = Record<SheetDetent, number>;
 
+const pixels = (style: CSSStyleDeclaration, property: string): number => {
+  const length = parseFloat(style.getPropertyValue(property));
+  return Number.isNaN(length) ? NO_LENGTH : length;
+};
+
 function measureDetents(root: HTMLElement): DetentHeights | null {
   const container = root.offsetParent?.clientHeight || window.innerHeight;
   const style = getComputedStyle(root);
+  const ceiling =
+    container - pixels(style, TOP_CLEARANCE_PROPERTY) - pixels(style, TOP_GAP_PROPERTY);
   const heights = {} as DetentHeights;
   for (const detent of SHEET_DETENTS) {
     const ratio = parseFloat(style.getPropertyValue(DETENT_RATIO_PROPERTY[detent]));
     if (Number.isNaN(ratio)) return null;
-    heights[detent] = ratio * container;
+    heights[detent] = Math.min(ratio * container, ceiling);
   }
   return heights;
 }
