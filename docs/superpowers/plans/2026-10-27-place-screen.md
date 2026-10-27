@@ -20,7 +20,7 @@
 - **A stay claim never comes from day rollups.** `stayCopy.result` is fed `StaySummaryDto.open_sites` (sites bookable every night); `AvailabilityDay` rollups feed the nights strip and nothing else.
 - **No cross-feature imports.** `npm run lint` enforces it; anything two features need lives in `domain/`, `@/lib` or `@ui`.
 - **Phone viewport is the default** in stories and tests; desktop is a second story, never the first.
-- Verification commands: `npm run test`, `npm run typecheck`, `npm run lint`, `npm run build-storybook`, all from `frontend/`.
+- Verification commands: `npm run test`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm run build-storybook`, all from `frontend/`, **and from the repo root `node scripts/check-token-usage.mjs` and `node scripts/check-color-tokens.mjs`** — a phase that invents a component family invents the custom properties those two gates police, and naming only the first four is how this plan shipped three task reviews deep with a red CI.
 
 ## Review Focus
 
