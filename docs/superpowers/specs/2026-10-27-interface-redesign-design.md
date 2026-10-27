@@ -164,6 +164,26 @@ answer *what is it like when I arrive*, which is Full. The sheet's Half/Full
 boundary is therefore after the `glance` group, and the rule hairline keeps its
 own, separate meaning in the block order.
 
+**The header carries the name and exactly one secondary line**, and that line is
+the type's own eyebrow, verbatim from the same source the identity block reads —
+`Campground · <agency>`, `Charger · Tesla`, `National park`. Who manages a place
+tells a camper which booking system and which rules to expect, which is why it
+shared the type's line in the first place. Two earlier drafts of this document
+called that line the parent unit, which is what a story fixture happened to
+contain; the smoke suite had it right.
+
+Where a type's eyebrow would merely repeat the name, the subtitle carries that
+type's one identifying fact instead. A dropped pin is the whole of that case: its
+"name" is a label, so an eyebrow-verbatim rule would print *Dropped pin* above
+*Dropped pin*, and its coordinates are the only thing that says which pin.
+
+A street address is a **location** fact, not an identity one, so it does not
+belong in the header. A campground's survives at Full, in `contact`. For `place`,
+`charger` and `group` nothing carries it in phase 1 — along with the charger's
+common-site label and a park group's state and manager — because the body block
+that should hold it does not exist yet. That is a second recorded gap beside the
+photographs, not a thing to solve by overloading the one line the header has.
+
 The sheet also renders **no `hero`**. A 176px photo at the top of a 395px Half
 detent pushes `actions` — Reserve — below the fold, and Reserve is the one thing
 Half must guarantee; a type omitting a block is already how this order works.
