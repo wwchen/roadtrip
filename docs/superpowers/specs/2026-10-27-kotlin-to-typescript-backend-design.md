@@ -258,6 +258,11 @@ a real environment cheap enough to verify against directly — by a person or by
 agent driving Playwright against the preview URL. This is built **early**, because it
 changes what every later step needs to write.
 
+**Its scope is API, database, and frontend iteration.** That is what a preview URL on
+a seeded branch is good at, and it covers steps 7, 8, 10 and 11. Pollers,
+notifications and the importer are verified by other means (§8.3) and are not a
+shortfall of this environment — they are outside what it is for.
+
 Three pieces:
 
 - **Seed as a restorable dump, not an import run.** Re-running the importer over
@@ -291,20 +296,27 @@ With that environment in place, each level is written for what only it can catch
 - **Not ported at all:** jOOQ mapping tests, DI wiring tests, the §5 auth internals,
   the dialect layer. These have no counterpart in the new system.
 
-#### 8.3 The gap this does not close
+#### 8.3 What covers the rest
 
-A preview deploy covers the Next.js half. **The worker is not in it** — pollers,
-vendor egress, notifications, and the scheduler's claim-lease behaviour are not
-exercised by a preview URL. Two options, and the choice belongs to the step that
-ports the worker:
+The worker's halves are not uncovered; they are covered by mechanisms better suited
+to them than a preview URL would be.
 
-- Run a local worker against the PR's branched database, which makes the loop
-  manual but exercises the real code.
-- Treat the worker's boundary as the API and test it against a seeded branch
-  directly, with its vendor calls served from `data/raw`.
+- **The importer** has §4's differential harness: both implementations over the same
+  19,136 envelopes, rows diffed, against a reference implementation that works. This
+  is the strongest verification in this spec, and stronger than anything a preview
+  gives the API.
+- **Scheduler claim-lease behaviour** tests against a real Postgres, concurrency and
+  lease expiry included. `FOR UPDATE SKIP LOCKED` under contention is exactly what an
+  integration test with two claimants demonstrates.
+- **Pollers and notifications** test at their boundaries with vendor responses from
+  `data/raw` and a fake outbound transport for Slack and email. `AvailabilityProvider`
+  and `NotificationService` are already ports, so the seams exist.
+- **Live vendor behaviour** — Akamai's actual responses, real rate-limit and cooldown
+  behaviour — is not automatically verifiable, and was not before this port either.
+  Unchanged, not a regression.
 
-Either way, the worker needs its own verification story and does not inherit the
-preview one.
+During step 9, running a local worker against a PR's branched database is a useful
+manual loop on top of the above. It is a convenience, not the plan.
 
 ### 9. Early probes
 
@@ -366,11 +378,11 @@ a `previous_id` linked list under a unique index. It is a read-modify-write agai
 current state. Porting it needs the reasoning, not the shape — the same hazard §5
 describes for auth. Cells per poll (campsites × target dates) is unmeasured.
 
-**The preview environment can make the worker a blind spot.** Everything verifiable
-through a preview URL will get verified, and the worker — pollers, vendor egress,
-notifications, lease recovery — will not. That asymmetry pulls attention toward the
-half that is easy to see, which is also the half with less behavioural subtlety.
-§8.3 is the mitigation and it needs a real owner at step 9, not a note.
+**Live vendor behaviour stays unverifiable.** Akamai's real responses and real
+rate-limit and cooldown behaviour cannot be exercised by any automated suite, here or
+today. The ported poller is correct against `data/raw` fixtures and still unproven
+against the live edge until it runs on mini-ca. Step 9 ends with a period of watching
+production, not with a green suite.
 
 **SSR delivers less than it sounds like.** The primary view is maplibre-gl, which is
 client-only. Server rendering buys campground and POI detail pages — real SEO value,
