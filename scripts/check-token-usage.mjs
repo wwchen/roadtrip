@@ -98,6 +98,7 @@ const COMPONENT_LOCAL = new Set([
   '--rt-sheet-drag-height',
   '--rt-sheet-handle-width',
   '--rt-sheet-handle-height',
+  '--rt-sheet-handle-focus-offset',
   '--rt-sheet-grabber-height',
   '--rt-sheet-close-size',
   '--rt-sheet-close-icon',
@@ -110,6 +111,23 @@ const COMPONENT_LOCAL = new Set([
   // The place sheet's own rhythm: declared in features/place/place-sheet.css.
   '--rt-place-sheet-stay-gap',
   '--rt-place-sheet-subtitle-size',
+  '--rt-place-sheet-header-gap',
+  '--rt-place-sheet-alert-gap',
+  '--rt-place-sheet-name-size',
+  // The nights strip's cell geometry: declared in domain/place/nights-strip.css.
+  '--rt-nights-gap',
+  '--rt-nights-cell-min',
+  '--rt-nights-cell-max',
+  '--rt-nights-cell-pad',
+  '--rt-nights-cell-line-gap',
+  // The verdict header's own rhythm: declared in domain/place/place-verdict.css.
+  '--rt-place-verdict-gap',
+  '--rt-place-verdict-head-gap',
+  '--rt-place-verdict-reasons-gap',
+  '--rt-place-verdict-name-size',
+  '--rt-place-verdict-detail-size',
+  // The alert offer's one line: declared in domain/place/alert-row.css.
+  '--rt-alert-offer-gap',
 ]);
 
 const defined = new Set(

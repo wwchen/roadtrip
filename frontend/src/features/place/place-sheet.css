@@ -1,6 +1,13 @@
 .rt-place-sheet {
-  --rt-place-sheet-stay-gap: 12px;
+  --rt-place-sheet-stay-gap: 6px;
+  --rt-place-sheet-alert-gap: 4px;
+  --rt-place-sheet-header-gap: 8px;
   --rt-place-sheet-subtitle-size: 12px;
+  --rt-place-sheet-name-size: 16px;
+}
+
+.rt-place-sheet .rt-sheet-header {
+  margin-bottom: var(--rt-place-sheet-header-gap);
 }
 
 .rt-place-sheet__compact {
@@ -15,19 +22,23 @@
   font-size: var(--rt-place-sheet-subtitle-size);
 }
 
-/* A heading element, sized like the body text around it: the sheet is the screen,
-   so the name is its h2, not a bolder paragraph. */
 .rt-place-sheet__name {
   margin: 0;
-  font: inherit;
   font-family: var(--rt-sans);
-  font-weight: 700;
+  font-size: var(--rt-place-sheet-name-size);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
 }
 
 .rt-place-sheet__stay {
   display: flex;
   flex-direction: column;
   gap: var(--rt-place-sheet-stay-gap);
+}
+
+.rt-place-sheet__stay > .rt-alert-offer {
+  margin-top: var(--rt-place-sheet-alert-gap);
 }
 
 .rt-place-sheet .rt-poi {

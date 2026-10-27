@@ -2,7 +2,6 @@ import type { AvailabilityDay } from '@/api/availability-api';
 import { availabilityStatusMeta, type AvailabilityStatus } from '@/lib/availability-status';
 import { nightsCopy } from '@/lib/strings';
 import { dayOfMonthLabel, dowLabel, longDayLabel } from '@/lib/week-labels';
-import { Chip } from '@ui';
 import { nightOf, type Night, type NightState } from './night-state';
 import './nights-strip.css';
 
@@ -47,10 +46,11 @@ export function NightsStrip({ days, dates, selected, onSelect }: NightsStripProp
         const appearance = APPEARANCE[night.state];
         const label = `${longDayLabel(date)}, ${appearance.words(night)}`;
         return (
-          <Chip
+          <button
             key={date}
+            type="button"
             className="rt-nights__night"
-            selected={date === selected}
+            aria-pressed={date === selected}
             disabled={!appearance.selectable}
             data-state={night.state}
             aria-label={label}
@@ -59,7 +59,7 @@ export function NightsStrip({ days, dates, selected, onSelect }: NightsStripProp
             <span className="rt-nights__dow">{dowLabel(date)}</span>
             <span className="rt-nights__day">{dayOfMonthLabel(date)}</span>
             <span className="rt-nights__count">{appearance.count(night)}</span>
-          </Chip>
+          </button>
         );
       })}
     </div>

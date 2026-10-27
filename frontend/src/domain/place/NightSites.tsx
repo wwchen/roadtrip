@@ -15,15 +15,16 @@ const NO_SITES_LINE = {
   first_come: nightsCopy.firstCome,
   closed: nightsCopy.closedNight,
   past: nightsCopy.noDetail,
-  unknown: nightsCopy.noDetail,
-} satisfies Record<Exclude<NightState, 'open'>, string>;
+  unknown: undefined,
+} satisfies Record<Exclude<NightState, 'open'>, string | undefined>;
 
 export function NightSites({ day, names, onPick }: NightSitesProps) {
   if (day === null) return null;
   const night = nightOf(day);
 
   if (night.state !== 'open') {
-    return <p className="rt-night-sites__none">{NO_SITES_LINE[night.state]}</p>;
+    const line = NO_SITES_LINE[night.state];
+    return line ? <p className="rt-night-sites__none">{line}</p> : null;
   }
 
   return (

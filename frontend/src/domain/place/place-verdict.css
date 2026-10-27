@@ -1,35 +1,54 @@
 .rt-place-verdict {
+  --rt-place-verdict-gap: 2px;
+  --rt-place-verdict-name-size: 16px;
+  --rt-place-verdict-detail-size: 12px;
+  --rt-place-verdict-head-gap: 10px;
+  --rt-place-verdict-reasons-gap: 8px;
+
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--rt-place-verdict-gap);
   color: var(--rt-text);
   font-family: var(--rt-sans);
 }
 
-/* The place's name is the screen's heading, so it is an element and not a weight.
-   The row's own typography still decides how it looks. */
-.rt-place-verdict__name {
-  margin: 0;
-  font: inherit;
+.rt-place-verdict__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--rt-place-verdict-head-gap);
 }
 
-/* A live region, so "Checking…" becoming "3 sites open" is announced — the one
-   transition this screen exists for. It wraps the tag rather than replacing it, so
-   the region is in the DOM before the answer lands. */
+.rt-place-verdict__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--rt-sans);
+  font-size: var(--rt-place-verdict-name-size);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rt-place-verdict__answer {
+  flex: 0 0 auto;
   display: inline-flex;
 }
 
 .rt-place-verdict__detail {
   margin: 0;
   color: var(--rt-muted);
+  font-size: var(--rt-place-verdict-detail-size);
 }
 
 .rt-place-verdict__reasons {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 0;
+  margin: var(--rt-place-verdict-reasons-gap) 0 0;
   padding: 0;
   list-style: none;
 }

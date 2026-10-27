@@ -1,7 +1,8 @@
-import { alertCopy, dayCopy, gateCopy } from '@/lib/strings';
+import { alertCopy, dayCopy, gateCopy, placeCopy } from '@/lib/strings';
 import { longDayLabel } from '@/lib/week-labels';
-import { Button, Row } from '@ui';
+import { Button } from '@ui';
 import type { WatchGate } from './watch-gate';
+import './alert-row.css';
 
 interface AlertRowBase {
   night: string;
@@ -42,5 +43,14 @@ export function AlertRow(props: AlertRowProps) {
       </Button>
     ) : undefined;
 
-  return <Row compact title={label} subtitle={SUBTITLE[props.gate]} trail={action} />;
+  return (
+    <div className="rt-alert-offer">
+      <p className="rt-alert-offer__line">
+        <span className="rt-alert-offer__night">{label}</span>
+        {placeCopy.factsSeparator}
+        <span className="rt-alert-offer__reason">{SUBTITLE[props.gate]}</span>
+      </p>
+      {action}
+    </div>
+  );
 }

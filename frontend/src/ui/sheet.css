@@ -10,6 +10,7 @@
   --rt-sheet-height: var(--rt-sheet-peek);
   --rt-sheet-handle-width: 36px;
   --rt-sheet-handle-height: 4px;
+  --rt-sheet-handle-focus-offset: 4px;
   /* 44px, not the 28px this started at: the grabber and the close button share one
      row, and both are then the comfortable touch target (iOS HIG / Material). */
   --rt-sheet-grabber-height: 44px;
@@ -73,9 +74,10 @@
 }
 .rt-sheet-grabber:hover .rt-sheet-handle,
 .rt-sheet-grabber:focus-visible .rt-sheet-handle { background: var(--rt-muted); }
-.rt-sheet-grabber:focus-visible {
+.rt-sheet-grabber:focus-visible { outline: none; }
+.rt-sheet-grabber:focus-visible .rt-sheet-handle {
   outline: 2px solid var(--rt-brand);
-  outline-offset: -2px;
+  outline-offset: var(--rt-sheet-handle-focus-offset);
 }
 
 .rt-sheet-close {

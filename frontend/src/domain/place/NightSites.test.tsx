@@ -53,11 +53,12 @@ describe('NightSites', () => {
     expect(screen.getByText(nightsCopy.noneOpen)).toBeInTheDocument();
   });
 
-  test('a night with no cells says it has no detail rather than that it is full', () => {
-    render(<NightSites day={{ ...dayOpen('2026-10-25', 0), cells: {} }} />);
+  test('a night with no cells leaves the absence to the strip rather than restating it', () => {
+    const { container } = render(<NightSites day={{ ...dayOpen('2026-10-25', 0), cells: {} }} />);
 
-    expect(screen.getByText(nightsCopy.noDetail)).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
     expect(screen.queryByText(nightsCopy.noneOpen)).not.toBeInTheDocument();
+    expect(screen.queryByText(nightsCopy.noDetail)).not.toBeInTheDocument();
   });
 
   test('names a site by the name it was given, and marks a bare id with #', () => {
