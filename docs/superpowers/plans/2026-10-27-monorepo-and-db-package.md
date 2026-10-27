@@ -112,6 +112,12 @@ Normalization is what makes the comparison possible: `pg_dump --schema-only --no
 
 `normalize` must also **drop both migration-bookkeeping objects**: Flyway's `flyway_schema_history` table and Drizzle's `__drizzle_migrations` (in the `drizzle` schema). Each exists on exactly one side, so leaving either in makes Task 6's gate impossible to pass.
 
+**`normalize` must also sort columns within `CREATE TABLE`.** Flyway's history is a sequence of `ALTER TABLE … ADD COLUMN`, so its dump lists later-added columns last; Drizzle emits them in declaration order. Without sorting, Task 6's gate fails on physical column order — a difference with no consumer here, since there is no data to migrate and Drizzle names columns explicitly in every query. Sorting keeps the gate comparing what matters: types, nullability, defaults, constraint names and bodies, and indexes. Forcing parity instead would make Task 4 encode Flyway's ALTER history as declaration order, which is historical accident dressed as a requirement.
+
+`writeReference` must **fail rather than write an empty or near-empty reference**. If Flyway applies zero migrations — an empty mount comes up exit 0 — or the statement splitter swallows everything, an empty file is written successfully and Task 6's gate then passes vacuously whenever both sides are empty. Assert a post-condition before writing: a plausible `CREATE TABLE` count. Delete or refuse to overwrite a stale `outPath` on failure.
+
+Export the container-and-dump pipeline, not just `writeReference`. Task 6 runs the same dump over a Drizzle-migrated database **in the same container** (see Task 6), and it needs the image pin, the `FROM template0` database creation and the `pg_dump` invocation to be literally the same code. Two copies drift on exactly the parameters that make the comparison valid.
+
 `--no-privileges` means the comparison covers structure, not grants. That is deliberate — `R__grafana_reader_grants.sql` is mini-ca's concern per spec §11 — but it means the gate does not protect the `grafana_reader` privileges. Say so in the commit.
 
 - [ ] **Step 1: Write the failing test**
