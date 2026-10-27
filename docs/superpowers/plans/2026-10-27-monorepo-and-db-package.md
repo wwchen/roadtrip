@@ -531,7 +531,14 @@ Expected: FAIL on both — member lockfiles exist and are referenced in 3 `cache
 
 - [ ] **Step 3: Repoint every call site at the root lockfile**
 
-`npm ci --workspace <name>` installs one workspace's dependencies from the root lock, so each site keeps its current scope. In `Dockerfile`, the frontend stage currently copies `frontend/package.json frontend/package-lock.json`; it must copy the root `package.json` and `package-lock.json` plus `frontend/package.json` instead. Keep `--ignore-scripts` off: only `esbuild` and `fsevents` declare install scripts in the whole tree, and esbuild needs its to link its platform binary.
+`npm ci --workspace <name>` installs one workspace's dependencies from the root lock, so each site keeps its current scope. In `Dockerfile`, the frontend stage currently copies `frontend/package.json frontend/package-lock.json`; it must copy the root `package.json` and `package-lock.json` plus `frontend/package.json` instead.
+
+**Two `prepare`-related traps, both from Task 3.** `@roadtrip/domain` compiles to `dist/` via a `prepare` script, which a root `npm ci` runs automatically. So:
+
+- **`--ignore-scripts` skips `prepare`**, leaving `dist/` absent and every consumer broken. `ci.yml:252` still carries it on the companion job. The companion does not depend on `@roadtrip/domain`, so that one site is safe — but verify that rather than assume it, and drop the flag anywhere a site does need the built package. Keep it off generally: only `esbuild` and `fsevents` declare install scripts in the whole tree, and esbuild needs its to link its platform binary.
+- **A scoped `npm ci --workspace roadtrip-frontend` may not build `@roadtrip/domain` at all.** Task 3 did not verify whether a scoped install triggers a dependency workspace's `prepare` or even copies `packages/domain`. The `Dockerfile` frontend stage and the `Makefile` `frontend` target are both scoped installs that need the built package. Check this first; if a scoped install does not produce `dist/`, those sites need an explicit `npm run build --workspace @roadtrip/domain` (and the Dockerfile stage needs `packages/domain` in its build context).
+
+The second one is the likelier breakage and it fails at image-build time, not in CI.
 
 - [ ] **Step 4: Delete the member lockfiles and run the test**
 
