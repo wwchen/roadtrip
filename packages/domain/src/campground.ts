@@ -71,3 +71,25 @@ export interface BookingAlias {
   provider: BookingProvider;
   ref: string;
 }
+
+export interface CampgroundLink {
+  url: string;
+  title?: string;
+}
+
+export interface CampgroundContact {
+  phone?: string;
+  email?: string;
+}
+
+export interface CampgroundManagement {
+  agency: string;
+  website?: string;
+}
+
+export interface GeometryProvenance {
+  match_kind: string;
+  source: string;
+  matched_name: string;
+  score?: number;
+}

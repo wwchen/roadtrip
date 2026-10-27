@@ -7,7 +7,10 @@ import {
   type BookingAlias,
   type CampgroundAlert,
   type CampgroundAmenity,
+  type CampgroundContact,
+  type CampgroundLink,
   type CampgroundLocation,
+  type CampgroundManagement,
   type CampgroundMetadata,
   type CampgroundPrice,
   type CampgroundRating,
@@ -15,9 +18,12 @@ import {
   type CampsiteAttribute,
   type CarrierSignal,
   type CatalogPhoto,
+  type GeometryProvenance,
 } from '@roadtrip/domain';
 
 export type JsonObject = Readonly<Record<string, unknown>>;
+
+type NullEncoding = 'empty-object' | 'sql-null';
 
 type Presence =
   | { readonly kind: 'required' }
@@ -35,7 +41,11 @@ type Spec =
   | { readonly kind: 'integer' }
   | { readonly kind: 'boolean' }
   | { readonly kind: 'enum'; readonly values: readonly string[] }
-  | { readonly kind: 'object'; readonly fields: Readonly<Record<string, Field>> }
+  | {
+      readonly kind: 'object';
+      readonly fields: Readonly<Record<string, Field>>;
+      readonly nullable: NullEncoding | null;
+    }
   | { readonly kind: 'array'; readonly item: Shape<unknown>; readonly lenient: boolean }
   | { readonly kind: 'opaque' };
 
@@ -73,7 +83,14 @@ const enumOf = <T extends string>(values: readonly T[]): Shape<T> => ({
 });
 
 const objectOf = <T extends object>(fields: { readonly [K in keyof T]-?: Field }): Shape<T> => ({
-  spec: { kind: 'object', fields },
+  spec: { kind: 'object', fields, nullable: null },
+});
+
+const nullableObjectOf = <T extends object>(
+  fields: { readonly [K in keyof T]-?: Field },
+  nullEncoding: NullEncoding,
+): Shape<T | null> => ({
+  spec: { kind: 'object', fields, nullable: nullEncoding },
 });
 
 const arrayOf = <T>(item: Shape<T>, options: { readonly lenient?: boolean } = {}): Shape<T[]> => ({
@@ -161,6 +178,38 @@ export const attributesShape: Shape<CampsiteAttribute[]> = arrayOf(attributeShap
 
 export const equipmentShape: Shape<string[]> = arrayOf(stringShape);
 
+export const linkShape: Shape<CampgroundLink> = objectOf<CampgroundLink>({
+  url: required(stringShape),
+  title: optional(stringShape),
+});
+
+export const linksShape: Shape<CampgroundLink[]> = arrayOf(linkShape);
+
+export const contactShape: Shape<CampgroundContact> = objectOf<CampgroundContact>({
+  phone: optional(stringShape),
+  email: optional(stringShape),
+});
+
+export const managementShape: Shape<CampgroundManagement | null> =
+  nullableObjectOf<CampgroundManagement>(
+    {
+      agency: required(stringShape),
+      website: optional(stringShape),
+    },
+    'empty-object',
+  );
+
+export const geometryProvenanceShape: Shape<GeometryProvenance | null> =
+  nullableObjectOf<GeometryProvenance>(
+    {
+      match_kind: required(stringShape),
+      source: required(stringShape),
+      matched_name: required(stringShape),
+      score: optional(numberShape),
+    },
+    'sql-null',
+  );
+
 export const bookingAliasShape: Shape<BookingAlias> = objectOf<BookingAlias>({
   provider: required(enumOf(bookingProviders)),
   ref: required(nonBlankStringShape),
@@ -211,9 +260,12 @@ function checkScalar(spec: Spec, value: unknown, path: string): unknown {
   }
 }
 
+const nullEncoded = (encoding: NullEncoding): unknown => (encoding === 'sql-null' ? null : {});
+
 function encode(spec: Spec, value: unknown, path: string): unknown {
   switch (spec.kind) {
     case 'object': {
+      if (spec.nullable !== null && isAbsent(value)) return nullEncoded(spec.nullable);
       if (!isPlainObject(value)) throw new CatalogJsonError(path, 'expected an object');
       const written: Record<string, unknown> = {};
       for (const [name, field] of Object.entries(spec.fields)) {
@@ -245,6 +297,7 @@ function decode(spec: Spec, raw: unknown, path: string): unknown {
   switch (spec.kind) {
     case 'object': {
       if (!isPlainObject(raw)) throw new CatalogJsonError(path, 'expected an object');
+      if (spec.nullable !== null && Object.keys(raw).length === 0) return null;
       const read: Record<string, unknown> = {};
       for (const [name, field] of Object.entries(spec.fields)) {
         const member = raw[name];

@@ -2,13 +2,17 @@ import type {
   BookingAlias,
   CampgroundAlert,
   CampgroundAmenity,
+  CampgroundContact,
+  CampgroundLink,
   CampgroundLocation,
+  CampgroundManagement,
   CampgroundMetadata,
   CampgroundPrice,
   CampgroundSchedule,
   CampsiteAttribute,
   CarrierSignal,
   CatalogPhoto,
+  GeometryProvenance,
 } from '@roadtrip/domain';
 import { getTableConfig, PgTable } from 'drizzle-orm/pg-core';
 import { is, sql } from 'drizzle-orm';
@@ -26,6 +30,10 @@ import {
   bookingAliasesShape,
   cellServiceShape,
   CatalogJsonError,
+  contactShape,
+  geometryProvenanceShape,
+  linksShape,
+  managementShape,
   decodeCatalogJson,
   encodeCatalogJson,
   equipmentShape,
@@ -97,6 +105,18 @@ const photos: CatalogPhoto[] = [
 const attributes: CampsiteAttribute[] = [{ name: 'Shade', value: 'Full' }, { name: 'Pets' }];
 const equipment = ['Tent', 'RV'];
 const bookingAliases: BookingAlias[] = [{ provider: 'recgov', ref: '232447' }];
+const links: CampgroundLink[] = [
+  { url: 'https://example.test/map', title: 'Map' },
+  { url: 'https://example.test/rules' },
+];
+const contact: CampgroundContact = { phone: '555-0100', email: 'camp@example.test' };
+const management: CampgroundManagement = { agency: 'State Parks', website: 'https://example.test' };
+const geometryProvenance: GeometryProvenance = {
+  match_kind: 'fuzzy',
+  source: 'aspira-maps-bc',
+  matched_name: 'Alice Lake',
+  score: 0.75,
+};
 const sourcePayload = { id: 'abc', nested: { n: null, list: [1, 2] }, extra: 'kept' };
 
 interface Coverage {
@@ -134,6 +154,10 @@ const COVERED_SHAPES: readonly Coverage[] = [
     addressShape,
     location.address!,
   ),
+  covered(['campgrounds.links'], linksShape, links),
+  covered(['campgrounds.contact'], contactShape, contact),
+  covered(['campgrounds.management'], managementShape, management),
+  covered(['campgrounds.geometry_provenance'], geometryProvenanceShape, geometryProvenance),
   covered(
     ['campgrounds.source_payload', 'campsites.source_payload'],
     sourcePayloadShape,
@@ -155,15 +179,6 @@ const PASSTHROUGH_COLUMNS: Readonly<Record<string, string>> = {
   'tesla_superchargers.detail_payload': 'Kotlin binds a raw JsonElement; no typed shape',
   'planet_fitness_locations.amenities': 'Kotlin binds a raw JsonElement; no typed shape',
   'planet_fitness_locations.payload': 'Kotlin binds a raw JsonElement; no typed shape',
-};
-
-const TYPED_IN_KOTLIN_NOT_YET_SHAPED: Readonly<Record<string, string>> = {
-  'campgrounds.links': 'CampgroundLink; outside the task-7 column list',
-  'campgrounds.contact': 'CampgroundContact; outside the task-7 column list',
-  'campgrounds.management':
-    'CampgroundManagement has a required field, so Kotlin reads {} as null; needs a ruling',
-  'campgrounds.geometry_provenance':
-    'GeometryProvenance; nullable column; outside the task-7 column list',
 };
 
 function catalogJsonbColumns(): string[] {
@@ -282,6 +297,39 @@ describe('decode', () => {
     ]);
   });
 
+  test('reads {} as null where the shape has a required field, as Kotlin decodeObject does', () => {
+    expect(decodeCatalogJson(managementShape, {})).toBeNull();
+    expect(decodeCatalogJson(managementShape, null)).toBeNull();
+    expect(decodeCatalogJson(managementShape, undefined)).toBeNull();
+    expect(decodeCatalogJson(geometryProvenanceShape, {})).toBeNull();
+    expect(decodeCatalogJson(geometryProvenanceShape, null)).toBeNull();
+  });
+
+  test('a non-empty value for a nullable shape still has to be complete', () => {
+    expect(() => decodeCatalogJson(managementShape, { website: 'https://example.test' })).toThrow(
+      '$.agency',
+    );
+    expect(() => decodeCatalogJson(managementShape, { future_key: 1 })).toThrow('$.agency');
+    expect(decodeCatalogJson(managementShape, { agency: 'BLM', future_key: 1 })).toEqual({
+      agency: 'BLM',
+    });
+  });
+
+  test('reads links and contact the way the Kotlin writer stores them', () => {
+    expect(
+      decodeCatalogJson(linksShape, [
+        { url: 'https://example.test', future_key: 1 },
+        { url: 'u', title: 't' },
+      ]),
+    ).toEqual([{ url: 'https://example.test' }, { url: 'u', title: 't' }]);
+    expect(decodeCatalogJson(linksShape, [])).toEqual([]);
+    expect(() => decodeCatalogJson(linksShape, [{ title: 'no url' }])).toThrow('$[0].url');
+    expect(decodeCatalogJson(contactShape, { phone: '555', future_key: 1 })).toEqual({
+      phone: '555',
+    });
+    expect(decodeCatalogJson(contactShape, {})).toEqual({});
+  });
+
   test('an opaque payload keeps every key and every null', () => {
     const payload = { a: null, b: { c: [1, null] }, unknown_to_everyone: 'kept' };
     expect(decodeCatalogJson(sourcePayloadShape, payload)).toEqual(payload);
@@ -339,6 +387,36 @@ describe('encode', () => {
     expect(encodeCatalogJson(priceShape, value)).toEqual(price);
   });
 
+  test('writes an absent nullable value the way Kotlin binds it', () => {
+    expect(encodeCatalogJson(managementShape, null)).toEqual({});
+    expect(encodeCatalogJson(geometryProvenanceShape, null)).toBeNull();
+    expect(encodeCatalogJson(managementShape, { agency: 'BLM', website: undefined })).toEqual({
+      agency: 'BLM',
+    });
+    expect(
+      encodeCatalogJson(geometryProvenanceShape, {
+        match_kind: 'exact',
+        source: 's',
+        matched_name: 'n',
+      }),
+    ).toEqual({ match_kind: 'exact', source: 's', matched_name: 'n' });
+  });
+
+  test('writes the snake_case provenance keys', () => {
+    expect(encodeCatalogJson(geometryProvenanceShape, geometryProvenance)).toEqual({
+      match_kind: 'fuzzy',
+      source: 'aspira-maps-bc',
+      matched_name: 'Alice Lake',
+      score: 0.75,
+    });
+  });
+
+  test('refuses an incomplete value for a nullable shape', () => {
+    expect(() =>
+      encodeCatalogJson(managementShape, { website: 'x' } as unknown as CampgroundManagement),
+    ).toThrow('$.agency');
+  });
+
   test('leaves an opaque payload exactly as given', () => {
     expect(encodeCatalogJson(sourcePayloadShape, sourcePayload)).toEqual(sourcePayload);
   });
@@ -367,7 +445,6 @@ describe('every covered shape', () => {
     const accounted = new Set([
       ...COVERED_SHAPES.flatMap((entry) => entry.columns),
       ...Object.keys(PASSTHROUGH_COLUMNS),
-      ...Object.keys(TYPED_IN_KOTLIN_NOT_YET_SHAPED),
     ]);
     expect(everyColumn.filter((column) => !accounted.has(column))).toEqual([]);
     expect([...accounted].filter((column) => !everyColumn.includes(column)).sort()).toEqual([]);
@@ -377,7 +454,6 @@ describe('every covered shape', () => {
     const claimed = [
       ...COVERED_SHAPES.flatMap((entry) => entry.columns),
       ...Object.keys(PASSTHROUGH_COLUMNS),
-      ...Object.keys(TYPED_IN_KOTLIN_NOT_YET_SHAPED),
     ];
     expect(claimed.length).toBe(new Set(claimed).size);
   });
@@ -420,6 +496,10 @@ describe('through a database', () => {
       name: 'Codec Campground',
       amenities: encodeCatalogJson(amenitiesShape, amenities) as CampgroundAmenity[],
       metadata: encodeCatalogJson(metadataShape, metadata) as CampgroundMetadata,
+      links: encodeCatalogJson(linksShape, links),
+      contact: encodeCatalogJson(contactShape, contact),
+      management: encodeCatalogJson(managementShape, management),
+      geometryProvenance: encodeCatalogJson(geometryProvenanceShape, geometryProvenance),
     });
     const rows = await db
       .select()
@@ -428,6 +508,12 @@ describe('through a database', () => {
     expect(rows).toHaveLength(1);
     expect(decodeCatalogJson(amenitiesShape, rows[0]!.amenities)).toEqual(amenities);
     expect(decodeCatalogJson(metadataShape, rows[0]!.metadata)).toEqual(metadata);
+    expect(decodeCatalogJson(linksShape, rows[0]!.links)).toEqual(links);
+    expect(decodeCatalogJson(contactShape, rows[0]!.contact)).toEqual(contact);
+    expect(decodeCatalogJson(managementShape, rows[0]!.management)).toEqual(management);
+    expect(decodeCatalogJson(geometryProvenanceShape, rows[0]!.geometryProvenance)).toEqual(
+      geometryProvenance,
+    );
   });
 
   test('what the encoder stores omits the defaults', async () => {
@@ -462,5 +548,8 @@ describe('through a database', () => {
     expect(decodeCatalogJson(alertsShape, row!.alerts)).toEqual([{ body: 'Road work' }]);
     expect(decodeCatalogJson(priceShape, row!.price)).toEqual({ minimum: 12 });
     expect(decodeCatalogJson(locationShape, row!.location)).toEqual({});
+    expect(decodeCatalogJson(managementShape, row!.management)).toBeNull();
+    expect(decodeCatalogJson(geometryProvenanceShape, row!.geometryProvenance)).toBeNull();
+    expect(decodeCatalogJson(linksShape, row!.links)).toEqual([]);
   });
 });

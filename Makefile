@@ -118,6 +118,10 @@ test: _ensure-hooks
 	# to follow the build above. `node scripts/schema-equivalence.mjs` is the
 	# same comparison on its own, for reading a diff by hand.
 	node --test scripts/schema-equivalence.test.mjs
+	# The packages' own suites. They resolve each other through dist, so they
+	# follow the build above; the db suite boots PostGIS containers.
+	npm run test --workspace @roadtrip/domain
+	npm run test --workspace @roadtrip/db
 	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
 	node --test scripts/check-package-boundaries.test.mjs && node scripts/check-package-boundaries.mjs
 	node scripts/check-color-tokens.mjs

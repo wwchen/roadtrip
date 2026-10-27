@@ -27,6 +27,7 @@ jobs:
       scripts: ${{ steps.filter.outputs.scripts }}
       gradle_lint: ${{ steps.filter.outputs.gradle_lint }}
       schema_equivalence: ${{ steps.filter.outputs.schema_equivalence }}
+      package_tests: ${{ steps.filter.outputs.package_tests }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -109,6 +110,13 @@ jobs:
               - 'backend/src/main/resources/db/migration/**'
               - 'scripts/schema-equivalence.mjs'
               - 'scripts/schema-equivalence.test.mjs'
+              - 'scripts/schema-reference.mjs'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
+              - '.github/workflows/ci.yml'
+            package_tests:
+              - 'packages/**'
               - 'scripts/schema-reference.mjs'
               - 'package.json'
               - 'package-lock.json'
@@ -321,6 +329,34 @@ jobs:
       # this job.
       - name: Check the Drizzle migrations still reproduce the Flyway schema
         run: node --test scripts/schema-equivalence.test.mjs
+
+  # Mirrored locally by `make test`. One job for both suites: the domain suite
+  # runs in well under a second, so a job of its own would spend more on
+  # checkout, npm ci and build than it ever saved. The db suite boots PostGIS
+  # containers, which is why this sits apart from frontend-tests.
+  package-tests:
+    needs: changes
+    if: needs.changes.outputs.package_tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
+
+      - name: Run @roadtrip/domain tests
+        run: npm run test --workspace @roadtrip/domain
+
+      - name: Run @roadtrip/db tests
+        run: npm run test --workspace @roadtrip/db
 
   companion-tests:
     needs: changes
@@ -655,6 +691,7 @@ jobs:
       - gradle-lint
       - frontend-tests
       - schema-equivalence
+      - package-tests
       - companion-tests
       - companion-image
       - data-image
