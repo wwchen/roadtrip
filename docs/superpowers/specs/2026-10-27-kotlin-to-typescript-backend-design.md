@@ -246,23 +246,65 @@ are deleted rather than replaced: with one language there is nothing to generate
 
 ### 8. Testing
 
-52,945 LOC of Kotlin tests do not port mechanically. The strategy is per category,
-and the total will be substantially smaller because a large share tests code this
-design deletes.
+**Do not port the test distribution. Derive it.** 52,945 LOC of Kotlin tests exist
+partly because there was no cheap way to observe real behaviour: a repo test against
+Testcontainers was the affordable substitute for looking at the running system. That
+constraint goes away, so reproducing the existing shape would be porting a workaround.
 
-- **Guard tests first.** Small, high-leverage, and what keeps the architecture honest
-  across a long port. Written before the code they guard (§7).
-- **ETL: differential, not unit.** The §4 harness against 19,136 envelopes.
-- **Repo tests:** `@testcontainers/postgresql` with real Postgres, Drizzle
-  migrations, and fixtures. Same shape as today.
-- **Route tests:** contract-driven against the frozen `api-types.ts` and OpenAPI
-  document from the Kotlin build, which serve as the target specification.
-- **Provider contract tests:** port directly.
-- **Smoke tests:** `backend/src/smokeTest` is 1,066 LOC of Playwright. Playwright is
-  JS-native, so these port most easily of anything here, and they are the end-to-end
-  safety net during the port. Do these early, not last.
-- **Not ported:** tests of jOOQ mapping, DI wiring, the auth internals of §5, and the
-  dialect layer. These have no counterpart.
+#### 8.1 The verification environment is a deliverable
+
+A per-PR preview deploy, a branched database, and a deterministic seed together make
+a real environment cheap enough to verify against directly — by a person or by an
+agent driving Playwright against the preview URL. This is built **early**, because it
+changes what every later step needs to write.
+
+Three pieces:
+
+- **Seed as a restorable dump, not an import run.** Re-running the importer over
+  19,136 envelopes is minutes; restoring a post-import `pg_dump` is seconds. The dump
+  is a versioned artifact produced by §4's importer. Tests that assert on seeded rows
+  pin the seed version, or they break the next time it is regenerated.
+- **Branched database per PR.** Supported by both Supabase and Neon; on bare Docker
+  it is a template-database copy. Needs lifecycle management — create on PR open, drop
+  on close — or branches accumulate.
+- **Vendor responses come from `data/raw`.** E2E must never call a real vendor: C1
+  forbids the IP, C3 forbids the quota, and vendor flakiness would make CI
+  non-deterministic. The 1.7G of captures are already the right fixtures and
+  `RawCaptureStore` is already the seam. Point it at a pinned subset for tests.
+
+#### 8.2 Scoping
+
+With that environment in place, each level is written for what only it can catch:
+
+- **Unit tests on genuine logic, and only there.** The status-run compression in
+  `recordObservations`, `PoiAvailabilityFusion`, cadence and backoff math,
+  `BookingHorizonResolver`, ETL field transforms. These are algorithms with edge
+  cases; a preview deploy cannot tell you the off-by-one.
+- **Contract tests on the API surface.** Against the frozen `api-types.ts` and
+  OpenAPI document from the Kotlin build, which are the target specification.
+- **E2E on flows, against the preview.** `backend/src/smokeTest` is 1,066 LOC of
+  Playwright already — JS-native, so the easiest thing in this project to port, and
+  the end-to-end safety net for every later step. Port it **first**, not last.
+- **Differential, for the importer.** §4's harness. Stronger than any unit test of a
+  transform, and it replaces most of them.
+- **Guard tests, before the code they guard.** §7.
+- **Not ported at all:** jOOQ mapping tests, DI wiring tests, the §5 auth internals,
+  the dialect layer. These have no counterpart in the new system.
+
+#### 8.3 The gap this does not close
+
+A preview deploy covers the Next.js half. **The worker is not in it** — pollers,
+vendor egress, notifications, and the scheduler's claim-lease behaviour are not
+exercised by a preview URL. Two options, and the choice belongs to the step that
+ports the worker:
+
+- Run a local worker against the PR's branched database, which makes the loop
+  manual but exercises the real code.
+- Treat the worker's boundary as the API and test it against a seeded branch
+  directly, with its vendor calls served from `data/raw`.
+
+Either way, the worker needs its own verification story and does not inherit the
+preview one.
 
 ### 9. Early probes
 
@@ -284,7 +326,7 @@ shape of the §5 adapter and should be known before that step.
 ### 10. Sequencing
 
 This spec describes a program, not a single change. Each step below is its own
-implementation plan; steps 2, 4, 5, 6 and 7 are each large enough to warrant one.
+implementation plan; steps 2, 4, 7, 8, 9 and 11 are each large enough to warrant one.
 Do not expand this into one plan.
 
 1. P1 and P2, in parallel with step 2.
@@ -293,16 +335,23 @@ Do not expand this into one plan.
 3. Enforcement gates (§7), before the code they guard.
 4. Importer plus differential harness. *Gate:* row-level diff clean against the
    Kotlin importer.
-5. Read API and SSR pages for POI and campground. *Gate:* responses match the frozen
-   contract.
-6. Auth (§5) and the full `RouteAccess` declaration set from RFC 0010's inventory.
+5. Verification environment (§8.1): seed dump produced from step 4, branch-per-PR
+   with lifecycle, preview deploy, `RawCaptureStore` pointed at a pinned fixture
+   subset. *Gate:* opening a PR yields a preview URL on a seeded branch.
+6. Port the Playwright suite from `backend/src/smokeTest`. It is the acceptance gate
+   for steps 7–11 and is expected red until step 7 — porting it here buys the
+   acceptance criteria for everything after, not a green build now.
+7. Read API and SSR pages for POI and campground. *Gate:* responses match the frozen
+   contract; read-path smoke green on a seeded preview.
+8. Auth (§5) and the full `RouteAccess` declaration set from RFC 0010's inventory.
    *Gate:* coverage check fails on an undeclared route.
-7. Worker: scheduler, pollers, notifications. *Gate:* ported Playwright smoke.
-8. Companion-facing operations on the worker; Next.js proxies, and the worker
-   resolves the forwarded session token against the database itself rather than
-   trusting a header.
-9. Frontend to Next.js pages.
-10. Cutover; decommission the Kotlin build.
+9. Worker: scheduler, pollers, notifications. *Gate:* smoke, plus the worker's own
+   verification story per §8.3 — it does not inherit the preview one.
+10. Companion-facing routes on the worker; Next.js proxies, and the worker resolves
+    the forwarded session token against the database itself rather than trusting a
+    header.
+11. Frontend to Next.js pages. *Gate:* full smoke suite green.
+12. Cutover; decommission the Kotlin build.
 
 ## Risks
 
@@ -316,6 +365,12 @@ less friction, and this is a real cost against them.
 a `previous_id` linked list under a unique index. It is a read-modify-write against
 current state. Porting it needs the reasoning, not the shape — the same hazard §5
 describes for auth. Cells per poll (campsites × target dates) is unmeasured.
+
+**The preview environment can make the worker a blind spot.** Everything verifiable
+through a preview URL will get verified, and the worker — pollers, vendor egress,
+notifications, lease recovery — will not. That asymmetry pulls attention toward the
+half that is easy to see, which is also the half with less behavioural subtlety.
+§8.3 is the mitigation and it needs a real owner at step 9, not a note.
 
 **SSR delivers less than it sounds like.** The primary view is maplibre-gl, which is
 client-only. Server rendering buys campground and POI detail pages — real SEO value,
