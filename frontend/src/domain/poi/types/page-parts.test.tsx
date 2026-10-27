@@ -97,7 +97,6 @@ describe('the parts a type hands its render prop', () => {
     ['charger', CHARGER],
     ['trailhead', TRAILHEAD],
     ['state', STATE_PAGE],
-    ['dropped pin', DROPPED_PIN],
     ['park group', PARK_GROUP],
   ])('%s hands over the very line its own page prints as the eyebrow', (_label, properties) => {
     const Page = poiPageFor(properties);
@@ -125,11 +124,29 @@ describe('the parts a type hands its render prop', () => {
     expect(partsOf(properties).subtitle).not.toMatch(DISTANCE_UNITS);
   });
 
-  test.each([
-    ['a dropped pin', DROPPED_PIN, 'Dropped pin', 'Dropped pin'],
-    ['a state', STATE_PAGE, 'California', 'State'],
-  ])('%s states its kind', (_label, properties, name, subtitle) => {
-    expect(partsOf(properties)).toMatchObject({ name, subtitle });
+  test('a state states its kind, as its eyebrow does', () => {
+    expect(partsOf(STATE_PAGE)).toMatchObject({ name: 'California', subtitle: 'State' });
+  });
+
+  test('a dropped pin is identified by its point, because its eyebrow would only repeat its name', () => {
+    const parts = partsOf(DROPPED_PIN);
+
+    expect(parts).toMatchObject({ name: 'Dropped pin', subtitle: '37.86510, -119.53830' });
+    expect(parts.subtitle).not.toBe(parts.name);
+  });
+
+  test('only the pin gives up its eyebrow: every other type still shows it', () => {
+    const subtitles = [CAMPGROUND, CHARGER, TRAILHEAD, STATE_PAGE, PARK_GROUP].map(
+      (properties) => partsOf(properties).subtitle,
+    );
+
+    expect(subtitles).toEqual([
+      'Campground · National Park Service',
+      'Charger · Tesla',
+      'Trailhead',
+      'State',
+      'National park',
+    ]);
   });
 
   test('every type still hands over the blocks it built', () => {

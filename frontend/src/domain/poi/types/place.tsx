@@ -15,6 +15,7 @@ import {
   DirectionsButton,
   SharePoiButton,
   UpstreamTable,
+  coordinatesLabel,
   coordinatesOf,
   subline,
   text,
@@ -61,6 +62,7 @@ export interface PlaceTypeSpec {
   websiteLabel?: string;
   /** Whether to offer `tel:` buttons for the record's phone numbers. */
   call?: boolean;
+  locatedByPoint?: boolean;
 }
 
 export interface PlacePoiPageProps extends PoiTypeProps {
@@ -153,7 +155,9 @@ export function PlacePoiPage({ feature, variant, onClose, render, spec }: PlaceP
       : null),
   };
 
-  return renderPoiPage({ name, subtitle: spec.eyebrow, blocks }, { render, variant });
+  const subtitle = spec.locatedByPoint ? coordinatesLabel(lng, lat) : spec.eyebrow;
+
+  return renderPoiPage({ name, subtitle, blocks }, { render, variant });
 }
 
 const noop = () => {};
