@@ -61,5 +61,13 @@ export const Pending: Story = { args: { answer: null } };
 export const WithReasonsAndFacts: Story = {
   args: { reasons: ['Near water', 'Shade'], priceFrom: 'From $28', fits: 'Fits 8 people' },
 };
+export const Compact: Story = {
+  args: {
+    compact: true,
+    reasons: ['Near water', 'Shade'],
+    priceFrom: 'From $28',
+    fits: 'Fits 8 people',
+  },
+};
 export const NoDriveTime: Story = { args: { origin: null } };
 export const Desktop: Story = { parameters: { desktop: true } };

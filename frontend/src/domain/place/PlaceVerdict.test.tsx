@@ -133,4 +133,32 @@ describe('driveTimeLabel', () => {
   ])('%j reads %s', (origin, expected) => {
     expect(driveTimeLabel(origin)).toBe(expected);
   });
+
+  test('compact keeps the name and the status line and drops every deciding fact', () => {
+    render(
+      <PlaceVerdict
+        compact
+        nameAs="h2"
+        name="Upper Pines"
+        origin={{ label: 'here', minutes: 250 }}
+        priceFrom="From $28"
+        fits="Fits 8 people"
+        reasons={['Near water']}
+        reopensOn="2027-05-14"
+        answer={summary({ status: 'closed_for_season', open_sites: 0, from_cache: true, observed_at: '2026-10-27T15:47:00Z' })}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Upper Pines' })).toBeInTheDocument();
+    expect(screen.getByText('Closed for the season')).toBeInTheDocument();
+    for (const fact of [/from here/, /From \$28/, /Fits 8 people/, 'Near water', /^Reopens/, /^Checked/]) {
+      expect(screen.queryByText(fact)).not.toBeInTheDocument();
+    }
+  });
+
+  test('compact still says why an answer is missing', () => {
+    render(<PlaceVerdict compact name="Upper Pines" origin={null} answer={null} />);
+
+    expect(screen.getByText(stayCopy.pending)).toBeInTheDocument();
+  });
 });

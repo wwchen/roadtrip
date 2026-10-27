@@ -90,6 +90,16 @@ export function PlaceSheet({
     </div>
   );
 
+  const headed = (compact: boolean) =>
+    verdict ? (
+      <>
+        {secondary}
+        <PlaceVerdict {...verdict} nameAs={NAME_HEADING} compact={compact} />
+      </>
+    ) : (
+      named
+    );
+
   return (
     <Sheet
       className="rt-place-sheet"
@@ -99,19 +109,7 @@ export function PlaceSheet({
       label={name}
       {...(onClose ? { onClose } : null)}
     >
-      <SheetHeader
-        full={
-          verdict ? (
-            <>
-              {secondary}
-              <PlaceVerdict {...verdict} nameAs={NAME_HEADING} />
-            </>
-          ) : (
-            named
-          )
-        }
-        compact={named}
-      />
+      <SheetHeader full={headed(false)} compact={headed(true)} />
       {notice ? <SheetSection from={PEEK_DETENT}>{notice}</SheetSection> : null}
       {hasStay ? (
         <SheetSection from={HALF_DETENT}>

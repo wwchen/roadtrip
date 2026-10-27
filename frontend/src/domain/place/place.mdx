@@ -91,7 +91,7 @@ convention into a type error.
     <tr>
       <td>Half</td>
       <td>Which nights, exactly, and what if the one I want is shut?</td>
-      <td>the nights strip, the sites open on the chosen night, Reserve, and one row offering to alert on a shut night in view</td>
+      <td>the stay answer's status line, the nights strip, the sites open on the chosen night, Reserve, and one row offering to alert on a shut night in view</td>
     </tr>
     <tr>
       <td>Full</td>
@@ -101,8 +101,10 @@ convention into a type error.
   </tbody>
 </table>
 
-The header compacts as the sheet rises. It does not repeat what the body already
-said.
+The header compacts as the sheet rises, to the name and the stay answer's status
+line. The name is said once at every height. The verdict is the answer, so it rides
+at every height too; what compacts away is the facts that decide it (the drive time,
+the price, the fits line, the reasons and the freshness line), which stay at Peek.
 
 Half does not carry a price. The wire holds one `price` per POI, a range on the POI
 detail, and nothing per night or per site. A place-level *from* price belongs to
@@ -112,7 +114,7 @@ Peek, said once.
 
 `ARRIVAL_DETENT` maps `from-map` to Half and `cold` to Peek. Peek's content is the
 card the user has just tapped on the map, so opening there would show them the same
-verdict twice. Peek is for cold arrivals only: a notification, a deep link, or a
+deciding facts twice. Peek is for cold arrivals only: a notification, a deep link, or a
 place reached by name rather than off the map.
 
 Every type honours that, not only the campgrounds with a stay to check: a charger, a

@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { POI_BLOCK_ORDER, type PoiBlockId } from '@/domain/poi/blocks';
 import type { PoiBlockSlots } from '@/domain/poi/PoiPageShell';
 import { dayFull, dayOpen, summary } from '@/domain/place/stay-fixtures';
+import { stayCopy } from '@/lib/strings';
 import { PlaceSheet, type PlaceSheetProps } from './PlaceSheet';
 
 const NAME = 'Upper Pines';
@@ -151,9 +152,26 @@ describe('PlaceSheet', () => {
     expect(screen.queryByTestId(blockTestId(IDENTITY))).not.toBeInTheDocument();
   });
 
-  test('names the place once, whatever the caller puts in the identity block', () => {
+  test('names the place once at every height, whatever the caller puts in the identity block', () => {
     const named: PoiBlockSlots = { identity: <div data-testid={blockTestId(IDENTITY)}>{NAME}</div> };
-    render(<PlaceSheet {...props} arrival="from-map" blocks={named} />);
+    render(<PlaceSheet {...props} arrival="cold" blocks={named} />);
+    expect(screen.getByTestId(SHEET)).toHaveAttribute('data-detent', 'peek');
+    expect(screen.getAllByText(NAME)).toHaveLength(1);
+
+    raise(1);
+    expect(screen.getByTestId(SHEET)).toHaveAttribute('data-detent', 'half');
+    expect(screen.getAllByText(NAME)).toHaveLength(1);
+
+    raise(1);
+    expect(screen.getByTestId(SHEET)).toHaveAttribute('data-detent', 'full');
+    expect(screen.getAllByText(NAME)).toHaveLength(1);
+  });
+
+  test('names the place once at every height when there is no verdict to carry', () => {
+    render(<PlaceSheet {...props} arrival="cold" verdict={undefined} />);
+    expect(screen.getAllByText(NAME)).toHaveLength(1);
+
+    raise(1);
     expect(screen.getAllByText(NAME)).toHaveLength(1);
 
     raise(1);
@@ -182,7 +200,7 @@ describe('PlaceSheet', () => {
     expect(screen.getByTestId(blockTestId('goodToKnow'))).toBeInTheDocument();
   });
 
-  test('raising to half replaces the verdict with the nights rather than repeating it', () => {
+  test('the stay answer is on screen at peek, half and full', () => {
     render(
       <PlaceSheet
         {...props}
@@ -191,9 +209,52 @@ describe('PlaceSheet', () => {
         nights={{ ...props.nights, days: [dayOpen(WEEK[0], OPEN_SITES), dayOpen(WEEK[1], OPEN_SITES)] }}
       />,
     );
+    expect(screen.getAllByText(stayCopy.result.full())).toHaveLength(1);
+
     raise(1);
     expect(screen.getByRole('group', { name: /nights/i })).toBeInTheDocument();
-    expect(screen.queryByText('Full')).not.toBeInTheDocument();
+    expect(screen.getAllByText(stayCopy.result.full())).toHaveLength(1);
+
+    raise(1);
+    expect(screen.getAllByText(stayCopy.result.full())).toHaveLength(1);
+  });
+
+  test('a stay that could not be answered states why at every height', () => {
+    const refused = { poi_id: 1, outcome: 'refused', reason: 'beyond_booking_horizon' } as const;
+    const line = stayCopy.errorFor(refused.outcome, refused.reason);
+    render(<PlaceSheet {...props} arrival="cold" verdict={{ ...verdict, answer: refused }} />);
+    expect(screen.getAllByText(line)).toHaveLength(1);
+
+    raise(1);
+    expect(screen.getAllByText(line)).toHaveLength(1);
+
+    raise(1);
+    expect(screen.getAllByText(line)).toHaveLength(1);
+  });
+
+  test('the deciding facts stay at peek, one fact at one height', () => {
+    render(
+      <PlaceSheet
+        {...props}
+        arrival="cold"
+        verdict={{
+          ...verdict,
+          origin: { label: 'here', minutes: 250 },
+          priceFrom: 'From $28',
+          fits: 'Fits 8 people',
+          reasons: ['Near water'],
+          answer: summary({ from_cache: true, observed_at: '2026-10-27T15:47:00Z' }),
+        }}
+      />,
+    );
+    const facts = [/4h 10m from here/, /From \$28/, /Fits 8 people/, 'Near water', /^Checked/];
+    for (const fact of facts) expect(screen.getByText(fact)).toBeInTheDocument();
+
+    raise(1);
+    for (const fact of facts) expect(screen.queryByText(fact)).not.toBeInTheDocument();
+
+    raise(1);
+    for (const fact of facts) expect(screen.queryByText(fact)).not.toBeInTheDocument();
   });
 
   test('the sites it names are the selected night\'s own, looked up in the days it was given', () => {

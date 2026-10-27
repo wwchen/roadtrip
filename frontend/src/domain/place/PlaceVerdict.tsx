@@ -21,6 +21,7 @@ const STATUS_TONE = {
 export interface PlaceVerdictProps {
   name: string;
   nameAs?: 'h2' | 'h3';
+  compact?: boolean;
   answer: StayAnswer | null;
   origin: DriveOrigin | null;
   reasons?: readonly string[];
@@ -58,6 +59,7 @@ function verdictOf(answer: StayAnswer): Verdict {
 export function PlaceVerdict({
   name,
   nameAs,
+  compact = false,
   answer,
   origin,
   reasons = [],
@@ -67,7 +69,7 @@ export function PlaceVerdict({
 }: PlaceVerdictProps) {
   const verdict = answer === null ? null : verdictOf(answer);
   const observedAt = verdict?.observedAt;
-  const now = useNow(CHECKED_AGO_TICK_MS, observedAt !== undefined);
+  const now = useNow(CHECKED_AGO_TICK_MS, !compact && observedAt !== undefined);
   const facts = [priceFrom, fits].filter((fact): fact is string => fact !== undefined);
   const title = nameAs ? createElement(nameAs, { className: 'rt-place-verdict__name' }, name) : name;
 
@@ -75,20 +77,20 @@ export function PlaceVerdict({
     <div className="rt-place-verdict">
       <Row
         title={title}
-        subtitle={origin ? driveTimeLabel(origin) : undefined}
+        subtitle={!compact && origin ? driveTimeLabel(origin) : undefined}
         trail={
           <span className="rt-place-verdict__answer" role="status">
             <Tag status={verdict?.tone}>{verdict ? verdict.line : stayCopy.pending}</Tag>
           </span>
         }
       />
-      {verdict?.closedForSeason && reopensOn ? (
+      {!compact && verdict?.closedForSeason && reopensOn ? (
         <p className="rt-place-verdict__detail">{stayCopy.reopens(formatWatchDate(reopensOn) ?? reopensOn)}</p>
       ) : null}
-      {facts.length > 0 ? (
+      {!compact && facts.length > 0 ? (
         <p className="rt-place-verdict__detail">{facts.join(placeCopy.factsSeparator)}</p>
       ) : null}
-      {reasons.length > 0 ? (
+      {!compact && reasons.length > 0 ? (
         <ul className="rt-place-verdict__reasons">
           {reasons.map((reason) => (
             <li key={reason}>
@@ -97,7 +99,7 @@ export function PlaceVerdict({
           ))}
         </ul>
       ) : null}
-      {observedAt ? (
+      {!compact && observedAt ? (
         <p className="rt-place-verdict__detail">{stayCopy.checkedAgo(relativeTime(observedAt, now))}</p>
       ) : null}
     </div>
