@@ -228,6 +228,7 @@ export const stayCopy = {
     if (outcome !== 'refused') return stayCopy.error;
     return (reason === null ? undefined : entryOf(STAY_REFUSAL_COPY, reason)) ?? stayCopy.refusedLine;
   },
+  reopens: (date: string) => `Reopens ${date}`,
   /** A card's answer, by status; `open` is the count of sites open every night. */
   result: {
     open: (open: number) => `${open} sites open`,
@@ -236,6 +237,11 @@ export const stayCopy = {
     closed_for_season: () => 'Closed for the season',
     no_data: () => 'No data for these dates',
   } satisfies Record<StayAvailabilityStatus, (open: number) => string>,
+} as const;
+
+export const placeCopy = {
+  driveFrom: (duration: string, origin: string) => `${duration} from ${origin}`,
+  factsSeparator: ' · ',
 } as const;
 
 /** The campground filter block under the search row, and the cards' facet row. */

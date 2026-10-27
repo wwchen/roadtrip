@@ -1,0 +1,21 @@
+.rt-place-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--rt-text);
+  font-family: var(--rt-sans);
+}
+
+.rt-place-verdict__detail {
+  margin: 0;
+  color: var(--rt-muted);
+}
+
+.rt-place-verdict__reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
