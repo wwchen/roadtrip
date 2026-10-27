@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AvailabilityDay } from '@/api/availability-api';
+import type { AvailabilityStatus } from '@/lib/availability-status';
 import { NightsStrip } from './NightsStrip';
 import { dayFull, dayOpen } from './stay-fixtures';
 
@@ -102,5 +103,27 @@ describe('NightsStrip', () => {
       expect.stringContaining('Oct 25'),
       expect.stringContaining('Oct 26'),
     ]);
+  });
+
+  test.each([
+    ['closed', 'closed', false, /closed/i],
+    ['first_come', 'first_come', false, /first come/i],
+    ['past', 'past', true, /past/i],
+  ] as const)('a %s night is drawn as %s, not as missing data', (status, state, disabled, name) => {
+    const cells = { '1': { status: status as AvailabilityStatus, watchable: false } };
+    render(
+      <NightsStrip
+        dates={['2026-10-25']}
+        days={[{ date: '2026-10-25', status, watchable: false, cells }]}
+        selected={null}
+        onSelect={noop}
+      />,
+    );
+
+    const night = screen.getByRole('button', { name: /25/ });
+    expect(night).toHaveAttribute('data-state', state);
+    expect(night).toHaveAccessibleName(name);
+    expect(night).not.toHaveAccessibleName(/no data/i);
+    expect(night.hasAttribute('disabled')).toBe(disabled);
   });
 });

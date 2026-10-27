@@ -44,9 +44,10 @@ const meta = {
     docs: {
       description: {
         component:
-          'Which nights, one button each, read from the per-day grid and never from a day ' +
-          'rollup: a night is open when one of its own cells is available, full when every ' +
-          'cell is taken, and unknown when the server sent no cells for it, or no day at all. ' +
+          'Which nights, one button each. A night\'s state is its own day\'s rollup, read off ' +
+          'the wire; its count and site ids come from that day\'s cells. A night with no day, ' +
+          'or a day with no cells, is unknown whatever a rollup says, since there is nothing to ' +
+          'count or name. ' +
           'An unknown night is drawn and disabled, so it cannot borrow its neighbour\'s answer. ' +
           'Picking a night names the sites open on that night alone, which is a per-night ' +
           'fact; a site list for the whole stay would be a stay claim, and only the stay ' +

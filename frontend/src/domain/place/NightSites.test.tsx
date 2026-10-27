@@ -59,4 +59,35 @@ describe('NightSites', () => {
     expect(screen.getByText(nightsCopy.noDetail)).toBeInTheDocument();
     expect(screen.queryByText(nightsCopy.noneOpen)).not.toBeInTheDocument();
   });
+
+  test('names a site by the name it was given, and marks a bare id with #', () => {
+    const names = new Map([[1, 'A12']]);
+    render(<NightSites day={dayOpen('2026-10-25', 2)} names={names} />);
+
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual(['A12', 'Site #2']);
+  });
+
+  test('picking a named site still reports its campsite id', async () => {
+    const onPick = vi.fn();
+    render(<NightSites day={dayOpen('2026-10-25', 2)} names={new Map([[2, 'B7']])} onPick={onPick} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'B7' }));
+    expect(onPick).toHaveBeenCalledWith(2);
+  });
+
+  test.each([
+    ['closed', nightsCopy.closedNight],
+    ['first_come', nightsCopy.firstCome],
+  ] as const)('a %s night says so instead of listing sites', (status, line) => {
+    const day: AvailabilityDay = {
+      date: '2026-10-25',
+      status,
+      watchable: false,
+      cells: { '1': { status, watchable: false } },
+    };
+    render(<NightSites day={day} />);
+
+    expect(screen.getByText(line)).toBeInTheDocument();
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+  });
 });

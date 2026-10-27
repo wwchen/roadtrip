@@ -1,30 +1,40 @@
-import type { AvailabilityDay, AvailabilityCell } from '@/api/availability-api';
+import type { AvailabilityDay } from '@/api/availability-api';
+import { normalizeAvailabilityStatus, type AvailabilityStatus } from '@/lib/availability-status';
 
-export type NightState = 'open' | 'full' | 'unknown';
+export type NightState = 'open' | 'full' | 'first_come' | 'closed' | 'past' | 'unknown';
 
 export interface Night {
   state: NightState;
   openIds: readonly number[];
 }
 
-const AVAILABLE = 'available';
-const RESERVED = 'reserved';
-const CLOSED = 'closed';
+const AVAILABLE: AvailabilityStatus = 'available';
+
+const NIGHT_STATE = {
+  available: 'open',
+  reserved: 'full',
+  first_come: 'first_come',
+  closed: 'closed',
+  past: 'past',
+  unknown: 'unknown',
+} satisfies Record<AvailabilityStatus, NightState>;
 
 const UNKNOWN_NIGHT: Night = { state: 'unknown', openIds: [] };
 
-export function nightOf(day: AvailabilityDay | undefined): Night {
-  const entries: [string, AvailabilityCell][] = day ? Object.entries(day.cells) : [];
-  if (entries.length === 0) return UNKNOWN_NIGHT;
-
-  const openIds = entries
+function openIdsOf(day: AvailabilityDay): number[] {
+  return Object.entries(day.cells)
     .filter(([, cell]) => cell.status === AVAILABLE)
     .map(([id]) => Number(id))
     .filter(Number.isInteger)
     .sort((a, b) => a - b);
-  if (openIds.length > 0) return { state: 'open', openIds };
+}
 
-  const everyCellTaken = entries.every(([, cell]) => cell.status === RESERVED || cell.status === CLOSED);
-  const someReserved = entries.some(([, cell]) => cell.status === RESERVED);
-  return everyCellTaken && someReserved ? { state: 'full', openIds } : UNKNOWN_NIGHT;
+export function nightOf(day: AvailabilityDay | undefined): Night {
+  if (day === undefined || Object.keys(day.cells).length === 0) return UNKNOWN_NIGHT;
+
+  const state = NIGHT_STATE[normalizeAvailabilityStatus(day.status)];
+  if (state !== 'open') return { state, openIds: [] };
+
+  const openIds = openIdsOf(day);
+  return openIds.length > 0 ? { state, openIds } : UNKNOWN_NIGHT;
 }

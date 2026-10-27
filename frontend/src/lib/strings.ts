@@ -252,8 +252,10 @@ export const nightsCopy = {
   openCount: (open: number) => String(open),
   fullCount: 'Full',
   unknownCount: '—',
-  site: (campsiteId: number) => `Site ${campsiteId}`,
+  site: (campsiteId: number) => `Site #${campsiteId}`,
   noneOpen: 'Nothing open this night.',
+  firstCome: 'First come, first served: nothing to reserve.',
+  closedNight: 'Closed this night.',
   noDetail: 'No site detail for this night.',
 } as const;
 
