@@ -17,7 +17,7 @@ import { WatchEditor } from '@/domain/watch/WatchEditor';
 import { WatchSignInGate } from '@/domain/watch/WatchSignInGate';
 import { watchCopy } from '@/lib/strings';
 import { useDismiss } from '@/lib/use-dismiss';
-import { longDayLabel } from './week-labels';
+import { longDayLabel } from '@/lib/week-labels';
 import { normalizeWatchCapabilities, type WatchCapabilities } from '@/lib/watch-windows';
 
 /** Matches `--rt-watch-editor-width` in domain/watch/watch-editor.css. */

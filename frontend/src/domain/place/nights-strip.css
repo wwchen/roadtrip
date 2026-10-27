@@ -1,0 +1,54 @@
+.rt-nights {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  font-family: var(--rt-sans);
+}
+
+.rt-nights__night {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 56px;
+  line-height: 1.2;
+}
+
+.rt-nights__dow {
+  color: var(--rt-muted);
+  font-size: 11px;
+}
+
+.rt-nights__day {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rt-nights__count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rt-nights__night[data-state='unknown'] .rt-nights__count {
+  color: var(--rt-faint);
+}
+
+.rt-night-sites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rt-night-sites__none {
+  margin: 0;
+  color: var(--rt-muted);
+  font-family: var(--rt-sans);
+}
+
+.rt-nights__night[aria-pressed='true'] .rt-nights__dow {
+  color: inherit;
+}

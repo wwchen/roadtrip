@@ -7,7 +7,7 @@
 // ignore it, and the grid layout shifts to a three-column grid without it (see the
 // `.has-today` / `.no-today` rules in availability.css).
 import type { ReactNode } from 'react';
-import { formatWeekLabel } from './week-labels';
+import { formatWeekLabel } from '@/lib/week-labels';
 
 export interface WeekNavProps {
   /** First visible day, `YYYY-MM-DD`. */

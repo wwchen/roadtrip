@@ -244,6 +244,19 @@ export const placeCopy = {
   factsSeparator: ' · ',
 } as const;
 
+export const nightsCopy = {
+  group: 'Nights',
+  open: (open: number) => (open === 1 ? '1 site open' : `${open} sites open`),
+  full: 'Full',
+  unknown: 'No data',
+  openCount: (open: number) => String(open),
+  fullCount: 'Full',
+  unknownCount: '—',
+  site: (campsiteId: number) => `Site ${campsiteId}`,
+  noneOpen: 'Nothing open this night.',
+  noDetail: 'No site detail for this night.',
+} as const;
+
 /** The campground filter block under the search row, and the cards' facet row. */
 export const filterCopy = {
   pill: 'Filter campgrounds',

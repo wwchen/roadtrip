@@ -77,7 +77,7 @@ describe('PlaceVerdict', () => {
       />,
     );
 
-    expect(screen.getByText(/reopens/i)).toBeInTheDocument();
+    expect(screen.getByText('Reopens May 14')).toBeInTheDocument();
   });
 
   test('a pending check shows the name and that it is checking', () => {

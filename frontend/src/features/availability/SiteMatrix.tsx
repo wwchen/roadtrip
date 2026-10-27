@@ -41,7 +41,7 @@ import {
   type MatrixSort,
 } from './matrix-rows';
 import { hasReservationUrlTemplate, type ReservationUrlTemplates } from './booking-links';
-import { dayOfMonthLabel, dowLabel } from './week-labels';
+import { dayOfMonthLabel, dowLabel } from '@/lib/week-labels';
 import { clampSiteColumnWidth, saveSiteColumnWidth } from './site-column';
 import { CellBookPopover } from './CellBookPopover';
 import { cartActionFor, isCartActionPending, type CartAction } from './cart-action';

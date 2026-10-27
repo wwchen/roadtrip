@@ -14,7 +14,7 @@ import { useState, type ReactNode } from 'react';
 import { Button, EmptyState, Icon } from '@ui';
 import { entryOf } from '@/lib/entry-of';
 import { filterCopy, inViewCopy, listCopy, routeListCopy, stayCopy } from '@/lib/strings';
-import { useNow } from '@/lib/use-now';
+import { CHECKED_AGO_TICK_MS, useNow } from '@/lib/use-now';
 import { relativeTime } from '@/lib/watch-format';
 import { useMapContext } from '@/map/context';
 import { useCampgroundFilterStore } from '@/stores/campgroundFilterStore';
@@ -35,9 +35,6 @@ const CARD_FLY_ZOOM = 13;
 const FLY_SPEED = 1.6;
 
 const RATING_PREFIX = '★';
-
-/** How often "Checked 4m ago" is re-read, so it ages on screen rather than when something else re-renders. */
-const CHECKED_AGO_TICK_MS = 30_000;
 
 /** A facet's icon, class, and state word, keyed by state rather than chained ternaries. */
 const FACET_APPEARANCE: Record<FacetState, { icon: string; className: string; stateWord: string }> = {

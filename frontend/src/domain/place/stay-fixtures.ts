@@ -29,3 +29,15 @@ export function dayOpen(date: string, open: number): AvailabilityDay {
     cells,
   };
 }
+
+const FIXTURE_FULL_CELLS = 3;
+
+export function dayFull(date: string): AvailabilityDay {
+  const cells = Object.fromEntries(
+    Array.from({ length: FIXTURE_FULL_CELLS }, (_, index) => [
+      String(index + 1),
+      { status: 'reserved' as const, watchable: false },
+    ]),
+  );
+  return { date, status: 'reserved', watchable: false, cells };
+}

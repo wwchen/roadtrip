@@ -1,13 +1,12 @@
 import { isAnswered, type StayAnswer, type StayAvailabilityStatus } from '@/api/availability-api';
 import { entryOf } from '@/lib/entry-of';
 import { placeCopy, stayCopy } from '@/lib/strings';
-import { useNow } from '@/lib/use-now';
+import { CHECKED_AGO_TICK_MS, useNow } from '@/lib/use-now';
 import { formatWatchDate, relativeTime } from '@/lib/watch-format';
 import { Row, Tag, type TagProps } from '@ui';
 import { driveTimeLabel, type DriveOrigin } from './drive-origin';
 import './place-verdict.css';
 
-const CHECKED_AGO_TICK_MS = 30_000;
 const CLOSED_FOR_SEASON: StayAvailabilityStatus = 'closed_for_season';
 
 const STATUS_TONE = {

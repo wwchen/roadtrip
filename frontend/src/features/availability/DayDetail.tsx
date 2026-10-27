@@ -17,7 +17,7 @@ import { Button, LinkButton } from '@ui';
 import { availabilityStatusMeta } from '@/lib/availability-status';
 import { dayCopy, gateCopy } from '@/lib/strings';
 import type { AvailabilityDay } from '@/api/availability-api';
-import { longDayLabel } from './week-labels';
+import { longDayLabel } from '@/lib/week-labels';
 
 /**
  * Why no watch can be set right now, when none can.
