@@ -43,10 +43,6 @@ const catalog = () => jsonResponse({ poi_id: POI_ID, type: 'campsites', campsite
 
 const watchList = () => jsonResponse({ total: 0, limit: 0, offset: 0, watches: [] });
 
-/**
- * Five reads land here at once, so they are routed by URL rather than by call
- * order: a queue would pin an ordering React is free to change.
- */
 function stubRoutes(stayEvents: readonly StubEvent[]) {
   vi.stubGlobal(
     'fetch',

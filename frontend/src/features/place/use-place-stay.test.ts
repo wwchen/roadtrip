@@ -63,8 +63,6 @@ describe('usePlaceStay', () => {
       start_date: STAY.start,
       end_date: STAY.end,
     });
-    // Party size is phase two: the grid read cannot honour it, so the stay read
-    // must not either, or the verdict and the strip describe different inventory.
   });
 
   test('never asks about party size, which the per-day read cannot honour', async () => {

@@ -62,7 +62,6 @@ export interface PlaceTypeSpec {
   websiteLabel?: string;
   /** Whether to offer `tel:` buttons for the record's phone numbers. */
   call?: boolean;
-  /** Whether a record with no street address is named by its coordinates instead. */
   locatedByPoint?: boolean;
 }
 

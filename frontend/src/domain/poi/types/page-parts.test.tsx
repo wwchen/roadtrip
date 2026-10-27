@@ -7,11 +7,7 @@ import { poiPageFor } from './registry';
 
 const POI_COORDINATES: [number, number] = [-119.5383, 37.8651];
 
-/**
- * Far enough from the pin that `useDistanceTo` resolves a real distance, so a
- * subtitle that let one through would print it.
- */
-const USER_LOCATION = { lng: -122.4194, lat: 37.7749 };
+const USER_LOCATION_FAR_FROM_THE_PIN = { lng: -122.4194, lat: 37.7749 };
 
 const DISTANCE_UNITS = /\d\s?(km|mi)\b/i;
 
@@ -77,7 +73,7 @@ const PARK_GROUP = {
 };
 
 beforeEach(() => {
-  useMapStore.setState({ userLocation: USER_LOCATION });
+  useMapStore.setState({ userLocation: USER_LOCATION_FAR_FROM_THE_PIN });
 });
 
 afterEach(() => {
