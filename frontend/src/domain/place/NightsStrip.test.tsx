@@ -3,10 +3,22 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AvailabilityDay } from '@/api/availability-api';
 import type { AvailabilityStatus } from '@/lib/availability-status';
+import { nightsCopy } from '@/lib/strings';
 import { NightsStrip } from './NightsStrip';
 import { dayFull, dayOpen } from './stay-fixtures';
 
 const noop = () => undefined;
+
+const countOf = (night: HTMLElement) => night.querySelector('.rt-nights__count')?.textContent;
+
+const oneNight = (status: AvailabilityStatus) => (
+  <NightsStrip
+    dates={['2026-10-25']}
+    days={[{ date: '2026-10-25', status, watchable: false, cells: { '1': { status, watchable: false } } }]}
+    selected={null}
+    onSelect={noop}
+  />
+);
 
 describe('NightsStrip', () => {
   test('draws a night the server omitted as unknown and unselectable', async () => {
@@ -125,5 +137,21 @@ describe('NightsStrip', () => {
     expect(night).toHaveAccessibleName(name);
     expect(night).not.toHaveAccessibleName(/no data/i);
     expect(night.hasAttribute('disabled')).toBe(disabled);
+  });
+
+  test.each([
+    ['first_come', nightsCopy.firstComeCount],
+    ['closed', nightsCopy.closedCount],
+    ['past', nightsCopy.pastCount],
+  ] as const)('a %s night says so in words rather than in a grid glyph', (status, word) => {
+    render(oneNight(status));
+
+    expect(countOf(screen.getByRole('button', { name: /25/ }))).toBe(word);
+  });
+
+  test('an unknown night says it has no data rather than drawing a dash', () => {
+    render(<NightsStrip dates={['2026-10-25']} days={[]} selected={null} onSelect={noop} />);
+
+    expect(countOf(screen.getByRole('button', { name: /25/ }))).toBe(nightsCopy.unknownCount);
   });
 });

@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { AvailabilityDay } from '@/api/availability-api';
+import type { AvailabilityStatus } from '@/lib/availability-status';
 import { NightSites } from './NightSites';
 import { NightsStrip } from './NightsStrip';
 import { dayFull, dayOpen } from './stay-fixtures';
@@ -12,7 +13,20 @@ const OPEN_SITES = [3, 5, 2, 4, 6, 1, 3];
 const SHUT_NIGHTS = new Set(['2026-10-27', '2026-10-28']);
 const GAP_NIGHTS = new Set(['2026-10-27', '2026-10-28']);
 
+const STATED_NIGHTS = ['first_come', 'closed', 'past'] as const;
+
+const dayStated = (date: string, status: AvailabilityStatus): AvailabilityDay => ({
+  date,
+  status,
+  watchable: false,
+  cells: { '1': { status, watchable: false } },
+});
+
 const openWeek = WEEK.map((date, index) => dayOpen(date, OPEN_SITES[index] ?? 1));
+const statedWeek = WEEK.map((date, index) => {
+  const stated = STATED_NIGHTS[index % STATED_NIGHTS.length];
+  return index % 2 === 0 ? dayOpen(date, OPEN_SITES[index] ?? 1) : dayStated(date, stated);
+});
 const twoShutWeek = WEEK.map((date, index) =>
   SHUT_NIGHTS.has(date) ? dayFull(date) : dayOpen(date, OPEN_SITES[index] ?? 1),
 );
@@ -64,4 +78,5 @@ export const FullWeekOpen: Story = {};
 export const TwoShutNights: Story = { args: { days: twoShutWeek } };
 export const GapInDays: Story = { args: { days: gapWeek } };
 export const WeekOfUnknowns: Story = { args: { days: [] } };
+export const StatedNights: Story = { args: { days: statedWeek } };
 export const Desktop: Story = { parameters: { desktop: true } };

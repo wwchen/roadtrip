@@ -29,7 +29,7 @@ export function NightSites({ day, names, onPick }: NightSitesProps) {
   return (
     <ul className="rt-night-sites">
       {night.openIds.map((id) => {
-        const label = names?.get(id) ?? nightsCopy.site(id);
+        const label = names?.get(id) || nightsCopy.site(id);
         return (
           <li key={id}>
             {onPick ? (

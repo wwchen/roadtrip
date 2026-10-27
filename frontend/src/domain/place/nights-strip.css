@@ -28,6 +28,7 @@
 .rt-nights__count {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .rt-nights__night[data-state='unknown'] .rt-nights__count {

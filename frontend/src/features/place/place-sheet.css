@@ -1,0 +1,17 @@
+.rt-place-sheet {
+  --rt-place-sheet-stay-gap: 12px;
+}
+
+.rt-place-sheet__name {
+  font-family: var(--rt-sans);
+}
+
+.rt-place-sheet__stay {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rt-place-sheet-stay-gap);
+}
+
+.rt-place-sheet .rt-poi {
+  --rt-poi-gutter: 0;
+}

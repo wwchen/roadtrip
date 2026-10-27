@@ -67,6 +67,13 @@ describe('NightSites', () => {
     expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual(['A12', 'Site #2']);
   });
 
+  test('an empty name falls back to the id rather than rendering a blank label', () => {
+    const names = new Map([[1, '']]);
+    render(<NightSites day={dayOpen('2026-10-25', 1)} names={names} />);
+
+    expect(screen.getByText(nightsCopy.site(1))).toBeInTheDocument();
+  });
+
   test('picking a named site still reports its campsite id', async () => {
     const onPick = vi.fn();
     render(<NightSites day={dayOpen('2026-10-25', 2)} names={new Map([[2, 'B7']])} onPick={onPick} />);

@@ -19,9 +19,9 @@ interface NightAppearance {
   selectable: boolean;
 }
 
-function fromStatus(status: AvailabilityStatus, selectable: boolean): NightAppearance {
+function fromStatus(status: AvailabilityStatus, count: string, selectable: boolean): NightAppearance {
   const meta = availabilityStatusMeta(status);
-  return { words: () => meta.text, count: () => meta.label, selectable };
+  return { words: () => meta.text, count: () => count, selectable };
 }
 
 const APPEARANCE = {
@@ -31,9 +31,9 @@ const APPEARANCE = {
     selectable: true,
   },
   full: { words: () => nightsCopy.full, count: () => nightsCopy.fullCount, selectable: true },
-  first_come: fromStatus('first_come', true),
-  closed: fromStatus('closed', true),
-  past: fromStatus('past', false),
+  first_come: fromStatus('first_come', nightsCopy.firstComeCount, true),
+  closed: fromStatus('closed', nightsCopy.closedCount, true),
+  past: fromStatus('past', nightsCopy.pastCount, false),
   unknown: { words: () => nightsCopy.unknown, count: () => nightsCopy.unknownCount, selectable: false },
 } satisfies Record<NightState, NightAppearance>;
 
