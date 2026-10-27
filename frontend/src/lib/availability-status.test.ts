@@ -54,7 +54,6 @@ describe('availabilityStatusMeta', () => {
       label: 'A',
       aria: 'available',
       text: 'Available',
-      detailClass: 'cg-status-ok',
     });
   });
 
