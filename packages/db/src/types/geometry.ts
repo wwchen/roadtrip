@@ -2,9 +2,23 @@ import { customType } from 'drizzle-orm/pg-core';
 
 export const GEOMETRY_SRID = 4326;
 
-export type Ewkt = string;
+const EWKT_SRID_PREFIX = 'SRID=';
 
-export const geometry = customType<{ data: Ewkt; driverData: Ewkt }>({
+declare const geometryFormat: unique symbol;
+
+export type Ewkt = string & { readonly [geometryFormat]: 'ewkt' };
+
+export type Ewkb = string & { readonly [geometryFormat]: 'ewkb' };
+
+export type GeometryLiteral = Ewkt | Ewkb;
+
+export const ewkt = (wkt: string, srid: number = GEOMETRY_SRID): Ewkt =>
+  `${EWKT_SRID_PREFIX}${srid};${wkt}` as Ewkt;
+
+export const isEwkt = (value: GeometryLiteral): value is Ewkt =>
+  value.startsWith(EWKT_SRID_PREFIX);
+
+export const geometry = customType<{ data: GeometryLiteral; driverData: string }>({
   dataType() {
     return `geometry(Geometry,${GEOMETRY_SRID})`;
   },
@@ -12,6 +26,6 @@ export const geometry = customType<{ data: Ewkt; driverData: Ewkt }>({
     return value;
   },
   fromDriver(value) {
-    return value;
+    return value as Ewkb;
   },
 });
