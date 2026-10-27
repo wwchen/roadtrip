@@ -454,3 +454,64 @@ Expected: PASS, including the Task 6 gate and every pre-existing Kotlin, fronten
 git add packages/db/src/codec
 git commit -m "feat: one codec for typed JSONB catalog columns"
 ```
+
+---
+
+### Task 8: One lockfile
+
+**Added after Task 1.** Task 1 created a root `package-lock.json` because root `npm ci` requires one, but left the two member lockfiles in place and left six other `npm ci` call sites pointing at them. Two lockfiles for one dependency tree can drift: a member-lock update leaves the root stale, and then CI, Docker and local development install different versions while all three appear to work.
+
+**Files:**
+- Delete: `frontend/package-lock.json`, `companion/package-lock.json`
+- Modify: `Makefile:83` (companion), `Makefile:177` (frontend), `Tiltfile:113`, `Dockerfile:36-39` (frontend build stage), `.github/workflows/ci.yml:208,211,249,252,471,479`
+- Test: `scripts/check-single-lockfile.mjs`
+
+**Interfaces:**
+- Consumes: Task 1's root `package.json` and `package-lock.json`.
+- Produces: `npm ci` resolves from exactly one lockfile everywhere. No new exports.
+
+- [ ] **Step 1: Write the failing test**
+
+```js
+test('exactly one lockfile exists, at the repo root', () => {
+  assert.ok(existsSync('package-lock.json'));
+  for (const m of ['frontend', 'companion']) {
+    assert.equal(existsSync(`${m}/package-lock.json`), false, `${m} has its own lockfile`);
+  }
+});
+
+test('no tracked file references a member lockfile', () => {
+  const hits = grepTracked('package-lock.json')
+    .filter((l) => /(frontend|companion)\/package-lock\.json/.test(l));
+  assert.deepEqual(hits, []);
+});
+```
+
+The second test is the one that matters: deleting the files while CI still names them in `cache-dependency-path` produces a green build and a broken cache.
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `node --test scripts/check-single-lockfile.test.mjs`
+Expected: FAIL on both — member lockfiles exist and are referenced in 3 `cache-dependency-path` entries plus 2 Dockerfile `COPY` lines.
+
+- [ ] **Step 3: Repoint every call site at the root lockfile**
+
+`npm ci --workspace <name>` installs one workspace's dependencies from the root lock, so each site keeps its current scope. In `Dockerfile`, the frontend stage currently copies `frontend/package.json frontend/package-lock.json`; it must copy the root `package.json` and `package-lock.json` plus `frontend/package.json` instead. Keep `--ignore-scripts` off: only `esbuild` and `fsevents` declare install scripts in the whole tree, and esbuild needs its to link its platform binary.
+
+- [ ] **Step 4: Delete the member lockfiles and run the test**
+
+Run: `node --test scripts/check-single-lockfile.test.mjs`
+Expected: PASS.
+
+- [ ] **Step 5: Verify installs still work from the root lock**
+
+Run: `npm ci && npm run test --workspace roadtrip-frontend && npm run test --workspace campsite-companion`
+Expected: PASS, with the same test counts Task 1 recorded — 1868 frontend across 129 files, 230 companion.
+
+- [ ] **Step 6: Add the check to `Makefile:test` and commit**
+
+```bash
+git add scripts/check-single-lockfile.mjs scripts/check-single-lockfile.test.mjs Makefile Tiltfile Dockerfile .github/workflows/ci.yml package-lock.json
+git rm frontend/package-lock.json companion/package-lock.json
+git commit -m "build: resolve every install from the root lockfile"
+```
