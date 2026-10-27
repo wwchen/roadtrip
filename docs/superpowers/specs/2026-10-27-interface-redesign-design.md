@@ -212,6 +212,17 @@ draft of this spec built one.
 
 ### Every status gets a sentence
 
+**This copy already exists and is not rewritten.** `lib/strings.ts` ships
+`stayCopy.result`, keyed by every `StayAvailabilityStatus` and typed
+`satisfies Record<…>` so a new status fails the build; `stayCopy.errorFor
+(outcome, reason)` for refusals, timeouts and failures, with
+`beyond_booking_horizon`, `start_before_earliest` and `window_too_long` already
+worded; and `stayCopy.checkedAgo(ago)` for the freshness line. The map's
+existing availability check renders all of it today. **These states were missing
+from the redesign, not from the product** — which is the more embarrassing of
+the two, and the work is to carry the existing vocabulary onto the new screens,
+extending the copy only where a sheet says more than a card can.
+
 `StayAvailabilityStatus` — the Where card and the Place peek each render exactly
 one of these, never a count dressed up as prose:
 
@@ -321,19 +332,31 @@ draft:**
 | `Sheet` | The detented bottom sheet: `peek \| half \| full`, controlled, drag and programmatic. Nothing in it is campground-specific. |
 | `SheetHeader` | Compacts as the sheet rises instead of repeating what the body already said. |
 | `SheetSection` | Declares the detent at which its content first appears. This is what makes "a fact belongs to exactly one height" a **type-level** rule: content without a declared level does not render. |
-| `Stepper` | Numeric +/− row. Absorbs `GroupSizeStepper`, which was a feature component doing a primitive's job. |
-| `ChoiceChips` | Multi-select chip row for rig preferences. LDS has `Checkbox` and `SegmentedControl`; neither is this shape. |
-| `DefinitionRow` | The label/value row the *Full* detent is made of. |
+| `Stepper` | Numeric +/− row. Absorbs `GroupSizeStepper`, which was a feature component doing a primitive's job. LDS has no stepper. |
+| `ChipGroup` | Layout and `role="group"` semantics over LDS's own `Chip`, which already has `selected`. Not a new chip. |
 
 `MonthCalendar` already exists as a local addition and is the date-pinning
 control; nothing new is needed for *when*.
 
-**Verify before building any of them.** `frontend/node_modules/` was not
-installed when this was written, so the table above is reasoned from `@ui`'s
-re-export surface rather than from LDS's component list. The first step of
-phase 1 is reading the installed `@lew-ds/` source — the frontend doc's standing
-instruction — and deleting any row LDS already covers. "Check `@ui` first" is the
-rule this design is least entitled to break.
+**Verified against the installed LDS source**
+(`@lew-ds/lds-react/src/index.d.ts`), which ships: Avatar, Banner, Button,
+ButtonGroup, Card, Checkbox, Chip, CodeField, EmptyState, Icon, Inline, Link,
+Menu, Modal, Nav, Radio, Row, Select, SegmentedControl, Skeleton, Table, Tabs,
+Tag, TextField, Textarea, Toast, ToastProvider, Toggle, Tooltip. Three rows came
+off this table as a result:
+
+- `DefinitionRow` — **deleted**. `Row` takes `lead`/`title`/`subtitle`/`trail`/
+  `chevron`, which is the *Full* detent's row, the nights list's row and the
+  alert row.
+- `ChoiceChips` — **reduced** to `ChipGroup`, because `Chip` already has
+  `selected`.
+- The answer states need no custom markup: `EmptyState`
+  (`title`/`body`/`actions`) is the shape of closed-for-season, no-data and
+  refused; `Banner` carries a stale or retryable answer; `Skeleton` covers a
+  stay still streaming.
+
+No sheet or drawer exists in LDS, so `Sheet`, `SheetHeader` and `SheetSection`
+are the only genuinely new primitives in phase 1.
 
 ### New in `domain/`
 
@@ -432,11 +455,10 @@ serves, and `make api-types` carries the DTOs to the frontend.
 5. **Trips.** Origin, destination, and a night per date. Today a trip lives in a
    store and a share link; the Your nights screen needs it to survive a reload
    on a phone.
-6. **The reopening date for a closed season.** `closed_for_season` tells the
-   screen it is shut; *Closed until mid-May* needs the date, and the screen must
-   not compute it from the absence of observations. Whether the season bounds are
-   already served or need promoting is the first thing to check when phase 1
-   reaches that state.
+6. **The reopening date for a closed season — already served.** The provider's
+   season block rides the wire and `availability-api.ts` already narrows it with
+   `seasonReopensOn(season)`. Nothing new is needed; the Place sheet reads it
+   where today only one call site does.
 
 ### The honest gap: we do not know what you booked
 
