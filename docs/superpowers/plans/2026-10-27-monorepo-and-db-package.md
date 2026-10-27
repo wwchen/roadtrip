@@ -243,7 +243,13 @@ git commit -m "feat: @roadtrip/domain vocabulary package"
 - Consumes: `@roadtrip/domain` for JSONB column types.
 - Produces: `createDb(url: string, opts?: { prepare?: boolean }): Db`, the `geometry` custom type, the `availabilityStatus` pgEnum, and one exported table object per table. `pois`, `campgrounds` and `campsites` live in `src/schema/catalog.ts`; `availabilityWatch`, `availabilityWatchTarget` and `availability` in `availability.ts`. Tasks 5, 6 and 7 import these.
 
-Every table, column, index, and `CHECK` is transcribed from Task 2's reference dump, with constraint names given explicitly. Partial indexes use Drizzle's `.where()`; `DATE[]` columns use `.array()`.
+Every table, column, index, and `CHECK` is transcribed from Task 2's reference dump, with constraint names given explicitly. Partial indexes use Drizzle's `.where()`.
+
+Three things the reference demands that Drizzle does not give you by default:
+
+- **`.desc()` is not `DESC`.** Drizzle's bare `.desc()` emits `DESC NULLS LAST`; four of the reference's indexes are `DESC NULLS FIRST` and need `.desc().nullsFirst()`. A wrong one is a different index with different plans, and nothing but the dump diff reveals it.
+- **There is no `date[]` column.** An earlier draft of this task said to use `.array()` for `DATE[]`, from reading `availability_watch.target_dates` in V14 — V20 drops that column. The only array column in the produced schema is `trigger_kinds text[]`.
+- **drizzle-orm 0.45 has no `bytea`**, which `user_session.token_hash` needs, so it takes a custom type alongside `geometry`.
 
 - [ ] **Step 1: Write the failing test** — Review Focus #1
 
@@ -289,6 +295,8 @@ Task 3 established that packages compile to `dist/` and that `exports` resolves 
 
 Add a root `build` script that builds every workspace that has one, call it from `Makefile:test` ahead of anything that consumes `dist`, and give `@roadtrip/db` the same `tsconfig.json` / `tsconfig.typecheck.json` split Task 3 used. Verify it: edit a value in `packages/domain/src`, run the root build, and confirm the change is visible to a plain-`node` import without a reinstall.
 
+**`npm run build --workspaces --if-present` is not good enough**, though an earlier draft of this step suggested it. npm runs workspaces in declaration order, which builds `domain` last and so fails `db` and the frontend; and npm does not abort on a failed workspace, so a `dist` emitted from code that never compiled survives and is served to consumers. The build needs dependency order and a non-zero exit on first failure.
+
 - [ ] **Step 6: Generate the initial migration**
 
 Run: `npx drizzle-kit generate --name init`
@@ -316,7 +324,17 @@ git commit -m "feat: @roadtrip/db schema and PostGIS geometry type"
 
 **Interfaces:**
 - Consumes: Task 4's migration output; runs immediately after it.
-- Produces: the `availability_watch_prune_when_no_targets` function, the `availability_watch_target_prune_empty` constraint trigger, the `grafana_api_cache_metadata` view, and the `grafana_reader` role and grants. **Not** the PostGIS extension — Task 4's `migrateDb` creates it before any migration runs, because `0000_init.sql` needs it. **No materialized views** — see below.
+- Produces: **two** functions — `availability_watch_prune_when_no_targets` (V30) and `campground_site_summary` (V64) — the `availability_watch_target_prune_empty` constraint trigger, the `grafana_api_cache_metadata` view, the `grafana_reader` role and grants, and one sequence-ownership statement (below). **Not** the PostGIS extension — Task 4's `migrateDb` creates it before any migration runs, because `0000_init.sql` needs it. **No materialized views** — see below.
+
+Three migrations create a function; the reference holds two, because V58's `campsite_wire_kind` is a one-shot canonicalization helper that V58 drops on its last line. Copy V30's and V64's bodies; do not create `campsite_wire_kind`.
+
+**One statement Drizzle has no API for at all:**
+
+```sql
+ALTER SEQUENCE public.availability_job_run_id_seq OWNED BY public.availability_run.id;
+```
+
+Task 4 verified that adding exactly this line collapses the last of the Flyway-vs-Drizzle diff to nothing. The sequence keeps its original name because V28 renamed the table (`availability_job_run` → `availability_run`) without renaming the sequence, and Drizzle cannot express sequence ownership. Without this line the gate fails on lines that look like they belong to nobody.
 
 SQL bodies are copied verbatim from the Flyway migrations that own them — V30 for the prune function and trigger, `R__grafana_reader_grants.sql` for the role guard, the grants and the `grafana_api_cache_metadata` view. Copy, do not paraphrase: these are the live definitions. The role guard is the `DO $$ … IF NOT EXISTS (SELECT FROM pg_roles …) $$` block, which is what makes the file safe to run against a database that has no `grafana_reader`.
 
