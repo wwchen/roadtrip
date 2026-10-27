@@ -122,8 +122,37 @@ churn describing tables that no longer exist: `availability_snapshot` was droppe
 V36, `availability_job` in V28. Reading them as a description of today's schema
 produces wrong answers; this spec's first draft made exactly that error.
 
-Author the Drizzle schema from a dump of the live database, as **one initial
-migration**. Gate: a round-trip comparison against that dump.
+The reference is **the schema the 66 migrations produce when run**, not a live
+database and not the migrations read individually. Running `flyway migrate` into a
+throwaway container and dumping the result gives exactly the live schema with no
+production access and a result reproducible in CI. The earlier error was reading
+migrations as descriptions; running them is authoritative.
+
+Author the Drizzle schema as **one initial migration** against that reference.
+
+**Drizzle cannot express all of it, and the parts it cannot are business logic.** An
+escape-hatch raw-SQL migration carries:
+
+| Feature | Count | Note |
+| --- | --- | --- |
+| PostGIS extension and `geometry(Geometry, 4326)` columns | 3 tables | Needs a Drizzle custom type |
+| `CREATE MATERIALIZED VIEW campground_canonical`, `campsite_canonical` | 2 | The canonical catalog read model; the importer must also refresh them |
+| plpgsql functions | 3 | |
+| `CREATE CONSTRAINT TRIGGER availability_watch_target_prune_empty` | 1 | `DEFERRABLE INITIALLY DEFERRED`; deleting the last target prunes the watch. **Business logic in the database** — a schema port drops this silently |
+| `CHECK` constraints | 107 | Named explicitly by Flyway; Drizzle auto-names unless told, so names must be pinned |
+| `R__grafana_reader_grants.sql` | 1 | Repeatable `GRANT` migration; Drizzle does not manage grants |
+
+The gate is therefore **semantic equivalence, not a textual diff**: migrate Drizzle
+into a second database, dump both with `pg_dump --schema-only --no-owner
+--no-privileges`, normalize, and fail on any difference. A textual comparison against
+an unnormalized dump would never pass, and the 107 explicitly-named constraints are
+the reason it matters.
+
+**`@roadtrip/db` must not be importable from the browser.** It depends on a Postgres
+driver. But the frontend needs the domain vocabulary — `frontend/src/lib/campground-vocab.ts`
+and seven other files already work with amenity, carrier and campsite-kind concepts.
+So the package is a pair: `@roadtrip/domain` holds browser-safe enums, labels and
+JSONB shapes, and `@roadtrip/db` holds Drizzle and the codecs and depends on it.
 
 Every typed JSONB column — `amenities`, `cell_service`, `metadata`, `price`,
 `default_campsite_schedule`, `alerts`, `photos`, `equipment`, `attributes`,
@@ -342,8 +371,12 @@ implementation plan; steps 2, 4, 7, 8, 9 and 11 are each large enough to warrant
 Do not expand this into one plan.
 
 1. P1 and P2, in parallel with step 2.
-2. Monorepo, `@roadtrip/db`, Drizzle schema from the live dump, local Postgres.
-   *Gate:* schema round-trips against the dump.
+2. Monorepo, `@roadtrip/domain` and `@roadtrip/db`, Drizzle schema plus the §3
+   escape-hatch migration, local Postgres. New top-level directories must be
+   registered in `.claude/settings.json` → `worktree.sparsePaths`, or
+   `scripts/check-worktree-sparse-paths.mjs` fails and every future worktree is
+   missing the code. *Gate:* normalized `pg_dump` equivalence against the
+   Flyway-produced reference.
 3. Enforcement gates (§7), before the code they guard.
 4. Importer plus differential harness. *Gate:* row-level diff clean against the
    Kotlin importer.
