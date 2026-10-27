@@ -15,6 +15,7 @@ import {
   DirectionsButton,
   SharePoiButton,
   UpstreamTable,
+  coordinatesLabel,
   coordinatesOf,
   subline,
   text,
@@ -30,8 +31,8 @@ import {
   PoiSpecs,
   type PoiTag,
 } from '../PoiBlocks';
-import { PoiPageShell, type PoiBlockSlots } from '../PoiPageShell';
-import { presentSpecs, type PoiTypeProps } from './common';
+import type { PoiBlockSlots } from '../PoiPageShell';
+import { presentSpecs, renderPoiPage, type PoiTypeProps } from './common';
 
 /** One labelled row of the type's spec block, and the flat property that fills it. */
 export interface PlaceField {
@@ -76,7 +77,7 @@ function googleMapsUrl(name: string, lng: number | undefined, lat: number | unde
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}%20${lat},${lng}`;
 }
 
-export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPageProps) {
+export function PlacePoiPage({ feature, variant, onClose, render, spec }: PlacePoiPageProps) {
   const p = feature.properties;
   const [lng, lat] = coordinatesOf(feature);
   const distance = useDistanceTo(lng, lat);
@@ -153,7 +154,10 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
       : null),
   };
 
-  return <PoiPageShell variant={variant} blocks={blocks} />;
+  return renderPoiPage(
+    { name, subtitle: address || coordinatesLabel(lng, lat), blocks },
+    { render, variant },
+  );
 }
 
 const noop = () => {};

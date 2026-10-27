@@ -5,9 +5,9 @@
 // renders page chrome, so the same component is the drawer and the routed page.
 import type { ReactNode } from 'react';
 import type { FlatPoiFeature } from '@/lib/poi';
-import type { PoiPageVariant } from '../PoiPageShell';
+import { PoiPageShell, type PoiBlockSlots, type PoiPageVariant } from '../PoiPageShell';
 import type { DetailGroup, DetailValue, StructuredDetails } from '../campground-detail';
-import type { PoiNeighbour, PoiSpec } from '../model';
+import type { PoiCrumb, PoiNeighbour, PoiSpec } from '../model';
 
 export interface PoiTypeProps {
   feature: FlatPoiFeature;
@@ -46,10 +46,28 @@ export interface PoiTypeProps {
    * that lands as one caller passing this prop rather than as a rewrite of the block.
    */
   nearby?: PoiNeighbour[];
+  render?: PoiPageRender;
 }
+
+export interface PoiPageParts {
+  name: string;
+  subtitle: string;
+  blocks: PoiBlockSlots;
+  parent?: PoiCrumb;
+}
+
+export type PoiPageRender = (parts: PoiPageParts) => ReactNode;
 
 /** A type component. The registry maps a category onto one of these. */
 export type PoiTypeComponent = (props: PoiTypeProps) => ReactNode;
+
+export function renderPoiPage(
+  parts: PoiPageParts,
+  { render, variant }: Pick<PoiTypeProps, 'render' | 'variant'>,
+): ReactNode {
+  if (render) return render(parts);
+  return <PoiPageShell variant={variant} parent={parts.parent} blocks={parts.blocks} />;
+}
 
 /** One structured-detail group's rows as specs, or null when the group is empty. */
 export function specsFrom(details: StructuredDetails, title: string): PoiSpec[] | null {

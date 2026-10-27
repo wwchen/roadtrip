@@ -28,3 +28,16 @@
 .rt-place-sheet .rt-poi {
   --rt-poi-gutter: 0;
 }
+
+.rt-place-chrome {
+  --rt-place-chrome-max-width: 420px;
+  --rt-place-chrome-gutter: 16px;
+
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: var(--rt-place-chrome-max-width);
+  box-sizing: border-box;
+  padding: var(--rt-place-chrome-gutter);
+}

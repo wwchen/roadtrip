@@ -242,6 +242,11 @@ export const stayCopy = {
 export const placeCopy = {
   driveFrom: (duration: string, origin: string) => `${duration} from ${origin}`,
   factsSeparator: ' · ',
+  loadFailed: "This place didn't load",
+  loadFailedBody: 'We could not fetch its details. Everything else still works.',
+  tryAgain: 'Try again',
+  noDetailView: 'No detail view for this place yet',
+  category: (category: string) => `Category: ${category || 'unknown'}`,
 } as const;
 
 export const nightsCopy = {
@@ -255,7 +260,7 @@ export const nightsCopy = {
   closedCount: 'Closed',
   pastCount: 'Past',
   unknownCount: 'No data',
-  site: (campsiteId: number) => `Site #${campsiteId}`,
+  site: (campsiteRef: number | string) => `Site #${campsiteRef}`,
   noneOpen: 'Nothing open this night.',
   firstCome: 'First come, first served: nothing to reserve.',
   closedNight: 'Closed this night.',
@@ -266,6 +271,7 @@ export const alertCopy = {
   offer: 'Get an alert if a site opens up.',
   create: 'Alert me',
   creating: 'Setting alert…',
+  createFailed: 'That alert was not set. Try again.',
 } as const;
 
 /** The campground filter block under the search row, and the cards' facet row. */

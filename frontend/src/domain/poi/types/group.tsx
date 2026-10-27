@@ -12,14 +12,14 @@
 // the same rule the park page follows for the rollup it has no endpoint for.
 import { UpstreamTable, eyebrowFor, subline, text } from '../fields';
 import { PoiIdentity, PoiProvenance } from '../PoiBlocks';
-import { PoiPageShell, type PoiBlockSlots } from '../PoiPageShell';
+import type { PoiBlockSlots } from '../PoiPageShell';
 import {
   AvailabilityTable,
   type AvailabilityCell,
   type AvailabilityNight,
   type AvailabilityPlace,
 } from '../AvailabilityTable';
-import type { PoiTypeProps } from './common';
+import { renderPoiPage, type PoiTypeProps } from './common';
 
 /**
  * The step above the group page.
@@ -34,7 +34,7 @@ const FALLBACK_NAME = 'Park';
 const AVAILABILITY_HEADING = 'Campgrounds by night';
 const AVAILABILITY_EMPTY = 'No nights are published for this park yet.';
 
-export function ParkGroupPoiPage({ feature, variant, availability }: PoiTypeProps) {
+export function ParkGroupPoiPage({ feature, variant, availability, render }: PoiTypeProps) {
   const p = feature.properties;
   const name = text(p.name) || text(p.Unit_Nm) || FALLBACK_NAME;
   const manager = text(p.Mang_Name) || text(p.agency);
@@ -58,6 +58,8 @@ export function ParkGroupPoiPage({ feature, variant, availability }: PoiTypeProp
       />
     ) : null);
 
+  const subtitle = subline([stateName, manager]);
+
   const blocks: PoiBlockSlots = {
     identity: (
       <PoiIdentity
@@ -65,7 +67,7 @@ export function ParkGroupPoiPage({ feature, variant, availability }: PoiTypeProp
         title={name}
         // The step above names the park system, never the state, so nothing here
         // restates it — unlike the park page, where the two can collide.
-        subtitle={subline([stateName, manager])}
+        subtitle={subtitle}
       />
     ),
     ...(grid ? { availability: grid } : null),
@@ -80,8 +82,9 @@ export function ParkGroupPoiPage({ feature, variant, availability }: PoiTypeProp
       : null),
   };
 
-  return (
-    <PoiPageShell variant={variant} parent={{ label: PARK_SYSTEM_PARENT }} blocks={blocks} />
+  return renderPoiPage(
+    { name, subtitle, blocks, parent: { label: PARK_SYSTEM_PARENT } },
+    { render, variant },
   );
 }
 

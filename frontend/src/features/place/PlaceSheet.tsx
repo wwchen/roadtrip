@@ -1,4 +1,4 @@
-import { useState, type ComponentProps } from 'react';
+import { useState, type ComponentProps, type ReactNode } from 'react';
 import { AlertRow } from '@/domain/place/AlertRow';
 import { NightSites } from '@/domain/place/NightSites';
 import { NightsStrip } from '@/domain/place/NightsStrip';
@@ -17,6 +17,7 @@ const ARRIVAL_DETENT = {
 
 const PLACE_SHEET_TESTID = 'place-sheet';
 
+const PEEK_DETENT: SheetDetent = 'peek';
 const HALF_DETENT: SheetDetent = 'half';
 const FULL_DETENT: SheetDetent = 'full';
 
@@ -47,14 +48,25 @@ export interface PlaceSheetProps {
   name: string;
   subtitle?: string;
   arrival: PlaceArrival;
-  verdict: ComponentProps<typeof PlaceVerdict>;
+  verdict?: ComponentProps<typeof PlaceVerdict>;
+  notice?: ReactNode;
   nights: ComponentProps<typeof NightsStrip>;
   alert?: ComponentProps<typeof AlertRow>;
   siteNames?: ReadonlyMap<number, string>;
   blocks: PoiBlockSlots;
 }
 
-export function PlaceSheet({ name, subtitle, arrival, verdict, nights, alert, siteNames, blocks }: PlaceSheetProps) {
+export function PlaceSheet({
+  name,
+  subtitle,
+  arrival,
+  verdict,
+  notice,
+  nights,
+  alert,
+  siteNames,
+  blocks,
+}: PlaceSheetProps) {
   const [detent, setDetent] = useState<SheetDetent>(ARRIVAL_DETENT[arrival]);
 
   const selected = nights.days.find((day) => day.date === nights.selected) ?? null;
@@ -62,6 +74,12 @@ export function PlaceSheet({ name, subtitle, arrival, verdict, nights, alert, si
   const halfBlocks = slotsFor(blocks, HALF_BLOCKS);
   const fullBlocks = slotsFor(blocks, FULL_BLOCKS);
   const secondary = subtitle ? <p className="rt-place-sheet__subtitle">{subtitle}</p> : null;
+  const named = (
+    <div className="rt-place-sheet__compact">
+      {secondary}
+      <strong className="rt-place-sheet__name">{name}</strong>
+    </div>
+  );
 
   return (
     <Sheet
@@ -73,18 +91,18 @@ export function PlaceSheet({ name, subtitle, arrival, verdict, nights, alert, si
     >
       <SheetHeader
         full={
-          <>
-            {secondary}
-            <PlaceVerdict {...verdict} />
-          </>
+          verdict ? (
+            <>
+              {secondary}
+              <PlaceVerdict {...verdict} />
+            </>
+          ) : (
+            named
+          )
         }
-        compact={
-          <div className="rt-place-sheet__compact">
-            {secondary}
-            <strong className="rt-place-sheet__name">{name}</strong>
-          </div>
-        }
+        compact={named}
       />
+      {notice ? <SheetSection from={PEEK_DETENT}>{notice}</SheetSection> : null}
       {hasStay ? (
         <SheetSection from={HALF_DETENT}>
           <div className="rt-place-sheet__stay">

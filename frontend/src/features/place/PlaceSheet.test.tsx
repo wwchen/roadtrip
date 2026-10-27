@@ -33,10 +33,12 @@ const everyBlock = slotsOf(POI_BLOCK_ORDER);
 const expectedOrderFromBlocks = () =>
   POI_BLOCK_ORDER.filter((id) => !SHEET_SKIPS.includes(id)).map(blockTestId);
 
+const verdict = { name: NAME, answer: summary(), origin: null };
+
 const props: PlaceSheetProps = {
   name: NAME,
   arrival: 'from-map',
-  verdict: { name: NAME, answer: summary(), origin: null },
+  verdict,
   nights: {
     days: [dayOpen(WEEK[0], OPEN_SITES), dayFull(WEEK[1])],
     dates: WEEK,
@@ -67,7 +69,7 @@ describe('PlaceSheet', () => {
       <PlaceSheet
         {...props}
         arrival="cold"
-        verdict={{ ...props.verdict, answer: summary({ status: 'full', open_sites: 0 }) }}
+        verdict={{ ...verdict, answer: summary({ status: 'full', open_sites: 0 }) }}
         nights={{ ...props.nights, days: [dayOpen(WEEK[0], OPEN_SITES), dayOpen(WEEK[1], OPEN_SITES)] }}
       />,
     );
@@ -133,7 +135,7 @@ describe('PlaceSheet', () => {
       <PlaceSheet
         {...props}
         arrival="cold"
-        verdict={{ ...props.verdict, answer: summary({ status: 'full', open_sites: 0 }) }}
+        verdict={{ ...verdict, answer: summary({ status: 'full', open_sites: 0 }) }}
         nights={{ ...props.nights, days: [dayOpen(WEEK[0], OPEN_SITES), dayOpen(WEEK[1], OPEN_SITES)] }}
       />,
     );
@@ -198,6 +200,19 @@ describe('PlaceSheet', () => {
     expect(screen.getByTestId(blockTestId('nearby'))).toBeInTheDocument();
     expect(container.querySelectorAll('.rt-poi-rule')).toHaveLength(1);
     expect(container.querySelectorAll('.rt-poi-rule--fold')).toHaveLength(0);
+  });
+
+  test('a place with no stay to check names itself and claims nothing', () => {
+    render(<PlaceSheet {...props} arrival="cold" verdict={undefined} subtitle={SUBTITLE} />);
+    expect(screen.getAllByText(NAME)).toHaveLength(1);
+    expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
+    expect(screen.queryByText(/sites open/)).not.toBeInTheDocument();
+  });
+
+  test('a notice the stay check needs read stays up at peek', () => {
+    const notice = <span data-testid="stay-notice" />;
+    render(<PlaceSheet {...props} arrival="cold" notice={notice} />);
+    expect(screen.getByTestId('stay-notice')).toBeInTheDocument();
   });
 
   test('the page rule still marks its own fold, now inside full', () => {
