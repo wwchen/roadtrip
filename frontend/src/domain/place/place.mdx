@@ -1,0 +1,221 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Place/Rules" />
+
+# The Place screen's rules
+
+The interface answers one question, *where am I sleeping*, and it answers it with
+two knobs: **where** and **when**. Everything on this page follows from that. The
+components beside it in the catalog (`Sheet`, `PlaceVerdict`, `NightsStrip`,
+`AlertRow`) are the rules in executable form; this page is the reasoning you would
+otherwise have to recover from them.
+
+Phase 1 builds the Place screen only. The other two screens appear below because
+the Place screen is defined against them.
+
+## Where and when
+
+*Where* is **pinned** (one place) or **open** (an area). *When* has three values,
+not two: **a night**, **a window** of nights, or **open**. The third value is not
+symmetry. A trip pins a route and a five-night window and then answers night by
+night, so a two-value *when* breaks on the first state the design has.
+
+> The narrowest pinned knob titles the screen. The widest open knob becomes the
+> answer.
+
+<table>
+  <thead>
+    <tr>
+      <th>where</th>
+      <th>when</th>
+      <th>screen</th>
+      <th>the answer is</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>route pinned</td>
+      <td>a window</td>
+      <td>Your nights</td>
+      <td>one row per night, gaps first</td>
+    </tr>
+    <tr>
+      <td>open</td>
+      <td>a night or a window</td>
+      <td>Where</td>
+      <td>ranked places on a map</td>
+    </tr>
+    <tr>
+      <td>pinned</td>
+      <td>open</td>
+      <td>Place</td>
+      <td>which dates are open</td>
+    </tr>
+    <tr>
+      <td>pinned</td>
+      <td>a night or a window, nothing open</td>
+      <td>Place, empty</td>
+      <td>an alert, or the reopening date</td>
+    </tr>
+  </tbody>
+</table>
+
+Pinning a knob is a navigation and unpinning it is going back. There is no tab bar,
+no menu and no modal routing. A notification that fires opens the Place screen with
+both knobs pinned, which is the one state the user asked to be told about.
+
+The Place screen has no map. The place is pinned, so geography is settled and
+showing it again would be the duplication the design exists to avoid.
+
+## Three heights, and a fact belongs to exactly one
+
+`Sheet` has three detents. Each `SheetSection` declares the detent at which its
+content first appears, `from` is required, and content with no declared height does
+not compile. That is what turns "a fact belongs to exactly one height" from a
+convention into a type error.
+
+<table>
+  <thead>
+    <tr>
+      <th>detent</th>
+      <th>the question it answers</th>
+      <th>what is there</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Peek</td>
+      <td>Should I go here?</td>
+      <td>the name, the verdict, the deciding facts, the origin of the drive time, freshness when the answer is stale, Reserve</td>
+    </tr>
+    <tr>
+      <td>Half</td>
+      <td>Which nights, exactly, and what if the one I want is shut?</td>
+      <td>the nights strip, the sites open on the chosen night, Reserve, and one row offering to alert on a shut night in view</td>
+    </tr>
+    <tr>
+      <td>Full</td>
+      <td>What is it like on arrival?</td>
+      <td>photographs, getting there, good to know, specs, contact, nearby, and the verified and provenance footer</td>
+    </tr>
+  </tbody>
+</table>
+
+The header compacts as the sheet rises. It does not repeat what the body already
+said.
+
+Half does not carry a price. The wire holds one `price` per POI, a range on the POI
+detail, and nothing per night or per site. A place-level *from* price belongs to
+Peek, said once.
+
+### Arriving from the map opens at Half
+
+`ARRIVAL_DETENT` maps `from-map` to Half and `cold` to Peek. Peek's content is the
+card the user has just tapped on the map, so opening there would show them the same
+verdict twice. Peek is for cold arrivals only: a notification, a deep link, or a
+place reached by name rather than off the map.
+
+### One component, two consumers
+
+The Where card and the Place peek both render `PlaceVerdict`, so the two cannot
+phrase a verdict differently. That buys consistency and nothing else. A shared
+component rendered in two places on one path says the same thing twice, reliably.
+Non-repetition is enforced by the detent a screen opens at and by `SheetSection`
+levels, which is why the two rules are separate and neither stands in for the other.
+
+## A stay claim never comes from day rollups
+
+This is the rule that would otherwise ship a Reserve button that makes a false
+promise.
+
+There are two reads, and they answer different questions.
+
+- **The stay check**, `POST /api/pois/availability/stays`, answers *how does this
+  stay look here*. Its `open_sites` is the number of campsites bookable online
+  **for every night of the stay**.
+- **The day grid**, `GET /api/pois/{id}/campsites/availability`, answers *how does
+  each night look*. Its `AvailabilityDay` rollups are per-night counts.
+
+Three sites open on Saturday and three open on Sunday can mean that no single site
+is open on both nights. Summing, or taking the minimum of, the two rollups produces
+a number that reads like a stay and is not one. A Reserve button behind that number
+sends someone to a booking page for a stay that cannot be made.
+
+So the rule is structural:
+
+- "Open both nights", the verdict's count, and anything that sits behind a Reserve
+  button read the stay check. In the code that is `usePlaceStay` feeding
+  `PlaceVerdict`.
+- The nights strip reads the grid and is per-night context only. In the code that
+  is `usePlaceNights` feeding `NightsStrip` and `NightSites`. It is never summed
+  into a stay claim.
+
+The grid carries the same discipline inside itself. `nightOf` reads a night off its
+cells; a day with no cells is `unknown`, and a day that claims to be open without an
+open cell is `unknown` too. The rollup never stands in for a missing cell.
+
+Every status the stay check can return has a sentence already, in `stayCopy` in
+`lib/strings.ts`, and the sheet renders the branch the server gives it. The browser
+invents no vocabulary of its own. A count dressed up as prose is not one of the
+branches.
+
+## Where Half ends and Full begins
+
+`POI_BLOCK_GROUPS` in `domain/poi/blocks.ts` lists the blocks in their one fixed
+order, and `PlaceSheet` splits that list into Half and Full after the `glance`
+group (`HALF_GROUP_COUNT`).
+
+That is **not** `RULE_BEFORE_GROUP`, although the constant is right there and
+invites it. `RULE_BEFORE_GROUP` sits after `gettingThere` and `goodToKnow`, and
+those two blocks answer *what is it like when I arrive*, which is Full. Splitting
+at the rule would pull them up into Half, where the question is *which nights*.
+The hairline keeps its own meaning in the block order, and the detent boundary
+is a separate decision that happens to share a list.
+
+The block order itself does not change. A type omits blocks; it never reorders them.
+What the sheet changes is that the groups become detents instead of scroll position.
+
+## What the sheet leaves out
+
+**The sheet renders no `hero` and no `identity`** (`SHEET_OMITS`).
+
+- `hero` is a 176px photograph. At the top of a 395px Half detent it pushes
+  `actions`, which holds Reserve, below the fold, and Reserve is the one thing Half
+  must guarantee. Moving it into Full would put it after `glance` on screen, which
+  breaks the older and stronger rule that the sequence never changes. So it is
+  omitted, and a type omitting a block is already how the order works.
+- `identity` is the name above the type's eyebrow. The sheet's header already owns
+  both, so rendering them again in the body is the repetition the detents exist to
+  prevent.
+
+## The header's one secondary line
+
+The header carries the name and exactly one secondary line, and that line is the
+type's own eyebrow, verbatim, from the same source the identity block reads:
+`Campground · <agency>`, `Charger · Tesla`, `National park`. Who manages a place
+tells a camper which booking system and which rules to expect, which is why it
+shares the type's line.
+
+Where the eyebrow would only repeat the name, the line carries that type's one
+identifying fact instead. A dropped pin is the whole of that case. Its name is a
+label, so a verbatim eyebrow would print *Dropped pin* above *Dropped pin*, and its
+coordinates are the only thing that says which pin it is. In the code that is the
+`locatedByPoint` branch in `domain/poi/types/place.tsx`.
+
+A street address is a location fact, not an identity one, so it does not go in the
+header. A campground's address survives at Full, in `contact`.
+
+## Recorded gaps
+
+Two things are missing from phase 1. They are stated here as gaps and are not
+worked around.
+
+- **No photographs anywhere.** The sheet omits `hero`, and nothing else renders a
+  photograph, so the Full list above promises photographs the sheet does not yet
+  show. The fix is not to reorder the blocks.
+- **No street address for `place`, `charger` or `group`.** The body block that
+  should hold it does not exist yet, and neither does the charger's common-site
+  label or a park group's state and manager. The answer is that block, not
+  overloading the header's single line.
+
+Both are open work. Neither is a decision that the information does not matter.
