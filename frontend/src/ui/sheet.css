@@ -1,4 +1,18 @@
+:root {
+  --rt-sheet-max-width: 420px;
+  --rt-sheet-gutter: 16px;
+}
+
 .rt-sheet {
+  --rt-sheet-peek: 0.26;
+  --rt-sheet-half: 0.52;
+  --rt-sheet-full: 0.92;
+  --rt-sheet-height: var(--rt-sheet-peek);
+  --rt-sheet-handle-width: 36px;
+  --rt-sheet-handle-height: 4px;
+  --rt-sheet-grabber-height: 28px;
+  --rt-sheet-motion: 220ms cubic-bezier(0.2, 0, 0, 1);
+
   position: absolute;
   left: 0;
   bottom: 0;

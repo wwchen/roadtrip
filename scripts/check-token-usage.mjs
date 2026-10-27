@@ -88,6 +88,26 @@ const COMPONENT_LOCAL = new Set([
   '--rt-acct-clearance',
   // Published from JS by features/account/useAcctClearance.ts, read by topbar.css.
   '--rt-acct-left',
+  // The bottom sheet's own geometry and motion: declared in ui/sheet.css, which is the one
+  // stylesheet for the sheet. Detent ratios are read back by Sheet.tsx with getComputedStyle,
+  // and the drag height is set inline by it while a drag is in progress.
+  '--rt-sheet-peek',
+  '--rt-sheet-half',
+  '--rt-sheet-full',
+  '--rt-sheet-height',
+  '--rt-sheet-drag-height',
+  '--rt-sheet-handle-width',
+  '--rt-sheet-handle-height',
+  '--rt-sheet-grabber-height',
+  '--rt-sheet-motion',
+  // The sheet's width cap and gutter, declared at :root in ui/sheet.css because
+  // features/place/place-sheet.css reads them for the loading and error chrome that stands in
+  // for the sheet while it has nothing to show, and that chrome sits outside .rt-sheet.
+  '--rt-sheet-max-width',
+  '--rt-sheet-gutter',
+  // The place sheet's own rhythm: declared in features/place/place-sheet.css.
+  '--rt-place-sheet-stay-gap',
+  '--rt-place-sheet-subtitle-size',
 ]);
 
 const defined = new Set(

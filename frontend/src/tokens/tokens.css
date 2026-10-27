@@ -334,21 +334,6 @@
   --rt-e3: 0 6px 20px rgba(var(--rt-c-shadow-rgb), 0.40);
   --rt-e4: 0 8px 24px rgba(var(--rt-c-shadow-rgb), 0.45);
 
-  --rt-sheet-peek: 0.26;
-  --rt-sheet-half: 0.52;
-  --rt-sheet-full: 0.92;
-  --rt-sheet-height: var(--rt-sheet-peek);
-  --rt-sheet-drag-height: auto;
-  --rt-sheet-max-width: 420px;
-  --rt-sheet-gutter: 16px;
-  --rt-sheet-grabber-height: 28px;
-  --rt-sheet-handle-width: 36px;
-  --rt-sheet-handle-height: 4px;
-  --rt-sheet-motion: 220ms cubic-bezier(0.2, 0, 0, 1);
-
-  --rt-place-sheet-stay-gap: 12px;
-  --rt-place-sheet-subtitle-size: 12px;
-
   /* Stacking order.
      ==========================================================
 

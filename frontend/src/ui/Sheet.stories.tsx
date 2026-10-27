@@ -29,7 +29,7 @@ const meta = {
           'named for the sheet: drag it to a height, tap it to step up, or use Arrow Up and ' +
           'Arrow Down. The sheet is not modal — focus is never trapped and the map behind it ' +
           'stays reachable. It positions itself against its nearest positioned ancestor and ' +
-          'takes its heights from the `--rt-sheet-peek|half|full` ratios in `tokens.css`.',
+          'takes its heights from the `--rt-sheet-peek|half|full` ratios in `sheet.css`.',
       },
     },
   },

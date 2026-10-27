@@ -1,3 +1,8 @@
+.rt-place-sheet {
+  --rt-place-sheet-stay-gap: 12px;
+  --rt-place-sheet-subtitle-size: 12px;
+}
+
 .rt-place-sheet__compact {
   display: flex;
   flex-direction: column;
