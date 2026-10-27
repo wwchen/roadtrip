@@ -217,6 +217,7 @@ function StayPlace({ feature, poiId, Poi, arrival, stale, onClose }: StayPlacePr
           {...(nightsFailure ? { nightsFailure } : null)}
           {...(row ? { alert: row } : null)}
           siteNames={nights.siteNames}
+          campsites={nights.campsites}
           blocks={parts.blocks}
           {...(onClose ? { onClose } : null)}
         />

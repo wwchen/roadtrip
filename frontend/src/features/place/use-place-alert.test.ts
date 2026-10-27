@@ -30,6 +30,7 @@ function nightsView(over: Partial<PlaceNightsView> = {}): PlaceNightsView {
   return {
     days: [dayOpen(FIRST, OPEN_SITES), watchable(SECOND), watchable(THIRD)],
     dates: DATES,
+    campsites: [],
     siteNames: new Map(),
     capabilities: CAN_EMAIL,
     reopensOn: undefined,

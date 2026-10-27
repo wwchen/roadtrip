@@ -116,6 +116,16 @@ const COMPONENT_LOCAL = new Set([
   '--rt-place-sheet-header-gap',
   '--rt-place-sheet-alert-gap',
   '--rt-place-sheet-name-size',
+  // The site-by-date grid's own column geometry: declared in domain/place/site-matrix.css,
+  // the one stylesheet for the grid at the sheet's Full detent. The date count is set
+  // from a React inline style because only the component knows how many nights are in
+  // view, and every column width is derived from it in CSS.
+  '--rt-site-matrix-date-col',
+  '--rt-site-matrix-max-height',
+  '--rt-site-matrix-row-height',
+  '--rt-site-matrix-head-height',
+  '--rt-site-column-min',
+  '--rt-site-date-count',
   // The nights strip's cell geometry: declared in domain/place/nights-strip.css.
   '--rt-nights-gap',
   '--rt-nights-cell-min',

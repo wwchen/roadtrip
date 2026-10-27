@@ -211,6 +211,32 @@ export const nightsCopy = {
   noDetail: 'No site detail for this night.',
 } as const;
 
+export const matrixCopy = {
+  group: 'Sites by date',
+  heading: (shown: number, total: number) =>
+    shown === total ? `${shown} sites by date` : `${shown} of ${total} sites by date`,
+  siteColumn: 'Site',
+  site: (campsiteRef: number | string) => `Site #${campsiteRef}`,
+  unknownSite: 'Unknown site',
+  loopAndSite: (loop: string, site: string) => `${loop} / ${site}`,
+  filterSites: 'Filter sites',
+  allLoops: 'All loops',
+  filterByLoop: 'Filter by loop',
+  allTypes: 'All types',
+  filterByType: 'Filter by site type',
+  sortSites: 'Sort sites',
+  sortBySite: 'Site',
+  sortByAvailable: 'Available first',
+  sortByLoop: 'Loop',
+  sortByType: 'Type',
+  key: 'What the letters mean',
+  noMatches: 'No sites match these filters.',
+  noSites: 'No reservable sites for this campground.',
+  resizeSiteColumn: 'Resize site column',
+  cell: (site: string, date: string, status: string) => `${site} ${date}: ${status}`,
+  pickNight: (date: string) => `Show ${date}`,
+} as const;
+
 export const alertCopy = {
   offer: 'Get an alert if a site opens up.',
   create: 'Alert me',

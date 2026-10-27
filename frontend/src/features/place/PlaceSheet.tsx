@@ -1,8 +1,10 @@
 import { useState, type ComponentProps, type ReactNode } from 'react';
+import type { Campsite } from '@/api/campsite-api';
 import { AlertRow } from '@/domain/place/AlertRow';
 import { NightSites } from '@/domain/place/NightSites';
 import { NightsStrip } from '@/domain/place/NightsStrip';
 import { PlaceVerdict } from '@/domain/place/PlaceVerdict';
+import { SiteMatrix } from '@/domain/place/SiteMatrix';
 import { POI_BLOCK_GROUPS, POI_FOOTER_BLOCKS, type PoiBlockId } from '@/domain/poi/blocks';
 import { PoiPageShell, type PoiBlockSlots } from '@/domain/poi/PoiPageShell';
 import { Sheet, SheetHeader, SheetSection, type SheetDetent } from '@ui';
@@ -58,6 +60,7 @@ export interface PlaceSheetProps {
   nightsFailure?: ReactNode;
   alert?: ComponentProps<typeof AlertRow>;
   siteNames?: ReadonlyMap<number, string>;
+  campsites?: readonly Campsite[];
   blocks: PoiBlockSlots;
   onClose?: () => void;
 }
@@ -72,6 +75,7 @@ export function PlaceSheet({
   nightsFailure,
   alert,
   siteNames,
+  campsites,
   blocks,
   onClose,
 }: PlaceSheetProps) {
@@ -114,12 +118,21 @@ export function PlaceSheet({
       {hasStay ? (
         <SheetSection from={HALF_DETENT}>
           <div className="rt-place-sheet__stay">
-            {nightsFailure ?? (
-              <>
-                <NightsStrip {...nights} />
-                <NightSites day={selected} names={siteNames} />
-              </>
-            )}
+            {nightsFailure ??
+              (detent === FULL_DETENT ? (
+                <SiteMatrix
+                  dates={nights.dates}
+                  days={nights.days}
+                  {...(campsites ? { campsites } : null)}
+                  selected={nights.selected}
+                  onSelect={nights.onSelect}
+                />
+              ) : (
+                <>
+                  <NightsStrip {...nights} />
+                  <NightSites day={selected} names={siteNames} />
+                </>
+              ))}
             {alert ? <AlertRow {...alert} /> : null}
           </div>
         </SheetSection>

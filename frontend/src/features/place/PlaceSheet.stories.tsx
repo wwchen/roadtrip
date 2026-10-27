@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { dayFull, dayOpen, summary } from '@/domain/place/stay-fixtures';
 import {
@@ -13,6 +13,7 @@ import {
   PoiVerifiedStamp,
 } from '@/domain/poi/PoiBlocks';
 import type { PoiBlockSlots } from '@/domain/poi/PoiPageShell';
+import type { Campsite } from '@/api/campsite-api';
 import { nightsCopy, placeCopy } from '@/lib/strings';
 import { Banner, Button } from '@ui';
 import { PlaceSheet, type PlaceSheetProps } from './PlaceSheet';
@@ -29,6 +30,8 @@ const PHONE_FRAME: CSSProperties = {
 };
 
 const DESKTOP_FRAME: CSSProperties = { ...PHONE_FRAME, width: 960, height: 640, borderRadius: 12 };
+
+const HOST: CSSProperties = { position: 'absolute', inset: 0 };
 
 const NAME = 'Upper Pines';
 const EYEBROW = 'Campground · National Park Service';
@@ -52,6 +55,30 @@ const twoShutWeek = WEEK.map((date, index) =>
 );
 const oneLeftWeek = WEEK.map((date, index) => (index === 0 ? dayOpen(date, LAST_SITE) : dayFull(date)));
 const shutWeek = WEEK.map((date) => dayFull(date));
+
+const LOOPS = ['Loop A', 'Loop A', 'Loop B', 'Loop B', 'Loop C', 'Loop C'];
+const SITE_NUMBERS = ['12', '14', '03', '07', '21', '24'];
+const SITE_KINDS: ReadonlyArray<[string, string]> = [
+  ['tent', 'Tent'],
+  ['tent', 'Tent'],
+  ['standard', 'Standard'],
+  ['standard', 'Standard'],
+  ['rv', 'RV'],
+  ['rv', 'RV'],
+];
+
+const CAMPSITES: readonly Campsite[] = SITE_NUMBERS.map((number, index) => ({
+  id: index + 1,
+  campground_id: 1,
+  name: number,
+  kind: SITE_KINDS[index][0],
+  kind_label: SITE_KINDS[index][1],
+  loop_name: LOOPS[index],
+  equipment: [],
+  attributes: [],
+  data_provider: 'rec_gov',
+  data_provider_ref: String(400 + index),
+})) as readonly Campsite[];
 
 const SITE_NAMES: ReadonlyMap<number, string> = new Map([
   [1, 'Loop A / 12'],
@@ -146,15 +173,32 @@ const droppedPinBlocks: PoiBlockSlots = {
   ),
 };
 
-function Live(props: PlaceSheetProps) {
+const RAISE_KEY = 'ArrowUp';
+const GRABBER_SELECTOR = '.rt-sheet-grabber';
+
+function Live({ raiseBy = 0, ...props }: PlaceSheetProps & { raiseBy?: number }) {
   const [selected, setSelected] = useState(props.nights.selected);
-  return <PlaceSheet {...props} nights={{ ...props.nights, selected, onSelect: setSelected }} />;
+  const host = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const grabber = host.current?.querySelector(GRABBER_SELECTOR);
+    if (!grabber) return;
+    for (let step = 0; step < raiseBy; step += 1) {
+      grabber.dispatchEvent(new KeyboardEvent('keydown', { key: RAISE_KEY, bubbles: true }));
+    }
+  }, [raiseBy]);
+
+  return (
+    <div ref={host} style={HOST}>
+      <PlaceSheet {...props} nights={{ ...props.nights, selected, onSelect: setSelected }} />
+    </div>
+  );
 }
 
 const meta = {
   title: 'Place/PlaceSheet',
   component: PlaceSheet,
-  render: (args) => <Live {...args} />,
+  render: (args, { parameters }) => <Live {...args} raiseBy={Number(parameters.raiseBy ?? 0)} />,
   args: {
     name: NAME,
     subtitle: EYEBROW,
@@ -168,6 +212,7 @@ const meta = {
     },
     nights: { days: openWeek, dates: WEEK, selected: WEEK[0], onSelect: noop },
     siteNames: SITE_NAMES,
+    campsites: CAMPSITES,
     blocks: campgroundBlocks,
     onClose: noop,
   },
@@ -322,3 +367,13 @@ export const DroppedPin: Story = {
 };
 
 export const Desktop: Story = { parameters: { desktop: true } };
+
+export const DesktopAtFull: Story = {
+  args: { nights: { ...meta.args.nights, days: twoShutWeek, selected: WEEK[2] } },
+  parameters: { desktop: true, raiseBy: 2 },
+};
+
+export const PhoneAtFull: Story = {
+  args: { nights: { ...meta.args.nights, days: twoShutWeek, selected: WEEK[2] } },
+  parameters: { raiseBy: 2 },
+};

@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { POI_BLOCK_ORDER, type PoiBlockId } from '@/domain/poi/blocks';
 import type { PoiBlockSlots } from '@/domain/poi/PoiPageShell';
 import { dayFull, dayOpen, summary } from '@/domain/place/stay-fixtures';
-import { stayCopy } from '@/lib/strings';
+import { matrixCopy, stayCopy } from '@/lib/strings';
 import { PlaceSheet, type PlaceSheetProps } from './PlaceSheet';
 
 const NAME = 'Upper Pines';
@@ -326,6 +326,69 @@ describe('PlaceSheet', () => {
     const notice = <span data-testid="stay-notice" />;
     render(<PlaceSheet {...props} arrival="cold" notice={notice} />);
     expect(screen.getByTestId('stay-notice')).toBeInTheDocument();
+  });
+
+  test('full replaces the nights strip with the grid, and keeps the place detail under it', () => {
+    const { container } = render(<PlaceSheet {...props} arrival="from-map" blocks={everyBlock} />);
+    expect(screen.getByRole('group', { name: /nights/i })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: matrixCopy.group })).not.toBeInTheDocument();
+
+    raise(1);
+    expect(screen.getByTestId(SHEET)).toHaveAttribute('data-detent', 'full');
+    expect(screen.queryByRole('group', { name: /nights/i })).not.toBeInTheDocument();
+    const grid = screen.getByRole('region', { name: matrixCopy.group });
+    expect(grid).toBeInTheDocument();
+
+    const detail = screen.getByTestId(blockTestId('gettingThere'));
+    expect(grid.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const order = [...container.querySelectorAll('[data-testid^="block-"]')].map(
+      (el) => (el as HTMLElement).dataset.testid,
+    );
+    expect(order).toEqual(expectedOrderFromBlocks());
+  });
+
+  test('the grid at full draws a cell per site per night, and claims nothing about the stay', () => {
+    render(
+      <PlaceSheet
+        {...props}
+        arrival="from-map"
+        verdict={{ ...verdict, answer: summary({ status: 'full', open_sites: 0 }) }}
+        nights={{ ...props.nights, days: [dayOpen(WEEK[0], OPEN_SITES), dayOpen(WEEK[1], OPEN_SITES)] }}
+      />,
+    );
+    raise(1);
+
+    expect(screen.getAllByText(stayCopy.result.full())).toHaveLength(1);
+    expect(screen.queryByText(/sites open/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('rowheader')).toHaveLength(OPEN_SITES);
+    expect(screen.getAllByLabelText(/available$/)).toHaveLength(OPEN_SITES * WEEK.length);
+  });
+
+  test('a shut grid states the reason at full too, in place of the matrix', () => {
+    const failure = <span data-testid="nights-failure" />;
+    render(<PlaceSheet {...props} arrival="from-map" nightsFailure={failure} />);
+    raise(1);
+
+    expect(screen.getByTestId('nights-failure')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: matrixCopy.group })).not.toBeInTheDocument();
+  });
+
+  test('the alert for a shut night still rides beside the grid at full', () => {
+    const alert = { night: WEEK[1], gate: 'ready', onCreate: vi.fn() } as const;
+    render(<PlaceSheet {...props} arrival="from-map" alert={alert} />);
+    raise(1);
+
+    expect(screen.getByRole('region', { name: matrixCopy.group })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /alert me/i })).toBeInTheDocument();
+  });
+
+  test('a place with no nights in view draws no grid at full either', () => {
+    render(
+      <PlaceSheet {...props} arrival="from-map" nights={{ ...props.nights, days: [], dates: [] }} />,
+    );
+    raise(1);
+
+    expect(screen.queryByRole('region', { name: matrixCopy.group })).not.toBeInTheDocument();
   });
 
   test('the page rule still marks its own fold, now inside full', () => {

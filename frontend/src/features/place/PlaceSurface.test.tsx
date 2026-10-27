@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query';
 import { STAY_ANSWER_EVENT, STAY_DONE_EVENT } from '@/api/availability-api';
 import { queryKeys } from '@/queries/keys';
-import { nightsCopy, placeCopy, stayCopy } from '@/lib/strings';
+import { matrixCopy, nightsCopy, placeCopy, stayCopy } from '@/lib/strings';
 import { eventStreamResponse, jsonResponse, type StubEvent } from '@/test/fetch-stub';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
@@ -56,13 +56,50 @@ const grid = () =>
     watch_capabilities: { trigger_kinds: [], add_to_cart: { state: 'unsupported' } },
   });
 
-const catalog = () => jsonResponse({ poi_id: POI_ID, type: 'campsites', campsites: [], reservation_url_templates: {} });
+const SITE_ID = 11;
+const SITE_NAME = '12';
+const SITE_LOOP = 'Loop A';
+const STAY_START = '2026-10-27';
+
+const gridWithSites = () =>
+  jsonResponse({
+    poi_id: POI_ID,
+    start_date: STAY_START,
+    end_date: '2026-10-28',
+    state: 'available',
+    days: [
+      {
+        date: STAY_START,
+        status: 'available',
+        watchable: false,
+        cells: { [SITE_ID]: { status: 'available', watchable: false } },
+      },
+    ],
+    watch_capabilities: { trigger_kinds: [], add_to_cart: { state: 'unsupported' } },
+  });
+
+const catalog = (campsites: readonly unknown[] = []) => () =>
+  jsonResponse({ poi_id: POI_ID, type: 'campsites', campsites, reservation_url_templates: {} });
+
+const namedSite = {
+  id: SITE_ID,
+  campground_id: POI_ID,
+  name: SITE_NAME,
+  kind: 'tent',
+  kind_label: 'Tent',
+  loop_name: SITE_LOOP,
+  equipment: [],
+  attributes: [],
+  data_provider: 'rec_gov',
+  data_provider_ref: String(SITE_ID),
+};
 
 const watchList = () => jsonResponse({ total: 0, limit: 0, offset: 0, watches: [] });
 
 interface Stubs {
   grid?: () => Response;
   detail?: () => Response;
+  catalog?: () => Response;
 }
 
 function stubRoutes(stayEvents: readonly StubEvent[], over: Stubs = {}) {
@@ -72,7 +109,7 @@ function stubRoutes(stayEvents: readonly StubEvent[], over: Stubs = {}) {
       const url = String(input);
       if (url.includes('/availability/stays')) return eventStreamResponse(stayEvents);
       if (url.includes('/campsites/availability')) return (over.grid ?? grid)();
-      if (url.includes('/campsites')) return catalog();
+      if (url.includes('/campsites')) return (over.catalog ?? catalog())();
       if (url.includes('/api/watches')) return watchList();
       return (over.detail ?? detail)();
     }),
@@ -235,6 +272,38 @@ describe('PlaceSurface', () => {
 
     expect(await screen.findByText(UPSTREAM_FAILED_REASON)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: placeCopy.tryAgain })).toBeInTheDocument();
+  });
+});
+
+describe('PlaceSurface, at the full detent', () => {
+  const raiseToFull = async () => {
+    const grabber = await screen.findByRole('button', { name: NAME });
+    fireEvent.keyDown(grabber, { key: 'ArrowUp' });
+    fireEvent.keyDown(grabber, { key: 'ArrowUp' });
+  };
+
+  test('the grid is fed by the week and the catalog the sheet already read, with no second request', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'completed' } }], {
+      grid: gridWithSites,
+      catalog: catalog([namedSite]),
+    });
+
+    mount('from-map');
+    await raiseToFull();
+
+    expect(screen.getByTestId(SHEET_TESTID)).toHaveAttribute('data-detent', 'full');
+    expect(screen.getByRole('region', { name: matrixCopy.group })).toBeInTheDocument();
+    expect(await screen.findByRole('rowheader')).toHaveTextContent(`${SITE_LOOP} / ${SITE_NAME}`);
+
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
+      String(call[0]),
+    );
+    const weekReads = calls.filter((url) => url.includes('/campsites/availability'));
+    const catalogReads = calls.filter(
+      (url) => url.includes('/campsites') && !url.includes('/availability'),
+    );
+    expect(weekReads).toHaveLength(1);
+    expect(catalogReads).toHaveLength(1);
   });
 });
 

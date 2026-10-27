@@ -39,6 +39,7 @@ export interface PlaceNightsFailure {
 export interface PlaceNightsView {
   days: readonly AvailabilityDay[];
   dates: readonly string[];
+  campsites: readonly Campsite[];
   siteNames: ReadonlyMap<number, string>;
   capabilities: WatchCapabilities;
   reopensOn: string | undefined;
@@ -46,6 +47,7 @@ export interface PlaceNightsView {
 }
 
 const NO_DAYS: readonly AvailabilityDay[] = [];
+const NO_CAMPSITES: readonly Campsite[] = [];
 const NO_SITE_NAMES: ReadonlyMap<number, string> = new Map();
 
 export function nightsOf(start: string, end: string): readonly string[] {
@@ -128,6 +130,7 @@ export function usePlaceNights(poiId: number, stay: PlaceStay): PlaceNightsView 
   return {
     days: Array.isArray(served?.days) ? served.days : NO_DAYS,
     dates,
+    campsites: Array.isArray(campsites) ? campsites : NO_CAMPSITES,
     siteNames,
     capabilities,
     reopensOn: seasonReopensOn(served?.season),
