@@ -110,10 +110,11 @@ local_resource(
 # in the Tilt UI instead of silently serving a stale bundle.
 local_resource(
     'frontend-deps',
-    cmd='cd frontend && npm ci',
+    cmd='npm ci --workspace roadtrip-frontend',
     deps=[
+        'package.json',
+        'package-lock.json',
         'frontend/package.json',
-        'frontend/package-lock.json',
     ],
     labels=['build'],
 )
@@ -126,8 +127,9 @@ local_resource(
         # package.json/lock are here as well as on frontend-deps: resource_deps
         # only orders, it does not re-trigger, so without these a dependency bump
         # would reinstall and leave the bundle stale.
+        'package.json',
+        'package-lock.json',
         'frontend/package.json',
-        'frontend/package-lock.json',
         'frontend/src',
         'frontend/index.html',
         'frontend/availability.html',
@@ -179,13 +181,14 @@ docker_build(
 
 docker_build(
     'roadtrip/recgov-companion',
-    'companion',
+    '.',
     dockerfile='companion/Dockerfile',
     only=[
-        'Dockerfile',
         'package.json',
         'package-lock.json',
-        'src',
+        'companion/Dockerfile',
+        'companion/package.json',
+        'companion/src',
     ],
 )
 

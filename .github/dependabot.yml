@@ -30,21 +30,11 @@ updates:
       - dependency-name: "com.charleskorn.kaml:*"
         versions: [">=0.80.0"]
 
-  # Frontend app. LDS is installed from npm under the @lew-ds scope; keep the
-  # framework package on 1.0.x while the app imports its Roadtrip theme, which
-  # was removed from the 1.1.0 export map.
+  # npm workspace root. LDS is installed from npm under the @lew-ds scope; keep
+  # the framework package on 1.0.x while the app imports its Roadtrip theme,
+  # which was removed from the 1.1.0 export map.
   - package-ecosystem: npm
-    directory: /frontend
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
-    groups:
-      frontend-npm-minor-and-patch:
-        update-types: [minor, patch]
-  # Rec.gov companion sidecar.
-  - package-ecosystem: npm
-    directory: /companion
+    directory: /
     schedule:
       interval: weekly
       day: monday

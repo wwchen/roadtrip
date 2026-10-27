@@ -80,7 +80,7 @@ recgov-atc: _ensure-hooks
 # existing packages; npm ci recreates the companion tree from the lockfile.
 install: install-hooks
 	brew install tilt docker openjdk node sops age ruff
-	cd companion && npm ci && npx playwright install chromium
+	npm ci --workspace campsite-companion && cd companion && npx playwright install chromium
 
 # Everything CI runs (see .github/workflows/ci.yml), locally and in one shot:
 # backend tests, detekt-rule tests, ktlint + detekt, frontend gates, companion
@@ -112,6 +112,7 @@ test: _ensure-hooks
 	node scripts/check-css-blocks.mjs
 	node scripts/check-token-usage.mjs
 	node scripts/check-worktree-sparse-paths.mjs
+	node --test scripts/check-single-lockfile.test.mjs
 	npm run test --workspace campsite-companion
 	ruff check --isolated --target-version py39 --select E4,E7,E9,F,B,UP secrets/ scripts/
 	python3 -m unittest discover -s scripts -p 'test_*.py'
@@ -177,7 +178,7 @@ _ensure-hooks:
 	  { git config core.hooksPath .githooks 2>/dev/null && echo "git hooks installed (.githooks/)"; } || true
 
 frontend:
-	cd frontend && npm ci && npm run build
+	npm ci --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend
 
 # Snapshot Grafana dashboards from the running container into
 # grafana/dashboards/*.json, then apply shared dashboard navigation links.

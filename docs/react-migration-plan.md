@@ -130,7 +130,7 @@ cd /tmp/lds
 cat packages/lds-react/src/index.d.ts     # full React API surface
 ```
 The packages were originally vendored from revision `2bdcf68`. They are now published under
-the `@lew-ds/*` scope and installed through `frontend/package-lock.json`. Keep
+the `@lew-ds/*` scope and installed through the root `package-lock.json`. Keep
 `@lew-ds/lds` pinned to 1.0.0 while the app imports `css/themes/roadtrip`; the 1.1.0 export
 map no longer includes that theme.
 

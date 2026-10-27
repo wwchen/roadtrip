@@ -54,9 +54,17 @@ jobs:
               - 'build.gradle.kts'
               - 'settings.gradle.kts'
               - 'frontend/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
               - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
               - 'scripts/check-color-tokens.mjs'
               - 'scripts/check-feature-boundaries.mjs'
               - 'scripts/check-feature-boundaries.test.mjs'
@@ -65,6 +73,8 @@ jobs:
               - '.github/workflows/ci.yml'
             companion:
               - 'companion/**'
+              - 'package.json'
+              - 'package-lock.json'
               - '.github/workflows/ci.yml'
             companion_image:
               - 'companion/**'
@@ -144,6 +154,14 @@ jobs:
       - name: Validate Claude worktree sparsePaths
         run: node scripts/check-worktree-sparse-paths.mjs
 
+  lockfile-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check every install resolves from the root lockfile
+        run: node --test scripts/check-single-lockfile.test.mjs
+
   lint:
     needs: changes
     if: needs.changes.outputs.scripts == 'true'
@@ -205,10 +223,12 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - name: Install frontend dependencies
-        working-directory: frontend
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
         run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
 
       - name: Check frontend architecture
         working-directory: frontend
@@ -246,10 +266,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: companion/package-lock.json
+          cache-dependency-path: package-lock.json
       - name: Install companion dependencies
-        working-directory: companion
-        run: npm ci --ignore-scripts
+        run: npm ci --workspace campsite-companion --ignore-scripts
       - name: Run companion tests
         working-directory: companion
         run: npm test
@@ -267,7 +286,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Build companion image
-        run: docker build -t roadtrip/recgov-companion ./companion
+        run: docker build -f companion/Dockerfile -t roadtrip/recgov-companion .
 
       - name: Log in to GHCR
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
@@ -468,16 +487,15 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Build backend fat-jar
         run: ./gradlew :backend:buildFatJar
 
       - name: Build frontend
-        working-directory: frontend
         run: |
-          npm ci
-          npm run build
+          npm ci --workspace roadtrip-frontend
+          npm run build --workspace roadtrip-frontend
 
       - name: Start backend
         run: |
@@ -564,6 +582,7 @@ jobs:
       - changes
       - migration-guard
       - worktree-guard
+      - lockfile-guard
       - lint
       - gradle-lint
       - frontend-tests

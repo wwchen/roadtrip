@@ -10,6 +10,10 @@ backend/build/*
 !backend/build/libs/
 !backend/build/libs/roadtrip-backend-*-all.jar
 
+node_modules
+packages/*/node_modules
+packages/*/dist
+
 companion/node_modules
 
 frontend/node_modules
