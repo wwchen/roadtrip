@@ -104,6 +104,9 @@ test: _ensure-hooks
 	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :backend:checkApiTypes :backend:contractLedgerCheck :detekt-rules:test
 	# npm run build includes the TypeScript check before bundling.
 	npm ci
+	# Rebuild every workspace that has a build script so no consumer below
+	# resolves a stale packages/*/dist.
+	npm run build
 	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
 	node scripts/check-color-tokens.mjs
 	node scripts/check-css-blocks.mjs

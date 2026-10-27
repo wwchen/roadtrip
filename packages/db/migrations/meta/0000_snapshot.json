@@ -1,0 +1,3460 @@
+{
+  "id": "3db1feee-35c3-471a-b0b2-722ac78c049a",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.app_user": {
+      "name": "app_user",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email_verified": {
+          "name": "email_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "theme": {
+          "name": "theme",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'system'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "app_user_email_lower_uq": {
+          "name": "app_user_email_lower_uq",
+          "columns": [
+            {
+              "expression": "lower(email)",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "app_user_status_check": {
+          "name": "app_user_status_check",
+          "value": "status = ANY (ARRAY['active'::text, 'disabled'::text])"
+        },
+        "app_user_theme_check": {
+          "name": "app_user_theme_check",
+          "value": "theme = ANY (ARRAY['light'::text, 'dark'::text, 'system'::text])"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.user_booking_credentials": {
+      "name": "user_booking_credentials",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "username": {
+          "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "secret_cipher": {
+          "name": "secret_cipher",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_booking_credentials_user_id_fkey": {
+          "name": "user_booking_credentials_user_id_fkey",
+          "tableFrom": "user_booking_credentials",
+          "tableTo": "app_user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "user_booking_credentials_pkey": {
+          "name": "user_booking_credentials_pkey",
+          "columns": [
+            "user_id",
+            "provider"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user_identity": {
+      "name": "user_identity",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "upstream_provider": {
+          "name": "upstream_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "upstream_subject": {
+          "name": "upstream_subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "email_verified_at": {
+          "name": "email_verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "user_identity_user_idx": {
+          "name": "user_identity_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_identity_upstream_idx": {
+          "name": "user_identity_upstream_idx",
+          "columns": [
+            {
+              "expression": "upstream_provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "upstream_subject",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "upstream_subject IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "user_identity_user_id_fkey": {
+          "name": "user_identity_user_id_fkey",
+          "tableFrom": "user_identity",
+          "tableTo": "app_user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "user_identity_provider_subject_key": {
+          "name": "user_identity_provider_subject_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "provider",
+            "subject"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user_role": {
+      "name": "user_role",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_role_user_id_fkey": {
+          "name": "user_role_user_id_fkey",
+          "tableFrom": "user_role",
+          "tableTo": "app_user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "user_role_pkey": {
+          "name": "user_role_pkey",
+          "columns": [
+            "user_id",
+            "role"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "user_role_role_check": {
+          "name": "user_role_role_check",
+          "value": "role = 'admin'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.user_session": {
+      "name": "user_session",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "user_session_user_idx": {
+          "name": "user_session_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "user_session_expires_idx": {
+          "name": "user_session_expires_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "user_session_user_id_fkey": {
+          "name": "user_session_user_id_fkey",
+          "tableFrom": "user_session",
+          "tableTo": "app_user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "user_session_token_hash_key": {
+          "name": "user_session_token_hash_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.user_settings": {
+      "name": "user_settings",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "notification_email": {
+          "name": "notification_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slack_token_cipher": {
+          "name": "slack_token_cipher",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slack_token_hint": {
+          "name": "slack_token_hint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slack_channel": {
+          "name": "slack_channel",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recgov_username": {
+          "name": "recgov_username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recgov_password_cipher": {
+          "name": "recgov_password_cipher",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_settings_user_id_fkey": {
+          "name": "user_settings_user_id_fkey",
+          "tableFrom": "user_settings",
+          "tableTo": "app_user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.availability": {
+      "name": "availability",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "campsite_id": {
+          "name": "campsite_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_date": {
+          "name": "target_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "availability_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_observed_at": {
+          "name": "last_observed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "previous_id": {
+          "name": "previous_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "availability_campsite_current_idx": {
+          "name": "availability_campsite_current_idx",
+          "columns": [
+            {
+              "expression": "campsite_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "target_date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "last_observed_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "availability_run_idx": {
+          "name": "availability_run_idx",
+          "columns": [
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "run_id IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "availability_previous_id_uq": {
+          "name": "availability_previous_id_uq",
+          "columns": [
+            {
+              "expression": "previous_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "previous_id IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "availability_campsite_id_fkey": {
+          "name": "availability_campsite_id_fkey",
+          "tableFrom": "availability",
+          "tableTo": "campsites",
+          "columnsFrom": [
+            "campsite_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "availability_run_id_fkey": {
+          "name": "availability_run_id_fkey",
+          "tableFrom": "availability",
+          "tableTo": "availability_run",
+          "columnsFrom": [
+            "run_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "availability_previous_id_fkey": {
+          "name": "availability_previous_id_fkey",
+          "tableFrom": "availability",
+          "tableTo": "availability",
+          "columnsFrom": [
+            "previous_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.availability_watch": {
+      "name": "availability_watch",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "owner_user_id": {
+          "name": "owner_user_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cadence_sec": {
+          "name": "cadence_sec",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "done_reason": {
+          "name": "done_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stop_when_triggered": {
+          "name": "stop_when_triggered",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "trigger_kinds": {
+          "name": "trigger_kinds",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trigger_config": {
+          "name": "trigger_config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "campsite_filters": {
+          "name": "campsite_filters",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "magic_link_token": {
+          "name": "magic_link_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "availability_watch_active_idx": {
+          "name": "availability_watch_active_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "status = 'active'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "availability_watch_owner_idx": {
+          "name": "availability_watch_owner_idx",
+          "columns": [
+            {
+              "expression": "owner_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "availability_watch_owner_user_id_fkey": {
+          "name": "availability_watch_owner_user_id_fkey",
+          "tableFrom": "availability_watch",
+          "tableTo": "app_user",
+          "columnsFrom": [
+            "owner_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "availability_watch_cadence_sec_check": {
+          "name": "availability_watch_cadence_sec_check",
+          "value": "cadence_sec >= 5"
+        },
+        "availability_watch_date_window_check": {
+          "name": "availability_watch_date_window_check",
+          "value": "end_date > start_date"
+        },
+        "availability_watch_done_reason_check": {
+          "name": "availability_watch_done_reason_check",
+          "value": "done_reason IS NULL OR done_reason = ANY (ARRAY['triggered'::text, 'elapsed'::text])"
+        },
+        "availability_watch_reservable_filters_check": {
+          "name": "availability_watch_reservable_filters_check",
+          "value": "jsonb_typeof(campsite_filters) = 'object'"
+        },
+        "availability_watch_status_check": {
+          "name": "availability_watch_status_check",
+          "value": "status = ANY (ARRAY['active'::text, 'paused'::text, 'done'::text])"
+        },
+        "availability_watch_trigger_config_check": {
+          "name": "availability_watch_trigger_config_check",
+          "value": "jsonb_typeof(trigger_config) = 'object'"
+        },
+        "availability_watch_trigger_kinds_check": {
+          "name": "availability_watch_trigger_kinds_check",
+          "value": "cardinality(trigger_kinds) > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.availability_watch_poller": {
+      "name": "availability_watch_poller",
+      "schema": "",
+      "columns": {
+        "watch_id": {
+          "name": "watch_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "poller_id": {
+          "name": "poller_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "availability_watch_poller_poller_idx": {
+          "name": "availability_watch_poller_poller_idx",
+          "columns": [
+            {
+              "expression": "poller_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "availability_watch_poller_watch_id_fkey": {
+          "name": "availability_watch_poller_watch_id_fkey",
+          "tableFrom": "availability_watch_poller",
+          "tableTo": "availability_watch",
+          "columnsFrom": [
+            "watch_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "availability_watch_poller_poller_id_fkey": {
+          "name": "availability_watch_poller_poller_id_fkey",
+          "tableFrom": "availability_watch_poller",
+          "tableTo": "availability_poller",
+          "columnsFrom": [
+            "poller_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "availability_watch_poller_pkey": {
+          "name": "availability_watch_poller_pkey",
+          "columns": [
+            "watch_id",
+            "poller_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.availability_watch_target": {
+      "name": "availability_watch_target",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "watch_id": {
+          "name": "watch_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "poi_id": {
+          "name": "poi_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "campsite_id": {
+          "name": "campsite_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "availability_watch_target_watch_idx": {
+          "name": "availability_watch_target_watch_idx",
+          "columns": [
+            {
+              "expression": "watch_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "availability_watch_target_poi_idx": {
+          "name": "availability_watch_target_poi_idx",
+          "columns": [
+            {
+              "expression": "poi_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "poi_id IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "availability_watch_target_campsite_idx": {
+          "name": "availability_watch_target_campsite_idx",
+          "columns": [
+            {
+              "expression": "campsite_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "campsite_id IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "availability_watch_target_watch_id_fkey": {
+          "name": "availability_watch_target_watch_id_fkey",
+          "tableFrom": "availability_watch_target",
+          "tableTo": "availability_watch",
+          "columnsFrom": [
+            "watch_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "availability_watch_target_poi_id_fkey": {
+          "name": "availability_watch_target_poi_id_fkey",
+          "tableFrom": "availability_watch_target",
+          "tableTo": "pois",
+          "columnsFrom": [
+            "poi_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "availability_watch_target_campsite_id_fkey": {
+          "name": "availability_watch_target_campsite_id_fkey",
+          "tableFrom": "availability_watch_target",
+          "tableTo": "campsites",
+          "columnsFrom": [
+            "campsite_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "availability_watch_target_check": {
+          "name": "availability_watch_target_check",
+          "value": "(poi_id IS NOT NULL) <> (campsite_id IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.campgrounds": {
+      "name": "campgrounds",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "data_provider": {
+          "name": "data_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data_provider_ref": {
+          "name": "data_provider_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "booking_provider": {
+          "name": "booking_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "booking_provider_ref": {
+          "name": "booking_provider_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "booking_aliases": {
+          "name": "booking_aliases",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_name": {
+          "name": "parent_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status_description": {
+          "name": "status_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "short_description": {
+          "name": "short_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "medium_description": {
+          "name": "medium_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "long_description": {
+          "name": "long_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reservation_url": {
+          "name": "reservation_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "big_rig_friendly": {
+          "name": "big_rig_friendly",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "has_pull_through_sites": {
+          "name": "has_pull_through_sites",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_rv_length": {
+          "name": "max_rv_length",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_trailer_length": {
+          "name": "max_trailer_length",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location": {
+          "name": "location",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "contact": {
+          "name": "contact",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "connections": {
+          "name": "connections",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "management": {
+          "name": "management",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "price": {
+          "name": "price",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "amenities": {
+          "name": "amenities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "alerts": {
+          "name": "alerts",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "cell_service": {
+          "name": "cell_service",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "links": {
+          "name": "links",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "photos": {
+          "name": "photos",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "default_campsite_schedule": {
+          "name": "default_campsite_schedule",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "geometry_provenance": {
+          "name": "geometry_provenance",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_payload": {
+          "name": "source_payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "campgrounds_active_kind_idx": {
+          "name": "campgrounds_active_kind_idx",
+          "columns": [
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "deleted_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campgrounds_booking_aliases_gin": {
+          "name": "campgrounds_booking_aliases_gin",
+          "columns": [
+            {
+              "expression": "booking_aliases",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "campgrounds_booking_provider_ref_idx": {
+          "name": "campgrounds_booking_provider_ref_idx",
+          "columns": [
+            {
+              "expression": "booking_provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "booking_provider_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campgrounds_geometry_provenance_match_kind_idx": {
+          "name": "campgrounds_geometry_provenance_match_kind_idx",
+          "columns": [
+            {
+              "expression": "(geometry_provenance ->> 'match_kind')",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "geometry_provenance IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campgrounds_provider_uidx": {
+          "name": "campgrounds_provider_uidx",
+          "columns": [
+            {
+              "expression": "data_provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "data_provider_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "deleted_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "campgrounds_alerts_check": {
+          "name": "campgrounds_alerts_check",
+          "value": "jsonb_typeof(alerts) = 'array'"
+        },
+        "campgrounds_amenities_check": {
+          "name": "campgrounds_amenities_check",
+          "value": "jsonb_typeof(amenities) = 'array'"
+        },
+        "campgrounds_booking_aliases_check": {
+          "name": "campgrounds_booking_aliases_check",
+          "value": "jsonb_typeof(booking_aliases) = 'array'"
+        },
+        "campgrounds_cell_service_check": {
+          "name": "campgrounds_cell_service_check",
+          "value": "jsonb_typeof(cell_service) = 'array'"
+        },
+        "campgrounds_connections_check": {
+          "name": "campgrounds_connections_check",
+          "value": "jsonb_typeof(connections) = 'object'"
+        },
+        "campgrounds_contact_check": {
+          "name": "campgrounds_contact_check",
+          "value": "jsonb_typeof(contact) = 'object'"
+        },
+        "campgrounds_data_source_check": {
+          "name": "campgrounds_data_source_check",
+          "value": "length(btrim(data_provider)) > 0"
+        },
+        "campgrounds_default_schedule_check": {
+          "name": "campgrounds_default_schedule_check",
+          "value": "jsonb_typeof(default_campsite_schedule) = 'object'"
+        },
+        "campgrounds_geometry_provenance_check": {
+          "name": "campgrounds_geometry_provenance_check",
+          "value": "geometry_provenance IS NULL OR jsonb_typeof(geometry_provenance) = 'object'"
+        },
+        "campgrounds_links_check": {
+          "name": "campgrounds_links_check",
+          "value": "jsonb_typeof(links) = 'array'"
+        },
+        "campgrounds_location_check": {
+          "name": "campgrounds_location_check",
+          "value": "jsonb_typeof(location) = 'object'"
+        },
+        "campgrounds_management_check": {
+          "name": "campgrounds_management_check",
+          "value": "jsonb_typeof(management) = 'object'"
+        },
+        "campgrounds_max_rv_length_check": {
+          "name": "campgrounds_max_rv_length_check",
+          "value": "max_rv_length IS NULL OR max_rv_length >= 0"
+        },
+        "campgrounds_max_trailer_length_check": {
+          "name": "campgrounds_max_trailer_length_check",
+          "value": "max_trailer_length IS NULL OR max_trailer_length >= 0"
+        },
+        "campgrounds_metadata_check": {
+          "name": "campgrounds_metadata_check",
+          "value": "jsonb_typeof(metadata) = 'object'"
+        },
+        "campgrounds_name_check": {
+          "name": "campgrounds_name_check",
+          "value": "length(btrim(name)) > 0"
+        },
+        "campgrounds_photos_check": {
+          "name": "campgrounds_photos_check",
+          "value": "jsonb_typeof(photos) = 'array'"
+        },
+        "campgrounds_price_check": {
+          "name": "campgrounds_price_check",
+          "value": "jsonb_typeof(price) = 'object'"
+        },
+        "campgrounds_source_payload_check": {
+          "name": "campgrounds_source_payload_check",
+          "value": "jsonb_typeof(source_payload) = 'object'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.campsites": {
+      "name": "campsites",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "campground_id": {
+          "name": "campground_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data_provider": {
+          "name": "data_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data_provider_ref": {
+          "name": "data_provider_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "booking_provider": {
+          "name": "booking_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "booking_provider_ref": {
+          "name": "booking_provider_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "booking_aliases": {
+          "name": "booking_aliases",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind_listed": {
+          "name": "kind_listed",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "loop_name": {
+          "name": "loop_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reservation_url": {
+          "name": "reservation_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ada_accessible": {
+          "name": "ada_accessible",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "electric_hookups": {
+          "name": "electric_hookups",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "water_hookups": {
+          "name": "water_hookups",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sewer_hookups": {
+          "name": "sewer_hookups",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "firepit": {
+          "name": "firepit",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "picnic_table": {
+          "name": "picnic_table",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pull_through": {
+          "name": "pull_through",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "driveway_length": {
+          "name": "driveway_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_cars": {
+          "name": "max_cars",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "min_people": {
+          "name": "min_people",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_people": {
+          "name": "max_people",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_rv_length": {
+          "name": "max_rv_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_trailer_length": {
+          "name": "max_trailer_length",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attributes": {
+          "name": "attributes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "equipment": {
+          "name": "equipment",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'[]'::jsonb"
+        },
+        "photos": {
+          "name": "photos",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "price": {
+          "name": "price",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "schedule": {
+          "name": "schedule",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "source_payload": {
+          "name": "source_payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "campsites_booking_aliases_gin": {
+          "name": "campsites_booking_aliases_gin",
+          "columns": [
+            {
+              "expression": "booking_aliases",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "campsites_booking_provider_ref_idx": {
+          "name": "campsites_booking_provider_ref_idx",
+          "columns": [
+            {
+              "expression": "booking_provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "booking_provider_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campsites_campground_active_idx": {
+          "name": "campsites_campground_active_idx",
+          "columns": [
+            {
+              "expression": "campground_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "deleted_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campsites_summary_idx": {
+          "name": "campsites_summary_idx",
+          "columns": [
+            {
+              "expression": "campground_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "max_people",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "deleted_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campsites_provider_uidx": {
+          "name": "campsites_provider_uidx",
+          "columns": [
+            {
+              "expression": "data_provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "data_provider_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "deleted_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "campsites_campground_id_fkey": {
+          "name": "campsites_campground_id_fkey",
+          "tableFrom": "campsites",
+          "tableTo": "campgrounds",
+          "columnsFrom": [
+            "campground_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "campsites_attributes_check": {
+          "name": "campsites_attributes_check",
+          "value": "jsonb_typeof(attributes) = 'array'"
+        },
+        "campsites_booking_aliases_check": {
+          "name": "campsites_booking_aliases_check",
+          "value": "jsonb_typeof(booking_aliases) = 'array'"
+        },
+        "campsites_data_source_check": {
+          "name": "campsites_data_source_check",
+          "value": "length(btrim(data_provider)) > 0"
+        },
+        "campsites_driveway_length_check": {
+          "name": "campsites_driveway_length_check",
+          "value": "driveway_length IS NULL OR driveway_length >= 0"
+        },
+        "campsites_equipment_check": {
+          "name": "campsites_equipment_check",
+          "value": "equipment IS NULL OR jsonb_typeof(equipment) = 'array'"
+        },
+        "campsites_kind_check": {
+          "name": "campsites_kind_check",
+          "value": "length(btrim(kind)) > 0"
+        },
+        "campsites_kind_wire_check": {
+          "name": "campsites_kind_wire_check",
+          "value": "kind = ANY (ARRAY['standard'::text, 'tent'::text, 'rv'::text, 'cabin'::text, 'group'::text, 'walk_in'::text, 'boat_in'::text, 'equestrian'::text, 'backcountry'::text, 'day_use'::text, 'other'::text])"
+        },
+        "campsites_latitude_check": {
+          "name": "campsites_latitude_check",
+          "value": "latitude IS NULL OR (latitude >= -90 AND latitude <= 90)"
+        },
+        "campsites_longitude_check": {
+          "name": "campsites_longitude_check",
+          "value": "longitude IS NULL OR (longitude >= -180 AND longitude <= 180)"
+        },
+        "campsites_max_cars_check": {
+          "name": "campsites_max_cars_check",
+          "value": "max_cars IS NULL OR max_cars >= 0"
+        },
+        "campsites_max_people_check": {
+          "name": "campsites_max_people_check",
+          "value": "max_people IS NULL OR max_people >= 0"
+        },
+        "campsites_max_rv_length_check": {
+          "name": "campsites_max_rv_length_check",
+          "value": "max_rv_length IS NULL OR max_rv_length >= 0"
+        },
+        "campsites_max_trailer_length_check": {
+          "name": "campsites_max_trailer_length_check",
+          "value": "max_trailer_length IS NULL OR max_trailer_length >= 0"
+        },
+        "campsites_min_people_check": {
+          "name": "campsites_min_people_check",
+          "value": "min_people IS NULL OR min_people >= 0"
+        },
+        "campsites_name_check": {
+          "name": "campsites_name_check",
+          "value": "length(btrim(name)) > 0"
+        },
+        "campsites_photos_check": {
+          "name": "campsites_photos_check",
+          "value": "jsonb_typeof(photos) = 'array'"
+        },
+        "campsites_price_check": {
+          "name": "campsites_price_check",
+          "value": "jsonb_typeof(price) = 'object'"
+        },
+        "campsites_schedule_check": {
+          "name": "campsites_schedule_check",
+          "value": "jsonb_typeof(schedule) = 'object'"
+        },
+        "campsites_source_payload_check": {
+          "name": "campsites_source_payload_check",
+          "value": "jsonb_typeof(source_payload) = 'object'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.planet_fitness_locations": {
+      "name": "planet_fitness_locations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "info_url": {
+          "name": "info_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opening_hours": {
+          "name": "opening_hours",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "region": {
+          "name": "region",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "country": {
+          "name": "country",
+          "type": "char(2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "address": {
+          "name": "address",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "amenities": {
+          "name": "amenities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "planet_fitness_locations_active_region_idx": {
+          "name": "planet_fitness_locations_active_region_idx",
+          "columns": [
+            {
+              "expression": "country",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "region",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "deleted_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "planet_fitness_locations_location_id_uidx": {
+          "name": "planet_fitness_locations_location_id_uidx",
+          "columns": [
+            {
+              "expression": "location_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "planet_fitness_locations_address_check": {
+          "name": "planet_fitness_locations_address_check",
+          "value": "jsonb_typeof(address) = 'object'"
+        },
+        "planet_fitness_locations_amenities_check": {
+          "name": "planet_fitness_locations_amenities_check",
+          "value": "jsonb_typeof(amenities) = 'array'"
+        },
+        "planet_fitness_locations_location_id_check": {
+          "name": "planet_fitness_locations_location_id_check",
+          "value": "length(btrim(location_id)) > 0"
+        },
+        "planet_fitness_locations_name_check": {
+          "name": "planet_fitness_locations_name_check",
+          "value": "length(btrim(name)) > 0"
+        },
+        "planet_fitness_locations_payload_check": {
+          "name": "planet_fitness_locations_payload_check",
+          "value": "jsonb_typeof(payload) = 'object'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.poi_campgrounds": {
+      "name": "poi_campgrounds",
+      "schema": "",
+      "columns": {
+        "poi_id": {
+          "name": "poi_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "campground_id": {
+          "name": "campground_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "poi_campgrounds_campground_uidx": {
+          "name": "poi_campgrounds_campground_uidx",
+          "columns": [
+            {
+              "expression": "campground_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "poi_campgrounds_poi_id_fkey": {
+          "name": "poi_campgrounds_poi_id_fkey",
+          "tableFrom": "poi_campgrounds",
+          "tableTo": "pois",
+          "columnsFrom": [
+            "poi_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "poi_campgrounds_campground_id_fkey": {
+          "name": "poi_campgrounds_campground_id_fkey",
+          "tableFrom": "poi_campgrounds",
+          "tableTo": "campgrounds",
+          "columnsFrom": [
+            "campground_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "poi_campgrounds_pkey": {
+          "name": "poi_campgrounds_pkey",
+          "columns": [
+            "poi_id",
+            "campground_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.poi_planet_fitness_locations": {
+      "name": "poi_planet_fitness_locations",
+      "schema": "",
+      "columns": {
+        "poi_id": {
+          "name": "poi_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "planet_fitness_location_id": {
+          "name": "planet_fitness_location_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "poi_planet_fitness_locations_location_uidx": {
+          "name": "poi_planet_fitness_locations_location_uidx",
+          "columns": [
+            {
+              "expression": "planet_fitness_location_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "poi_planet_fitness_locations_poi_id_fkey": {
+          "name": "poi_planet_fitness_locations_poi_id_fkey",
+          "tableFrom": "poi_planet_fitness_locations",
+          "tableTo": "pois",
+          "columnsFrom": [
+            "poi_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "poi_planet_fitness_locations_planet_fitness_location_id_fkey": {
+          "name": "poi_planet_fitness_locations_planet_fitness_location_id_fkey",
+          "tableFrom": "poi_planet_fitness_locations",
+          "tableTo": "planet_fitness_locations",
+          "columnsFrom": [
+            "planet_fitness_location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "poi_planet_fitness_locations_pkey": {
+          "name": "poi_planet_fitness_locations_pkey",
+          "columns": [
+            "poi_id",
+            "planet_fitness_location_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.poi_tesla_superchargers": {
+      "name": "poi_tesla_superchargers",
+      "schema": "",
+      "columns": {
+        "poi_id": {
+          "name": "poi_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tesla_supercharger_id": {
+          "name": "tesla_supercharger_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "poi_tesla_superchargers_supercharger_uidx": {
+          "name": "poi_tesla_superchargers_supercharger_uidx",
+          "columns": [
+            {
+              "expression": "tesla_supercharger_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "poi_tesla_superchargers_poi_id_fkey": {
+          "name": "poi_tesla_superchargers_poi_id_fkey",
+          "tableFrom": "poi_tesla_superchargers",
+          "tableTo": "pois",
+          "columnsFrom": [
+            "poi_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "poi_tesla_superchargers_tesla_supercharger_id_fkey": {
+          "name": "poi_tesla_superchargers_tesla_supercharger_id_fkey",
+          "tableFrom": "poi_tesla_superchargers",
+          "tableTo": "tesla_superchargers",
+          "columnsFrom": [
+            "tesla_supercharger_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "poi_tesla_superchargers_pkey": {
+          "name": "poi_tesla_superchargers_pkey",
+          "columns": [
+            "poi_id",
+            "tesla_supercharger_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.pois": {
+      "name": "pois",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "poi_type": {
+          "name": "poi_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "geom": {
+          "name": "geom",
+          "type": "geometry(Geometry,4326)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cadence_override_sec": {
+          "name": "cadence_override_sec",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "pois_active_type_idx": {
+          "name": "pois_active_type_idx",
+          "columns": [
+            {
+              "expression": "poi_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "deleted_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "pois_geom_idx": {
+          "name": "pois_geom_idx",
+          "columns": [
+            {
+              "expression": "geom",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gist",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "pois_poi_type_check": {
+          "name": "pois_poi_type_check",
+          "value": "poi_type = ANY (ARRAY['campground'::text, 'tesla_supercharger'::text, 'planet_fitness_location'::text])"
+        },
+        "pois_cadence_override_sec_check": {
+          "name": "pois_cadence_override_sec_check",
+          "value": "cadence_override_sec IS NULL OR cadence_override_sec >= 5"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.tesla_superchargers": {
+      "name": "tesla_superchargers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "location_slug": {
+          "name": "location_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location_guid": {
+          "name": "location_guid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "common_site_name": {
+          "name": "common_site_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "site_status": {
+          "name": "site_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "access_type": {
+          "name": "access_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "open_to_public": {
+          "name": "open_to_public",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "open_to_non_teslas": {
+          "name": "open_to_non_teslas",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trailer_friendly": {
+          "name": "trailer_friendly",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "twenty_four_seven": {
+          "name": "twenty_four_seven",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stall_count": {
+          "name": "stall_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "max_power_kw": {
+          "name": "max_power_kw",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "region": {
+          "name": "region",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "country": {
+          "name": "country",
+          "type": "char(2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "time_zone": {
+          "name": "time_zone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "info_url": {
+          "name": "info_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "address": {
+          "name": "address",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "amenities": {
+          "name": "amenities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "availability_profile": {
+          "name": "availability_profile",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "hardware_counts": {
+          "name": "hardware_counts",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "pricebooks": {
+          "name": "pricebooks",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "index_payload": {
+          "name": "index_payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "detail_payload": {
+          "name": "detail_payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "tesla_superchargers_active_country_region_idx": {
+          "name": "tesla_superchargers_active_country_region_idx",
+          "columns": [
+            {
+              "expression": "country",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "region",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "deleted_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tesla_superchargers_location_slug_uidx": {
+          "name": "tesla_superchargers_location_slug_uidx",
+          "columns": [
+            {
+              "expression": "location_slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "tesla_superchargers_address_check": {
+          "name": "tesla_superchargers_address_check",
+          "value": "jsonb_typeof(address) = 'object'"
+        },
+        "tesla_superchargers_amenities_check": {
+          "name": "tesla_superchargers_amenities_check",
+          "value": "jsonb_typeof(amenities) = 'array'"
+        },
+        "tesla_superchargers_availability_profile_check": {
+          "name": "tesla_superchargers_availability_profile_check",
+          "value": "jsonb_typeof(availability_profile) = 'object'"
+        },
+        "tesla_superchargers_common_site_name_check": {
+          "name": "tesla_superchargers_common_site_name_check",
+          "value": "length(btrim(common_site_name)) > 0"
+        },
+        "tesla_superchargers_detail_payload_check": {
+          "name": "tesla_superchargers_detail_payload_check",
+          "value": "jsonb_typeof(detail_payload) = 'object'"
+        },
+        "tesla_superchargers_hardware_counts_check": {
+          "name": "tesla_superchargers_hardware_counts_check",
+          "value": "jsonb_typeof(hardware_counts) = 'object'"
+        },
+        "tesla_superchargers_index_payload_check": {
+          "name": "tesla_superchargers_index_payload_check",
+          "value": "jsonb_typeof(index_payload) = 'object'"
+        },
+        "tesla_superchargers_location_slug_check": {
+          "name": "tesla_superchargers_location_slug_check",
+          "value": "length(btrim(location_slug)) > 0"
+        },
+        "tesla_superchargers_max_power_kw_check": {
+          "name": "tesla_superchargers_max_power_kw_check",
+          "value": "max_power_kw IS NULL OR max_power_kw >= 0"
+        },
+        "tesla_superchargers_pricebooks_check": {
+          "name": "tesla_superchargers_pricebooks_check",
+          "value": "jsonb_typeof(pricebooks) = 'array'"
+        },
+        "tesla_superchargers_site_status_check": {
+          "name": "tesla_superchargers_site_status_check",
+          "value": "length(btrim(site_status)) > 0"
+        },
+        "tesla_superchargers_stall_count_check": {
+          "name": "tesla_superchargers_stall_count_check",
+          "value": "stall_count IS NULL OR stall_count >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.import_runs": {
+      "name": "import_runs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "seen_count": {
+          "name": "seen_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ingest_runs": {
+      "name": "ingest_runs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "target": {
+          "name": "target",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phase": {
+          "name": "phase",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phase_kind": {
+          "name": "phase_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "triggered_by": {
+          "name": "triggered_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_run_id": {
+          "name": "parent_run_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "exit_code": {
+          "name": "exit_code",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "counts": {
+          "name": "counts",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "ingest_runs_parent_idx": {
+          "name": "ingest_runs_parent_idx",
+          "columns": [
+            {
+              "expression": "parent_run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ingest_runs_started_only_idx": {
+          "name": "ingest_runs_started_only_idx",
+          "columns": [
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "status = 'started' AND phase_kind = 'target'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ingest_runs_target_started_idx": {
+          "name": "ingest_runs_target_started_idx",
+          "columns": [
+            {
+              "expression": "target",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ingest_runs_parent_run_id_fkey": {
+          "name": "ingest_runs_parent_run_id_fkey",
+          "tableFrom": "ingest_runs",
+          "tableTo": "ingest_runs",
+          "columnsFrom": [
+            "parent_run_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "ingest_runs_phase_kind_check": {
+          "name": "ingest_runs_phase_kind_check",
+          "value": "phase_kind = ANY (ARRAY['target'::text, 'fetch'::text, 'import'::text])"
+        },
+        "ingest_runs_status_check": {
+          "name": "ingest_runs_status_check",
+          "value": "status = ANY (ARRAY['started'::text, 'completed'::text, 'failed'::text, 'aborted'::text])"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.api_cache": {
+      "name": "api_cache",
+      "schema": "",
+      "columns": {
+        "namespace": {
+          "name": "namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cache_key": {
+          "name": "cache_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "api_cache_expires_at_idx": {
+          "name": "api_cache_expires_at_idx",
+          "columns": [
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "api_cache_pkey": {
+          "name": "api_cache_pkey",
+          "columns": [
+            "namespace",
+            "cache_key"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.availability_fetch_call": {
+      "name": "availability_fetch_call",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "run_id": {
+          "name": "run_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_ref": {
+          "name": "parent_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "window_start": {
+          "name": "window_start",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "window_end": {
+          "name": "window_end",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "campsite_count": {
+          "name": "campsite_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "availability_fetch_call_outcome_created_idx": {
+          "name": "availability_fetch_call_outcome_created_idx",
+          "columns": [
+            {
+              "expression": "outcome",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "availability_fetch_call_run_idx": {
+          "name": "availability_fetch_call_run_idx",
+          "columns": [
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "availability_fetch_call_run_id_fkey": {
+          "name": "availability_fetch_call_run_id_fkey",
+          "tableFrom": "availability_fetch_call",
+          "tableTo": "availability_run",
+          "columnsFrom": [
+            "run_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "availability_fetch_call_duration_ms_check": {
+          "name": "availability_fetch_call_duration_ms_check",
+          "value": "duration_ms IS NULL OR duration_ms >= 0"
+        },
+        "availability_fetch_call_outcome_check": {
+          "name": "availability_fetch_call_outcome_check",
+          "value": "outcome = ANY (ARRAY['ok'::text, 'rate_limited'::text, 'upstream_5xx'::text, 'blocked'::text, 'other'::text])"
+        },
+        "availability_fetch_call_reservable_count_check": {
+          "name": "availability_fetch_call_reservable_count_check",
+          "value": "campsite_count >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.availability_poller": {
+      "name": "availability_poller",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "poi_id": {
+          "name": "poi_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parent_ref": {
+          "name": "parent_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "next_run_at": {
+          "name": "next_run_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "last_run_at": {
+          "name": "last_run_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_force_pull_at": {
+          "name": "last_force_pull_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "claim_token": {
+          "name": "claim_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "claimed_until": {
+          "name": "claimed_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "availability_poller_due_idx": {
+          "name": "availability_poller_due_idx",
+          "columns": [
+            {
+              "expression": "next_run_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "active",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "availability_poller_poi_id_fkey": {
+          "name": "availability_poller_poi_id_fkey",
+          "tableFrom": "availability_poller",
+          "tableTo": "pois",
+          "columnsFrom": [
+            "poi_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "availability_poller_provider_parent_ref_key": {
+          "name": "availability_poller_provider_parent_ref_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "provider",
+            "parent_ref"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.availability_run": {
+      "name": "availability_run",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "nextval('availability_job_run_id_seq'::regclass)"
+        },
+        "poller_id": {
+          "name": "poller_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'started'"
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "snapshot_count": {
+          "name": "snapshot_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "availability_run_poller_started_idx": {
+          "name": "availability_run_poller_started_idx",
+          "columns": [
+            {
+              "expression": "poller_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "first"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "availability_run_poller_id_fkey": {
+          "name": "availability_run_poller_id_fkey",
+          "tableFrom": "availability_run",
+          "tableTo": "availability_poller",
+          "columnsFrom": [
+            "poller_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "availability_job_run_pkey": {
+          "name": "availability_job_run_pkey",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "availability_job_run_duration_ms_check": {
+          "name": "availability_job_run_duration_ms_check",
+          "value": "duration_ms IS NULL OR duration_ms >= 0"
+        },
+        "availability_job_run_snapshot_count_check": {
+          "name": "availability_job_run_snapshot_count_check",
+          "value": "snapshot_count >= 0"
+        },
+        "availability_job_run_status_check": {
+          "name": "availability_job_run_status_check",
+          "value": "status = ANY (ARRAY['started'::text, 'completed'::text, 'failed'::text])"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.vendor_rate_limit_bucket": {
+      "name": "vendor_rate_limit_bucket",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(255)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.availability_status": {
+      "name": "availability_status",
+      "schema": "public",
+      "values": [
+        "first_come",
+        "reserved",
+        "available",
+        "closed",
+        "unknown",
+        "past"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {
+    "public.availability_job_run_id_seq": {
+      "name": "availability_job_run_id_seq",
+      "schema": "public",
+      "increment": "1",
+      "startWith": "1",
+      "minValue": "1",
+      "maxValue": "9223372036854775807",
+      "cache": "1",
+      "cycle": false
+    }
+  },
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
