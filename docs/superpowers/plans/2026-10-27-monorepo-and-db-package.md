@@ -28,7 +28,7 @@ Five conditions §3 implies that no task's happy path would exercise, most likel
 1. **PostGIS SRID is lost in the custom type.** A `geometry(Geometry, 4326)` value written and read through Drizzle must come back with SRID 4326 intact; a custom type that serializes to WKT without SRID silently degrades every geo query in step 7. *Test in Task 4.*
 2. **The constraint trigger is ported as an immediate trigger.** `availability_watch_target_prune_empty` is `DEFERRABLE INITIALLY DEFERRED`: deleting all of a watch's targets and re-inserting one inside a single transaction must leave the watch alive. A plain `AFTER DELETE` trigger deletes it. *Test in Task 5.*
 3. **A JSONB codec throws on keys it does not know.** The Kotlin importer writes these columns today and its `Json` is configured `ignoreUnknownKeys = true`. A strict TS decoder fails on real rows during step 4's differential run. *Test in Task 7.*
-4. **A query reads a materialized view before it is refreshed.** `campground_canonical` and `campsite_canonical` do not reflect an insert until refreshed, so a later step reading them gets stale rows with no error. *Test in Task 5.*
+4. **The documented migration path differs from the tested one.** If `migrateDb` is the only thing that creates the PostGIS extension, then `npx drizzle-kit migrate` — the obvious command, and the one a new contributor reaches for — fails on an empty database while the equivalence gate passes, because the gate goes through `migrateDb`. *Test in Task 4:* the project's documented entrypoint migrates an empty database successfully.
 5. **Everything is tested on a direct connection only.** The API path uses a transaction-mode pooler where prepared statements fail; a suite that never exercises `prepare: false` passes here and breaks in step 7. *Test in Task 6.*
 
 ---
@@ -120,11 +120,15 @@ Normalization is what makes the comparison possible: `pg_dump --schema-only --no
 test('reference dump contains the objects Drizzle cannot express', async () => {
   const sql = await readFile(ref, 'utf8');
   assert.match(sql, /CREATE EXTENSION IF NOT EXISTS postgis/);
-  assert.match(sql, /CREATE MATERIALIZED VIEW campground_canonical/);
-  assert.match(sql, /CREATE MATERIALIZED VIEW campsite_canonical/);
   assert.match(sql, /CREATE CONSTRAINT TRIGGER availability_watch_target_prune_empty/);
   assert.match(sql, /CREATE TYPE public\.availability_status AS ENUM/);
-  assert.equal((sql.match(/CHECK \(/g) ?? []).length, 107);
+  assert.match(sql, /CREATE VIEW public\.grafana_api_cache_metadata/);
+  assert.equal((sql.match(/CHECK \(/g) ?? []).length, 76);
+});
+
+test('the dropped materialized views are absent', async () => {
+  const sql = await readFile(ref, 'utf8');
+  assert.doesNotMatch(sql, /MATERIALIZED VIEW/);
 });
 
 test('normalization is idempotent', () => {
@@ -144,7 +148,7 @@ Start a Postgres container with PostGIS available, run Flyway over the migration
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `node --test scripts/schema-reference.test.mjs`
-Expected: PASS. If the `CHECK (` count differs from 107, the assertion is right and the migrations have changed — update the number and say so in the commit.
+Expected: PASS. The counts here are against the *produced schema*, not the migration source: 76 `CHECK (` in the dump versus 107 occurrences in the migration text, the difference being constraints on tables and columns that later migrations dropped. If your run disagrees with 76, investigate before changing the number, and say why in the commit.
 
 - [ ] **Step 5: Commit**
 
@@ -278,9 +282,11 @@ git commit -m "feat: @roadtrip/db schema and PostGIS geometry type"
 
 **Interfaces:**
 - Consumes: Task 4's migration output; runs immediately after it.
-- Produces: `campground_canonical`, `campsite_canonical`, the `grafana_api_cache_metadata` view, three plpgsql functions, `availability_watch_target_prune_empty`, and the `grafana_reader` role and grants. **Not** the PostGIS extension — Task 4's `migrateDb` creates it before any migration runs, because `0000_init.sql` needs it.
+- Produces: the `availability_watch_prune_when_no_targets` function, the `availability_watch_target_prune_empty` constraint trigger, the `grafana_api_cache_metadata` view, and the `grafana_reader` role and grants. **Not** the PostGIS extension — Task 4's `migrateDb` creates it before any migration runs, because `0000_init.sql` needs it. **No materialized views** — see below.
 
-SQL bodies are copied verbatim from the Flyway migrations that own them — V38 and later for the matviews, V30 for the prune function and trigger, `R__grafana_reader_grants.sql` for the role guard, the grants and the `grafana_api_cache_metadata` view. Copy, do not paraphrase: these are the live definitions. The role guard is the `DO $$ … IF NOT EXISTS (SELECT FROM pg_roles …) $$` block, which is what makes the file safe to run against a database that has no `grafana_reader`.
+SQL bodies are copied verbatim from the Flyway migrations that own them — V30 for the prune function and trigger, `R__grafana_reader_grants.sql` for the role guard, the grants and the `grafana_api_cache_metadata` view. Copy, do not paraphrase: these are the live definitions. The role guard is the `DO $$ … IF NOT EXISTS (SELECT FROM pg_roles …) $$` block, which is what makes the file safe to run against a database that has no `grafana_reader`.
+
+**Do not create `campground_canonical` or `campsite_canonical`.** An earlier draft of this task listed them. They are created in V39, recreated in V41 and V43, and dropped for good in V44; `CanonicalCatalogSchemaTest` asserts their absence against `pg_matviews`, and Task 2's reference dump contains neither. Creating them would fail Task 6's gate.
 
 - [ ] **Step 1: Write the failing tests** — Review Focus #2 and #4
 
@@ -298,11 +304,13 @@ test('deleting the last target with no re-insert prunes the watch', async () => 
   expect(await watchExists(2n)).toBe(false);
 });
 
-test('campground_canonical does not reflect an insert until refreshed', async () => {
-  await db.insert(campgrounds).values(fixture);
-  expect(await canonicalCount()).toBe(before);
-  await db.execute(sql`REFRESH MATERIALIZED VIEW campground_canonical`);
-  expect(await canonicalCount()).toBe(before + 1);
+test('no materialized views exist', async () => {
+  const rows = await db.execute(sql`SELECT matviewname FROM pg_matviews WHERE schemaname = 'public'`);
+  expect(rows).toEqual([]);
+});
+
+test('grafana_api_cache_metadata is queryable', async () => {
+  await expect(db.execute(sql`SELECT * FROM grafana_api_cache_metadata LIMIT 1`)).resolves.toBeDefined();
 });
 ```
 
@@ -311,11 +319,11 @@ The first test is the one that matters. It fails if the trigger is created witho
 - [ ] **Step 2: Run to verify they fail**
 
 Run: `npm run test --workspace @roadtrip/db -- raw-objects`
-Expected: FAIL — relation `campground_canonical` does not exist.
+Expected: FAIL — relation `grafana_api_cache_metadata` does not exist, and the trigger tests fail because nothing prunes.
 
 - [ ] **Step 3: Write `0001_raw_objects.sql`**
 
-Order matters: extension, functions, matviews, constraint trigger, grants.
+Order matters: function, then constraint trigger, then role guard, then grants, then the view.
 
 - [ ] **Step 4: Run to verify they pass**
 
@@ -371,7 +379,9 @@ Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement `compare(): Promise<{ equal: boolean, diff: string }>` in `scripts/schema-equivalence.mjs`**
 
-Two containers: one Flyway-migrated via Task 2, one Drizzle-migrated. Dump and normalize both with Task 2's `normalize`. Diff line-by-line.
+**One container, two databases** — not two containers. Task 2 reports the PostGIS image is amd64-only, so it runs under emulation on Apple Silicon and the first pull is ~850MB; booting it twice doubles a cost that is already the slowest thing in this plan. Create two databases in the single container, both from `template0` as Task 2 does, migrate one with Flyway and one with Drizzle, and dump both. Reuse Task 2's container setup rather than writing a second one.
+
+Dump and normalize both with Task 2's `normalize`. Diff line-by-line.
 
 - [ ] **Step 4: Run to verify they pass**
 

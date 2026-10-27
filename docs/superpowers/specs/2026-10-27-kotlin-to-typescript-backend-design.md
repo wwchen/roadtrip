@@ -135,12 +135,26 @@ escape-hatch raw-SQL migration carries:
 
 | Feature | Count | Note |
 | --- | --- | --- |
-| PostGIS extension and `geometry(Geometry, 4326)` columns | 3 tables | Needs a Drizzle custom type |
-| `CREATE MATERIALIZED VIEW campground_canonical`, `campsite_canonical` | 2 | The canonical catalog read model; the importer must also refresh them |
-| plpgsql functions | 3 | |
-| `CREATE CONSTRAINT TRIGGER availability_watch_target_prune_empty` | 1 | `DEFERRABLE INITIALLY DEFERRED`; deleting the last target prunes the watch. **Business logic in the database** — a schema port drops this silently |
-| `CHECK` constraints | 107 | Named explicitly by Flyway; Drizzle auto-names unless told, so names must be pinned |
-| `R__grafana_reader_grants.sql` | 1 | Repeatable `GRANT` migration; Drizzle does not manage grants |
+| PostGIS extension and `geometry(Geometry, 4326)` columns | 3 tables | Needs a Drizzle custom type. The extension must be created *before* the generated migration, which declares those columns |
+| `CREATE CONSTRAINT TRIGGER availability_watch_target_prune_empty` and its plpgsql function | 1 + 1 | `DEFERRABLE INITIALLY DEFERRED`; deleting the last target prunes the watch. **Business logic in the database** — a schema port drops this silently |
+| `CREATE TYPE availability_status AS ENUM` | 1 | `pgEnum`, with the member order preserved |
+| `CREATE VIEW grafana_api_cache_metadata` | 1 | A plain view, inside `R__grafana_reader_grants.sql` |
+| Partial and expression indexes | several | Drizzle expresses `.where()`; expression indexes need raw SQL |
+| `CHECK` constraints | **76** | Named explicitly by Flyway; Drizzle auto-names unless told, so names must be pinned |
+| `R__grafana_reader_grants.sql` role and grants | 1 | Repeatable `GRANT` migration; Drizzle does not manage grants or roles |
+
+**There are no materialized views.** An earlier draft of this section listed
+`campground_canonical` and `campsite_canonical` as the canonical catalog read model,
+from counting `CREATE MATERIALIZED VIEW` across the migrations. They are created in
+V39, recreated in V41 and V43, and **dropped for good in V44** —
+`CanonicalCatalogSchemaTest` asserts their absence against `pg_matviews`. That error
+is this section's own warning in miniature: six `CREATE` statements read as proof of
+existence, and nobody looked for the later `DROP`.
+
+The `CHECK` count has the same shape. The migration *source text* contains 107
+`CHECK (` occurrences; the schema those migrations *produce* has 76, because the rest
+constrain tables and columns that no longer exist. Any count asserted against this
+schema must come from the dump.
 
 The gate is therefore **semantic equivalence, not a textual diff**: migrate Drizzle
 into a second database, dump both with `pg_dump --schema-only --no-owner
