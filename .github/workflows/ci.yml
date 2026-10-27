@@ -26,6 +26,7 @@ jobs:
       data_image: ${{ steps.filter.outputs.data_image }}
       scripts: ${{ steps.filter.outputs.scripts }}
       gradle_lint: ${{ steps.filter.outputs.gradle_lint }}
+      schema_equivalence: ${{ steps.filter.outputs.schema_equivalence }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -97,6 +98,21 @@ jobs:
               - 'docker-compose*.yml'
               - '.github/actions/**'
               - '.github/workflows/**'
+            # Both sides of the comparison, because the drift being caught is a
+            # Flyway migration landing with no matching Drizzle change — a filter
+            # watching only packages/ would skip the gate on exactly that push.
+            # packages/** rather than packages/db/**: campsiteKinds from
+            # @roadtrip/domain is baked into the campsites_kind_wire_check
+            # constraint, so a domain edit alone can move the emitted schema.
+            schema_equivalence:
+              - 'packages/**'
+              - 'backend/src/main/resources/db/migration/**'
+              - 'scripts/schema-equivalence.mjs'
+              - 'scripts/schema-reference.mjs'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
+              - '.github/workflows/ci.yml'
             gradle_lint:
               - 'backend/**'
               - 'detekt-rules/**'
@@ -272,6 +288,33 @@ jobs:
 
       - name: Check design token usage
         run: node scripts/check-token-usage.mjs
+
+  # Mirrored locally by `make test`. packages/db no longer builds on install, so
+  # the gate needs `npm run build` ahead of it — the same prelude frontend-tests
+  # runs, which is why this is its own job rather than a step there: that job has
+  # no business booting Postgres, and backend-tests has Docker but no npm install.
+  # The amd64-only PostGIS image runs natively on these runners, so the emulation
+  # cost paid locally does not apply here.
+  schema-equivalence:
+    needs: changes
+    if: needs.changes.outputs.schema_equivalence == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
+
+      - name: Check the Drizzle migrations still reproduce the Flyway schema
+        run: node scripts/schema-equivalence.mjs
 
   companion-tests:
     needs: changes
@@ -605,6 +648,7 @@ jobs:
       - lint
       - gradle-lint
       - frontend-tests
+      - schema-equivalence
       - companion-tests
       - companion-image
       - data-image

@@ -90,7 +90,8 @@ install: install-hooks
 # across the backend checks that CI runs in separate jobs.
 #
 # This target is the local mirror of ci.yml's gradle-lint, backend-tests,
-# frontend-tests, companion-tests and lint jobs — change one, change the other.
+# frontend-tests, schema-equivalence, companion-tests and lint jobs — change
+# one, change the other.
 # The single deliberate divergence: gradle-lint runs `ktlintCheck` with
 # `-x :backend:generateJooq`, since linting alone has no reason to spin up the
 # codegen Testcontainer. Here ktlintCheck shares an invocation with
@@ -101,9 +102,10 @@ install: install-hooks
 # so they need the same compile (and therefore the same Docker) :backend:test
 # already needs. ci.yml runs them in backend-tests, never in gradle-lint.
 #
-# Second deliberate divergence: schema-equivalence.mjs runs here but has no
-# ci.yml job yet. It boots the amd64-only PostGIS image plus Flyway, so where a
-# slow container job belongs in the workflow graph is still open.
+# schema-equivalence.mjs mirrors ci.yml's schema-equivalence job, which this
+# target also stands in for. That job is filtered on both sides of the
+# comparison (packages/** and the Flyway migration directory), because the drift
+# it catches is a migration landing with no matching Drizzle change.
 test: _ensure-hooks
 	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :backend:checkApiTypes :backend:contractLedgerCheck :detekt-rules:test
 	# npm run build includes the TypeScript check before bundling.
