@@ -508,7 +508,13 @@ Code that this design removes outright, not relocates:
 
 - `pages/watches/` and `watches.html`; `features/watches/WatchTable.tsx`,
   `WatchForm.tsx`, `TriggerSelector.tsx`, `ManageWatchCard.tsx`
-- `pages/availability/` and `availability.html` — the routed matrix page
+- ~~`pages/availability/` and `availability.html`~~ — **wrong, and kept.** This
+  is not the matrix page. It is the shell for the operator Availability
+  Dashboard: it mounts `ChangesTab`, `PollersTab`, `RunsTab` and `TabNav` from
+  `features/availability-dashboard`, which the top of this document puts out of
+  scope. The backend serves `/availability` from it, the watches page links to
+  it, and `page-shells.test.ts` and the smoke test pin it. An implementer
+  refused this instruction and was right to.
 - `features/availability/SiteMatrix.tsx` (857 lines), `SiteList.tsx`,
   `matrix-rows.ts` — per-campsite × per-day grids are not a thing a phone shows
 - `features/map/LegendPanel.tsx`, `BasemapPicker.tsx` — a legend explains a
@@ -579,6 +585,12 @@ has to be *asserted* rather than looked at.
 - The existing page tests move with their surfaces; deleted surfaces take their
   tests with them.
 - Copy assertions read from `lib/strings.ts`, never inline literals.
+- **The repo's own gates count as tests.** `scripts/check-token-usage.mjs` and
+  `scripts/check-color-tokens.mjs` are CI, and a phase that invents a new
+  component family invents new custom properties — exactly what they police. The
+  first phase of this work shipped three task reviews deep before anyone ran
+  them, because the verification list named `test`, `typecheck`, `lint` and
+  `build-storybook` and stopped there. Every phase runs all of them.
 
 ## Deferred
 
