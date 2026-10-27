@@ -254,13 +254,23 @@ Three things the reference demands that Drizzle does not give you by default:
 - [ ] **Step 1: Write the failing test** — Review Focus #1
 
 ```ts
-test('geometry round-trips with SRID 4326 intact', async () => {
-  const db = createDb(container.getConnectionUri());
-  await db.insert(pois).values({ id: 1n, geom: 'SRID=4326;POINT(-123.1 49.2)' });
-  const [row] = await db.select({ srid: sql`ST_SRID(${pois.geom})` }).from(pois);
-  expect(row.srid).toBe(4326);
+test('the write carries the SRID', async () => {
+  await db.insert(pois).values({ id: WRITTEN_POI_ID, geom: ewkt('POINT(-123.1 49.2)') });
+  expect(await sridOf(WRITTEN_POI_ID)).toBe(4326);
+});
+
+test('the read is SRID-bearing EWKB, not EWKT', async () => {
+  const [row] = await db.select({ geom: pois.geom }).from(pois).where(eq(pois.id, WRITTEN_POI_ID));
+  expect(isEwkt(row.geom)).toBe(false);
+  expect(row.geom).toMatch(SRID_4326_POINT_HEADER);
 });
 ```
+
+**Both halves are required, and the second is the one that matters.** An earlier draft of this step had a single test projecting `ST_SRID(${pois.geom})` — which makes the server compute the answer, so `fromDriver` is never invoked and the read path is untested. Select the column and assert on what comes back.
+
+The read assertion must be an EWKB-header match, not an `ST_SRID` check on a re-inserted value: PostGIS re-applies the column's typmod SRID to SRID-less WKB, so an `ST_SRID` assertion on a round-tripped row cannot fail even when the SRID has been lost. `/^0101000020E6100000/i` is the honest assertion — little-endian, Point-with-SRID-flag, `0x10E6` = 4326.
+
+Writes and reads are **different formats**: EWKT in, hex EWKB out. Give them distinct branded types rather than two aliases for `string`, which the compiler treats as interchangeable, and make a constructor the only way to build one so a bare WKT string is a compile error.
 
 And Review Focus #4 — the documented migration path must work, not just the one the gate uses:
 
