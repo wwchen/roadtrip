@@ -1,0 +1,340 @@
+# Kotlin Backend to TypeScript
+
+Replace the Ktor backend with TypeScript: a Next.js app serving the web surface and
+a Node worker owning vendor egress and scheduled work, sharing one Drizzle package.
+The datastore is a configuration choice, not an architectural one.
+
+## Problem
+
+The backend is 855 Kotlin files — 42,184 LOC main, 52,945 LOC test, 1,066 LOC smoke
+— serving 46 HTTP endpoints over 66 Flyway migrations. The frontend is a separate
+Vite + React 19 SPA. Four things motivate replacing it:
+
+1. **One language.** Types cross the boundary through a generator
+   (`frontend/src/api/generated/api-types.ts`, 884 lines) rather than directly.
+2. **Build weight.** `generateJooq` runs against a Testcontainers Postgres, so a
+   backend build requires Docker. The edit-run loop is Gradle-paced.
+3. **Deploy.** Self-hosted Compose behind Caddy and a Cloudflare tunnel, with no
+   preview deploys.
+4. **SSR.** The SPA cannot server-render campground or POI pages.
+
+Two conditions make a port viable that would otherwise not be: there is no active
+development on the existing site, and there is no data to migrate. The current
+repository is a reference implementation, not a system to keep running in parallel.
+
+## Constraints
+
+These are discovered, not chosen. Each one killed an earlier version of this design.
+
+### C1 — Vendor traffic must originate from a residential IP
+
+Recreation.gov sits behind Akamai, which flags datacenter IPs. `docs/companion.md`
+records this as the reason the rec.gov companion runs a real Chromium with a
+persistent profile. It applies beyond the companion: `CampsiteAvailabilityService`
+computes a freshness cutoff from a per-provider TTL — `DEFAULT_AVAILABILITY_TTL` is
+**2 hours** — and when the stored snapshot is older, calls
+`failoverFetcher.fetch(...)` **during the user's request**. A request-path fetch from
+a serverless function would originate from a datacenter.
+
+**Therefore:** one process owns all vendor egress, and it runs on mini-ca.
+
+### C2 — The companion never gets a public vhost
+
+`docs/companion.md` states this as an invariant: no Compose `ports:`, no Caddy
+route. Per-user isolation is enforceable because the process calling the companion
+authenticates the user and passes only *their* `profile_id`.
+
+**Therefore:** whatever calls the companion sits inside the Compose network, where
+the Ktor backend sits today.
+
+### C3 — Vendor rate limiting is per-process
+
+`VendorRateLimitConfig` is a token bucket — `DEFAULT_VENDOR_BUCKET_CAPACITY` 60,
+refilling 60 per minute — held in memory, alongside `ProviderCooldownTracker`. Two
+processes fetching from the same vendor would hold two independent buckets and be
+blind to each other's cooldowns.
+
+**Therefore:** C1's single egress process is also the only rate-limit authority.
+
+### C4 — The datastore must be swappable
+
+Supabase, self-hosted Docker Postgres, and Neon must all work, across production,
+preview, and local. This is a first-class requirement.
+
+**Therefore:** the application depends on Postgres and nothing else. Every vendor
+capability is an adapter behind a port with a portable default — the `AGENTS.md`
+port/adapter rule applied to infrastructure rather than to reservation vendors.
+
+C4 is why Supabase Realtime is **not** the push mechanism, despite fitting the
+cold-snapshot flow well. It is Supabase-only. Postgres `LISTEN`/`NOTIFY` does not
+rescue portability either, because transaction-mode pooling — Supavisor, Neon's
+pooler, pgbouncer — forbids it, and that is the pooling a serverless API requires.
+The portable default is polling. Realtime may be added later as an adapter if
+polling proves measurably inadequate.
+
+## Design
+
+### 1. Two runtimes and a shared package
+
+| Component | Host | Owns |
+| --- | --- | --- |
+| **Next.js** | Vercel (or mini-ca; see §9) | SSR pages, the frontend, ~41 endpoints |
+| **Worker** | mini-ca | Scheduler, availability pollers, vendor clients, notifications, the companion-facing routes, and the importer CLI |
+
+The companion-facing routes are the four in `RecgovSettingsRoutes` — login, MFA,
+verify, status — plus whichever settings route performs credential save and removal,
+since removal calls `destroyProfile`. The eight `CompanionSessionPort` methods are
+not all routes; `refresh` and `markKeepWarm` are driven by `RecGovKeepaliveJob`,
+which is worker-internal either way.
+| **Companion** | mini-ca | Unchanged. Already Node, already a clean HTTP contract |
+| **`@roadtrip/db`** | shared workspace package | Drizzle schema, domain types, JSONB codecs |
+
+Both runtimes import `@roadtrip/db`, so "one schema mapper" is a compiler guarantee
+rather than a convention.
+
+The worker connects to Postgres directly and keeps `FOR UPDATE SKIP LOCKED` exactly
+as `SchedulableRepo` does today. There is no internal work-claim API, no signed-token
+scheme, and no cross-language DTO contract — all three were in earlier drafts of this
+design and all three exist only to paper over a language boundary that this design
+removes.
+
+C2 needs no new design: the worker sits where the Ktor backend sits today, on the
+same Compose network, with the same shared secret and the same `profile_id`-only
+contract.
+
+### 2. Connection configuration
+
+Two connection strings, not one:
+
+- **Next.js** uses the transaction-mode pooler. This requires `prepare: false` in
+  postgres.js; prepared statements fail confusingly otherwise.
+- **The worker** is long-lived and takes a direct session-mode connection.
+
+`FOR UPDATE SKIP LOCKED` works identically under transaction pooling on all three
+targets, so the scheduler's claim-lease mechanism is portable unchanged.
+
+Local development is `docker run postgres` — not a ten-container Supabase stack.
+
+### 3. Schema
+
+The live schema is the source, **not the 66 migrations**. Those contain historical
+churn describing tables that no longer exist: `availability_snapshot` was dropped in
+V36, `availability_job` in V28. Reading them as a description of today's schema
+produces wrong answers; this spec's first draft made exactly that error.
+
+Author the Drizzle schema from a dump of the live database, as **one initial
+migration**. Gate: a round-trip comparison against that dump.
+
+Every typed JSONB column — `amenities`, `cell_service`, `metadata`, `price`,
+`default_campsite_schedule`, `alerts`, `photos`, `equipment`, `attributes`,
+`booking_aliases`, `kind`, `location`/`address`, `properties`, `source_payload` — is
+written only by the importer and read only by the API. Both are TypeScript importing
+the same package, so `CatalogColumnJson`'s "one codec" rule survives as a type
+constraint. `availability_watch.reservable_filters` and `trigger_config` are written
+by the API and read by the worker; same package, same guarantee.
+
+### 4. The importer
+
+`data/raw` is 1.7G across 19,136 envelope files and 29 sources. It is a cache of
+vendor responses, so the importer is a batch job — one-time seed plus ad hoc refresh
+— not a service. It is a CLI in the worker package taking a directory and a
+connection string.
+
+It must not run through an HTTP endpoint. Routing a few hundred thousand upserts
+through single-digit-MB request bodies against capped function durations is the wrong
+shape, not a tuning problem.
+
+**Verification by differential testing.** Run the Kotlin importer and the TypeScript
+importer against the same 19,136 envelopes into two databases and diff the rows.
+Deterministic input, deterministic output, no mocking, and a reference implementation
+that already works. This replaces most ETL unit tests with one harness and is
+stronger than what it replaces.
+
+Note for execution: if the importer runs on mini-ca against a remote datastore, the
+bulk load crosses a residential uplink. Seeding against a local Postgres and
+dump/restoring upward is likely faster.
+
+### 5. Auth
+
+Supabase Auth replaces the sign-in flow. The reason is **not** that the existing code
+is weak — that framing appeared in an earlier draft and is wrong.
+
+`rfcs/0009-auth-provider-layer.md` documents two live holes this code closed:
+`availability_watch` had no owner column, so `GET /api/watches` returned every user's
+watches and the delete endpoint would delete anyone's; and `trigger_config.email_notify.to`
+was an arbitrary unverified address, making the notification path an open email relay
+any anonymous caller could drive.
+
+The primitives are minimal and correct. `Pkce.kt` is 49 lines, over half comments.
+`AuthCookies.kt` is 112 lines. The replacement must still guarantee, and these files
+are the reference for what each one is for:
+
+| Guarantee | Reference | Why it exists |
+| --- | --- | --- |
+| Asymmetric-only algorithm allowlist | `IdTokenVerifier.kt` | Prevents alg-confusion token forgery |
+| Issuer compared against configured value, not the discovery document's | `IdTokenVerifier.kt` | The discovery value rejected every Auth0 token over a trailing slash |
+| Opaque random session tokens, only SHA-256 persisted | `SessionService.kt`, `user_session.token_hash` | Revocable before expiry; survives an IdP swap without signing everyone out |
+| HMAC-signed login-flow cookie, constant-time compare, domain-separated key | `LoginFlowState.kt` | Closes login CSRF and session fixation |
+| `SameSite=Lax`, **not** `Strict` | `AuthCookies.kt` | `Strict` is not sent on the provider's cross-site callback redirect; "hardening" it breaks every login |
+
+**The risk being avoided is the port, not the original.** A TypeScript
+reimplementation derived from this code's shape rather than its reasoning would
+plausibly lose the allowlist, the constant-time compare, or the Lax-not-Strict
+subtlety. Not writing it twice is the win.
+
+What is genuine excess is the provider-dialect layer: ~370 LOC across
+`Auth0ClaimsDialect`, `ClerkClaimsDialect`, `WorkOsClaimsDialect`,
+`StandardClaimsDialect`, `ClaimsDialectRegistry`, and the id types.
+`docker-compose.secrets.yml` provisions Auth0 and Clerk only; WorkOS has no
+credentials anywhere in the repo. Dropping provider-switching is an accepted loss.
+
+**The port shrinks to one question:** given a request, who is the user and what roles
+do they have. Adapters behind it: a Supabase adapter verifying its JWT, and a dev
+adapter for local and any plain-Postgres configuration. `app_user`, `user_identity`
+and `user_role` stay in the Drizzle schema, so authorization stays ours and stays
+portable per C4.
+
+`MagicLinkTokenService` is **not** part of this and does not move. It is wired to
+`AvailabilityWatchRepo` and read by `AvailabilityWatchRoutes` via a query param; it
+backs unauthenticated watch access from an alert link. A product feature, not sign-in.
+
+### 6. Authorization
+
+`rfcs/0010-authorization-pass.md` settles a decision this rewrite must not quietly
+reverse: **every route declares its access level, and a route that declares nothing
+fails the build.** Neither deny-by-default nor allow-by-default was acceptable —
+roughly three-quarters of routes are legitimately anonymous because browsing is the
+product, so deny-by-default puts the annotation burden on the common case and turns a
+forgotten marker into a user-facing outage; allow-by-default turns one into a silent
+leak.
+
+Port `RouteAccess` — `Anonymous`, `User`, `HasRole(role)`, `Signed` — and the
+coverage check. RFC 0010 contains the complete 46-row surface inventory with the
+access level for each route; that table is the authoritative input, not something to
+re-derive.
+
+Two rows carry their own requirements. `POST /test/email` and `POST /test/slack` take
+a caller-supplied destination and send real mail and real Slack messages; they must
+be `admin`-gated **and** registered only behind a diagnostics flag, so production
+carries no send-anything endpoint. `POST /api/slack/interactivity` is authenticated
+by HMAC signature rather than session and must stay that way — Slack has no cookie —
+so it is declared `Signed` rather than left uncovered.
+
+Authorization stays in code (`RoadtripAuthorization`, `WatchAccessResolver`), not in
+RLS policies. Policies are harder to test for no gain, since the database is not
+exposed to browsers. This also keeps C4: RLS is Supabase-shaped.
+
+### 7. Enforcement gates
+
+These are what currently make drift and layering violations impossible. Each needs a
+replacement, and the replacements are written **before** the code they guard. The
+existing `scripts/check-feature-boundaries.mjs` is the local precedent for the style.
+
+| Current gate | Replacement |
+| --- | --- |
+| `RouteAccessCoverageTest` | Walk the route tree; fail on any handler without a declared access level |
+| `LayeringGuardTest` | Import-boundary check over the workspace: no route→repo, no `org.jooq` equivalent outside the data layer |
+| `ApiContractCoverageTest`, `ContractLedgerCheck`, `ContractBodyCheck` | Zod schemas as the source, `zod-to-openapi` for the document; assert every route's success body is produced by a route test |
+| `OpenApiContractDocumentTest` | Snapshot the generated OpenAPI document |
+| `JooqCodegenDriftTest` | `drizzle-kit check` plus a schema-vs-dump round-trip |
+| `SecretRegistryDriftTest` | Port directly against `secrets/registry.yaml` |
+| `AvailabilityProviderContractTest` | Port directly — one suite every provider adapter must satisfy |
+| `TypedInfrastructurePropertyNaming` (detekt) | ESLint rule, or drop if the Drizzle types make it unnecessary |
+
+`make api-types` and the generator in `backend/src/main/kotlin/ca/floo/roadtrip/apigen`
+are deleted rather than replaced: with one language there is nothing to generate.
+
+### 8. Testing
+
+52,945 LOC of Kotlin tests do not port mechanically. The strategy is per category,
+and the total will be substantially smaller because a large share tests code this
+design deletes.
+
+- **Guard tests first.** Small, high-leverage, and what keeps the architecture honest
+  across a long port. Written before the code they guard (§7).
+- **ETL: differential, not unit.** The §4 harness against 19,136 envelopes.
+- **Repo tests:** `@testcontainers/postgresql` with real Postgres, Drizzle
+  migrations, and fixtures. Same shape as today.
+- **Route tests:** contract-driven against the frozen `api-types.ts` and OpenAPI
+  document from the Kotlin build, which serve as the target specification.
+- **Provider contract tests:** port directly.
+- **Smoke tests:** `backend/src/smokeTest` is 1,066 LOC of Playwright. Playwright is
+  JS-native, so these port most easily of anything here, and they are the end-to-end
+  safety net during the port. Do these early, not last.
+- **Not ported:** tests of jOOQ mapping, DI wiring, the auth internals of §5, and the
+  dialect layer. These have no counterpart.
+
+### 9. Early probes
+
+Both are **early steps, not blockers.** C4 is what makes them non-blocking: the
+datastore and the host are configuration, so a bad answer changes a config value
+rather than invalidating this design.
+
+**P1 — Read latency.** Run `CampgroundSearchRepo`'s geo queries and the availability
+read path from a deployed function against a managed datastore, and compare against
+in-process-to-localhost today. If the regression is unacceptable, Next.js runs on
+mini-ca in standalone mode and everything else in this spec is unchanged; the only
+loss is Vercel preview deploys.
+
+**P2 — Supabase third-party auth.** Determine whether Supabase can sit in front of an
+external IdP, or whether adopting it means replacing the IdP outright. Either answer
+is acceptable — provider-switching is an accepted loss per §5 — but it changes the
+shape of the §5 adapter and should be known before that step.
+
+### 10. Sequencing
+
+This spec describes a program, not a single change. Each step below is its own
+implementation plan; steps 2, 4, 5, 6 and 7 are each large enough to warrant one.
+Do not expand this into one plan.
+
+1. P1 and P2, in parallel with step 2.
+2. Monorepo, `@roadtrip/db`, Drizzle schema from the live dump, local Postgres.
+   *Gate:* schema round-trips against the dump.
+3. Enforcement gates (§7), before the code they guard.
+4. Importer plus differential harness. *Gate:* row-level diff clean against the
+   Kotlin importer.
+5. Read API and SSR pages for POI and campground. *Gate:* responses match the frozen
+   contract.
+6. Auth (§5) and the full `RouteAccess` declaration set from RFC 0010's inventory.
+   *Gate:* coverage check fails on an undeclared route.
+7. Worker: scheduler, pollers, notifications. *Gate:* ported Playwright smoke.
+8. Companion-facing operations on the worker; Next.js proxies, and the worker
+   resolves the forwarded session token against the database itself rather than
+   trusting a header.
+9. Frontend to Next.js pages.
+10. Cutover; decommission the Kotlin build.
+
+## Risks
+
+**Operational surface grows.** Today: one JVM process plus a Node companion. After:
+Next.js, a Node worker, the companion, and `scripts/poll_raw.py` — which stays Python
+and is out of scope. Four runtimes to two hosts. Three of the four motives are about
+less friction, and this is a real cost against them.
+
+**The availability write path is not a simple insert.** `recordObservations` →
+`latestPerCell` → `currentStatusRuns` → `insertStatusRuns`/`bumpObservedAt` maintains
+a `previous_id` linked list under a unique index. It is a read-modify-write against
+current state. Porting it needs the reasoning, not the shape — the same hazard §5
+describes for auth. Cells per poll (campsites × target dates) is unmeasured.
+
+**SSR delivers less than it sounds like.** The primary view is maplibre-gl, which is
+client-only. Server rendering buys campground and POI detail pages — real SEO value,
+but not the app.
+
+**Deleting provider-switching is irreversible in practice.** `AUTH_PROVIDER=clerk`
+in `docker-compose.sandbox.yml` shows it is in live use across environments.
+
+**The RFCs are the reasoning, the code is only its shape.** This spec's first draft
+asserted schema facts from dropped tables and mis-framed the auth code, both from
+reading code without reading `rfcs/`. Before porting any subsystem, read its RFC:
+0004 for ingestion, 0007 for availability and alerts, 0008 for the reservable
+hierarchy, 0009 and 0010 for auth and authorization.
+
+## Open questions
+
+- Does the companion fold into the worker process or stay separate? Staying separate
+  is assumed — it owns a browser pool, persistent profiles, and concurrency caps —
+  but it is now the same language, so the choice is open.
+- Does `scripts/poll_raw.py` eventually port, or stay Python permanently?
+- Is a hosted datastore used for preview deploys, or does preview point at a branch
+  of production data? C4 permits either.
