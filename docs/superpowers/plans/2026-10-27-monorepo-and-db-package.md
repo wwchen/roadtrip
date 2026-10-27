@@ -256,6 +256,18 @@ test('geometry round-trips with SRID 4326 intact', async () => {
 });
 ```
 
+And Review Focus #4 — the documented migration path must work, not just the one the gate uses:
+
+```ts
+test('the documented migration command migrates an empty database', async () => {
+  const { status, stderr } = runDocumentedMigrate(container.getConnectionUri());
+  expect(stderr).not.toMatch(/type "geometry" does not exist/);
+  expect(status).toBe(0);
+});
+```
+
+Whatever command the package documents as "how you migrate" is what this runs. If that is `drizzle-kit migrate`, it will fail on an empty database unless the extension is created ahead of the generated migration — and the equivalence gate will not catch it, because the gate goes through `migrateDb`. Either make the documented path create the extension too, or document `migrateDb` as the entrypoint and have this test run that. Do not make the test call a private helper the docs do not mention.
+
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `npm run test --workspace @roadtrip/db`
@@ -271,17 +283,23 @@ Expected: FAIL — module not found.
 
 Five modules per the File Structure table. Names, nullability, defaults and constraint names come from the reference dump, not from the Kotlin models.
 
-- [ ] **Step 5: Generate the initial migration**
+- [ ] **Step 5: Add a root `build` script and make `dist` staleness impossible**
+
+Task 3 established that packages compile to `dist/` and that `exports` resolves there, but builds happen only through `prepare` on install — and the root `package.json` has no `scripts` block at all. So editing `packages/*/src` changes nothing for any consumer until someone reinstalls. That is a correctness problem for the three tasks after this one, not a convenience: Task 6's `scripts/schema-equivalence.mjs` is plain Node resolving `dist`, so it would run against stale code and report a schema difference that does not exist, or miss one that does.
+
+Add a root `build` script that builds every workspace that has one, call it from `Makefile:test` ahead of anything that consumes `dist`, and give `@roadtrip/db` the same `tsconfig.json` / `tsconfig.typecheck.json` split Task 3 used. Verify it: edit a value in `packages/domain/src`, run the root build, and confirm the change is visible to a plain-`node` import without a reinstall.
+
+- [ ] **Step 6: Generate the initial migration**
 
 Run: `npx drizzle-kit generate --name init`
 Expected: `packages/db/migrations/0000_init.sql` created. Do not hand-edit it; Task 5 adds a second file instead.
 
-- [ ] **Step 6: Run to verify the test passes**
+- [ ] **Step 7: Run to verify the test passes**
 
 Run: `npm run test --workspace @roadtrip/db`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add packages/db package-lock.json
