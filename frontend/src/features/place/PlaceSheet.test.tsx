@@ -25,9 +25,13 @@ function slotsOf(ids: readonly PoiBlockId[]): PoiBlockSlots {
 }
 
 const HERO: PoiBlockId = 'hero';
+const IDENTITY: PoiBlockId = 'identity';
+const SHEET_SKIPS: readonly PoiBlockId[] = [HERO, IDENTITY];
+const SUBTITLE = 'Yosemite National Park';
 
 const everyBlock = slotsOf(POI_BLOCK_ORDER);
-const expectedOrderFromBlocks = () => POI_BLOCK_ORDER.filter((id) => id !== HERO).map(blockTestId);
+const expectedOrderFromBlocks = () =>
+  POI_BLOCK_ORDER.filter((id) => !SHEET_SKIPS.includes(id)).map(blockTestId);
 
 const props: PlaceSheetProps = {
   name: NAME,
@@ -81,20 +85,41 @@ describe('PlaceSheet', () => {
   test('peek answers whether to go, and says nothing about which nights', () => {
     render(<PlaceSheet {...props} arrival="cold" blocks={everyBlock} />);
     expect(screen.queryByRole('group', { name: /nights/i })).not.toBeInTheDocument();
-    expect(screen.queryByTestId(blockTestId('identity'))).not.toBeInTheDocument();
+    expect(screen.queryByTestId(blockTestId('actions'))).not.toBeInTheDocument();
   });
 
-  test('the sheet never draws a hero, at any height', () => {
+  test('the sheet never draws the blocks its header replaces, at any height', () => {
     render(<PlaceSheet {...props} arrival="cold" blocks={everyBlock} />);
     raise(2);
     expect(screen.getByTestId(SHEET)).toHaveAttribute('data-detent', 'full');
-    expect(screen.getByTestId(blockTestId('identity'))).toBeInTheDocument();
+    expect(screen.getByTestId(blockTestId('actions'))).toBeInTheDocument();
     expect(screen.queryByTestId(blockTestId(HERO))).not.toBeInTheDocument();
+    expect(screen.queryByTestId(blockTestId(IDENTITY))).not.toBeInTheDocument();
+  });
+
+  test('names the place once, whatever the caller puts in the identity block', () => {
+    const named: PoiBlockSlots = { identity: <div data-testid={blockTestId(IDENTITY)}>{NAME}</div> };
+    render(<PlaceSheet {...props} arrival="from-map" blocks={named} />);
+    expect(screen.getAllByText(NAME)).toHaveLength(1);
+
+    raise(1);
+    expect(screen.getAllByText(NAME)).toHaveLength(1);
+  });
+
+  test('the header carries the secondary line at every height', () => {
+    render(<PlaceSheet {...props} arrival="cold" subtitle={SUBTITLE} blocks={everyBlock} />);
+    expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
+
+    raise(1);
+    expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
+
+    raise(1);
+    expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
   });
 
   test('what it is like on arrival waits for full', () => {
     render(<PlaceSheet {...props} arrival="from-map" blocks={everyBlock} />);
-    expect(screen.getByTestId(blockTestId('identity'))).toBeInTheDocument();
+    expect(screen.getByTestId(blockTestId('actions'))).toBeInTheDocument();
     expect(screen.queryByTestId(blockTestId('gettingThere'))).not.toBeInTheDocument();
     expect(screen.queryByTestId(blockTestId('goodToKnow'))).not.toBeInTheDocument();
 

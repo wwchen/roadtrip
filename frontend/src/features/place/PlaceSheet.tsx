@@ -21,7 +21,7 @@ const HALF_DETENT: SheetDetent = 'half';
 const FULL_DETENT: SheetDetent = 'full';
 
 const HALF_GROUP_COUNT = 3;
-const SHEET_OMITS: readonly PoiBlockId[] = ['hero'];
+const SHEET_OMITS: readonly PoiBlockId[] = ['hero', 'identity'];
 
 const sheetBlocks = (ids: readonly PoiBlockId[]): readonly PoiBlockId[] =>
   ids.filter((id) => !SHEET_OMITS.includes(id));
@@ -45,6 +45,7 @@ function slotsFor(blocks: PoiBlockSlots, ids: readonly PoiBlockId[]): PoiBlockSl
 
 export interface PlaceSheetProps {
   name: string;
+  subtitle?: string;
   arrival: PlaceArrival;
   verdict: ComponentProps<typeof PlaceVerdict>;
   nights: ComponentProps<typeof NightsStrip>;
@@ -53,13 +54,14 @@ export interface PlaceSheetProps {
   blocks: PoiBlockSlots;
 }
 
-export function PlaceSheet({ name, arrival, verdict, nights, alert, siteNames, blocks }: PlaceSheetProps) {
+export function PlaceSheet({ name, subtitle, arrival, verdict, nights, alert, siteNames, blocks }: PlaceSheetProps) {
   const [detent, setDetent] = useState<SheetDetent>(ARRIVAL_DETENT[arrival]);
 
   const selected = nights.days.find((day) => day.date === nights.selected) ?? null;
   const hasStay = nights.dates.length > 0 || alert !== undefined;
   const halfBlocks = slotsFor(blocks, HALF_BLOCKS);
   const fullBlocks = slotsFor(blocks, FULL_BLOCKS);
+  const secondary = subtitle ? <p className="rt-place-sheet__subtitle">{subtitle}</p> : null;
 
   return (
     <Sheet
@@ -70,8 +72,18 @@ export function PlaceSheet({ name, arrival, verdict, nights, alert, siteNames, b
       label={name}
     >
       <SheetHeader
-        full={<PlaceVerdict {...verdict} />}
-        compact={<strong className="rt-place-sheet__name">{name}</strong>}
+        full={
+          <>
+            {secondary}
+            <PlaceVerdict {...verdict} />
+          </>
+        }
+        compact={
+          <div className="rt-place-sheet__compact">
+            {secondary}
+            <strong className="rt-place-sheet__name">{name}</strong>
+          </div>
+        }
       />
       {hasStay ? (
         <SheetSection from={HALF_DETENT}>

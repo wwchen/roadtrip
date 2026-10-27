@@ -1,5 +1,18 @@
 .rt-place-sheet {
   --rt-place-sheet-stay-gap: 12px;
+  --rt-place-sheet-subtitle-size: 12px;
+}
+
+.rt-place-sheet__compact {
+  display: flex;
+  flex-direction: column;
+}
+
+.rt-place-sheet__subtitle {
+  margin: 0;
+  color: var(--rt-muted);
+  font-family: var(--rt-sans);
+  font-size: var(--rt-place-sheet-subtitle-size);
 }
 
 .rt-place-sheet__name {
