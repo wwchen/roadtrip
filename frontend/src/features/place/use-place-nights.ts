@@ -16,12 +16,12 @@ import {
   type AvailabilityErrorBody,
 } from '@/lib/availability-errors';
 import { addLocalDays, localYmd, parseLocalYmd } from '@/lib/local-date';
-import { nightsCopy } from '@/lib/strings';
 import {
   NO_WATCH_CAPABILITIES,
   normalizeWatchCapabilities,
   type WatchCapabilities,
 } from '@/lib/watch-windows';
+import { siteTitleText } from '@/domain/place/matrix-rows';
 import { queryKeys } from '@/queries/keys';
 import type { PlaceStay } from './use-place-stay';
 
@@ -60,19 +60,11 @@ export function nightsOf(start: string, end: string): readonly string[] {
   return dates;
 }
 
-export function siteLabel(site: Partial<Campsite>): string {
-  const name = site.name?.trim();
-  const loop = site.loop_name?.trim();
-  if (name) return loop ? `${loop} / ${name}` : name;
-  const ref = site.data_provider_ref?.trim();
-  return ref ? nightsCopy.site(ref) : '';
-}
-
 function namesOf(campsites: readonly Campsite[] | undefined): ReadonlyMap<number, string> {
   if (!campsites) return NO_SITE_NAMES;
   const names = new Map<number, string>();
   for (const site of campsites) {
-    const label = siteLabel(site);
+    const label = siteTitleText(site);
     if (label) names.set(site.id, label);
   }
   return names;

@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import { AvailabilityRequestError, GENERIC_AVAILABILITY_ERROR } from '@/lib/availability-errors';
-import { failureOf, nightsOf, siteLabel } from './use-place-nights';
+import { failureOf, nightsOf } from './use-place-nights';
 
 const START = '2026-10-25';
 
@@ -15,24 +15,6 @@ describe('nightsOf', () => {
 
   test('a window longer than the strip can show is cut, not looped forever', () => {
     expect(nightsOf(START, '2027-10-25').length).toBe(30);
-  });
-});
-
-describe('siteLabel', () => {
-  test('a named site in a loop reads as both', () => {
-    expect(siteLabel({ name: '12', loop_name: 'Loop A' })).toBe('Loop A / 12');
-  });
-
-  test('a named site with no loop is just its name', () => {
-    expect(siteLabel({ name: 'Walk-in 3' })).toBe('Walk-in 3');
-  });
-
-  test('a site the provider only numbered reads as the number on the post', () => {
-    expect(siteLabel({ data_provider_ref: '4711' })).toBe('Site #4711');
-  });
-
-  test('a site with nothing to call it is not named at all', () => {
-    expect(siteLabel({})).toBe('');
   });
 });
 

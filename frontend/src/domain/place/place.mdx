@@ -7,8 +7,8 @@ import { Meta } from '@storybook/addon-docs/blocks';
 The interface answers one question, *where am I sleeping*, and it answers it with
 two knobs: **where** and **when**. Everything on this page follows from that. The
 components beside it in the catalog (`Sheet`, `PlaceVerdict`, `NightsStrip`,
-`AlertRow`) are the rules in executable form; this page is the reasoning you would
-otherwise have to recover from them.
+`SiteMatrix`, `AlertRow`) are the rules in executable form; this page is the
+reasoning you would otherwise have to recover from them.
 
 Phase 1 builds the Place screen only. The other two screens appear below because
 the Place screen is defined against them.
@@ -95,11 +95,30 @@ convention into a type error.
     </tr>
     <tr>
       <td>Full</td>
-      <td>What is it like on arrival?</td>
-      <td>photographs, getting there, good to know, specs, contact, nearby, and the verified and provenance footer</td>
+      <td>Which site, exactly — and what is it like on arrival?</td>
+      <td>the site-by-date grid in place of the nights strip, then photographs, getting there, good to know, specs, contact, nearby, and the verified and provenance footer</td>
     </tr>
   </tbody>
 </table>
+
+### Full replaces the strip with the grid
+
+The same fact at more detail sits in the same place in the order. At Full the
+nights strip and the sites-open list give way to `SiteMatrix`, the site-by-date
+grid: every campsite against every night of the stay, with the Loop, Type and
+free-text filters and the sort. The place's own detail then scrolls *below* it, so
+nothing Full used to carry is lost. Half is unchanged, and so is Peek.
+
+That is a swap, not an addition, because the strip and the grid answer the same
+question — *which nights* — and "a fact belongs to exactly one height" applies to
+the two renderings of one answer as much as it does to two different answers. A
+sheet showing both would state the week twice.
+
+The grid is the one place the sheet's own width cap moves: 420px at Peek and Half,
+where it sits over the map, and the window's width at Full, where it covers the map
+anyway. On a phone 420px is the whole screen, so the week scrolls sideways under a
+frozen Site column. The grid caps its own height and scrolls its rows, so the place
+detail stays a short scroll below it rather than two hundred rows below it.
 
 The header compacts as the sheet rises, to the name and the stay answer's status
 line. The name is said once at every height. The verdict is the answer, so it rides
@@ -154,13 +173,42 @@ So the rule is structural:
 - "Open both nights", the verdict's count, and anything that sits behind a Reserve
   button read the stay check. In the code that is `usePlaceStay` feeding
   `PlaceVerdict`.
-- The nights strip reads the grid and is per-night context only. In the code that
-  is `usePlaceNights` feeding `NightsStrip` and `NightSites`. It is never summed
-  into a stay claim.
+- The nights strip and the site-by-date grid read the day grid and are per-night
+  context only. In the code that is `usePlaceNights` feeding `NightsStrip` and
+  `NightSites` at Half and `SiteMatrix` at Full. Neither is ever summed into a stay
+  claim. The grid renders cells, which is per-campsite-per-night and is exactly
+  what cells are for; what it may not do is add them up into a sentence about the
+  whole stay.
 
 The grid carries the same discipline inside itself. `nightOf` reads a night off its
 cells; a day with no cells is `unknown`, and a day that claims to be open without an
 open cell is `unknown` too. The rollup never stands in for a missing cell.
+`SiteMatrix` applies it one level down: `cellState` is a straight lookup of
+`day.cells[campsiteId]`, and a night the wire never answered is `unknown` rather
+than the rollup of the nights it did answer.
+
+### One read serves both detents
+
+`usePlaceNights` makes **two** requests for the whole screen and no more: the week
+from `GET /api/pois/{id}/campsites/availability`, and the campsite catalog from
+`GET /api/pois/{id}/campsites`. It publishes `days`, `dates`, `campsites` and
+`siteNames` off them, and the strip at Half and the grid at Full are both fed from
+that one view. Neither owns a query.
+
+This is the invariant most likely to be broken by the next feature, so it is worth
+stating plainly: **raising the sheet to Full must not issue a request.** A grid
+that fetched its own week would be a second rendering of the same nights that can
+disagree with the first, and a grid that fetched its own catalog would be the
+duplicate query this one already replaced. The catalog is a POI's fixed inventory
+and the strip already needed it for site names, so the metadata the Loop and Type
+filters read was on the wire before the grid existed.
+
+The grid's columns are `dates` — the stay's own nights, the same list the strip
+iterates — so the two detents cannot disagree about which nights are in view. That
+is also why the grid has no week paging: paging would either move the window the
+strip reads, leaving the strip and the verdict describing different nights, or give
+the grid a window of its own, which is the second read. Changing the window is the
+date picker's job.
 
 Every status the stay check can return has a sentence already, in `stayCopy` in
 `lib/strings.ts`, and the sheet renders the branch the server gives it. The browser
@@ -172,8 +220,9 @@ branches.
 The same rule binds the grid's failures. A refused read has a server-stated code,
 `lib/availability-errors.ts` turns that code into the sentence written for it, and
 `usePlaceNights` carries it out as `failure`. The sheet shows that sentence in place
-of the strip — not a week of `No data` chips, which is a claim the server never made
-standing in for the reason it did state.
+of whichever reading of the week the detent would otherwise carry, the strip at Half
+or the grid at Full — not a week of `No data` chips, and not an empty grid, which are
+claims the server never made standing in for the reason it did state.
 
 The retry follows the same source: it is offered for a failure on the provider's end
 and withheld while the provider is rate-limiting us, because asking again is the one

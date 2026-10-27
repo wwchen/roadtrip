@@ -216,9 +216,6 @@ export const matrixCopy = {
   heading: (shown: number, total: number) =>
     shown === total ? `${shown} sites by date` : `${shown} of ${total} sites by date`,
   siteColumn: 'Site',
-  site: (campsiteRef: number | string) => `Site #${campsiteRef}`,
-  unknownSite: 'Unknown site',
-  loopAndSite: (loop: string, site: string) => `${loop} / ${site}`,
   filterSites: 'Filter sites',
   allLoops: 'All loops',
   filterByLoop: 'Filter by loop',
@@ -232,7 +229,6 @@ export const matrixCopy = {
   key: 'What the letters mean',
   noMatches: 'No sites match these filters.',
   noSites: 'No reservable sites for this campground.',
-  resizeSiteColumn: 'Resize site column',
   cell: (site: string, date: string, status: string) => `${site} ${date}: ${status}`,
   pickNight: (date: string) => `Show ${date}`,
 } as const;

@@ -58,6 +58,19 @@ describe('naming a site', () => {
     expect(siteTitleText(site(1, { name: '12' }))).toBe('12');
     expect(rowId(site(4))).toBe('4');
   });
+
+  test('a site the provider only numbered reads as the number on the post', () => {
+    expect(siteTitleText({ data_provider_ref: '4711' })).toBe('Site #4711');
+  });
+
+  test('a site with nothing to call it is not named at all, and a loop does not name it', () => {
+    expect(siteTitleText({})).toBe('');
+    expect(siteTitleText({ loop_name: 'Loop A' })).toBe('');
+  });
+
+  test('trims what the provider padded', () => {
+    expect(siteTitleText({ name: '  Walk-in 3  ', loop_name: '  Loop B  ' })).toBe('Loop B / Walk-in 3');
+  });
 });
 
 describe('the row set', () => {

@@ -1,6 +1,6 @@
 import type { AvailabilityCell, AvailabilityDay } from '@/api/availability-api';
 import type { Campsite } from '@/api/campsite-api';
-import { matrixCopy } from '@/lib/strings';
+import { matrixCopy, nightsCopy } from '@/lib/strings';
 import { longDayLabel } from '@/lib/week-labels';
 
 export type MatrixSort = 'site' | 'available' | 'loop' | 'type';
@@ -48,9 +48,11 @@ const COLLATE_NUMERIC: Intl.CollatorOptions = { numeric: true };
 const NO_LOCALE = undefined;
 
 export function siteName(row: Partial<Campsite>): string {
-  if (row.name) return row.name;
-  if (row.data_provider_ref) return matrixCopy.site(row.data_provider_ref);
-  return row.id != null ? matrixCopy.site(row.id) : matrixCopy.unknownSite;
+  const name = row.name?.trim();
+  if (name) return name;
+  const ref = row.data_provider_ref?.trim();
+  if (ref) return nightsCopy.site(ref);
+  return row.id != null ? nightsCopy.site(row.id) : '';
 }
 
 export function rowId(row: Partial<Campsite>): string {
@@ -59,7 +61,7 @@ export function rowId(row: Partial<Campsite>): string {
 
 export function siteTitleText(row: Partial<Campsite>, label = siteName(row)): string {
   const loop = row.loop_name?.trim();
-  return loop ? matrixCopy.loopAndSite(loop, label) : label;
+  return loop && label ? `${loop} / ${label}` : label;
 }
 
 export function matrixColumns(
