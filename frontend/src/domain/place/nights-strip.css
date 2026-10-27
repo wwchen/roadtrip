@@ -30,7 +30,7 @@
   cursor: pointer;
 }
 
-.rt-nights__night:hover:not(:disabled) {
+.rt-nights__night:hover:not(:disabled):not([aria-pressed='true']) {
   background: var(--rt-fill-hover);
 }
 

@@ -83,6 +83,18 @@ describe('NightSites', () => {
     expect(onPick).toHaveBeenCalledWith(2);
   });
 
+  test('a past night still says it has no site detail, which its cell does not', () => {
+    const day: AvailabilityDay = {
+      date: '2026-10-25',
+      status: 'past',
+      watchable: false,
+      cells: { '1': { status: 'past', watchable: false } },
+    };
+    render(<NightSites day={day} />);
+
+    expect(screen.getByText(nightsCopy.noDetail)).toBeInTheDocument();
+  });
+
   test.each([
     ['closed', nightsCopy.closedNight],
     ['first_come', nightsCopy.firstCome],
