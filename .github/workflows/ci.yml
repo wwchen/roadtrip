@@ -82,6 +82,7 @@ jobs:
               - 'companion/**'
               - 'package.json'
               - 'package-lock.json'
+              - 'scripts/companion-image-key.sh'
               - '.github/workflows/ci.yml'
             data_image:
               - 'data/**'
@@ -165,6 +166,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Check every install resolves from the root lockfile
         run: node --test scripts/check-single-lockfile.test.mjs
+
+  image-key-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check the companion image tag covers everything its build reads
+        run: python3 -m unittest scripts.test_ci_image_builds -v
 
   lint:
     needs: changes
@@ -592,6 +601,7 @@ jobs:
       - migration-guard
       - worktree-guard
       - lockfile-guard
+      - image-key-guard
       - lint
       - gradle-lint
       - frontend-tests

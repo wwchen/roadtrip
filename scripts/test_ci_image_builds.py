@@ -95,6 +95,20 @@ class DeploymentContractTest(unittest.TestCase):
         for path in inputs:
             watched = f"{path}/**" if (ROOT / path).is_dir() else path
             self.assertIn(watched, filters["companion_image"], f"{path} does not rebuild the image")
+        self.assertIn(
+            COMPANION_KEY_SCRIPT,
+            filters["companion_image"],
+            "editing the key script moves the tag but would build nothing",
+        )
+
+    def test_the_guard_on_the_companion_key_runs_on_every_change(self) -> None:
+        jobs = workflow("ci.yml")["jobs"]
+        guard = jobs["image-key-guard"]
+
+        self.assertNotIn("if", guard)
+        self.assertNotIn("needs", guard)
+        self.assertIn("scripts.test_ci_image_builds", job_commands(guard))
+        self.assertIn("image-key-guard", jobs["ci-passed"]["needs"])
 
     def test_companion_key_moves_with_each_input_and_only_those(self) -> None:
         inputs = companion_key_inputs()
@@ -104,11 +118,16 @@ class DeploymentContractTest(unittest.TestCase):
                 ["git", *args], cwd=repo, check=True, capture_output=True, text=True
             ).stdout.strip()
 
-        def key(repo: Path) -> str:
+        def run_key(cwd: Path) -> subprocess.CompletedProcess:
             return subprocess.run(
                 ["bash", str(ROOT / COMPANION_KEY_SCRIPT)],
-                cwd=repo, check=True, capture_output=True, text=True,
-            ).stdout.strip()
+                cwd=cwd, capture_output=True, text=True,
+            )
+
+        def key(cwd: Path) -> str:
+            result = run_key(cwd)
+            self.assertEqual(0, result.returncode, result.stderr)
+            return result.stdout.strip()
 
         def edit(repo: Path, path: str) -> None:
             target = repo / (path if "." in path else f"{path}/file.txt")
@@ -127,6 +146,7 @@ class DeploymentContractTest(unittest.TestCase):
 
             edit(repo, "frontend")
             self.assertEqual(baseline, key(repo))
+            self.assertEqual(baseline, key(repo / "frontend"))
 
             seen = {baseline}
             for path in inputs:
@@ -134,6 +154,13 @@ class DeploymentContractTest(unittest.TestCase):
                 moved = key(repo)
                 self.assertNotIn(moved, seen, f"editing {path} did not move the key")
                 seen.add(moved)
+
+            git(repo, "rm", "-q", "package-lock.json")
+            git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "rename")
+            missing = run_key(repo)
+            self.assertNotEqual(0, missing.returncode)
+            self.assertEqual("", missing.stdout.strip())
+            self.assertIn("expected 3 tree entries", missing.stderr)
 
     def test_production_only_pulls_images(self) -> None:
         deploy = (ROOT / "scripts" / "deploy.sh").read_text()
