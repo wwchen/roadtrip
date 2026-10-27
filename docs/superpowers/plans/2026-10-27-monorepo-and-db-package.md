@@ -530,12 +530,18 @@ git commit -m "feat: one codec for typed JSONB catalog columns"
 
 ### Task 8: One lockfile
 
+**Runs after Task 4, not last.** Task 3 added `"@roadtrip/domain": "*"` to `frontend/package.json`, and `frontend/package-lock.json` has no entry for it. `ci.yml`'s `frontend-tests` and `smoke` jobs run `npm ci` with `working-directory: frontend` against that lockfile, and `npm ci` fails hard on an out-of-sync manifest — **so CI on this branch cannot install today.** There is no band-aid: with `frontend/` as the working directory, npm resolves `@roadtrip/domain` from the registry rather than the workspace, so a member-scoped install is fundamentally incompatible with a workspace dependency. The structural fix is this task, which is why it moved ahead of Tasks 5–7. It depends only on Task 1, and nothing in Tasks 5–7 depends on it.
+
 **Added after Task 1.** Task 1 created a root `package-lock.json` because root `npm ci` requires one, but left the two member lockfiles in place and left six other `npm ci` call sites pointing at them. Two lockfiles for one dependency tree can drift: a member-lock update leaves the root stale, and then CI, Docker and local development install different versions while all three appear to work.
+
+**`ci.yml` also never builds `packages/*`.** Task 4 added `npm run build` to `Makefile:109`, but `Makefile:92-106` states in its own header that it mirrors `ci.yml` — "change one, change the other" — and `ci.yml` did not get it. Jobs that install with `working-directory: frontend` never build the workspace packages at all, so `dist/` is absent and the frontend cannot resolve `@roadtrip/domain`. Fixing the install location and adding the build step are the same piece of work.
 
 **Files:**
 - Delete: `frontend/package-lock.json`, `companion/package-lock.json`
-- Modify: `Makefile:83` (companion), `Makefile:177` (frontend), `Tiltfile:113`, `Dockerfile:36-39` (frontend build stage), `.github/workflows/ci.yml:208,211,249,252,471,479`
+- Modify: `Makefile:83` (companion), `Makefile:177` (frontend), `Tiltfile:113`, `Dockerfile:36-39` (frontend build stage), `.github/workflows/ci.yml:208,211,249,252,471,479` — including the `working-directory: frontend` on the install steps and the three `cache-dependency-path` entries, plus a build step mirroring `Makefile:109`
 - Test: `scripts/check-single-lockfile.mjs`
+
+Verify the outcome the way CI will experience it: from a clean tree, the exact install command each job runs must succeed and leave `packages/domain/dist` present. An install that succeeds without building the packages is the failure this task exists to prevent, and it looks identical to success until the frontend tries to resolve the import.
 
 **Interfaces:**
 - Consumes: Task 1's root `package.json` and `package-lock.json`.
