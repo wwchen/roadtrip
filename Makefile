@@ -113,9 +113,11 @@ test: _ensure-hooks
 	# Rebuild every workspace that has a build script so no consumer below
 	# resolves a stale packages/*/dist.
 	npm run build
-	# Prove the Drizzle migrations still reproduce the Flyway schema. Needs
-	# packages/db/dist, so it has to follow the build above.
-	node scripts/schema-equivalence.mjs
+	# Prove the Drizzle migrations still reproduce the Flyway schema, and that
+	# the gate still fails when they do not. Needs packages/db/dist, so it has
+	# to follow the build above. `node scripts/schema-equivalence.mjs` is the
+	# same comparison on its own, for reading a diff by hand.
+	node --test scripts/schema-equivalence.test.mjs
 	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
 	node --test scripts/check-package-boundaries.test.mjs && node scripts/check-package-boundaries.mjs
 	node scripts/check-color-tokens.mjs

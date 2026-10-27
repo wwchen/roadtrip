@@ -19,6 +19,9 @@ const POOLER_MAX_CLIENT_CONN = '20';
 const POOLER_READY_LOG = 'process up: PgBouncer';
 const POOLER_READY_ATTEMPTS = 60;
 const POOLER_READY_INTERVAL_MS = 500;
+const POOLER_PREPARE = false;
+const POOLER_PROBE = 'select 1';
+const POOLER_PROBE_CONNECT_TIMEOUT_SECONDS = '5';
 
 const INJECTED_COLUMN = 'ALTER TABLE campgrounds ADD COLUMN bogus text';
 
@@ -40,44 +43,60 @@ async function waitForPooler(container) {
   throw new Error(`pgbouncer in ${container} never logged "${POOLER_READY_LOG}"`);
 }
 
-async function withPooler(upstream, use) {
+class PoolerUnavailable extends Error {}
+
+async function probePooler(uri) {
+  const probe = new URL(uri);
+  probe.searchParams.set('connect_timeout', POOLER_PROBE_CONNECT_TIMEOUT_SECONDS);
+  const db = createDb(probe.toString(), { prepare: POOLER_PREPARE });
+  try {
+    await db.$client.unsafe(POOLER_PROBE);
+  } finally {
+    await db.$client.end();
+  }
+}
+
+async function startPooler(upstream) {
   const url = new URL(upstream);
   const container = `roadtrip-schema-pooler-${randomUUID().slice(0, 8)}`;
-  await docker(
-    'run',
-    '-d',
-    '--rm',
-    '--name',
-    container,
-    '-p',
-    `${POOLER_HOST}::${POOLER_PORT}`,
-    '--add-host',
-    `${POOLER_UPSTREAM_HOST}:host-gateway`,
-    '-e',
-    `DB_HOST=${POOLER_UPSTREAM_HOST}`,
-    '-e',
-    `DB_PORT=${url.port}`,
-    '-e',
-    `DB_USER=${url.username}`,
-    '-e',
-    `DB_PASSWORD=${url.password}`,
-    '-e',
-    `AUTH_TYPE=${POOLER_AUTH_TYPE}`,
-    '-e',
-    `POOL_MODE=${POOLER_POOL_MODE}`,
-    '-e',
-    `MAX_PREPARED_STATEMENTS=${POOLER_MAX_PREPARED_STATEMENTS}`,
-    '-e',
-    `MAX_CLIENT_CONN=${POOLER_MAX_CLIENT_CONN}`,
-    POOLER_IMAGE,
-  );
   try {
+    await docker(
+      'run',
+      '-d',
+      '--rm',
+      '--name',
+      container,
+      '-p',
+      `${POOLER_HOST}::${POOLER_PORT}`,
+      '--add-host',
+      `${POOLER_UPSTREAM_HOST}:host-gateway`,
+      '-e',
+      `DB_HOST=${POOLER_UPSTREAM_HOST}`,
+      '-e',
+      `DB_PORT=${url.port}`,
+      '-e',
+      `DB_USER=${url.username}`,
+      '-e',
+      `DB_PASSWORD=${url.password}`,
+      '-e',
+      `AUTH_TYPE=${POOLER_AUTH_TYPE}`,
+      '-e',
+      `POOL_MODE=${POOLER_POOL_MODE}`,
+      '-e',
+      `MAX_PREPARED_STATEMENTS=${POOLER_MAX_PREPARED_STATEMENTS}`,
+      '-e',
+      `MAX_CLIENT_CONN=${POOLER_MAX_CLIENT_CONN}`,
+      POOLER_IMAGE,
+    );
     await waitForPooler(container);
     const mapping = (await docker('port', container, `${POOLER_PORT}/tcp`)).split('\n')[0].trim();
     url.port = mapping.slice(mapping.lastIndexOf(':') + 1);
-    return await use(url.toString());
-  } finally {
+    const uri = url.toString();
+    await probePooler(uri);
+    return { container, uri };
+  } catch (error) {
     await docker('rm', '-f', container).catch(() => {});
+    throw new PoolerUnavailable(error.message, { cause: error });
   }
 }
 
@@ -115,15 +134,22 @@ test('the schema equivalence gate', async (t) => {
 
     await t.test(
       'the schema works through a transaction-mode pooler with prepare disabled',
-      async () => {
-        await withPooler(schemas.drizzleConnectionString(), async (poolerUri) => {
-          const db = createDb(poolerUri, { prepare: false });
-          try {
-            assert.ok(await db.select().from(campgrounds).limit(1));
-          } finally {
-            await db.$client.end();
-          }
-        });
+      async (subtest) => {
+        let pooler;
+        try {
+          pooler = await startPooler(schemas.drizzleConnectionString());
+        } catch (error) {
+          if (!(error instanceof PoolerUnavailable)) throw error;
+          subtest.skip(`no transaction-mode pooler available here: ${error.message}`);
+          return;
+        }
+        const db = createDb(pooler.uri, { prepare: POOLER_PREPARE });
+        try {
+          assert.ok(await db.select().from(campgrounds).limit(1));
+        } finally {
+          await db.$client.end();
+          await docker('rm', '-f', pooler.container).catch(() => {});
+        }
       },
     );
 

@@ -25,7 +25,7 @@ SHELL_REFERENCE_ROOTS = {"SCRIPT_DIR": "scripts", "REPO_ROOT": ""}
 
 COMPANION_KEY_SCRIPT = "scripts/companion-image-key.sh"
 
-SCHEMA_EQUIVALENCE_SCRIPT = "scripts/schema-equivalence.mjs"
+SCHEMA_EQUIVALENCE_TEST = "scripts/schema-equivalence.test.mjs"
 FLYWAY_MIGRATIONS = "backend/src/main/resources/db/migration"
 
 
@@ -123,7 +123,12 @@ class DeploymentContractTest(unittest.TestCase):
             )["with"]["filters"]
         )
         watched = filters["schema_equivalence"]
-        for path in (FLYWAY_MIGRATIONS, "packages", "scripts/schema-equivalence.mjs"):
+        for path in (
+            FLYWAY_MIGRATIONS,
+            "packages",
+            "scripts/schema-equivalence.mjs",
+            SCHEMA_EQUIVALENCE_TEST,
+        ):
             self.assertTrue(
                 any(pattern.startswith(path) for pattern in watched),
                 f"{path} does not run the schema equivalence gate",
@@ -132,7 +137,7 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("schema_equivalence", jobs["changes"]["outputs"])
         self.assertIn("schema_equivalence", gate["if"])
         self.assertIn("npm run build", job_commands(gate))
-        self.assertIn(SCHEMA_EQUIVALENCE_SCRIPT, job_commands(gate))
+        self.assertIn(SCHEMA_EQUIVALENCE_TEST, job_commands(gate))
         self.assertIn("schema-equivalence", jobs["ci-passed"]["needs"])
 
     def test_companion_key_moves_with_each_input_and_only_those(self) -> None:

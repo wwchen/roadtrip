@@ -108,6 +108,7 @@ jobs:
               - 'packages/**'
               - 'backend/src/main/resources/db/migration/**'
               - 'scripts/schema-equivalence.mjs'
+              - 'scripts/schema-equivalence.test.mjs'
               - 'scripts/schema-reference.mjs'
               - 'package.json'
               - 'package-lock.json'
@@ -313,8 +314,13 @@ jobs:
       - name: Build workspace packages
         run: npm run build
 
+      # The test file, not the bare script: its container subtest makes the same
+      # clean comparison the script does and then injects a column to prove the
+      # gate can still fail, at the same single PostGIS boot. The pooler subtest
+      # skips when its sidecar cannot be established, so a fixture cannot fail
+      # this job.
       - name: Check the Drizzle migrations still reproduce the Flyway schema
-        run: node scripts/schema-equivalence.mjs
+        run: node --test scripts/schema-equivalence.test.mjs
 
   companion-tests:
     needs: changes
