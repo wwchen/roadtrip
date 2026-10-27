@@ -37,7 +37,7 @@ export interface TripCard {
  * Structural rather than the api client's `Feature<Point, PoiPinProperties>`, because
  * an interface with named properties does not satisfy `Record<string, unknown>` — and
  * because this reads `properties.id` as a fallback, which the pinned wire type does not
- * declare (it is there on some provider payloads and the vanilla looked for it).
+ * declare (it is there on some provider payloads).
  */
 interface SlimFeature {
   /** Accepted and ignored, so a real GeoJSON feature fits without a cast. */
@@ -141,9 +141,9 @@ export interface CardFilter {
  * The cards the map is currently showing pins for.
  *
  * The list has to agree with the map, because clicking a card flies to its pin — a
- * row for a hidden pin is a row that flies the camera to nothing. The vanilla filtered
- * by agency only; the overlay check is new because 4b's legend can switch campgrounds
- * off wholesale, which the vanilla legend could not.
+ * row for a hidden pin is a row that flies the camera to nothing. Both filters
+ * matter: the legend hides agencies, and it can also switch campgrounds off
+ * wholesale.
  */
 export function visibleCards<T extends TripCard>(
   cards: readonly T[],

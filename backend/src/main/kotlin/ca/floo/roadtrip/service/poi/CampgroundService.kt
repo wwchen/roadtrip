@@ -85,7 +85,6 @@ internal class CampgroundService(
                     availabilitySupported = (bookingRef != null).takeIf { it },
                     cta = ctas,
                     bookingSystem = cta.bookingSystem(bookingRef),
-                    // The source record, sent once — no longer also as `raw`.
                     upstream = raw,
                     status = campground.status,
                     statusDescription = campground.statusDescription,

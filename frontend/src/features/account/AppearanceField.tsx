@@ -26,7 +26,7 @@ export interface AppearanceFieldProps {
  * keeping `system` would cost a second switch that disables the first.
  *
  * **`SegmentedControl` has no visible label and no help slot.** Confirmed against
- * `@lew-ds/lds/src/templates/segmented-control.js`: the vanilla template turns
+ * `@lew-ds/lds/src/templates/segmented-control.js`: the LDS template turns
  * `label` into `aria-label` on the `role="radiogroup"` wrapper and renders
  * nothing else — unlike `TextField`/`Toggle`, whose `label`/`help` route through
  * the slot-portal mechanism (`lds-react`'s `controllers.jsx` only does that for
@@ -42,7 +42,7 @@ export interface AppearanceFieldProps {
  * `aria-describedby` closes that gap. It reaches the real `role="radiogroup"`
  * element because `SegmentedControlProps` extends LDS's `HtmlProps`, whose
  * index signature (`[attr: string]: unknown`) both types it and — verified in
- * `@lew-ds/lds/src/templates/segmented-control.js` — the vanilla template
+ * `@lew-ds/lds/src/templates/segmented-control.js` — the LDS template
  * spreads unrecognised props (`...rest`) onto that same div, so a hyphenated
  * `aria-*` prop rides straight through the React wrapper and the string
  * template to the rendered attribute.

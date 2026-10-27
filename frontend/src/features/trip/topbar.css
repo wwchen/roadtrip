@@ -1,15 +1,13 @@
 /* The trip planner's panel.
  *
- * Lifted out of `injectStyles()` in web/topbar.js, which built ~330 lines of CSS as
- * a template string and appended a <style> tag at init. Two consequences of moving
- * it here, both wanted: the rules are under the colour-token checker for the first
- * time, and they are under `scripts/check-css-blocks.mjs` — which exists because a
- * rule that loses its closing brace is still valid CSS, and that is exactly how the
- * 4d watch editor rendered 1061px wide.
+ * A real stylesheet rather than ~330 lines of CSS built as a template string and
+ * appended as a <style> tag at init. That is what puts the rules under the
+ * colour-token checker, and under `scripts/check-css-blocks.mjs` — which exists because a
+ * rule that loses its closing brace is still valid CSS, and renders a panel at an
+ * arbitrary width rather than failing.
  *
- * Ids became classes (`#topbar` -> `.tb-panel`, `#tb-stops` -> `.tb-stops`, …): the
- * vanilla needed ids because `document.getElementById` was its only handle on the
- * DOM, and React needs no handle at all. The one id kept is `topbar` itself, which
+ * Classes rather than ids (`.tb-panel`, `.tb-stops`, …), since nothing here needs a
+ * `document.getElementById` handle. The one id is `topbar` itself, which
  * `SmokeTest.kt` locates the panel by.
  */
 

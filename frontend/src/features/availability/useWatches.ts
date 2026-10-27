@@ -129,9 +129,8 @@ export interface WatchMutations {
  * A watch mutation that failed because the session is gone.
  *
  * Distinct from every other failure so the editor can say "sign in" instead of "try
- * again" — retrying is exactly what will not help. The vanilla handled this by
- * clearing its watch state and closing the popover; here the list refetch does the
- * first (it 401s in turn, so `canManage` goes false) and this type does the second.
+ * again" — retrying is exactly what will not help. The list refetch 401s in turn,
+ * so `canManage` goes false, and this type closes the popover.
  */
 export class WatchAuthError extends Error {
   constructor() {

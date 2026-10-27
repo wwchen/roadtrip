@@ -107,9 +107,9 @@ describe('settingsErrorMessage', () => {
   });
 
   test('the three add-to-cart misses read differently from each other', () => {
-    // They all used to be "cart_not_added — someone else likely took it",
-    // which is wrong advice for two of them: if Recreation.gov never offered the
-    // dates or the button, retrying cannot help.
+    // One shared "cart_not_added — someone else likely took it" is wrong advice
+    // for two of them: if Recreation.gov never offered the dates or the button,
+    // retrying cannot help.
     const dates = settingsErrorMessage('recgov_dates_not_offered');
     const button = settingsErrorMessage('recgov_no_reserve_button');
     const raced = settingsErrorMessage('cart_not_added');

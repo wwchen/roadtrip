@@ -216,12 +216,11 @@ function clamp(value: number, min: number, max: number): number {
 /**
  * What the editor may offer, which is not quite what the provider advertises.
  *
- * Carried over from `capabilitiesForEditor` in the vanilla popover, including its one
- * surprising rule: **an empty capability set enables Slack**. An empty set means the
- * response carried no capability block at all — an older backend, or a field that
- * failed to serialise — and treating "we do not know" as "nothing is possible" would
- * have taken watches away from every provider during that rollout. A populated set is
- * trusted exactly.
+ * One surprising rule: **an empty capability set enables Slack**. An empty set
+ * means the response carried no capability block at all — an older backend, or a
+ * field that failed to serialise — and treating "we do not know" as "nothing is
+ * possible" would take watches away from every provider at once. A populated set
+ * is trusted exactly.
  */
 function capabilitiesForEditor(capabilities: WatchCapabilities): WatchCapabilities {
   const normalized = normalizeWatchCapabilities(capabilities);

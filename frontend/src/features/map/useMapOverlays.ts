@@ -54,9 +54,8 @@ export function useMapOverlays(pois: ViewportPois): void {
    *
    * A ref, and synced in an effect declared BEFORE the install effect so it is
    * already current when that runs. Without it a basemap change would install
-   * empty layers and only fill them in the paint effect below — one frame of a map
-   * with no pins on it, which is exactly the flash the vanilla reinstall-from-cache
-   * avoided.
+   * empty layers and only fill them in the paint effect below — one frame of a
+   * map with no pins on it.
    */
   const latest = useRef(pois.buckets);
   useEffect(() => {
@@ -101,7 +100,7 @@ export function useMapOverlays(pois: ViewportPois): void {
       const onClick = (event: MapLayerMouseEvent) => {
         const id = pinFeatureId(event.features?.[0] as PinFeature | undefined);
         // The drawer hydrates from the id through GET /api/pois/{id}; the slim
-        // pin carries nothing else worth handing on. Phase 4c renders it.
+        // pin carries nothing else worth handing on.
         if (id != null) selectPoi(id);
       };
       const onEnter = () => {
@@ -150,8 +149,7 @@ export function useMapOverlays(pois: ViewportPois): void {
  *
  * A static file rather than a bbox query, so it is fetched once and reinstalled on
  * every style load like everything else. A failure leaves the map without
- * boundaries and is not otherwise surfaced — same as the vanilla loader, which
- * logged and carried on.
+ * boundaries, logged and not otherwise surfaced.
  */
 export function useStateLines(): void {
   const { map, styleEpoch } = useMapContext();

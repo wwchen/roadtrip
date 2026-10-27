@@ -1,12 +1,10 @@
 /* The nav's availability-alerts row.
  *
- * Lifted out of `injectAlertsStyles()` in web/topbar/alerts.js — the third
- * template-string stylesheet this migration has moved into a real file (after the
- * topbar's own and 4d's watch editor), and for the same reason: only here are the
- * rules under the colour-token and CSS-block checkers.
+ * A real stylesheet rather than a template string injected at init: only here are
+ * the rules under the colour-token and CSS-block checkers.
  *
- * `#tb-alerts` keeps its id, because the panel is addressable by it; everything else
- * was already a class.
+ * `#tb-alerts` keeps its id, because the panel is addressable by it; everything
+ * else is a class.
  */
 
 #tb-alerts { display: none; border-top: 1px solid var(--rt-border); }

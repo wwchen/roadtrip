@@ -361,8 +361,8 @@ class PoiServiceTest : SharedDbTest() {
     }
 
     // A recreation.gov campground's fees, stay limit and directions live in the
-    // RIDB record. The FE used to synthesise `upstream` from three Campflare keys,
-    // so those pins rendered an empty provenance table.
+    // RIDB record, so `upstream` carries that record. Synthesised from Campflare
+    // keys instead, those pins render an empty provenance table.
     @Test
     fun `campground detail serves the source record as upstream`() {
         // No providerRefJson: seedCampground binds `providerRefJson ?: sourcePayloadJson`
@@ -385,8 +385,7 @@ class PoiServiceTest : SharedDbTest() {
                 .jsonObject["StayLimit"]!!
                 .jsonPrimitive.content,
         )
-        // The same blob used to go out as `raw` as well; nothing read it once the
-        // FE stopped promoting out of it.
+        // The same blob does not also go out as `raw`: nothing reads it.
         assertNull(detail.raw)
     }
 

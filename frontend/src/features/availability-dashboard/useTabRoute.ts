@@ -1,8 +1,7 @@
 // The dashboard's URL contract.
 //
-// `/availability?tab=pollers|runs|changes`, plus per-tab params that the legacy
-// page passed through verbatim (`poller_id`, `status`, `poi_id`, `campsite_id`,
-// `target_date`). Ported from web/availability.js's readUrlState/setTab.
+// `/availability?tab=pollers|runs|changes`, plus per-tab params passed through
+// verbatim (`poller_id`, `status`, `poi_id`, `campsite_id`, `target_date`).
 //
 // These URLs are shared and linked to — a poller row links to the runs tab, and
 // the changes tab rewrites its own query as you filter — so the shapes are a

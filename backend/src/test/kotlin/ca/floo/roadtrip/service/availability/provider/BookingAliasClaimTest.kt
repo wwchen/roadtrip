@@ -87,9 +87,9 @@ class BookingAliasClaimTest {
     }
 
     /**
-     * A blank ref names nothing. It used to parse into `RecGov(facilityId = "")`,
-     * which won the selling identity, served `booking_system = Recreation.gov`
-     * and rebuilt a reserve CTA pointing at no facility at all.
+     * A blank ref names nothing. Parsed into `RecGov(facilityId = "")` it wins
+     * the selling identity, serves `booking_system = Recreation.gov` and rebuilds
+     * a reserve CTA pointing at no facility at all.
      */
     @Test
     fun `a blank alias ref is not a booking identity`() {

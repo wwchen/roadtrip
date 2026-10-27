@@ -363,8 +363,8 @@ open class AvailabilityWatchRepo(
     /**
      * Exposed so sibling repos (e.g. [AvailabilityPollerRepo]) can extend
      * this select with their own conditions rather than re-deriving the
-     * watch row mapping. Targets are no longer part of the base select (they
-     * are N rows per watch); [fromRecord] loads them via a second query.
+     * watch row mapping. Targets are not part of the base select (they are N
+     * rows per watch); [fromRecord] loads them via a second query.
      */
     internal fun baseSelectFields(): List<SelectField<*>> = AVAILABILITY_WATCH.fields().toList()
 

@@ -35,11 +35,10 @@ export interface ConfirmButtonProps extends ButtonProps {
 /**
  * A button whose action needs two clicks: the first arms it, the second fires.
  *
- * Replaces `web/design-system/double-confirm-button.js` and the copy that Phase 1
- * inlined into `WatchTable`. Extracted at the third site — deleting a watch,
- * signing out, and disconnecting Slack — rather than written a third time.
+ * One component for the three sites that need it: deleting a watch, signing out,
+ * and disconnecting Slack.
  *
- * **It disarms itself** after `ARM_TIMEOUT_MS`, which the inlined copy did not. That
+ * **It disarms itself** after `ARM_TIMEOUT_MS`. That
  * matters because the armed state is a promise that the next click destroys
  * something: an armed button left on screen is a trap, and the user's next click on
  * what looks like an ordinary button deletes.

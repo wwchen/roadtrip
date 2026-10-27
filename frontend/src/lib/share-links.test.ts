@@ -117,9 +117,9 @@ describe('routeShareUrl', () => {
 });
 
 describe('decodeRouteState', () => {
-  // The legacy encoder's exact output for the two stops above at 25 miles.
-  // Pinned as a literal so a change to the encoder cannot silently orphan links
-  // that are already in circulation.
+  // The encoder's exact output for the two stops above at 25 miles. Pinned as a
+  // literal so a change to the encoder cannot silently orphan links that are
+  // already in circulation.
   const LEGACY_STRING =
     'eyJ2IjoxLCJyYWRpdXNfbWlsZXMiOjI1LCJzdG9wcyI6W3sibmFtZSI6IlNlYXR0bGUiLCJsbmciOi0xMjIuMzMyMSwibGF0Ijo0Ny42MDYyLCJraW5kIjoiUExBQ0UifSx7Im5hbWUiOiJCb3dtYW4gQmF5IiwibG5nIjotMTIyLjY1NDMyMSwibGF0Ijo0OC40MTIzNDYsImtpbmQiOiJDRyJ9XX0';
 

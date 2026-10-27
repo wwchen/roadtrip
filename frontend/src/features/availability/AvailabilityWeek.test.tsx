@@ -698,7 +698,7 @@ describe('paging weeks', () => {
     expect(screen.getByRole('button', { name: 'Pick a date' })).toHaveTextContent('Aug 10 – 16, 2026');
   });
 
-  // `›` used to be clamped on the low side only, so it kept walking past the
+  // `›` is clamped on both sides: clamped on the low side alone it walks past the
   // provider's horizon into requests the backend answers with
   // `beyond_booking_horizon`.
   test('stops at the last week the horizon allows', async () => {

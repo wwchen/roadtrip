@@ -257,8 +257,8 @@ describe('following the theme', () => {
     expect(instance.options.style).toBe(BASEMAPS[DEFAULT_BASEMAP].style.dark);
   });
 
-  // The bug: brightness used to be a basemap, so switching theme swapped the whole
-  // cartography. It must now swap only the tiles of the map you already chose.
+  // Brightness is not a basemap: a theme switch swaps only the tiles of the map
+  // already chosen, not the cartography.
   test('a mode change keeps the cartography and re-styles to its other tiles', async () => {
     renderMap();
     await loadStyle();

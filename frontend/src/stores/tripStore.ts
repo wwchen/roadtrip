@@ -37,9 +37,9 @@ export interface TripStop {
   /**
    * A placeholder while the browser resolves the user's location.
    *
-   * Ported from the legacy `_pending` flag, and it has to be a property of the
-   * stop rather than a separate loading flag because the row it belongs to can
-   * move: the coordinates are (0, 0) until geolocation answers, so routing and
+   * A property of the stop rather than a separate loading flag, because the row
+   * it belongs to can move: the coordinates are (0, 0) until geolocation
+   * answers, so routing and
    * marker placement both have to skip it — see `isLocated` in
    * domain/trip/stops.ts. Null island is a real coordinate that passes every
    * finite check.
@@ -48,14 +48,11 @@ export interface TripStop {
 }
 
 /**
- * The trip's geometries, typed as GeoJSON now that Phase 4e consumes them.
+ * The trip's geometries, typed as GeoJSON.
  *
- * Phase 0 declared these as `Record<string, unknown>` on the grounds that they
- * were "passed through to MapLibre" — true of the map, but the planner also reads
+ * Not `Record<string, unknown>` "passed through to MapLibre": the planner reads
  * the route's `properties` for its summary and its line for the corridor buffer,
- * and an untyped bag made every one of those reads a cast. Narrowed here for the
- * same reason the filter fields were reshaped in 4b: a store shape is a guess
- * until something consumes it.
+ * and an untyped bag makes every one of those reads a cast.
  */
 export type TripRouteCollection = FeatureCollection;
 /** A slim POI pin from /api/pois/on-route. Painted, never read field-by-field. */
@@ -181,8 +178,7 @@ export const selectAllStopsFilled = (s: TripState): boolean =>
   s.stops.length > 0 && s.stops.every((stop) => stop != null);
 
 /**
- * Whether a usable route is on the map. Mirrors the legacy
- * Route-active predicate: directions mode, a fetched route, and
+ * Whether a usable route is on the map: directions mode, a fetched route, and
  * every slot filled.
  */
 export const selectRouteActive = (s: TripState): boolean =>

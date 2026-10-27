@@ -22,8 +22,8 @@ import java.time.LocalDate
  * labels and formats accordingly.
  *
  * The applicable controls come from [state] alone — an active watch pauses, a
- * paused one resumes, a done one only deletes — so callers no longer pass a
- * separate control-links object.
+ * paused one resumes, a done one only deletes — so no caller passes a separate
+ * control-links object.
  */
 data class WatchStatusNotice(
     val watchId: Long,

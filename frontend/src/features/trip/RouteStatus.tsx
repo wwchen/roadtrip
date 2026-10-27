@@ -16,8 +16,7 @@ export interface RouteStatusProps {
 }
 
 export function RouteStatus({ computing, error, legs }: RouteStatusProps) {
-  // An error outranks progress: a failed request is not still computing, and the
-  // vanilla's shared node made that ordering implicit in call order.
+  // An error outranks progress: a failed request is not still computing.
   const message = error;
   if (!message && !computing && legs.length === 0) return null;
 

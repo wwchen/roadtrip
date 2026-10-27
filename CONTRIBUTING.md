@@ -186,7 +186,6 @@ checkout <n>` / `gh stack rebase` / `gh stack push`. See
 - [docs/secrets.md](docs/secrets.md) — the `secrets/` vault, rotation, what's deliberately not in it.
 - [docs/backend-architecture.md](docs/backend-architecture.md) — Kotlin/Ktor layering rules.
 - [docs/frontend-components.md](docs/frontend-components.md) — React component rules, the `@ui` layer, and the colour-token system.
-- [docs/react-migration-plan.md](docs/react-migration-plan.md) — how the frontend got here, and the Gotchas worth reading before your first LDS form or MapLibre effect.
 - [docs/touch-scroll-interactions.md](docs/touch-scroll-interactions.md) — touch/scroll interaction rules for the map UI.
 - [docs/observability.md](docs/observability.md) — the Grafana/Loki/Tempo/Prometheus/Alloy stack.
 - [docs/reservation-providers.md](docs/reservation-providers.md) — the availability-provider abstraction.

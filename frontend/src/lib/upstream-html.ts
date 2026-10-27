@@ -131,8 +131,8 @@ export interface UpstreamDecorations {
 /**
  * The auxiliary fields worth showing out of a verbatim upstream record.
  *
- * Returns data rather than the legacy version's ready-made HTML sections, so the
- * drawer decides the framing and the sanitiser's output is the only markup in play.
+ * Returns data rather than ready-made HTML sections, so the drawer decides the
+ * framing and the sanitiser's output is the only markup in play.
  */
 export function upstreamDecorations(upstream: unknown): UpstreamDecorations {
   const empty: UpstreamDecorations = {

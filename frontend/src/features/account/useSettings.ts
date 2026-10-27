@@ -58,11 +58,10 @@ export function useSettings(): UseQueryResult<SettingsResponse> {
 /**
  * Writes that replace the whole settings document.
  *
- * Every mutation here seeds the cache from its own response and then invalidates.
- * The legacy modal did the same thing by hand — save, then re-read, falling back to
- * the mutation's response if the re-read failed — because a save can change values
- * the client did not send: storing a Slack token produces a new `slack_token_hint`,
- * and the masked field has to show the new one.
+ * Every mutation here seeds the cache from its own response and then invalidates,
+ * because a save can change values the client did not send: storing a Slack token
+ * produces a new `slack_token_hint`, and the masked field has to show the new
+ * one.
  */
 function useSettingsWrite<TInput>(mutationFn: (input: TInput) => Promise<SettingsResponse>) {
   const queryClient = useQueryClient();

@@ -215,9 +215,9 @@ class ContractBodyCheckTest {
 
     /**
      * The row declares `BuildInfoDto` at 200, so a `text/plain` 200 is a row the
-     * check can no longer read — which is drift, not a skip. Skipping it meant a
-     * contracted route could stop serving JSON entirely and the only signal would
-     * be the ledger gate calling its success body unexercised.
+     * check cannot read — which is drift, not a skip. Skipped, a contracted route
+     * could stop serving JSON entirely and the only signal would be the ledger
+     * gate calling its success body unexercised.
      */
     @Test
     fun `a non-JSON body on a status the row declares a body at is drift`() =

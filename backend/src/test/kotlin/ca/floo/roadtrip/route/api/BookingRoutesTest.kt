@@ -160,9 +160,9 @@ class BookingRoutesTest {
 
     @Test
     fun `each failure category gets its own status, whatever the provider called it`() {
-        // The route classifies nothing: it used to keep two sets of rec.gov codes
-        // and answer 502 for anything in neither. Which code lands in which
-        // category is the adapter's business, and is tested there.
+        // The route classifies nothing. Which code lands in which category is
+        // the adapter's business, and is tested there; sets of rec.gov codes kept
+        // here would answer 502 for anything in neither.
         val expected =
             mapOf(
                 BookingFailureCategory.CALLER_ACTION to HttpStatusCode.Forbidden,
@@ -306,12 +306,11 @@ class BookingRoutesTest {
     @Test
     fun `a quoted campsite_id still decodes to the same Long`() =
         testApplication {
-            // Pinned because the frontend used to send String(row.id) and the
-            // shape of that bug depends entirely on this: kotlinx coerces a
-            // quoted number into a Long here, so it was never the 400 it looked
-            // like it should be. The frontend now sends a number regardless —
-            // this test exists so the tolerance is a recorded fact rather than
-            // an assumption either side is free to break.
+            // kotlinx coerces a quoted number into a Long here, so a caller
+            // sending String(row.id) gets a 200 rather than the 400 the shape
+            // suggests. The frontend sends a number; this pins the tolerance as
+            // a recorded fact rather than an assumption either side is free to
+            // break.
             val service = StubBookingActions()
             mount(service)
 

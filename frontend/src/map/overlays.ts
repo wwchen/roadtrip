@@ -28,10 +28,9 @@ const HIT_LAYER_SUFFIX = '-points-hit';
  * Campground pin size, by campsite count.
  *
  * `sites` is not in the slim `/api/pois` response today, so in practice every
- * campground draws at the `coalesce` default — the same as it did in the vanilla
- * map, where this expression is copied from verbatim. It stays because the
- * fallback is the intended one and the ramp is what should apply the day the
- * endpoint carries the count.
+ * campground draws at the `coalesce` default. The ramp stays because the fallback
+ * is the intended one and the ramp is what should apply the day the endpoint
+ * carries the count.
  */
 const CAMPGROUND_SITES_SIZE: DataDrivenPropertyValueSpecification<number> = [
   'sqrt',
@@ -60,8 +59,7 @@ export interface PointOverlaySpec {
    *
    * Two names per upstream category in some cases because the backend's
    * canonical name (`tesla_supercharger`) and the alias it also accepts
-   * (`supercharger`) both reach the client depending on the endpoint — the
-   * vanilla bucketing accepted both and so does this.
+   * (`supercharger`) both reach the client depending on the endpoint.
    */
   categories: readonly string[];
   /** Pin fill. A token NAME: MapLibre paint cannot resolve `var()`, so the value
@@ -90,9 +88,8 @@ export interface PointOverlaySpec {
 /**
  * Every pin overlay, in install order.
  *
- * Order is the paint order: later entries draw above earlier ones, which is what
- * the vanilla install sequence produced (campgrounds, then Planet Fitness, then
- * Superchargers on top).
+ * Order is the paint order: later entries draw above earlier ones (campgrounds,
+ * then Planet Fitness, then Superchargers on top).
  */
 export const POINT_OVERLAYS: readonly PointOverlaySpec[] = [
   {

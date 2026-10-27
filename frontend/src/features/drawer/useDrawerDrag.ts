@@ -1,11 +1,10 @@
 // Drag-to-dismiss for the mobile bottom sheet.
 //
-// Faithful port of `attachDragHandlers` in web/drawer/chrome.js, thresholds and
-// all. The subtlety is not the dismissal — it is deciding, mid-gesture, whether a
+// The subtlety is not the dismissal — it is deciding, mid-gesture, whether a
 // downward touch is a dismiss or a scroll, because the drawer body scrolls and the
 // availability matrix inside it scrolls horizontally.
 //
-// The state machine, unchanged:
+// The state machine:
 //   'handle'  — started on the grab bar: always a drag.
 //   'pending' — started in the body: undecided until the touch travels SLOP px.
 //   'body'    — a pending touch that went down past SLOP while scrolled to the

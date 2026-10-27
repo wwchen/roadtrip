@@ -18,7 +18,7 @@ const STATUS_TONE: Record<string, 'success' | 'error' | 'info'> = {
   started: 'info',
 };
 
-/** Matches the legacy cell width for a run's error text. */
+/** The cell width for a run's error text. */
 const ERROR_MAX_CHARS = 80;
 
 const NONE = '—';
@@ -43,8 +43,6 @@ function filtersFromParams(params: TabParams): RunFilters {
 }
 
 /**
- * Rebuild of web/components/availability/runs-tab.js.
- *
  * Recent executions across all pollers, or filtered to one. Seeded from the URL
  * so a poller row's link lands here already scoped.
  */

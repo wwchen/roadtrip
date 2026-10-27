@@ -21,9 +21,9 @@ private val companionBaseUrlLine = Regex("""^\s*$COMPANION_BASE_URL_KEY:(.*)$"""
  * error anywhere. `docs/reservation-providers.md` states the requirement; this
  * is what enforces it.
  *
- * The drawer's CTA no longer depends on it (phase 4b resolves an aliased pin's
- * identity through `BookingIdentityResolver` and the registry's `sells`), so
- * the `atc` action is the whole of what this guards.
+ * The drawer's CTA does not depend on it — an aliased pin's identity resolves
+ * through `BookingIdentityResolver` and the registry's `sells` — so the `atc`
+ * action is the whole of what this guards.
  */
 class ShippingProfileCompanionConfigTest {
     @Test

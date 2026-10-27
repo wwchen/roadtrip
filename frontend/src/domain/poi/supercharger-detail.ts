@@ -47,9 +47,9 @@ export function formatRate(book: Pricebook): string {
 /**
  * Pricebooks → the rows the drawer renders, or null for "no pricing on file".
  *
- * Only Tesla-vehicle charging fees and the congestion fee are surfaced; the capture
- * also carries other makes and fee types, which the vanilla drawer likewise ignored.
- * Time-of-use rows sort by start time so the day reads in order.
+ * Only Tesla-vehicle charging fees and the congestion fee are surfaced; the
+ * capture also carries other makes and fee types. Time-of-use rows sort by start
+ * time so the day reads in order.
  */
 export function rateRows(raw: unknown): RateRow[] | null {
   const books = parsePricebooks(raw);

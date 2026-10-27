@@ -76,8 +76,6 @@ export interface ChangesTabProps {
 }
 
 /**
- * Rebuild of web/components/availability/snapshots-tab.js.
- *
  * Scoped to exactly one campsite or one POI — the backend rejects neither and
  * both, so the form enforces it rather than surfacing a 400. Nothing is requested
  * until a target is set, which is why the panel opens on a prompt.
@@ -95,8 +93,8 @@ export function ChangesTab({ route }: ChangesTabProps) {
   const apply = (next: ChangeFilters) => {
     setFilters(next);
     if (!hasOneChangeTarget(next)) return;
-    // Mirror the applied filter into the URL so the view is linkable — the legacy
-    // tab did this here too, and only for a valid target.
+    // Mirror the applied filter into the URL so the view is linkable, and only
+    // for a valid target.
     route.setParams({
       ...(next.poiId ? { poi_id: next.poiId } : {}),
       ...(next.campsiteId ? { campsite_id: next.campsiteId } : {}),

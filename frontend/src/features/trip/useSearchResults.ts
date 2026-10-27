@@ -103,7 +103,7 @@ export function useSearchResults(query: string): SearchResults {
 
   // The only report a failed source gets: the other source's rows still show, and
   // a red banner over a search box the user is still typing in is worse than fewer
-  // results. The vanilla logged the same way, inside its per-source catch.
+  // results.
   useEffect(() => {
     if (pois.error) console.warn('POI search failed', pois.error);
   }, [pois.error]);

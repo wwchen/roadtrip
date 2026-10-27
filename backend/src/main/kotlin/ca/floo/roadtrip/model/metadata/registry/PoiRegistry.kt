@@ -46,7 +46,7 @@ private const val SOURCE_NAME_PROPERTY_KEY = "name_property"
  * without it, whether it joins its vendor's leaves to a sibling geometry feed by
  * name, the further `args` keys its factory reads with no default, and the
  * complete `args` key set it accepts — a key outside that set is a boot error,
- * since a dead or misspelled arg used to boot cleanly and do nothing. A null
+ * since a dead or misspelled arg would otherwise boot cleanly and do nothing. A null
  * [acceptedArgKeys] leaves the adapter's args unjudged.
  */
 internal data class AdapterPolicy(

@@ -143,9 +143,7 @@ function WatchesListPage() {
   );
 
   // Deep links run only once the list has SUCCESSFULLY loaded and the caller is
-  // signed in. The legacy page reached `applyUrlAction()` only after
-  // `await loadWatches()` returned, so any list failure — 401 or otherwise —
-  // skipped the action entirely; both conditions here reproduce that.
+  // signed in: any list failure — 401 or otherwise — skips the action entirely.
   //
   // `listError` belongs in `allowed`, not in `ready`. Putting it in `ready` would
   // leave the action armed instead of dropping it, so a user who pressed Retry

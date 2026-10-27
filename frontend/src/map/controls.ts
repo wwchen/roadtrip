@@ -40,9 +40,7 @@ export function installMapControls(map: MapLibreMap): MapControls {
     trackUserLocation: false,
     // We draw the puck (`map/user-location.ts`), so MapLibre must not draw its own:
     // with `trackUserLocation: false` its dot and accuracy circle only appear for the
-    // duration of the single fetch, which reads as a flicker under ours. The vanilla
-    // passed `showUserHeading: false` here, which this version of MapLibre has no
-    // option for at all — so that line was doing nothing.
+    // duration of the single fetch, which reads as a flicker under ours.
     showUserLocation: false,
     fitBoundsOptions: { maxZoom: GEOLOCATE_MAX_ZOOM },
   });

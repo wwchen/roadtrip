@@ -356,9 +356,9 @@ class CampsiteRoutesTest : SharedDbTest() {
 
     /**
      * The campground names no rec.gov ref, so pairing the site's selling
-     * identity with the campground's finds nothing — and the row used to fall
-     * back to Campflare while its link opened recreation.gov. The site's own
-     * ref stands instead, and the button names the site it opens.
+     * identity with the campground's finds nothing. The site's own ref stands,
+     * and the button names the site it opens — a Campflare fallback here would
+     * label a link that opens recreation.gov.
      */
     @Test
     fun `a Campflare row whose sites sell on rec_gov names rec_gov`() =

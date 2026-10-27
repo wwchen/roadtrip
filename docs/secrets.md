@@ -30,13 +30,13 @@ unchanged; they wrap themselves in `manage.py exec`.
 
 ## Why it is shaped this way
 
-The list of secret *names* used to live in four hand-maintained places —
+The alternative is the list of secret *names* in four hand-maintained places —
 `application*.yaml`, `.env.example`, `docker-compose.yml`, and a deploy
-workflow — kept in sync by a script somebody had to remember to run. It drifted:
-`CAMPFLARE_TOKEN` was read by the backend and documented nowhere, and
-`env_file: .env` handed every secret to a container that needed none.
+workflow — kept in sync by a script somebody has to remember to run. That drifts
+both ways: a secret the backend reads and nothing documents, and an
+`env_file: .env` handing every secret to a container that needs none.
 
-So there is now exactly one list, and **everything else is generated from it or
+So there is exactly one list, and **everything else is generated from it or
 checked against it**:
 
 | artifact | how it stays true |

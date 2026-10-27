@@ -13,9 +13,9 @@ import kotlin.test.assertTrue
 
 /**
  * HTTP-layer coverage for the one client with call shaping of its own. The
- * 429 case is the load-bearing one: it used to sleep 3s/6s/12s inside this
- * client and then throw an untyped RuntimeException, which meant the failover
- * fetcher never saw a rate limit it could cool the provider down for.
+ * 429 case is the load-bearing one: sleeping 3s/6s/12s inside this client and
+ * throwing an untyped RuntimeException hides the rate limit from the failover
+ * fetcher, which is the one thing that can cool the provider down.
  */
 class HttpRecgovAvailabilityClientTest {
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)

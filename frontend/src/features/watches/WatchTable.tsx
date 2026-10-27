@@ -31,7 +31,7 @@ export interface WatchTableProps {
 type SortKey = 'id' | 'poi' | 'start_date' | 'status' | 'last_run_at';
 type SortDir = 'asc' | 'desc';
 
-/** Matches the legacy data-table's defaultSort. */
+/** The table's default sort. */
 const DEFAULT_SORT: { key: SortKey; dir: SortDir } = { key: 'id', dir: 'desc' };
 
 const STATUS_LABELS: Record<WatchStatus, string> = {
@@ -40,7 +40,7 @@ const STATUS_LABELS: Record<WatchStatus, string> = {
   done: 'Done',
 };
 
-/** Status → LDS Tag hue. Replaces the legacy per-row `is-paused`/`is-done` tint. */
+/** Status → LDS Tag hue. */
 const STATUS_HUE: Record<WatchStatus, 'green' | 'yellow' | 'gray'> = {
   active: 'green',
   paused: 'yellow',

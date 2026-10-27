@@ -359,7 +359,7 @@ class RecGovCredentialServiceTest {
         runBlocking {
             // A sign-out is not a removal: `logout` leaves the Chromium profile
             // directory and the saved rec.gov cookie jar on the companion host,
-            // so removing credentials used to leave the session behind.
+            // so a removal that only signs out leaves the session behind.
             val companion = FakeCompanion()
 
             val dto = service(configuredRepo(), companion).remove(testUserId)

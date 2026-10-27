@@ -1,15 +1,9 @@
 /* The watch editor's own stylesheet.
  *
- * These rules did not live in a stylesheet at all: `web/availability/watch-editor.js`
- * built them as a template string and injected a `<style>` tag into `document.head`
- * on first mount, guarded by an element-id check. That is why they were invisible to
- * the colour guardrail, and why two of their literal colours needed tokenising on the
- * way in. Otherwise verbatim.
- *
- * They then spent a while in `features/availability/availability.css`, which meant the
- * alerts panel — the editor's second consumer — was styled only because the map bundle
- * happened to pull the availability grid's sheet in alongside it. The component owns
- * its own sheet now, so either consumer can mount it alone.
+ * The editor's own sheet, not the availability grid's: the alerts panel is the
+ * editor's second consumer, and folded into `availability.css` it would be styled
+ * only because the map bundle happens to pull the grid's sheet in alongside it.
+ * Either consumer can mount the editor alone.
  *
  * `--rt-watch-editor-width` is the number `WatchPopover` positions against, so the
  * two must agree — see POPOVER_WIDTH_PX there.
