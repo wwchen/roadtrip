@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { STAY_ANSWER_EVENT, STAY_DONE_EVENT } from '@/api/availability-api';
+import { addLocalDays, localToday, localYmd } from '@/lib/local-date';
 import { queryKeys } from '@/queries/keys';
 import { bookingCopy, gateCopy, matrixCopy, nightsCopy, placeCopy, stayCopy } from '@/lib/strings';
 import { eventStreamResponse, jsonResponse, type StubEvent } from '@/test/fetch-stub';
@@ -306,6 +307,80 @@ describe('PlaceSurface, at the full detent', () => {
     );
     expect(weekReads).toHaveLength(1);
     expect(catalogReads).toHaveLength(1);
+  });
+});
+
+describe('PlaceSurface, with no dates pinned', () => {
+  const DISCOVERY_NIGHTS = 14;
+  const ONE_NIGHT = 1;
+
+  const stayAsked = () => {
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter((made) =>
+      String(made[0]).includes('/availability/stays'),
+    );
+    return JSON.parse(String((calls.at(-1)?.[1] as RequestInit | undefined)?.body ?? '{}'));
+  };
+
+  const openNights = () => {
+    const today = localToday();
+    const open = [localYmd(today), localYmd(addLocalDays(today, ONE_NIGHT))];
+    return () =>
+      jsonResponse({
+        poi_id: POI_ID,
+        start_date: open[0],
+        end_date: localYmd(addLocalDays(today, DISCOVERY_NIGHTS)),
+        state: 'available',
+        days: open.map((date) => ({
+          date,
+          status: 'available',
+          watchable: false,
+          cells: { [SITE_ID]: { status: 'available', watchable: false } },
+        })),
+        watch_capabilities: { trigger_kinds: [], add_to_cart: { state: 'unsupported' } },
+      });
+  };
+
+  test('the sheet covers a fortnight, and asks the stay check about one night of it', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+
+    mount('from-map');
+
+    const strip = await screen.findByRole('group', { name: nightsCopy.group });
+    expect(within(strip).getAllByRole('button')).toHaveLength(DISCOVERY_NIGHTS);
+
+    const today = localToday();
+    expect(stayAsked()).toMatchObject({
+      start_date: localYmd(today),
+      end_date: localYmd(addLocalDays(today, ONE_NIGHT)),
+    });
+  });
+
+  test('picking a night in the strip asks the stay check about that night', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], { grid: openNights() });
+
+    mount('from-map');
+
+    const strip = await screen.findByRole('group', { name: nightsCopy.group });
+    await waitFor(() => expect(within(strip).getAllByRole('button')[1]).toBeEnabled());
+    fireEvent.click(within(strip).getAllByRole('button')[1]);
+
+    const night = localYmd(addLocalDays(localToday(), ONE_NIGHT));
+    await waitFor(() => expect(stayAsked()).toMatchObject({ start_date: night }));
+  });
+
+  test('the grid is read over the whole fortnight, not over the night in focus', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+
+    mount('from-map');
+
+    await screen.findByRole('group', { name: nightsCopy.group });
+
+    const today = localToday();
+    const read = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
+      .map((made) => String(made[0]))
+      .find((url) => url.includes('/campsites/availability'));
+    expect(read).toContain(`start_date=${localYmd(today)}`);
+    expect(read).toContain(`end_date=${localYmd(addLocalDays(today, DISCOVERY_NIGHTS))}`);
   });
 });
 

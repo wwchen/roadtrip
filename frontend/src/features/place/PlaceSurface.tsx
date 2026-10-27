@@ -10,7 +10,7 @@ import { alertCopy, nightsCopy, placeCopy, stayCopy } from '@/lib/strings';
 import { usePoiDetail } from '@/queries/poi-detail';
 import { useMapStore } from '@/stores/mapStore';
 import { PlaceSheet, type PlaceArrival } from './PlaceSheet';
-import { usePinnedStay } from './place-stay-window';
+import { stayWithin, usePlaceWindow } from './place-stay-window';
 import { usePlaceAlert } from './use-place-alert';
 import { usePlaceCart } from './use-place-cart';
 import { usePlaceNights, type PlaceNightsFailure } from './use-place-nights';
@@ -169,14 +169,14 @@ interface StayPlaceProps extends PlainPlaceProps {
 }
 
 function StayPlace({ feature, poiId, Poi, arrival, stale, onClose }: StayPlaceProps) {
-  const stay = usePinnedStay();
-  const check = usePlaceStay(poiId, stay);
-  const nights = usePlaceNights(poiId, stay);
+  const inView = usePlaceWindow();
+  const nights = usePlaceNights(poiId, inView);
   const { row, failed } = usePlaceAlert(poiId, nights);
   const cart = usePlaceCart(nights.capabilities);
   const [picked, setPicked] = useState<string | null>(null);
 
   const selected = picked !== null && nights.dates.includes(picked) ? picked : (nights.dates[0] ?? null);
+  const check = usePlaceStay(poiId, stayWithin(inView, selected));
   const own = stayRetry(check) ?? (failed ? <Banner status="warning" title={alertCopy.createFailed} /> : null);
   const notice =
     stale || own ? (
