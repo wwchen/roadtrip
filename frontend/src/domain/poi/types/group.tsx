@@ -59,11 +59,12 @@ export function ParkGroupPoiPage({ feature, variant, availability, render }: Poi
     ) : null);
 
   const subtitle = subline([stateName, manager]);
+  const eyebrow = eyebrowFor(EYEBROW, name);
 
   const blocks: PoiBlockSlots = {
     identity: (
       <PoiIdentity
-        eyebrow={eyebrowFor(EYEBROW, name)}
+        eyebrow={eyebrow}
         title={name}
         // The step above names the park system, never the state, so nothing here
         // restates it — unlike the park page, where the two can collide.
@@ -83,7 +84,7 @@ export function ParkGroupPoiPage({ feature, variant, availability, render }: Poi
   };
 
   return renderPoiPage(
-    { name, subtitle, blocks, parent: { label: PARK_SYSTEM_PARENT } },
+    { name, subtitle: eyebrow, blocks, parent: { label: PARK_SYSTEM_PARENT } },
     { render, variant },
   );
 }

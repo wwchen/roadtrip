@@ -90,6 +90,8 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
     distance,
   ]);
 
+  const eyebrow = eyebrowFor(KIND_LABEL, name, agency);
+
   const tags: PoiTag[] = [
     ...amenityTags(p),
     ...activityList(p).map((label) => ({ label, absent: false })),
@@ -114,7 +116,7 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
       <PoiIdentity
         // "Campground · USDA Forest Service" over "Tuff Campground" says campground
         // twice; a name that does not carry its own type keeps the word.
-        eyebrow={eyebrowFor(KIND_LABEL, name, agency)}
+        eyebrow={eyebrow}
         title={name}
         subtitle={subtitle}
       />
@@ -194,7 +196,7 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
   return renderPoiPage(
     {
       name,
-      subtitle: eyebrowFor(KIND_LABEL, name, knownParent),
+      subtitle: eyebrow,
       blocks,
       ...(parentStep ? { parent: { label: parentStep } } : null),
     },

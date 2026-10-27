@@ -62,7 +62,6 @@ const PLACE_TYPES: Record<string, PlaceTypeSpec> = {
     eyebrow: 'Dropped pin',
     fallbackName: 'Dropped pin',
     kind: 'PLACE',
-    locatedByPoint: true,
     specs: {
       heading: 'What we know',
       fields: [

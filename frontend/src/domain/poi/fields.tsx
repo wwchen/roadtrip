@@ -28,13 +28,6 @@ export function coordinatesOf(feature: PoiFeature): [number | undefined, number 
   return [coords[0], coords[1]];
 }
 
-const COORDINATE_DECIMALS = 5;
-
-export function coordinatesLabel(lng: number | undefined, lat: number | undefined): string {
-  if (lng == null || lat == null) return '';
-  return `${lat.toFixed(COORDINATE_DECIMALS)}, ${lng.toFixed(COORDINATE_DECIMALS)}`;
-}
-
 /** A flattened property as a string, since `properties` is deliberately open. */
 export const text = (value: unknown): string => (typeof value === 'string' ? value : '');
 

@@ -27,6 +27,8 @@ import {
 import type { PoiBlockSlots } from '../PoiPageShell';
 import { presentSpecs, renderPoiPage, type PoiTypeProps } from './common';
 
+const EYEBROW = 'Charger · Tesla';
+
 /** The heading the charger's one spec block carries. */
 const CHARGING_HEADING = 'Charging';
 
@@ -99,7 +101,7 @@ export function ChargerPoiPage({ feature, variant, onClose, render }: PoiTypePro
   const blocks: PoiBlockSlots = {
     identity: (
       <PoiIdentity
-        eyebrow="Charger · Tesla"
+        eyebrow={EYEBROW}
         title={name}
         subtitle={subline([address, commonSite, distance])}
       />
@@ -159,7 +161,7 @@ export function ChargerPoiPage({ feature, variant, onClose, render }: PoiTypePro
       : null),
   };
 
-  return renderPoiPage({ name, subtitle: subline([address, commonSite]), blocks }, { render, variant });
+  return renderPoiPage({ name, subtitle: EYEBROW, blocks }, { render, variant });
 }
 
 /** A numeric property, or 0 — every hardware spec is "render when non-zero". */

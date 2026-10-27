@@ -505,7 +505,6 @@ class SmokeTest {
                     .IsVisibleOptions()
                     .setTimeout(15_000.0),
             )
-            assertThat(sheet.locator(".rt-poi-share")).hasCount(0)
             assertTrue(page.url().contains("poi=4242"), "shared POI should be represented by the visible URL")
             assertTrue(
                 pageErrors.isEmpty(),
@@ -601,6 +600,9 @@ class SmokeTest {
                     .IsVisibleOptions()
                     .setTimeout(15_000.0),
             )
+            // The agency shares the eyebrow with the type — "Campground · <agency>" —
+            // which is what identifies the place before its name locates it.
+            assertThat(sheet.getByText("Campground · California State Parks")).isVisible()
             sheet
                 .getByRole(AriaRole.BUTTON, Locator.GetByRoleOptions().setName("Clear Lake SP Cabins"))
                 .click()

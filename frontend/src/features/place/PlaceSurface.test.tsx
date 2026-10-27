@@ -13,7 +13,8 @@ import { MapPlaceSurface, PlaceSurface } from './PlaceSurface';
 const POI_ID = 42;
 const NAME = 'Upper Pines';
 const PARENT = 'Yosemite National Park';
-const SUBTITLE = `Campground · ${PARENT}`;
+const AGENCY = 'National Park Service';
+const SUBTITLE = `Campground · ${AGENCY}`;
 const OPEN_SITES = 3;
 const CHECKED_SITES = 40;
 
@@ -27,7 +28,7 @@ const detail = () =>
       subcategory: 'federal',
       name: NAME,
       parent_name: PARENT,
-      agency: 'National Park Service',
+      agency: AGENCY,
       availability_supported: true,
     },
   });
@@ -130,6 +131,7 @@ describe('PlaceSurface', () => {
 
     expect(await screen.findByText(`${OPEN_SITES} sites open`)).toBeInTheDocument();
     expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
+    expect(screen.queryByText(PARENT)).not.toBeInTheDocument();
     expect(screen.queryByText(stayCopy.timedOut)).not.toBeInTheDocument();
   });
 

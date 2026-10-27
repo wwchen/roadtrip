@@ -11,6 +11,8 @@ const USER_LOCATION_FAR_FROM_THE_PIN = { lng: -122.4194, lat: 37.7749 };
 
 const DISTANCE_UNITS = /\d\s?(km|mi)\b/i;
 
+const EYEBROW_SELECTOR = '.rt-poi-eyebrow';
+
 const feature = (properties: Record<string, unknown>): FlatPoiFeature => ({
   type: 'Feature',
   id: 7,
@@ -82,12 +84,34 @@ afterEach(() => {
 
 describe('the parts a type hands its render prop', () => {
   test.each([
-    ['campground', CAMPGROUND, 'Upper Pines', 'Campground · Yosemite National Park'],
-    ['charger', CHARGER, 'Mariposa Supercharger', '5035 Highway 140, Mariposa, CA 95338'],
-    ['trailhead', TRAILHEAD, 'Mist Trail', '9000 Happy Isles Loop Rd, Yosemite Valley, CA'],
-    ['park group', PARK_GROUP, 'Yosemite', 'California · NPS'],
+    ['campground', CAMPGROUND, 'Upper Pines', 'Campground · National Park Service'],
+    ['charger', CHARGER, 'Mariposa Supercharger', 'Charger · Tesla'],
+    ['trailhead', TRAILHEAD, 'Mist Trail', 'Trailhead'],
+    ['park group', PARK_GROUP, 'Yosemite', 'National park'],
   ])('%s names itself and states what it is beside the name', (_label, properties, name, subtitle) => {
     expect(partsOf(properties)).toMatchObject({ name, subtitle });
+  });
+
+  test.each([
+    ['campground', CAMPGROUND],
+    ['charger', CHARGER],
+    ['trailhead', TRAILHEAD],
+    ['state', STATE_PAGE],
+    ['dropped pin', DROPPED_PIN],
+    ['park group', PARK_GROUP],
+  ])('%s hands over the very line its own page prints as the eyebrow', (_label, properties) => {
+    const Page = poiPageFor(properties);
+    if (!Page) throw new Error('no page for this category');
+    const { container } = render(<Page variant="page" feature={feature(properties)} />);
+
+    expect(container.querySelector(EYEBROW_SELECTOR)?.textContent ?? '').toBe(partsOf(properties).subtitle);
+  });
+
+  test('a campground names the agency that manages it, not the park it sits in', () => {
+    const { subtitle } = partsOf(CAMPGROUND);
+
+    expect(subtitle).toContain(CAMPGROUND.agency);
+    expect(subtitle).not.toContain(CAMPGROUND.parent_name);
   });
 
   test.each([
@@ -101,15 +125,11 @@ describe('the parts a type hands its render prop', () => {
     expect(partsOf(properties).subtitle).not.toMatch(DISTANCE_UNITS);
   });
 
-  test('a dropped pin with no address is named by its point', () => {
-    expect(partsOf(DROPPED_PIN)).toMatchObject({
-      name: 'Dropped pin',
-      subtitle: '37.86510, -119.53830',
-    });
-  });
-
-  test('a place that is not a pin shows no secondary line rather than a decimal pair', () => {
-    expect(partsOf(STATE_PAGE)).toMatchObject({ name: 'California', subtitle: '' });
+  test.each([
+    ['a dropped pin', DROPPED_PIN, 'Dropped pin', 'Dropped pin'],
+    ['a state', STATE_PAGE, 'California', 'State'],
+  ])('%s states its kind', (_label, properties, name, subtitle) => {
+    expect(partsOf(properties)).toMatchObject({ name, subtitle });
   });
 
   test('every type still hands over the blocks it built', () => {

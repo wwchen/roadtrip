@@ -30,10 +30,9 @@ const PHONE_FRAME: CSSProperties = {
 const DESKTOP_FRAME: CSSProperties = { ...PHONE_FRAME, width: 960, height: 640, borderRadius: 12 };
 
 const NAME = 'Upper Pines';
-const INSIDE = 'Yosemite National Park';
+const EYEBROW = 'Campground · National Park Service';
 const ADDRESS = '9000 Upper Pines Rd, Yosemite Valley, CA 95389';
 const DROPPED_PIN = 'Dropped pin';
-const DROPPED_PIN_AT = '37.7449, −119.5933';
 const ORIGIN = { label: 'Oakland', minutes: 232 };
 const WEEK = ['2026-11-06', '2026-11-07', '2026-11-08', '2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12'];
 const OPEN_SITES = [4, 6, 2, 3, 5, 1, 2];
@@ -154,7 +153,7 @@ const meta = {
   render: (args) => <Live {...args} />,
   args: {
     name: NAME,
-    subtitle: INSIDE,
+    subtitle: EYEBROW,
     arrival: 'from-map',
     verdict: {
       name: NAME,
@@ -198,9 +197,9 @@ const meta = {
           'Reserve off the screen, and the header is the one element present at every ' +
           'height, so it owns what the place is called — an identity block beside it would ' +
           'state the name twice in one detent. What `identity` carried beyond the name ' +
-          "becomes the header's `subtitle`, which rides along at every height: the unit a " +
-          "campground sits inside, or a dropped pin's coordinates, which are the only thing " +
-          'identifying it. A group with nothing in ' +
+          "becomes the header's `subtitle`, which rides along at every height: the eyebrow's " +
+          "own line, the kind of place and, for a campground, the agency that manages it. " +
+          'A group with nothing in ' +
           'it draws no band and no rule, which is what a dropped pin relies on. ' +
           'The stay section is guarded the same way: a place with no nights in view and no ' +
           'alert to offer draws no availability band at all, which is how "this pin has no ' +
@@ -262,7 +261,7 @@ export const ColdArrival: Story = { args: { arrival: 'cold' } };
 export const DroppedPin: Story = {
   args: {
     name: DROPPED_PIN,
-    subtitle: DROPPED_PIN_AT,
+    subtitle: DROPPED_PIN,
     verdict: {
       name: DROPPED_PIN,
       answer: summary({ status: 'no_data', open_sites: 0 }),
