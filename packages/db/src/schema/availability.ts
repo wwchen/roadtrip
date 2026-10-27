@@ -18,11 +18,11 @@ import {
 } from 'drizzle-orm/pg-core';
 import { appUser } from './auth.js';
 import { campsites, pois } from './catalog.js';
-import { atLeast, jsonbObject, nullOrTextIn, textIn } from './constraints.js';
+import { atLeast, jsonbObject, moreThan, nullOrTextIn, textIn } from './constraints.js';
 import { availabilityPoller, availabilityRun } from './scheduler.js';
 
 const MIN_CADENCE_SEC = 5;
-const MIN_TRIGGER_KINDS = 0;
+const EMPTY_CARDINALITY = 0;
 
 export const AVAILABILITY_STATUSES = [
   'first_come',
@@ -104,18 +104,18 @@ export const availabilityWatch = pgTable(
       columns: [table.ownerUserId],
       foreignColumns: [appUser.id],
     }),
-    check('availability_watch_cadence_sec_check', atLeast('cadence_sec', MIN_CADENCE_SEC)),
+    check('availability_watch_cadence_sec_check', atLeast(table.cadenceSec, MIN_CADENCE_SEC)),
     check('availability_watch_date_window_check', sql`end_date > start_date`),
     check(
       'availability_watch_done_reason_check',
-      nullOrTextIn('done_reason', WATCH_DONE_REASONS),
+      nullOrTextIn(table.doneReason, WATCH_DONE_REASONS),
     ),
-    check('availability_watch_reservable_filters_check', jsonbObject('campsite_filters')),
-    check('availability_watch_status_check', textIn('status', WATCH_STATUSES)),
-    check('availability_watch_trigger_config_check', jsonbObject('trigger_config')),
+    check('availability_watch_reservable_filters_check', jsonbObject(table.campsiteFilters)),
+    check('availability_watch_status_check', textIn(table.status, WATCH_STATUSES)),
+    check('availability_watch_trigger_config_check', jsonbObject(table.triggerConfig)),
     check(
       'availability_watch_trigger_kinds_check',
-      sql.raw(`cardinality(trigger_kinds) > ${MIN_TRIGGER_KINDS}`),
+      moreThan('cardinality(trigger_kinds)', EMPTY_CARDINALITY),
     ),
     index('availability_watch_active_idx').on(table.status).where(sql`status = 'active'`),
     index('availability_watch_owner_idx').on(table.ownerUserId),

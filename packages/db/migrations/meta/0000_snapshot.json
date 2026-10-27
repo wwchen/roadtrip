@@ -1,5 +1,5 @@
 {
-  "id": "3db1feee-35c3-471a-b0b2-722ac78c049a",
+  "id": "37cca93f-3c76-46f7-b05a-b38d74cf1ef7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -86,11 +86,11 @@
       "checkConstraints": {
         "app_user_status_check": {
           "name": "app_user_status_check",
-          "value": "status = ANY (ARRAY['active'::text, 'disabled'::text])"
+          "value": "\"status\" = ANY (ARRAY['active'::text, 'disabled'::text])"
         },
         "app_user_theme_check": {
           "name": "app_user_theme_check",
-          "value": "theme = ANY (ARRAY['light'::text, 'dark'::text, 'system'::text])"
+          "value": "\"theme\" = ANY (ARRAY['light'::text, 'dark'::text, 'system'::text])"
         }
       },
       "isRLSEnabled": false
@@ -331,7 +331,7 @@
       "checkConstraints": {
         "user_role_role_check": {
           "name": "user_role_role_check",
-          "value": "role = 'admin'"
+          "value": "\"role\" = 'admin'::text"
         }
       },
       "isRLSEnabled": false
@@ -827,7 +827,7 @@
       "checkConstraints": {
         "availability_watch_cadence_sec_check": {
           "name": "availability_watch_cadence_sec_check",
-          "value": "cadence_sec >= 5"
+          "value": "\"cadence_sec\" >= 5"
         },
         "availability_watch_date_window_check": {
           "name": "availability_watch_date_window_check",
@@ -835,19 +835,19 @@
         },
         "availability_watch_done_reason_check": {
           "name": "availability_watch_done_reason_check",
-          "value": "done_reason IS NULL OR done_reason = ANY (ARRAY['triggered'::text, 'elapsed'::text])"
+          "value": "\"done_reason\" IS NULL OR \"done_reason\" = ANY (ARRAY['triggered'::text, 'elapsed'::text])"
         },
         "availability_watch_reservable_filters_check": {
           "name": "availability_watch_reservable_filters_check",
-          "value": "jsonb_typeof(campsite_filters) = 'object'"
+          "value": "jsonb_typeof(\"campsite_filters\") = 'object'"
         },
         "availability_watch_status_check": {
           "name": "availability_watch_status_check",
-          "value": "status = ANY (ARRAY['active'::text, 'paused'::text, 'done'::text])"
+          "value": "\"status\" = ANY (ARRAY['active'::text, 'paused'::text, 'done'::text])"
         },
         "availability_watch_trigger_config_check": {
           "name": "availability_watch_trigger_config_check",
-          "value": "jsonb_typeof(trigger_config) = 'object'"
+          "value": "jsonb_typeof(\"trigger_config\") = 'object'"
         },
         "availability_watch_trigger_kinds_check": {
           "name": "availability_watch_trigger_kinds_check",
@@ -1398,79 +1398,79 @@
       "checkConstraints": {
         "campgrounds_alerts_check": {
           "name": "campgrounds_alerts_check",
-          "value": "jsonb_typeof(alerts) = 'array'"
+          "value": "jsonb_typeof(\"alerts\") = 'array'"
         },
         "campgrounds_amenities_check": {
           "name": "campgrounds_amenities_check",
-          "value": "jsonb_typeof(amenities) = 'array'"
+          "value": "jsonb_typeof(\"amenities\") = 'array'"
         },
         "campgrounds_booking_aliases_check": {
           "name": "campgrounds_booking_aliases_check",
-          "value": "jsonb_typeof(booking_aliases) = 'array'"
+          "value": "jsonb_typeof(\"booking_aliases\") = 'array'"
         },
         "campgrounds_cell_service_check": {
           "name": "campgrounds_cell_service_check",
-          "value": "jsonb_typeof(cell_service) = 'array'"
+          "value": "jsonb_typeof(\"cell_service\") = 'array'"
         },
         "campgrounds_connections_check": {
           "name": "campgrounds_connections_check",
-          "value": "jsonb_typeof(connections) = 'object'"
+          "value": "jsonb_typeof(\"connections\") = 'object'"
         },
         "campgrounds_contact_check": {
           "name": "campgrounds_contact_check",
-          "value": "jsonb_typeof(contact) = 'object'"
+          "value": "jsonb_typeof(\"contact\") = 'object'"
         },
         "campgrounds_data_source_check": {
           "name": "campgrounds_data_source_check",
-          "value": "length(btrim(data_provider)) > 0"
+          "value": "length(btrim(\"data_provider\")) > 0"
         },
         "campgrounds_default_schedule_check": {
           "name": "campgrounds_default_schedule_check",
-          "value": "jsonb_typeof(default_campsite_schedule) = 'object'"
+          "value": "jsonb_typeof(\"default_campsite_schedule\") = 'object'"
         },
         "campgrounds_geometry_provenance_check": {
           "name": "campgrounds_geometry_provenance_check",
-          "value": "geometry_provenance IS NULL OR jsonb_typeof(geometry_provenance) = 'object'"
+          "value": "\"geometry_provenance\" IS NULL OR jsonb_typeof(\"geometry_provenance\") = 'object'"
         },
         "campgrounds_links_check": {
           "name": "campgrounds_links_check",
-          "value": "jsonb_typeof(links) = 'array'"
+          "value": "jsonb_typeof(\"links\") = 'array'"
         },
         "campgrounds_location_check": {
           "name": "campgrounds_location_check",
-          "value": "jsonb_typeof(location) = 'object'"
+          "value": "jsonb_typeof(\"location\") = 'object'"
         },
         "campgrounds_management_check": {
           "name": "campgrounds_management_check",
-          "value": "jsonb_typeof(management) = 'object'"
+          "value": "jsonb_typeof(\"management\") = 'object'"
         },
         "campgrounds_max_rv_length_check": {
           "name": "campgrounds_max_rv_length_check",
-          "value": "max_rv_length IS NULL OR max_rv_length >= 0"
+          "value": "\"max_rv_length\" IS NULL OR \"max_rv_length\" >= 0"
         },
         "campgrounds_max_trailer_length_check": {
           "name": "campgrounds_max_trailer_length_check",
-          "value": "max_trailer_length IS NULL OR max_trailer_length >= 0"
+          "value": "\"max_trailer_length\" IS NULL OR \"max_trailer_length\" >= 0"
         },
         "campgrounds_metadata_check": {
           "name": "campgrounds_metadata_check",
-          "value": "jsonb_typeof(metadata) = 'object'"
+          "value": "jsonb_typeof(\"metadata\") = 'object'"
         },
         "campgrounds_name_check": {
           "name": "campgrounds_name_check",
-          "value": "length(btrim(name)) > 0"
+          "value": "length(btrim(\"name\")) > 0"
         },
         "campgrounds_photos_check": {
           "name": "campgrounds_photos_check",
-          "value": "jsonb_typeof(photos) = 'array'"
+          "value": "jsonb_typeof(\"photos\") = 'array'"
         },
         "campgrounds_price_check": {
           "name": "campgrounds_price_check",
-          "value": "jsonb_typeof(price) = 'object'"
+          "value": "jsonb_typeof(\"price\") = 'object'"
         },
         "campgrounds_source_payload_check": {
           "name": "campgrounds_source_payload_check",
-          "value": "jsonb_typeof(source_payload) = 'object'"
+          "value": "jsonb_typeof(\"source_payload\") = 'object'"
         }
       },
       "isRLSEnabled": false
@@ -1842,79 +1842,79 @@
       "checkConstraints": {
         "campsites_attributes_check": {
           "name": "campsites_attributes_check",
-          "value": "jsonb_typeof(attributes) = 'array'"
+          "value": "jsonb_typeof(\"attributes\") = 'array'"
         },
         "campsites_booking_aliases_check": {
           "name": "campsites_booking_aliases_check",
-          "value": "jsonb_typeof(booking_aliases) = 'array'"
+          "value": "jsonb_typeof(\"booking_aliases\") = 'array'"
         },
         "campsites_data_source_check": {
           "name": "campsites_data_source_check",
-          "value": "length(btrim(data_provider)) > 0"
+          "value": "length(btrim(\"data_provider\")) > 0"
         },
         "campsites_driveway_length_check": {
           "name": "campsites_driveway_length_check",
-          "value": "driveway_length IS NULL OR driveway_length >= 0"
+          "value": "\"driveway_length\" IS NULL OR \"driveway_length\" >= 0"
         },
         "campsites_equipment_check": {
           "name": "campsites_equipment_check",
-          "value": "equipment IS NULL OR jsonb_typeof(equipment) = 'array'"
+          "value": "\"equipment\" IS NULL OR jsonb_typeof(\"equipment\") = 'array'"
         },
         "campsites_kind_check": {
           "name": "campsites_kind_check",
-          "value": "length(btrim(kind)) > 0"
+          "value": "length(btrim(\"kind\")) > 0"
         },
         "campsites_kind_wire_check": {
           "name": "campsites_kind_wire_check",
-          "value": "kind = ANY (ARRAY['standard'::text, 'tent'::text, 'rv'::text, 'cabin'::text, 'group'::text, 'walk_in'::text, 'boat_in'::text, 'equestrian'::text, 'backcountry'::text, 'day_use'::text, 'other'::text])"
+          "value": "\"kind\" = ANY (ARRAY['standard'::text, 'tent'::text, 'rv'::text, 'cabin'::text, 'group'::text, 'walk_in'::text, 'boat_in'::text, 'equestrian'::text, 'backcountry'::text, 'day_use'::text, 'other'::text])"
         },
         "campsites_latitude_check": {
           "name": "campsites_latitude_check",
-          "value": "latitude IS NULL OR (latitude >= -90 AND latitude <= 90)"
+          "value": "\"latitude\" IS NULL OR (\"latitude\" >= -90 AND \"latitude\" <= 90)"
         },
         "campsites_longitude_check": {
           "name": "campsites_longitude_check",
-          "value": "longitude IS NULL OR (longitude >= -180 AND longitude <= 180)"
+          "value": "\"longitude\" IS NULL OR (\"longitude\" >= -180 AND \"longitude\" <= 180)"
         },
         "campsites_max_cars_check": {
           "name": "campsites_max_cars_check",
-          "value": "max_cars IS NULL OR max_cars >= 0"
+          "value": "\"max_cars\" IS NULL OR \"max_cars\" >= 0"
         },
         "campsites_max_people_check": {
           "name": "campsites_max_people_check",
-          "value": "max_people IS NULL OR max_people >= 0"
+          "value": "\"max_people\" IS NULL OR \"max_people\" >= 0"
         },
         "campsites_max_rv_length_check": {
           "name": "campsites_max_rv_length_check",
-          "value": "max_rv_length IS NULL OR max_rv_length >= 0"
+          "value": "\"max_rv_length\" IS NULL OR \"max_rv_length\" >= 0"
         },
         "campsites_max_trailer_length_check": {
           "name": "campsites_max_trailer_length_check",
-          "value": "max_trailer_length IS NULL OR max_trailer_length >= 0"
+          "value": "\"max_trailer_length\" IS NULL OR \"max_trailer_length\" >= 0"
         },
         "campsites_min_people_check": {
           "name": "campsites_min_people_check",
-          "value": "min_people IS NULL OR min_people >= 0"
+          "value": "\"min_people\" IS NULL OR \"min_people\" >= 0"
         },
         "campsites_name_check": {
           "name": "campsites_name_check",
-          "value": "length(btrim(name)) > 0"
+          "value": "length(btrim(\"name\")) > 0"
         },
         "campsites_photos_check": {
           "name": "campsites_photos_check",
-          "value": "jsonb_typeof(photos) = 'array'"
+          "value": "jsonb_typeof(\"photos\") = 'array'"
         },
         "campsites_price_check": {
           "name": "campsites_price_check",
-          "value": "jsonb_typeof(price) = 'object'"
+          "value": "jsonb_typeof(\"price\") = 'object'"
         },
         "campsites_schedule_check": {
           "name": "campsites_schedule_check",
-          "value": "jsonb_typeof(schedule) = 'object'"
+          "value": "jsonb_typeof(\"schedule\") = 'object'"
         },
         "campsites_source_payload_check": {
           "name": "campsites_source_payload_check",
-          "value": "jsonb_typeof(source_payload) = 'object'"
+          "value": "jsonb_typeof(\"source_payload\") = 'object'"
         }
       },
       "isRLSEnabled": false
@@ -2059,23 +2059,23 @@
       "checkConstraints": {
         "planet_fitness_locations_address_check": {
           "name": "planet_fitness_locations_address_check",
-          "value": "jsonb_typeof(address) = 'object'"
+          "value": "jsonb_typeof(\"address\") = 'object'"
         },
         "planet_fitness_locations_amenities_check": {
           "name": "planet_fitness_locations_amenities_check",
-          "value": "jsonb_typeof(amenities) = 'array'"
+          "value": "jsonb_typeof(\"amenities\") = 'array'"
         },
         "planet_fitness_locations_location_id_check": {
           "name": "planet_fitness_locations_location_id_check",
-          "value": "length(btrim(location_id)) > 0"
+          "value": "length(btrim(\"location_id\")) > 0"
         },
         "planet_fitness_locations_name_check": {
           "name": "planet_fitness_locations_name_check",
-          "value": "length(btrim(name)) > 0"
+          "value": "length(btrim(\"name\")) > 0"
         },
         "planet_fitness_locations_payload_check": {
           "name": "planet_fitness_locations_payload_check",
-          "value": "jsonb_typeof(payload) = 'object'"
+          "value": "jsonb_typeof(\"payload\") = 'object'"
         }
       },
       "isRLSEnabled": false
@@ -2439,11 +2439,11 @@
       "checkConstraints": {
         "pois_poi_type_check": {
           "name": "pois_poi_type_check",
-          "value": "poi_type = ANY (ARRAY['campground'::text, 'tesla_supercharger'::text, 'planet_fitness_location'::text])"
+          "value": "\"poi_type\" = ANY (ARRAY['campground'::text, 'tesla_supercharger'::text, 'planet_fitness_location'::text])"
         },
         "pois_cadence_override_sec_check": {
           "name": "pois_cadence_override_sec_check",
-          "value": "cadence_override_sec IS NULL OR cadence_override_sec >= 5"
+          "value": "\"cadence_override_sec\" IS NULL OR \"cadence_override_sec\" >= 5"
         }
       },
       "isRLSEnabled": false
@@ -2665,51 +2665,51 @@
       "checkConstraints": {
         "tesla_superchargers_address_check": {
           "name": "tesla_superchargers_address_check",
-          "value": "jsonb_typeof(address) = 'object'"
+          "value": "jsonb_typeof(\"address\") = 'object'"
         },
         "tesla_superchargers_amenities_check": {
           "name": "tesla_superchargers_amenities_check",
-          "value": "jsonb_typeof(amenities) = 'array'"
+          "value": "jsonb_typeof(\"amenities\") = 'array'"
         },
         "tesla_superchargers_availability_profile_check": {
           "name": "tesla_superchargers_availability_profile_check",
-          "value": "jsonb_typeof(availability_profile) = 'object'"
+          "value": "jsonb_typeof(\"availability_profile\") = 'object'"
         },
         "tesla_superchargers_common_site_name_check": {
           "name": "tesla_superchargers_common_site_name_check",
-          "value": "length(btrim(common_site_name)) > 0"
+          "value": "length(btrim(\"common_site_name\")) > 0"
         },
         "tesla_superchargers_detail_payload_check": {
           "name": "tesla_superchargers_detail_payload_check",
-          "value": "jsonb_typeof(detail_payload) = 'object'"
+          "value": "jsonb_typeof(\"detail_payload\") = 'object'"
         },
         "tesla_superchargers_hardware_counts_check": {
           "name": "tesla_superchargers_hardware_counts_check",
-          "value": "jsonb_typeof(hardware_counts) = 'object'"
+          "value": "jsonb_typeof(\"hardware_counts\") = 'object'"
         },
         "tesla_superchargers_index_payload_check": {
           "name": "tesla_superchargers_index_payload_check",
-          "value": "jsonb_typeof(index_payload) = 'object'"
+          "value": "jsonb_typeof(\"index_payload\") = 'object'"
         },
         "tesla_superchargers_location_slug_check": {
           "name": "tesla_superchargers_location_slug_check",
-          "value": "length(btrim(location_slug)) > 0"
+          "value": "length(btrim(\"location_slug\")) > 0"
         },
         "tesla_superchargers_max_power_kw_check": {
           "name": "tesla_superchargers_max_power_kw_check",
-          "value": "max_power_kw IS NULL OR max_power_kw >= 0"
+          "value": "\"max_power_kw\" IS NULL OR \"max_power_kw\" >= 0"
         },
         "tesla_superchargers_pricebooks_check": {
           "name": "tesla_superchargers_pricebooks_check",
-          "value": "jsonb_typeof(pricebooks) = 'array'"
+          "value": "jsonb_typeof(\"pricebooks\") = 'array'"
         },
         "tesla_superchargers_site_status_check": {
           "name": "tesla_superchargers_site_status_check",
-          "value": "length(btrim(site_status)) > 0"
+          "value": "length(btrim(\"site_status\")) > 0"
         },
         "tesla_superchargers_stall_count_check": {
           "name": "tesla_superchargers_stall_count_check",
-          "value": "stall_count IS NULL OR stall_count >= 0"
+          "value": "\"stall_count\" IS NULL OR \"stall_count\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -2924,11 +2924,11 @@
       "checkConstraints": {
         "ingest_runs_phase_kind_check": {
           "name": "ingest_runs_phase_kind_check",
-          "value": "phase_kind = ANY (ARRAY['target'::text, 'fetch'::text, 'import'::text])"
+          "value": "\"phase_kind\" = ANY (ARRAY['target'::text, 'fetch'::text, 'import'::text])"
         },
         "ingest_runs_status_check": {
           "name": "ingest_runs_status_check",
-          "value": "status = ANY (ARRAY['started'::text, 'completed'::text, 'failed'::text, 'aborted'::text])"
+          "value": "\"status\" = ANY (ARRAY['started'::text, 'completed'::text, 'failed'::text, 'aborted'::text])"
         }
       },
       "isRLSEnabled": false
@@ -3133,15 +3133,15 @@
       "checkConstraints": {
         "availability_fetch_call_duration_ms_check": {
           "name": "availability_fetch_call_duration_ms_check",
-          "value": "duration_ms IS NULL OR duration_ms >= 0"
+          "value": "\"duration_ms\" IS NULL OR \"duration_ms\" >= 0"
         },
         "availability_fetch_call_outcome_check": {
           "name": "availability_fetch_call_outcome_check",
-          "value": "outcome = ANY (ARRAY['ok'::text, 'rate_limited'::text, 'upstream_5xx'::text, 'blocked'::text, 'other'::text])"
+          "value": "\"outcome\" = ANY (ARRAY['ok'::text, 'rate_limited'::text, 'upstream_5xx'::text, 'blocked'::text, 'other'::text])"
         },
         "availability_fetch_call_reservable_count_check": {
           "name": "availability_fetch_call_reservable_count_check",
-          "value": "campsite_count >= 0"
+          "value": "\"campsite_count\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -3383,15 +3383,15 @@
       "checkConstraints": {
         "availability_job_run_duration_ms_check": {
           "name": "availability_job_run_duration_ms_check",
-          "value": "duration_ms IS NULL OR duration_ms >= 0"
+          "value": "\"duration_ms\" IS NULL OR \"duration_ms\" >= 0"
         },
         "availability_job_run_snapshot_count_check": {
           "name": "availability_job_run_snapshot_count_check",
-          "value": "snapshot_count >= 0"
+          "value": "\"snapshot_count\" >= 0"
         },
         "availability_job_run_status_check": {
           "name": "availability_job_run_status_check",
-          "value": "status = ANY (ARRAY['started'::text, 'completed'::text, 'failed'::text])"
+          "value": "\"status\" = ANY (ARRAY['started'::text, 'completed'::text, 'failed'::text])"
         }
       },
       "isRLSEnabled": false

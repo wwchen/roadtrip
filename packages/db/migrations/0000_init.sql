@@ -9,8 +9,8 @@ CREATE TABLE "app_user" (
 	"theme" text DEFAULT 'system' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "app_user_status_check" CHECK (status = ANY (ARRAY['active'::text, 'disabled'::text])),
-	CONSTRAINT "app_user_theme_check" CHECK (theme = ANY (ARRAY['light'::text, 'dark'::text, 'system'::text]))
+	CONSTRAINT "app_user_status_check" CHECK ("status" = ANY (ARRAY['active'::text, 'disabled'::text])),
+	CONSTRAINT "app_user_theme_check" CHECK ("theme" = ANY (ARRAY['light'::text, 'dark'::text, 'system'::text]))
 );
 --> statement-breakpoint
 CREATE TABLE "user_booking_credentials" (
@@ -38,7 +38,7 @@ CREATE TABLE "user_role" (
 	"user_id" bigint NOT NULL,
 	"role" text NOT NULL,
 	CONSTRAINT "user_role_pkey" PRIMARY KEY("user_id","role"),
-	CONSTRAINT "user_role_role_check" CHECK (role = 'admin')
+	CONSTRAINT "user_role_role_check" CHECK ("role" = 'admin'::text)
 );
 --> statement-breakpoint
 CREATE TABLE "user_session" (
@@ -88,12 +88,12 @@ CREATE TABLE "availability_watch" (
 	"magic_link_token" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "availability_watch_cadence_sec_check" CHECK (cadence_sec >= 5),
+	CONSTRAINT "availability_watch_cadence_sec_check" CHECK ("cadence_sec" >= 5),
 	CONSTRAINT "availability_watch_date_window_check" CHECK (end_date > start_date),
-	CONSTRAINT "availability_watch_done_reason_check" CHECK (done_reason IS NULL OR done_reason = ANY (ARRAY['triggered'::text, 'elapsed'::text])),
-	CONSTRAINT "availability_watch_reservable_filters_check" CHECK (jsonb_typeof(campsite_filters) = 'object'),
-	CONSTRAINT "availability_watch_status_check" CHECK (status = ANY (ARRAY['active'::text, 'paused'::text, 'done'::text])),
-	CONSTRAINT "availability_watch_trigger_config_check" CHECK (jsonb_typeof(trigger_config) = 'object'),
+	CONSTRAINT "availability_watch_done_reason_check" CHECK ("done_reason" IS NULL OR "done_reason" = ANY (ARRAY['triggered'::text, 'elapsed'::text])),
+	CONSTRAINT "availability_watch_reservable_filters_check" CHECK (jsonb_typeof("campsite_filters") = 'object'),
+	CONSTRAINT "availability_watch_status_check" CHECK ("status" = ANY (ARRAY['active'::text, 'paused'::text, 'done'::text])),
+	CONSTRAINT "availability_watch_trigger_config_check" CHECK (jsonb_typeof("trigger_config") = 'object'),
 	CONSTRAINT "availability_watch_trigger_kinds_check" CHECK (cardinality(trigger_kinds) > 0)
 );
 --> statement-breakpoint
@@ -148,25 +148,25 @@ CREATE TABLE "campgrounds" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
-	CONSTRAINT "campgrounds_alerts_check" CHECK (jsonb_typeof(alerts) = 'array'),
-	CONSTRAINT "campgrounds_amenities_check" CHECK (jsonb_typeof(amenities) = 'array'),
-	CONSTRAINT "campgrounds_booking_aliases_check" CHECK (jsonb_typeof(booking_aliases) = 'array'),
-	CONSTRAINT "campgrounds_cell_service_check" CHECK (jsonb_typeof(cell_service) = 'array'),
-	CONSTRAINT "campgrounds_connections_check" CHECK (jsonb_typeof(connections) = 'object'),
-	CONSTRAINT "campgrounds_contact_check" CHECK (jsonb_typeof(contact) = 'object'),
-	CONSTRAINT "campgrounds_data_source_check" CHECK (length(btrim(data_provider)) > 0),
-	CONSTRAINT "campgrounds_default_schedule_check" CHECK (jsonb_typeof(default_campsite_schedule) = 'object'),
-	CONSTRAINT "campgrounds_geometry_provenance_check" CHECK (geometry_provenance IS NULL OR jsonb_typeof(geometry_provenance) = 'object'),
-	CONSTRAINT "campgrounds_links_check" CHECK (jsonb_typeof(links) = 'array'),
-	CONSTRAINT "campgrounds_location_check" CHECK (jsonb_typeof(location) = 'object'),
-	CONSTRAINT "campgrounds_management_check" CHECK (jsonb_typeof(management) = 'object'),
-	CONSTRAINT "campgrounds_max_rv_length_check" CHECK (max_rv_length IS NULL OR max_rv_length >= 0),
-	CONSTRAINT "campgrounds_max_trailer_length_check" CHECK (max_trailer_length IS NULL OR max_trailer_length >= 0),
-	CONSTRAINT "campgrounds_metadata_check" CHECK (jsonb_typeof(metadata) = 'object'),
-	CONSTRAINT "campgrounds_name_check" CHECK (length(btrim(name)) > 0),
-	CONSTRAINT "campgrounds_photos_check" CHECK (jsonb_typeof(photos) = 'array'),
-	CONSTRAINT "campgrounds_price_check" CHECK (jsonb_typeof(price) = 'object'),
-	CONSTRAINT "campgrounds_source_payload_check" CHECK (jsonb_typeof(source_payload) = 'object')
+	CONSTRAINT "campgrounds_alerts_check" CHECK (jsonb_typeof("alerts") = 'array'),
+	CONSTRAINT "campgrounds_amenities_check" CHECK (jsonb_typeof("amenities") = 'array'),
+	CONSTRAINT "campgrounds_booking_aliases_check" CHECK (jsonb_typeof("booking_aliases") = 'array'),
+	CONSTRAINT "campgrounds_cell_service_check" CHECK (jsonb_typeof("cell_service") = 'array'),
+	CONSTRAINT "campgrounds_connections_check" CHECK (jsonb_typeof("connections") = 'object'),
+	CONSTRAINT "campgrounds_contact_check" CHECK (jsonb_typeof("contact") = 'object'),
+	CONSTRAINT "campgrounds_data_source_check" CHECK (length(btrim("data_provider")) > 0),
+	CONSTRAINT "campgrounds_default_schedule_check" CHECK (jsonb_typeof("default_campsite_schedule") = 'object'),
+	CONSTRAINT "campgrounds_geometry_provenance_check" CHECK ("geometry_provenance" IS NULL OR jsonb_typeof("geometry_provenance") = 'object'),
+	CONSTRAINT "campgrounds_links_check" CHECK (jsonb_typeof("links") = 'array'),
+	CONSTRAINT "campgrounds_location_check" CHECK (jsonb_typeof("location") = 'object'),
+	CONSTRAINT "campgrounds_management_check" CHECK (jsonb_typeof("management") = 'object'),
+	CONSTRAINT "campgrounds_max_rv_length_check" CHECK ("max_rv_length" IS NULL OR "max_rv_length" >= 0),
+	CONSTRAINT "campgrounds_max_trailer_length_check" CHECK ("max_trailer_length" IS NULL OR "max_trailer_length" >= 0),
+	CONSTRAINT "campgrounds_metadata_check" CHECK (jsonb_typeof("metadata") = 'object'),
+	CONSTRAINT "campgrounds_name_check" CHECK (length(btrim("name")) > 0),
+	CONSTRAINT "campgrounds_photos_check" CHECK (jsonb_typeof("photos") = 'array'),
+	CONSTRAINT "campgrounds_price_check" CHECK (jsonb_typeof("price") = 'object'),
+	CONSTRAINT "campgrounds_source_payload_check" CHECK (jsonb_typeof("source_payload") = 'object')
 );
 --> statement-breakpoint
 CREATE TABLE "campsites" (
@@ -207,25 +207,25 @@ CREATE TABLE "campsites" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
-	CONSTRAINT "campsites_attributes_check" CHECK (jsonb_typeof(attributes) = 'array'),
-	CONSTRAINT "campsites_booking_aliases_check" CHECK (jsonb_typeof(booking_aliases) = 'array'),
-	CONSTRAINT "campsites_data_source_check" CHECK (length(btrim(data_provider)) > 0),
-	CONSTRAINT "campsites_driveway_length_check" CHECK (driveway_length IS NULL OR driveway_length >= 0),
-	CONSTRAINT "campsites_equipment_check" CHECK (equipment IS NULL OR jsonb_typeof(equipment) = 'array'),
-	CONSTRAINT "campsites_kind_check" CHECK (length(btrim(kind)) > 0),
-	CONSTRAINT "campsites_kind_wire_check" CHECK (kind = ANY (ARRAY['standard'::text, 'tent'::text, 'rv'::text, 'cabin'::text, 'group'::text, 'walk_in'::text, 'boat_in'::text, 'equestrian'::text, 'backcountry'::text, 'day_use'::text, 'other'::text])),
-	CONSTRAINT "campsites_latitude_check" CHECK (latitude IS NULL OR (latitude >= -90 AND latitude <= 90)),
-	CONSTRAINT "campsites_longitude_check" CHECK (longitude IS NULL OR (longitude >= -180 AND longitude <= 180)),
-	CONSTRAINT "campsites_max_cars_check" CHECK (max_cars IS NULL OR max_cars >= 0),
-	CONSTRAINT "campsites_max_people_check" CHECK (max_people IS NULL OR max_people >= 0),
-	CONSTRAINT "campsites_max_rv_length_check" CHECK (max_rv_length IS NULL OR max_rv_length >= 0),
-	CONSTRAINT "campsites_max_trailer_length_check" CHECK (max_trailer_length IS NULL OR max_trailer_length >= 0),
-	CONSTRAINT "campsites_min_people_check" CHECK (min_people IS NULL OR min_people >= 0),
-	CONSTRAINT "campsites_name_check" CHECK (length(btrim(name)) > 0),
-	CONSTRAINT "campsites_photos_check" CHECK (jsonb_typeof(photos) = 'array'),
-	CONSTRAINT "campsites_price_check" CHECK (jsonb_typeof(price) = 'object'),
-	CONSTRAINT "campsites_schedule_check" CHECK (jsonb_typeof(schedule) = 'object'),
-	CONSTRAINT "campsites_source_payload_check" CHECK (jsonb_typeof(source_payload) = 'object')
+	CONSTRAINT "campsites_attributes_check" CHECK (jsonb_typeof("attributes") = 'array'),
+	CONSTRAINT "campsites_booking_aliases_check" CHECK (jsonb_typeof("booking_aliases") = 'array'),
+	CONSTRAINT "campsites_data_source_check" CHECK (length(btrim("data_provider")) > 0),
+	CONSTRAINT "campsites_driveway_length_check" CHECK ("driveway_length" IS NULL OR "driveway_length" >= 0),
+	CONSTRAINT "campsites_equipment_check" CHECK ("equipment" IS NULL OR jsonb_typeof("equipment") = 'array'),
+	CONSTRAINT "campsites_kind_check" CHECK (length(btrim("kind")) > 0),
+	CONSTRAINT "campsites_kind_wire_check" CHECK ("kind" = ANY (ARRAY['standard'::text, 'tent'::text, 'rv'::text, 'cabin'::text, 'group'::text, 'walk_in'::text, 'boat_in'::text, 'equestrian'::text, 'backcountry'::text, 'day_use'::text, 'other'::text])),
+	CONSTRAINT "campsites_latitude_check" CHECK ("latitude" IS NULL OR ("latitude" >= -90 AND "latitude" <= 90)),
+	CONSTRAINT "campsites_longitude_check" CHECK ("longitude" IS NULL OR ("longitude" >= -180 AND "longitude" <= 180)),
+	CONSTRAINT "campsites_max_cars_check" CHECK ("max_cars" IS NULL OR "max_cars" >= 0),
+	CONSTRAINT "campsites_max_people_check" CHECK ("max_people" IS NULL OR "max_people" >= 0),
+	CONSTRAINT "campsites_max_rv_length_check" CHECK ("max_rv_length" IS NULL OR "max_rv_length" >= 0),
+	CONSTRAINT "campsites_max_trailer_length_check" CHECK ("max_trailer_length" IS NULL OR "max_trailer_length" >= 0),
+	CONSTRAINT "campsites_min_people_check" CHECK ("min_people" IS NULL OR "min_people" >= 0),
+	CONSTRAINT "campsites_name_check" CHECK (length(btrim("name")) > 0),
+	CONSTRAINT "campsites_photos_check" CHECK (jsonb_typeof("photos") = 'array'),
+	CONSTRAINT "campsites_price_check" CHECK (jsonb_typeof("price") = 'object'),
+	CONSTRAINT "campsites_schedule_check" CHECK (jsonb_typeof("schedule") = 'object'),
+	CONSTRAINT "campsites_source_payload_check" CHECK (jsonb_typeof("source_payload") = 'object')
 );
 --> statement-breakpoint
 CREATE TABLE "planet_fitness_locations" (
@@ -243,11 +243,11 @@ CREATE TABLE "planet_fitness_locations" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
-	CONSTRAINT "planet_fitness_locations_address_check" CHECK (jsonb_typeof(address) = 'object'),
-	CONSTRAINT "planet_fitness_locations_amenities_check" CHECK (jsonb_typeof(amenities) = 'array'),
-	CONSTRAINT "planet_fitness_locations_location_id_check" CHECK (length(btrim(location_id)) > 0),
-	CONSTRAINT "planet_fitness_locations_name_check" CHECK (length(btrim(name)) > 0),
-	CONSTRAINT "planet_fitness_locations_payload_check" CHECK (jsonb_typeof(payload) = 'object')
+	CONSTRAINT "planet_fitness_locations_address_check" CHECK (jsonb_typeof("address") = 'object'),
+	CONSTRAINT "planet_fitness_locations_amenities_check" CHECK (jsonb_typeof("amenities") = 'array'),
+	CONSTRAINT "planet_fitness_locations_location_id_check" CHECK (length(btrim("location_id")) > 0),
+	CONSTRAINT "planet_fitness_locations_name_check" CHECK (length(btrim("name")) > 0),
+	CONSTRAINT "planet_fitness_locations_payload_check" CHECK (jsonb_typeof("payload") = 'object')
 );
 --> statement-breakpoint
 CREATE TABLE "poi_campgrounds" (
@@ -282,8 +282,8 @@ CREATE TABLE "pois" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
-	CONSTRAINT "pois_poi_type_check" CHECK (poi_type = ANY (ARRAY['campground'::text, 'tesla_supercharger'::text, 'planet_fitness_location'::text])),
-	CONSTRAINT "pois_cadence_override_sec_check" CHECK (cadence_override_sec IS NULL OR cadence_override_sec >= 5)
+	CONSTRAINT "pois_poi_type_check" CHECK ("poi_type" = ANY (ARRAY['campground'::text, 'tesla_supercharger'::text, 'planet_fitness_location'::text])),
+	CONSTRAINT "pois_cadence_override_sec_check" CHECK ("cadence_override_sec" IS NULL OR "cadence_override_sec" >= 5)
 );
 --> statement-breakpoint
 CREATE TABLE "tesla_superchargers" (
@@ -313,18 +313,18 @@ CREATE TABLE "tesla_superchargers" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
-	CONSTRAINT "tesla_superchargers_address_check" CHECK (jsonb_typeof(address) = 'object'),
-	CONSTRAINT "tesla_superchargers_amenities_check" CHECK (jsonb_typeof(amenities) = 'array'),
-	CONSTRAINT "tesla_superchargers_availability_profile_check" CHECK (jsonb_typeof(availability_profile) = 'object'),
-	CONSTRAINT "tesla_superchargers_common_site_name_check" CHECK (length(btrim(common_site_name)) > 0),
-	CONSTRAINT "tesla_superchargers_detail_payload_check" CHECK (jsonb_typeof(detail_payload) = 'object'),
-	CONSTRAINT "tesla_superchargers_hardware_counts_check" CHECK (jsonb_typeof(hardware_counts) = 'object'),
-	CONSTRAINT "tesla_superchargers_index_payload_check" CHECK (jsonb_typeof(index_payload) = 'object'),
-	CONSTRAINT "tesla_superchargers_location_slug_check" CHECK (length(btrim(location_slug)) > 0),
-	CONSTRAINT "tesla_superchargers_max_power_kw_check" CHECK (max_power_kw IS NULL OR max_power_kw >= 0),
-	CONSTRAINT "tesla_superchargers_pricebooks_check" CHECK (jsonb_typeof(pricebooks) = 'array'),
-	CONSTRAINT "tesla_superchargers_site_status_check" CHECK (length(btrim(site_status)) > 0),
-	CONSTRAINT "tesla_superchargers_stall_count_check" CHECK (stall_count IS NULL OR stall_count >= 0)
+	CONSTRAINT "tesla_superchargers_address_check" CHECK (jsonb_typeof("address") = 'object'),
+	CONSTRAINT "tesla_superchargers_amenities_check" CHECK (jsonb_typeof("amenities") = 'array'),
+	CONSTRAINT "tesla_superchargers_availability_profile_check" CHECK (jsonb_typeof("availability_profile") = 'object'),
+	CONSTRAINT "tesla_superchargers_common_site_name_check" CHECK (length(btrim("common_site_name")) > 0),
+	CONSTRAINT "tesla_superchargers_detail_payload_check" CHECK (jsonb_typeof("detail_payload") = 'object'),
+	CONSTRAINT "tesla_superchargers_hardware_counts_check" CHECK (jsonb_typeof("hardware_counts") = 'object'),
+	CONSTRAINT "tesla_superchargers_index_payload_check" CHECK (jsonb_typeof("index_payload") = 'object'),
+	CONSTRAINT "tesla_superchargers_location_slug_check" CHECK (length(btrim("location_slug")) > 0),
+	CONSTRAINT "tesla_superchargers_max_power_kw_check" CHECK ("max_power_kw" IS NULL OR "max_power_kw" >= 0),
+	CONSTRAINT "tesla_superchargers_pricebooks_check" CHECK (jsonb_typeof("pricebooks") = 'array'),
+	CONSTRAINT "tesla_superchargers_site_status_check" CHECK (length(btrim("site_status")) > 0),
+	CONSTRAINT "tesla_superchargers_stall_count_check" CHECK ("stall_count" IS NULL OR "stall_count" >= 0)
 );
 --> statement-breakpoint
 CREATE TABLE "import_runs" (
@@ -350,8 +350,8 @@ CREATE TABLE "ingest_runs" (
 	"exit_code" integer,
 	"counts" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"notes" text,
-	CONSTRAINT "ingest_runs_phase_kind_check" CHECK (phase_kind = ANY (ARRAY['target'::text, 'fetch'::text, 'import'::text])),
-	CONSTRAINT "ingest_runs_status_check" CHECK (status = ANY (ARRAY['started'::text, 'completed'::text, 'failed'::text, 'aborted'::text]))
+	CONSTRAINT "ingest_runs_phase_kind_check" CHECK ("phase_kind" = ANY (ARRAY['target'::text, 'fetch'::text, 'import'::text])),
+	CONSTRAINT "ingest_runs_status_check" CHECK ("status" = ANY (ARRAY['started'::text, 'completed'::text, 'failed'::text, 'aborted'::text]))
 );
 --> statement-breakpoint
 CREATE TABLE "api_cache" (
@@ -375,9 +375,9 @@ CREATE TABLE "availability_fetch_call" (
 	"duration_ms" integer,
 	"error" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "availability_fetch_call_duration_ms_check" CHECK (duration_ms IS NULL OR duration_ms >= 0),
-	CONSTRAINT "availability_fetch_call_outcome_check" CHECK (outcome = ANY (ARRAY['ok'::text, 'rate_limited'::text, 'upstream_5xx'::text, 'blocked'::text, 'other'::text])),
-	CONSTRAINT "availability_fetch_call_reservable_count_check" CHECK (campsite_count >= 0)
+	CONSTRAINT "availability_fetch_call_duration_ms_check" CHECK ("duration_ms" IS NULL OR "duration_ms" >= 0),
+	CONSTRAINT "availability_fetch_call_outcome_check" CHECK ("outcome" = ANY (ARRAY['ok'::text, 'rate_limited'::text, 'upstream_5xx'::text, 'blocked'::text, 'other'::text])),
+	CONSTRAINT "availability_fetch_call_reservable_count_check" CHECK ("campsite_count" >= 0)
 );
 --> statement-breakpoint
 CREATE TABLE "availability_poller" (
@@ -406,9 +406,9 @@ CREATE TABLE "availability_run" (
 	"snapshot_count" integer DEFAULT 0 NOT NULL,
 	"error" text,
 	CONSTRAINT "availability_job_run_pkey" PRIMARY KEY("id"),
-	CONSTRAINT "availability_job_run_duration_ms_check" CHECK (duration_ms IS NULL OR duration_ms >= 0),
-	CONSTRAINT "availability_job_run_snapshot_count_check" CHECK (snapshot_count >= 0),
-	CONSTRAINT "availability_job_run_status_check" CHECK (status = ANY (ARRAY['started'::text, 'completed'::text, 'failed'::text]))
+	CONSTRAINT "availability_job_run_duration_ms_check" CHECK ("duration_ms" IS NULL OR "duration_ms" >= 0),
+	CONSTRAINT "availability_job_run_snapshot_count_check" CHECK ("snapshot_count" >= 0),
+	CONSTRAINT "availability_job_run_status_check" CHECK ("status" = ANY (ARRAY['started'::text, 'completed'::text, 'failed'::text]))
 );
 --> statement-breakpoint
 CREATE TABLE "vendor_rate_limit_bucket" (

@@ -14,7 +14,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { bytea } from '../types/bytea.js';
-import { textIn } from './constraints.js';
+import { equalsText, textIn } from './constraints.js';
 
 export const USER_STATUSES = ['active', 'disabled'] as const;
 export const USER_THEMES = ['light', 'dark', 'system'] as const;
@@ -36,9 +36,9 @@ export const appUser = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
-  () => [
-    check('app_user_status_check', textIn('status', USER_STATUSES)),
-    check('app_user_theme_check', textIn('theme', USER_THEMES)),
+  (table) => [
+    check('app_user_status_check', textIn(table.status, USER_STATUSES)),
+    check('app_user_theme_check', textIn(table.theme, USER_THEMES)),
     uniqueIndex('app_user_email_lower_uq').on(sql`lower(email)`),
   ],
 );
@@ -104,7 +104,7 @@ export const userRole = pgTable(
       columns: [table.userId],
       foreignColumns: [appUser.id],
     }).onDelete('cascade'),
-    check('user_role_role_check', sql.raw(`role = '${USER_ROLES[0]}'`)),
+    check('user_role_role_check', equalsText(table.role, USER_ROLES[0])),
   ],
 );
 

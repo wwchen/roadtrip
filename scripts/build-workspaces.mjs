@@ -7,8 +7,13 @@ import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BUILD_SCRIPT = 'build';
-const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
-const CYCLE_EXIT_CODE = 2;
+const DEPENDENCY_FIELDS = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+];
+const SIGNALLED_EXIT_CODE = 1;
 
 const manifest = (dir) => JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
 
@@ -66,7 +71,7 @@ async function main() {
       stdio: 'inherit',
     });
     if (status !== 0) {
-      process.exitCode = status ?? CYCLE_EXIT_CODE;
+      process.exitCode = status ?? SIGNALLED_EXIT_CODE;
       return;
     }
   }

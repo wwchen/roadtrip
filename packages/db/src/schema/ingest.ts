@@ -41,8 +41,8 @@ export const ingestRuns = pgTable(
       columns: [table.parentRunId],
       foreignColumns: [table.id],
     }).onDelete('cascade'),
-    check('ingest_runs_phase_kind_check', textIn('phase_kind', INGEST_PHASE_KINDS)),
-    check('ingest_runs_status_check', textIn('status', INGEST_STATUSES)),
+    check('ingest_runs_phase_kind_check', textIn(table.phaseKind, INGEST_PHASE_KINDS)),
+    check('ingest_runs_status_check', textIn(table.status, INGEST_STATUSES)),
     index('ingest_runs_parent_idx').on(table.parentRunId),
     index('ingest_runs_started_only_idx')
       .on(table.startedAt)
