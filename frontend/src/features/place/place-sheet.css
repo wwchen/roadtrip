@@ -1,8 +1,3 @@
-.rt-place-sheet {
-  --rt-place-sheet-stay-gap: 12px;
-  --rt-place-sheet-subtitle-size: 12px;
-}
-
 .rt-place-sheet__compact {
   display: flex;
   flex-direction: column;
@@ -30,14 +25,11 @@
 }
 
 .rt-place-chrome {
-  --rt-place-chrome-max-width: 420px;
-  --rt-place-chrome-gutter: 16px;
-
   position: absolute;
   left: 0;
   bottom: 0;
   width: 100%;
-  max-width: var(--rt-place-chrome-max-width);
+  max-width: var(--rt-sheet-max-width);
   box-sizing: border-box;
-  padding: var(--rt-place-chrome-gutter);
+  padding: var(--rt-sheet-gutter);
 }
