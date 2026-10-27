@@ -132,9 +132,15 @@ height**:
 - **Peek** — should I go here: name, verdict, the three deciding facts, the
   origin of the drive time, freshness if stale, Reserve.
 - **Half** — which nights, exactly: the nights strip (each night tinted with its
-  open count, the chosen night solid, shut nights dimmed), the sites that can
-  hold the whole stay, the price, Reserve, and — only if a night in view is shut
-  — one row offering to alert on it.
+  open count, the chosen night solid, shut nights dimmed), the sites open on the
+  night you picked, Reserve, and — only if a night in view is shut — one row
+  offering to alert on it.
+
+  **Not the price.** The wire carries one `price` per POI — a `PriceDto` of
+  `minimum`/`maximum`/`currency` on the POI detail — and no per-night, per-site
+  figure anywhere. So "`$36/night`" in the sketch above was a number this product
+  cannot produce. The place-level *from* price belongs to Peek, said once, and
+  Half does not repeat it.
 - **Full** — what it is like on arrival: photos, getting there, good to know,
   specs, contact, nearby, and the verified/provenance footer. The header
   compacts to a line; it does not repeat.
@@ -151,8 +157,20 @@ with a sentence rather than a strip: *"Nov 8–9 is your first open weekend,"*
 followed by every weekend in the horizon as a bar. The user asked an open
 question and gets a stated answer, not a grid to read.
 
-`domain/poi/blocks.ts` already encodes this fold — `RULE_BEFORE_GROUP` is
-exactly the boundary between Half and Full. The block order survives this
+`domain/poi/blocks.ts` already encodes this fold — but **not** at
+`RULE_BEFORE_GROUP`, which an earlier draft of this document asserted without
+checking. That constant sits after `gettingThere`/`goodToKnow`, and those two
+answer *what is it like when I arrive*, which is Full. The sheet's Half/Full
+boundary is therefore after the `glance` group, and the rule hairline keeps its
+own, separate meaning in the block order.
+
+The sheet also renders **no `hero`**. A 176px photo at the top of a 395px Half
+detent pushes `actions` — Reserve — below the fold, and Reserve is the one thing
+Half must guarantee; a type omitting a block is already how this order works.
+The consequence is that the sheet shows no photographs at all in phase 1, which
+is a real gap against the Full list above and is left open rather than solved by
+reordering: moving `hero` into Full would put it after `glance` on screen, and
+"the sequence never changes" is the older and stronger rule. The block order survives this
 redesign unchanged; what changes is that the groups become sheet detents instead
 of scroll position, and the drawer/page variant split disappears, because the
 sheet is the only presentation.
