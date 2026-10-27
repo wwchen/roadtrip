@@ -181,10 +181,22 @@ and seven other files already work with amenity, carrier and campsite-kind conce
 So the package is a pair: `@roadtrip/domain` holds browser-safe enums, labels and
 JSONB shapes, and `@roadtrip/db` holds Drizzle and the codecs and depends on it.
 
-Every typed JSONB column — `amenities`, `cell_service`, `metadata`, `price`,
+The typed JSONB columns — `amenities`, `cell_service`, `metadata`, `price`,
 `default_campsite_schedule`, `alerts`, `photos`, `equipment`, `attributes`,
-`booking_aliases`, `kind`, `location`/`address`, `properties`, `source_payload` — is
-written only by the importer and read only by the API. Both are TypeScript importing
+`booking_aliases`, `location`/`address`, `source_payload`, plus `links`, `contact`,
+`management` and `geometry_provenance` — are written only by the importer and read
+only by the API.
+
+Two corrections to an earlier draft of that list, both found by Task 7 reading the
+Kotlin rather than this spec. **`kind` is not JSONB** — it is
+`text('kind').$type<CampsiteKind>()`, a wire string with a `CHECK` over the
+vocabulary, which is what V58 converted it to; nor is `properties`. And **`campsites.price`
+and `campsites.schedule` are not `CampgroundPrice` and `CampgroundSchedule`.**
+`CampsiteRepo.kt:338-339` reads both through `parseJsonElement` and writes them with
+`jsonObject` — they are raw vendor objects, and Campflare's carry `per_night`,
+`currency_code`, `check_in_time` and `uniform`. Applying the campground shapes to
+them would silently drop those fields from every campsite row. The identically named
+campground columns *are* those shapes; only the campsite pair is raw. Both are TypeScript importing
 the same package, so `CatalogColumnJson`'s "one codec" rule survives as a type
 constraint. `availability_watch.reservable_filters` and `trigger_config` are written
 by the API and read by the worker; same package, same guarantee.
@@ -205,6 +217,15 @@ importer against the same 19,136 envelopes into two databases and diff the rows.
 Deterministic input, deterministic output, no mocking, and a reference implementation
 that already works. This replaces most ETL unit tests with one harness and is
 stronger than what it replaces.
+
+**The diff must compare JSONB as `jsonb`, not as `::text`.** Task 7 found that Kotlin
+writes `12.0` where TypeScript writes `12`: equal under the `jsonb` `=` operator,
+different as text. A text comparison would report a spurious difference on a large
+share of the catalog and bury the real ones. Expect a second, narrower difference
+too — decoding `{}` yields a defaulted object where Kotlin yields null for shapes
+whose required field is absent, so the harness needs to treat those as equal or the
+codec needs to match Kotlin exactly. Decide which before the first full run, not after
+reading a hundred thousand false positives.
 
 Note for execution: if the importer runs on mini-ca against a remote datastore, the
 bulk load crosses a residential uplink. Seeding against a local Postgres and
