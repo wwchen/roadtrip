@@ -32,9 +32,28 @@ export const VENDOR = 'Recreation.gov';
 /** The bare noun, for the one sentence that already supplies its own "your". */
 const UNNAMED_BOOKING_LABEL = 'booking';
 
+/**
+ * The neutral name for a booking site we cannot name. `heldTitle` and
+ * `openCart` read better with the vendor simply dropped ("your cart"), so they
+ * do that instead; every sentence that needs a noun there uses this one.
+ */
+const UNNAMED_BOOKING_SITE = 'the booking site';
+
+/** The possessive form, for the gate sentences that ask for a login. */
+const UNNAMED_BOOKING_ACCOUNT = 'your booking';
+
+const CART_HOLD_MINUTES = 15;
+
 export const bookingCopy = {
   /** The fallback when a pin carries a bare reserve URL and no label. */
   reserve: 'Reserve',
+  addToCart: 'Add to cart',
+  holdRunning: 'Holding site… usually under a minute; can take a few',
+  holdFailed: 'Could not hold the site',
+  heldTitle: (holder?: string) => `Site held in your ${holder ? `${holder} ` : ''}cart`,
+  openCart: (holder?: string) => `Open ${holder ?? 'your'} cart ↗`,
+  checkOutSoon: (holder?: string) =>
+    `Check out on ${holder ?? UNNAMED_BOOKING_SITE} within ${CART_HOLD_MINUTES} minutes.`,
 } as const;
 
 /**
@@ -44,6 +63,10 @@ export const bookingCopy = {
  * because they are a set — a user who meets two of them should hear one voice.
  */
 export const gateCopy = {
+  cartSignedOut: 'Sign in to hold sites from here',
+  /** Named after the adapter the backend says would hold it, never the POI's. */
+  cartNoCredentials: (holder?: string) =>
+    `Add ${holder ?? UNNAMED_BOOKING_ACCOUNT} login in Settings`,
   watchSignedOut: 'Sign in to get an alert when a site opens up that night.',
   /** The word inside the day panel's sentence, and the sentence around it. */
   signIn: 'Sign in',
@@ -230,6 +253,9 @@ export const matrixCopy = {
   noMatches: 'No sites match these filters.',
   noSites: 'No reservable sites for this campground.',
   cell: (site: string, date: string, status: string) => `${site} ${date}: ${status}`,
+  cellCart: (cell: string) => `${cell}; add to cart`,
+  cellHolding: (cell: string) => `${cell}; holding this site in your cart`,
+  cellHeld: (cell: string) => `${cell}; held in your cart`,
   pickNight: (date: string) => `Show ${date}`,
 } as const;
 

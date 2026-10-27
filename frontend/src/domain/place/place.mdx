@@ -114,6 +114,64 @@ question — *which nights* — and "a fact belongs to exactly one height" appli
 the two renderings of one answer as much as it does to two different answers. A
 sheet showing both would state the week twice.
 
+### An open cell is where a site is held
+
+The grid is also the one surface that can hold a *specific* campsite. An open cell
+is a control; clicking it opens `SiteCartPopover`, which names that site and that
+night and offers one hold in the caller's own cart at the booking vendor. A night
+that is not open is never that control, because there is nothing to hold.
+
+That hold is a real side effect with a fifteen-minute clock on the vendor's side,
+so it is explicit and single-fire. `cart-action.ts` is the whole lifecycle as a pure
+state machine — one hold at a time, and an answer that arrives for a cell that is no
+longer pending lands nowhere rather than resurrecting it. `usePlaceCart` holds the
+same lock against the request itself, so a second click sends nothing. There is no
+optimistic cell: a cell reads *held* only once the vendor said so, and a refusal
+says which refusal it was, by the server's own code through
+`lib/settings-errors.ts`, instead of quietly returning to the offer.
+
+Holding is a mutation, not a read. Raising to Full still issues no request — see
+*One read serves both detents* below, which the cart does not weaken.
+
+#### The cart gate is a branch, not a visibility test
+
+`watch_capabilities.add_to_cart.state` on the week response decides what the offer
+says, backend-side, and the browser renders the branch it is given.
+
+<table>
+  <thead>
+    <tr>
+      <th>state</th>
+      <th>what the cell offers</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ready</code></td>
+      <td>the hold itself</td>
+    </tr>
+    <tr>
+      <td><code>signed_out</code></td>
+      <td>the control, with signing in as its action</td>
+    </tr>
+    <tr>
+      <td><code>no_credentials</code></td>
+      <td>the control, with <code>openSettings('booking')</code> as its action, naming the provider whose login is missing</td>
+    </tr>
+    <tr>
+      <td><code>unsupported</code></td>
+      <td>nothing — the cell stays text</td>
+    </tr>
+  </tbody>
+</table>
+
+Three of the four keep the control's shape, because hiding a gated control is
+indistinguishable from the campground not having the feature and the two states need
+different sentences. Only `unsupported` falls back to text, because there really is
+nothing the visitor could do. `domain/place/cart-gate.ts` is that union, the
+counterpart of `watch-gate.ts` for alerts, and `reachableCartGate` is the one place
+`unsupported` is turned into "no control".
+
 The grid is the one place the sheet's own width cap moves: 420px at Peek and Half,
 where it sits over the map, and the window's width at Full, where it covers the map
 anyway. On a phone 420px is the whole screen, so the week scrolls sideways under a

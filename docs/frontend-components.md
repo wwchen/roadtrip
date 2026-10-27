@@ -65,6 +65,8 @@ The place sheet shows that one week at two densities, and **reads it once**. `fe
 
 `domain/place/SiteMatrix.tsx` is the site-by-date grid, with its row rules in `matrix-rows.ts`. It renders cells, which is per-campsite-per-night: `cellState` is a straight lookup of `day.cells[campsiteId]`, and a night the wire never answered is `unknown` rather than the rollup of the nights it did answer. Nothing in the grid is ever summed into a whole-stay claim — the verdict above it comes from the stay check and from nowhere else. Row order, the Loop and Type filters and the free-text query all read the catalog; `kind` is the wire value the filter runs on and `kind_label` is what the option reads as, so the frontend still keeps no vocabulary of its own.
 
+An **open** cell in that grid is also a control: it opens `domain/place/SiteCartPopover.tsx`, which holds that one campsite-night in the caller's own cart at the booking vendor through `POST /api/booking/add-to-cart`. That is the one mutation the Place screen makes, and it is a mutation only — raising to Full still issues no request. The hold has a fifteen-minute clock on the vendor's side, so it is explicit and single-fire: `domain/place/cart-action.ts` is the lifecycle as a pure state machine (one hold at a time, and a late answer for a cell that is no longer pending lands nowhere), and `features/place/use-place-cart.ts` holds the same lock against the request itself. No cell reads as held until the vendor says so, and a refusal renders the server's own code through `lib/settings-errors.ts` rather than reverting to the offer.
+
 Amenity, carrier, and campsite-kind labels are the same rule applied to display text: the backend owns the vocabulary (`AmenityKey`, `Carrier`, `CampsiteKind`) and ships one render-ready `label` per amenity and carrier entry — already "No showers" for an absence — plus `kind_label` on `CampsiteDto`, so the frontend keeps no vocabulary of its own; it renders the string it is given.
 
 ## Where copy lives
@@ -95,7 +97,11 @@ action becomes the one step that unlocks it.
 - `watch_capabilities.add_to_cart.state` on the week response is the cart gate:
   `ready | no_credentials | signed_out | unsupported`, decided backend-side. The
   browser renders the matching copy branch and never guesses which of the four
-  applies from what `trigger_kinds` omits.
+  applies from what `trigger_kinds` omits. `domain/place/cart-gate.ts` is that
+  union as the grid takes it, `features/place/use-place-cart.ts` maps the wire
+  state onto it and owns the mutation, and `domain/place/SiteCartPopover.tsx`
+  renders whichever branch it is handed. `no_credentials` sends the caller through
+  `openSettings('booking')` rather than a link.
 - `WatchGate` (`domain/place/watch-gate.ts`) is the same idea for alerts: `ready |
   signed-out | blocked`. `AlertRow` offers the alert when `ready`, a sign-in
   button when `signed-out`, and says why it cannot when `blocked`.

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query';
 import { STAY_ANSWER_EVENT, STAY_DONE_EVENT } from '@/api/availability-api';
 import { queryKeys } from '@/queries/keys';
-import { matrixCopy, nightsCopy, placeCopy, stayCopy } from '@/lib/strings';
+import { bookingCopy, gateCopy, matrixCopy, nightsCopy, placeCopy, stayCopy } from '@/lib/strings';
 import { eventStreamResponse, jsonResponse, type StubEvent } from '@/test/fetch-stub';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
@@ -61,7 +61,9 @@ const SITE_NAME = '12';
 const SITE_LOOP = 'Loop A';
 const STAY_START = '2026-10-27';
 
-const gridWithSites = () =>
+const HOLDER = 'Recreation.gov';
+
+const gridWithSites = (cart: unknown = { state: 'unsupported' }) => () =>
   jsonResponse({
     poi_id: POI_ID,
     start_date: STAY_START,
@@ -75,7 +77,7 @@ const gridWithSites = () =>
         cells: { [SITE_ID]: { status: 'available', watchable: false } },
       },
     ],
-    watch_capabilities: { trigger_kinds: [], add_to_cart: { state: 'unsupported' } },
+    watch_capabilities: { trigger_kinds: [], add_to_cart: cart },
   });
 
 const catalog = (campsites: readonly unknown[] = []) => () =>
@@ -284,7 +286,7 @@ describe('PlaceSurface, at the full detent', () => {
 
   test('the grid is fed by the week and the catalog the sheet already read, with no second request', async () => {
     stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'completed' } }], {
-      grid: gridWithSites,
+      grid: gridWithSites(),
       catalog: catalog([namedSite]),
     });
 
@@ -442,5 +444,75 @@ describe('MapPlaceSurface', () => {
     expect(trip.mode).toBe('directions');
     expect(trip.focusRow).toBe(ORIGIN_ROW);
     await waitFor(() => expect(useMapStore.getState().selectedPoiId).toBeNull());
+  });
+});
+
+describe('PlaceSurface, the cart gate the week served', () => {
+  const raiseToFull = async () => {
+    const grabber = await screen.findByRole('button', { name: NAME });
+    fireEvent.keyDown(grabber, { key: 'ArrowUp' });
+    fireEvent.keyDown(grabber, { key: 'ArrowUp' });
+  };
+
+  const openCell = async (cart: unknown) => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], {
+      grid: gridWithSites(cart),
+      catalog: catalog([namedSite]),
+    });
+    mount('from-map');
+    await raiseToFull();
+    const cellLabel = `${SITE_LOOP} / ${SITE_NAME} Tue, Oct 27: available`;
+    fireEvent.click(await screen.findByRole('button', { name: matrixCopy.cellCart(cellLabel) }));
+    return screen.getByRole('group', { name: bookingCopy.addToCart });
+  };
+
+  test('a signed-out reader is offered the sign-in step, not a dead Add to cart', async () => {
+    const group = await openCell({
+      state: 'signed_out',
+      provider: 'recgov',
+      provider_display: HOLDER,
+    });
+
+    expect(group).toHaveTextContent(gateCopy.cartSignedOut);
+    expect(screen.getByRole('button', { name: new RegExp(bookingCopy.addToCart) })).toBeEnabled();
+  });
+
+  test('a reader with no saved provider login is named the login that is missing', async () => {
+    const group = await openCell({
+      state: 'no_credentials',
+      provider: 'recgov',
+      provider_display: HOLDER,
+    });
+
+    expect(group).toHaveTextContent(gateCopy.cartNoCredentials(HOLDER));
+  });
+
+  test('a campground with no cart at all leaves the cell as text', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], {
+      grid: gridWithSites({ state: 'unsupported' }),
+      catalog: catalog([namedSite]),
+    });
+    mount('from-map');
+    await raiseToFull();
+
+    const cellLabel = `${SITE_LOOP} / ${SITE_NAME} Tue, Oct 27: available`;
+    expect(await screen.findByLabelText(cellLabel)).toHaveTextContent('A');
+    expect(screen.queryByRole('button', { name: matrixCopy.cellCart(cellLabel) })).toBeNull();
+  });
+
+  test('raising to full still issues no request, cart and all', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], {
+      grid: gridWithSites({ state: 'signed_out', provider_display: HOLDER }),
+      catalog: catalog([namedSite]),
+    });
+    mount('from-map');
+    await raiseToFull();
+    await screen.findByRole('rowheader');
+
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
+      String(call[0]),
+    );
+    expect(calls.filter((url) => url.includes('/campsites/availability'))).toHaveLength(1);
+    expect(calls.filter((url) => url.includes('/api/booking/add-to-cart'))).toHaveLength(0);
   });
 });

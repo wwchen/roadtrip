@@ -54,6 +54,7 @@ const CALLED_TODAY = [
   '/api/availability/pollers/{id}/force',
   '/api/availability/pollers/{id}/runs',
   '/api/availability/runs',
+  '/api/booking/add-to-cart',
   '/api/build-info',
   '/api/campgrounds/details',
   '/api/campgrounds/search',

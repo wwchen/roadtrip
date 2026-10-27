@@ -12,6 +12,7 @@ import { useMapStore } from '@/stores/mapStore';
 import { PlaceSheet, type PlaceArrival } from './PlaceSheet';
 import { usePinnedStay } from './place-stay-window';
 import { usePlaceAlert } from './use-place-alert';
+import { usePlaceCart } from './use-place-cart';
 import { usePlaceNights, type PlaceNightsFailure } from './use-place-nights';
 import { stayRetryLine, usePlaceStay, type PlaceStayCheck } from './use-place-stay';
 
@@ -172,6 +173,7 @@ function StayPlace({ feature, poiId, Poi, arrival, stale, onClose }: StayPlacePr
   const check = usePlaceStay(poiId, stay);
   const nights = usePlaceNights(poiId, stay);
   const { row, failed } = usePlaceAlert(poiId, nights);
+  const cart = usePlaceCart(nights.capabilities);
   const [picked, setPicked] = useState<string | null>(null);
 
   const selected = picked !== null && nights.dates.includes(picked) ? picked : (nights.dates[0] ?? null);
@@ -218,6 +220,8 @@ function StayPlace({ feature, poiId, Poi, arrival, stale, onClose }: StayPlacePr
           {...(row ? { alert: row } : null)}
           siteNames={nights.siteNames}
           campsites={nights.campsites}
+          cart={cart.gate}
+          cartAction={cart.action}
           blocks={parts.blocks}
           {...(onClose ? { onClose } : null)}
         />

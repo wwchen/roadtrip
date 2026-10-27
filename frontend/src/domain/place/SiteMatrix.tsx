@@ -1,9 +1,12 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useMemo, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import type { AvailabilityDay } from '@/api/availability-api';
 import type { Campsite } from '@/api/campsite-api';
 import { availabilityStatusMeta, type AvailabilityStatus } from '@/lib/availability-status';
 import { matrixCopy } from '@/lib/strings';
 import { dayOfMonthLabel, dowLabel } from '@/lib/week-labels';
+import { cartActionFor, type CartAction, type CartActionCell } from './cart-action';
+import { reachableCartGate, type CartGate, type ReachableCartGate } from './cart-gate';
+import { SiteCartPopover } from './SiteCartPopover';
 import {
   DEFAULT_MATRIX_FILTERS,
   SORT_OPTIONS,
@@ -37,15 +40,31 @@ const LEGEND_STATUSES: readonly AvailabilityStatus[] = [
 
 const NO_FILTER_VALUE = '';
 
+const BOOKABLE_STATUS: AvailabilityStatus = 'available';
+
+const DISMISS_KEY = 'Escape';
+
 export interface SiteMatrixProps {
   dates: readonly string[];
   days: readonly AvailabilityDay[];
   campsites?: readonly Campsite[];
   selected: string | null;
   onSelect: (date: string) => void;
+  /** The backend's reason the cart is or is not reachable for this reader. */
+  cart?: CartGate;
+  /** The one hold in play, if any. */
+  cartAction?: CartAction | null;
 }
 
-export function SiteMatrix({ dates, days, campsites, selected, onSelect }: SiteMatrixProps) {
+export function SiteMatrix({
+  dates,
+  days,
+  campsites,
+  selected,
+  onSelect,
+  cart,
+  cartAction = null,
+}: SiteMatrixProps) {
   const [filters, setFilters] = useState<MatrixFilters>(DEFAULT_MATRIX_FILTERS);
 
   const columns = useMemo(() => matrixColumns(dates, days), [dates, days]);
@@ -104,7 +123,13 @@ export function SiteMatrix({ dates, days, campsites, selected, onSelect }: SiteM
             </thead>
             <tbody>
               {rows.map((row) => (
-                <MatrixRow key={rowId(row)} row={row} columns={columns} />
+                <MatrixRow
+                  key={rowId(row)}
+                  row={row}
+                  columns={columns}
+                  cart={cart}
+                  cartAction={cartAction}
+                />
               ))}
             </tbody>
           </table>
@@ -114,7 +139,17 @@ export function SiteMatrix({ dates, days, campsites, selected, onSelect }: SiteM
   );
 }
 
-function MatrixRow({ row, columns }: { row: Partial<Campsite>; columns: readonly MatrixColumn[] }) {
+function MatrixRow({
+  row,
+  columns,
+  cart,
+  cartAction,
+}: {
+  row: Partial<Campsite>;
+  columns: readonly MatrixColumn[];
+  cart: CartGate | undefined;
+  cartAction: CartAction | null;
+}) {
   const label = siteName(row);
   const title = siteTitleText(row, label);
   const loop = row.loop_name?.trim();
@@ -128,7 +163,14 @@ function MatrixRow({ row, columns }: { row: Partial<Campsite>; columns: readonly
         </span>
       </th>
       {columns.map((column) => (
-        <MatrixCell key={column.date} row={row} column={column} siteLabel={title} />
+        <MatrixCell
+          key={column.date}
+          row={row}
+          column={column}
+          siteLabel={title}
+          cart={cart}
+          cartAction={cartAction}
+        />
       ))}
     </tr>
   );
@@ -138,18 +180,109 @@ function MatrixCell({
   row,
   column,
   siteLabel,
+  cart,
+  cartAction,
 }: {
   row: Partial<Campsite>;
   column: MatrixColumn;
   siteLabel: string;
+  cart: CartGate | undefined;
+  cartAction: CartAction | null;
 }) {
   const meta = availabilityStatusMeta(cellState(row, column).status);
+  const spoken = matrixCopy.cell(siteLabel, column.spoken, meta.aria);
+  const className = `rt-site-matrix__cell rt-site-matrix__cell--${meta.kind}`;
+  const gate = meta.value === BOOKABLE_STATUS ? reachableCartGate(cart) : null;
+
+  if (gate === null) {
+    return (
+      <td className={className} aria-label={spoken}>
+        <span aria-hidden="true">{meta.label}</span>
+      </td>
+    );
+  }
+
   return (
-    <td
-      className={`rt-site-matrix__cell rt-site-matrix__cell--${meta.kind}`}
-      aria-label={matrixCopy.cell(siteLabel, column.spoken, meta.aria)}
-    >
-      <span aria-hidden="true">{meta.label}</span>
+    <CartCell
+      className={className}
+      glyph={meta.label}
+      spoken={spoken}
+      site={siteLabel}
+      night={column.spoken}
+      campsiteId={rowId(row)}
+      date={column.date}
+      gate={gate}
+      cartAction={cartAction}
+    />
+  );
+}
+
+function CartCell({
+  className,
+  glyph,
+  spoken,
+  site,
+  night,
+  campsiteId,
+  date,
+  gate,
+  cartAction,
+}: {
+  className: string;
+  glyph: string;
+  spoken: string;
+  site: string;
+  night: string;
+  campsiteId: string;
+  date: string;
+  gate: ReachableCartGate;
+  cartAction: CartAction | null;
+}) {
+  const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const cell = useMemo<CartActionCell>(() => ({ campsiteId, date }), [campsiteId, date]);
+  const close = useCallback(() => setOpen(false), []);
+
+  const mine = cartActionFor(cartAction, campsiteId, date);
+  const state = mine?.kind === 'pending' ? 'pending' : mine?.kind === 'held' ? 'held' : null;
+  const label =
+    state === 'pending'
+      ? matrixCopy.cellHolding(spoken)
+      : state === 'held'
+        ? matrixCopy.cellHeld(spoken)
+        : matrixCopy.cellCart(spoken);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLTableCellElement>) => {
+    if (!open || event.key !== DISMISS_KEY) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setOpen(false);
+  };
+
+  return (
+    <td className={className} onKeyDown={onKeyDown}>
+      <button
+        type="button"
+        ref={setAnchor}
+        className={`rt-site-matrix__cell-button${state ? ` is-${state}` : ''}`}
+        aria-label={label}
+        aria-expanded={open}
+        onClick={() => setOpen((was) => !was)}
+      >
+        <span aria-hidden="true">{glyph}</span>
+      </button>
+      {open && anchor ? (
+        <SiteCartPopover
+          anchor={anchor}
+          cell={cell}
+          site={site}
+          night={night}
+          gate={gate}
+          action={cartAction}
+          onClose={close}
+        />
+      ) : null}
     </td>
   );
 }

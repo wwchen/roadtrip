@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { POI_BLOCK_ORDER, type PoiBlockId } from '@/domain/poi/blocks';
 import type { PoiBlockSlots } from '@/domain/poi/PoiPageShell';
 import { dayFull, dayOpen, summary } from '@/domain/place/stay-fixtures';
-import { matrixCopy, stayCopy } from '@/lib/strings';
+import { bookingCopy, gateCopy, matrixCopy, stayCopy } from '@/lib/strings';
 import { PlaceSheet, type PlaceSheetProps } from './PlaceSheet';
 
 const NAME = 'Upper Pines';
@@ -397,5 +397,70 @@ describe('PlaceSheet', () => {
     );
     raise(1);
     expect(container.querySelectorAll('.rt-poi-rule--fold')).toHaveLength(1);
+  });
+});
+
+const OPEN_CELL = 'Site #1 Sun, Oct 25: available';
+const READY_CART = { state: 'ready', onAddToCart: noop } as const;
+
+const openCell = () => screen.getByRole('button', { name: matrixCopy.cellCart(OPEN_CELL) });
+const cartPanel = () => screen.queryByRole('group', { name: bookingCopy.addToCart });
+
+describe('PlaceSheet, holding a site from the grid', () => {
+  const atFull = (over: Partial<PlaceSheetProps> = {}) => {
+    const view = render(<PlaceSheet {...props} arrival="from-map" {...over} />);
+    raise(1);
+    return view;
+  };
+
+  test('an open cell in the grid offers the hold, and nothing at half does', () => {
+    render(<PlaceSheet {...props} arrival="from-map" cart={READY_CART} />);
+    expect(cartPanel()).toBeNull();
+    expect(screen.queryByRole('button', { name: matrixCopy.cellCart(OPEN_CELL) })).toBeNull();
+
+    raise(1);
+    fireEvent.click(openCell());
+    expect(cartPanel()).toBeInTheDocument();
+  });
+
+  test('a campground with no cart leaves its open cells as text', () => {
+    atFull({ cart: { state: 'unsupported' } });
+
+    expect(screen.getByLabelText(OPEN_CELL)).toHaveTextContent('A');
+    expect(screen.queryByRole('button', { name: matrixCopy.cellCart(OPEN_CELL) })).toBeNull();
+  });
+
+  test('a gated reader is offered the step that unlocks the hold, not a dead control', () => {
+    atFull({ cart: { state: 'signed_out', onSignIn: noop } });
+    fireEvent.click(openCell());
+
+    expect(screen.getByText(gateCopy.cartSignedOut)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: new RegExp(bookingCopy.addToCart) })).toBeEnabled();
+  });
+
+  test('Escape in the open panel dismisses it and leaves the sheet up', () => {
+    const onClose = vi.fn();
+    atFull({ cart: READY_CART, onClose });
+    fireEvent.click(openCell());
+
+    const offer = screen.getByRole('button', { name: bookingCopy.addToCart });
+    expect(document.activeElement).toBe(offer);
+    fireEvent.keyDown(offer, { key: 'Escape' });
+
+    expect(cartPanel()).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  test('Escape on the cell itself does the same, rather than closing the place', () => {
+    const onClose = vi.fn();
+    atFull({ cart: READY_CART, onClose });
+    fireEvent.click(openCell());
+
+    const cell = openCell();
+    cell.focus();
+    fireEvent.keyDown(cell, { key: 'Escape' });
+
+    expect(cartPanel()).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
