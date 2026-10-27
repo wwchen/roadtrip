@@ -26,24 +26,45 @@ not decision inputs and do not appear in a candidate's reasoning.
 
 ## The rule
 
-Two knobs — **where** and **when**. Each is either *pinned* or *open*.
+Two knobs — **where** and **when**.
 
-> **The pinned knob becomes the title. The open knob becomes the answer.**
+*Where* is **pinned** (one place) or **open** (an area). *When* has three
+values, not two: **a night**, **a window** of nights, or **open**. The third
+value is not symmetry for its own sake — a trip pins a route and a five-night
+window and then answers night by night, so a two-value *when* is broken by the
+first state this design has.
 
-Four combinations, three screens, because "both pinned" is the Place screen with
-nothing to offer:
+> **The narrowest pinned knob titles the screen. The widest open knob becomes
+> the answer.**
 
 | where | when | screen | the answer is |
 |---|---|---|---|
-| route pinned | nights open | **Your nights** | one row per night, gaps first |
-| open | pinned | **Where** | ranked places on a map |
+| route pinned | a window | **Your nights** | one row per night, gaps first |
+| open | a night or a window | **Where** | ranked places on a map |
 | pinned | open | **Place** | which dates are open |
-| pinned | pinned, nothing open | **Place**, empty | an alert, and two alternatives |
+| pinned | a night or window, nothing open | **Place**, empty | an alert, or the reopening date |
 
 **Pinning a knob is a navigation; unpinning it is going back.** There is no
 other navigation model in the product — no tab bar, no menu, no modal routing.
 A notification that fires opens the Place screen with both knobs pinned, which
 is the one state the user asked to be told about.
+
+### Where the clock starts
+
+Every screen states a drive time, so every screen must say what it is measured
+from, and the answer differs by state. Unstated, it would be inconsistent across
+three screens and silently wrong in the ranking, since detour is derived from it:
+
+| state | origin | shown as |
+|---|---|---|
+| on a trip, tonight's night | current position | `4h 10m from here` |
+| on a trip, a later night | the previous settled night, else the route's start | `2h 30m from Lassen` |
+| a weekend, no trip | the profile's home | `4h 10m from Oakland` |
+| no position and no home | the area's own centre, and the time is omitted | distance only |
+
+The origin is never implicit: the candidate card and the Place peek both name
+it. A phone that has refused location permission falls to the row below it
+rather than guessing.
 
 ## Screen 1 — Your nights
 
@@ -52,9 +73,10 @@ nights`). Body is one row per night, in date order, each row in exactly one of
 four states:
 
 - **Settled** — place name and site number. One line, no verdict, no photo.
-- **Empty, candidates exist** — `Nobody yet` plus the count of places open
-  within the corridor, and the one button that matters. Tonight's empty row is
-  the only element in the product that gets a tinted background.
+- **Empty, candidates exist** — `Nobody yet` plus how many places in the corridor
+  can hold that night, from the stay check, and the one button that matters.
+  Tonight's empty row is the only element in the product that gets a tinted
+  background.
 - **Empty, nothing open** — `Nobody yet · nothing open` and the number of
   alerts already working that night.
 - **Alerting** — a night with live alerts shows only that; it is not re-offered
@@ -70,7 +92,8 @@ Map, full screen, with the question as a pill at the top: `Yosemite · Oct
 25–26`. Its left half re-opens the area, its right half the dates. The pill and one
 candidate card are the only things that float over the map.
 
-Pins carry the count of open sites — **every** pin, including the selected one,
+Pins carry the stay check's `open_sites` — sites that can hold the *whole* stay,
+not a per-night count — on **every** pin, including the selected one,
 because the map's job is to rank at a glance and a pin that changes meaning when
 tapped is a rule the user has to learn. One card sits above the map's bottom
 edge for the selected candidate:
@@ -78,13 +101,21 @@ edge for the selected candidate:
 ```
 Upper Pines
 Open both nights · showers · quiet      ← the ranking, explaining itself
-4h 10m · $36 · fits 19 ft               ← the facts a pin cannot carry
+4h 10m from here · $36 · fits 19 ft     ← the facts a pin cannot carry
+Checked 20 min ago                      ← only when the answer is not live
 [ Reserve ]
 ```
 
 The green line is composed from the user's own rig preferences, in their words,
 and is the only justification the interface ever offers. Swiping the card moves
 the map; tapping it pins the place and goes to **Place**.
+
+**The freshness line is not optional furniture.** A stay answer carries
+`observed_at` and `from_cache`; a cached count can be wrong by the time it is
+read, and the worst failure this product has is someone driving two hours on a
+stale number. The line appears whenever the answer is not live, and the old POI
+page's verified/provenance footer survives in the Place sheet for the same
+reason.
 
 The area comes from one of three things, which are one thing — a polygon: the
 route corridor, a named region, or the viewport.
@@ -98,13 +129,22 @@ be the duplication this design exists to avoid. (A static approach map inside
 The screen is a sheet with three heights, and **a fact belongs to exactly one
 height**:
 
-- **Peek** — should I go here: name, verdict, the three deciding facts, Reserve.
+- **Peek** — should I go here: name, verdict, the three deciding facts, the
+  origin of the drive time, freshness if stale, Reserve.
 - **Half** — which nights, exactly: the nights strip (each night tinted with its
-  open count, the chosen night solid, shut nights dimmed), the specific site
-  numbers and the price, Reserve, and — only if a night in view is shut — one
-  row offering to alert on it.
+  open count, the chosen night solid, shut nights dimmed), the sites that can
+  hold the whole stay, the price, Reserve, and — only if a night in view is shut
+  — one row offering to alert on it.
 - **Full** — what it is like on arrival: photos, getting there, good to know,
-  specs, contact, nearby. The header compacts to a line; it does not repeat.
+  specs, contact, nearby, and the verified/provenance footer. The header
+  compacts to a line; it does not repeat.
+
+**Arriving from Where opens the sheet at Half, not Peek.** Peek's content is
+exactly the candidate card the user just tapped, so presenting it again is the
+repetition this design exists to prevent — sharing one `PlaceVerdict` component
+makes the two states *consistent*, which is not the same thing as not saying it
+twice. Peek is for cold arrivals only: a notification, a deep link, or a place
+reached by name rather than off the map.
 
 When *when* is open rather than pinned, Half becomes the whole screen and leads
 with a sentence rather than a strip: *"Nov 8–9 is your first open weekend,"*
@@ -136,6 +176,70 @@ The cadence sentence is not copy; it is computed from
 `/api/availability/changes` history for that POI. This is the single highest-
 value screen in the product and today it does not exist.
 
+**It is wrong for a campground that is shut for the winter**, which is most of
+the ones this design keeps using as examples. Upper Pines in late October is a
+`closed_for_season` answer, not a `full` one, and offering to watch it is
+offering an alert that cannot fire. That state gets its own sentence and its own
+next action — *Closed until mid-May. Booking opens six months ahead; I'll tell
+you when Upper Pines appears* — and the alternatives below it are places that
+are actually open, not later dates at a closed one.
+
+## The answer vocabulary is the server's
+
+The screens above were drawn before this section was written, and drawing them
+first is how two of them ended up assuming states the backend had already
+enumerated. Every status and every outcome below is decided server-side and
+generated into the frontend types; the browser renders the branch it is given
+and invents no vocabulary of its own.
+
+### One stay is one read
+
+`POST /api/pois/availability/stays` answers *how does this stay look here*, and
+its `open_sites` is defined as campsites bookable online **for every night of
+the stay**. The per-day grid answers a different question and its day rollups
+are per-night counts.
+
+> **A stay claim never comes from day rollups.** "Open both nights" and anything
+> behind a Reserve button read the stay check. The nights strip reads the grid
+> and is per-night context only — it is never summed into a stay claim.
+
+Three sites open Saturday and three open Sunday can mean no single site is open
+both nights; `reservation-providers.md` already names the distinction
+(`same_site` versus `any_combination` in watch evaluation), and
+`frontend-components.md` already forbids letting a rollup stand in for a cell.
+A Reserve button built on summed rollups is a button that lies, and the first
+draft of this spec built one.
+
+### Every status gets a sentence
+
+`StayAvailabilityStatus` — the Where card and the Place peek each render exactly
+one of these, never a count dressed up as prose:
+
+| status | what the screen says | next action |
+|---|---|---|
+| `open` | open, with the nights named | Reserve |
+| `few_left` | open, and stated as scarce — distinct copy, not a smaller number | Reserve, sooner |
+| `full` | nothing open | alert on the shut night |
+| `closed_for_season` | closed, with when it reopens | alert on reopening, or see open places |
+| `no_data` | we do not know yet | retry, and never a reassuring blank |
+
+### Every refusal and failure gets one too
+
+`refused` is about the dates and asking again cannot help:
+`start_before_earliest` (the campground's season has not begun),
+`beyond_booking_horizon` (past what the vendor sells yet — the weekend bars will
+hit this routinely, since vendors sell roughly six months out, and the bar list
+must end where the horizon does and say so), `window_too_long`.
+
+`failed` carries a server-stated `retryable`, so the screen offers a retry only
+when the server says one would help. `timed_out` is always worth asking again
+and shows a retry.
+
+Each of these is a state of the Where card and of the Place sheet, with copy in
+`lib/strings.ts`, and each has a story. A state with no story is a state nobody
+has looked at — and the previous draft of this spec demanded that coverage while
+never specifying what the states looked like.
+
 ## Alerts
 
 A watch is **a night you tapped on a place you were already looking at**. It is
@@ -147,6 +251,27 @@ There is no watch list, no watch table, no trigger selector, no watch form, and
 no page that enumerates watches. The existing per-watch Slack/email delete and
 modify links keep working — they are the management surface, and they already
 exist.
+
+### What that costs, and what we keep anyway
+
+A watch has **one or more targets**, each a `poi_id` or a `campsite_id`. A night
+tapped on a place creates exactly one POI target, so taken literally this design
+deletes two capabilities the API already has:
+
+- **Many places, one weekend** — "tell me if anything in this result set opens."
+  This is a real need and the Where screen is exactly where it is felt, so it
+  keeps an action: alerting from the result set creates one watch with a target
+  per candidate. It is the one watch a user can create without first pinning a
+  place.
+- **One specific site** — "site 42, because it is the one by the creek." Created
+  from a site in the Half detent's stay list, which is the only place a user
+  ever sees a site number.
+
+Both are the same watch resource with a different target list, so neither needs
+a form, a table, or a page. What is genuinely gone is *editing* a watch's
+targets in-app: a watch is created from what the user was looking at, and
+changed by deleting it and tapping again, with the Slack/email links as the
+out-of-app path.
 
 Trigger kinds and `watch_capabilities` gating stay exactly as the backend
 defines them; the capability-gate rule from `docs/frontend-components.md` is
@@ -177,10 +302,17 @@ then `domain/` for things that know what a place or a night is, then `features/`
 for surfaces, then `pages/` for composition, and no feature imports another. What
 follows is the hierarchy this design adds inside those rules.
 
-**The structural trick:** *if two screens would state the same fact, they must
-share one component, and that component decides where the fact renders.* The
-non-repetition rule becomes a property of the component graph rather than a note
-reviewers have to remember.
+**Two different rules, often confused — this spec confused them in its first
+draft:**
+
+- *If two screens would state the same fact, they share one component.* This
+  buys **consistency**: the card and the sheet cannot phrase a verdict
+  differently. It does nothing about repetition — a shared component rendered in
+  both places says the same thing twice, reliably.
+- *A fact is rendered at one place in the flow.* This buys **non-repetition**,
+  and it is enforced by two things that are not component sharing: `SheetSection`
+  levels, and the detent a screen opens at (arriving from Where opens Half,
+  because Peek is the card you just read).
 
 ### New in `@ui` (generic; knows nothing about campgrounds)
 
@@ -208,9 +340,11 @@ rule this design is least entitled to break.
 These know the vocabulary and own no surface. They are where the redesign's
 rules actually live:
 
-- `domain/place/PlaceVerdict` — name, the reason line, the deciding facts. **One
-  component, two consumers** (the Where candidate card and the Place peek), so
-  the two screens cannot drift into saying it differently.
+- `domain/place/PlaceVerdict` — name, the reason line, the deciding facts, the
+  drive-time origin, and freshness when stale. One component, two consumers (the
+  Where candidate card and the Place sheet's cold-arrival Peek), so the two
+  cannot phrase a verdict differently — and they are never both on the path at
+  once, which is the detent rule's job, not this one's.
 - `domain/place/NightsStrip` — per-night rollups: open count, chosen, shut.
 - `domain/place/SeasonBars` — the weekend horizon, for open-*when*.
 - `domain/place/AlertRow` — the shut-night offer; the only creator of a watch.
@@ -252,6 +386,11 @@ judged, not an afterthought:
   each one lands with its stories before it is wired to real data.** The design
   is reviewable in Storybook before a single query runs, which is what the
   throwaway HTML mockups were standing in for.
+- **Except the map.** Pins are imperative MapLibre layers that own their own
+  DOM, so the catalog can hold the `QuestionPill` and the `CandidateCard` but
+  cannot judge the Where screen as a whole. That screen is verified in a browser
+  against a real map, and saying otherwise would make the catalog look more
+  authoritative than it is.
 - **A story per state, and the state list is the wire's, not ours.** Every
   availability state, both watch gates, all four cart gate states, each night
   state, and every empty state. A state that has no story is a state nobody has
@@ -293,6 +432,11 @@ serves, and `make api-types` carries the DTOs to the frontend.
 5. **Trips.** Origin, destination, and a night per date. Today a trip lives in a
    store and a share link; the Your nights screen needs it to survive a reload
    on a phone.
+6. **The reopening date for a closed season.** `closed_for_season` tells the
+   screen it is shut; *Closed until mid-May* needs the date, and the screen must
+   not compute it from the absence of observations. Whether the season bounds are
+   already served or need promoting is the first thing to check when phase 1
+   reaches that state.
 
 ### The honest gap: we do not know what you booked
 
@@ -307,9 +451,16 @@ offers the alert. No inference, no scraping, no second system of record.
 
 This is a product decision with a real cost (a night can be wrong if the user
 ignores the prompt) and it is the one piece of the design that adds a question
-rather than removing one. It is called out here rather than buried because if it
-is rejected, the Your nights screen loses the *settled* state and becomes a list
-of gaps and alerts only — still useful, materially less good.
+rather than removing one.
+
+**If it is rejected, more goes with it than one row state.** Screen 1 says the
+trip's stops are a consequence of what was settled — that model is downstream of
+knowing what was booked. Without the tap there is no settled night, so there is
+no itinerary either, and Your nights degrades to a list of gaps and live alerts
+with no record of the trip taking shape. That is still worth building, and it is
+a materially smaller product than the one drawn above. The alternative is a
+manual "I booked this" affordance, which is the same tap asked at a worse
+moment.
 
 ## Deletions
 
@@ -336,17 +487,21 @@ gate rules, and every `@ui` primitive.
 
 One design, four shippable pieces, each a plan of its own:
 
-1. **Place screen** — the sheet and its detents with the nights strip, over
-   today's day rollups. Deletes the drawer/page split and the matrix page. The
-   open-*when* variant (the weekend bars) waits on read 2 and lands with it.
+1. **Place screen** — the sheet and its detents: the nights strip from the grid,
+   the verdict and the Reserve action from the stay check. Deletes the
+   drawer/page split and the matrix page. The open-*when* variant (the weekend
+   bars) waits on read 2 and lands with it.
 2. **Where screen** — map, pins with counts, the candidate card. Needs the
    ranked answer and the rig profile.
 3. **Alerts as a night** — the shut-night row and the empty state, including the
    cadence sentence. Deletes the watches surface.
 4. **Your nights** — trips, the night states, the did-you-get-it prompt.
 
-Phase 1 touches no backend contract and is the honest test of whether the
-non-repetition rule holds in real copy with real data. It also front-loads every
+Phase 1 adds no endpoint — it calls the existing stay check with a single POI
+beside the existing grid — but it is **not** rollup-only, which is what the first
+draft of this spec assumed and *One stay is one read* corrects. It remains the
+honest test of whether the non-repetition rule holds in real copy with real
+data. It also front-loads every
 new `@ui` primitive — `Sheet`, `SheetHeader`, `SheetSection`, `DefinitionRow` —
 so phases 2 to 4 compose an existing catalog rather than inventing one each.
 `Stepper` and `ChoiceChips` arrive with the rig profile in phase 2.
@@ -373,9 +528,13 @@ so phases 2 to 4 compose an existing catalog rather than inventing one each.
 Story coverage is specified above and not restated here; what follows is what
 has to be *asserted* rather than looked at.
 
-- A test per non-repetition rule: no fact rendered at two sheet heights, and no
-  candidate fact duplicated between pin and card. `SheetSection` makes the first
-  one mostly structural, so the test guards the escape hatches.
+- A test per non-repetition rule: no fact rendered at two sheet heights, no
+  candidate fact duplicated between pin and card, and arrival from Where landing
+  on Half rather than Peek. `SheetSection` makes the first one mostly
+  structural, so that test guards the escape hatches.
+- A test that no stay claim is computed from day rollups: the nights strip and
+  the Reserve action read different sources, and the one asserting a whole-stay
+  fact reads the stay check.
 - Phone viewport is the default in tests as well as stories.
 - The existing page tests move with their surfaces; deleted surfaces take their
   tests with them.
