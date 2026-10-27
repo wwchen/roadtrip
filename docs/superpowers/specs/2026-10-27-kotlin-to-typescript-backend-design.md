@@ -398,6 +398,107 @@ Do not expand this into one plan.
 11. Frontend to Next.js pages. *Gate:* full smoke suite green.
 12. Cutover; decommission the Kotlin build.
 
+### 11. Secrets
+
+**Keep SOPS. Extend `secrets/registry.yaml`; do not replace either.** The existing
+system is SOPS with age recipients in `secrets/.sops.yaml`, vaults that are dotenv
+files with encrypted values and plaintext keys so `git diff` shows *which* secret
+changed, and `manage.py` wrapping the `sops` binary. Its load-bearing property is that
+`docker-compose.secrets.yml` is *generated* from the registry's `consumers` field, so
+a wrong entry means the container genuinely does not receive the secret — the metadata
+cannot disagree with reality. `manage.py check` runs in CI and pre-commit.
+
+**The structural problem is that SOPS is a file-based store committed to git and
+Vercel is an API-based store.** They do not compose; one has to be authoritative.
+
+Two ways to resolve it, and the choice matters more than it looks:
+
+**Chosen — SOPS stays authoritative and pushes.** Add `vercel` as a consumer type.
+`manage.py push vercel` decrypts and sets Vercel environment variables from the
+registry; `manage.py check` verifies the names present in Vercel match the registry's
+`vercel` consumers — names and presence, never values. One source of truth, drift
+still mechanically detectable, `manage.py set NAME` still rotates one value.
+
+The cost, stated plainly: Vercel's environment store becomes a second place
+production secrets exist in plaintext at rest. Today every value lives encrypted in
+git and decrypted only into a container on mini-ca. This widens the trust surface to
+Vercel's platform, and that is a real change, not a formality.
+
+**Rejected — put the age key in Vercel and decrypt at runtime.** Commit the vaults,
+give Vercel one secret, let the app decrypt. Tempting because Vercel then holds a
+single value. Rejected because that one key unlocks every environment at once,
+per-value rotation stops working (`manage.py set NAME` would require a redeploy),
+and the serverless runtime would need sops or an age implementation on the cold path.
+Concentrating all environments behind one key in the newly-added trust surface is
+worse than putting the individual values there.
+
+Where the 20 current secrets land:
+
+| Secret | After |
+| --- | --- |
+| `MAPBOX_TOKEN` | vercel — `/api/route`, `/api/geocode`, `/api/pois/on-route` are server-side |
+| `SLACK_SIGNING_SECRET` | vercel — verifies the inbound interactivity webhook |
+| `AUTH_CLERK_*`, `AUTH_AUTH0_*` (6) | **deleted** — replaced by Supabase per §5 |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | vercel, browser-exposed |
+| `SUPABASE_SERVICE_ROLE_KEY` | vercel, **server-only** |
+| `SLACK_BOT_TOKEN`, `SLACK_ALERT_CHANNEL`, `RESEND_API_KEY` | worker — outbound notification |
+| `CAMPFLARE_API_KEY` | worker, host-tools |
+| `COMPANION_API_TOKEN` | worker, companion |
+| `RIDB_API_KEY` | host-tools — unchanged |
+| `POSTGRES_PASSWORD` | postgres, worker — only in the self-hosted C4 configuration |
+| `GRAFANA_*` (3), `CLOUDFLARE_TUNNEL_TOKEN` | unchanged |
+| `ENCRYPTION_KEY` | **split in two; see below** |
+
+#### Environments do not line up
+
+The registry's environments are `local` and `prod` (`required_in`), with vaults
+`common.enc.env`, `local.enc.env`, `prod.enc.env`. Vercel's are production, preview
+and development. Preview is new and has no vault, so it needs one —
+`preview.enc.env` — rather than silently inheriting `prod`.
+
+**A preview deploy must not carry production notification credentials.** This is the
+sharpest hazard in this section: a PR preview holding `SLACK_BOT_TOKEN` and
+`RESEND_API_KEY` sends real Slack alerts and real email to real users from unreviewed
+code. The registry already records the way out — both are `required_in: []`, meaning
+absence degrades the feature rather than failing boot, and the code must actually do
+so. So preview simply does not receive them, and `manage.py check` fails if it does.
+
+CI needs to run `push vercel`, which means CI needs an age key, which means a new
+recipient in `.sops.yaml` and a new place a decryption key lives. That is a
+deliberate addition to the threat model in `docs/secrets.md`, not an implementation
+detail.
+
+#### Three hazards
+
+**`ENCRYPTION_KEY` is needed on both sides, so split it by purpose.** It feeds
+`SecretCipher` in three places: `UserSettingsService` writes a user's Slack token
+from the settings page (Vercel), `WatchNotificationTargetResolver` reads that token
+when dispatching an alert (worker), and `RecGovCredentialService` holds rec.gov
+credentials (worker). One key would therefore have to exist in Vercel's environment.
+Two keys — `SLACK_TOKEN_ENCRYPTION_KEY` on both sides, `BOOKING_CREDENTIAL_ENCRYPTION_KEY`
+on the worker only — keep the higher-value secret, a user's actual rec.gov password,
+from ever leaving mini-ca. Decide this before any value is encrypted; splitting later
+means re-encrypting stored rows.
+
+**`NEXT_PUBLIC_` inlines into the client bundle.** A service-role key named with that
+prefix is served to every visitor, and it bypasses RLS. The registry must classify
+each `vercel` secret as browser-exposed or server-only, and `manage.py check` must
+fail when a server-only name carries the prefix or is referenced from a client
+component. This is the same shape as the drift tests already in the repo.
+
+**A static preview `DATABASE_URL` silently defeats §8.1.** The branch-per-PR database
+URL is generated at branch creation, so it is not a registry secret at all. Pasting a
+long-lived URL into Vercel's preview environment makes every PR share one database
+while appearing to work. The registry records it as injected-per-deploy, and `check`
+fails if a literal value is set for the preview environment.
+
+#### A property to keep
+
+`frontend/src` contains no `import.meta.env` references, no Mapbox token, and no
+external tile URL — **the browser holds zero secrets today.** Moving to Next.js makes
+leaking one a one-line mistake, so the only browser-exposed values permitted are
+`SUPABASE_URL` and `SUPABASE_ANON_KEY`. Mapbox stays server-side.
+
 ## Risks
 
 **Operational surface grows.** Today: one JVM process plus a Node companion. After:
