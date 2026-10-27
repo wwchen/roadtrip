@@ -221,11 +221,17 @@ stronger than what it replaces.
 **The diff must compare JSONB as `jsonb`, not as `::text`.** Task 7 found that Kotlin
 writes `12.0` where TypeScript writes `12`: equal under the `jsonb` `=` operator,
 different as text. A text comparison would report a spurious difference on a large
-share of the catalog and bury the real ones. Expect a second, narrower difference
-too — decoding `{}` yields a defaulted object where Kotlin yields null for shapes
-whose required field is absent, so the harness needs to treat those as equal or the
-codec needs to match Kotlin exactly. Decide which before the first full run, not after
-reading a hundred thousand false positives.
+share of the catalog and bury the real ones.
+
+**And `{}` is null on read, for every object column, not just the ones with a required
+field.** `CatalogColumnJson.decodeObject` returns null for any empty JSON object, and
+`CampgroundRepo` reads `contact`, `metadata`, `price` and `location` through
+`decodeObjectColumn`. An earlier draft of this paragraph said the divergence was
+limited to shapes whose required field was absent — that was a wrong ruling of mine,
+caught by the Task 7 re-review, and it understated the surface considerably. The codec
+matches Kotlin here rather than the harness papering over it, because a codec that
+reads a stored row differently from the system that wrote it is the one thing this
+seam exists to prevent.
 
 Note for execution: if the importer runs on mini-ca against a remote datastore, the
 bulk load crosses a residential uplink. Seeding against a local Postgres and
