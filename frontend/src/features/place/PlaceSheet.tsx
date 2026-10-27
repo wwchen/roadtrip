@@ -3,7 +3,7 @@ import { AlertRow } from '@/domain/place/AlertRow';
 import { NightSites } from '@/domain/place/NightSites';
 import { NightsStrip } from '@/domain/place/NightsStrip';
 import { PlaceVerdict } from '@/domain/place/PlaceVerdict';
-import { POI_BLOCK_GROUPS, POI_FOOTER_BLOCKS, RULE_BEFORE_GROUP, type PoiBlockId } from '@/domain/poi/blocks';
+import { POI_BLOCK_GROUPS, POI_FOOTER_BLOCKS, type PoiBlockId } from '@/domain/poi/blocks';
 import { PoiPageShell, type PoiBlockSlots } from '@/domain/poi/PoiPageShell';
 import { Sheet, SheetHeader, SheetSection, type SheetDetent } from '@ui';
 import './place-sheet.css';
@@ -17,14 +17,20 @@ const ARRIVAL_DETENT = {
 
 const PLACE_SHEET_TESTID = 'place-sheet';
 
-const ABOVE_FOLD_DETENT: SheetDetent = 'half';
-const BELOW_FOLD_DETENT: SheetDetent = 'full';
+const HALF_DETENT: SheetDetent = 'half';
+const FULL_DETENT: SheetDetent = 'full';
 
-const ABOVE_FOLD_BLOCKS: readonly PoiBlockId[] = POI_BLOCK_GROUPS.slice(0, RULE_BEFORE_GROUP).flat();
-const BELOW_FOLD_BLOCKS: readonly PoiBlockId[] = [
-  ...POI_BLOCK_GROUPS.slice(RULE_BEFORE_GROUP).flat(),
+const HALF_GROUP_COUNT = 3;
+const SHEET_OMITS: readonly PoiBlockId[] = ['hero'];
+
+const sheetBlocks = (ids: readonly PoiBlockId[]): readonly PoiBlockId[] =>
+  ids.filter((id) => !SHEET_OMITS.includes(id));
+
+const HALF_BLOCKS = sheetBlocks(POI_BLOCK_GROUPS.slice(0, HALF_GROUP_COUNT).flat());
+const FULL_BLOCKS = sheetBlocks([
+  ...POI_BLOCK_GROUPS.slice(HALF_GROUP_COUNT).flat(),
   ...POI_FOOTER_BLOCKS,
-];
+]);
 
 function slotsFor(blocks: PoiBlockSlots, ids: readonly PoiBlockId[]): PoiBlockSlots | null {
   const slots: PoiBlockSlots = {};
@@ -51,8 +57,9 @@ export function PlaceSheet({ name, arrival, verdict, nights, alert, siteNames, b
   const [detent, setDetent] = useState<SheetDetent>(ARRIVAL_DETENT[arrival]);
 
   const selected = nights.days.find((day) => day.date === nights.selected) ?? null;
-  const aboveFold = slotsFor(blocks, ABOVE_FOLD_BLOCKS);
-  const belowFold = slotsFor(blocks, BELOW_FOLD_BLOCKS);
+  const hasStay = nights.dates.length > 0 || alert !== undefined;
+  const halfBlocks = slotsFor(blocks, HALF_BLOCKS);
+  const fullBlocks = slotsFor(blocks, FULL_BLOCKS);
 
   return (
     <Sheet
@@ -66,21 +73,23 @@ export function PlaceSheet({ name, arrival, verdict, nights, alert, siteNames, b
         full={<PlaceVerdict {...verdict} />}
         compact={<strong className="rt-place-sheet__name">{name}</strong>}
       />
-      <SheetSection from={ABOVE_FOLD_DETENT}>
-        <div className="rt-place-sheet__stay">
-          <NightsStrip {...nights} />
-          <NightSites day={selected} names={siteNames} />
-          {alert ? <AlertRow {...alert} /> : null}
-        </div>
-      </SheetSection>
-      {aboveFold ? (
-        <SheetSection from={ABOVE_FOLD_DETENT}>
-          <PoiPageShell blocks={aboveFold} />
+      {hasStay ? (
+        <SheetSection from={HALF_DETENT}>
+          <div className="rt-place-sheet__stay">
+            <NightsStrip {...nights} />
+            <NightSites day={selected} names={siteNames} />
+            {alert ? <AlertRow {...alert} /> : null}
+          </div>
         </SheetSection>
       ) : null}
-      {belowFold ? (
-        <SheetSection from={BELOW_FOLD_DETENT}>
-          <PoiPageShell blocks={belowFold} />
+      {halfBlocks ? (
+        <SheetSection from={HALF_DETENT}>
+          <PoiPageShell blocks={halfBlocks} />
+        </SheetSection>
+      ) : null}
+      {fullBlocks ? (
+        <SheetSection from={FULL_DETENT}>
+          <PoiPageShell blocks={fullBlocks} />
         </SheetSection>
       ) : null}
     </Sheet>

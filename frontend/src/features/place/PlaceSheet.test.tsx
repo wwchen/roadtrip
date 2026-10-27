@@ -24,8 +24,10 @@ function slotsOf(ids: readonly PoiBlockId[]): PoiBlockSlots {
   return slots;
 }
 
+const HERO: PoiBlockId = 'hero';
+
 const everyBlock = slotsOf(POI_BLOCK_ORDER);
-const expectedOrderFromBlocks = () => POI_BLOCK_ORDER.map(blockTestId);
+const expectedOrderFromBlocks = () => POI_BLOCK_ORDER.filter((id) => id !== HERO).map(blockTestId);
 
 const props: PlaceSheetProps = {
   name: NAME,
@@ -79,7 +81,26 @@ describe('PlaceSheet', () => {
   test('peek answers whether to go, and says nothing about which nights', () => {
     render(<PlaceSheet {...props} arrival="cold" blocks={everyBlock} />);
     expect(screen.queryByRole('group', { name: /nights/i })).not.toBeInTheDocument();
-    expect(screen.queryByTestId(blockTestId('hero'))).not.toBeInTheDocument();
+    expect(screen.queryByTestId(blockTestId('identity'))).not.toBeInTheDocument();
+  });
+
+  test('the sheet never draws a hero, at any height', () => {
+    render(<PlaceSheet {...props} arrival="cold" blocks={everyBlock} />);
+    raise(2);
+    expect(screen.getByTestId(SHEET)).toHaveAttribute('data-detent', 'full');
+    expect(screen.getByTestId(blockTestId('identity'))).toBeInTheDocument();
+    expect(screen.queryByTestId(blockTestId(HERO))).not.toBeInTheDocument();
+  });
+
+  test('what it is like on arrival waits for full', () => {
+    render(<PlaceSheet {...props} arrival="from-map" blocks={everyBlock} />);
+    expect(screen.getByTestId(blockTestId('identity'))).toBeInTheDocument();
+    expect(screen.queryByTestId(blockTestId('gettingThere'))).not.toBeInTheDocument();
+    expect(screen.queryByTestId(blockTestId('goodToKnow'))).not.toBeInTheDocument();
+
+    raise(1);
+    expect(screen.getByTestId(blockTestId('gettingThere'))).toBeInTheDocument();
+    expect(screen.getByTestId(blockTestId('goodToKnow'))).toBeInTheDocument();
   });
 
   test('raising to half replaces the verdict with the nights rather than repeating it', () => {
@@ -123,11 +144,24 @@ describe('PlaceSheet', () => {
     expect(screen.getByRole('button', { name: /alert me/i })).toBeInTheDocument();
   });
 
-  test('a dropped pin draws no block shell and no hairline', () => {
-    const { container } = render(<PlaceSheet {...props} arrival="from-map" />);
+  test('a dropped pin draws no availability band, no block shell and no hairline', () => {
+    const { container } = render(
+      <PlaceSheet {...props} arrival="from-map" nights={{ ...props.nights, days: [], dates: [] }} />,
+    );
     raise(1);
+    expect(screen.queryByRole('group', { name: /nights/i })).not.toBeInTheDocument();
+    expect(container.querySelector('.rt-place-sheet__stay')).toBeNull();
     expect(container.querySelector('.rt-poi')).toBeNull();
     expect(container.querySelectorAll('.rt-poi-rule')).toHaveLength(0);
+  });
+
+  test('a place with no nights in view still offers an alert when there is one', () => {
+    const alert = { night: WEEK[1], gate: 'ready', onCreate: vi.fn() } as const;
+    const { container } = render(
+      <PlaceSheet {...props} arrival="from-map" nights={{ ...props.nights, days: [], dates: [] }} alert={alert} />,
+    );
+    expect(container.querySelector('.rt-place-sheet__stay')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /alert me/i })).toBeInTheDocument();
   });
 
   test('a place with nothing above the fold draws no fold rule', () => {
@@ -139,5 +173,13 @@ describe('PlaceSheet', () => {
     expect(screen.getByTestId(blockTestId('nearby'))).toBeInTheDocument();
     expect(container.querySelectorAll('.rt-poi-rule')).toHaveLength(1);
     expect(container.querySelectorAll('.rt-poi-rule--fold')).toHaveLength(0);
+  });
+
+  test('the page rule still marks its own fold, now inside full', () => {
+    const { container } = render(
+      <PlaceSheet {...props} arrival="from-map" blocks={slotsOf(['goodToKnow', 'specs'])} />,
+    );
+    raise(1);
+    expect(container.querySelectorAll('.rt-poi-rule--fold')).toHaveLength(1);
   });
 });

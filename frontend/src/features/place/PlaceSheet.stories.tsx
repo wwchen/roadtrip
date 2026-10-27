@@ -188,10 +188,17 @@ const meta = {
           'opens at Peek. ' +
           'A stay claim comes only from the stay check behind the verdict; the strip reads ' +
           "the per-day grid, and neither stands in for the other. " +
-          'The POI blocks render in `blocks.ts` order, split at `RULE_BEFORE_GROUP`: the ' +
-          'groups above it at Half, the rest and the footer at Full, so the fold that used ' +
-          'to be a hairline is now the detent boundary. A group with nothing in it draws no ' +
-          'band and no rule, which is what a dropped pin relies on. ' +
+          'The POI blocks render in `blocks.ts` order, which stays the one place that order ' +
+          'lives. The sheet splits it at its own boundary: the first three groups at Half, ' +
+          'group three onward and the footer at Full. That boundary is the sheet\'s, not the ' +
+          "page's rule hairline — they sit near each other and are no longer one fact, which " +
+          'is why `getting there` and `good to know` are Full rather than Half. The hero is ' +
+          'the one block the sheet never draws: a photo at Half would push Reserve off the ' +
+          'screen, and "what it looks like" is a Full answer anyway. A group with nothing in ' +
+          'it draws no band and no rule, which is what a dropped pin relies on. ' +
+          'The stay section is guarded the same way: a place with no nights in view and no ' +
+          'alert to offer draws no availability band at all, which is how "this pin has no ' +
+          'availability" reads differently from "we asked and nobody answered". ' +
           'The sheet is `position: absolute`, so its container must be positioned — the ' +
           'phone frame these stories draw is the contract, not decoration.',
       },
@@ -254,7 +261,7 @@ export const DroppedPin: Story = {
       answer: summary({ status: 'no_data', open_sites: 0 }),
       origin: ORIGIN,
     },
-    nights: { ...meta.args.nights, days: [], selected: null },
+    nights: { ...meta.args.nights, days: [], dates: [], selected: null },
     siteNames: undefined,
     blocks: droppedPinBlocks,
   },
