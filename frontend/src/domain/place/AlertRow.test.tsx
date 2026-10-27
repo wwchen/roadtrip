@@ -48,14 +48,15 @@ describe('AlertRow', () => {
     render(<AlertRow night={NIGHT} gate="ready" onCreate={noop} />);
 
     expect(screen.getByText(NIGHT_LABEL)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: `${alertCopy.create} for ${NIGHT_LABEL}` })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: alertCopy.createFor(NIGHT_LABEL) })).toBeInTheDocument();
   });
 
-  test('pending disables the button and shows the in-flight label', async () => {
+  test('pending disables the button and keeps the night in the in-flight label', async () => {
     const onCreate = vi.fn();
     render(<AlertRow night={NIGHT} gate="ready" pending onCreate={onCreate} />);
 
-    const button = screen.getByRole('button', { name: alertCopy.creating });
+    expect(screen.getByText(alertCopy.creating)).toBeInTheDocument();
+    const button = screen.getByRole('button', { name: alertCopy.creatingFor(NIGHT_LABEL) });
     expect(button).toBeDisabled();
     await userEvent.click(button);
     expect(onCreate).not.toHaveBeenCalled();

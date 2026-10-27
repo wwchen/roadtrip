@@ -115,6 +115,12 @@ card the user has just tapped on the map, so opening there would show them the s
 verdict twice. Peek is for cold arrivals only: a notification, a deep link, or a
 place reached by name rather than off the map.
 
+Every type honours that, not only the campgrounds with a stay to check: a charger, a
+gym, a trailhead and a state park reached from the map open at Half too. The one
+exception is named rather than assumed — `PEEK_ONLY_CATEGORIES` in `PlaceSurface`
+holds the dropped pin, whose every fact fits in Peek, so raising it would open a
+sheet with nothing new in it.
+
 ### One component, two consumers
 
 The Where card and the Place peek both render `PlaceVerdict`, so the two cannot
@@ -158,6 +164,29 @@ Every status the stay check can return has a sentence already, in `stayCopy` in
 `lib/strings.ts`, and the sheet renders the branch the server gives it. The browser
 invents no vocabulary of its own. A count dressed up as prose is not one of the
 branches.
+
+### A grid the booking site would not answer
+
+The same rule binds the grid's failures. A refused read has a server-stated code,
+`lib/availability-errors.ts` turns that code into the sentence written for it, and
+`usePlaceNights` carries it out as `failure`. The sheet shows that sentence in place
+of the strip — not a week of `No data` chips, which is a claim the server never made
+standing in for the reason it did state.
+
+The retry follows the same source: it is offered for a failure on the provider's end
+and withheld while the provider is rate-limiting us, because asking again is the one
+thing that cannot help there.
+
+## Getting out of the sheet
+
+`Sheet` takes an optional `onClose`. Given one it draws a close control beside the
+grabber — both 44px — and Escape inside the sheet dismisses it. The map surface
+passes `clearSelectedPoi`; the routed `?poi=<id>` page passes nothing, because it has
+nowhere to close to, and a gated control that cannot act is worse than no control.
+
+The sheet is not modal. Focus is never trapped, the map keeps its gestures, and the
+scrolling body is a tab stop so a keyboard can reach prose that holds no controls of
+its own.
 
 ## Where Half ends and Full begins
 

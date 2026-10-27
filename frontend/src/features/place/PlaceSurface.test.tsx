@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query';
 import { STAY_ANSWER_EVENT, STAY_DONE_EVENT } from '@/api/availability-api';
 import { queryKeys } from '@/queries/keys';
-import { placeCopy, stayCopy } from '@/lib/strings';
+import { nightsCopy, placeCopy, stayCopy } from '@/lib/strings';
 import { eventStreamResponse, jsonResponse, type StubEvent } from '@/test/fetch-stub';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
@@ -18,6 +18,10 @@ const SUBTITLE = `Campground · ${AGENCY}`;
 const OPEN_SITES = 3;
 const CHECKED_SITES = 40;
 
+const PRICE_MINIMUM = 36;
+const PRICE_MAXIMUM = 42;
+const PRICE_FROM = 'From $36';
+
 const detail = () =>
   jsonResponse({
     type: 'Feature',
@@ -30,7 +34,16 @@ const detail = () =>
       parent_name: PARENT,
       agency: AGENCY,
       availability_supported: true,
+      price: { minimum: PRICE_MINIMUM, maximum: PRICE_MAXIMUM, currency: 'USD' },
     },
+  });
+
+const plainDetail = (category: string, name: string) =>
+  jsonResponse({
+    type: 'Feature',
+    id: POI_ID,
+    geometry: { type: 'Point', coordinates: [-119.5383, 37.8651] },
+    properties: { category, name },
   });
 
 const grid = () =>
@@ -47,25 +60,30 @@ const catalog = () => jsonResponse({ poi_id: POI_ID, type: 'campsites', campsite
 
 const watchList = () => jsonResponse({ total: 0, limit: 0, offset: 0, watches: [] });
 
-function stubRoutes(stayEvents: readonly StubEvent[]) {
+interface Stubs {
+  grid?: () => Response;
+  detail?: () => Response;
+}
+
+function stubRoutes(stayEvents: readonly StubEvent[], over: Stubs = {}) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: unknown): Promise<Response> => {
       const url = String(input);
       if (url.includes('/availability/stays')) return eventStreamResponse(stayEvents);
-      if (url.includes('/campsites/availability')) return grid();
+      if (url.includes('/campsites/availability')) return (over.grid ?? grid)();
       if (url.includes('/campsites')) return catalog();
       if (url.includes('/api/watches')) return watchList();
-      return detail();
+      return (over.detail ?? detail)();
     }),
   );
 }
 
-function mount() {
+function mount(arrival: 'cold' | 'from-map' = 'cold') {
   const client = createTestQueryClient();
   const view = render(
     <QueryClientProvider client={client}>
-      <PlaceSurface poiId={POI_ID} arrival="cold" />
+      <PlaceSurface poiId={POI_ID} arrival={arrival} />
     </QueryClientProvider>,
   );
   return { ...view, client };
@@ -75,6 +93,14 @@ const refetchDetail = (client: ReturnType<typeof mount>['client']) =>
   act(() => client.refetchQueries({ queryKey: queryKeys.pois.detail(POI_ID) }));
 
 const SERVER_ERROR = 500;
+const TOO_MANY_REQUESTS = 429;
+const BAD_GATEWAY = 502;
+const RATE_LIMITED_REASON = 'Booking site rate-limited us — try again shortly';
+const UPSTREAM_FAILED_REASON = `Booking site returned an error (upstream HTTP ${SERVER_ERROR})`;
+const GYM_CATEGORY = 'planet_fitness_location';
+const GYM_NAME = 'Planet Fitness Fresno';
+const DROPPED_PIN_CATEGORY = 'dropped-pin';
+const DROPPED_PIN_NAME = 'Dropped pin';
 const SHEET_TESTID = 'place-sheet';
 const CHROME_SELECTOR = '.rt-place-chrome';
 const UNRENDERED_CATEGORY = 'ski_resort';
@@ -176,6 +202,57 @@ describe('PlaceSurface', () => {
 
     await screen.findByText(SUBTITLE);
     expect(screen.getAllByText(NAME)).toHaveLength(1);
+  });
+
+  test('peek states the place-level from price, read off the POI record', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+
+    mount();
+
+    expect(await screen.findByText(PRICE_FROM)).toBeInTheDocument();
+  });
+
+  test('a grid the booking site refused says the reason it gave, and offers no retry it said would not help', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], {
+      grid: () => jsonResponse({ error: 'rate_limited' }, TOO_MANY_REQUESTS),
+    });
+
+    mount('from-map');
+
+    expect(await screen.findByText(RATE_LIMITED_REASON)).toBeInTheDocument();
+    expect(screen.getByText(nightsCopy.unread)).toBeInTheDocument();
+    expect(screen.queryByText(nightsCopy.unknown)).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /nights/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: placeCopy.tryAgain })).not.toBeInTheDocument();
+  });
+
+  test('a grid that failed on their end offers the retry the server says would help', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], {
+      grid: () => jsonResponse({ error: 'upstream_5xx', upstream_status: SERVER_ERROR }, BAD_GATEWAY),
+    });
+
+    mount('from-map');
+
+    expect(await screen.findByText(UPSTREAM_FAILED_REASON)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: placeCopy.tryAgain })).toBeInTheDocument();
+  });
+});
+
+describe('PlaceSurface, for a place with no stay to check', () => {
+  test('a place reached from the map opens at half, like every other place', async () => {
+    stubRoutes([], { detail: () => plainDetail(GYM_CATEGORY, GYM_NAME) });
+
+    mount('from-map');
+
+    expect(await screen.findByTestId(SHEET_TESTID)).toHaveAttribute('data-detent', 'half');
+  });
+
+  test('a dropped pin stays at peek, which is all it has', async () => {
+    stubRoutes([], { detail: () => plainDetail(DROPPED_PIN_CATEGORY, DROPPED_PIN_NAME) });
+
+    mount('from-map');
+
+    expect(await screen.findByTestId(SHEET_TESTID)).toHaveAttribute('data-detent', 'peek');
   });
 });
 

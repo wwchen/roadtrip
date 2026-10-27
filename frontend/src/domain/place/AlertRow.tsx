@@ -31,7 +31,7 @@ export function AlertRow(props: AlertRowProps) {
         size="sm"
         disabled={pending}
         aria-busy={pending}
-        aria-label={pending ? alertCopy.creating : `${alertCopy.create} for ${label}`}
+        aria-label={pending ? alertCopy.creatingFor(label) : alertCopy.createFor(label)}
         onClick={() => onCreate(night)}
       >
         {pending ? alertCopy.creating : alertCopy.create}

@@ -181,6 +181,7 @@ export const stayCopy = {
 
 export const placeCopy = {
   driveFrom: (duration: string, origin: string) => `${duration} from ${origin}`,
+  priceFrom: (amount: string) => `From ${amount}`,
   factsSeparator: ' · ',
   loadFailed: "This place didn't load",
   loadFailedBody: 'We could not fetch its details. Everything else still works.',
@@ -203,6 +204,7 @@ export const nightsCopy = {
   pastCount: 'Past',
   unknownCount: 'No data',
   site: (campsiteRef: number | string) => `Site #${campsiteRef}`,
+  unread: 'The booking site did not answer for these nights.',
   noneOpen: 'Nothing open this night.',
   firstCome: 'First come, first served: nothing to reserve.',
   closedNight: 'Closed this night.',
@@ -212,7 +214,9 @@ export const nightsCopy = {
 export const alertCopy = {
   offer: 'Get an alert if a site opens up.',
   create: 'Alert me',
+  createFor: (night: string) => `Alert me for ${night}`,
   creating: 'Setting alert…',
+  creatingFor: (night: string) => `Setting alert for ${night}`,
   createFailed: 'That alert was not set. Try again.',
 } as const;
 

@@ -13,7 +13,8 @@ import {
   PoiVerifiedStamp,
 } from '@/domain/poi/PoiBlocks';
 import type { PoiBlockSlots } from '@/domain/poi/PoiPageShell';
-import { Button } from '@ui';
+import { nightsCopy, placeCopy } from '@/lib/strings';
+import { Banner, Button } from '@ui';
 import { PlaceSheet, type PlaceSheetProps } from './PlaceSheet';
 
 const PHONE_FRAME: CSSProperties = {
@@ -40,6 +41,8 @@ const OPEN_SITES = [4, 6, 2, 3, 5, 1, 2];
 const SHUT_NIGHTS = new Set([WEEK[2], WEEK[3]]);
 const LAST_SITE = 1;
 const REOPENS_ON = '2027-05-14';
+const UPSTREAM_REASON = 'Booking site returned an error (upstream HTTP 500)';
+const THROTTLED_REASON = 'Booking site rate-limited us — try again shortly';
 
 const noop = () => undefined;
 
@@ -166,6 +169,7 @@ const meta = {
     nights: { days: openWeek, dates: WEEK, selected: WEEK[0], onSelect: noop },
     siteNames: SITE_NAMES,
     blocks: campgroundBlocks,
+    onClose: noop,
   },
   decorators: [
     (Story, { parameters }) => (
@@ -189,8 +193,17 @@ const meta = {
           'opens at Peek. ' +
           'A stay claim comes only from the stay check behind the verdict; the strip reads ' +
           "the per-day grid, and neither stands in for the other. " +
+          'Reserve is at Peek, because Peek is every cold arrival — a shared link, a ' +
+          'notification — and the spec names Reserve as the one action it carries. It is the ' +
+          'actions group, rendered from Peek and still in its place in the block order. ' +
+          'A sheet given an `onClose` draws a close control beside the grabber and answers ' +
+          'Escape; the routed page passes none, because it has nowhere to close to. ' +
+          'A per-night read the booking site would not answer replaces the strip with the ' +
+          "reason the server stated, and offers a retry only where the server's own code says " +
+          'retrying helps — never a week of "No data" chips standing in for a reason. ' +
           'The POI blocks render in `blocks.ts` order, which stays the one place that order ' +
-          'lives. The sheet splits it at its own boundary: the first three groups at Half, ' +
+          'lives. The sheet splits it at its own boundary: the actions group at Peek, the two ' +
+          'groups after it at Half, and ' +
           'group three onward and the footer at Full. That boundary is the sheet\'s, not the ' +
           "page's rule hairline — they sit near each other and are no longer one fact, which " +
           'is why `getting there` and `good to know` are Full rather than Half. The hero is ' +
@@ -260,6 +273,38 @@ export const OneShutNightInAnOpenWeek: Story = {
 };
 
 export const ColdArrival: Story = { args: { arrival: 'cold' } };
+
+export const GridUnread: Story = {
+  args: {
+    nights: { ...meta.args.nights, days: [], selected: null },
+    nightsFailure: (
+      <Banner
+        status="warning"
+        title={UPSTREAM_REASON}
+        actions={
+          <Button variant="secondary" size="sm" iconStart="refresh">
+            {placeCopy.tryAgain}
+          </Button>
+        }
+      >
+        <p>{nightsCopy.unread}</p>
+      </Banner>
+    ),
+  },
+};
+
+export const RateLimited: Story = {
+  args: {
+    nights: { ...meta.args.nights, days: [], selected: null },
+    nightsFailure: (
+      <Banner status="warning" title={THROTTLED_REASON}>
+        <p>{nightsCopy.unread}</p>
+      </Banner>
+    ),
+  },
+};
+
+export const OnTheRoutedPage: Story = { args: { arrival: 'cold', onClose: undefined } };
 
 export const DroppedPin: Story = {
   args: {
