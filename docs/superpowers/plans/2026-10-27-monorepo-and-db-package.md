@@ -27,7 +27,7 @@ Five conditions §3 implies that no task's happy path would exercise, most likel
 
 1. **PostGIS SRID is lost in the custom type.** A `geometry(Geometry, 4326)` value written and read through Drizzle must come back with SRID 4326 intact; a custom type that serializes to WKT without SRID silently degrades every geo query in step 7. *Test in Task 4.*
 2. **The constraint trigger is ported as an immediate trigger.** `availability_watch_target_prune_empty` is `DEFERRABLE INITIALLY DEFERRED`: deleting all of a watch's targets and re-inserting one inside a single transaction must leave the watch alive. A plain `AFTER DELETE` trigger deletes it. *Test in Task 5.*
-3. **A JSONB codec throws on keys it does not know.** The Kotlin importer writes these columns today and its `Json` is configured `ignoreUnknownKeys = true`. A strict TS decoder fails on real rows during step 4's differential run. *Test in Task 7.*
+3. **A JSONB codec mishandles the keys that are not there, in either direction.** The Kotlin codec runs `ignoreUnknownKeys = true`, `explicitNulls = false` and no `encodeDefaults`, so stored rows carry keys a TS decoder has never seen *and* omit every null and every defaulted value. A strict decoder throws on the first; a decoder without defaults silently reads an absent `present` as undefined rather than `true`, and an absent `activities` as undefined rather than `[]`. Keys are snake_case (`check_in`, `ends_on`, `last_updated`) via `@SerialName`. *Test in Task 7, both directions.*
 4. **The documented migration path differs from the tested one.** If `migrateDb` is the only thing that creates the PostGIS extension, then `npx drizzle-kit migrate` — the obvious command, and the one a new contributor reaches for — fails on an empty database while the equivalence gate passes, because the gate goes through `migrateDb`. *Test in Task 4:* the project's documented entrypoint migrates an empty database successfully.
 5. **Everything is tested on a direct connection only.** The API path uses a transaction-mode pooler where prepared statements fail; a suite that never exercises `prepare: false` passes here and breaks in step 7. *Test in Task 6.*
 
@@ -173,7 +173,17 @@ git commit -m "build: Flyway-produced schema reference"
 
 **Interfaces:**
 - Consumes: nothing. Zero runtime dependencies — this is the browser-safe half.
-- Produces: the union types `AmenityKey`, `Carrier`, `CarrierSignal`, `CampsiteKind`; the frozen member arrays `amenityKeys`, `carriers`, `campsiteKinds` (each `readonly T[]`, so callers can enumerate); `amenityLabel(k: AmenityKey): string`, `amenityNegativeLabel(k: AmenityKey): string`, `carrierLabel(c: Carrier): string`, `campsiteKindLabel(k: CampsiteKind): string`; and the JSONB shape types `CampgroundLocation`, `CampgroundPrice`, `CampgroundSchedule`, `CampgroundAlert`, `CampgroundMetadata`, `CampgroundRating`, `BookingAlias`.
+- Produces: the union types `AmenityKey`, `Carrier`, `CampsiteKind`; the frozen member arrays `amenityKeys`, `carriers`, `campsiteKinds` (each `readonly T[]`, so callers can enumerate); `amenityLabel(k: AmenityKey): string`, **`amenityNegativeLabel(k: AmenityKey): string | undefined`**, `carrierLabel(c: Carrier): string`, `campsiteKindLabel(k: CampsiteKind): string`; and the shape types `CarrierSignal`, `CampgroundLocation`, `Address`, `CampgroundPrice`, `CampgroundSchedule`, `CampgroundAlert`, `CampgroundMetadata`, `CampgroundRating`, `CampgroundAmenity`, `BookingProvider`, `BookingAlias`.
+
+Three corrections to an earlier draft of this task, all found by transcribing the Kotlin rather than trusting this plan:
+
+- **`negativeLabel` is nullable in Kotlin** (`AmenityKey.kt:11`, `String? = null`) and passed positionally, so only some of the 13 members carry one. The return type is `string | undefined` and no label is invented. Tasks 4 and 7 must handle `undefined`.
+- **`CarrierSignal` is an object, not a union** — `data class CarrierSignal(carrier, average, count: Int? = null)`. It is one entry of the `campgrounds.cell_service` JSONB array.
+- **`Address`, `BookingProvider` and `CampgroundAmenity` are required** by the shapes above, and belong here even though an earlier draft omitted them.
+
+**The stored values are the `wire` strings, not the Kotlin member names.** `AmenityKey` carries a `wire` field alongside its `@SerialName`, and that is what is persisted and what the API serves. The union members are the wire values.
+
+**The package builds.** `exports` points at compiled output under `dist/`, with declarations, and a `build` script runs `tsc`. Exporting `./src/index.ts` directly works under Vite, vitest and `tsc` but not under plain `node`, and Task 6's `scripts/schema-equivalence.mjs` is plain Node importing `@roadtrip/db`, which depends on this package. `tsconfig.base.json` already sets `declaration` and `composite`, which is a build configuration.
 
 Source of truth for every member and label is `backend/src/main/kotlin/ca/floo/roadtrip/model/domain/` — `AmenityKey.kt`, `Carrier.kt`, `CampsiteKind.kt`. Labels ride on the enum there (`AmenityKey.label`/`.negativeLabel`), so they ride on it here.
 
@@ -426,6 +436,15 @@ Covers `amenities`, `cell_service`, `metadata`, `price`, `default_campsite_sched
 test('decode tolerates keys it does not know', () => {
   const raw = { ...validAmenities, future_key: 'whatever' };
   expect(() => decodeCatalogJson(amenitiesShape, raw)).not.toThrow();
+});
+
+test('decode supplies the defaults the writer omitted', () => {
+  expect(decodeCatalogJson(amenityShape, { key: 'showers' }).present).toBe(true);
+  expect(decodeCatalogJson(scheduleShape, {}).activities).toEqual([]);
+});
+
+test('encode writes the snake_case keys the stored rows use', () => {
+  expect(encodeCatalogJson(scheduleShape, schedule)).toHaveProperty('check_in');
 });
 
 test('encode then decode is identity for every covered shape', () => {
