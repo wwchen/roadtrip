@@ -441,6 +441,8 @@ Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement `compare(): Promise<{ equal: boolean, diff: string }>` in `scripts/schema-equivalence.mjs`**
 
+**This script needs the root build to have run.** Task 8 removed `prepare` from `packages/db`, because npm runs workspace `prepare` scripts in path order and `packages/db` was running `tsc` before `packages/domain/dist` existed, failing every clean `npm ci`. So nothing builds `@roadtrip/db` on install, and this script imports it from plain Node, which resolves `dist/`. Two consequences: the gate must be wired into `Makefile:test` **after** `npm run build`, and the script must fail with a message naming the missing build rather than an opaque module-resolution error. A gate that fails because nobody built the package looks exactly like a gate that failed because the schema diverged.
+
 **One container, two databases** — not two containers. Task 2 reports the PostGIS image is amd64-only, so it runs under emulation on Apple Silicon and the first pull is ~850MB; booting it twice doubles a cost that is already the slowest thing in this plan. Create two databases in the single container, both from `template0` as Task 2 does, migrate one with Flyway and one with Drizzle, and dump both. Reuse Task 2's container setup rather than writing a second one.
 
 Dump and normalize both with Task 2's `normalize`. Diff line-by-line.
