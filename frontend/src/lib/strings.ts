@@ -259,6 +259,12 @@ export const nightsCopy = {
   noDetail: 'No site detail for this night.',
 } as const;
 
+export const alertCopy = {
+  offer: 'Get an alert if a site opens up.',
+  create: 'Alert me',
+  creating: 'Setting alert…',
+} as const;
+
 /** The campground filter block under the search row, and the cards' facet row. */
 export const filterCopy = {
   pill: 'Filter campgrounds',
