@@ -121,7 +121,7 @@ local_resource(
 
 local_resource(
     'frontend-dist',
-    cmd='cd frontend && npm run build',
+    cmd='npm run build --workspace @roadtrip/domain && npm run build --workspace roadtrip-frontend',
     resource_deps=['frontend-deps'],
     deps=[
         # package.json/lock are here as well as on frontend-deps: resource_deps
@@ -130,6 +130,10 @@ local_resource(
         'package.json',
         'package-lock.json',
         'frontend/package.json',
+        'packages/domain/package.json',
+        'packages/domain/tsconfig.json',
+        'packages/domain/src',
+        'tsconfig.base.json',
         'frontend/src',
         'frontend/index.html',
         'frontend/availability.html',
