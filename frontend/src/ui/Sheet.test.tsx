@@ -158,6 +158,45 @@ describe('Sheet', () => {
     expect(root).toHaveClass('rt-sheet', 'mine');
   });
 
+  test('a sheet given a dismissal offers a close control that is a real touch target', async () => {
+    const onClose = vi.fn();
+    render(<Sheet detent="full" onDetentChange={noop} label={LABEL} onClose={onClose} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /close/i }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('Escape inside the sheet dismisses it', () => {
+    const onClose = vi.fn();
+    render(
+      <Sheet detent="full" onDetentChange={noop} label={LABEL} onClose={onClose}>
+        <SheetSection from="peek">body</SheetSection>
+      </Sheet>,
+    );
+
+    fireEvent.keyDown(screen.getByText('body'), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('a sheet with nowhere to close to draws no close control and ignores Escape', () => {
+    render(<Sheet detent="full" onDetentChange={noop} label={LABEL} data-testid="sheet" />);
+
+    expect(screen.queryByRole('button', { name: /close/i })).not.toBeInTheDocument();
+    const escape = createEvent.keyDown(screen.getByTestId('sheet'), { key: 'Escape' });
+    fireEvent(screen.getByTestId('sheet'), escape);
+    expect(escape.defaultPrevented).toBe(false);
+  });
+
+  test('the scrolling body is a tab stop, so a keyboard can reach prose with no controls in it', () => {
+    const { container } = render(
+      <Sheet detent="full" onDetentChange={noop} label={LABEL}>
+        <SheetSection from="peek">body</SheetSection>
+      </Sheet>,
+    );
+
+    expect(container.querySelector('.rt-sheet-body')).toHaveAttribute('tabindex', '0');
+  });
+
   test('lists the detents in ascending order', () => {
     expect(SHEET_DETENTS).toEqual(['peek', 'half', 'full']);
   });

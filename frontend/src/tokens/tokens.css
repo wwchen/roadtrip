@@ -363,6 +363,10 @@
   --rt-z-map-account:  21;     /* the account pill, above the layers panel it shares a corner with */
   --rt-z-sheet-scrim:  25;     /* the mobile layers sheet's backdrop */
   --rt-z-sheet:        30;     /* the mobile layers sheet itself */
+  --rt-z-place-sheet: 999;     /* the Place sheet and the chrome that stands in for it: above
+                                  every overlay on the map, below the topbar it must not cover.
+                                  The number --rt-z-drawer carried, because the sheet replaced
+                                  the drawer and answers the same question. */
   --rt-z-modal:        1000;
   --rt-z-topbar:       1000;   /* desktop only: the search panel */
   --rt-z-chrome:       9999;   /* the deployment banner, above everything the app draws */

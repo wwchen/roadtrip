@@ -27,9 +27,14 @@ const meta = {
           'declared height does not compile. `SheetHeader` shows its full form at peek and ' +
           'its compact form from `compactFrom` (half by default). The grabber is a button ' +
           'named for the sheet: drag it to a height, tap it to step up, or use Arrow Up and ' +
-          'Arrow Down. The sheet is not modal — focus is never trapped and the map behind it ' +
-          'stays reachable. It positions itself against its nearest positioned ancestor and ' +
-          'takes its heights from the `--rt-sheet-peek|half|full` ratios in `sheet.css`.',
+          'Arrow Down. Given an `onClose`, it also draws a close control beside the grabber — ' +
+          'both 44px — and Escape inside the sheet dismisses it; without one it draws neither, ' +
+          'because a surface with nowhere to close to should not offer the control. The body ' +
+          'scrolls and is a tab stop, so a keyboard can reach prose that holds no controls of ' +
+          'its own. The sheet is not modal — focus is never trapped and the map behind it ' +
+          'stays reachable. It positions itself against its nearest positioned ancestor, at ' +
+          '`--rt-z-place-sheet` so it clears the overlays it sits beside, and takes its ' +
+          'heights from the `--rt-sheet-peek|half|full` ratios in `sheet.css`.',
       },
     },
   },
@@ -38,11 +43,26 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-function Demo({ initial, frame }: { initial: SheetDetent; frame: CSSProperties }) {
+function Demo({
+  initial,
+  frame,
+  dismissable = false,
+}: {
+  initial: SheetDetent;
+  frame: CSSProperties;
+  dismissable?: boolean;
+}) {
   const [detent, setDetent] = useState<SheetDetent>(initial);
+  const [closed, setClosed] = useState(false);
+  if (closed) return <div style={frame} />;
   return (
     <div style={frame}>
-      <Sheet detent={detent} onDetentChange={setDetent} label="Upper Pines">
+      <Sheet
+        detent={detent}
+        onDetentChange={setDetent}
+        label="Upper Pines"
+        {...(dismissable ? { onClose: () => setClosed(true) } : null)}
+      >
         <SheetHeader
           full={<h2 style={{ margin: 0 }}>Upper Pines</h2>}
           compact={<strong>Upper Pines</strong>}
@@ -65,3 +85,6 @@ export const Peek: Story = { render: () => <Demo initial="peek" frame={PHONE_FRA
 export const Half: Story = { render: () => <Demo initial="half" frame={PHONE_FRAME} /> };
 export const Full: Story = { render: () => <Demo initial="full" frame={PHONE_FRAME} /> };
 export const Desktop: Story = { render: () => <Demo initial="half" frame={DESKTOP_FRAME} /> };
+export const Dismissable: Story = {
+  render: () => <Demo initial="half" frame={PHONE_FRAME} dismissable />,
+};

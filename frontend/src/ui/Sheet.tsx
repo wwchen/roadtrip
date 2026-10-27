@@ -7,6 +7,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from 'react';
+import { Icon } from '@lew-ds/lds-react';
 import './sheet.css';
 
 export type SheetDetent = 'peek' | 'half' | 'full';
@@ -18,6 +19,10 @@ const DRAG_THRESHOLD_PX = 4;
 const PRIMARY_BUTTON = 0;
 const RAISE_KEY = 'ArrowUp';
 const LOWER_KEY = 'ArrowDown';
+const DISMISS_KEY = 'Escape';
+const CLOSE_LABEL = 'Close';
+const CLOSE_ICON = 'close';
+const BODY_TAB_STOP = 0;
 const DRAG_HEIGHT_PROPERTY = '--rt-sheet-drag-height';
 const DRAGGING_ATTRIBUTE = 'data-dragging';
 const DETENT_RATIO_PROPERTY: Record<SheetDetent, string> = {
@@ -80,10 +85,19 @@ export interface SheetProps extends HTMLAttributes<HTMLElement> {
   detent: SheetDetent;
   onDetentChange: (next: SheetDetent) => void;
   label: string;
+  onClose?: () => void;
   children?: ReactNode;
 }
 
-export function Sheet({ detent, onDetentChange, label, className, children, ...rest }: SheetProps) {
+export function Sheet({
+  detent,
+  onDetentChange,
+  label,
+  onClose,
+  className,
+  children,
+  ...rest
+}: SheetProps) {
   const rootRef = useRef<HTMLElement>(null);
   const dragRef = useRef<Drag | null>(null);
   const suppressClickRef = useRef(false);
@@ -150,6 +164,13 @@ export function Sheet({ detent, onDetentChange, label, className, children, ...r
     if (next !== detent) onDetentChange(next);
   };
 
+  const onDismissKey = (event: KeyboardEvent<HTMLElement>) => {
+    if (!onClose || event.key !== DISMISS_KEY) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+  };
+
   return (
     <section
       {...rest}
@@ -157,6 +178,7 @@ export function Sheet({ detent, onDetentChange, label, className, children, ...r
       aria-label={label}
       data-detent={detent}
       className={className ? `rt-sheet ${className}` : 'rt-sheet'}
+      onKeyDown={onDismissKey}
     >
       <button
         type="button"
@@ -172,7 +194,12 @@ export function Sheet({ detent, onDetentChange, label, className, children, ...r
       >
         <span className="rt-sheet-handle" aria-hidden="true" />
       </button>
-      <div className="rt-sheet-body">
+      {onClose ? (
+        <button type="button" className="rt-sheet-close" aria-label={CLOSE_LABEL} onClick={onClose}>
+          <Icon name={CLOSE_ICON} aria-hidden="true" />
+        </button>
+      ) : null}
+      <div className="rt-sheet-body" tabIndex={BODY_TAB_STOP}>
         <SheetContext.Provider value={detent}>{children}</SheetContext.Provider>
       </div>
     </section>

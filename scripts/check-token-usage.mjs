@@ -99,6 +99,8 @@ const COMPONENT_LOCAL = new Set([
   '--rt-sheet-handle-width',
   '--rt-sheet-handle-height',
   '--rt-sheet-grabber-height',
+  '--rt-sheet-close-size',
+  '--rt-sheet-close-icon',
   '--rt-sheet-motion',
   // The sheet's width cap and gutter, declared at :root in ui/sheet.css because
   // features/place/place-sheet.css reads them for the loading and error chrome that stands in

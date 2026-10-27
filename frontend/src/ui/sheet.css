@@ -10,12 +10,20 @@
   --rt-sheet-height: var(--rt-sheet-peek);
   --rt-sheet-handle-width: 36px;
   --rt-sheet-handle-height: 4px;
-  --rt-sheet-grabber-height: 28px;
+  /* 44px, not the 28px this started at: the grabber and the close button share one
+     row, and both are then the comfortable touch target (iOS HIG / Material). */
+  --rt-sheet-grabber-height: 44px;
+  --rt-sheet-close-size: 44px;
+  --rt-sheet-close-icon: 18px;
   --rt-sheet-motion: 220ms cubic-bezier(0.2, 0, 0, 1);
 
   position: absolute;
   left: 0;
   bottom: 0;
+  /* On the scale, not left to `auto`. Every other overlay in the map shell carries a
+     positive z-index, and a positioned sibling at `auto` paints under all of them —
+     the zoom cluster sat inside this sheet and took its taps. */
+  z-index: var(--rt-z-place-sheet);
   width: 100%;
   max-width: var(--rt-sheet-max-width);
   height: calc(var(--rt-sheet-height) * 100%);
@@ -70,11 +78,42 @@
   outline-offset: -2px;
 }
 
+.rt-sheet-close {
+  --icon-size: var(--rt-sheet-close-icon);
+
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: var(--rt-sheet-close-size);
+  height: var(--rt-sheet-close-size);
+  padding: 0;
+  border: 0;
+  border-radius: var(--rt-r-sm);
+  background: none;
+  color: var(--rt-muted);
+  cursor: pointer;
+}
+.rt-sheet-close:hover { color: var(--rt-text); }
+.rt-sheet-close:focus-visible {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: -2px;
+  color: var(--rt-text);
+}
+
+/* Focusable, because it scrolls. At full height it holds provider prose and the
+   upstream table, neither of which contains anything focusable, so without a tab
+   stop here a keyboard user cannot reach the text to read it. */
 .rt-sheet-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0 var(--rt-sheet-gutter) var(--rt-sheet-gutter);
+}
+.rt-sheet-body:focus-visible {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: -2px;
 }
 .rt-sheet-section + .rt-sheet-section { margin-top: var(--rt-sheet-gutter); }
