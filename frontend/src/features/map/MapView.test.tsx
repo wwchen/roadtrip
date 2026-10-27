@@ -49,7 +49,7 @@ vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
 
 const { MapProvider } = await import('./MapProvider');
 const { MapView } = await import('./MapView');
-const { PoiDrawer } = await import('@/features/drawer/PoiDrawer');
+const { MapPlaceSurface } = await import('@/features/place/PlaceSurface');
 const { TopBar } = await import('@/features/trip/TopBar');
 
 // Fixtures
@@ -179,7 +179,7 @@ const renderPage = () =>
       <MapProvider>
         <TopBar />
         <MapView />
-        <PoiDrawer />
+        <MapPlaceSurface />
       </MapProvider>
     </AppProviders>,
   );
@@ -245,7 +245,7 @@ beforeEach(() => {
   useTripStore.getState().reset();
   // The address bar is shared state too, and this page both reads and writes it: a
   // test that completes a trip leaves `?route=` behind (`useSharedTrip`'s writer),
-  // and a test that opens a drawer leaves `?poi=`. Without this, the NEXT mount
+  // and a test that opens a place leaves `?poi=`. Without this, the NEXT mount
   // restores that trip, `useRoute` fetches it, and whether the store has a route by
   // the time an assertion runs comes down to how many microtasks the mount happened
   // to take — which is exactly how the legend's zoom hint became the suite's flake.

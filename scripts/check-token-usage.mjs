@@ -56,34 +56,21 @@ const EXTENSIONS = ['.css', '.ts', '.tsx'];
  * have rendered as the fallback forever.
  */
 const COMPONENT_LOCAL = new Set([
-  // Declared in availability.css and re-set by the Site column's drag-resize.
-  '--rt-site-column-width',
-  // Declared in availability.css; WatchPopover positions against the same number.
+  // Declared in watch-editor.css, which sizes the editor against them.
   '--rt-watch-editor-width',
-  // Declared in cell-book-popover.css; CellBookPopover positions against it, for
-  // the same reason the watch editor does.
-  '--rt-cell-book-pop-width',
   '--rt-watch-editor-mobile-margin',
-  // Set from React inline styles in SiteMatrix.tsx (lines ~352 and ~370), never
-  // declared in CSS, and read with a fallback for the pre-measurement first paint.
-  '--rt-site-dates-width',
-  '--rt-site-matrix-viewport-width',
   // Layout plumbing, not design tokens: geometry one fixed surface has to hand to
   // another because CSS cannot read a sibling's box. See docs/frontend-components.md.
   // Declared 0 in shell.css, set by sandbox.css while the banner is up, and read by
-  // map.css, legend.css, topbar.css, drawer.css and the body padding.
+  // map.css, legend.css, topbar.css and the body padding.
   '--rt-chrome-top',
   // Declared in sandbox.css; pins the banner's height and the room it claims.
   '--rt-sandbox-banner-h',
-  // Published from JS by features/trip/useTopbarClearance.ts, read by drawer.css.
+  // Published from JS by features/trip/useTopbarClearance.ts.
   '--rt-topbar-bottom',
-  // Declared and consumed entirely inside drawer.css.
-  '--rt-drawer-clearance',
-  '--rt-drawer-clearance-gap',
   // The POI page's own rhythm: declared in domain/poi/poi-page.css, which is the
-  // one stylesheet for both the drawer panel and the routed page. drawer.css reads
-  // the gutter so its loading and error states line up with the page that replaces
-  // them. Geometry the page owns, not colour or a scale step.
+  // one stylesheet for both the place sheet and the routed page. Geometry the page
+  // owns, not colour or a scale step.
   '--rt-poi-gutter',
   '--rt-poi-block-gap',
   '--rt-poi-hero-height',

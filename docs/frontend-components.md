@@ -38,7 +38,7 @@ one collapses every named prop to `any`. Widen by intersection instead.
 ### Domain components (`frontend/src/features/<feature>/`)
 
 Compose primitives into feature-specific UI — `features/watches/WatchTable.tsx`,
-`features/trip/TopBar.tsx`, `features/drawer/PoiDrawer.tsx`. They import
+`features/trip/TopBar.tsx`, `features/place/PlaceSurface.tsx`. They import
 primitives from `@ui`, clients from `@/api`, stores from `@/stores`, and **never from
 another feature directory**. A thing two features need moves to `@/lib`, `@/ui` or a
 store.
@@ -57,11 +57,11 @@ features, features and pages may import domains, and domains never import featur
 compose multiple features to exercise a page, but production composition belongs in
 `pages/`.
 
-The `Campsite` type in `api/campsite-api.ts` is `CampsiteDto`, generated. Every type under `frontend/src/api/generated/` comes from the Kotlin `@Serializable` DTOs named in `model/api/ApiContract.kt`; `make test` and CI fail when the committed file and the DTOs disagree, so the closed type is closed by a build step rather than by hand. Never edit the generated file. When the drawer needs a new fact, the vendor ETL promotes it to a typed column and the DTO gains a field — and now nothing else: `make api-types` carries it to the frontend, and the compiler says which call sites can use it. The clients under `frontend/src/api/` keep their own exported names as aliases, so importers name `Campsite`, not `CampsiteDto`. Optional in a generated response type means the server omits the key; `null` never appears, because the one encoder never emits it. `features/availability/site-detail-facts.ts` is still the one place campsite facts are turned into copy.
+The `Campsite` type in `api/campsite-api.ts` is `CampsiteDto`, generated. Every type under `frontend/src/api/generated/` comes from the Kotlin `@Serializable` DTOs named in `model/api/ApiContract.kt`; `make test` and CI fail when the committed file and the DTOs disagree, so the closed type is closed by a build step rather than by hand. Never edit the generated file. When the place sheet needs a new fact, the vendor ETL promotes it to a typed column and the DTO gains a field — and now nothing else: `make api-types` carries it to the frontend, and the compiler says which call sites can use it. The clients under `frontend/src/api/` keep their own exported names as aliases, so importers name `Campsite`, not `CampsiteDto`. Optional in a generated response type means the server omits the key; `null` never appears, because the one encoder never emits it. `features/availability/site-detail-facts.ts` is still the one place campsite facts are turned into copy.
 
-The availability grid is the same rule applied to state. `GET /api/pois/{id}/campsites/availability` serves the week already fused (see `docs/reservation-providers.md`), and the grid renders `days[].cells` as they arrive: the day's rollup, whether a day or a cell is watchable, and whether add-to-cart is reachable are all read off the wire, never re-derived. `features/availability/matrix-rows.ts` looks a row's cell up by campsite id and falls back to `unknown`/unwatchable when the day has no cell for it; it never lets the day's rollup stand in for a missing cell. The only availability states the browser owns are the ones the server cannot know: the watch list is loading, the watch list failed, and nobody is signed in.
+The nights strip is the same rule applied to state. `GET /api/pois/{id}/campsites/availability` serves the week already fused (see `docs/reservation-providers.md`), and `domain/place/night-state.ts` reads each night off the day as it arrives. A day with no cells is `unknown`, and a day that claims to be open without an open cell is `unknown` too; the day's rollup never stands in for a missing cell. The only availability states the browser owns are the ones the server cannot know: the watch list is loading, the watch list failed, and nobody is signed in.
 
-Amenity, carrier, and campsite-kind labels are the same rule applied to display text: the backend owns the vocabulary (`AmenityKey`, `Carrier`, `CampsiteKind`) and ships one render-ready `label` per amenity and carrier entry — already "No showers" for an absence — plus `kind_label` on `CampsiteDto`, so the frontend keeps no vocabulary of its own; it renders the string it is given. `features/availability/matrix-rows.ts` builds the Type dropdown's options from each row's `kind`/`kind_label` pair and filters on the wire `kind`, never the label, so a rename of display text can never change which sites a filter matches.
+Amenity, carrier, and campsite-kind labels are the same rule applied to display text: the backend owns the vocabulary (`AmenityKey`, `Carrier`, `CampsiteKind`) and ships one render-ready `label` per amenity and carrier entry — already "No showers" for an absence — plus `kind_label` on `CampsiteDto`, so the frontend keeps no vocabulary of its own; it renders the string it is given.
 
 ## Where copy lives
 
@@ -92,9 +92,9 @@ action becomes the one step that unlocks it.
   `ready | no_credentials | signed_out | unsupported`, decided backend-side. The
   browser renders the matching copy branch and never guesses which of the four
   applies from what `trigger_kinds` omits.
-- `SiteMatrix`'s `watchGate` is the same idea for watches: `ready | signed-out |
-  blocked`. A watchable cell is a button in the first two, and the popover it
-  opens carries `WatchSignInGate` instead of `WatchEditor`.
+- `WatchGate` (`domain/place/watch-gate.ts`) is the same idea for alerts: `ready |
+  signed-out | blocked`. `AlertRow` offers the alert when `ready`, a sign-in
+  button when `signed-out`, and says why it cannot when `blocked`.
 - Only `unsupported` / `blocked` fall back to inert text, because there really is
   nothing the visitor could do.
 
@@ -115,7 +115,7 @@ and it comes from the M0 screens doc (4a, "One order, thirteen blocks").
   when" and "tell me more". Nothing else may express an order.
 - `PoiPageShell.tsx` takes a bag of blocks keyed by id and renders them in that
   order. A type omits a block by leaving the key out; a group with nothing in it
-  draws no band and no stray rule. `variant` is `panel` (the map drawer, ~520px) or
+  draws no band and no stray rule. `variant` is `panel` (the map's place sheet) or
   `page` (the routed detail page, which also shows the step above) — CSS and one
   nav, not structure.
 - **Nothing is printed twice.** The trail is one step, not a chain: the title says
@@ -139,8 +139,8 @@ and it comes from the M0 screens doc (4a, "One order, thirteen blocks").
   town stop, dropped pin, state — are rows in `place.tsx`'s descriptor table rather
   than components of their own.
 
-Two surfaces consume it and neither adds anything: `features/drawer/PoiDrawer`
-(the shell, the drag gesture, and the two states that have no page to show) and
+Two surfaces consume it and neither adds anything: `features/place/PlaceSurface`
+(the sheet, its detents, and the states that have no page to show) and
 `pages/poi/PoiPage` (the routed `?poi=<id>` page). **If one shows a block the other
 does not, that is a bug in one of them.** Adding a type is a row in `registry.ts`;
 adding a block is an id in `blocks.ts` and a component beside its neighbours.
@@ -212,7 +212,7 @@ the old one never held.
 
 Pure logic belongs in its own module beside the component that uses it — the ordering
 rules, the copy, the state machine — because that is the half worth testing directly.
-`features/availability/matrix-rows.ts` next to `SiteMatrix.tsx` is the pattern.
+`domain/place/night-state.ts` next to `NightsStrip.tsx` is the pattern.
 
 ## Forms on LDS: the controls are uncontrolled
 
@@ -336,27 +336,16 @@ from `@tokens` after a runtime swap so the map and charts re-resolve computed co
   - `--rt-chrome-top` — room a fixed deployment bar has taken off the top of the viewport.
     `app/shell.css` defaults it to `0px`; only `sandbox/sandbox.css` sets it, keyed on the
     `has-sandbox-chrome` class so the room can be reserved from a mirror before the
-    build-info fetch answers. The map shell, `body` padding, the desktop drawer, the legend
+    build-info fetch answers. The map shell, `body` padding, the legend
     and the topbar's max-height all offset by it — a new fixed surface, or anything sized
     against `100dvh` inside the map shell, should honour it rather than assume `top: 0`.
   - `--rt-topbar-bottom` — where the search panel's lower edge sits, relative to the map
-    shell, published by `features/trip/useTopbarClearance.ts` and consumed by the desktop
-    drawer, which starts below it. It is the panel's bottom edge and not its height
-    because the panel is itself inset from the top. The search popover is excluded on
-    purpose, so typing does not move the drawer.
-
-    The drawer spends it on `top`, not `padding-top`: the two surfaces **tile**, so the
-    drawer's box is the container for its contents and resizes with whatever the panel
-    above is doing — expanding the alerts list or opening the corridor results shortens
-    the drawer, collapsing them gives the height back. As padding the drawer's surface
-    ran the full viewport height behind the panel, which read as one sheet with an
-    unexplained empty band and hid the map above it.
-
-    The drawer reserves this much room **uncapped**, which only works because
-    `topbar.css` bounds the panel's own height at `min(50dvh, …)` and scrolls it
-    internally. Do not add a ceiling on the drawer side: clamping there silently returns
-    the drawer to underneath the panel whenever the panel is tall — a route with a
-    corridor results list is enough — which is the bug the clearance exists to prevent.
+    shell, published by `features/trip/useTopbarClearance.ts`. It is the panel's bottom
+    edge and not its height because the panel is itself inset from the top. The search
+    popover is excluded on purpose, so typing does not move it. Nothing reads it since
+    the desktop drawer was deleted. A surface that must start below the panel spends it
+    on `top`, not `padding-top`, and does not cap it, because `topbar.css` already bounds
+    the panel at `min(50dvh, …)` and scrolls it internally.
 - `node scripts/check-css-blocks.mjs` fails on an unbalanced brace, and
   `node scripts/check-token-usage.mjs` fails on a `var(--rt-*)` naming a token that does
   not exist or a declaration whose parens do not balance. Both are cheap insurance for

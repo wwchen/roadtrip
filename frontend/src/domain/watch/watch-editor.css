@@ -10,9 +10,6 @@
  * alerts panel — the editor's second consumer — was styled only because the map bundle
  * happened to pull the availability grid's sheet in alongside it. The component owns
  * its own sheet now, so either consumer can mount it alone.
- *
- * `--rt-watch-editor-width` is the number `WatchPopover` positions against, so the
- * two must agree — see POPOVER_WIDTH_PX there.
  */
 .rt-watch-editor {
   --rt-watch-editor-width: 240px;

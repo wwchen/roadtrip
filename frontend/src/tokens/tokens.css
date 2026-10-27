@@ -370,8 +370,6 @@
   --rt-z-sheet-scrim:  25;     /* the mobile layers sheet's backdrop */
   --rt-z-sheet:        30;     /* the mobile layers sheet itself */
   --rt-z-inline-popover: 50;   /* a popover in normal flow — the week-nav calendar */
-  --rt-z-drawer-scrim: 998;
-  --rt-z-drawer:       999;
   --rt-z-modal:        1000;
   --rt-z-topbar:       1000;   /* desktop only: the panel stays reachable over the drawer */
   --rt-z-popover:      1200;   /* the fixed-position watch-editor host */

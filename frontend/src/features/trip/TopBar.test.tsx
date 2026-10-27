@@ -816,7 +816,7 @@ describe('the results list', () => {
       id: 11,
       geometry: { type: 'Point', coordinates: [-122.64, 48.4] },
       // Region arrives nested: the flattener derives `state` from `address` and
-      // overwrites a flat one. Same reasoning as `CampgroundPanel.test.tsx`.
+      // overwrites a flat one.
       properties: {
         name: 'Bowman Bay',
         address: { state: 'WA' },

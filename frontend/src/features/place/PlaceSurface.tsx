@@ -86,10 +86,28 @@ export function PlaceSurface({ poiId, arrival, onClose }: PlaceSurfaceProps) {
     );
   }
 
+  const stale = query.isError ? <RefreshFailed onRetry={() => void query.refetch()} /> : null;
+
   return id !== null && availabilitySupported(feature.properties) ? (
-    <StayPlace feature={feature} poiId={id} Poi={Poi} arrival={arrival} onClose={onClose} />
+    <StayPlace feature={feature} poiId={id} Poi={Poi} arrival={arrival} stale={stale} onClose={onClose} />
   ) : (
-    <PlainPlace feature={feature} Poi={Poi} onClose={onClose} />
+    <PlainPlace feature={feature} Poi={Poi} stale={stale} onClose={onClose} />
+  );
+}
+
+function RefreshFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Banner
+      status="warning"
+      title={placeCopy.refreshFailed}
+      actions={
+        <Button variant="secondary" size="sm" iconStart="refresh" onClick={onRetry}>
+          {placeCopy.tryAgain}
+        </Button>
+      }
+    >
+      <p>{placeCopy.refreshFailedBody}</p>
+    </Banner>
   );
 }
 
@@ -112,10 +130,11 @@ export function MapPlaceSurface() {
 interface PlainPlaceProps {
   feature: FlatPoiFeature;
   Poi: PoiTypeComponent;
+  stale: ReactNode;
   onClose?: () => void;
 }
 
-function PlainPlace({ feature, Poi, onClose }: PlainPlaceProps) {
+function PlainPlace({ feature, Poi, stale, onClose }: PlainPlaceProps) {
   return (
     <Poi
       feature={feature}
@@ -126,6 +145,7 @@ function PlainPlace({ feature, Poi, onClose }: PlainPlaceProps) {
           name={parts.name}
           subtitle={parts.subtitle}
           arrival={COLD_ARRIVAL}
+          {...(stale ? { notice: stale } : null)}
           nights={NO_NIGHTS}
           blocks={parts.blocks}
         />
@@ -139,7 +159,7 @@ interface StayPlaceProps extends PlainPlaceProps {
   arrival: PlaceArrival;
 }
 
-function StayPlace({ feature, poiId, Poi, arrival, onClose }: StayPlaceProps) {
+function StayPlace({ feature, poiId, Poi, arrival, stale, onClose }: StayPlaceProps) {
   const stay = usePinnedStay();
   const check = usePlaceStay(poiId, stay);
   const nights = usePlaceNights(poiId, stay);
@@ -147,8 +167,14 @@ function StayPlace({ feature, poiId, Poi, arrival, onClose }: StayPlaceProps) {
   const [picked, setPicked] = useState<string | null>(null);
 
   const selected = picked !== null && nights.dates.includes(picked) ? picked : (nights.dates[0] ?? null);
+  const own = stayRetry(check) ?? (failed ? <Banner status="warning" title={alertCopy.createFailed} /> : null);
   const notice =
-    stayRetry(check) ?? (failed ? <Banner status="warning" title={alertCopy.createFailed} /> : null);
+    stale || own ? (
+      <>
+        {stale}
+        {own}
+      </>
+    ) : null;
 
   return (
     <Poi

@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import {
   dayOfMonthLabel,
   dowLabel,
-  formatWeekLabel,
   longDayLabel,
 } from './week-labels';
 
@@ -51,28 +50,5 @@ describe('the long day label', () => {
 
   test('does not slip a day across the new year', () => {
     expect(longDayLabel('2027-01-01')).toBe('Fri, Jan 1');
-  });
-});
-
-describe('the week label', () => {
-  test('collapses the month within one month', () => {
-    expect(formatWeekLabel('2026-08-10', '2026-08-16')).toBe('Aug 10 – 16, 2026');
-  });
-
-  test('names both months across a boundary', () => {
-    expect(formatWeekLabel('2026-08-30', '2026-09-05')).toBe('Aug 30 – Sep 5, 2026');
-  });
-
-  test('spans a year boundary on the start year', () => {
-    expect(formatWeekLabel('2026-12-28', '2027-01-03')).toBe('Dec 28 – Jan 3, 2026');
-  });
-
-  test('a lone date labels itself', () => {
-    expect(formatWeekLabel('2026-08-10')).toBe('Aug 10 – 10, 2026');
-  });
-
-  test('an empty start is an empty label, not "Invalid Date"', () => {
-    expect(formatWeekLabel('')).toBe('');
-    expect(formatWeekLabel('nonsense')).toBe('nonsense');
   });
 });

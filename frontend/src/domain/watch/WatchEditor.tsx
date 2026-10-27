@@ -308,8 +308,7 @@ function saveErrorMessage(caught: unknown): string {
   // Deliberately says nothing about an expired session, even though that is a failure
   // mode here: a 401 withdraws every watch affordance, which unmounts the cell this
   // popover is anchored to and therefore closes the popover. A message in here would
-  // be raised into a component that is about to disappear. `AvailabilityWeek` raises a
-  // toast instead — one surface, and one that outlives the popover.
+  // be raised into a component that is about to disappear.
   const body = caught instanceof HttpError && typeof caught.body === 'string' ? caught.body : '';
   if (body.includes('unsupported_trigger')) return 'Add to cart is not available for this watch.';
   if (body.includes('invalid_trigger_config')) return 'Check the trigger settings and try again.';
