@@ -110,6 +110,10 @@ git commit -m "build: npm workspace root"
 
 Normalization is what makes the comparison possible: `pg_dump --schema-only --no-owner --no-privileges`, then strip `--` comment lines, strip `SET`/`SELECT pg_catalog.set_config` preamble, collapse blank runs, and sort statements by their first identifier. Both sides of Task 6's comparison run through the same function.
 
+`normalize` must also **drop both migration-bookkeeping objects**: Flyway's `flyway_schema_history` table and Drizzle's `__drizzle_migrations` (in the `drizzle` schema). Each exists on exactly one side, so leaving either in makes Task 6's gate impossible to pass.
+
+`--no-privileges` means the comparison covers structure, not grants. That is deliberate — `R__grafana_reader_grants.sql` is mini-ca's concern per spec §11 — but it means the gate does not protect the `grafana_reader` privileges. Say so in the commit.
+
 - [ ] **Step 1: Write the failing test**
 
 ```js
@@ -237,9 +241,11 @@ test('geometry round-trips with SRID 4326 intact', async () => {
 Run: `npm run test --workspace @roadtrip/db`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement `geometry` in `src/types/geometry.ts` and `createDb` in `src/client.ts`**
+- [ ] **Step 3: Implement `geometry` in `src/types/geometry.ts`, and `createDb` plus `migrateDb` in `src/client.ts`**
 
 `geometry` is a `customType` whose `dataType()` returns `geometry(Geometry, 4326)`. `toDriver`/`fromDriver` must preserve SRID — EWKT or EWKB, not bare WKT. `createDb` passes `prepare` through to postgres.js, defaulting to `true`.
+
+`migrateDb(db)` runs `CREATE EXTENSION IF NOT EXISTS postgis` **before** applying any migration, then applies them. This ordering is required, not stylistic: `0000_init.sql` declares `geometry(Geometry, 4326)` columns, so the extension must exist before the generated migration runs, and drizzle-kit always numbers its generated migration first. Task 5's raw migration therefore does **not** create the extension.
 
 - [ ] **Step 4: Transcribe the schema modules from the Task 2 reference**
 
@@ -272,9 +278,9 @@ git commit -m "feat: @roadtrip/db schema and PostGIS geometry type"
 
 **Interfaces:**
 - Consumes: Task 4's migration output; runs immediately after it.
-- Produces: the PostGIS extension, `campground_canonical`, `campsite_canonical`, three plpgsql functions, `availability_watch_target_prune_empty`, and the `grafana_reader` grants.
+- Produces: `campground_canonical`, `campsite_canonical`, the `grafana_api_cache_metadata` view, three plpgsql functions, `availability_watch_target_prune_empty`, and the `grafana_reader` role and grants. **Not** the PostGIS extension — Task 4's `migrateDb` creates it before any migration runs, because `0000_init.sql` needs it.
 
-SQL bodies are copied verbatim from the Flyway migrations that own them — V38 and later for the matviews, V30 for the prune function and trigger, `R__grafana_reader_grants.sql` for the grants. Copy, do not paraphrase: these are the live definitions.
+SQL bodies are copied verbatim from the Flyway migrations that own them — V38 and later for the matviews, V30 for the prune function and trigger, `R__grafana_reader_grants.sql` for the role guard, the grants and the `grafana_api_cache_metadata` view. Copy, do not paraphrase: these are the live definitions. The role guard is the `DO $$ … IF NOT EXISTS (SELECT FROM pg_roles …) $$` block, which is what makes the file safe to run against a database that has no `grafana_reader`.
 
 - [ ] **Step 1: Write the failing tests** — Review Focus #2 and #4
 
@@ -412,12 +418,14 @@ test('encode then decode is identity for every covered shape', () => {
   }
 });
 
-test('a row written as JSONB and read back through the column preserves the shape', async () => {
-  await db.insert(campgrounds).values({ ...fixture, amenities: value });
+test('an encoded row read back and decoded preserves the shape', async () => {
+  await db.insert(campgrounds).values({ ...fixture, amenities: encodeCatalogJson(amenitiesShape, value) });
   const [row] = await db.select().from(campgrounds).limit(1);
-  expect(row.amenities).toEqual(value);
+  expect(decodeCatalogJson(amenitiesShape, row.amenities)).toEqual(value);
 });
 ```
+
+The third test goes through `encode` and `decode` explicitly. Drizzle's `jsonb().$type<T>()` only asserts a TypeScript type — it applies no codec — so asserting `row.amenities` directly would pass on parsed JSON and test nothing. Columns are declared `.$type<T>()` and callers encode and decode at the boundary.
 
 The first test is not defensive style — the Kotlin importer writes these columns with `ignoreUnknownKeys = true`, so real rows will carry keys this decoder has never seen during step 4's differential run.
 
