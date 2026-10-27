@@ -35,3 +35,8 @@ const CAMPSITE_KIND_LABELS: Readonly<Record<CampsiteKind, string>> = {
 export function campsiteKindLabel(kind: CampsiteKind): string {
   return CAMPSITE_KIND_LABELS[kind];
 }
+
+export interface CampsiteAttribute {
+  name: string;
+  value?: string;
+}
