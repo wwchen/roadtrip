@@ -1,6 +1,9 @@
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import {
+  CRESCENT_NAME,
+  CRESCENT_POI_ID,
+  DELETED_CAMPGROUND_POI_ID,
   DELETED_POI_ID,
   DRIFT_AMENITIES,
   DRIFT_CAMPGROUND_ID,
@@ -55,6 +58,10 @@ test('findDetailByPoi returns null for a soft-deleted poi', async () => {
   expect(await findDetailByPoi(fixture.readDb, DELETED_POI_ID)).toBeNull();
 });
 
+test('findDetailByPoi returns null for a soft-deleted campground behind a live poi', async () => {
+  expect(await findDetailByPoi(fixture.readDb, DELETED_CAMPGROUND_POI_ID)).toBeNull();
+});
+
 test('findDetailByPoi returns null for an unknown id', async () => {
   expect(await findDetailByPoi(fixture.readDb, UNKNOWN_POI_ID)).toBeNull();
 });
@@ -77,6 +84,28 @@ test('findSummariesByPoiIds returns rows in the order asked, skipping unknown id
 test('findSummariesByPoiIds skips a soft-deleted poi and an empty id list', async () => {
   expect(await findSummariesByPoiIds(fixture.readDb, [String(DELETED_POI_ID)])).toEqual([]);
   expect(await findSummariesByPoiIds(fixture.readDb, [])).toEqual([]);
+});
+
+test('findSummariesByPoiIds skips a soft-deleted campground behind a live poi', async () => {
+  const summaries = await findSummariesByPoiIds(fixture.readDb, [
+    String(DELETED_CAMPGROUND_POI_ID),
+    String(NEAR_POI_ID),
+  ]);
+  expect(summaries.map((summary) => summary.poiId)).toEqual([String(NEAR_POI_ID)]);
+});
+
+test('findSummariesByPoiIds reports a point that lies on a concave geometry, not its centroid', async () => {
+  const [crescent] = await findSummariesByPoiIds(fixture.readDb, [String(CRESCENT_POI_ID)]);
+  expect(crescent?.name).toBe(CRESCENT_NAME);
+  const [placement] = await fixture.readDb.execute<{ on_geometry: boolean }>(sql`
+    SELECT ST_Within(
+             ST_SetSRID(ST_MakePoint(${crescent?.lng}::float8, ${crescent?.lat}::float8), 4326),
+             geom
+           ) AS on_geometry
+    FROM pois
+    WHERE id = ${CRESCENT_POI_ID}
+  `);
+  expect(placement?.on_geometry).toBe(true);
 });
 
 test('findSummariesByPoiIds carries the site summary, null when no live sites', async () => {

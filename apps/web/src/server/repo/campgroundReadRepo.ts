@@ -105,6 +105,7 @@ export async function findDetailByPoi(db: Db, poiId: bigint): Promise<Campground
     WHERE pc.poi_id = ${poiId}
       AND cg.deleted_at IS NULL
       AND p.deleted_at IS NULL
+    ORDER BY cg.id
   `);
   const row = rows[0];
   if (row === undefined) return null;

@@ -10,6 +10,8 @@ export const GEOMETRY_PARSE_FAULTS: readonly string[] = [
   'invalid GeoJson representation',
 ];
 
+const GEOMETRY_PARSE_FAULTS_LOWERCASE = GEOMETRY_PARSE_FAULTS.map((message) => message.toLowerCase());
+
 export function causeChain(error: unknown): string {
   const parts: string[] = [];
   const seen = new Set<unknown>();
@@ -33,5 +35,5 @@ export function isTopologyFault(error: unknown): boolean {
 
 export function isGeometryParseFault(error: unknown): boolean {
   const chain = causeChain(error).toLowerCase();
-  return GEOMETRY_PARSE_FAULTS.some((message) => chain.includes(message.toLowerCase()));
+  return GEOMETRY_PARSE_FAULTS_LOWERCASE.some((message) => chain.includes(message));
 }

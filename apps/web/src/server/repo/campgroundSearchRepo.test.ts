@@ -1,9 +1,12 @@
 import { afterAll, beforeAll, expect, test, vi } from 'vitest';
 import {
+  CRESCENT_POI_ID,
+  DELETED_CAMPGROUND_POI_ID,
   DISABLED_PROVIDER,
   ENABLED_PROVIDERS,
   FAR_POI_ID,
   NEAR_POI_ID,
+  OTHER_TYPE_POI_ID,
   TAHOE_BOUNDARY,
   UNSERVED_POI_ID,
   startCatalogFixture,
@@ -39,6 +42,21 @@ test('returns poi ids inside the boundary as strings, nearest first', async () =
   expect(result.totalInBoundary).toBe(IN_BOUNDARY_COUNT);
   expect(result.totalMatching).toBe(IN_BOUNDARY_COUNT);
   expect(result.truncated).toBe(false);
+});
+
+test('a soft-deleted campground behind a live poi is not served', async () => {
+  const result = await search();
+  expect(result.poiIds).not.toContain(String(DELETED_CAMPGROUND_POI_ID));
+});
+
+test('a poi of another type inside the boundary is not served', async () => {
+  const result = await search();
+  expect(result.poiIds).not.toContain(String(OTHER_TYPE_POI_ID));
+});
+
+test('a geometry whose bounding box overlaps the boundary but whose centroid is outside is not inside it', async () => {
+  const result = await search();
+  expect(result.poiIds).not.toContain(String(CRESCENT_POI_ID));
 });
 
 test('a result is JSON-serializable', async () => {

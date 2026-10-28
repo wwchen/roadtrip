@@ -5,15 +5,21 @@ import {
   ewkt,
   migrateDb,
   poiCampgrounds,
+  POI_TYPES,
   pois,
   type Db,
+  type PoiType,
 } from '@roadtrip/db';
 import { CampsiteKind } from '@roadtrip/domain';
 import { withPostgis, type PostgisSession } from '../../../../../scripts/schema-reference.mjs';
 import { openServerDb } from '../db';
 
 const CATALOG_DATABASE = 'roadtrip_web_read';
-const POI_TYPE = 'campground';
+const POI_TYPE = POI_TYPES[0];
+const OTHER_POI_TYPE = POI_TYPES[1];
+
+const CRESCENT_WKT =
+  'POLYGON((-119.7 38.8,-119.2 38.8,-119.2 38.9,-119.6 38.9,-119.6 39.2,-119.2 39.2,-119.2 39.3,-119.7 39.3,-119.7 38.8))';
 
 export const ENABLED_PROVIDER = 'campflare';
 export const DISABLED_PROVIDER = 'reserveamerica';
@@ -32,17 +38,22 @@ export const TAHOE_BOUNDARY = JSON.stringify({
   ],
 });
 
-export const NEAR_POI_ID = 1001n;
-export const FAR_POI_ID = 1002n;
+export const FAR_POI_ID = 1001n;
+export const NEAR_POI_ID = 1002n;
 export const OUTSIDE_POI_ID = 1003n;
 export const DELETED_POI_ID = 1004n;
 export const DRIFT_POI_ID = 1005n;
 export const UNSERVED_POI_ID = 1006n;
+export const DELETED_CAMPGROUND_POI_ID = 1007n;
+export const OTHER_TYPE_POI_ID = 1008n;
+export const CRESCENT_POI_ID = 1009n;
 export const UNKNOWN_POI_ID = 9999n;
 
 export const NEAR_CAMPGROUND_ID = 2001n;
 export const DRIFT_CAMPGROUND_ID = 2005n;
+export const DELETED_CAMPGROUND_ID = 2007n;
 
+export const CRESCENT_NAME = 'Crescent Campground';
 export const NEAR_NAME = 'Near Campground';
 export const FAR_NAME = 'Far Campground';
 export const DRIFT_NAME = 'Drifted Campground';
@@ -64,6 +75,8 @@ interface SeededCampground {
   wkt: string;
   provider?: string;
   deleted?: boolean;
+  campgroundDeleted?: boolean;
+  poiType?: PoiType;
   region?: string;
   amenities?: unknown;
   price?: unknown;
@@ -105,6 +118,21 @@ const SEEDED: readonly SeededCampground[] = [
     wkt: 'POINT(-120.2 39.1)',
     provider: DISABLED_PROVIDER,
   },
+  {
+    poiId: DELETED_CAMPGROUND_POI_ID,
+    campgroundId: DELETED_CAMPGROUND_ID,
+    name: 'Deleted Campground Live Poi',
+    wkt: 'POINT(-120.05 39.0)',
+    campgroundDeleted: true,
+  },
+  {
+    poiId: OTHER_TYPE_POI_ID,
+    campgroundId: 2008n,
+    name: 'Other Type Poi',
+    wkt: 'POINT(-120.15 39.2)',
+    poiType: OTHER_POI_TYPE,
+  },
+  { poiId: CRESCENT_POI_ID, campgroundId: 2009n, name: CRESCENT_NAME, wkt: CRESCENT_WKT },
 ];
 
 const NEAR_SITES = [
@@ -119,7 +147,12 @@ async function seedCatalog(db: Db): Promise<void> {
     const deletedAt = seed.deleted ? new Date() : null;
     await db
       .insert(pois)
-      .values({ id: seed.poiId, poiType: POI_TYPE, geom: ewkt(seed.wkt), deletedAt });
+      .values({
+        id: seed.poiId,
+        poiType: seed.poiType ?? POI_TYPE,
+        geom: ewkt(seed.wkt),
+        deletedAt,
+      });
     await db.insert(campgrounds).values({
       id: seed.campgroundId,
       dataProvider: provider,
@@ -129,6 +162,7 @@ async function seedCatalog(db: Db): Promise<void> {
       amenities: seed.amenities ?? [],
       price: seed.price ?? {},
       contact: seed.contact ?? {},
+      deletedAt: seed.campgroundDeleted ? new Date() : null,
     });
     await db
       .insert(poiCampgrounds)
