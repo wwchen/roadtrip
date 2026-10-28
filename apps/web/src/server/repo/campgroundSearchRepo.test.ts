@@ -13,6 +13,8 @@ import { InvalidBoundaryError, searchWithinBoundary } from './campgroundSearchRe
 
 const NOT_GEOJSON = 'not geojson';
 const NON_ARRAY_COORDINATES = '{"type":"Polygon","coordinates":"nope"}';
+const EMPTY_OBJECT = '{}';
+const UNKNOWN_GEOMETRY_TYPE = '{"type":"Banana","coordinates":[[0,0]]}';
 const GENEROUS_LIMIT = 100;
 const TRUNCATING_LIMIT = 1;
 const IN_BOUNDARY_COUNT = 2;
@@ -57,7 +59,7 @@ test('a provider that is not enabled is not served', async () => {
   expect(result.poiIds).toEqual([String(UNSERVED_POI_ID)]);
 });
 
-test.each([NOT_GEOJSON, NON_ARRAY_COORDINATES])(
+test.each([NOT_GEOJSON, NON_ARRAY_COORDINATES, EMPTY_OBJECT, UNKNOWN_GEOMETRY_TYPE])(
   'a malformed boundary raises InvalidBoundaryError: %s',
   async (boundary) => {
     await expect(

@@ -1,4 +1,4 @@
-import { GEOMETRY_SRID, POI_TYPES, pois, type Db, type PoiType } from '@roadtrip/db';
+import { GEOMETRY_SRID, POI_TYPES, type Db, type PoiType } from '@roadtrip/db';
 import { sql } from 'drizzle-orm';
 import { causeChain, isGeometryParseFault, isTopologyFault } from './faults';
 import { idString } from './ids';
@@ -101,7 +101,7 @@ export async function searchWithinBoundary(
   const first = rows[0];
   const totalMatching = first?.total_passing ?? 0;
   return {
-    poiIds: passing.map((row) => idString(pois.id, row.poi_id)),
+    poiIds: passing.map((row) => idString(row.poi_id)),
     totalInBoundary: first?.total_in_boundary ?? 0,
     totalMatching,
     truncated: totalMatching > passing.length,

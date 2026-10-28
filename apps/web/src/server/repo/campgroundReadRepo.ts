@@ -1,9 +1,7 @@
 import {
   amenitiesShape,
-  campgrounds,
   contactShape,
   locationShape,
-  pois,
   priceShape,
   type Db,
 } from '@roadtrip/db';
@@ -113,8 +111,8 @@ export async function findDetailByPoi(db: Db, poiId: bigint): Promise<Campground
 
   const decoder = createColumnDecoder();
   return {
-    poiId: idString(pois.id, row.poi_id),
-    campgroundId: idString(campgrounds.id, row.id),
+    poiId: idString(row.poi_id),
+    campgroundId: idString(row.id),
     dataProvider: row.data_provider,
     dataProviderRef: row.data_provider_ref,
     name: row.name,
@@ -173,10 +171,10 @@ export async function findSummariesByPoiIds(
   for (const row of rows) {
     const decoder = createColumnDecoder();
     const location = decoder.decode(LOCATION_COLUMN, locationShape, row.location);
-    const poiId = idString(pois.id, row.poi_id);
+    const poiId = idString(row.poi_id);
     byPoi.set(poiId, {
       poiId,
-      campgroundId: idString(campgrounds.id, row.id),
+      campgroundId: idString(row.id),
       name: row.name,
       lng: row.lng,
       lat: row.lat,

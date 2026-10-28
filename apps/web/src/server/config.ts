@@ -5,7 +5,8 @@ const SEARCH_RESULT_LIMIT_VARIABLE = 'SEARCH_RESULT_LIMIT';
 
 const DEFAULT_DATABASE_PREPARE = true;
 const DEFAULT_ENABLED_DATA_PROVIDERS: readonly string[] = ['campflare', 'bcparks-strapi', 'aspira'];
-const DEFAULT_SEARCH_RESULT_LIMIT = 5000;
+const DEFAULT_SEARCH_RESULT_LIMIT = 200;
+const MAX_SEARCH_RESULT_LIMIT = 1000;
 
 const PROVIDER_SEPARATOR = ',';
 const TRUE_LITERAL = 'true';
@@ -26,12 +27,12 @@ function booleanFrom(variable: string, fallback: boolean): boolean {
   throw new ConfigError(variable, `must be ${TRUE_LITERAL} or ${FALSE_LITERAL}`);
 }
 
-function positiveIntegerFrom(variable: string, fallback: number): number {
+function boundedIntegerFrom(variable: string, fallback: number, maximum: number): number {
   const raw = process.env[variable];
   if (raw === undefined) return fallback;
   const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new ConfigError(variable, 'must be a positive integer');
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > maximum) {
+    throw new ConfigError(variable, `must be an integer from 1 to ${maximum}`);
   }
   return parsed;
 }
@@ -60,6 +61,10 @@ export const config = {
     return listFrom(ENABLED_DATA_PROVIDERS_VARIABLE, DEFAULT_ENABLED_DATA_PROVIDERS);
   },
   get searchResultLimit(): number {
-    return positiveIntegerFrom(SEARCH_RESULT_LIMIT_VARIABLE, DEFAULT_SEARCH_RESULT_LIMIT);
+    return boundedIntegerFrom(
+      SEARCH_RESULT_LIMIT_VARIABLE,
+      DEFAULT_SEARCH_RESULT_LIMIT,
+      MAX_SEARCH_RESULT_LIMIT,
+    );
   },
 };

@@ -1,7 +1,12 @@
-import type { campgrounds, pois } from '@roadtrip/db';
+export class UnsupportedIdError extends Error {
+  constructor(raw: unknown) {
+    super(`expected an id as string, bigint or number, got ${raw === null ? 'null' : typeof raw}`);
+    this.name = 'UnsupportedIdError';
+  }
+}
 
-type IdColumn = typeof pois.id | typeof campgrounds.id;
-
-export function idString(column: IdColumn, raw: unknown): string {
-  return String(column.mapFromDriverValue(String(raw)));
+export function idString(raw: unknown): string {
+  if (typeof raw === 'string') return raw;
+  if (typeof raw === 'bigint' || typeof raw === 'number') return String(raw);
+  throw new UnsupportedIdError(raw);
 }
