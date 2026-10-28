@@ -139,6 +139,8 @@ const NULL_ON_EMPTY_SHAPES: ReadonlyArray<readonly [string, Shape<unknown>]> = [
   ['campgrounds.geometry_provenance', geometryProvenanceShape],
 ];
 
+const SQL_NULL_COLUMN = 'campgrounds.geometry_provenance';
+
 interface Coverage {
   readonly columns: readonly string[];
   readonly value: unknown;
@@ -433,6 +435,12 @@ describe('encode', () => {
   test('drops keys the shape does not know', () => {
     const value = { ...price, stray: 'x' } as CampgroundPrice;
     expect(encodeCatalogJson(priceShape, value)).toEqual(price);
+  });
+
+  test.each(NULL_ON_EMPTY_SHAPES)('%s writes an absent value the way Kotlin binds it', (column, shape) => {
+    const stored = column === SQL_NULL_COLUMN ? null : {};
+    expect(encodeCatalogJson(shape, null)).toEqual(stored);
+    expect(encodeCatalogJson(shape, undefined)).toEqual(stored);
   });
 
   test('writes an absent nullable value the way Kotlin binds it', () => {
