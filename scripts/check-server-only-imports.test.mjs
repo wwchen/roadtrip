@@ -3,9 +3,39 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { Worker } from 'node:worker_threads';
 import { findClientBoundaryViolations } from './check-server-only-imports.mjs';
+import { findModuleSpecifiers } from './module-specifiers.mjs';
 
 const CLIENT = "'use client';\n";
+const ADJACENT_BLOCK_COMMENTS = 64;
+const SCAN_BUDGET_MS = 100;
+const SCAN_HARD_TIMEOUT_MS = 3000;
+const MODULE_SPECIFIERS_URL = new URL('./module-specifiers.mjs', import.meta.url).href;
+const SCAN_WORKER = `
+const { parentPort, workerData } = require('node:worker_threads');
+import(workerData.moduleUrl).then(({ findModuleSpecifiers }) => {
+  const started = performance.now();
+  const found = findModuleSpecifiers(workerData.source);
+  parentPort.postMessage({ elapsed: performance.now() - started, found: found.length });
+});
+`;
+
+function scanInWorker(source) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(SCAN_WORKER, { eval: true, workerData: { moduleUrl: MODULE_SPECIFIERS_URL, source } });
+    const timer = setTimeout(() => {
+      worker.terminate();
+      reject(new Error(`scan did not finish within ${SCAN_HARD_TIMEOUT_MS}ms`));
+    }, SCAN_HARD_TIMEOUT_MS);
+    worker.once('error', reject);
+    worker.once('message', (result) => {
+      clearTimeout(timer);
+      worker.terminate();
+      resolve(result);
+    });
+  });
+}
 
 async function fixture(files) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'roadtrip-server-only-'));
@@ -132,7 +162,8 @@ test('allows a client component importing @roadtrip/domain and lookalikes', asyn
     'src/components/Ok.tsx': `${CLIENT}import { amenity } from '@roadtrip/domain';
 import { x } from '@roadtrip/db-tools';
 import { y } from './packages/db';
-import { z } from '../../../../packages/db-tools/src';`,
+import { z } from '../../../../packages/db-tools/src';
+const a = await import(\`@roadtrip/db-tools\${name}\`);`,
     'src/components/packages/db/index.ts': 'export const y = 1;',
   });
   context.after(() => rm(root, { recursive: true, force: true }));
@@ -205,20 +236,63 @@ test('rejects magic-comment, backtick and unspaced specifiers reaching @roadtrip
 test('follows a magic-comment dynamic import of a relative helper chain', async (context) => {
   const root = await fixture({
     'src/components/Lazy.tsx': `${CLIENT}const rows = await import(/* webpackChunkName: "rows" */ './lib/rows');`,
-    'src/components/Backtick.tsx': `${CLIENT}const rows = await import(\`./lib/rows\`);`,
     'src/components/lib/rows.ts': "import{pois}from'@roadtrip/db';",
   });
   context.after(() => rm(root, { recursive: true, force: true }));
 
-  const violations = await findClientBoundaryViolations(root);
-
-  assert.equal(violations.length, 1);
-  assert.match(violations[0], /^apps\/web\/src\/components\/lib\/rows\.ts:1: imports @roadtrip\/db \(reached from client component apps\/web\/src\/components\/(Lazy|Backtick)\.tsx\)$/);
+  assert.deepEqual(await findClientBoundaryViolations(root), [
+    'apps/web/src/components/lib/rows.ts:1: imports @roadtrip/db (reached from client component apps/web/src/components/Lazy.tsx)',
+  ]);
 });
 
-test('recognises the directive after a byte order mark', async (context) => {
+test('follows a backtick dynamic import of a relative helper chain', async (context) => {
   const root = await fixture({
-    'src/components/Bom.tsx': `﻿${CLIENT}import { pois } from '@roadtrip/db';`,
+    'src/components/Tick.tsx': `${CLIENT}const rows = await import(\`./lib/rows\`);`,
+    'src/components/lib/rows.ts': "import{pois}from'@roadtrip/db';",
+  });
+  context.after(() => rm(root, { recursive: true, force: true }));
+
+  assert.deepEqual(await findClientBoundaryViolations(root), [
+    'apps/web/src/components/lib/rows.ts:1: imports @roadtrip/db (reached from client component apps/web/src/components/Tick.tsx)',
+  ]);
+});
+
+test('rejects a template specifier that begins with @roadtrip/db and interpolates the rest', async (context) => {
+  const root = await fixture({
+    'src/components/Template.tsx': `${CLIENT}const db = await import(\`@roadtrip/db\${name}\`);`,
+  });
+  context.after(() => rm(root, { recursive: true, force: true }));
+
+  assert.equal((await findClientBoundaryViolations(root)).length, 1);
+});
+
+test('scans a long run of adjacent block comments inside the time budget', async () => {
+  const source = `import ${'/**/'.repeat(ADJACENT_BLOCK_COMMENTS)} nothing`;
+
+  const { elapsed, found } = await scanInWorker(source);
+
+  assert.equal(found, 0);
+  assert.ok(elapsed < SCAN_BUDGET_MS, `scan took ${elapsed}ms, budget ${SCAN_BUDGET_MS}ms`);
+});
+
+test('reads block comments that contain stars, slashes and doubled terminators', () => {
+  const source = [
+    "import(/**/ '@roadtrip/a');",
+    "import(/***/ '@roadtrip/b');",
+    "import(/* a * b / c */ '@roadtrip/c');",
+    "import(/** doc **/ '@roadtrip/d');",
+    "import(/* one */ /* two */ '@roadtrip/e');",
+  ].join('\n');
+
+  assert.deepEqual(
+    findModuleSpecifiers(source).map((found) => found.specifier),
+    ['@roadtrip/a', '@roadtrip/b', '@roadtrip/c', '@roadtrip/d', '@roadtrip/e'],
+  );
+});
+
+test('recognises the directive after a byte order mark, comments and blank lines', async (context) => {
+  const root = await fixture({
+    'src/components/Preceded.tsx': "\uFEFF// header\n\n\n/* block\n   comment */\n\n'use client';\nimport { pois } from '@roadtrip/db';",
   });
   context.after(() => rm(root, { recursive: true, force: true }));
 

@@ -28,6 +28,7 @@ test('rejects every import form that reaches @roadtrip/db', async (context) => {
     'src/magic.ts': "const db = await import(/* webpackChunkName: \"db\" */ '@roadtrip/db');",
     'src/backtick.ts': 'const db = await import(`@roadtrip/db`);',
     'src/compact.ts': "import{schema}from'@roadtrip/db';",
+    'src/template.ts': 'const db = await import(`@roadtrip/db${name}`);',
     'src/stray-quote.ts': "// loaded via import \"\nimport { schema } from '@roadtrip/db';",
     'src/Thing.test.tsx': "import { schema } from '@roadtrip/db';",
     'vite.config.ts': "import { schema } from '@roadtrip/db';",
@@ -37,7 +38,7 @@ test('rejects every import form that reaches @roadtrip/db', async (context) => {
 
   const violations = await findPackageBoundaryViolations(root);
 
-  assert.equal(violations.length, 12);
+  assert.equal(violations.length, 13);
   assert.ok(violations.every((violation) => violation.includes('imports @roadtrip/db')));
 });
 
@@ -70,6 +71,7 @@ test('allows @roadtrip/domain, lookalike names and installed packages', async (c
   const root = await fixture({
     'src/ok.ts': "import { amenity } from '@roadtrip/domain';",
     'src/lookalike.ts': "import { x } from '@roadtrip/db-tools';",
+    'src/lookalike-template.ts': 'const x = await import(`@roadtrip/db-tools${name}`);',
     'src/sibling.ts': "import { x } from '../../packages/db-tools/src';",
     'src/domain.ts': "import { x } from '../../packages/domain/src';",
     'src/local/index.ts': "import { x } from '../packages/db';",

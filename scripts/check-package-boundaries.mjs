@@ -3,7 +3,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findModuleSpecifiers, SKIPPED_DIRECTORIES, SOURCE_EXTENSION } from './module-specifiers.mjs';
+import { findModuleSpecifiers, isPackageSpecifier, SKIPPED_DIRECTORIES, SOURCE_EXTENSION } from './module-specifiers.mjs';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const FRONTEND_DIRECTORY = 'frontend';
@@ -12,7 +12,7 @@ const FORBIDDEN_PACKAGE_DIRECTORY = 'packages/db';
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
 
 function reachesForbiddenPackage(specifier, file, repoRoot) {
-  if (specifier === FORBIDDEN_PACKAGE || specifier.startsWith(`${FORBIDDEN_PACKAGE}/`)) return true;
+  if (isPackageSpecifier(specifier, FORBIDDEN_PACKAGE)) return true;
   if (!specifier.startsWith('.')) return false;
   const relative = path.relative(
     path.join(repoRoot, FORBIDDEN_PACKAGE_DIRECTORY),
@@ -59,7 +59,7 @@ async function main() {
   const violations = await findPackageBoundaryViolations(REPO_ROOT);
   if (violations.length > 0) {
     console.error(
-      `${FRONTEND_DIRECTORY}/ must not depend on ${FORBIDDEN_PACKAGE}: it carries a Postgres driver. Import shared vocabulary from @roadtrip/domain instead:\n`,
+      `${FRONTEND_DIRECTORY}/ must not depend on ${FORBIDDEN_PACKAGE}: it carries a Postgres driver. Import shared vocabulary from @roadtrip/domain instead. Only literal specifiers are checked: import(someVariable) and require(someVariable) cannot be seen, so do not rely on this gate for them.\n`,
     );
     console.error(violations.join('\n'));
     process.exitCode = 1;

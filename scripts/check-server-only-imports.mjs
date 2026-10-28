@@ -3,7 +3,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findModuleSpecifiers, SKIPPED_DIRECTORIES as SHARED_SKIPPED_DIRECTORIES, SOURCE_EXTENSION } from './module-specifiers.mjs';
+import { findModuleSpecifiers, isPackageSpecifier, SKIPPED_DIRECTORIES as SHARED_SKIPPED_DIRECTORIES, SOURCE_EXTENSION } from './module-specifiers.mjs';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const WEB_DIRECTORY = 'apps/web';
@@ -23,7 +23,6 @@ const COMPILED_SUFFIX_SOURCES = new Map([
   ['.mjs', ['.mts']],
   ['.cjs', ['.cts']],
 ]);
-const BYTE_ORDER_MARK = /^\uFEFF/;
 const LEADING_LINE_COMMENT = /^\/\/[^\n]*(?:\n|$)/;
 const LEADING_BLOCK_COMMENT = /^\/\*[\s\S]*?\*\//;
 
@@ -37,7 +36,7 @@ function lineOf(source, index) {
 }
 
 function declaresClientDirective(source) {
-  let rest = source.replace(BYTE_ORDER_MARK, '').trimStart();
+  let rest = source.trimStart();
   for (;;) {
     const comment = rest.match(LEADING_LINE_COMMENT) ?? rest.match(LEADING_BLOCK_COMMENT);
     if (!comment) break;
@@ -55,7 +54,7 @@ function specifierTarget(specifier, file, repoRoot) {
 }
 
 function reachesForbiddenPackage(specifier, target, repoRoot) {
-  if (specifier === FORBIDDEN_PACKAGE || specifier.startsWith(`${FORBIDDEN_PACKAGE}/`)) return true;
+  if (isPackageSpecifier(specifier, FORBIDDEN_PACKAGE)) return true;
   return target !== null && isInside(path.join(repoRoot, FORBIDDEN_PACKAGE_DIRECTORY), target);
 }
 
