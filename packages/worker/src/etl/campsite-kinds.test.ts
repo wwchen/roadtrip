@@ -58,6 +58,11 @@ describe('rec.gov', () => {
     expect(campsiteKindRecGov('NONELECTRIC TENT ONLY').kind).toBe(CampsiteKind.OTHER);
   });
 
+  test('repeated and edge spaces between tokens are ignored', () => {
+    expect(campsiteKindRecGov('TENT  ONLY NONELECTRIC')).toEqual({ kind: CampsiteKind.TENT, electric: false });
+    expect(campsiteKindRecGov('  GROUP   PICNIC  AREA ')).toEqual({ kind: CampsiteKind.GROUP, electric: null });
+  });
+
   test('mixed-case input matches the same as upper case', () => {
     expect(campsiteKindRecGov('Tent Only Nonelectric')).toEqual({ kind: CampsiteKind.TENT, electric: false });
   });

@@ -149,14 +149,6 @@ describe('poi registry', () => {
       campsiteDataByName: () => undefined,
     });
 
-    test('the target entry is the terminal etl of a multi-etl row', () => {
-      const targets = importTargets(
-        registryOf([row('Chain', ['first-etl', 'second-etl'])]),
-        new Set(['first-etl', 'second-etl']),
-      );
-      expect(targets.map((t) => t.entry.slug)).toEqual(['second-etl']);
-    });
-
     test('a row with one implemented and one unimplemented etl slug is skipped', () => {
       const targets = importTargets(
         registryOf([row('Half wired', ['wired-etl', 'unwired-etl']), row('Wired', ['wired-etl'])]),

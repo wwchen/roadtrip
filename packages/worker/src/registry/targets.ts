@@ -5,7 +5,6 @@ export type ImportSection = 'poi_data' | 'campsite_data';
 export interface ImportTarget {
   name: string;
   section: ImportSection;
-  entry: EtlEntry;
 }
 
 interface Row {
@@ -14,10 +13,8 @@ interface Row {
   etls: EtlEntry[];
 }
 
-function terminalEtl(row: Row): EtlEntry {
-  const terminal = row.etls[row.etls.length - 1];
-  if (terminal === undefined) throw new Error(`registry row '${row.name}' declares no etls`);
-  return terminal;
+function requireEtls(row: Row): void {
+  if (row.etls.length === 0) throw new Error(`registry row '${row.name}' declares no etls`);
 }
 
 function targetsFor(
@@ -26,8 +23,12 @@ function targetsFor(
   implemented: ReadonlySet<string>,
 ): ImportTarget[] {
   return rows
-    .filter((row) => row.enabled && row.etls.every((etl) => implemented.has(etl.slug)))
-    .map((row) => ({ name: row.name, section, entry: terminalEtl(row) }));
+    .filter((row) => {
+      if (!row.enabled) return false;
+      requireEtls(row);
+      return row.etls.every((etl) => implemented.has(etl.slug));
+    })
+    .map((row) => ({ name: row.name, section }));
 }
 
 export function importTargets(

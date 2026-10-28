@@ -94,8 +94,8 @@ const campsiteEtl: SourceEtl<string, CampsiteUpsertCandidate> = {
 };
 
 const FAKE_ADAPTERS: AdapterRegistry = {
-  [CAMPGROUNDS_ADAPTER]: () => campgroundBinding(campgroundEtl) as never,
-  [CAMPSITES_ADAPTER]: () => campsiteBinding(campsiteEtl) as never,
+  [CAMPGROUNDS_ADAPTER]: () => campgroundBinding(campgroundEtl),
+  [CAMPSITES_ADAPTER]: () => campsiteBinding(campsiteEtl),
 };
 
 function cli(adapters: AdapterRegistry, argv: string[], env: Record<string, string> = {}): Promise<{ code: number } & Captured> {
@@ -193,6 +193,51 @@ describe('import cli', () => {
     expect(result.code).toBe(EXIT_FAILED);
     expect(result.err.join('\n')).toContain('import failed');
     expect(result.out).toEqual([]);
+  });
+
+  test('an unreadable registry path fails as an import failure, not a raw stack trace', async () => {
+    const captured: Captured = { out: [], err: [] };
+    const io: CliIo = {
+      adapters: FAKE_ADAPTERS,
+      env: {},
+      out: (line) => captured.out.push(line),
+      err: (line) => captured.err.push(line),
+    };
+    const code = await runCli(
+      ['--raw-dir', staticDir, '--static-dir', staticDir, '--registry', path.join(staticDir, 'missing.yaml'), '--list'],
+      io,
+    );
+    expect(code).toBe(EXIT_FAILED);
+    expect(captured.err.join('\n')).toContain('import failed:');
+    expect(captured.err.join('\n')).toContain('missing.yaml');
+    expect(captured.out).toEqual([]);
+  });
+
+  test('the first failing target stops the run: no later target runs and nothing is reported as done', async () => {
+    let campsitesParsed = false;
+    const adapters: AdapterRegistry = {
+      [CAMPGROUNDS_ADAPTER]: () =>
+        campgroundBinding({
+          etlSlug: CAMPGROUNDS_SLUG,
+          parse: () => {
+            throw new Error('campgrounds exploded');
+          },
+          transform: () => [],
+        }),
+      [CAMPSITES_ADAPTER]: () =>
+        campsiteBinding({
+          ...campsiteEtl,
+          parse: (inputs) => {
+            campsitesParsed = true;
+            return campsiteEtl.parse(inputs);
+          },
+        }),
+    };
+    const result = await cli(adapters, ['--database-url', postgis.connectionString(DB_NAME)]);
+    expect(result.code).toBe(EXIT_FAILED);
+    expect(result.err.join('\n')).toContain('import failed: campgrounds exploded');
+    expect(result.out).toEqual([]);
+    expect(campsitesParsed).toBe(false);
   });
 
   test('targets run sequentially in registry order, campsites resolving the campground the first target wrote', async () => {

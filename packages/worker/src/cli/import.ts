@@ -1,7 +1,8 @@
+#!/usr/bin/env node
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { createDb } from '@roadtrip/db';
+import { createDb, type Db } from '@roadtrip/db';
 import {
   adapterRegistry as productionAdapters,
   implementedSlugs,
@@ -79,30 +80,29 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     return EXIT_FAILED;
   }
 
-  const registry = loadPoiRegistry(
-    values.registry ?? path.join(staticDir, DEFAULT_REGISTRY_RELATIVE_PATH),
-  );
-  const runnable = importTargets(registry, implementedSlugs(registry, io.adapters));
-  const selected = selectTargets(runnable, values.target ?? []);
-  if (typeof selected === 'string') {
-    io.err(selected);
-    return EXIT_USAGE;
-  }
-
-  if (values.list === true) {
-    for (const target of selected) io.out(targetLabel(target));
-    return EXIT_OK;
-  }
-
-  const databaseUrl = values['database-url'] ?? io.env[DATABASE_URL_ENV];
-  if (databaseUrl === undefined || databaseUrl === '') {
-    io.err(`--database-url or ${DATABASE_URL_ENV} is required\n${USAGE}`);
-    return EXIT_USAGE;
-  }
-
-  const db = createDb(databaseUrl);
-  const store = new RawCaptureStore(rawDir, staticDir);
+  let db: Db | undefined;
   try {
+    const registry = loadPoiRegistry(values.registry ?? path.join(staticDir, DEFAULT_REGISTRY_RELATIVE_PATH));
+    const runnable = importTargets(registry, implementedSlugs(registry, io.adapters));
+    const selected = selectTargets(runnable, values.target ?? []);
+    if (typeof selected === 'string') {
+      io.err(selected);
+      return EXIT_USAGE;
+    }
+
+    if (values.list === true) {
+      for (const target of selected) io.out(targetLabel(target));
+      return EXIT_OK;
+    }
+
+    const databaseUrl = values['database-url'] ?? io.env[DATABASE_URL_ENV];
+    if (databaseUrl === undefined || databaseUrl === '') {
+      io.err(`--database-url or ${DATABASE_URL_ENV} is required\n${USAGE}`);
+      return EXIT_USAGE;
+    }
+
+    db = createDb(databaseUrl);
+    const store = new RawCaptureStore(rawDir, staticDir);
     for (const target of selected) {
       const stats = await runTarget(target, { db, store, registry, rawDir, adapters: io.adapters });
       io.out(statsLine(stats));
@@ -112,7 +112,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
     io.err(`import failed: ${error instanceof Error ? error.message : String(error)}`);
     return EXIT_FAILED;
   } finally {
-    await db.$client.end();
+    await db?.$client.end();
   }
 }
 

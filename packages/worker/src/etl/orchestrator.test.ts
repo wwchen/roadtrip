@@ -9,10 +9,9 @@ import { withPostgis, type PostgisSession } from '../../../../scripts/schema-ref
 import type { CampgroundUpsertCandidate } from '../model/campground-candidate.js';
 import type { CampsiteUpsertCandidate } from '../model/campsite-candidate.js';
 import type { CampsiteDataEntry, DataSourceEntry, PoiDataEntry, PoiRegistry } from '../registry/poi-registry.js';
-import { importTargets, type ImportTarget } from '../registry/targets.js';
-import type { FlushCounts } from '../repo/bulk.js';
-import { implementedSlugs, type AdapterRegistry } from './adapter-registry.js';
-import { BatchAccumulator, type TerminalSink } from './batch.js';
+import type { ImportTarget } from '../registry/targets.js';
+import type { AdapterRegistry } from './adapter-registry.js';
+import type { TerminalSink } from './batch.js';
 import type { InputBundle } from './input-bundle.js';
 import { NoCaptureError, RawCaptureStore } from './raw-capture-store.js';
 import { runTarget, type EtlStats, type OrchestratorDeps, type RunLog } from './orchestrator.js';
@@ -27,7 +26,6 @@ const ADAPTER_NAME = 'FakeEtl';
 const STATUS_COMPLETED = 'completed';
 const STATUS_FAILED = 'failed';
 const DEFAULT_SINK_BATCH_SIZE = 1000;
-const NO_COUNTS: FlushCounts = { upserted: 0, skipped: 0 };
 const FETCHED_AT = '2026-06-07T21:33:18Z';
 const HTTP_OK = 200;
 const WARN_SAMPLE_LIMIT = 10;
@@ -104,6 +102,7 @@ interface Harness {
   target: ImportTarget;
   deps: OrchestratorDeps;
   slug: string;
+  rowName: string;
   warnings: string[];
   infos: string[];
 }
@@ -134,11 +133,12 @@ function harness(
     args: {},
   }));
   const section = options.section ?? 'poi_data';
+  const rowName = `${slug} row`;
   const poiData: PoiDataEntry[] =
     section === 'poi_data'
-      ? [{ name: slug, enabled: true, category: 'campground', subcategory: options.subcategory, etls }]
+      ? [{ name: rowName, enabled: true, category: 'campground', subcategory: options.subcategory, etls }]
       : [];
-  const campsiteData: CampsiteDataEntry[] = section === 'campsite_data' ? [{ name: slug, enabled: true, etls }] : [];
+  const campsiteData: CampsiteDataEntry[] = section === 'campsite_data' ? [{ name: rowName, enabled: true, etls }] : [];
   const sources = (options.withDataSources ?? inputs).map(dataSource);
   const registry: PoiRegistry = {
     dataSources: sources,
@@ -150,18 +150,14 @@ function harness(
     campsiteDataByName: (name) => campsiteData.find((row) => row.name === name),
   };
   const adapters: AdapterRegistry = binding === undefined ? {} : { [options.adapterName ?? ADAPTER_NAME]: () => binding };
-  const target: ImportTarget = {
-    name: slug,
-    section,
-    entry: etls[etls.length - 1]!,
-  };
-  const wired = importTargets(registry, implementedSlugs(registry, adapters)).find((t) => t.name === slug);
+  const target: ImportTarget = { name: rowName, section };
   const warnings: string[] = [];
   const infos: string[] = [];
   const log: RunLog = { info: (line) => infos.push(line), warn: (line) => warnings.push(line) };
   return {
-    target: wired ?? target,
+    target,
     slug,
+    rowName,
     warnings,
     infos,
     deps: { db, store: new RawCaptureStore(rawDir, process.cwd()), registry, rawDir, adapters, log },
@@ -174,7 +170,7 @@ function bindingOf<DTO, OUT>(etl: SourceEtl<DTO, OUT>, sink: TerminalSink<OUT>):
 
 function run<OUT>(script: Script, sink: TerminalSink<number> = recordingSink<number>()): Promise<EtlStats> {
   const slug = nextSlug();
-  const h = harness(slug, bindingOf(fakeEtl(slug, script), sink) as AnyTerminalEtlBinding);
+  const h = harness(slug, bindingOf(fakeEtl(slug, script), sink));
   return runTarget(h.target, h.deps);
 }
 
@@ -223,65 +219,6 @@ afterAll(async () => {
   await session;
 }, CONTAINER_TIMEOUT_MS);
 
-describe('BatchAccumulator', () => {
-  const NONE: FlushCounts = NO_COUNTS;
-
-  test('the accumulator flushes at the sink batch size and once more at the end', async () => {
-    const written: number[] = [];
-    const acc = new BatchAccumulator<number>({
-      batchSize: 2,
-      write: async (records) => {
-        written.push(records.length);
-        return NONE;
-      },
-    });
-    for (const record of [1, 2, 3]) await acc.add(record);
-    await acc.flush();
-    expect(written).toEqual([2, 1]);
-  });
-
-  test('a final flush with nothing buffered does not call the sink', async () => {
-    const written: number[] = [];
-    const acc = new BatchAccumulator<number>({
-      batchSize: 2,
-      write: async (records) => {
-        written.push(records.length);
-        return NONE;
-      },
-    });
-    for (const record of [1, 2]) await acc.add(record);
-    await acc.flush();
-    expect(written).toEqual([2]);
-  });
-
-  test('add returns the counts of the flush it triggered and zeroes otherwise', async () => {
-    const acc = new BatchAccumulator<number>({
-      batchSize: 2,
-      write: async (records) => ({ upserted: records.length, skipped: 1 }),
-    });
-    expect(await acc.add(1)).toEqual({ upserted: 0, skipped: 0 });
-    expect(await acc.add(2)).toEqual({ upserted: 2, skipped: 1 });
-    expect(await acc.flush()).toEqual({ upserted: 0, skipped: 0 });
-  });
-
-  test('records are handed to the sink in arrival order', async () => {
-    const batches: number[][] = [];
-    const acc = new BatchAccumulator<number>({
-      batchSize: 3,
-      write: async (records) => {
-        batches.push([...records]);
-        return NONE;
-      },
-    });
-    for (const record of [5, 4, 3, 2, 1]) await acc.add(record);
-    await acc.flush();
-    expect(batches).toEqual([
-      [5, 4, 3],
-      [2, 1],
-    ]);
-  });
-});
-
 describe('runTarget', () => {
   test('counts follow the Kotlin arithmetic', async () => {
     const stats = await run({ parseBad: 2, transformBad: 3, ok: 10 });
@@ -312,7 +249,7 @@ describe('runTarget', () => {
   test('seen counts transformed records, so a dto fanning out to two counts twice and one yielding none counts zero', async () => {
     const slug = nextSlug();
     const sink = recordingSink<number>();
-    const h = harness(slug, bindingOf(fanOutEtl(slug, [2, 0, 1]), sink) as AnyTerminalEtlBinding);
+    const h = harness(slug, bindingOf(fanOutEtl(slug, [2, 0, 1]), sink));
     const stats = await runTarget(h.target, h.deps);
     expect(stats).toMatchObject({ parsed: 3, transformed: 3, upserted: 3, skipped: 0 });
   });
@@ -331,11 +268,22 @@ describe('runTarget', () => {
     expect(stats).toMatchObject({ transformed: 5, upserted: 5, skipped: 0 });
   });
 
-  test('the stats carry the row name, the etl slug and the persisted run id', async () => {
-    const stats = await run({ ok: 1 });
-    const [row] = await db.execute(sql`SELECT id::text AS id, source FROM import_runs WHERE source = ${stats.etlSlug}`);
-    expect(stats.name).toBe(stats.etlSlug);
-    expect(stats.runId.toString()).toBe(row!.id);
+  test('skips reported by mid-stream flushes are folded into skipped, not only the final flush', async () => {
+    const sink = recordingSink<number>({ batchSize: 2, skipPerWrite: 1 });
+    const stats = await run({ ok: 5 }, sink);
+    expect(sink.written).toEqual([2, 2, 1]);
+    expect(stats).toMatchObject({ parsed: 5, transformed: 5, upserted: 2, skipped: 3 });
+  });
+
+  test('the stats carry the row name and etl slug, and import_runs.source is the etl slug, not the row name', async () => {
+    const slug = nextSlug();
+    const h = harness(slug, bindingOf(fakeEtl(slug, { ok: 1 }), recordingSink<number>()));
+    const stats = await runTarget(h.target, h.deps);
+    expect(h.rowName).not.toBe(slug);
+    expect(stats).toMatchObject({ name: h.rowName, etlSlug: slug });
+    const [row] = await db.execute(sql`SELECT id::text AS id, source FROM import_runs WHERE id = ${stats.runId}`);
+    expect(row).toEqual({ id: stats.runId.toString(), source: slug });
+    expect(await importRunsFor(h.rowName)).toEqual([]);
   });
 
   test('a throwing terminal marks the import run failed and rethrows', async () => {
@@ -349,7 +297,7 @@ describe('runTarget', () => {
       },
       transform: (dto) => [{ ok: true, record: dto }],
     };
-    const h = harness(slug, bindingOf(throwing, sink) as AnyTerminalEtlBinding);
+    const h = harness(slug, bindingOf(throwing, sink));
     await expect(runTarget(h.target, h.deps)).rejects.toThrow('boom');
     expect(await importRunsFor(slug)).toEqual([{ status: STATUS_FAILED, seen_count: null, notes: 'boom' }]);
     expect(sink.written).toEqual([]);
@@ -363,7 +311,7 @@ describe('runTarget', () => {
         throw new Error('write exploded');
       },
     };
-    const h = harness(slug, bindingOf(fakeEtl(slug, { ok: 1 }), sink) as AnyTerminalEtlBinding);
+    const h = harness(slug, bindingOf(fakeEtl(slug, { ok: 1 }), sink));
     await expect(runTarget(h.target, h.deps)).rejects.toThrow('write exploded');
     expect(await importRunsFor(slug)).toEqual([{ status: STATUS_FAILED, seen_count: null, notes: 'write exploded' }]);
   });
@@ -377,7 +325,7 @@ describe('runTarget', () => {
       },
       transform: () => [],
     };
-    const h = harness(slug, bindingOf(throwing, recordingSink<number>()) as AnyTerminalEtlBinding);
+    const h = harness(slug, bindingOf(throwing, recordingSink<number>()));
     await expect(runTarget(h.target, h.deps)).rejects.toBe('plain string');
     expect((await importRunsFor(slug))[0]).toMatchObject({ status: STATUS_FAILED, notes: 'plain string' });
   });
@@ -385,8 +333,7 @@ describe('runTarget', () => {
   test('an unregistered adapter is rejected before any run row exists', async () => {
     const slug = nextSlug();
     const h = harness(slug, undefined);
-    const target: ImportTarget = { name: slug, section: 'poi_data', entry: h.deps.registry.poiData[0]!.etls[0]! };
-    await expect(runTarget(target, h.deps)).rejects.toThrow(`no adapter registered for etl slug='${slug}'`);
+    await expect(runTarget(h.target, h.deps)).rejects.toThrow(`no adapter registered for etl slug='${slug}'`);
     expect(await importRunsFor(slug)).toEqual([]);
   });
 
@@ -400,10 +347,9 @@ describe('runTarget', () => {
   test('a row with several etls, or no row of that name, is rejected before any run row exists', async () => {
     const slug = nextSlug();
     const single = fakeEtl(slug, { ok: 1 });
-    const chained = harness(slug, bindingOf(single, recordingSink<number>()) as AnyTerminalEtlBinding, { extraEtls: 1 });
+    const chained = harness(slug, bindingOf(single, recordingSink<number>()), { extraEtls: 1 });
     await expect(runTarget(chained.target, chained.deps)).rejects.toThrow('must declare exactly one etl');
-    const missing = harness(slug, undefined);
-    await expect(runTarget({ name: 'no-such-row', section: 'poi_data', entry: missing.target.entry }, missing.deps)).rejects.toThrow(
+    await expect(runTarget({ name: 'no-such-row', section: 'poi_data' }, chained.deps)).rejects.toThrow(
       "no poi_data row with name='no-such-row'",
     );
     expect(await importRunsFor(slug)).toEqual([]);
@@ -412,7 +358,7 @@ describe('runTarget', () => {
   test('a data_source input with no capture fails before a run is started', async () => {
     const slug = nextSlug();
     const input = `${slug}-input`;
-    const h = harness(slug, bindingOf(fakeEtl(slug, { ok: 1 }), recordingSink<number>()) as AnyTerminalEtlBinding, {
+    const h = harness(slug, bindingOf(fakeEtl(slug, { ok: 1 }), recordingSink<number>()), {
       inputs: [input],
     });
     await expect(runTarget(h.target, h.deps)).rejects.toBeInstanceOf(NoCaptureError);
@@ -421,7 +367,7 @@ describe('runTarget', () => {
 
   test('an input that is not a registered data_source is rejected', async () => {
     const slug = nextSlug();
-    const h = harness(slug, bindingOf(fakeEtl(slug, { ok: 1 }), recordingSink<number>()) as AnyTerminalEtlBinding, {
+    const h = harness(slug, bindingOf(fakeEtl(slug, { ok: 1 }), recordingSink<number>()), {
       inputs: ['not-a-data-source'],
       withDataSources: [],
     });
@@ -442,7 +388,7 @@ describe('runTarget', () => {
       },
       transform: () => [],
     };
-    const h = harness(slug, bindingOf(reading, recordingSink<number>()) as AnyTerminalEtlBinding, { inputs: [input] });
+    const h = harness(slug, bindingOf(reading, recordingSink<number>()), { inputs: [input] });
     await runTarget(h.target, h.deps);
     expect(seen).toEqual([[input], { marker: 'seen-by-etl' }]);
   });
@@ -458,7 +404,7 @@ describe('runTarget', () => {
         return [];
       },
     };
-    const h = harness(slug, bindingOf(reading, recordingSink<number>()) as AnyTerminalEtlBinding, {
+    const h = harness(slug, bindingOf(reading, recordingSink<number>()), {
       subcategory: 'state_park',
     });
     await runTarget(h.target, h.deps);
@@ -467,7 +413,7 @@ describe('runTarget', () => {
 
   test('row errors are logged for only the first ten of each stage', async () => {
     const slug = nextSlug();
-    const h = harness(slug, bindingOf(fakeEtl(slug, { parseBad: 12, transformBad: 11 }), recordingSink<number>()) as AnyTerminalEtlBinding);
+    const h = harness(slug, bindingOf(fakeEtl(slug, { parseBad: 12, transformBad: 11 }), recordingSink<number>()));
     await runTarget(h.target, h.deps);
     const parseWarnings = h.warnings.filter((line) => line.includes(' parse bad '));
     const transformWarnings = h.warnings.filter((line) => line.includes(' transform bad '));
@@ -478,12 +424,12 @@ describe('runTarget', () => {
 
   test('a run with skips logs a skipped warning and a clean run does not', async () => {
     const dirty = nextSlug();
-    const dirtyHarness = harness(dirty, bindingOf(fakeEtl(dirty, { ok: 1, parseBad: 1 }), recordingSink<number>()) as AnyTerminalEtlBinding);
+    const dirtyHarness = harness(dirty, bindingOf(fakeEtl(dirty, { ok: 1, parseBad: 1 }), recordingSink<number>()));
     await runTarget(dirtyHarness.target, dirtyHarness.deps);
     expect(dirtyHarness.warnings.some((line) => line.includes('skipped 1 records'))).toBe(true);
 
     const clean = nextSlug();
-    const cleanHarness = harness(clean, bindingOf(fakeEtl(clean, { ok: 1 }), recordingSink<number>()) as AnyTerminalEtlBinding);
+    const cleanHarness = harness(clean, bindingOf(fakeEtl(clean, { ok: 1 }), recordingSink<number>()));
     await runTarget(cleanHarness.target, cleanHarness.deps);
     expect(cleanHarness.warnings).toEqual([]);
     expect(cleanHarness.infos).toHaveLength(1);
@@ -527,7 +473,7 @@ describe('runTarget through the catalog sinks', () => {
     const slug = nextSlug();
     const ref = `${slug}-cg`;
     const etl = candidateEtl<CampgroundUpsertCandidate>(slug, [campgroundCandidate(ref)], 1, 1);
-    const h = harness(slug, campgroundBinding(etl) as unknown as AnyTerminalEtlBinding);
+    const h = harness(slug, campgroundBinding(etl));
     const stats = await runTarget(h.target, h.deps);
     expect(stats).toMatchObject({ parsed: 3, transformed: 1, upserted: 1, skipped: 2 });
     const [row] = await db.execute(sql`SELECT count(*)::int AS n FROM campgrounds WHERE data_provider_ref = ${ref}`);
@@ -538,7 +484,7 @@ describe('runTarget through the catalog sinks', () => {
     const slug = nextSlug();
     const parentRef = `${slug}-cg`;
     const campgrounds = candidateEtl<CampgroundUpsertCandidate>(`${slug}-parents`, [campgroundCandidate(parentRef)], 0, 0);
-    const parents = harness(`${slug}-parents`, campgroundBinding(campgrounds) as unknown as AnyTerminalEtlBinding);
+    const parents = harness(`${slug}-parents`, campgroundBinding(campgrounds));
     await runTarget(parents.target, parents.deps);
 
     const sites = candidateEtl<CampsiteUpsertCandidate>(
@@ -547,7 +493,7 @@ describe('runTarget through the catalog sinks', () => {
       0,
       0,
     );
-    const h = harness(slug, campsiteBinding(sites) as unknown as AnyTerminalEtlBinding, { section: 'campsite_data' });
+    const h = harness(slug, campsiteBinding(sites), { section: 'campsite_data' });
     const stats = await runTarget(h.target, h.deps);
     expect(stats).toMatchObject({ parsed: 2, transformed: 2, upserted: 1, skipped: 1 });
     expect(await importRunsFor(slug)).toEqual([{ status: STATUS_COMPLETED, seen_count: 2, notes: null }]);
