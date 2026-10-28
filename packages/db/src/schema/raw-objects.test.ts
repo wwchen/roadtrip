@@ -146,6 +146,17 @@ test('grafana_reader reads the metadata view but not the raw payloads', async ()
       has_table_privilege(${GRAFANA_ROLE}, 'public.api_cache', 'SELECT') AS raw
   `);
   expect(privileges).toEqual({ view: true, raw: false });
+
+  const defaults = await db.execute<{ privilege: string }>(sql`
+    SELECT acl.privilege_type AS privilege
+    FROM pg_default_acl default_acl
+    JOIN pg_namespace namespace ON namespace.oid = default_acl.defaclnamespace
+    CROSS JOIN LATERAL aclexplode(default_acl.defaclacl) acl
+    WHERE namespace.nspname = 'public'
+      AND default_acl.defaclobjtype = 'r'
+      AND acl.grantee = ${GRAFANA_ROLE}::regrole
+  `);
+  expect([...defaults]).toEqual([{ privilege: 'SELECT' }]);
 });
 
 test('campground_site_summary aggregates one campground by kind', async () => {

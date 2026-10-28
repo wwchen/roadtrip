@@ -46,9 +46,12 @@ $$;
 -- is infra-layer. This migration only owns schema-adjacent concerns: what the
 -- role can SELECT, and the grafana_api_cache_metadata view.
 --
--- Idempotent, and runs on every Flyway migrate — so drift from `make reset-db`
--- (which DROPs and recreates public but leaves cluster-level roles intact)
--- auto-repairs on the next backend boot. No sidecar container required.
+-- Idempotent. Under Flyway this ran on every migrate, so drift from `make
+-- reset-db` (which DROPs and recreates public but leaves cluster-level roles
+-- intact) auto-repaired on the next backend boot. As a Drizzle migration it runs
+-- exactly once: a later migration that recreates or renames api_cache gets
+-- grafana_reader's SELECT back from the default privileges below, and must
+-- repeat the REVOKE itself. No sidecar container required.
 
 -- Safety net for environments where postgres-init hasn't run (e.g. the
 -- generateJooq testcontainer). No password is set here on purpose; passwords
