@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -142,6 +142,39 @@ async function docker(...args) {
   }
 }
 
+// `docker exec` with a program's exit status, stderr and (optionally) stdin
+// exposed. `docker()` above cannot stand in for it: execFile has no stdin
+// option, and a caller that pipes a dump file into psql needs one. Used for
+// the work that has to happen *inside* the container — a binary COPY piped
+// between two of its databases, pg_dump, psql -f — rather than over TCP.
+async function dockerExec(container, argv, { input } = {}) {
+  return new Promise((resolve, reject) => {
+    const stdio = input === undefined ? ['ignore', 'pipe', 'pipe'] : ['pipe', 'pipe', 'pipe'];
+    const child = spawn('docker', ['exec', ...(input === undefined ? [] : ['-i']), container, ...argv], { stdio });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', (error) =>
+      reject(error.code === 'ENOENT' ? new Error('docker is not installed or not on PATH') : error),
+    );
+    child.on('close', (code) => {
+      if (code === 0) resolve(stdout);
+      else reject(new Error(`docker exec ${argv[0]} exited ${code}: ${stderr.trim() || stdout.trim()}`));
+    });
+    if (input !== undefined) {
+      child.stdin.on('error', () => {});
+      child.stdin.end(input);
+    }
+  });
+}
+
 async function waitForPostgres(container) {
   for (let attempt = 0; attempt < READY_ATTEMPTS; attempt += 1) {
     try {
@@ -179,6 +212,12 @@ export async function withPostgis(use) {
     await waitForPostgres(container);
     const port = await hostPort(container);
     return await use({
+      containerName() {
+        return container;
+      },
+      async exec(argv, options) {
+        return dockerExec(container, argv, options);
+      },
       async createDatabase(name) {
         await docker(
           'exec',
