@@ -66,6 +66,7 @@ Five conditions the spec implies that no task's own tests would otherwise exerci
 - Produces:
   - `loadPoiRegistry(yamlPath: string): PoiRegistry`
   - `interface PoiRegistry { dataSources: DataSourceEntry[]; poiData: PoiDataEntry[]; campsiteData: CampsiteDataEntry[]; bookingProviders: BookingProviderEntry[]; dataSource(slug: string): DataSourceEntry | undefined; poiDataByName(name): PoiDataEntry | undefined; campsiteDataByName(name): CampsiteDataEntry | undefined }`
+  - `interface DataSourceEntry { slug: string; name: string; dependsOn?: string[]; fetcher: { executor?: string; filename?: string; args?: Record<string, string>; timeoutSec?: number; outputDirPrefix: string } }` — field for field with `DataSourceEntry.kt` and `Fetcher.kt`. Task 2 resolves a capture directory from `fetcher.outputDirPrefix`, so that field is load-bearing.
   - `interface EtlEntry { slug: string; adapter: string; inputs: string[]; args: Record<string, string>; geometry?: GeometryPolicy }`
   - `type AgencyConfig = { kind: 'constant'; value: string } | { kind: 'derived'; field: string }`, mirroring `AgencyConfig.kt`
   - `interface GeometryPolicy { sources: GeometrySourceSpec[]; match: MatchPolicy }`, `interface GeometrySourceSpec { input: string; format: GeometryFormat; state?: string; nameProperty?: string }`, `interface MatchPolicy { fuzzyThreshold: number; parentFallback: boolean }` — field for field with `GeometryPolicy.kt`, including its default `fuzzyThreshold`
@@ -206,6 +207,11 @@ test('names sort by code unit, not by locale or number', () => {
     .toEqual(['facility-10', 'facility-9']);
 });
 
+test('an integer wider than IEEE-754 exact range survives parsing with its digits intact', () => {
+  const envelope = parseEnvelope(fileHolding('{"payload":{"photo_id":72157625256027958}}'));
+  expect(JSON.stringify(envelope.payload)).toContain('72157625256027958');
+});
+
 test('envelope(slug) rejects a multi-part input and soleEnvelopes rejects two inputs', () => {
   const bundle = new InputBundle(new Map([['a', [e1, e2]], ['b', [e1]]]));
   expect(() => bundle.envelope('a')).toThrow(/multi-part/);
@@ -224,6 +230,8 @@ Expected: FAIL — module not found.
 - [ ] **Step 3: Implement `envelope.ts`, `raw-capture-store.ts`, `input-bundle.ts`**
 
 Read synchronously (`readFileSync`); the orchestrator is a batch job and streaming buys nothing against a 60-page capture. `payload` stays `unknown` — per-adapter parsing owns its shape.
+
+`parseEnvelope` owns Review Focus #5. A bare `JSON.parse` rounds an integer wider than IEEE-754 exact range, while Kotlin's `JsonElement` keeps the literal digits, so such a value in an opaque passthrough column would be silent permanent corruption that the diff reports as an unexplainable mismatch. Preserve the digits: a `JSON.parse` reviver cannot see the raw text, so use a source-text-preserving parse for integers outside `Number.MIN_SAFE_INTEGER..Number.MAX_SAFE_INTEGER` — carry them as `BigInt` and have the writer render them unquoted, or carry the raw literal in a wrapper the opaque encoder emits verbatim. Whichever is chosen, `JSON.stringify` of the parsed payload must reproduce the original digits, and the codec's opaque passthrough must accept the carrier. The sampled captures contain no such value; that is a sample over three pages per source, not a proof, and the cost of being wrong is undetectable corruption rather than a failure.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -342,7 +350,7 @@ test('an integer wider than IEEE-754 exact range in source_payload is stored wit
 });
 ```
 
-The last test is expected to **fail** against a plain `JSON.parse` pipeline; it is the Review Focus #5 probe. If it fails, the fix is in the envelope parser (Task 2's `parseEnvelope`) — parse payloads with a reviver or a big-int-preserving parser and carry such values as a type the codec passes through unchanged — not in this repo layer. Record which way it went in the commit message.
+The last test is the end-to-end half of Review Focus #5; Task 2's `parseEnvelope` already carries the parse-side half, so this one should be green on first run. If it is not, the gap is in Task 2's carrier or in the codec's opaque passthrough accepting it — fix it there, not by special-casing this repo layer.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -464,8 +472,9 @@ git commit -m "feat(worker): port the ETL orchestrator, transform context and sh
 - Consumes: Task 4's CLI; `withPostgis` from `scripts/schema-reference.mjs`.
 - Produces:
   - from `importer-diff-columns.mjs`: `DIFFED_TABLES` — for each of `campgrounds`, `campsites`, `tesla_superchargers`, `planet_fitness_locations`, `pois`, `import_runs`: its key columns, its ignored columns with a reason per entry, and (for `pois`) the link table and owner key it joins through — and `diffSql(table)`, the one statement per table whose compared column list is derived from `getTableConfig`
-  - from `importer-differential.mjs`: `runDifferential({ rawDir, staticDir, targets, referenceDump })` → `{ differences: Difference[], counts: Record<string, number> }`, and `interface Difference { table: string; key: string[]; kind: 'missing_in_kotlin' | 'missing_in_typescript' | 'differs'; columns: string[] }`
-  - Gradle: `./gradlew :backend:importCatalog --args="--jdbc-url <url> --raw-dir <dir> --static-dir <dir> [--target <name>]"`
+  - from `importer-differential.mjs`: `runDifferential({ rawDir, staticDir, targets, sources, referenceDump, maxDifferences, emitSeed })` → `{ differences: Difference[], counts: Record<string, number> }`, and `interface Difference { table: string; key: string[]; kind: 'missing_in_kotlin' | 'missing_in_typescript' | 'differs'; columns: string[] }`
+  - the CLI flags `--target <name>` (repeatable), `--source <slug>` (repeatable; restricts which `data_source` captures *both* importers read, for Task 14's CI subset fallback — it must constrain the Kotlin side too or the diff is meaningless), `--reference-dump <path>`, `--max-differences <n>` (default 50), `--emit-seed <path>` (after a clean diff, `pg_dump` the TypeScript database plus a provenance sidecar, for spec §8.1's seed)
+  - Gradle: `./gradlew :backend:importCatalog --args="--jdbc-url <url> --raw-dir <dir> --static-dir <dir> [--target <name>] [--source <slug>]"`
 
 How it runs:
 
