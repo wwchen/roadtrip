@@ -31,7 +31,7 @@ ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]
 # in its filtered Docker context.
 FROM backend-base AS backend-local
 
-FROM node:22-alpine AS frontend
+FROM node:26-alpine AS frontend
 
 WORKDIR /src
 
