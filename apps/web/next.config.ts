@@ -5,7 +5,6 @@ import type { NextConfig } from 'next';
 const WORKSPACE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 const config: NextConfig = {
-  output: 'standalone',
   outputFileTracingRoot: WORKSPACE_ROOT,
 };
 
