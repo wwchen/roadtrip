@@ -267,6 +267,18 @@ capture, so the data for it already exists. It belongs with step 5's seed-and-re
 story rather than here, because `--prove-update-keys` already proves the column list
 completely and deterministically.
 
+**Whoever builds it should expect older captures not to parse, and not read that as a
+port defect.** The captures span months and both the envelope and the payload drift.
+Two of those ten sources already demonstrate it: `tesla-index`'s oldest capture carries
+`fetcher_version: "0-migrated"` against `"1"` for the other eight, and three of the
+`aspira-dictionaries-*` captures put nested objects under `response.headers`, which
+`ResponseMeta.headers` — a `Map<String, String>` — rejects outright, so *both*
+importers refuse them. None of the three is the newest in its source, which is the only
+reason today's single-pass run is unaffected. A pass-1 failure on an old capture is the
+vendor's shape changing, not the refresh property breaking. The envelope records
+`fetcher_version`, so comparing the pass-1 capture's version against the newest's is a
+cheap pre-check before anything is debugged.
+
 **The diff must compare JSONB as `jsonb`, not as `::text`.** Task 7 found that Kotlin
 writes `12.0` where TypeScript writes `12`: equal under the `jsonb` `=` operator,
 different as text. A text comparison would report a spurious difference on a large
