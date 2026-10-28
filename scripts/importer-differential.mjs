@@ -495,8 +495,25 @@ async function readProvenance(dumpPath) {
 // --data-only --disable-triggers: the schema comes from Flyway in the database
 // this is restored into, and pg_dump emits data in catalog order rather than
 // foreign-key order, so campsites can land before their campgrounds.
-const REFERENCE_DUMP_FLAGS = ['--data-only', '--no-owner', '--no-privileges', '--disable-triggers'];
-const SEED_DUMP_FLAGS = ['--no-owner', '--no-privileges'];
+//
+// Restricted to the tables the diff reads, which is also what keeps the
+// restore from colliding with the database it lands in: a whole-database
+// data-only dump of a migrated database carries flyway_schema_history and
+// PostGIS's spatial_ref_sys, and re-inserting either into another migrated
+// database violates its primary key.
+const REFERENCE_DUMP_FLAGS = [
+  '--data-only',
+  '--no-owner',
+  '--no-privileges',
+  '--disable-triggers',
+  ...COPIED_TABLES.map((table) => `--table=${TYPESCRIPT_SCHEMA}.${table.name}`),
+];
+
+// --schema=public, because by the time a clean diff has been reported the
+// TypeScript database also holds the `reference` schema this harness filled
+// with the Kotlin side's rows, and a seed of the TypeScript importer's output
+// must not carry the other importer's.
+const SEED_DUMP_FLAGS = ['--no-owner', '--no-privileges', `--schema=${TYPESCRIPT_SCHEMA}`];
 
 async function dumpDatabase(postgres, user, database, flags) {
   return postgres.exec([PG_DUMP, '-U', user, '-d', database, ...flags]);
