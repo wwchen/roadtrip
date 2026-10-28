@@ -513,7 +513,11 @@ test('an encoded row read back and decoded preserves the shape', async () => {
 });
 ```
 
-The third test goes through `encode` and `decode` explicitly. Drizzle's `jsonb().$type<T>()` only asserts a TypeScript type — it applies no codec — so asserting `row.amenities` directly would pass on parsed JSON and test nothing. Columns are declared `.$type<T>()` and callers encode and decode at the boundary.
+The third test goes through `encode` and `decode` explicitly. Drizzle's `jsonb().$type<T>()` only asserts a TypeScript type — it applies no codec — so asserting `row.amenities` directly would pass on parsed JSON and test nothing.
+
+**The JSONB columns carry no `.$type<>` at all**, which the whole-branch review settled after this task landed. The annotation asserted the *decoded* domain type for the *encoded* value — `campgrounds.amenities` was `$type<CampgroundAmenity[]>` while the encoder omits `present` when it is `true`, so `row.amenities.filter(a => a.present)` compiled clean and reported every amenity absent. The columns now type as `unknown`, which forces callers through `decodeCatalogJson`. That is the same defect class as the campsite `price`/`schedule` columns typed as the campground shapes, and dropping the annotation closes it everywhere rather than in one place.
+
+The cost, accepted knowingly: `unknown` also removes compile-time checking on the *write* side, so `db.insert(campgrounds).values({ amenities: … })` will accept an unencoded value. The codec is the only guard on both directions now.
 
 The first test is not defensive style — the Kotlin importer writes these columns with `ignoreUnknownKeys = true`, so real rows will carry keys this decoder has never seen during step 4's differential run.
 
