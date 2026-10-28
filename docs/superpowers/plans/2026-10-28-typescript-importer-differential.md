@@ -397,13 +397,16 @@ git commit -m "feat(worker): port the catalog write layer and the provider refs"
   - `class BatchAccumulator<OUT> { add(record: OUT): Promise<FlushCounts>; flush(): Promise<FlushCounts> }`
   - `interface EtlStats { name: string; etlSlug: string; runId: bigint; parsed: number; transformed: number; upserted: number; skipped: number }`
   - `runTarget(target: ImportTarget, deps: { db: Db; store: RawCaptureStore; registry: PoiRegistry; rawDir: string }): Promise<EtlStats>`
-  - `adapterRegistry: Record<string, (entry: EtlEntry) => TerminalEtlBinding>` — keyed by the YAML `adapter` name, empty at the end of this task
+  - `adapterRegistry: Record<string, (entry: EtlEntry) => TerminalEtlBinding>` — keyed by the YAML `adapter` name, empty at the end of this task. Kotlin keys its two factory maps the same way (`poiAdapters`, `campsiteAdapters`) and keeps a *separate* slug-keyed map (`productionTerminalEtlDefinitions`) for the implemented set.
+  - `implementedSlugs(registry: PoiRegistry, adapters: typeof adapterRegistry): Set<string>` — the etl slugs whose adapter name is registered. `importTargets` compares its second argument against etl **slugs**, not adapter names, so passing `Object.keys(adapterRegistry)` straight in yields zero targets for every production row even once all eight adapter tasks are done. That is how Kotlin's `RegistryTargets` works too: its `implemented` is `EtlOrchestrator.registry.keys`, which is slug-keyed.
   - `stripTags(value: string): string`, `pointGeoJson(lng: number, lat: number): string`
   - `campsiteKindRecGov(type?: string): VendorKind`, `campsiteKindCampflare`, `campsiteKindAspira`, `campsiteKindReserveCalifornia`
 
 The counting arithmetic must match `EtlOrchestrator.runTerminal` exactly, because `import_runs.seen_count` is a diffed column: `seen = transformOk + parseBad + transformBad`, `skipped = parseBad + transformBad + repoSkipped`. A terminal that throws marks the run failed and rethrows.
 
-The CLI takes `--raw-dir`, `--static-dir`, `--database-url`, repeatable `--target <name>`, and `--list`. With no `--target` it runs every target from `importTargets(registry, new Set(Object.keys(adapterRegistry)))`, sequentially, in registry order.
+The CLI takes `--raw-dir`, `--static-dir`, `--database-url`, repeatable `--target <name>`, and `--list`. With no `--target` it runs every target from `importTargets(registry, implementedSlugs(registry, adapterRegistry))`, sequentially, in registry order.
+
+`stripTags` must reproduce **Java's** whitespace semantics, not JavaScript's. Kotlin's `Regex("\\s+")` compiles to Java's `\s`, which is ASCII-only (`[ \t\n\x0B\f\r]`), and `String.trim()` uses `Character.isWhitespace`, which excludes U+00A0. JavaScript's `\s` and `String.prototype.trim` both include it. So a naive port rewrites every no-break space in a description, and the newest `recgov-campgrounds` capture alone holds 659 non-ASCII whitespace characters with 46 more in Campflare's — all flowing into `short_description`, `medium_description` and `long_description`, which the diff compares. Port the Java behaviour and pin it with a test containing U+00A0.
 
 - [ ] **Step 1: Write the failing tests**
 
