@@ -140,7 +140,8 @@ const COMPONENT_LOCAL = new Set([
   '--rt-place-verdict-detail-size',
   // The alert offer's one line: declared in domain/place/alert-row.css.
   '--rt-alert-offer-gap',
-  // The open cell's add-to-cart panel: declared in domain/place/site-cart.css.
+  // The open cell's add-to-cart panel: domain/place/site-cart.css, except the width,
+  // which SiteCartPopover.tsx sets because it also measures against it.
   '--rt-site-cart-width',
   '--rt-site-cart-z',
   '--rt-site-cart-gap',

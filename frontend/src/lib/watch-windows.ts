@@ -72,13 +72,6 @@ export function normalizeWatchCapabilities(
   };
 }
 
-/**
- * Whether this campground can notify at all.
- *
- * Either channel counts: a provider with email but no Slack still supports alerts,
- * and gating on Slack alone would hide the feature from anyone whose provider
- * happens to be configured the other way.
- */
 export type CartReach = 'ready' | 'gated' | 'unsupported';
 
 export function cartReach(state: AddToCartState): CartReach {
@@ -93,6 +86,13 @@ export function cartReach(state: AddToCartState): CartReach {
   }
 }
 
+/**
+ * Whether this campground can notify at all.
+ *
+ * Either channel counts: a provider with email but no Slack still supports alerts,
+ * and gating on Slack alone would hide the feature from anyone whose provider
+ * happens to be configured the other way.
+ */
 export function supportsWatchAlerts(capabilities: WatchCapabilities): boolean {
   return (
     capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY) ||

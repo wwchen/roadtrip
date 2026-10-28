@@ -7,6 +7,21 @@ import { jsonPostOk, type RequestOptions } from './http';
 
 const ADD_TO_CART_URL = '/api/booking/add-to-cart';
 
+const SECONDS_IN_MS = 1_000;
+
+export const CART_HOLD_DEADLINE_MS = 240 * SECONDS_IN_MS;
+
+export const HOLD_UNANSWERED = 'hold_unanswered';
+
+export class CartHoldUnanswered extends Error {
+  readonly code = HOLD_UNANSWERED;
+
+  constructor() {
+    super(`add-to-cart: no answer within ${CART_HOLD_DEADLINE_MS}ms`);
+    this.name = 'CartHoldUnanswered';
+  }
+}
+
 export type AddToCartFields = AddToCartRequestDto;
 
 export type AddToCartResponse = AddToCartResponseDto;
@@ -33,9 +48,19 @@ export function addToCartFailure(err: unknown): AddToCartFailure {
   };
 }
 
-export function addToCart(
+export async function addToCart(
   fields: AddToCartFields,
-  options: RequestOptions = {},
+  { signal }: RequestOptions = {},
 ): Promise<AddToCartResponse> {
-  return jsonPostOk<AddToCartResponse>(ADD_TO_CART_URL, fields, options);
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), CART_HOLD_DEADLINE_MS);
+  try {
+    return await jsonPostOk<AddToCartResponse>(ADD_TO_CART_URL, fields, {
+      signal: signal ? AbortSignal.any([signal, deadline.signal]) : deadline.signal,
+    });
+  } catch (err) {
+    throw deadline.signal.aborted ? new CartHoldUnanswered() : err;
+  } finally {
+    clearTimeout(timer);
+  }
 }

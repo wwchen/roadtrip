@@ -119,11 +119,29 @@ describe('nextCartActions, answers', () => {
 });
 
 describe('nextCartActions, the hold lapsing', () => {
-  test('an expired hold stops being claimed at all', () => {
+  test('an expired hold says it lapsed rather than vanishing into a fresh offer', () => {
     const held = heldOn(requested(NO_CART_ACTIONS));
     const lapsed = nextCartActions(held, { type: 'expired', cell });
 
-    expect(cartActionFor(lapsed, '42', '2026-07-04')).toBeNull();
+    expect(cartActionFor(lapsed, '42', '2026-07-04')).toEqual({
+      kind: 'lapsed',
+      cell,
+      cartUrl: CART,
+    });
+  });
+
+  test('a lapsed hold keeps the cart it was in, since our clock is only a guess', () => {
+    const held = nextCartActions(requested(NO_CART_ACTIONS), {
+      type: 'held',
+      cell,
+      cartUrl: CART,
+      heldAt: HELD_AT,
+      holder: 'BC Parks',
+    });
+
+    expect(nextCartActions(held, { type: 'expired', cell })).toEqual(
+      cartActionsOf({ kind: 'lapsed', cell, cartUrl: CART, holder: 'BC Parks' }),
+    );
   });
 
   test('expiring one hold leaves the others standing', () => {
@@ -131,7 +149,7 @@ describe('nextCartActions, the hold lapsing', () => {
     const second = heldOn(requested(first, otherSite), otherSite);
     const lapsed = nextCartActions(second, { type: 'expired', cell });
 
-    expect(kindsIn(lapsed)).toEqual(['held@43|2026-07-04']);
+    expect(kindsIn(lapsed)).toEqual(['held@43|2026-07-04', 'lapsed@42|2026-07-04']);
   });
 
   test('a hold may be taken again once the last one lapsed', () => {
@@ -140,13 +158,32 @@ describe('nextCartActions, the hold lapsing', () => {
     expect(cartActionFor(requested(lapsed), '42', '2026-07-04')?.kind).toBe('pending');
   });
 
-  test('expiry applies to a hold and to nothing else', () => {
+  test('a cell that lapsed and was held again carries the newer hold', () => {
+    const lapsed = nextCartActions(heldOn(requested(NO_CART_ACTIONS)), { type: 'expired', cell });
+    const again = heldOn(requested(lapsed), cell, HELD_AT + CART_HOLD_MS);
+
+    expect(cartActionFor(again, '42', '2026-07-04')).toMatchObject({
+      kind: 'held',
+      heldAt: HELD_AT + CART_HOLD_MS,
+    });
+  });
+
+  test('expiry applies to a hold and to nothing else, a lapsed one included', () => {
     const pending = requested(NO_CART_ACTIONS);
     const failed = failedOn(pending);
+    const lapsed = nextCartActions(heldOn(requested(NO_CART_ACTIONS)), { type: 'expired', cell });
 
     expect(nextCartActions(pending, { type: 'expired', cell })).toBe(pending);
     expect(nextCartActions(failed, { type: 'expired', cell })).toBe(failed);
+    expect(nextCartActions(lapsed, { type: 'expired', cell })).toBe(lapsed);
     expect(nextCartActions(NO_CART_ACTIONS, { type: 'expired', cell })).toBe(NO_CART_ACTIONS);
+  });
+
+  test('a lapsed hold never counts as one in flight', () => {
+    const lapsed = nextCartActions(heldOn(requested(NO_CART_ACTIONS)), { type: 'expired', cell });
+
+    expect(holdInFlight(lapsed)).toBeNull();
+    expect(holdExpiresAt(lapsed.get(cellKey(cell)) as CartAction)).toBeNull();
   });
 });
 

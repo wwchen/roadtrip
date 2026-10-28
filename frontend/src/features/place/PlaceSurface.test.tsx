@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { QueryClientProvider } from '@tanstack/react-query';
 import { STAY_ANSWER_EVENT, STAY_DONE_EVENT } from '@/api/availability-api';
 import { addLocalDays, localToday, localYmd } from '@/lib/local-date';
+import { longDayLabel } from '@/lib/week-labels';
+import { flattenHydratedPoi } from '@/lib/poi';
 import { queryKeys } from '@/queries/keys';
 import { bookingCopy, gateCopy, matrixCopy, nightsCopy, placeCopy, stayCopy } from '@/lib/strings';
 import { eventStreamResponse, jsonResponse, type StubEvent } from '@/test/fetch-stub';
@@ -47,32 +49,38 @@ const plainDetail = (category: string, name: string) =>
     properties: { category, name },
   });
 
+const SITE_ID = 11;
+const SITE_NAME = '12';
+const SITE_LOOP = 'Loop A';
+const ONE_NIGHT = 1;
+
+const stayStart = () => localYmd(localToday());
+const stayEnd = () => localYmd(addLocalDays(localToday(), ONE_NIGHT));
+
+const openCellLabel = () =>
+  `${SITE_LOOP} / ${SITE_NAME} ${longDayLabel(stayStart())}: available`;
+
 const grid = () =>
   jsonResponse({
     poi_id: POI_ID,
-    start_date: '2026-10-27',
-    end_date: '2026-10-28',
+    start_date: stayStart(),
+    end_date: stayEnd(),
     state: 'available',
     days: [],
     watch_capabilities: { trigger_kinds: [], add_to_cart: { state: 'unsupported' } },
   });
-
-const SITE_ID = 11;
-const SITE_NAME = '12';
-const SITE_LOOP = 'Loop A';
-const STAY_START = '2026-10-27';
 
 const HOLDER = 'Recreation.gov';
 
 const gridWithSites = (cart: unknown = { state: 'unsupported' }) => () =>
   jsonResponse({
     poi_id: POI_ID,
-    start_date: STAY_START,
-    end_date: '2026-10-28',
+    start_date: stayStart(),
+    end_date: stayEnd(),
     state: 'available',
     days: [
       {
-        date: STAY_START,
+        date: stayStart(),
         status: 'available',
         watchable: false,
         cells: { [SITE_ID]: { status: 'available', watchable: false } },
@@ -312,7 +320,6 @@ describe('PlaceSurface, at the full detent', () => {
 
 describe('PlaceSurface, with no dates pinned', () => {
   const DISCOVERY_NIGHTS = 14;
-  const ONE_NIGHT = 1;
 
   const stayAsked = () => {
     const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter((made) =>
@@ -536,7 +543,7 @@ describe('PlaceSurface, the cart gate the week served', () => {
     });
     mount('from-map');
     await raiseToFull();
-    const cellLabel = `${SITE_LOOP} / ${SITE_NAME} Tue, Oct 27: available`;
+    const cellLabel = openCellLabel();
     fireEvent.click(await screen.findByRole('button', { name: matrixCopy.cellCart(cellLabel) }));
     return screen.getByRole('group', { name: bookingCopy.addToCart });
   };
@@ -570,9 +577,49 @@ describe('PlaceSurface, the cart gate the week served', () => {
     mount('from-map');
     await raiseToFull();
 
-    const cellLabel = `${SITE_LOOP} / ${SITE_NAME} Tue, Oct 27: available`;
+    const cellLabel = openCellLabel();
     expect(await screen.findByLabelText(cellLabel)).toHaveTextContent('A');
     expect(screen.queryByRole('button', { name: matrixCopy.cellCart(cellLabel) })).toBeNull();
+  });
+
+  test('a hold on one place cannot lock the cart on the next one opened', async () => {
+    const OTHER_POI_ID = POI_ID + 1;
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], {
+      grid: gridWithSites({ state: 'ready' }),
+      catalog: catalog([namedSite]),
+    });
+
+    const client = createTestQueryClient();
+    const view = render(
+      <QueryClientProvider client={client}>
+        <PlaceSurface poiId={POI_ID} arrival="from-map" />
+      </QueryClientProvider>,
+    );
+    await raiseToFull();
+
+    await act(async () => {
+      await client.prefetchQuery({
+        queryKey: queryKeys.pois.detail(OTHER_POI_ID),
+        queryFn: async () => flattenHydratedPoi(await detail().json()),
+      });
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: matrixCopy.cellCart(openCellLabel()) }));
+    fireEvent.click(screen.getByRole('button', { name: bookingCopy.addToCart }));
+    expect(screen.getByRole('button', { name: new RegExp(bookingCopy.addToCart) })).toBeDisabled();
+
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <PlaceSurface poiId={OTHER_POI_ID} arrival="from-map" />
+      </QueryClientProvider>,
+    );
+    await raiseToFull();
+
+    fireEvent.click(await screen.findByRole('button', { name: matrixCopy.cellCart(openCellLabel()) }));
+    const offer = screen.getByRole('button', { name: new RegExp(bookingCopy.addToCart) });
+    expect(offer).toBeEnabled();
+    expect(offer).not.toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryByText(bookingCopy.holdBusy)).toBeNull();
   });
 
   test('raising to full still issues no request, cart and all', async () => {

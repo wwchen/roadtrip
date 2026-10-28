@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { HOLD_UNANSWERED } from '@/api/booking-api';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import { bookingCopy, gateCopy } from '@/lib/strings';
 import { SiteCartPopover, type SiteCartPopoverProps } from './SiteCartPopover';
@@ -177,6 +178,44 @@ describe('SiteCartPopover', () => {
 
     fireEvent.click(step());
     expect(onAddToCart).toHaveBeenCalledTimes(1);
+  });
+
+  test('a lapsed hold says so rather than flipping back to a bare offer', () => {
+    show({
+      actions: cartActionsOf({ kind: 'lapsed', cell: CELL, cartUrl: CART_URL, holder: HOLDER }),
+    });
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(bookingCopy.holdLapsedTitle);
+    expect(status).toHaveTextContent(bookingCopy.holdLapsed(HOLDER));
+    expect(screen.getByRole('link', { name: bookingCopy.openCart(HOLDER) })).toHaveAttribute(
+      'href',
+      CART_URL,
+    );
+  });
+
+  test('a lapsed hold still offers the site, because the vendor did release it', () => {
+    const onAddToCart = vi.fn();
+    show({
+      gate: { state: 'ready', onAddToCart },
+      actions: cartActionsOf({ kind: 'lapsed', cell: CELL, cartUrl: CART_URL }),
+    });
+
+    expect(step()).toBeEnabled();
+    fireEvent.click(step());
+    expect(onAddToCart).toHaveBeenCalledExactlyOnceWith(CAMPSITE_ID, NIGHT);
+  });
+
+  test('a hold we stopped waiting for never claims it failed', () => {
+    show({
+      actions: cartActionsOf({ kind: 'failed', cell: CELL, code: HOLD_UNANSWERED }),
+    });
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(bookingCopy.holdUnansweredTitle);
+    expect(alert).toHaveTextContent(bookingCopy.holdUnanswered());
+    expect(alert).not.toHaveTextContent(bookingCopy.holdFailed);
+    expect(step()).toBeEnabled();
   });
 
   test('an answer about another cell is not read as this one', () => {

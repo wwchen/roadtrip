@@ -94,6 +94,7 @@
 }
 
 .rt-site-cart__held,
+.rt-site-cart__lapsed,
 .rt-site-cart__failed {
   display: flex;
   flex-direction: column;
@@ -114,6 +115,7 @@
   color: var(--rt-success);
 }
 
+.rt-site-cart__lapsed .rt-site-cart__title,
 .rt-site-cart__failed .rt-site-cart__title {
   color: var(--rt-warn);
 }

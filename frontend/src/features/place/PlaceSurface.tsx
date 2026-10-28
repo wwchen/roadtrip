@@ -97,7 +97,7 @@ export function PlaceSurface({ poiId, arrival, onClose }: PlaceSurfaceProps) {
   const stale = query.isError ? <RefreshFailed onRetry={() => void query.refetch()} /> : null;
 
   return id !== null && availabilitySupported(feature.properties) ? (
-    <StayPlace feature={feature} poiId={id} Poi={Poi} arrival={arrival} stale={stale} onClose={onClose} />
+    <StayPlace key={id} feature={feature} poiId={id} Poi={Poi} arrival={arrival} stale={stale} onClose={onClose} />
   ) : (
     <PlainPlace feature={feature} Poi={Poi} arrival={arrival} stale={stale} onClose={onClose} />
   );

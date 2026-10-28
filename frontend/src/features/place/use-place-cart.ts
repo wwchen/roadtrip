@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef } from 'react';
 import { signIn } from '@/api/auth-api';
 import { addToCart, addToCartFailure } from '@/api/booking-api';
 import {
@@ -30,7 +30,9 @@ export function usePlaceCart(capabilities: WatchCapabilities): PlaceCart {
   const standing = useRef<CartActions>(NO_CART_ACTIONS);
   const expiries = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
-  standing.current = actions;
+  useLayoutEffect(() => {
+    standing.current = actions;
+  }, [actions]);
 
   const hold = useCallback((campsiteId: string, date: string) => {
     if (running.current) return;

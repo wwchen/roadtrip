@@ -51,6 +51,14 @@ export const bookingCopy = {
   holdFailed: 'Could not hold the site',
   /** Why a second cart control is inert: the companion serialises a profile's work. */
   holdBusy: 'One hold at a time; wait for the running one to finish.',
+  /** We gave up on the answer. Neither sentence may claim the hold failed — we cannot know. */
+  holdUnansweredTitle: 'No answer from the booking site',
+  holdUnanswered: (holder?: string) =>
+    `We stopped waiting. The hold may still have landed — check your ${holder ?? UNNAMED_BOOKING_LABEL} cart before trying again.`,
+  /** Our own clock, not the vendor's, so the sentence says the site may still be held. */
+  holdLapsedTitle: 'That hold has run out',
+  holdLapsed: (holder?: string) =>
+    `Our ${CART_HOLD_MINUTES} minutes are up. It may still be in your ${holder ?? UNNAMED_BOOKING_LABEL} cart — check there before holding it again.`,
   heldTitle: (holder?: string) => `Site held in your ${holder ? `${holder} ` : ''}cart`,
   openCart: (holder?: string) => `Open ${holder ?? 'your'} cart ↗`,
   checkOutSoon: (holder?: string) =>

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { CART_HOLD_DEADLINE_MS, HOLD_UNANSWERED } from '@/api/booking-api';
 import { cartActionFor, holdInFlight } from '@/domain/place/cart-action';
 import { CART_HOLD_MS } from '@/lib/cart-hold';
 import { jsonResponse } from '@/test/fetch-stub';
@@ -217,7 +218,7 @@ describe('usePlaceCart, the vendor deadline', () => {
     expect(actionAt(hook)).toMatchObject({ kind: 'held' });
   });
 
-  test('once the deadline passes the UI stops claiming the hold', async () => {
+  test('once the deadline passes the hold reads as lapsed, not as a fresh offer', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const hook = await holdThenWait();
 
@@ -225,8 +226,7 @@ describe('usePlaceCart, the vendor deadline', () => {
       vi.advanceTimersByTime(CART_HOLD_MS);
     });
 
-    expect(actionAt(hook)).toBeNull();
-    expect(hook.result.current.actions.size).toBe(0);
+    expect(actionAt(hook)).toMatchObject({ kind: 'lapsed', cartUrl: CART_URL, holder: HOLDER });
   });
 
   test('a lapsed hold may be taken again', async () => {
@@ -243,6 +243,18 @@ describe('usePlaceCart, the vendor deadline', () => {
     });
 
     expect(actionAt(hook)?.kind).toBe('held');
+  });
+
+  test('a lapsed hold leaves no timer behind', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const hook = await holdThenWait();
+
+    await act(async () => {
+      vi.advanceTimersByTime(CART_HOLD_MS);
+    });
+
+    expect(actionAt(hook)?.kind).toBe('lapsed');
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   test('unmounting drops the deadline rather than firing into a gone tree', async () => {
@@ -265,5 +277,57 @@ describe('usePlaceCart, the vendor deadline', () => {
     await waitFor(() => expect(actionAt(hook)?.kind).toBe('failed'));
 
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('usePlaceCart, a hold that never answers', () => {
+  test('it gives up at its own deadline and releases the lock for the whole grid', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { hook, hold } = ready();
+    await act(async () => {
+      hold(CAMPSITE_ID, NIGHT);
+    });
+    expect(actionAt(hook)?.kind).toBe('pending');
+
+    await act(async () => {
+      vi.advanceTimersByTime(CART_HOLD_DEADLINE_MS);
+    });
+    await waitFor(() => expect(actionAt(hook)?.kind).toBe('failed'));
+
+    expect(actionAt(hook)).toMatchObject({ code: HOLD_UNANSWERED });
+    expect(holdInFlight(hook.result.current.actions)).toBeNull();
+
+    vi.stubGlobal('fetch', vi.fn(async () => held()));
+    await act(async () => {
+      hold(OTHER_CAMPSITE_ID, OTHER_NIGHT);
+    });
+    await waitFor(() =>
+      expect(actionAt(hook, OTHER_CAMPSITE_ID, OTHER_NIGHT)?.kind).toBe('held'),
+    );
+  });
+
+  test('a hold that answers in time is never given up on', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.stubGlobal('fetch', vi.fn(async () => held()));
+
+    const { hook, hold } = ready();
+    await act(async () => {
+      hold(CAMPSITE_ID, NIGHT);
+    });
+    await waitFor(() => expect(actionAt(hook)?.kind).toBe('held'));
+
+    await act(async () => {
+      vi.advanceTimersByTime(CART_HOLD_DEADLINE_MS);
+    });
+
+    expect(actionAt(hook)).toMatchObject({ kind: 'held' });
   });
 });

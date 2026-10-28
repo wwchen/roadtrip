@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SiteCartPopover, type SiteCartPopoverProps } from './SiteCartPopover';
+import { HOLD_UNANSWERED } from '@/api/booking-api';
 import { NO_CART_ACTIONS, cartActionsOf } from './cart-action';
 
 const FRAME: CSSProperties = { width: 390, height: 300, padding: 16, boxSizing: 'border-box' };
@@ -128,5 +129,21 @@ export const Failed: Story = {
       code: 'cart_not_added',
       holder: HOLDER,
     }),
+  },
+};
+
+export const Lapsed: Story = {
+  args: {
+    ...BASE,
+    gate: { state: 'ready', onAddToCart: noop },
+    actions: cartActionsOf({ kind: 'lapsed', cell: CELL, cartUrl: CART_URL, holder: HOLDER }),
+  },
+};
+
+export const Unanswered: Story = {
+  args: {
+    ...BASE,
+    gate: { state: 'ready', onAddToCart: noop },
+    actions: cartActionsOf({ kind: 'failed', cell: CELL, code: HOLD_UNANSWERED }),
   },
 };

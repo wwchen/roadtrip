@@ -138,13 +138,25 @@ control is disabled and `aria-busy`, not only the cell being held, and the other
 one that is visibly inert.
 
 **The claim expires with the vendor's hold.** `usePlaceCart` schedules one timer per
-held cell off `heldAt + CART_HOLD_MS` and dispatches `expired`, which drops the hold
-from the map; the cell loses its badge and the panel stops saying "check out within
-fifteen minutes". Nothing on the wire carries that deadline — `AddToCartResponseDto`
-has no expiry field — so the countdown starts when the answer lands and the duration
-lives in `lib/cart-hold.ts`, which is also where `checkOutSoon` reads its number, so
-the sentence and the timer cannot disagree. A lapsed cell is offered again, which is
-correct: the vendor really did release it.
+held cell off `heldAt + CART_HOLD_MS` and dispatches `expired`. Nothing on the wire
+carries that deadline — `AddToCartResponseDto` has no expiry field — so the countdown
+starts when the answer lands and the duration lives in `lib/cart-hold.ts`, which is
+also where `checkOutSoon` reads its number, so the sentence and the timer cannot
+disagree.
+
+Because the fifteen minutes is **our** guess and not the vendor's word, a lapsed hold
+becomes its own state rather than disappearing. The cell drops its badge and is
+offered again, but the open panel *says* the hold ran out and keeps the link to the
+cart, because if our clock runs early the site is still held and a silent flip back to
+"Add to cart" would walk the user into a second hold on a site they already have —
+the same harm as the one-slot bug, arriving by a different road.
+
+**A hold that never answers gives up.** `addToCart` carries its own
+`CART_HOLD_DEADLINE_MS`, set past the backend's companion budget so tripping it means
+the server is not answering at all rather than that the work is slow. Without it a
+stalled POST held the whole grid's lock indefinitely. The panel then says we stopped
+waiting and that the hold **may** still have landed; it never claims the hold failed,
+because nothing on this side can know.
 
 There is no optimistic cell: a cell reads *held* only once the vendor said so, and a
 refusal says which refusal it was, by the server's own code through
@@ -154,6 +166,10 @@ for everything else — so the callers read the status code and not the body's `
 
 Holding is a mutation, not a read. Raising to Full still issues no request — see
 *One read serves both detents* below, which the cart does not weaken.
+
+Hold state belongs to one place: `PlaceSurface` keys `StayPlace` by POI id, so opening
+another campground starts a fresh map and a fresh lock. Without that key a hold running
+on one campground disabled every cart control on the next, with copy naming no site.
 
 #### Closing the sheet mid-hold loses the receipt
 

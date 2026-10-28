@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { Icon } from '@ui';
+import { HOLD_UNANSWERED } from '@/api/booking-api';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import { bookingCopy, gateCopy, placeCopy } from '@/lib/strings';
 import { useDismiss } from '@/lib/use-dismiss';
@@ -74,6 +75,7 @@ export function SiteCartPopover({
   const holding = running !== null && sameCell(running, cell);
   const elsewhere = running !== null && !holding;
   const held = mine?.kind === 'held' ? mine : null;
+  const lapsed = mine?.kind === 'lapsed' ? mine : null;
   const failed = mine?.kind === 'failed' ? mine : null;
   const hint = elsewhere ? bookingCopy.holdBusy : hintFor(gate);
 
@@ -178,11 +180,31 @@ export function SiteCartPopover({
               {bookingCopy.holdRunning}
             </p>
           ) : null}
+          {lapsed ? (
+            <div className="rt-site-cart__lapsed" role="status">
+              <p className="rt-site-cart__title">{bookingCopy.holdLapsedTitle}</p>
+              <p className="rt-site-cart__hint">{bookingCopy.holdLapsed(lapsed.holder)}</p>
+              <a
+                className="rt-site-cart__link"
+                href={lapsed.cartUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                {bookingCopy.openCart(lapsed.holder)}
+              </a>
+            </div>
+          ) : null}
           {failed ? (
             <div className="rt-site-cart__failed" role="alert">
-              <p className="rt-site-cart__title">{bookingCopy.holdFailed}</p>
+              <p className="rt-site-cart__title">
+                {failed.code === HOLD_UNANSWERED
+                  ? bookingCopy.holdUnansweredTitle
+                  : bookingCopy.holdFailed}
+              </p>
               <p className="rt-site-cart__hint">
-                {settingsErrorMessage(failed.code, failed.holder)}
+                {failed.code === HOLD_UNANSWERED
+                  ? bookingCopy.holdUnanswered(failed.holder)
+                  : settingsErrorMessage(failed.code, failed.holder)}
               </p>
             </div>
           ) : null}

@@ -8,6 +8,7 @@ export interface CartActionCell {
 export type CartAction =
   | { kind: 'pending'; cell: CartActionCell }
   | { kind: 'held'; cell: CartActionCell; cartUrl: string; heldAt: number; holder?: string }
+  | { kind: 'lapsed'; cell: CartActionCell; cartUrl: string; holder?: string }
   | { kind: 'failed'; cell: CartActionCell; code: string; holder?: string };
 
 export type CartActions = ReadonlyMap<string, CartAction>;
@@ -79,7 +80,12 @@ export function nextCartActions(current: CartActions, event: CartActionEvent): C
       });
     case 'expired':
       if (standing?.kind !== 'held') return current;
-      return without(current, key);
+      return written(current, key, {
+        kind: 'lapsed',
+        cell: event.cell,
+        cartUrl: standing.cartUrl,
+        ...(standing.holder ? { holder: standing.holder } : null),
+      });
   }
 }
 
@@ -89,8 +95,3 @@ function written(current: CartActions, key: string, action: CartAction): CartAct
   return next;
 }
 
-function without(current: CartActions, key: string): CartActions {
-  const next = new Map(current);
-  next.delete(key);
-  return next;
-}
