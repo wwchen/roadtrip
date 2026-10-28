@@ -273,7 +273,7 @@ git commit -m "feat(worker): mirror RawCaptureStore, Envelope and InputBundle"
 
 Each upsert reproduces its Kotlin counterpart's column list, conflict target (`(data_provider, data_provider_ref) WHERE deleted_at IS NULL` for campgrounds and campsites; the plain unique index for the other two), update set, `updated_at = now()`, `deleted_at = NULL`, `distinctBy` dedupe keeping the first occurrence, and `BULK_CHUNK_SIZE` chunking. Campground upsert also inserts or updates the `pois` row and the `poi_campgrounds` link exactly as `bulkUpsertCampgroundPois` does: existing links get `ST_SetSRID(ST_MakePoint(lng, lat), 4326)`, new ones insert a POI of type `campground` then link `ON CONFLICT (campground_id) DO NOTHING`. Write geometry with `ewkt(\`POINT(${lng} ${lat})\`)` from `@roadtrip/db`. Campsite upsert resolves parents by `(data_provider, data_provider_ref)` and counts a record with no parent ref, or an unresolved one, as skipped rather than failing.
 
-Verify that `drizzle-orm@0.45.4`'s `onConflictDoUpdate` accepts `targetWhere`; if it does not, build the statement with the `sql` template rather than changing the conflict target.
+`onConflictDoUpdate` accepts `targetWhere` (checked against Drizzle's insert documentation on 2026-10-28; `setWhere` exists too and is not needed here), so the partial unique index is expressible as `onConflictDoUpdate({ target: [t.dataProvider, t.dataProviderRef], targetWhere: sql\`deleted_at IS NULL\`, set: { … } })`. Confirm it compiles against the installed 0.45.4; only if it does not, build the statement with the `sql` template — never by widening the conflict target.
 
 Column-by-column JSONB handling, which is the whole point of this task:
 
