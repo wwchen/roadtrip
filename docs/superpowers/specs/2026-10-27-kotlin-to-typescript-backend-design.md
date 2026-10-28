@@ -198,8 +198,17 @@ and `campsites.schedule` are not `CampgroundPrice` and `CampgroundSchedule`.**
 them would silently drop those fields from every campsite row. The identically named
 campground columns *are* those shapes; only the campsite pair is raw. Both are TypeScript importing
 the same package, so `CatalogColumnJson`'s "one codec" rule survives as a type
-constraint. `availability_watch.reservable_filters` and `trigger_config` are written
+constraint. `availability_watch.campsite_filters` and `trigger_config` are written
 by the API and read by the worker; same package, same guarantee.
+
+The column is `campsite_filters`, not `reservable_filters` as an earlier draft said:
+V14 created it under the old name and **V38:151 renamed it** when reservables became
+campsites. That is the sixth error in this spec traceable to reading a migration that
+created something without looking for the one that changed it — the same mistake as
+the materialized views, the check count, the `DATE[]` column, `kind`, and the campsite
+price and schedule shapes. Its `CHECK` is still named
+`availability_watch_reservable_filters_check`, because Flyway renamed the column and
+not the constraint, and the equivalence gate requires that to stay true.
 
 ### 4. The importer
 
