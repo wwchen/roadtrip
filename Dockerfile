@@ -33,13 +33,15 @@ FROM backend-base AS backend-local
 
 FROM node:22-alpine AS frontend
 
-WORKDIR /src/frontend
+WORKDIR /src
 
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --no-audit --no-fund
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY frontend/package.json frontend/
+COPY packages/domain/ packages/domain/
+RUN npm ci --workspace roadtrip-frontend --no-audit --no-fund
 
-COPY frontend/ ./
-RUN npm run build
+COPY frontend/ frontend/
+RUN npm run build --workspace roadtrip-frontend
 
 # Production and sandbox images include the frontend build in the image.
 FROM backend-base AS backend

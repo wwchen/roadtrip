@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 import re
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path, PurePosixPath
 
@@ -19,6 +21,48 @@ AWAIT_IMAGES_ACTION = (
 # there.
 SHELL_PATH_REFERENCE = re.compile(r"\$\{(SCRIPT_DIR|REPO_ROOT)\}/([A-Za-z0-9._/-]+)")
 SHELL_REFERENCE_ROOTS = {"SCRIPT_DIR": "scripts", "REPO_ROOT": ""}
+
+
+COMPANION_KEY_SCRIPT = "scripts/companion-image-key.sh"
+
+SCHEMA_EQUIVALENCE_TEST = "scripts/schema-equivalence.test.mjs"
+SCHEMA_REFERENCE_TEST = "scripts/schema-reference.test.mjs"
+BUILD_WORKSPACES = "scripts/build-workspaces.mjs"
+PACKAGE_TYPECHECKS = (
+    "npm run typecheck --workspace @roadtrip/domain",
+    "npm run typecheck --workspace @roadtrip/db",
+)
+FLYWAY_MIGRATIONS = "backend/src/main/resources/db/migration"
+
+
+def companion_key_inputs() -> list[str]:
+    declared = re.search(
+        r"COMPANION_IMAGE_INPUTS=\(([^)]*)\)", (ROOT / COMPANION_KEY_SCRIPT).read_text()
+    )
+    assert declared, "COMPANION_IMAGE_INPUTS not found"
+    return declared.group(1).split()
+
+
+def make_recipe(target: str) -> list[str]:
+    lines = (ROOT / "Makefile").read_text().splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(f"{target}:"))
+    recipe = []
+    for line in lines[start + 1 :]:
+        if line and not line.startswith("\t"):
+            break
+        command = line.strip()
+        if command and not command.startswith("#"):
+            recipe.append(command)
+    return recipe
+
+
+def path_filters() -> dict:
+    jobs = workflow("ci.yml")["jobs"]
+    return yaml.safe_load(
+        next(step for step in jobs["changes"]["steps"] if step.get("id") == "filter")[
+            "with"
+        ]["filters"]
+    )
 
 
 def workflow(name: str) -> dict:
@@ -51,10 +95,160 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("github.event_name == 'push' ||", app.get("if", ""))
         self.assertIn('docker push "$IMAGE:${SHA}"', job_commands(app))
 
-        for job_name, tree in (("companion-image", "companion"), ("data-image", "data")):
-            commands = job_commands(jobs[job_name])
-            self.assertIn(f"git rev-parse HEAD:{tree}", commands)
-            self.assertIn("docker push", commands)
+        data_commands = job_commands(jobs["data-image"])
+        self.assertIn("git rev-parse HEAD:data", data_commands)
+        self.assertIn("docker push", data_commands)
+
+        companion_commands = job_commands(jobs["companion-image"])
+        self.assertIn(COMPANION_KEY_SCRIPT, companion_commands)
+        self.assertNotIn("git rev-parse HEAD:companion", companion_commands)
+        self.assertIn("docker push", companion_commands)
+
+    def test_companion_image_is_keyed_on_everything_its_build_reads(self) -> None:
+        deploy_commands = job_commands(workflow("deploy.yml")["jobs"]["deploy"])
+        self.assertIn(COMPANION_KEY_SCRIPT, deploy_commands)
+        self.assertNotIn("git rev-parse HEAD:companion", deploy_commands)
+
+        inputs = companion_key_inputs()
+        copied = {
+            PurePosixPath(source).parts[0]
+            for line in (ROOT / "companion" / "Dockerfile").read_text().splitlines()
+            if line.startswith("COPY ") and "--from" not in line
+            for source in line.split()[1:-1]
+        }
+        self.assertTrue(copied)
+        self.assertTrue(copied <= set(inputs), f"{copied - set(inputs)} copied but not in the key")
+
+        steps = workflow("ci.yml")["jobs"]["changes"]["steps"]
+        filters = yaml.safe_load(
+            next(step for step in steps if step.get("id") == "filter")["with"]["filters"]
+        )
+        for path in inputs:
+            watched = f"{path}/**" if (ROOT / path).is_dir() else path
+            self.assertIn(watched, filters["companion_image"], f"{path} does not rebuild the image")
+        self.assertIn(
+            COMPANION_KEY_SCRIPT,
+            filters["companion_image"],
+            "editing the key script moves the tag but would build nothing",
+        )
+
+    def test_the_guard_on_the_companion_key_runs_on_every_change(self) -> None:
+        jobs = workflow("ci.yml")["jobs"]
+        guard = jobs["image-key-guard"]
+
+        self.assertNotIn("if", guard)
+        self.assertNotIn("needs", guard)
+        self.assertIn("scripts.test_ci_image_builds", job_commands(guard))
+        self.assertIn("image-key-guard", jobs["ci-passed"]["needs"])
+
+    def test_the_schema_equivalence_gate_watches_both_schema_sources(self) -> None:
+        jobs = workflow("ci.yml")["jobs"]
+        gate = jobs["schema-equivalence"]
+
+        filters = yaml.safe_load(
+            next(
+                step for step in jobs["changes"]["steps"] if step.get("id") == "filter"
+            )["with"]["filters"]
+        )
+        watched = filters["schema_equivalence"]
+        for path in (
+            FLYWAY_MIGRATIONS,
+            "packages",
+            "scripts/schema-equivalence.mjs",
+            SCHEMA_EQUIVALENCE_TEST,
+        ):
+            self.assertTrue(
+                any(pattern.startswith(path) for pattern in watched),
+                f"{path} does not run the schema equivalence gate",
+            )
+
+        self.assertIn("schema_equivalence", jobs["changes"]["outputs"])
+        self.assertIn("schema_equivalence", gate["if"])
+        self.assertIn("npm run build", job_commands(gate))
+        self.assertIn(SCHEMA_EQUIVALENCE_TEST, job_commands(gate))
+        self.assertIn(SCHEMA_REFERENCE_TEST, job_commands(gate))
+        self.assertIn("schema-equivalence", jobs["ci-passed"]["needs"])
+        self.assertTrue(
+            any(pattern.startswith(SCHEMA_REFERENCE_TEST) for pattern in watched),
+            f"{SCHEMA_REFERENCE_TEST} does not run the schema equivalence gate",
+        )
+
+    def test_make_test_runs_the_gate_after_the_build_it_consumes(self) -> None:
+        recipe = make_recipe("test")
+
+        def position(command: str) -> int:
+            self.assertIn(command, recipe)
+            return recipe.index(command)
+
+        build = position("npm run build")
+        gate = position(f"node --test {SCHEMA_EQUIVALENCE_TEST}")
+        self.assertLess(build, gate, "the gate imports packages/db/dist, so the build comes first")
+        self.assertLess(build, position(f"node --test {SCHEMA_REFERENCE_TEST}"))
+        for command in PACKAGE_TYPECHECKS:
+            self.assertLess(build, position(command))
+
+    def test_package_typechecks_run_in_ci(self) -> None:
+        commands = job_commands(workflow("ci.yml")["jobs"]["package-tests"])
+        for command in PACKAGE_TYPECHECKS:
+            self.assertIn(command, commands)
+        self.assertLess(commands.index("npm run build"), commands.index(PACKAGE_TYPECHECKS[0]))
+
+    def test_every_job_that_builds_watches_the_build_driver(self) -> None:
+        filters = path_filters()
+        for name in ("smoke", "frontend", "schema_equivalence", "package_tests"):
+            self.assertIn(BUILD_WORKSPACES, filters[name], f"{name} does not rerun on {BUILD_WORKSPACES}")
+
+    def test_companion_key_moves_with_each_input_and_only_those(self) -> None:
+        inputs = companion_key_inputs()
+
+        def git(repo: Path, *args: str) -> str:
+            return subprocess.run(
+                ["git", *args], cwd=repo, check=True, capture_output=True, text=True
+            ).stdout.strip()
+
+        def run_key(cwd: Path) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                ["bash", str(ROOT / COMPANION_KEY_SCRIPT)],
+                cwd=cwd, capture_output=True, text=True,
+            )
+
+        def key(cwd: Path) -> str:
+            result = run_key(cwd)
+            self.assertEqual(0, result.returncode, result.stderr)
+            return result.stdout.strip()
+
+        def edit(repo: Path, path: str) -> None:
+            target = repo / (path if "." in path else f"{path}/file.txt")
+            target.parent.mkdir(exist_ok=True)
+            target.write_text(target.read_text() + "x" if target.exists() else "x")
+            git(repo, "add", "-A")
+            git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", path)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            git(repo, "init", "-q")
+            for path in (*inputs, "frontend"):
+                edit(repo, path)
+            baseline = key(repo)
+            self.assertRegex(baseline, r"^[0-9a-f]{40}$")
+
+            edit(repo, "frontend")
+            self.assertEqual(baseline, key(repo))
+            self.assertEqual(baseline, key(repo / "frontend"))
+
+            seen = {baseline}
+            for path in inputs:
+                edit(repo, path)
+                moved = key(repo)
+                self.assertNotIn(moved, seen, f"editing {path} did not move the key")
+                seen.add(moved)
+
+            git(repo, "rm", "-q", "package-lock.json")
+            git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "rename")
+            missing = run_key(repo)
+            self.assertNotEqual(0, missing.returncode)
+            self.assertEqual("", missing.stdout.strip())
+            self.assertIn("expected 3 tree entries", missing.stderr)
 
     def test_production_only_pulls_images(self) -> None:
         deploy = (ROOT / "scripts" / "deploy.sh").read_text()

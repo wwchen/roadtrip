@@ -71,8 +71,9 @@ jobs:
 
       - name: Resolve independently versioned images
         run: |
+          companion_key="$(scripts/companion-image-key.sh)"
           echo "DEPLOY_DATA_SHA=$(git rev-parse HEAD:data)" >> "$GITHUB_ENV"
-          echo "DEPLOY_COMPANION_SHA=$(git rev-parse HEAD:companion)" >> "$GITHUB_ENV"
+          echo "DEPLOY_COMPANION_SHA=${companion_key}" >> "$GITHUB_ENV"
 
       # workflow_dispatch skips the `workflow_run` guard above, so a manual
       # deploy can outrun CI's image push and fail on the host with a bare

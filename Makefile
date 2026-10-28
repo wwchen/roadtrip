@@ -80,7 +80,7 @@ recgov-atc: _ensure-hooks
 # existing packages; npm ci recreates the companion tree from the lockfile.
 install: install-hooks
 	brew install tilt docker openjdk node sops age ruff
-	cd companion && npm ci && npx playwright install chromium
+	npm ci --workspace campsite-companion && cd companion && npx playwright install chromium
 
 # Everything CI runs (see .github/workflows/ci.yml), locally and in one shot:
 # backend tests, detekt-rule tests, ktlint + detekt, frontend gates, companion
@@ -90,7 +90,8 @@ install: install-hooks
 # across the backend checks that CI runs in separate jobs.
 #
 # This target is the local mirror of ci.yml's gradle-lint, backend-tests,
-# frontend-tests, companion-tests and lint jobs — change one, change the other.
+# frontend-tests, schema-equivalence, companion-tests and lint jobs — change
+# one, change the other.
 # The single deliberate divergence: gradle-lint runs `ktlintCheck` with
 # `-x :backend:generateJooq`, since linting alone has no reason to spin up the
 # codegen Testcontainer. Here ktlintCheck shares an invocation with
@@ -100,15 +101,44 @@ install: install-hooks
 # checkApiTypes and contractLedgerCheck both run over the backend's own classpath,
 # so they need the same compile (and therefore the same Docker) :backend:test
 # already needs. ci.yml runs them in backend-tests, never in gradle-lint.
+#
+# The schema-equivalence.test.mjs and schema-reference.test.mjs lines mirror
+# ci.yml's schema-equivalence job, which this target also stands in for. That
+# job is filtered on both sides of the
+# comparison (packages/** and the Flyway migration directory), because the drift
+# it catches is a migration landing with no matching Drizzle change.
 test: _ensure-hooks
 	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :backend:checkApiTypes :backend:contractLedgerCheck :detekt-rules:test
 	# npm run build includes the TypeScript check before bundling.
-	cd frontend && npm ci && npm run lint && npm run test && npm run build && npm run build-storybook
+	npm ci
+	# Rebuild every workspace that has a build script so no consumer below
+	# resolves a stale packages/*/dist.
+	npm run build
+	# Prove the Drizzle migrations still reproduce the Flyway schema, and that
+	# the gate still fails when they do not. Needs packages/db/dist, so it has
+	# to follow the build above. `node scripts/schema-equivalence.mjs` is the
+	# same comparison on its own, for reading a diff by hand.
+	node --test scripts/schema-equivalence.test.mjs
+	# normalize is what the comparison trusts. Without these tests an edit that
+	# over-normalizes (collapsing NOT NULL, a default or a type) leaves the line
+	# above green on both the clean comparison and the injected-column proof.
+	node --test scripts/schema-reference.test.mjs
+	# The test files are excluded from each package's build, so only this
+	# tsconfig type-checks them (and scripts/schema-reference.d.mts with them).
+	npm run typecheck --workspace @roadtrip/domain
+	npm run typecheck --workspace @roadtrip/db
+	# The packages' own suites. They resolve each other through dist, so they
+	# follow the build above; the db suite boots PostGIS containers.
+	npm run test --workspace @roadtrip/domain
+	npm run test --workspace @roadtrip/db
+	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
+	node --test scripts/check-package-boundaries.test.mjs && node scripts/check-package-boundaries.mjs
 	node scripts/check-color-tokens.mjs
 	node scripts/check-css-blocks.mjs
 	node scripts/check-token-usage.mjs
 	node scripts/check-worktree-sparse-paths.mjs
-	cd companion && npm ci --ignore-scripts && npm test
+	node --test scripts/check-single-lockfile.test.mjs
+	npm run test --workspace campsite-companion
 	ruff check --isolated --target-version py39 --select E4,E7,E9,F,B,UP secrets/ scripts/
 	python3 -m unittest discover -s scripts -p 'test_*.py'
 	python3 secrets/manage.py generate --check
@@ -173,7 +203,7 @@ _ensure-hooks:
 	  { git config core.hooksPath .githooks 2>/dev/null && echo "git hooks installed (.githooks/)"; } || true
 
 frontend:
-	cd frontend && npm ci && npm run build
+	npm ci --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend
 
 # Snapshot Grafana dashboards from the running container into
 # grafana/dashboards/*.json, then apply shared dashboard navigation links.

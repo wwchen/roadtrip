@@ -26,6 +26,8 @@ jobs:
       data_image: ${{ steps.filter.outputs.data_image }}
       scripts: ${{ steps.filter.outputs.scripts }}
       gradle_lint: ${{ steps.filter.outputs.gradle_lint }}
+      schema_equivalence: ${{ steps.filter.outputs.schema_equivalence }}
+      package_tests: ${{ steps.filter.outputs.package_tests }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -54,20 +56,37 @@ jobs:
               - 'build.gradle.kts'
               - 'settings.gradle.kts'
               - 'frontend/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
+              - 'scripts/build-workspaces.mjs'
               - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
+              - 'scripts/build-workspaces.mjs'
               - 'scripts/check-color-tokens.mjs'
               - 'scripts/check-feature-boundaries.mjs'
               - 'scripts/check-feature-boundaries.test.mjs'
+              - 'scripts/check-package-boundaries.mjs'
+              - 'scripts/check-package-boundaries.test.mjs'
               - 'scripts/check-css-blocks.mjs'
               - 'scripts/check-token-usage.mjs'
               - '.github/workflows/ci.yml'
             companion:
               - 'companion/**'
+              - 'package.json'
+              - 'package-lock.json'
               - '.github/workflows/ci.yml'
             companion_image:
               - 'companion/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'scripts/companion-image-key.sh'
               - '.github/workflows/ci.yml'
             data_image:
               - 'data/**'
@@ -82,6 +101,33 @@ jobs:
               - 'docker-compose*.yml'
               - '.github/actions/**'
               - '.github/workflows/**'
+            # Both sides of the comparison, because the drift being caught is a
+            # Flyway migration landing with no matching Drizzle change — a filter
+            # watching only packages/ would skip the gate on exactly that push.
+            # packages/** rather than packages/db/**: campsiteKinds from
+            # @roadtrip/domain is baked into the campsites_kind_wire_check
+            # constraint, so a domain edit alone can move the emitted schema.
+            schema_equivalence:
+              - 'packages/**'
+              - 'backend/src/main/resources/db/migration/**'
+              - 'scripts/schema-equivalence.mjs'
+              - 'scripts/schema-equivalence.test.mjs'
+              - 'scripts/schema-reference.mjs'
+              - 'scripts/schema-reference.test.mjs'
+              - 'scripts/build-workspaces.mjs'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
+              - '.github/workflows/ci.yml'
+            package_tests:
+              - 'packages/**'
+              - 'scripts/schema-reference.mjs'
+              - 'scripts/schema-reference.d.mts'
+              - 'scripts/build-workspaces.mjs'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
+              - '.github/workflows/ci.yml'
             gradle_lint:
               - 'backend/**'
               - 'detekt-rules/**'
@@ -144,6 +190,22 @@ jobs:
       - name: Validate Claude worktree sparsePaths
         run: node scripts/check-worktree-sparse-paths.mjs
 
+  lockfile-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check every install resolves from the root lockfile
+        run: node --test scripts/check-single-lockfile.test.mjs
+
+  image-key-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check the companion image tag covers everything its build reads
+        run: python3 -m unittest scripts.test_ci_image_builds -v
+
   lint:
     needs: changes
     if: needs.changes.outputs.scripts == 'true'
@@ -205,10 +267,12 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - name: Install frontend dependencies
-        working-directory: frontend
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
         run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
 
       - name: Check frontend architecture
         working-directory: frontend
@@ -226,6 +290,11 @@ jobs:
         working-directory: frontend
         run: npm run build-storybook
 
+      - name: Check package boundaries
+        run: |
+          node --test scripts/check-package-boundaries.test.mjs
+          node scripts/check-package-boundaries.mjs
+
       - name: Check color tokens
         run: node scripts/check-color-tokens.mjs
 
@@ -234,6 +303,81 @@ jobs:
 
       - name: Check design token usage
         run: node scripts/check-token-usage.mjs
+
+  # Mirrored locally by `make test`. packages/db no longer builds on install, so
+  # the gate needs `npm run build` ahead of it — the same prelude frontend-tests
+  # runs, which is why this is its own job rather than a step there: that job has
+  # no business booting Postgres, and backend-tests has Docker but no npm install.
+  # The amd64-only PostGIS image runs natively on these runners, so the emulation
+  # cost paid locally does not apply here.
+  schema-equivalence:
+    needs: changes
+    if: needs.changes.outputs.schema_equivalence == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
+
+      # The test file, not the bare script: its container subtest makes the same
+      # clean comparison the script does and then injects a column to prove the
+      # gate can still fail, at the same single PostGIS boot. The pooler subtest
+      # skips when its sidecar cannot be established, so a fixture cannot fail
+      # this job.
+      - name: Check the Drizzle migrations still reproduce the Flyway schema
+        run: node --test scripts/schema-equivalence.test.mjs
+
+      # normalize is what the comparison above trusts. These tests are the ones
+      # that fail when an edit to it stops distinguishing types, nullability or
+      # defaults — the one change the injected-column proof cannot see.
+      - name: Check the schema normalizer still distinguishes what the gate compares
+        run: node --test scripts/schema-reference.test.mjs
+
+  # Mirrored locally by `make test`. One job for both suites: the domain suite
+  # runs in well under a second, so a job of its own would spend more on
+  # checkout, npm ci and build than it ever saved. The db suite boots PostGIS
+  # containers, which is why this sits apart from frontend-tests.
+  package-tests:
+    needs: changes
+    if: needs.changes.outputs.package_tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
+
+      - name: Run @roadtrip/domain tests
+        run: npm run test --workspace @roadtrip/domain
+
+      - name: Run @roadtrip/db tests
+        run: npm run test --workspace @roadtrip/db
+
+      # tsconfig.json leaves the test files out of the build and vitest strips
+      # types without checking them, so these are the only steps that type-check
+      # the tests (and scripts/schema-reference.d.mts).
+      - name: Type-check @roadtrip/domain including tests
+        run: npm run typecheck --workspace @roadtrip/domain
+
+      - name: Type-check @roadtrip/db including tests
+        run: npm run typecheck --workspace @roadtrip/db
 
   companion-tests:
     needs: changes
@@ -246,10 +390,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: companion/package-lock.json
+          cache-dependency-path: package-lock.json
       - name: Install companion dependencies
-        working-directory: companion
-        run: npm ci --ignore-scripts
+        run: npm ci --workspace campsite-companion --ignore-scripts
       - name: Run companion tests
         working-directory: companion
         run: npm test
@@ -267,7 +410,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Build companion image
-        run: docker build -t roadtrip/recgov-companion ./companion
+        run: docker build -f companion/Dockerfile -t roadtrip/recgov-companion .
 
       - name: Log in to GHCR
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
@@ -277,11 +420,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag and push companion image by tree SHA
+      - name: Tag and push companion image by input hash
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          TREE_SHA="$(git rev-parse HEAD:companion)"
-          IMAGE="ghcr.io/${{ github.repository }}/recgov-companion:${TREE_SHA}"
+          INPUT_HASH="$(scripts/companion-image-key.sh)"
+          IMAGE="ghcr.io/${{ github.repository }}/recgov-companion:${INPUT_HASH}"
           docker tag roadtrip/recgov-companion "$IMAGE"
           docker push "$IMAGE"
 
@@ -468,16 +611,15 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Build backend fat-jar
         run: ./gradlew :backend:buildFatJar
 
       - name: Build frontend
-        working-directory: frontend
         run: |
-          npm ci
-          npm run build
+          npm ci --workspace roadtrip-frontend
+          npm run build --workspace roadtrip-frontend
 
       - name: Start backend
         run: |
@@ -564,9 +706,13 @@ jobs:
       - changes
       - migration-guard
       - worktree-guard
+      - lockfile-guard
+      - image-key-guard
       - lint
       - gradle-lint
       - frontend-tests
+      - schema-equivalence
+      - package-tests
       - companion-tests
       - companion-image
       - data-image

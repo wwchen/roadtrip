@@ -26,7 +26,8 @@ services:
 
   recgov-companion:
     build:
-      context: ./companion
+      context: .
+      dockerfile: companion/Dockerfile
     restart: "no"
     ports:
       - "127.0.0.1:8770:8770"
