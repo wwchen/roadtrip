@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import { withPostgis, type PostgisSession } from '../../../../scripts/schema-reference.mjs';
 import { createDb, migrateDb, type Db } from '../client.js';
@@ -122,7 +122,12 @@ test('a watch that loses one of several targets survives', async () => {
   const watchId = await createWatch([campsiteIds[0]!, campsiteIds[1]!]);
   await db
     .delete(availabilityWatchTarget)
-    .where(eq(availabilityWatchTarget.campsiteId, campsiteIds[0]!));
+    .where(
+      and(
+        eq(availabilityWatchTarget.watchId, watchId),
+        eq(availabilityWatchTarget.campsiteId, campsiteIds[0]!),
+      ),
+    );
   expect(await watchExists(watchId)).toBe(true);
 });
 
