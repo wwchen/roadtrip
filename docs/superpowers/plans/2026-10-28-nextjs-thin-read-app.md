@@ -212,6 +212,8 @@ Expected: FAIL — module not found.
 
 `parsePoiId` validates against a named `POI_ID_PATTERN` before `BigInt()` so the constructor never throws, and range-checks against a named `MAX_POI_ID`. `bboxToPolygonGeoJson` splits on a named separator, validates arity and the four coordinate ranges against the same named bounds `packages/db/src/schema/catalog.ts` uses, and returns the closed ring.
 
+**`parsePoiId` must canonicalise, and this is a requirement rather than a nicety.** Task 3's review established that `findSummariesByPoiIds` silently returns `[]` for a non-canonical id — `'01001'` matches nothing, where the Kotlin's `Long` keys would have matched — because the port compares id strings. So the route layer is the only thing standing between a leading zero and an empty page. `parsePoiId` returning a `bigint` already canonicalises; the requirement is that **every** id reaching a repo has been through it, and that `'01001'` and `'1001'` therefore behave identically. Add that as a test case.
+
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npm run test --workspace @roadtrip/web -- boundary`
