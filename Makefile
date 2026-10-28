@@ -102,8 +102,9 @@ install: install-hooks
 # so they need the same compile (and therefore the same Docker) :backend:test
 # already needs. ci.yml runs them in backend-tests, never in gradle-lint.
 #
-# schema-equivalence.mjs mirrors ci.yml's schema-equivalence job, which this
-# target also stands in for. That job is filtered on both sides of the
+# The schema-equivalence.test.mjs and schema-reference.test.mjs lines mirror
+# ci.yml's schema-equivalence job, which this target also stands in for. That
+# job is filtered on both sides of the
 # comparison (packages/** and the Flyway migration directory), because the drift
 # it catches is a migration landing with no matching Drizzle change.
 test: _ensure-hooks
@@ -118,6 +119,14 @@ test: _ensure-hooks
 	# to follow the build above. `node scripts/schema-equivalence.mjs` is the
 	# same comparison on its own, for reading a diff by hand.
 	node --test scripts/schema-equivalence.test.mjs
+	# normalize is what the comparison trusts. Without these tests an edit that
+	# over-normalizes (collapsing NOT NULL, a default or a type) leaves the line
+	# above green on both the clean comparison and the injected-column proof.
+	node --test scripts/schema-reference.test.mjs
+	# The test files are excluded from each package's build, so only this
+	# tsconfig type-checks them (and scripts/schema-reference.d.mts with them).
+	npm run typecheck --workspace @roadtrip/domain
+	npm run typecheck --workspace @roadtrip/db
 	# The packages' own suites. They resolve each other through dist, so they
 	# follow the build above; the db suite boots PostGIS containers.
 	npm run test --workspace @roadtrip/domain

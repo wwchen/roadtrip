@@ -60,6 +60,7 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.base.json'
+              - 'scripts/build-workspaces.mjs'
               - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
@@ -67,6 +68,7 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.base.json'
+              - 'scripts/build-workspaces.mjs'
               - 'scripts/check-color-tokens.mjs'
               - 'scripts/check-feature-boundaries.mjs'
               - 'scripts/check-feature-boundaries.test.mjs'
@@ -111,6 +113,8 @@ jobs:
               - 'scripts/schema-equivalence.mjs'
               - 'scripts/schema-equivalence.test.mjs'
               - 'scripts/schema-reference.mjs'
+              - 'scripts/schema-reference.test.mjs'
+              - 'scripts/build-workspaces.mjs'
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.base.json'
@@ -118,6 +122,8 @@ jobs:
             package_tests:
               - 'packages/**'
               - 'scripts/schema-reference.mjs'
+              - 'scripts/schema-reference.d.mts'
+              - 'scripts/build-workspaces.mjs'
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.base.json'
@@ -330,6 +336,12 @@ jobs:
       - name: Check the Drizzle migrations still reproduce the Flyway schema
         run: node --test scripts/schema-equivalence.test.mjs
 
+      # normalize is what the comparison above trusts. These tests are the ones
+      # that fail when an edit to it stops distinguishing types, nullability or
+      # defaults — the one change the injected-column proof cannot see.
+      - name: Check the schema normalizer still distinguishes what the gate compares
+        run: node --test scripts/schema-reference.test.mjs
+
   # Mirrored locally by `make test`. One job for both suites: the domain suite
   # runs in well under a second, so a job of its own would spend more on
   # checkout, npm ci and build than it ever saved. The db suite boots PostGIS
@@ -357,6 +369,15 @@ jobs:
 
       - name: Run @roadtrip/db tests
         run: npm run test --workspace @roadtrip/db
+
+      # tsconfig.json leaves the test files out of the build and vitest strips
+      # types without checking them, so these are the only steps that type-check
+      # the tests (and scripts/schema-reference.d.mts).
+      - name: Type-check @roadtrip/domain including tests
+        run: npm run typecheck --workspace @roadtrip/domain
+
+      - name: Type-check @roadtrip/db including tests
+        run: npm run typecheck --workspace @roadtrip/db
 
   companion-tests:
     needs: changes

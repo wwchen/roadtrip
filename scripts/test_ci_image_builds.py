@@ -26,6 +26,12 @@ SHELL_REFERENCE_ROOTS = {"SCRIPT_DIR": "scripts", "REPO_ROOT": ""}
 COMPANION_KEY_SCRIPT = "scripts/companion-image-key.sh"
 
 SCHEMA_EQUIVALENCE_TEST = "scripts/schema-equivalence.test.mjs"
+SCHEMA_REFERENCE_TEST = "scripts/schema-reference.test.mjs"
+BUILD_WORKSPACES = "scripts/build-workspaces.mjs"
+PACKAGE_TYPECHECKS = (
+    "npm run typecheck --workspace @roadtrip/domain",
+    "npm run typecheck --workspace @roadtrip/db",
+)
 FLYWAY_MIGRATIONS = "backend/src/main/resources/db/migration"
 
 
@@ -35,6 +41,28 @@ def companion_key_inputs() -> list[str]:
     )
     assert declared, "COMPANION_IMAGE_INPUTS not found"
     return declared.group(1).split()
+
+
+def make_recipe(target: str) -> list[str]:
+    lines = (ROOT / "Makefile").read_text().splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith(f"{target}:"))
+    recipe = []
+    for line in lines[start + 1 :]:
+        if line and not line.startswith("\t"):
+            break
+        command = line.strip()
+        if command and not command.startswith("#"):
+            recipe.append(command)
+    return recipe
+
+
+def path_filters() -> dict:
+    jobs = workflow("ci.yml")["jobs"]
+    return yaml.safe_load(
+        next(step for step in jobs["changes"]["steps"] if step.get("id") == "filter")[
+            "with"
+        ]["filters"]
+    )
 
 
 def workflow(name: str) -> dict:
@@ -138,7 +166,37 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("schema_equivalence", gate["if"])
         self.assertIn("npm run build", job_commands(gate))
         self.assertIn(SCHEMA_EQUIVALENCE_TEST, job_commands(gate))
+        self.assertIn(SCHEMA_REFERENCE_TEST, job_commands(gate))
         self.assertIn("schema-equivalence", jobs["ci-passed"]["needs"])
+        self.assertTrue(
+            any(pattern.startswith(SCHEMA_REFERENCE_TEST) for pattern in watched),
+            f"{SCHEMA_REFERENCE_TEST} does not run the schema equivalence gate",
+        )
+
+    def test_make_test_runs_the_gate_after_the_build_it_consumes(self) -> None:
+        recipe = make_recipe("test")
+
+        def position(command: str) -> int:
+            self.assertIn(command, recipe)
+            return recipe.index(command)
+
+        build = position("npm run build")
+        gate = position(f"node --test {SCHEMA_EQUIVALENCE_TEST}")
+        self.assertLess(build, gate, "the gate imports packages/db/dist, so the build comes first")
+        self.assertLess(build, position(f"node --test {SCHEMA_REFERENCE_TEST}"))
+        for command in PACKAGE_TYPECHECKS:
+            self.assertLess(build, position(command))
+
+    def test_package_typechecks_run_in_ci(self) -> None:
+        commands = job_commands(workflow("ci.yml")["jobs"]["package-tests"])
+        for command in PACKAGE_TYPECHECKS:
+            self.assertIn(command, commands)
+        self.assertLess(commands.index("npm run build"), commands.index(PACKAGE_TYPECHECKS[0]))
+
+    def test_every_job_that_builds_watches_the_build_driver(self) -> None:
+        filters = path_filters()
+        for name in ("smoke", "frontend", "schema_equivalence", "package_tests"):
+            self.assertIn(BUILD_WORKSPACES, filters[name], f"{name} does not rerun on {BUILD_WORKSPACES}")
 
     def test_companion_key_moves_with_each_input_and_only_those(self) -> None:
         inputs = companion_key_inputs()

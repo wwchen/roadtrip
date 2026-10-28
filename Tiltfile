@@ -105,9 +105,11 @@ local_resource(
 # and no container restart, just a browser refresh.
 #
 # Split in two so a source edit does not re-resolve dependencies: `npm ci` is
-# keyed on the lockfile, the build on the sources. `npm run build` is
-# `tsc --noEmit && vite build`, so a type error fails this resource and shows up
-# in the Tilt UI instead of silently serving a stale bundle.
+# keyed on the lockfile, the build on the sources. `frontend-dist` builds
+# @roadtrip/domain first (the frontend resolves it through packages/domain/dist),
+# then the frontend's own `npm run build`, which is `tsc --noEmit && vite build`,
+# so a type error in either fails this resource and shows up in the Tilt UI
+# instead of silently serving a stale bundle.
 local_resource(
     'frontend-deps',
     cmd='npm ci --workspace roadtrip-frontend',
