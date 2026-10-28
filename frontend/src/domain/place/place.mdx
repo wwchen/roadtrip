@@ -310,9 +310,15 @@ So the rule is structural:
   whole stay.
 
 The grid carries the same discipline inside itself. `nightOf` reads a night off its
-cells; a day with no cells is `unknown`, and a day that claims to be open without an
-open cell is `unknown` too. The rollup never stands in for a missing cell.
-`SiteMatrix` applies it one level down: `cellState` is a straight lookup of
+cells and nothing else: the most permissive cell decides, so one open site makes the
+night open however little else was read, while calling a night *shut* — full, closed
+or past — takes most of its sites having been read. A day with no cells, or one whose
+cells were mostly never read, is `unknown`. The server's `day.status` is a rollup of
+those same cells and is not read here, because it answers a different question: it
+refuses to call a campground full while even one site went unobserved, which is right
+for a claim and wrong for a night chip, where it turned a campground that is full but
+for two unread sites into `No data` the user could not even select. `SiteMatrix`
+applies the same rule one level down: `cellState` is a straight lookup of
 `day.cells[campsiteId]`, and a night the wire never answered is `unknown` rather
 than the rollup of the nights it did answer.
 
