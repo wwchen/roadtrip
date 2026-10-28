@@ -227,6 +227,22 @@ Deterministic input, deterministic output, no mocking, and a reference implement
 that already works. This replaces most ETL unit tests with one harness and is
 stronger than what it replaces.
 
+**A single-pass differential proves the insert path and not the update path.** Two
+*empty* databases only ever `INSERT`, so the `ON CONFLICT DO UPDATE` half of every
+upsert is invisible to the diff: step 4 found that dropping any of the 28 campground or
+29 campsite conflict-update keys left the differential completely green. That matters
+because the importer's steady state is the refresh, not the seed — `make data-import`
+runs against a database that already holds the catalog. A wrong update-key list
+produces an identical first import and a divergent second one, which is the failure
+mode least likely to be noticed and most likely to be live. Step 4 closed it two ways:
+per-table update-path unit tests that re-upsert a fully-populated row over another and
+assert every column, each proven by mutation; and a **second differential pass** —
+both importers run twice over the same captures before the rows are diffed, so the
+compared state is the one `ON CONFLICT` produced. Run the harness both ways. The
+one-pass run is the stronger check of parse and transform, because an insert-path error
+that the update path happens to correct would be masked by two passes; the two-pass run
+is the only one that sees the refresh. Neither subsumes the other.
+
 **The diff must compare JSONB as `jsonb`, not as `::text`.** Task 7 found that Kotlin
 writes `12.0` where TypeScript writes `12`: equal under the `jsonb` `=` operator,
 different as text. A text comparison would report a spurious difference on a large

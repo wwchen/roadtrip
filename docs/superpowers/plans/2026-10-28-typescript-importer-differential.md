@@ -473,15 +473,16 @@ git commit -m "feat(worker): port the ETL orchestrator, transform context and sh
 - Produces:
   - from `importer-diff-columns.mjs`: `DIFFED_TABLES` — for each of `campgrounds`, `campsites`, `tesla_superchargers`, `planet_fitness_locations`, `pois`, `import_runs`: its key columns, its ignored columns with a reason per entry, and (for `pois`) the link table and owner key it joins through — and `diffSql(table)`, the one statement per table whose compared column list is derived from `getTableConfig`
   - from `importer-differential.mjs`: `runDifferential({ rawDir, staticDir, targets, sources, referenceDump, maxDifferences, emitSeed })` → `{ differences: Difference[], counts: Record<string, number> }`, and `interface Difference { table: string; key: string[]; kind: 'missing_in_kotlin' | 'missing_in_typescript' | 'differs'; columns: string[] }`
-  - the CLI flags `--target <name>` (repeatable), `--source <slug>` (repeatable; restricts which `data_source` captures *both* importers read, for Task 14's CI subset fallback — it must constrain the Kotlin side too or the diff is meaningless), `--reference-dump <path>`, `--max-differences <n>` (default 50), `--emit-seed <path>` (after a clean diff, `pg_dump` the TypeScript database plus a provenance sidecar, for spec §8.1's seed)
+  - the CLI flags `--target <name>` (repeatable), `--source <slug>` (repeatable; restricts which `data_source` captures *both* importers read, for Task 14's CI subset fallback — it must constrain the Kotlin side too or the diff is meaningless), `--reference-dump <path>`, `--max-differences <n>` (default 50), `--emit-seed <path>` (after a clean diff, `pg_dump` the TypeScript database plus a provenance sidecar, for spec §8.1's seed), and `--passes <n>` (default 1)
+  - `--passes 2` runs **each importer twice over the same captures** before the rows are diffed, so the compared state is the one `ON CONFLICT DO UPDATE` produced rather than the one `INSERT` produced. Two empty databases only ever insert, so a single pass cannot see the update half of any upsert — spec §4 states this, and Task 3 found that dropping any of the 28 campground or 29 campsite conflict-update keys leaves a one-pass differential green. `--reference-dump` caches the Kotlin side per pass count; a dump taken at one pass count must not be restored for another, so the pass count joins the provenance key.
   - Gradle: `./gradlew :backend:importCatalog --args="--jdbc-url <url> --raw-dir <dir> --static-dir <dir> [--target <name>] [--source <slug>]"`
 
 How it runs:
 
 0. `npm run build` first, so `packages/worker/dist` is not stale — the same reason `make test` builds before the schema-equivalence lines. The harness refuses to run if `dist/cli/import.js` is missing.
 1. `withPostgis` → one container. `createDatabase('roadtrip_kotlin')` + `migrateFlyway`, `createDatabase('roadtrip_ts')` + `migrateDb`.
-2. Kotlin side: `./gradlew :backend:importCatalog` against `roadtrip_kotlin`, unless `--reference-dump <path>` names a dump whose provenance matches, in which case restore it.
-3. TypeScript side: `node packages/worker/dist/cli/import.js` against `roadtrip_ts`.
+2. Kotlin side: `./gradlew :backend:importCatalog` against `roadtrip_kotlin`, repeated `--passes` times, unless `--reference-dump <path>` names a dump whose provenance matches, in which case restore it.
+3. TypeScript side: `node packages/worker/dist/cli/import.js` against `roadtrip_ts`, repeated `--passes` times.
 4. In `roadtrip_ts`: `CREATE SCHEMA reference` and, per diffed table, `CREATE TABLE reference.<t> (LIKE public.<t>)`, then stream the rows across with `psql -d roadtrip_kotlin -c "COPY public.<t> TO STDOUT (FORMAT binary)" | psql -d roadtrip_ts -c "COPY reference.<t> FROM STDIN (FORMAT binary)"` inside the container. Binary COPY preserves `jsonb` exactly and needs no extension.
 5. Diff with one `FULL OUTER JOIN … USING (<key>)` per table whose predicate is `k.<key> IS NULL OR t.<key> IS NULL OR ROW(k.<cols>) IS DISTINCT FROM ROW(t.<cols>)`. `ROW(...) IS DISTINCT FROM ROW(...)` applies each column's own `=`, so `jsonb` columns compare as `jsonb`. For each differing row, a second query names the columns where `k.<c> IS DISTINCT FROM t.<c>`.
 6. Report the first `--max-differences` (default 50) with table, key, kind (`missing_in_kotlin` / `missing_in_typescript` / `differs`) and the differing column names. Exit non-zero on any difference.
@@ -690,15 +691,18 @@ Both targets read the same `reservecalifornia-catalog` input (823 envelopes). `B
 - Create: `docs/superpowers/2026-10-28-step-4-rulings.md`
 - Reference: `.github/workflows/ci.yml`'s `schema-equivalence` job for the job's shape
 
-- [ ] **Step 1: Run the full differential over every target**
+- [ ] **Step 1: Run the full differential over every target, both ways**
 
-Run: `time node scripts/importer-differential.mjs`
-Expected: `0 differences` across every diffed table and all 18 targets. Record the wall-clock time and the per-table row counts.
+Run: `time node scripts/importer-differential.mjs` then `time node scripts/importer-differential.mjs --passes 2`
+Expected: `0 differences` across every diffed table and all 18 targets, in both runs. Record both wall-clock times and the per-table row counts.
 
-- [ ] **Step 2: Prove the full run can still fail**
+- [ ] **Step 2: Prove the full run can still fail, and that the second pass earns its place**
 
 Run: mutate one row per diffed table in the `reference` schema of a completed run and re-diff.
 Expected: one difference per diffed table, each naming the mutated column. A clean run that cannot go red is worth nothing.
+
+Then, separately: drop one conflict-update key from `campground-repo.ts` — `statusDescription`, which Task 3 used — and run the differential at `--passes 1` and at `--passes 2`.
+Expected: the one-pass run is clean and the two-pass run reports a difference on `status_description` across every campground row. If the two-pass run is also clean, the second pass is not exercising the update path and the `--passes` implementation is wrong. Revert the mutation.
 
 - [ ] **Step 3: Add the `make importer-diff` target**
 
@@ -706,7 +710,7 @@ The full differential is **not** added to `make test`: it needs `data/raw`, whic
 
 - [ ] **Step 4: Decide and wire the CI job**
 
-Rule, applied to Step 1's measured time: the job runs the **full** capture set if the whole job — checkout, Gradle, both imports, diff — lands under 30 minutes on a GitHub runner; otherwise it runs `--source`-filtered subset covering one target per adapter family, and the full run stays the `make importer-diff` gate before landing. `data/raw` is already in every CI checkout (138 MiB packed), so the captures cost nothing extra. Record the measurement and the resulting choice in the job's comment and in the rulings file.
+Rule, applied to Step 1's two measured times. CI runs the full capture set at **both** pass counts if the whole job — checkout, Gradle, four imports, two diffs — lands under 30 minutes on a GitHub runner. If it does not, the one-pass run keeps the full capture set and the two-pass run drops to a `--source`-filtered subset covering one target per adapter family; the one-pass run is the stronger check of parse and transform and has the more rows to lose, while the two-pass run is checking one specific thing — that the update half of each upsert agrees — and a subset establishes that per adapter. If even that does not fit, the two-pass full run stays the `make importer-diff` gate before landing. `data/raw` is already in every CI checkout (138 MiB packed), so the captures cost nothing extra. Record both measurements and the resulting choice in the job's comment and in the rulings file.
 
 Path filter: `packages/**`, `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/**`, `backend/src/main/kotlin/ca/floo/roadtrip/repo/**`, `backend/src/main/kotlin/ca/floo/roadtrip/model/domain/**`, `backend/src/main/kotlin/ca/floo/roadtrip/tools/**`, `backend/src/main/resources/poi-registry.yaml`, `backend/src/main/resources/db/migration/**`, `data/raw/**`, `scripts/importer-differential*.mjs`, `scripts/schema-reference.mjs`, `.github/workflows/ci.yml`.
 
