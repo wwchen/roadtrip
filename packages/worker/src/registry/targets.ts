@@ -14,6 +14,12 @@ interface Row {
   etls: EtlEntry[];
 }
 
+function terminalEtl(row: Row): EtlEntry {
+  const terminal = row.etls[row.etls.length - 1];
+  if (terminal === undefined) throw new Error(`registry row '${row.name}' declares no etls`);
+  return terminal;
+}
+
 function targetsFor(
   section: ImportSection,
   rows: readonly Row[],
@@ -21,7 +27,7 @@ function targetsFor(
 ): ImportTarget[] {
   return rows
     .filter((row) => row.enabled && row.etls.every((etl) => implemented.has(etl.slug)))
-    .map((row) => ({ name: row.name, section, entry: row.etls[row.etls.length - 1]! }));
+    .map((row) => ({ name: row.name, section, entry: terminalEtl(row) }));
 }
 
 export function importTargets(

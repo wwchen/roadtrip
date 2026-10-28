@@ -121,6 +121,7 @@ jobs:
               - '.github/workflows/ci.yml'
             package_tests:
               - 'packages/**'
+              - 'backend/src/main/resources/poi-registry.yaml'
               - 'scripts/schema-reference.mjs'
               - 'scripts/schema-reference.d.mts'
               - 'scripts/build-workspaces.mjs'
@@ -370,6 +371,9 @@ jobs:
       - name: Run @roadtrip/db tests
         run: npm run test --workspace @roadtrip/db
 
+      - name: Run @roadtrip/worker tests
+        run: npm run test --workspace @roadtrip/worker
+
       # tsconfig.json leaves the test files out of the build and vitest strips
       # types without checking them, so these are the only steps that type-check
       # the tests (and scripts/schema-reference.d.mts).
@@ -378,6 +382,9 @@ jobs:
 
       - name: Type-check @roadtrip/db including tests
         run: npm run typecheck --workspace @roadtrip/db
+
+      - name: Type-check @roadtrip/worker including tests
+        run: npm run typecheck --workspace @roadtrip/worker
 
   companion-tests:
     needs: changes

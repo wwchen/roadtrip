@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
-import { loadPoiRegistry } from './poi-registry.js';
+import { loadPoiRegistry, type EtlEntry, type PoiDataEntry, type PoiRegistry } from './poi-registry.js';
 import { importTargets } from './targets.js';
 
 const PRODUCTION_REGISTRY_PATH = fileURLToPath(
@@ -129,5 +129,44 @@ describe('poi registry', () => {
     expect(importTargets(disabled, ALL_PRODUCTION_SLUGS).map((t) => t.name)).not.toContain(
       'Planet Fitness',
     );
+  });
+
+  describe('importTargets on a synthetic registry', () => {
+    const etl = (slug: string): EtlEntry => ({ slug, adapter: 'Adapter', inputs: [], args: {} });
+    const row = (name: string, slugs: string[], enabled = true): PoiDataEntry => ({
+      name,
+      enabled,
+      category: 'campground',
+      etls: slugs.map(etl),
+    });
+    const registryOf = (poiData: PoiDataEntry[]): PoiRegistry => ({
+      dataSources: [],
+      poiData,
+      campsiteData: [],
+      bookingProviders: [],
+      dataSource: () => undefined,
+      poiDataByName: () => undefined,
+      campsiteDataByName: () => undefined,
+    });
+
+    test('the target entry is the terminal etl of a multi-etl row', () => {
+      const targets = importTargets(
+        registryOf([row('Chain', ['first-etl', 'second-etl'])]),
+        new Set(['first-etl', 'second-etl']),
+      );
+      expect(targets.map((t) => t.entry.slug)).toEqual(['second-etl']);
+    });
+
+    test('a row with one implemented and one unimplemented etl slug is skipped', () => {
+      const targets = importTargets(
+        registryOf([row('Half wired', ['wired-etl', 'unwired-etl']), row('Wired', ['wired-etl'])]),
+        new Set(['wired-etl']),
+      );
+      expect(targets.map((t) => t.name)).toEqual(['Wired']);
+    });
+
+    test('a row with no etls fails loudly and names the row', () => {
+      expect(() => importTargets(registryOf([row('Empty', [])]), new Set())).toThrow(/'Empty'/);
+    });
   });
 });
