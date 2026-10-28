@@ -432,14 +432,21 @@ export function rowCountSql(table, schema) {
 // and its side select deliberately keeps only the newest run per source, so its
 // covered count is lower by design and the run count it does not keep is
 // compared as the derived `runs` column instead.
+// A set check, not a count check. Counting the side select against the table
+// nets out: one orphan poi plus one poi linked to two owners leaves
+// present == covered, and the link tables allow it — the primary key is
+// (poi_id, owner_id) and only the owner column is unique, so one poi can hold
+// two links. Identical on both sides, nothing else would report it.
 export function coverageSql(table, schema) {
   const diffed = DIFFED_TABLES.find((candidate) => candidate.table === table);
   if (diffed === undefined) throw new Error(`no diffed table named '${table}'`);
-  return `WITH side AS (
-            ${rowSelect(diffed, schema, diffed.comparedForDiff)}
-          )
-          SELECT (SELECT count(*)::int FROM ${quote(schema, table)}) AS present,
-                 (SELECT count(*)::int FROM side) AS covered`;
+  if (diffed.joins === undefined) {
+    throw new Error(`${table} has no joins, so its side select already reads every row`);
+  }
+  const unlinked = diffed.joins
+    .map((join) => `NOT EXISTS (SELECT 1 FROM ${quote(schema, join.link)} l WHERE l.poi_id = t.id)`)
+    .join(' AND ');
+  return `SELECT count(*)::int AS uncovered FROM ${quote(schema, table)} t WHERE ${unlinked}`;
 }
 
 // Every other base table the migrated schema holds. The completeness test
@@ -447,34 +454,37 @@ export function coverageSql(table, schema) {
 // adds a table has to land in one list or the other — which is the same net as
 // the per-column one, at table granularity. A table the catalog importer
 // writes belongs in DIFFED_TABLES; anything else belongs here.
-export const NOT_IMPORTED_TABLES = [
-  'api_cache',
-  'app_user',
-  'availability',
-  'availability_fetch_call',
-  'availability_poller',
-  'availability_run',
-  'availability_watch',
-  'availability_watch_poller',
-  'availability_watch_target',
-  'ingest_runs',
-  'spatial_ref_sys',
-  'user_booking_credentials',
-  'user_identity',
-  'user_role',
-  'user_session',
-  'user_settings',
-  'vendor_rate_limit_bucket',
-];
+export const NOT_IMPORTED_TABLES = {
+  api_cache: 'request-time cache written by the API, never by an importer',
+  app_user: 'accounts, written by the auth layer',
+  availability: 'request-time availability, written by the poller',
+  availability_fetch_call: 'per-vendor fetch bookkeeping, written by the poller',
+  availability_poller: 'poller registry, written by the scheduler',
+  availability_run: 'one row per poll, written by the poller',
+  availability_watch: 'user-created watches',
+  availability_watch_poller: 'watch-to-poller join, written with the watch',
+  availability_watch_target: 'watch-to-target join, written with the watch',
+  ingest_runs: 'IngestController bookkeeping; the plan does not port IngestController',
+  spatial_ref_sys: 'PostGIS reference data, created by the extension',
+  user_booking_credentials: 'per-user vendor credentials, written by the auth layer',
+  user_identity: 'OIDC identities, written by the auth layer',
+  user_role: 'role grants, written by the auth layer',
+  user_session: 'sessions, written by the auth layer',
+  user_settings: 'per-user preferences, written by the API',
+  vendor_rate_limit_bucket: "bucket4j's token-bucket store for the fetch governor, written by neither importer",
+};
 
 export const BASE_TABLES_SQL = `SELECT table_name AS name
   FROM information_schema.tables
   WHERE table_schema = '${TYPESCRIPT_SCHEMA}' AND table_type = 'BASE TABLE'
   ORDER BY table_name`;
 
-// The tables whose side select must reach every row. import_runs is the one
-// exemption and it is named here rather than inferred, so a future table that
-// needs one has to say so.
+// Which tables the coverage check applies to, and why the others are left out.
+// A table whose side select is plain `FROM <table>` reads every row by
+// construction and needs no check; a table whose select is narrowed needs
+// either a `joins` list (checked above) or a named exemption here. The
+// completeness test holds that invariant, so a future narrowed select cannot
+// quietly join the third group.
 export const COVERAGE_EXEMPT_TABLES = {
   import_runs: 'append-only; the side select keeps the newest run per source and compares the rest as `runs`',
 };

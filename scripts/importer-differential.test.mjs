@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, stat, utimes, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { createDb, migrateDb } from '@roadtrip/db';
 import {
   BASE_TABLES_SQL,
   blankSql,
   columnsOf,
   COPIED_TABLES,
+  COVERAGE_EXEMPT_TABLES,
   DIFFED_TABLES,
   fingerprintSql,
   KOTLIN_SCHEMA,
@@ -18,16 +18,19 @@ import {
   TYPESCRIPT_SCHEMA,
 } from './importer-diff-columns.mjs';
 import {
+  assertCurrentBuild,
   createReferenceSchema,
   diffDatabases,
+  positiveInteger,
   runDifferential,
   staleBuilds,
 } from './importer-differential.mjs';
 import { withPostgis } from './schema-reference.mjs';
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const WORKER_SOURCE_PROBE = 'packages/worker/src/cli/run-cli.ts';
+const WORKER_ENTRY = 'packages/worker/dist/cli/import.js';
 const STALE_SKEW_MS = 60_000;
+const UNREADABLE_MODE = 0o000;
+const READABLE_MODE = 0o755;
 
 const FIXTURE_DB = 'roadtrip_differential_fixture';
 const FIXTURE_PREPARE = false;
@@ -40,29 +43,29 @@ const TESLA_SLUG = 'tesla-slug-1';
 const FITNESS_ID = 'pf-1';
 const RUN_SOURCE = 'test-source';
 
-// One row per diffed table, inserted into public only; reseed() then copies
-// public into reference so both sides start byte-identical and every test
-// begins from the same state rather than from the previous test's mutation.
+// One row per diffed table, inserted into the TypeScript schema only;
+// reseed() then copies it across so both sides start byte-identical and every
+// test begins from the same state rather than from the previous one's mutation.
 const SEED = `
-INSERT INTO public.campgrounds (data_provider, data_provider_ref, name, price, management)
+INSERT INTO ${TYPESCRIPT_SCHEMA}.campgrounds (data_provider, data_provider_ref, name, price, management)
   VALUES ('${PROVIDER}', '${REF}', 'Fixture Campground', '{"minimum": 12}', '{"agency": "Fixture"}');
-INSERT INTO public.campsites (campground_id, data_provider, data_provider_ref, name, kind)
-  SELECT id, '${PROVIDER}', '${SITE_REF}', 'Fixture Site', 'tent' FROM public.campgrounds;
-INSERT INTO public.tesla_superchargers (location_slug, common_site_name, site_status)
+INSERT INTO ${TYPESCRIPT_SCHEMA}.campsites (campground_id, data_provider, data_provider_ref, name, kind)
+  SELECT id, '${PROVIDER}', '${SITE_REF}', 'Fixture Site', 'tent' FROM ${TYPESCRIPT_SCHEMA}.campgrounds;
+INSERT INTO ${TYPESCRIPT_SCHEMA}.tesla_superchargers (location_slug, common_site_name, site_status)
   VALUES ('${TESLA_SLUG}', 'Fixture Supercharger', 'OPEN');
-INSERT INTO public.planet_fitness_locations (location_id, name)
+INSERT INTO ${TYPESCRIPT_SCHEMA}.planet_fitness_locations (location_id, name)
   VALUES ('${FITNESS_ID}', 'Fixture Gym');
-INSERT INTO public.pois (poi_type, geom)
+INSERT INTO ${TYPESCRIPT_SCHEMA}.pois (poi_type, geom)
   VALUES ('campground', 'SRID=4326;POINT(-122.25 44.5)'),
          ('tesla_supercharger', 'SRID=4326;POINT(-122.26 44.6)'),
          ('planet_fitness_location', 'SRID=4326;POINT(-122.27 44.7)');
-INSERT INTO public.poi_campgrounds (poi_id, campground_id)
-  SELECT p.id, c.id FROM public.pois p, public.campgrounds c WHERE p.poi_type = 'campground';
-INSERT INTO public.poi_tesla_superchargers (poi_id, tesla_supercharger_id)
-  SELECT p.id, s.id FROM public.pois p, public.tesla_superchargers s WHERE p.poi_type = 'tesla_supercharger';
-INSERT INTO public.poi_planet_fitness_locations (poi_id, planet_fitness_location_id)
-  SELECT p.id, l.id FROM public.pois p, public.planet_fitness_locations l WHERE p.poi_type = 'planet_fitness_location';
-INSERT INTO public.import_runs (source, status, seen_count) VALUES ('${RUN_SOURCE}', 'completed', 1);
+INSERT INTO ${TYPESCRIPT_SCHEMA}.poi_campgrounds (poi_id, campground_id)
+  SELECT p.id, c.id FROM ${TYPESCRIPT_SCHEMA}.pois p, ${TYPESCRIPT_SCHEMA}.campgrounds c WHERE p.poi_type = 'campground';
+INSERT INTO ${TYPESCRIPT_SCHEMA}.poi_tesla_superchargers (poi_id, tesla_supercharger_id)
+  SELECT p.id, s.id FROM ${TYPESCRIPT_SCHEMA}.pois p, ${TYPESCRIPT_SCHEMA}.tesla_superchargers s WHERE p.poi_type = 'tesla_supercharger';
+INSERT INTO ${TYPESCRIPT_SCHEMA}.poi_planet_fitness_locations (poi_id, planet_fitness_location_id)
+  SELECT p.id, l.id FROM ${TYPESCRIPT_SCHEMA}.pois p, ${TYPESCRIPT_SCHEMA}.planet_fitness_locations l WHERE p.poi_type = 'planet_fitness_location';
+INSERT INTO ${TYPESCRIPT_SCHEMA}.import_runs (source, status, seen_count) VALUES ('${RUN_SOURCE}', 'completed', 1);
 `;
 
 const copiedTableNames = COPIED_TABLES.map((table) => table.name);
@@ -129,6 +132,28 @@ test('every diffed table names every one of its columns as compared or ignored',
       [],
       `${spec.table}: column(s) both compared and ignored`,
     );
+    // A narrowed side select is only safe if something checks what it leaves
+    // out: either a `joins` list, which coverageSql tests with NOT EXISTS, or
+    // a named exemption. Without this, a future narrowing would be undiffed
+    // rows that nothing reports.
+    if (spec.rowSelect !== undefined) {
+      assert.ok(
+        spec.joins !== undefined || Object.hasOwn(COVERAGE_EXEMPT_TABLES, spec.table),
+        `${spec.table} narrows its side select with neither a joins list nor a coverage exemption`,
+      );
+    }
+  }
+});
+
+test('--passes and --max-differences reject what they cannot mean', () => {
+  assert.equal(positiveInteger('--passes', undefined, 1), 1);
+  assert.equal(positiveInteger('--passes', '3', 1), 3);
+  for (const bad of ['2x', 'abc', '0', '-1', '', ' 2', '2.5']) {
+    assert.throws(
+      () => positiveInteger('--passes', bad, 1),
+      new RegExp(`--passes must be a positive integer, got '${bad.replace(/[-.]/g, '\\$&')}'`),
+      `--passes ${JSON.stringify(bad)} was accepted`,
+    );
   }
 });
 
@@ -167,20 +192,119 @@ const writeCampground = async ({ databaseUrl }) =>
      SELECT p.id, c.id FROM ${TYPESCRIPT_SCHEMA}.pois p, ${TYPESCRIPT_SCHEMA}.campgrounds c`,
   ]);
 
-test('a source file newer than its build refuses the run instead of diffing the old build', async (t) => {
-  assert.deepEqual(staleBuilds(), [], 'run `npm run build` first: this suite needs a current build');
-
-  const source = path.join(REPO_ROOT, WORKER_SOURCE_PROBE);
-  const original = (await stat(source)).mtime;
-  const future = new Date(Date.now() + STALE_SKEW_MS);
-  await utimes(source, future, future);
-  try {
-    assert.notDeepEqual(staleBuilds(), [], 'touching a source file did not register as stale');
-    await assert.rejects(runDifferential(), /stale build, not a clean diff/);
-  } finally {
-    await utimes(source, original, original);
+// A throwaway workspace root, so nothing in this suite ever moves a tracked
+// file's mtime. An abrupt exit during the earlier version of this test left
+// the real tree reading as permanently stale, which is the very trap
+// finding 11 is about.
+// `withDist` is a flag rather than `dist: undefined`, because passing
+// undefined for a defaulted parameter applies the default.
+async function scratchWorkspace({ src = { 'index.ts': 'export const a = 1;\n' }, dist = {}, withDist = true } = {}) {
+  const root = await mkdtemp(path.join(tmpdir(), 'roadtrip-stale-'));
+  await writeFile(path.join(root, 'package.json'), JSON.stringify({ workspaces: ['packages/*'] }));
+  const pkg = path.join(root, 'packages', 'worker');
+  await mkdir(path.join(pkg, 'src'), { recursive: true });
+  await writeFile(path.join(pkg, 'package.json'), JSON.stringify({ name: 'worker', scripts: { build: 'tsc' } }));
+  for (const [name, body] of Object.entries(src)) await writeFile(path.join(pkg, 'src', name), body);
+  if (withDist) {
+    await mkdir(path.join(root, path.dirname(WORKER_ENTRY)), { recursive: true });
+    for (const [name, body] of Object.entries(dist)) await writeFile(path.join(pkg, 'dist', name), body);
   }
-  assert.deepEqual(staleBuilds(), [], 'the probe did not restore the source file mtime');
+  return { root, pkg, entry: path.join(root, WORKER_ENTRY) };
+}
+
+const touchFuture = async (target) => {
+  const future = new Date(Date.now() + STALE_SKEW_MS);
+  await utimes(target, future, future);
+};
+
+test('the build guard sees every way the output can stop matching the source', async (t) => {
+  await t.test('a freshly built package is not stale', async () => {
+    const { root } = await scratchWorkspace();
+    assert.deepEqual(staleBuilds(root), []);
+  });
+
+  await t.test('a source file newer than the output is stale', async () => {
+    const { root, pkg } = await scratchWorkspace();
+    await touchFuture(path.join(pkg, 'src', 'index.ts'));
+    assert.match(staleBuilds(root).join('\n'), /index\.ts is newer than its dist\//);
+  });
+
+  await t.test('a deleted source file is stale, because the directory is newer', async () => {
+    const { root, pkg } = await scratchWorkspace({ src: { 'index.ts': '', 'gone.ts': '' } });
+    await touchFuture(path.join(pkg, 'src'));
+    assert.match(staleBuilds(root).join('\n'), /src is newer than its dist\//);
+  });
+
+  await t.test('a test file newer than the output is not stale', async () => {
+    const { root, pkg } = await scratchWorkspace({ src: { 'index.ts': '', 'index.test.ts': '' } });
+    await touchFuture(path.join(pkg, 'src', 'index.test.ts'));
+    assert.deepEqual(staleBuilds(root), []);
+  });
+
+  await t.test('a package with no output is stale', async () => {
+    const { root } = await scratchWorkspace({ withDist: false });
+    assert.match(staleBuilds(root).join('\n'), /has no dist\//);
+  });
+
+  await t.test('an unreadable source tree is stale, not silently fine', async () => {
+    const { root, pkg } = await scratchWorkspace();
+    await chmod(path.join(pkg, 'src'), UNREADABLE_MODE);
+    try {
+      assert.match(staleBuilds(root).join('\n'), /src\/ could not be read/);
+    } finally {
+      await chmod(path.join(pkg, 'src'), READABLE_MODE);
+    }
+  });
+});
+
+test('a stale build is rebuilt rather than refused, and a failing build refuses', async (t) => {
+  await t.test('a source whose mtime moved but whose content did not clears itself', async () => {
+    // tsc 7 records input content signatures in dist/.tsbuildinfo, so a
+    // rebuild after a mtime-only change writes nothing and the output stays
+    // older than the source. The guard has to accept that: re-checking mtimes
+    // after a successful build would refuse forever, and tell the operator to
+    // run the build that cannot clear it.
+    const { root, pkg, entry } = await scratchWorkspace({ dist: { 'index.js': '' } });
+    await writeFile(entry, '');
+    await touchFuture(path.join(pkg, 'src', 'index.ts'));
+    assert.notDeepEqual(staleBuilds(root), [], 'the fixture is not stale, so this proves nothing');
+
+    let built = 0;
+    const build = async () => {
+      built += 1;
+    };
+    await assertCurrentBuild({ root, build });
+    assert.equal(built, 1, 'the guard did not rebuild');
+    assert.notDeepEqual(staleBuilds(root), [], 'the fixture stopped being mtime-stale, so this proves nothing');
+  });
+
+  await t.test('a build that fails refuses the run and says so', async () => {
+    const { root } = await scratchWorkspace({ withDist: false });
+    const build = async () => {
+      throw new Error('tsc exited 2');
+    };
+    await assert.rejects(assertCurrentBuild({ root, build }), /broken build, not a clean diff/);
+  });
+
+  await t.test('a build that leaves the entry point missing refuses the run', async () => {
+    const { root } = await scratchWorkspace({ withDist: false });
+    const build = async () => {};
+    await assert.rejects(assertCurrentBuild({ root, build }), /still missing/);
+  });
+
+  await t.test('a current build neither rebuilds nor refuses', async () => {
+    const { root, entry } = await scratchWorkspace({ dist: { 'index.js': '' } });
+    await writeFile(entry, '');
+    assert.deepEqual(staleBuilds(root), []);
+    let built = 0;
+    await assertCurrentBuild({
+      root,
+      build: async () => {
+        built += 1;
+      },
+    });
+    assert.equal(built, 0, 'the guard rebuilt a current build');
+  });
 });
 
 test('a run over a raw dir with no captures fails instead of reporting a clean diff', async () => {
@@ -228,7 +352,7 @@ test(
         await t.test('a single changed scalar is reported with its table, key and column', async () => {
           await reseed(db);
           await db.$client.unsafe(
-            `UPDATE reference.campgrounds SET name = 'Changed' WHERE data_provider_ref = '${REF}'`,
+            `UPDATE ${KOTLIN_SCHEMA}.campgrounds SET name = 'Changed' WHERE data_provider_ref = '${REF}'`,
           );
           assert.deepEqual(await diffOnly(), [
             { table: 'campgrounds', key: [PROVIDER, REF], kind: 'differs', columns: ['name'] },
@@ -238,10 +362,10 @@ test(
         await t.test('a jsonb value differing only in numeric rendering is NOT reported', async () => {
           await reseed(db);
           await db.$client.unsafe(
-            `UPDATE reference.campgrounds SET price = '{"minimum": 12.0}'::jsonb WHERE data_provider_ref = '${REF}'`,
+            `UPDATE ${KOTLIN_SCHEMA}.campgrounds SET price = '{"minimum": 12.0}'::jsonb WHERE data_provider_ref = '${REF}'`,
           );
           await db.$client.unsafe(
-            `UPDATE public.campgrounds SET price = '{"minimum": 12}'::jsonb WHERE data_provider_ref = '${REF}'`,
+            `UPDATE ${TYPESCRIPT_SCHEMA}.campgrounds SET price = '{"minimum": 12}'::jsonb WHERE data_provider_ref = '${REF}'`,
           );
           assert.deepEqual(await diffOnly(), []);
         });
@@ -249,10 +373,10 @@ test(
         await t.test('the same pair compared as text WOULD be reported', async () => {
           await reseed(db);
           await db.$client.unsafe(
-            `UPDATE reference.campgrounds SET price = '{"minimum": 12.0}'::jsonb WHERE data_provider_ref = '${REF}'`,
+            `UPDATE ${KOTLIN_SCHEMA}.campgrounds SET price = '{"minimum": 12.0}'::jsonb WHERE data_provider_ref = '${REF}'`,
           );
           await db.$client.unsafe(
-            `UPDATE public.campgrounds SET price = '{"minimum": 12}'::jsonb WHERE data_provider_ref = '${REF}'`,
+            `UPDATE ${TYPESCRIPT_SCHEMA}.campgrounds SET price = '{"minimum": 12}'::jsonb WHERE data_provider_ref = '${REF}'`,
           );
           assert.deepEqual(await diffOnly(), []);
           assert.notDeepEqual(await textDiff('campgrounds', 'price'), []);
@@ -308,14 +432,20 @@ test(
         await t.test('every base table in the schema is diffed or named as not imported', async () => {
           const rows = await db.$client.unsafe(BASE_TABLES_SQL);
           const present = rows.map((row) => row.name);
-          const accounted = new Set([...copiedTableNames, ...NOT_IMPORTED_TABLES]);
+          for (const [table, reason] of Object.entries(NOT_IMPORTED_TABLES)) {
+            assert.ok(
+              typeof reason === 'string' && reason.trim() !== '',
+              `${table} is named as not imported with no reason`,
+            );
+          }
+          const accounted = new Set([...copiedTableNames, ...Object.keys(NOT_IMPORTED_TABLES)]);
           assert.deepEqual(
             present.filter((name) => !accounted.has(name)),
             [],
             'table(s) in the schema that are neither diffed nor named as not imported',
           );
           assert.deepEqual(
-            NOT_IMPORTED_TABLES.filter((name) => !present.includes(name)),
+            Object.keys(NOT_IMPORTED_TABLES).filter((name) => !present.includes(name)),
             [],
             'table(s) named as not imported that the schema does not have',
           );
@@ -327,7 +457,31 @@ test(
             `INSERT INTO ${TYPESCRIPT_SCHEMA}.pois (poi_type, geom)
              VALUES ('campground', 'SRID=4326;POINT(-122.3 44.8)')`,
           );
-          await assert.rejects(diffDatabases(db), /pois: the diff reaches 3 of 4 row\(s\)/);
+          await assert.rejects(diffDatabases(db), /public\.pois: 1 row\(s\) are reachable through none/);
+        });
+
+        await t.test('an orphan on both sides at once is refused, not cancelled out', async () => {
+          // The pair a count-based coverage check cannot see: one orphan plus
+          // one poi carrying two links nets to present == covered, and the
+          // link primary key is (poi_id, owner_id) with only the owner column
+          // unique, so the second link is allowed. Identical on both sides,
+          // the keyed diff reports nothing either.
+          await reseed(db);
+          for (const schema of [TYPESCRIPT_SCHEMA, KOTLIN_SCHEMA]) {
+            await db.$client.unsafe(
+              `INSERT INTO ${schema}.pois (poi_type, geom) VALUES ('campground', 'SRID=4326;POINT(-122.3 44.8)')`,
+            );
+            await db.$client.unsafe(
+              `INSERT INTO ${schema}.campgrounds (data_provider, data_provider_ref, name)
+               VALUES ('${PROVIDER}', 'cg-2', 'Second campground')`,
+            );
+            await db.$client.unsafe(
+              `INSERT INTO ${schema}.poi_campgrounds (poi_id, campground_id)
+               SELECT (SELECT min(id) FROM ${schema}.pois WHERE poi_type = 'campground'),
+                      (SELECT id FROM ${schema}.campgrounds WHERE data_provider_ref = 'cg-2')`,
+            );
+          }
+          await assert.rejects(diffDatabases(db), /pois: 1 row\(s\) are reachable through none/);
         });
 
         await t.test('a duplicated key is refused rather than silently cross-joined', async () => {

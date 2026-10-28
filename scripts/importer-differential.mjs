@@ -35,7 +35,7 @@
 //        [--prove-update-keys]
 
 import { execFile, spawn } from 'node:child_process';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -78,6 +78,7 @@ const NODE_EXECUTABLE = process.execPath;
 const DEFAULT_MAX_DIFFERENCES = 50;
 const DEFAULT_PASSES = 1;
 const PROVE_UPDATE_KEYS_PASSES = 2;
+const BLANK_AFTER_PASS = 1;
 
 const JSON_SUFFIX = '.json';
 const PARENT_SEGMENT = '..';
@@ -117,6 +118,24 @@ const USAGE =
 
 class MissingBuildError extends Error {}
 
+// Names the flag and echoes what the user typed, so `--passes 2x` is rejected
+// rather than silently read as 2 and a bad value does not come back as NaN.
+const INTEGER_PATTERN = /^[0-9]+$/;
+
+export function positiveInteger(flag, raw, fallback) {
+  if (raw === undefined) return fallback;
+  if (!INTEGER_PATTERN.test(raw) || Number.parseInt(raw, 10) < 1) {
+    throw new Error(`${flag} must be a positive integer, got '${raw}'`);
+  }
+  return Number.parseInt(raw, 10);
+}
+
+function assertPositiveInteger(flag, value) {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error(`${flag} must be a positive integer, got ${JSON.stringify(value)}`);
+  }
+}
+
 // Absent *and* stale, because this is the only guard standing between an edit
 // to packages/*/src and a clean diff over the previous build. Tasks 6-13 each
 // end on this command right after editing TypeScript, so an existence-only
@@ -131,90 +150,136 @@ const BUILD_OUTPUT_DIR = 'dist';
 const BUILD_SCRIPT = 'build';
 const TEST_SOURCE_SUFFIXES = ['.test.ts', '.test.tsx'];
 
-function newestFile(dir, skip = () => false) {
-  let newest;
-  const walk = (current) => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (!entry.isFile() || skip(entry.name)) continue;
-      const { mtimeMs } = statSync(full);
-      if (newest === undefined || mtimeMs > newest.mtimeMs) newest = { path: full, mtimeMs };
+// Directory mtimes count, not just file mtimes: deleting a source file touches
+// its directory and no file at all, so a delete with no other edit is
+// invisible to a files-only walk.
+//
+// Throws rather than returning a sentinel on a read error. An unreadable
+// source tree is the one case where guessing is unacceptable — treating it as
+// "nothing to compare" makes the whole guard fail open, which is the hole it
+// exists to close.
+function newestEntry(dir, skip = () => false) {
+  let newest = { path: dir, mtimeMs: statSync(dir).mtimeMs };
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const deepest = newestEntry(full, skip);
+      if (deepest.mtimeMs > newest.mtimeMs) newest = deepest;
+      continue;
     }
-  };
-  try {
-    walk(dir);
-  } catch {
-    return undefined;
+    if (!entry.isFile() || skip(entry.name)) continue;
+    const { mtimeMs } = statSync(full);
+    if (mtimeMs > newest.mtimeMs) newest = { path: full, mtimeMs };
   }
   return newest;
 }
 
-// The workspaces the two commands below load through `dist`, in dependency
-// order, read from the root manifest so a new package cannot escape the check.
-function buildableWorkspaces() {
-  const { workspaces = [] } = JSON.parse(readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
+function directoryExists(dir) {
+  try {
+    return statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// The workspaces the two importers load through `dist`, read from the root
+// manifest so a new package cannot escape the check.
+function buildableWorkspaces(root) {
+  const { workspaces = [] } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
   const dirs = [];
   for (const pattern of workspaces) {
     if (!pattern.endsWith('/*')) continue;
-    const parent = path.join(REPO_ROOT, pattern.slice(0, -2));
+    const parent = path.join(root, pattern.slice(0, -2));
+    if (!directoryExists(parent)) continue;
     for (const entry of readdirSync(parent, { withFileTypes: true })) {
       if (entry.isDirectory()) dirs.push(path.join(parent, entry.name));
     }
   }
   return dirs.filter((dir) => {
+    const manifest = path.join(dir, 'package.json');
+    if (!directoryExists(path.join(dir, BUILD_SOURCE_DIR))) return false;
     try {
-      const manifest = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
-      return manifest.scripts?.[BUILD_SCRIPT] !== undefined;
+      return JSON.parse(readFileSync(manifest, 'utf8')).scripts?.[BUILD_SCRIPT] !== undefined;
     } catch {
       return false;
     }
   });
 }
 
-export function staleBuilds() {
+export function staleBuilds(root = REPO_ROOT) {
   const stale = [];
-  for (const dir of buildableWorkspaces()) {
-    const relative = path.relative(REPO_ROOT, dir);
-    // Test sources are excluded from each package's build, so they can be
-    // newer than dist without anything being stale.
-    const source = newestFile(
-      path.join(dir, BUILD_SOURCE_DIR),
-      (name) => TEST_SOURCE_SUFFIXES.some((suffix) => name.endsWith(suffix)),
-    );
-    if (source === undefined) continue;
-    const output = newestFile(path.join(dir, BUILD_OUTPUT_DIR));
-    if (output === undefined) {
+  for (const dir of buildableWorkspaces(root)) {
+    const relative = path.relative(root, dir);
+    let source;
+    try {
+      // Test sources are excluded from each package's build, so they can be
+      // newer than dist without anything being stale.
+      source = newestEntry(path.join(dir, BUILD_SOURCE_DIR), (name) =>
+        TEST_SOURCE_SUFFIXES.some((suffix) => name.endsWith(suffix)),
+      );
+    } catch (error) {
+      stale.push(`${relative}: its ${BUILD_SOURCE_DIR}/ could not be read (${error.message})`);
+      continue;
+    }
+    if (!directoryExists(path.join(dir, BUILD_OUTPUT_DIR))) {
       stale.push(`${relative} has no ${BUILD_OUTPUT_DIR}/`);
       continue;
     }
+    let output;
+    try {
+      output = newestEntry(path.join(dir, BUILD_OUTPUT_DIR));
+    } catch (error) {
+      stale.push(`${relative}: its ${BUILD_OUTPUT_DIR}/ could not be read (${error.message})`);
+      continue;
+    }
     if (source.mtimeMs > output.mtimeMs) {
-      stale.push(`${relative}: ${path.relative(REPO_ROOT, source.path)} is newer than its ${BUILD_OUTPUT_DIR}/`);
+      stale.push(`${relative}: ${path.relative(root, source.path)} is newer than its ${BUILD_OUTPUT_DIR}/`);
     }
   }
   return stale;
 }
 
-async function loadWorker() {
-  const entry = path.join(REPO_ROOT, WORKER_ENTRY);
+// Builds when the mtime comparison says the output might not match the source,
+// and treats a successful build as authoritative rather than re-checking.
+//
+// That last part is the whole point. tsc 7's incremental build records input
+// content signatures in dist/.tsbuildinfo, so a source file whose mtime moved
+// but whose content did not — a branch round-trip, a rebase, a checkout —
+// produces no output at all. An mtime comparison that is a *verdict* then
+// refuses forever and tells the operator to run a build that cannot clear it,
+// which strands the eight tasks that end on this command. As a *trigger* it
+// costs one no-op build and then proceeds, and the content question is left to
+// the only thing that can answer it.
+export async function assertCurrentBuild({ root = REPO_ROOT, build = runBuild } = {}) {
+  const entry = path.join(root, WORKER_ENTRY);
+  const missing = !existsSync(entry);
+  const stale = staleBuilds(root);
+  if (!missing && stale.length === 0) return;
+
+  const why = missing ? [`${WORKER_ENTRY} is missing`] : stale;
+  console.log(`rebuilding before the differential:\n  ${why.join('\n  ')}`);
   try {
-    statSync(entry);
-  } catch {
+    await build();
+  } catch (error) {
     throw new MissingBuildError(
-      `@roadtrip/worker is not built: ${WORKER_ENTRY} is missing. Run \`${WORKER_BUILD_COMMAND}\` ` +
-        'before the differential; this is a missing build, not a clean diff.',
+      `\`${WORKER_BUILD_COMMAND}\` failed, so the TypeScript importer on disk is not the one in ` +
+        `src: ${error.message}. This is a broken build, not a clean diff.`,
     );
   }
-  const stale = staleBuilds();
-  if (stale.length > 0) {
+  if (!existsSync(entry)) {
     throw new MissingBuildError(
-      `the build is stale, so the TypeScript importer on disk is not the one in src:\n  ${stale.join('\n  ')}\n` +
-        `Run \`${WORKER_BUILD_COMMAND}\` before the differential; this is a stale build, not a clean diff.`,
+      `\`${WORKER_BUILD_COMMAND}\` succeeded but ${WORKER_ENTRY} is still missing. ` +
+        'This is a missing build, not a clean diff.',
     );
   }
+}
+
+async function runBuild() {
+  await runProcess('npm', ['run', BUILD_SCRIPT], WORKER_BUILD_COMMAND);
+}
+
+async function loadWorker(build) {
+  await assertCurrentBuild({ build });
   return import('@roadtrip/worker');
 }
 
@@ -457,14 +522,13 @@ async function auditKeys(db, table, schema) {
   );
 }
 
-async function auditCoverage(db, table, schema) {
-  if (Object.hasOwn(COVERAGE_EXEMPT_TABLES, table)) return;
-  const [{ present, covered }] = await db.$client.unsafe(coverageSql(table, schema));
-  if (present === covered) return;
+async function auditCoverage(db, spec, schema) {
+  if (Object.hasOwn(COVERAGE_EXEMPT_TABLES, spec.table) || spec.joins === undefined) return;
+  const [{ uncovered }] = await db.$client.unsafe(coverageSql(spec.table, schema));
+  if (uncovered === 0) return;
   throw new Error(
-    `${schema}.${table}: the diff reaches ${covered} of ${present} row(s). ` +
-      `${present - covered} row(s) are invisible to the comparison — for pois that is a poi with no ` +
-      'link row — so a clean diff over this table would prove nothing about them.',
+    `${schema}.${spec.table}: ${uncovered} row(s) are reachable through none of its link tables, ` +
+      'so the comparison cannot see them at all and a clean diff would prove nothing about them.',
   );
 }
 
@@ -478,7 +542,7 @@ export async function tableCounts(db) {
   for (const spec of DIFFED_TABLES) {
     for (const side of SIDES) {
       await auditKeys(db, spec.table, side.schema);
-      await auditCoverage(db, spec.table, side.schema);
+      await auditCoverage(db, spec, side.schema);
       const [{ rows }] = await db.$client.unsafe(rowCountSql(spec.table, side.schema));
       counts[`${side.name}.${spec.table}`] = rows;
     }
@@ -695,17 +759,18 @@ export async function runDifferential({
   emitSeed,
   passes = DEFAULT_PASSES,
   proveUpdateKeys = false,
-  // The one injection seam: importer-differential.test.mjs replaces these to
-  // reach the guards that follow an import without running two real importers.
+  // The injection seams: importer-differential.test.mjs replaces these to reach
+  // the guards that follow a build or an import without running the real thing.
   // Everything else in this function is the production path.
   importers = DEFAULT_IMPORTERS,
+  build,
 } = {}) {
-  const { loadPoiRegistry } = await loadWorker();
-  if (!Number.isSafeInteger(passes) || passes < 1) {
-    // Without this, `--passes abc` runs no importer at all and then fails with
-    // "wrote zero rows", which names the wrong problem.
-    throw new Error(`--passes must be a positive integer, got ${passes}`);
-  }
+  // Both counts are checked before anything expensive. `--passes abc` used to
+  // run no importer at all and then fail with "wrote zero rows", which names
+  // the wrong problem, and --max-differences was only validated once the diff
+  // was reached — twenty minutes in.
+  assertPositiveInteger('--passes', passes);
+  assertPositiveInteger('--max-differences', maxDifferences);
   const effectivePasses = proveUpdateKeys ? Math.max(passes, PROVE_UPDATE_KEYS_PASSES) : passes;
 
   if (proveUpdateKeys && referenceDump !== undefined) {
@@ -716,9 +781,14 @@ export async function runDifferential({
     throw new Error('--prove-update-keys cannot use --reference-dump: a restored Kotlin side re-writes nothing');
   }
 
+  const { loadPoiRegistry } = await loadWorker(build);
   const registry = loadPoiRegistry(registryPath);
   const selected = selectTargets(registry, { targets, sources });
   assertCapturesPresent(registry, selected, { rawDir, staticDir });
+  // Computed here only for its refusal. Left where it is used it would be
+  // reached after both importers had run — twenty minutes to learn that a
+  // poi_data category has no entry in the map.
+  expectedTables(selected);
 
   const targetNames = selected.map((target) => target.name);
   const wanted = await provenanceFor({ targets, sources, passes: effectivePasses, proveUpdateKeys });
@@ -749,7 +819,14 @@ export async function runDifferential({
       // Gradle's own startup are ~28 s each and the Kotlin CLI loops over the
       // targets itself. --prove-update-keys is the only mode that needs two
       // segments, because its blanking step has to land between them.
-      const segments = proveUpdateKeys ? [1, 1] : [effectivePasses];
+      // Under --prove-update-keys the blanking lands after the first pass, so
+      // the run splits there and every remaining pass follows it. Splitting
+      // into [1, 1] regardless would have run two passes while the provenance
+      // key recorded --passes 3, which would later authorise reusing a dump
+      // the run never produced.
+      const segments = proveUpdateKeys
+        ? [BLANK_AFTER_PASS, effectivePasses - BLANK_AFTER_PASS]
+        : [effectivePasses];
       let completed = 0;
       for (const [segment, segmentPasses] of segments.entries()) {
         if (segment > 0) await blankBothSides([kotlinDb, typescriptDb]);
@@ -857,12 +934,9 @@ async function main() {
       rawDir: values['raw-dir'] === undefined ? undefined : path.resolve(values['raw-dir']),
       staticDir: values['static-dir'] === undefined ? undefined : path.resolve(values['static-dir']),
       referenceDump: values['reference-dump'] === undefined ? undefined : path.resolve(values['reference-dump']),
-      maxDifferences:
-        values['max-differences'] === undefined
-          ? DEFAULT_MAX_DIFFERENCES
-          : Number.parseInt(values['max-differences'], 10),
+      maxDifferences: positiveInteger('--max-differences', values['max-differences'], DEFAULT_MAX_DIFFERENCES),
       emitSeed: values['emit-seed'] === undefined ? undefined : path.resolve(values['emit-seed']),
-      passes: values.passes === undefined ? DEFAULT_PASSES : Number.parseInt(values.passes, 10),
+      passes: positiveInteger('--passes', values.passes, DEFAULT_PASSES),
       proveUpdateKeys: values['prove-update-keys'] === true,
     });
     process.exitCode = report(result);
