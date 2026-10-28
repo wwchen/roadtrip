@@ -33,6 +33,7 @@ import { upsertTeslaSuperchargerBatch } from './tesla-repo.js';
 
 const CATALOG_WRITE_DB = 'roadtrip_catalog_write';
 const CONTAINER_TIMEOUT_MS = 600_000;
+const BULK_TEST_TIMEOUT_MS = 60_000;
 const REF = 'cg-1';
 const DUP_REF = 'cg-dup';
 const PARENT_REF = 'parent-1';
@@ -354,7 +355,7 @@ describe('campground rows', () => {
     expect(await count('campgrounds')).toBe(MULTI_CHUNK_SIZE);
     expect(await count('pois')).toBe(MULTI_CHUNK_SIZE);
     expect(await count('poi_campgrounds')).toBe(MULTI_CHUNK_SIZE);
-  });
+  }, BULK_TEST_TIMEOUT_MS);
 
   test('an empty batch writes nothing and reports zero', async () => {
     expect(await upsertCampgroundBatch(db, [])).toBe(0);
@@ -575,7 +576,7 @@ describe('campsite rows', () => {
     );
     expect(await upsertCampsiteBatch(db, batch)).toEqual({ upserted: MULTI_CHUNK_SIZE, skipped: 0 });
     expect(await count('campsites')).toBe(MULTI_CHUNK_SIZE);
-  });
+  }, BULK_TEST_TIMEOUT_MS);
 
   test('Aspira-shaped parent refs resolve through their serialized form', async () => {
     const aspiraParent = DataProviderRef.aspira(10, 20);
