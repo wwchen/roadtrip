@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { isWideNumber, parseEnvelope, serializeOpaquePayload } from './envelope.js';
+import { afterAll, beforeAll, describe, expect, expectTypeOf, test } from 'vitest';
+import { isWideNumber, parseEnvelope, serializeOpaquePayload, type OpaquePayloadJson } from './envelope.js';
 
 const TEMP_DIR_PREFIX = 'envelope-';
 const WIDE_INTEGER = '72157625256027958';
@@ -248,14 +248,39 @@ describe('the wide-number carrier contract', () => {
     expect(serializeOpaquePayload(parsedWide())).toBe(`{"photo_id":${WIDE_INTEGER}}`);
   });
 
-  test('serializeOpaquePayload handles a payload that is itself a wide integer, and a null payload', () => {
-    const wideTop = parseEnvelope(envelopeWithRawPayload(HUGE_INTEGER)).payload;
-    expect(serializeOpaquePayload(wideTop)).toBe(HUGE_INTEGER);
-    expect(serializeOpaquePayload(null)).toBe('null');
+  test('serializeOpaquePayload returns the branded type, which a bare string does not satisfy', () => {
+    expectTypeOf(serializeOpaquePayload).returns.toEqualTypeOf<OpaquePayloadJson>();
+    expectTypeOf<OpaquePayloadJson>().toExtend<string>();
+    expectTypeOf<string>().not.toExtend<OpaquePayloadJson>();
+    expectTypeOf(JSON.stringify({})).not.toExtend<OpaquePayloadJson>();
   });
 
-  test('serializeOpaquePayload refuses a value JSON cannot represent', () => {
-    expect(() => serializeOpaquePayload(undefined)).toThrow(/not JSON-serializable/);
+  test('the branded value is still the plain JSON text', () => {
+    const serialized: string = serializeOpaquePayload({ a: [1, { b: null }], c: 'x' });
+    expect(serialized).toBe('{"a":[1,{"b":null}],"c":"x"}');
+    expect(typeof serialized).toBe('string');
+  });
+
+  test('an empty object serialises, since an empty object satisfies a jsonb object check', () => {
+    expect(serializeOpaquePayload({})).toBe('{}');
+  });
+
+  test.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['a string', 'text'],
+    ['an already-stringified object', '{"photo_id":1}'],
+    ['an array', [1, 2]],
+    ['a number', 7],
+    ['a boolean', true],
+  ])('serializeOpaquePayload rejects %s, because every opaque column is a jsonb object', (_label, value) => {
+    expect(() => serializeOpaquePayload(value)).toThrow(/must be a JSON object/);
+  });
+
+  test('serializeOpaquePayload rejects a payload that is itself a wide integer', () => {
+    const wideTop = parseEnvelope(envelopeWithRawPayload(HUGE_INTEGER)).payload;
+    expect(isWideNumber(wideTop)).toBe(true);
+    expect(() => serializeOpaquePayload(wideTop)).toThrow(/must be a JSON object/);
   });
 
   test('HAZARD: structuredClone of a payload holding a carried integer throws', () => {

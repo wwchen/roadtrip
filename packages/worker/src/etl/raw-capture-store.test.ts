@@ -2,16 +2,26 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync }
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { DataSourceEntry } from '../registry/poi-registry.js';
 import { NoCaptureError, RawCaptureStore } from './raw-capture-store.js';
+
+const listing = vi.hoisted(() => ({ descending: false }));
 
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   const listNames = actual.readdirSync as (dir: string) => string[];
-  const listReversed = (dir: string): string[] => [...listNames(dir)].reverse();
-  return { ...actual, readdirSync: listReversed };
+  const listInOrder = (dir: string): string[] => {
+    const ascending = [...listNames(dir)].sort();
+    return listing.descending ? ascending.reverse() : ascending;
+  };
+  return { ...actual, readdirSync: listInOrder };
 });
+
+const LISTING_ORDERS = [
+  { label: 'ascending', descending: false },
+  { label: 'descending', descending: true },
+];
 
 const TEMP_DIR_PREFIX = 'raw-capture-store-';
 const RAW_DIR_SEGMENTS = ['data', 'raw'];
@@ -22,6 +32,7 @@ const REAL_RECGOV_SOURCE = 'recgov-campsites';
 const REAL_RECGOV_ENVELOPES = 4001;
 const REAL_RECGOV_FIRST_PART = 'facility-10000305';
 const REAL_RECGOV_LAST_PART = 'facility-275092';
+const REAL_DATA_TIMEOUT_MS = 120_000;
 const OLD_TIME = new Date('2001-01-01T00:00:00Z');
 const NEW_TIME = new Date('2030-01-01T00:00:00Z');
 
@@ -117,82 +128,88 @@ afterAll(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-describe('RawCaptureStore.loadNewestEnvelopes', () => {
-  test('the newest capture directory wins by name, not by mtime, and its pages come back in name order', () => {
-    expect(parts('paged')).toEqual(['page-001', 'page-002', 'page-010']);
+describe.each(LISTING_ORDERS)('with the directory listing $label', ({ descending }) => {
+  beforeEach(() => {
+    listing.descending = descending;
   });
 
-  test('a single timestamped file is one envelope and the newest name wins over a newer mtime', () => {
-    expect(markers('single')).toEqual(['single-new']);
+  describe('RawCaptureStore.loadNewestEnvelopes', () => {
+    test('the newest capture directory wins by name, not by mtime, and its pages come back in name order', () => {
+      expect(parts('paged')).toEqual(['page-001', 'page-002', 'page-010']);
+    });
+
+    test('a single timestamped file is one envelope and the newest name wins over a newer mtime', () => {
+      expect(markers('single')).toEqual(['single-new']);
+    });
+
+    test('a capture file outranks a capture directory whose name is its prefix', () => {
+      expect(markers('mixed')).toEqual(['mixed-file']);
+    });
+
+    test.each(['empty-source', 'only-junk'])('a source directory with no captures throws: %s', (source) => {
+      expect(() => store.loadNewestEnvelopes(source)).toThrow(NoCaptureError);
+    });
+
+    test('a newest capture directory with no json pages throws instead of falling back to an older capture', () => {
+      expect(() => store.loadNewestEnvelopes('empty-capture')).toThrow(NoCaptureError);
+    });
+
+    test('a source directory that does not exist throws', () => {
+      expect(() => store.loadNewestEnvelopes('absent')).toThrow(NoCaptureError);
+    });
+
+    test('pages sort by code unit, not by locale or number', () => {
+      expect(parts('ordering')).toEqual(['Facility-5', 'facility-10', 'facility-9']);
+    });
+
+    test('the newest capture is chosen by code unit, not by locale or number', () => {
+      expect(markers('newest-ordering')).toEqual(['snap-9']);
+    });
   });
 
-  test('a capture file outranks a capture directory whose name is its prefix', () => {
-    expect(markers('mixed')).toEqual(['mixed-file']);
+  describe('RawCaptureStore with a DataSourceEntry', () => {
+    test('a relative prefix resolves against the static dir', () => {
+      expect(parts(entryFor('paged', 'data/raw/paged'))).toEqual(['page-001', 'page-002', 'page-010']);
+    });
+
+    test('a prefix that normalizes back inside the raw dir is accepted', () => {
+      expect(markers(entryFor('single', 'data/raw/paged/../single'))).toEqual(['single-new']);
+    });
+
+    test('an absolute prefix inside the raw dir is accepted', () => {
+      expect(markers(entryFor('single', path.join(rawDir, 'single')))).toEqual(['single-new']);
+    });
+
+    test('an output_dir_prefix resolving outside the raw dir is rejected before anything is read', () => {
+      const escapee = entryFor('escapee', 'data/../etc');
+      expect(() => store.loadNewestEnvelopes(escapee)).toThrow(/resolves outside raw dir/);
+      expect(() => store.loadNewestEnvelopes(escapee)).not.toThrow(NoCaptureError);
+    });
+
+    test('a sibling directory sharing the raw dir name as a string prefix is rejected', () => {
+      const sibling = entryFor('sibling', `data/${SIBLING_RAW_DIR}/cap`);
+      expect(() => store.loadNewestEnvelopes(sibling)).toThrow(/resolves outside raw dir/);
+    });
+
+    test('an absolute prefix outside the raw dir is rejected', () => {
+      const absolute = entryFor('absolute', path.join(root, 'etc'));
+      expect(() => store.loadNewestEnvelopes(absolute)).toThrow(/resolves outside raw dir/);
+    });
+
+    test('the rejection names the slug and the offending prefix', () => {
+      expect(() => store.loadNewestEnvelopes(entryFor('escapee', 'data/../etc'))).toThrow(
+        /data_source 'escapee' output_dir_prefix 'data\/\.\.\/etc'/,
+      );
+    });
   });
 
-  test.each(['empty-source', 'only-junk'])('a source directory with no captures throws: %s', (source) => {
-    expect(() => store.loadNewestEnvelopes(source)).toThrow(NoCaptureError);
-  });
-
-  test('a newest capture directory with no json pages throws instead of falling back to an older capture', () => {
-    expect(() => store.loadNewestEnvelopes('empty-capture')).toThrow(NoCaptureError);
-  });
-
-  test('a source directory that does not exist throws', () => {
-    expect(() => store.loadNewestEnvelopes('absent')).toThrow(NoCaptureError);
-  });
-
-  test('pages sort by code unit, not by locale or number', () => {
-    expect(parts('ordering')).toEqual(['Facility-5', 'facility-10', 'facility-9']);
-  });
-
-  test('the newest capture is chosen by code unit, not by locale or number', () => {
-    expect(markers('newest-ordering')).toEqual(['snap-9']);
-  });
-});
-
-describe('RawCaptureStore with a DataSourceEntry', () => {
-  test('a relative prefix resolves against the static dir', () => {
-    expect(parts(entryFor('paged', 'data/raw/paged'))).toEqual(['page-001', 'page-002', 'page-010']);
-  });
-
-  test('a prefix that normalizes back inside the raw dir is accepted', () => {
-    expect(markers(entryFor('single', 'data/raw/paged/../single'))).toEqual(['single-new']);
-  });
-
-  test('an absolute prefix inside the raw dir is accepted', () => {
-    expect(markers(entryFor('single', path.join(rawDir, 'single')))).toEqual(['single-new']);
-  });
-
-  test('an output_dir_prefix resolving outside the raw dir is rejected before anything is read', () => {
-    const escapee = entryFor('escapee', 'data/../etc');
-    expect(() => store.loadNewestEnvelopes(escapee)).toThrow(/resolves outside raw dir/);
-    expect(() => store.loadNewestEnvelopes(escapee)).not.toThrow(NoCaptureError);
-  });
-
-  test('a sibling directory sharing the raw dir name as a string prefix is rejected', () => {
-    const sibling = entryFor('sibling', `data/${SIBLING_RAW_DIR}/cap`);
-    expect(() => store.loadNewestEnvelopes(sibling)).toThrow(/resolves outside raw dir/);
-  });
-
-  test('an absolute prefix outside the raw dir is rejected', () => {
-    const absolute = entryFor('absolute', path.join(root, 'etc'));
-    expect(() => store.loadNewestEnvelopes(absolute)).toThrow(/resolves outside raw dir/);
-  });
-
-  test('the rejection names the slug and the offending prefix', () => {
-    expect(() => store.loadNewestEnvelopes(entryFor('escapee', 'data/../etc'))).toThrow(
-      /data_source 'escapee' output_dir_prefix 'data\/\.\.\/etc'/,
-    );
-  });
-});
-
-describe.skipIf(!existsSync(path.join(REAL_RAW_DIR, REAL_RECGOV_SOURCE)))('against the real capture tree', () => {
-  test('the recgov campsite capture loads every page in code-unit order', () => {
-    const real = new RawCaptureStore(REAL_RAW_DIR, REAL_ROOT);
-    const envelopes = real.loadNewestEnvelopes(REAL_RECGOV_SOURCE);
-    expect(envelopes).toHaveLength(REAL_RECGOV_ENVELOPES);
-    expect(envelopes[0]?.part).toBe(REAL_RECGOV_FIRST_PART);
-    expect(envelopes.at(-1)?.part).toBe(REAL_RECGOV_LAST_PART);
+  describe.skipIf(!existsSync(path.join(REAL_RAW_DIR, REAL_RECGOV_SOURCE)))('against the real capture tree', () => {
+    test('the recgov campsite capture loads every page in code-unit order', () => {
+      const real = new RawCaptureStore(REAL_RAW_DIR, REAL_ROOT);
+      const envelopes = real.loadNewestEnvelopes(REAL_RECGOV_SOURCE);
+      expect(envelopes).toHaveLength(REAL_RECGOV_ENVELOPES);
+      expect(envelopes[0]?.part).toBe(REAL_RECGOV_FIRST_PART);
+      expect(envelopes.at(-1)?.part).toBe(REAL_RECGOV_LAST_PART);
+    }, REAL_DATA_TIMEOUT_MS);
   });
 });

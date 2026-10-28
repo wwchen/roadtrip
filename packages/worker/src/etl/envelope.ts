@@ -11,6 +11,10 @@ export interface ResponseMeta {
   headers: Record<string, string>;
 }
 
+declare const opaquePayloadBrand: unique symbol;
+
+export type OpaquePayloadJson = string & { readonly [opaquePayloadBrand]: 'jsonb-object' };
+
 export type WideNumber = Readonly<{ rawJSON: string }>;
 
 export interface Envelope {
@@ -47,10 +51,9 @@ export function isWideNumber(value: unknown): value is WideNumber {
   return sourceAwareJson.isRawJSON(value);
 }
 
-export function serializeOpaquePayload(value: unknown): string {
-  const serialized = JSON.stringify(value);
-  if (serialized === undefined) throw new Error('opaque payload is not JSON-serializable');
-  return serialized;
+export function serializeOpaquePayload(value: unknown): OpaquePayloadJson {
+  if (!isRecord(value) || isWideNumber(value)) throw new Error('opaque payload must be a JSON object');
+  return JSON.stringify(value) as OpaquePayloadJson;
 }
 
 function parseKeepingDigits(text: string): unknown {
