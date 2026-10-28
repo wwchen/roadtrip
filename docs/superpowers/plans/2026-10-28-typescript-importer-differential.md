@@ -567,7 +567,11 @@ Expected: PASS
 - [ ] **Step 7: Prove the harness is red end to end, over one real target**
 
 Run: `node scripts/importer-differential.mjs --target 'Planet Fitness'`
-Expected: exits non-zero reporting every Planet Fitness row as `missing_in_typescript` — no adapters are registered yet. Record the row count in the commit message; Task 6 turns it to zero.
+Expected: exits non-zero **because the TypeScript importer refused to run** — Task 4's CLI exits 1 with "no adapters registered" rather than importing nothing, so the harness must surface a failed import and must not diff two databases where one side never ran. It is *not* expected to report rows as `missing_in_typescript`; that would mean the harness ran a no-op import and diffed the result, which is the vacuous-pass failure Review Focus #1 forbids.
+
+So this step proves two things at once: the harness propagates an importer's non-zero exit, and it does not mistake "one side did not run" for "one side has no rows". The diff's ability to detect a row present on one side only is proven on synthetic fixtures by this task's own test 5, which does not need an unimplemented adapter.
+
+Record in the commit message which of the two failure paths fired. Task 6 is the first task where this command can come back clean.
 
 - [ ] **Step 8: Commit**
 
