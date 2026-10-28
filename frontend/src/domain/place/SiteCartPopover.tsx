@@ -11,7 +11,13 @@ import { Icon } from '@ui';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import { bookingCopy, gateCopy, placeCopy } from '@/lib/strings';
 import { useDismiss } from '@/lib/use-dismiss';
-import { cartActionFor, type CartAction, type CartActionCell } from './cart-action';
+import {
+  cartActionFor,
+  holdInFlight,
+  sameCell,
+  type CartActionCell,
+  type CartActions,
+} from './cart-action';
 import type { ReachableCartGate } from './cart-gate';
 import './site-cart.css';
 
@@ -21,6 +27,7 @@ const POPOVER_ANCHOR_GAP_PX = 6;
 const POPOVER_WIDTH_PROPERTY = '--rt-site-cart-width';
 
 const NO_HEIGHT_YET = 0;
+const UNPLACED_OFFSET_PX = 0;
 
 const CART_ICON = 'cart-add';
 const HELD_ICON = 'cart-check';
@@ -32,7 +39,7 @@ export interface SiteCartPopoverProps {
   site: string;
   night: string;
   gate: ReachableCartGate;
-  action: CartAction | null;
+  actions: CartActions;
   onClose: () => void;
 }
 
@@ -54,7 +61,7 @@ export function SiteCartPopover({
   site,
   night,
   gate,
-  action,
+  actions,
   onClose,
 }: SiteCartPopoverProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -62,11 +69,13 @@ export function SiteCartPopover({
   const focused = useRef(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
 
-  const mine = cartActionFor(action, cell.campsiteId, cell.date);
-  const pending = mine?.kind === 'pending';
+  const mine = cartActionFor(actions, cell.campsiteId, cell.date);
+  const running = holdInFlight(actions);
+  const holding = running !== null && sameCell(running, cell);
+  const elsewhere = running !== null && !holding;
   const held = mine?.kind === 'held' ? mine : null;
   const failed = mine?.kind === 'failed' ? mine : null;
-  const hint = hintFor(gate);
+  const hint = elsewhere ? bookingCopy.holdBusy : hintFor(gate);
 
   const reposition = useCallback(() => {
     if (!anchor.isConnected) {
@@ -82,7 +91,7 @@ export function SiteCartPopover({
     );
   }, [anchor, onClose]);
 
-  useLayoutEffect(reposition, [reposition, mine?.kind]);
+  useLayoutEffect(reposition, [reposition, mine?.kind, elsewhere]);
 
   useEffect(() => {
     window.addEventListener('scroll', reposition, true);
@@ -111,8 +120,8 @@ export function SiteCartPopover({
 
   const style = {
     [POPOVER_WIDTH_PROPERTY]: `${POPOVER_WIDTH_PX}px`,
-    top: position?.top ?? NO_HEIGHT_YET,
-    left: position?.left ?? NO_HEIGHT_YET,
+    top: position?.top ?? UNPLACED_OFFSET_PX,
+    left: position?.left ?? UNPLACED_OFFSET_PX,
     visibility: position ? 'visible' : 'hidden',
   } as CSSProperties;
 
@@ -153,8 +162,8 @@ export function SiteCartPopover({
             type="button"
             ref={stepRef}
             className={`rt-site-cart__step${gate.state === 'ready' ? ' rt-site-cart__step--ready' : ''}`}
-            disabled={pending}
-            aria-busy={pending}
+            disabled={holding || elsewhere}
+            aria-busy={holding || elsewhere}
             aria-label={hint ? `${bookingCopy.addToCart} — ${hint}` : bookingCopy.addToCart}
             onClick={() => runStep(gate, cell)}
           >
@@ -164,7 +173,7 @@ export function SiteCartPopover({
               {hint ? <span className="rt-site-cart__hint">{hint}</span> : null}
             </span>
           </button>
-          {pending ? (
+          {holding ? (
             <p className="rt-site-cart__hint" role="status">
               {bookingCopy.holdRunning}
             </p>

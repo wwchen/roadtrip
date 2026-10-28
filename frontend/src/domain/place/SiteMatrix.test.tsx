@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { AvailabilityDay } from '@/api/availability-api';
 import type { Campsite } from '@/api/campsite-api';
 import { bookingCopy, gateCopy, matrixCopy } from '@/lib/strings';
-import type { CartAction } from './cart-action';
+import { cartActionsOf } from './cart-action';
 import type { CartGate } from './cart-gate';
 import { SiteMatrix } from './SiteMatrix';
 
@@ -185,6 +185,8 @@ describe('SiteMatrix', () => {
 const OPEN_CELL = 'Loop A / 12 Tue, Oct 27: available';
 const TAKEN_CELL = 'Loop A / 12 Wed, Oct 28: reserved';
 const OPEN_ID = '1';
+const OPEN_CART_CELL = { campsiteId: OPEN_ID, date: FIRST };
+const HELD_AT = 1_767_225_600_000;
 
 const cartCell = () => screen.getByRole('button', { name: matrixCopy.cellCart(OPEN_CELL) });
 
@@ -234,11 +236,14 @@ describe('SiteMatrix, holding a site in the cart', () => {
 
   test('a second click on the control cannot start a second hold', () => {
     const onAddToCart = vi.fn();
-    const pending: CartAction = { kind: 'pending', cell: { campsiteId: OPEN_ID, date: FIRST } };
-    render(grid({ cart: { state: 'ready', onAddToCart }, cartAction: pending }));
+    render(
+      grid({
+        cart: { state: 'ready', onAddToCart },
+        cartActions: cartActionsOf({ kind: 'pending', cell: OPEN_CART_CELL }),
+      }),
+    );
 
-    const cell = screen.getByRole('button', { name: matrixCopy.cellHolding(OPEN_CELL) });
-    fireEvent.click(cell);
+    fireEvent.click(screen.getByRole('button', { name: matrixCopy.cellHolding(OPEN_CELL) }));
 
     const offer = screen.getByRole('button', { name: bookingCopy.addToCart });
     expect(offer).toBeDisabled();
@@ -246,16 +251,62 @@ describe('SiteMatrix, holding a site in the cart', () => {
     expect(onAddToCart).not.toHaveBeenCalled();
   });
 
+  test('every other open cell is locked too while a hold runs, and says why', () => {
+    const onAddToCart = vi.fn();
+    render(
+      grid({
+        cart: { state: 'ready', onAddToCart },
+        cartActions: cartActionsOf({ kind: 'pending', cell: { campsiteId: '2', date: FIRST } }),
+      }),
+    );
+
+    fireEvent.click(cartCell());
+
+    const offer = screen.getByRole('button', { name: new RegExp(bookingCopy.addToCart) });
+    expect(offer).toBeDisabled();
+    expect(offer).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByText(bookingCopy.holdBusy)).toBeInTheDocument();
+    fireEvent.click(offer);
+    expect(onAddToCart).not.toHaveBeenCalled();
+  });
+
   test('a held cell says so from the grid, without claiming anything about the stay', () => {
-    const held: CartAction = {
-      kind: 'held',
-      cell: { campsiteId: OPEN_ID, date: FIRST },
-      cartUrl: 'https://cart',
-    };
-    render(grid({ cart: { state: 'ready', onAddToCart: noop }, cartAction: held }));
+    render(
+      grid({
+        cart: { state: 'ready', onAddToCart: noop },
+        cartActions: cartActionsOf({
+          kind: 'held',
+          cell: OPEN_CART_CELL,
+          cartUrl: 'https://cart',
+          heldAt: HELD_AT,
+        }),
+      }),
+    );
 
     expect(screen.getByRole('button', { name: matrixCopy.cellHeld(OPEN_CELL) })).toBeInTheDocument();
     expect(screen.getByLabelText(TAKEN_CELL)).toHaveTextContent('R');
+  });
+
+  test('a held cell never offers the hold again, however many others are held', () => {
+    render(
+      grid({
+        cart: { state: 'ready', onAddToCart: noop },
+        cartActions: cartActionsOf(
+          { kind: 'held', cell: OPEN_CART_CELL, cartUrl: 'https://cart', heldAt: HELD_AT },
+          {
+            kind: 'held',
+            cell: { campsiteId: '2', date: FIRST },
+            cartUrl: 'https://cart',
+            heldAt: HELD_AT,
+          },
+        ),
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: matrixCopy.cellHeld(OPEN_CELL) }));
+
+    expect(screen.queryByRole('button', { name: new RegExp(bookingCopy.addToCart) })).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent(bookingCopy.heldTitle());
   });
 
   test('a gated reader is offered the one step that unlocks the hold', () => {

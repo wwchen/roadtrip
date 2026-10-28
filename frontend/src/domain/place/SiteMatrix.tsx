@@ -4,7 +4,7 @@ import type { Campsite } from '@/api/campsite-api';
 import { availabilityStatusMeta, type AvailabilityStatus } from '@/lib/availability-status';
 import { matrixCopy } from '@/lib/strings';
 import { dayOfMonthLabel, dowLabel } from '@/lib/week-labels';
-import { cartActionFor, type CartAction, type CartActionCell } from './cart-action';
+import { NO_CART_ACTIONS, cartActionFor, type CartActionCell, type CartActions } from './cart-action';
 import { reachableCartGate, type CartGate, type ReachableCartGate } from './cart-gate';
 import { SiteCartPopover } from './SiteCartPopover';
 import {
@@ -50,10 +50,8 @@ export interface SiteMatrixProps {
   campsites?: readonly Campsite[];
   selected: string | null;
   onSelect: (date: string) => void;
-  /** The backend's reason the cart is or is not reachable for this reader. */
   cart?: CartGate;
-  /** The one hold in play, if any. */
-  cartAction?: CartAction | null;
+  cartActions?: CartActions;
 }
 
 export function SiteMatrix({
@@ -63,7 +61,7 @@ export function SiteMatrix({
   selected,
   onSelect,
   cart,
-  cartAction = null,
+  cartActions = NO_CART_ACTIONS,
 }: SiteMatrixProps) {
   const [filters, setFilters] = useState<MatrixFilters>(DEFAULT_MATRIX_FILTERS);
 
@@ -128,7 +126,7 @@ export function SiteMatrix({
                   row={row}
                   columns={columns}
                   cart={cart}
-                  cartAction={cartAction}
+                  cartActions={cartActions}
                 />
               ))}
             </tbody>
@@ -143,12 +141,12 @@ function MatrixRow({
   row,
   columns,
   cart,
-  cartAction,
+  cartActions,
 }: {
   row: Partial<Campsite>;
   columns: readonly MatrixColumn[];
   cart: CartGate | undefined;
-  cartAction: CartAction | null;
+  cartActions: CartActions;
 }) {
   const label = siteName(row);
   const title = siteTitleText(row, label);
@@ -169,7 +167,7 @@ function MatrixRow({
           column={column}
           siteLabel={title}
           cart={cart}
-          cartAction={cartAction}
+          cartActions={cartActions}
         />
       ))}
     </tr>
@@ -181,13 +179,13 @@ function MatrixCell({
   column,
   siteLabel,
   cart,
-  cartAction,
+  cartActions,
 }: {
   row: Partial<Campsite>;
   column: MatrixColumn;
   siteLabel: string;
   cart: CartGate | undefined;
-  cartAction: CartAction | null;
+  cartActions: CartActions;
 }) {
   const meta = availabilityStatusMeta(cellState(row, column).status);
   const spoken = matrixCopy.cell(siteLabel, column.spoken, meta.aria);
@@ -212,7 +210,7 @@ function MatrixCell({
       campsiteId={rowId(row)}
       date={column.date}
       gate={gate}
-      cartAction={cartAction}
+      cartActions={cartActions}
     />
   );
 }
@@ -226,7 +224,7 @@ function CartCell({
   campsiteId,
   date,
   gate,
-  cartAction,
+  cartActions,
 }: {
   className: string;
   glyph: string;
@@ -236,7 +234,7 @@ function CartCell({
   campsiteId: string;
   date: string;
   gate: ReachableCartGate;
-  cartAction: CartAction | null;
+  cartActions: CartActions;
 }) {
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -244,7 +242,7 @@ function CartCell({
   const cell = useMemo<CartActionCell>(() => ({ campsiteId, date }), [campsiteId, date]);
   const close = useCallback(() => setOpen(false), []);
 
-  const mine = cartActionFor(cartAction, campsiteId, date);
+  const mine = cartActionFor(cartActions, campsiteId, date);
   const state = mine?.kind === 'pending' ? 'pending' : mine?.kind === 'held' ? 'held' : null;
   const label =
     state === 'pending'
@@ -279,7 +277,7 @@ function CartCell({
           site={site}
           night={night}
           gate={gate}
-          action={cartAction}
+          actions={cartActions}
           onClose={close}
         />
       ) : null}

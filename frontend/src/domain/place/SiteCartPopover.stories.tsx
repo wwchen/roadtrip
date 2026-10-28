@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SiteCartPopover, type SiteCartPopoverProps } from './SiteCartPopover';
+import { NO_CART_ACTIONS, cartActionsOf } from './cart-action';
 
 const FRAME: CSSProperties = { width: 390, height: 300, padding: 16, boxSizing: 'border-box' };
 const ANCHOR: CSSProperties = {
@@ -20,6 +21,8 @@ const SITE = 'Upper Pines / 073';
 const SPOKEN = 'Thu, Oct 29';
 const HOLDER = 'Recreation.gov';
 const CART_URL = 'https://www.recreation.gov/cart';
+const HELD_AT = 1_767_225_600_000;
+const ELSEWHERE = { campsiteId: '131745', date: NIGHT };
 const GLYPH = 'A';
 
 const noop = () => undefined;
@@ -40,7 +43,7 @@ function Anchored(props: Omit<SiteCartPopoverProps, 'anchor' | 'onClose'>) {
   );
 }
 
-const BASE = { cell: CELL, site: SITE, night: SPOKEN, action: null };
+const BASE = { cell: CELL, site: SITE, night: SPOKEN, actions: NO_CART_ACTIONS };
 
 const meta = {
   title: 'Place/SiteCartPopover',
@@ -89,7 +92,15 @@ export const Holding: Story = {
   args: {
     ...BASE,
     gate: { state: 'ready', onAddToCart: noop },
-    action: { kind: 'pending', cell: CELL },
+    actions: cartActionsOf({ kind: 'pending', cell: CELL }),
+  },
+};
+
+export const HoldingAnotherSite: Story = {
+  args: {
+    ...BASE,
+    gate: { state: 'ready', onAddToCart: noop },
+    actions: cartActionsOf({ kind: 'pending', cell: ELSEWHERE }),
   },
 };
 
@@ -97,7 +108,13 @@ export const Held: Story = {
   args: {
     ...BASE,
     gate: { state: 'ready', onAddToCart: noop },
-    action: { kind: 'held', cell: CELL, cartUrl: CART_URL, holder: HOLDER },
+    actions: cartActionsOf({
+      kind: 'held',
+      cell: CELL,
+      cartUrl: CART_URL,
+      heldAt: HELD_AT,
+      holder: HOLDER,
+    }),
   },
 };
 
@@ -105,6 +122,11 @@ export const Failed: Story = {
   args: {
     ...BASE,
     gate: { state: 'ready', onAddToCart: noop },
-    action: { kind: 'failed', cell: CELL, code: 'cart_not_added', holder: HOLDER },
+    actions: cartActionsOf({
+      kind: 'failed',
+      cell: CELL,
+      code: 'cart_not_added',
+      holder: HOLDER,
+    }),
   },
 };

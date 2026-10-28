@@ -1,7 +1,7 @@
 import { useState, type ComponentProps, type ReactNode } from 'react';
 import type { Campsite } from '@/api/campsite-api';
 import { AlertRow } from '@/domain/place/AlertRow';
-import type { CartAction } from '@/domain/place/cart-action';
+import { NO_CART_ACTIONS, type CartActions } from '@/domain/place/cart-action';
 import type { CartGate } from '@/domain/place/cart-gate';
 import { NightSites } from '@/domain/place/NightSites';
 import { NightsStrip } from '@/domain/place/NightsStrip';
@@ -64,7 +64,7 @@ export interface PlaceSheetProps {
   siteNames?: ReadonlyMap<number, string>;
   campsites?: readonly Campsite[];
   cart?: CartGate;
-  cartAction?: CartAction | null;
+  cartActions?: CartActions;
   blocks: PoiBlockSlots;
   onClose?: () => void;
 }
@@ -81,7 +81,7 @@ export function PlaceSheet({
   siteNames,
   campsites,
   cart,
-  cartAction = null,
+  cartActions = NO_CART_ACTIONS,
   blocks,
   onClose,
 }: PlaceSheetProps) {
@@ -133,7 +133,7 @@ export function PlaceSheet({
                   selected={nights.selected}
                   onSelect={nights.onSelect}
                   {...(cart ? { cart } : null)}
-                  cartAction={cartAction}
+                  cartActions={cartActions}
                 />
               ) : (
                 <>

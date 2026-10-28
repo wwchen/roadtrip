@@ -79,6 +79,20 @@ export function normalizeWatchCapabilities(
  * and gating on Slack alone would hide the feature from anyone whose provider
  * happens to be configured the other way.
  */
+export type CartReach = 'ready' | 'gated' | 'unsupported';
+
+export function cartReach(state: AddToCartState): CartReach {
+  switch (state) {
+    case 'ready':
+      return 'ready';
+    case 'signed_out':
+    case 'no_credentials':
+      return 'gated';
+    case 'unsupported':
+      return 'unsupported';
+  }
+}
+
 export function supportsWatchAlerts(capabilities: WatchCapabilities): boolean {
   return (
     capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY) ||

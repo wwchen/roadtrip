@@ -221,7 +221,7 @@ function StayPlace({ feature, poiId, Poi, arrival, stale, onClose }: StayPlacePr
           siteNames={nights.siteNames}
           campsites={nights.campsites}
           cart={cart.gate}
-          cartAction={cart.action}
+          cartActions={cart.actions}
           blocks={parts.blocks}
           {...(onClose ? { onClose } : null)}
         />

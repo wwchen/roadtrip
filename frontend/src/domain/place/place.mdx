@@ -121,17 +121,52 @@ is a control; clicking it opens `SiteCartPopover`, which names that site and tha
 night and offers one hold in the caller's own cart at the booking vendor. A night
 that is not open is never that control, because there is nothing to hold.
 
-That hold is a real side effect with a fifteen-minute clock on the vendor's side,
-so it is explicit and single-fire. `cart-action.ts` is the whole lifecycle as a pure
-state machine — one hold at a time, and an answer that arrives for a cell that is no
-longer pending lands nowhere rather than resurrecting it. `usePlaceCart` holds the
-same lock against the request itself, so a second click sends nothing. There is no
-optimistic cell: a cell reads *held* only once the vendor said so, and a refusal
-says which refusal it was, by the server's own code through
-`lib/settings-errors.ts`, instead of quietly returning to the offer.
+That hold is a real side effect with a fifteen-minute clock on the vendor's side, so
+it is explicit and single-fire. `cart-action.ts` is the whole lifecycle as a pure
+state machine, and the state it keeps is **a hold per (site, night)** rather than one
+slot. A single slot was wrong in a way that cost the user money: taking a second hold
+dropped the first cell's badge, which made the grid offer a site it had already held,
+and taking that offer spent a second hold on the same site-night. So a cell that is
+held stays held until its own deadline, and a cell that is held is never offered
+again — in the reducer, which refuses the request, and in the hook, which will not
+post for a cell it already holds.
+
+**One hold runs at a time**, because the companion serialises a profile's work and a
+second concurrent hold would come back `profile_busy`. While one runs, *every* cart
+control is disabled and `aria-busy`, not only the cell being held, and the others say
+`One hold at a time`. A control that looks live and swallows the click is worse than
+one that is visibly inert.
+
+**The claim expires with the vendor's hold.** `usePlaceCart` schedules one timer per
+held cell off `heldAt + CART_HOLD_MS` and dispatches `expired`, which drops the hold
+from the map; the cell loses its badge and the panel stops saying "check out within
+fifteen minutes". Nothing on the wire carries that deadline — `AddToCartResponseDto`
+has no expiry field — so the countdown starts when the answer lands and the duration
+lives in `lib/cart-hold.ts`, which is also where `checkOutSoon` reads its number, so
+the sentence and the timer cannot disagree. A lapsed cell is offered again, which is
+correct: the vendor really did release it.
+
+There is no optimistic cell: a cell reads *held* only once the vendor said so, and a
+refusal says which refusal it was, by the server's own code through
+`lib/settings-errors.ts`, instead of quietly returning to the offer. A 200 **is** the
+hold — `BookingActionStatus` has one member and the route answers an error envelope
+for everything else — so the callers read the status code and not the body's `status`.
 
 Holding is a mutation, not a read. Raising to Full still issues no request — see
 *One read serves both detents* below, which the cart does not weaken.
+
+#### Closing the sheet mid-hold loses the receipt
+
+The hold is placed by a real browser at the vendor, so by the time the request is in
+flight the side effect is already happening. Unmounting the sheet cannot un-place it;
+it only discards the answer. The request is therefore **not** aborted on unmount — an
+abort would destroy the `cart_url` while leaving the hold — and the cost is a hold the
+user was never told about. Nothing can recover it on remount, because
+`POST /api/booking/add-to-cart` is the only booking route and there is no cart read.
+The one mitigation that exists today is that the cart URL is a fixed per-provider
+page, so the cart is still reachable without our receipt. Fixing this properly means
+either a cart-read endpoint or hoisting hold state above the sheet; both are their own
+change.
 
 #### The cart gate is a branch, not a visibility test
 

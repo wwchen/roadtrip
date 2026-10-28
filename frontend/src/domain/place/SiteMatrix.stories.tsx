@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { AvailabilityCell, AvailabilityDay } from '@/api/availability-api';
 import type { Campsite } from '@/api/campsite-api';
-import type { CartAction } from './cart-action';
+import { NO_CART_ACTIONS, cartActionsOf, type CartActions } from './cart-action';
 import type { CartGate } from './cart-gate';
 import { SiteMatrix } from './SiteMatrix';
 
@@ -29,6 +29,7 @@ const OPEN_EVERY = 5;
 const CLOSED_EVERY = 11;
 const HOLDER = 'Recreation.gov';
 const CART_URL = 'https://www.recreation.gov/cart';
+const HELD_AT = 1_767_225_600_000;
 
 const CAMPSITES: readonly Campsite[] = Array.from({ length: SITE_COUNT }, (_, index) => {
   const kind = KINDS[index % KINDS.length] ?? KINDS[0];
@@ -77,7 +78,7 @@ const FIRST_OPEN_CELL = firstOpenCell();
 
 const noop = () => undefined;
 
-function Demo({ cart, cartAction }: { cart: CartGate; cartAction?: CartAction | null }) {
+function Demo({ cart, cartActions }: { cart: CartGate; cartActions?: CartActions }) {
   const [selected, setSelected] = useState<string | null>(WEEK[0] ?? null);
   return (
     <SiteMatrix
@@ -87,7 +88,7 @@ function Demo({ cart, cartAction }: { cart: CartGate; cartAction?: CartAction | 
       selected={selected}
       onSelect={setSelected}
       cart={cart}
-      cartAction={cartAction ?? null}
+      cartActions={cartActions ?? NO_CART_ACTIONS}
     />
   );
 }
@@ -134,14 +135,20 @@ export const CartUnsupported: Story = { args: { cart: { state: 'unsupported' } }
 export const Holding: Story = {
   args: {
     cart: { state: 'ready', onAddToCart: noop },
-    cartAction: { kind: 'pending', cell: FIRST_OPEN_CELL },
+    cartActions: cartActionsOf({ kind: 'pending', cell: FIRST_OPEN_CELL }),
   },
 };
 
 export const Held: Story = {
   args: {
     cart: { state: 'ready', onAddToCart: noop },
-    cartAction: { kind: 'held', cell: FIRST_OPEN_CELL, cartUrl: CART_URL, holder: HOLDER },
+    cartActions: cartActionsOf({
+      kind: 'held',
+      cell: FIRST_OPEN_CELL,
+      cartUrl: CART_URL,
+      heldAt: HELD_AT,
+      holder: HOLDER,
+    }),
   },
 };
 

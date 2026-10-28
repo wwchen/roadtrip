@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import type { BookingActionStatus } from './generated/api-types';
 import { addToCartFailure } from './booking-api';
 import { HttpError } from './http';
 
@@ -51,5 +52,15 @@ describe('addToCartFailure', () => {
     const aborted = new DOMException('aborted', 'AbortError');
 
     expect(addToCartFailure(aborted).error).toBe('');
+  });
+});
+
+function theOnlyStatusAHoldAnswersWith(status: BookingActionStatus): 'completed' {
+  return status;
+}
+
+describe('what a 200 from the hold route can say', () => {
+  test('is completed and nothing else, so the status code is the whole answer', () => {
+    expect(theOnlyStatusAHoldAnswersWith('completed')).toBe('completed');
   });
 });

@@ -140,10 +140,7 @@ const COMPONENT_LOCAL = new Set([
   '--rt-place-verdict-detail-size',
   // The alert offer's one line: declared in domain/place/alert-row.css.
   '--rt-alert-offer-gap',
-  // The open cell's add-to-cart popover: declared in domain/place/site-cart.css, which is
-  // the one stylesheet for it. Geometry and the stacking step over the grid's own sticky
-  // header, not colour or a scale step; the width is read back by SiteCartPopover.tsx,
-  // which has to flip the panel against the viewport before it can be painted.
+  // The open cell's add-to-cart panel: declared in domain/place/site-cart.css.
   '--rt-site-cart-width',
   '--rt-site-cart-z',
   '--rt-site-cart-gap',

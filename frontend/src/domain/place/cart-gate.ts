@@ -10,5 +10,12 @@ export const NO_CART_GATE: CartGate = { state: 'unsupported' };
 
 export function reachableCartGate(gate: CartGate | undefined): ReachableCartGate | null {
   if (gate === undefined) return null;
-  return gate.state === 'unsupported' ? null : gate;
+  switch (gate.state) {
+    case 'ready':
+    case 'signed_out':
+    case 'no_credentials':
+      return gate;
+    case 'unsupported':
+      return null;
+  }
 }

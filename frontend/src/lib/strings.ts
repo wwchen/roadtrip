@@ -20,6 +20,7 @@
 // of fragments and get the word order wrong.
 
 import type { StayAvailabilityStatus, StayFailureReason, StayOutcome } from '@/api/availability-api';
+import { CART_HOLD_MINUTES } from './cart-hold';
 import { entryOf } from './entry-of';
 
 /**
@@ -42,14 +43,14 @@ const UNNAMED_BOOKING_SITE = 'the booking site';
 /** The possessive form, for the gate sentences that ask for a login. */
 const UNNAMED_BOOKING_ACCOUNT = 'your booking';
 
-const CART_HOLD_MINUTES = 15;
-
 export const bookingCopy = {
   /** The fallback when a pin carries a bare reserve URL and no label. */
   reserve: 'Reserve',
   addToCart: 'Add to cart',
   holdRunning: 'Holding site… usually under a minute; can take a few',
   holdFailed: 'Could not hold the site',
+  /** Why a second cart control is inert: the companion serialises a profile's work. */
+  holdBusy: 'One hold at a time; wait for the running one to finish.',
   heldTitle: (holder?: string) => `Site held in your ${holder ? `${holder} ` : ''}cart`,
   openCart: (holder?: string) => `Open ${holder ?? 'your'} cart ↗`,
   checkOutSoon: (holder?: string) =>

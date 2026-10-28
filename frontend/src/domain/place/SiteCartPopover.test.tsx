@@ -3,15 +3,17 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import { bookingCopy, gateCopy } from '@/lib/strings';
 import { SiteCartPopover, type SiteCartPopoverProps } from './SiteCartPopover';
-import type { CartAction } from './cart-action';
+import { NO_CART_ACTIONS, cartActionsOf, type CartAction } from './cart-action';
 
 const CAMPSITE_ID = '131744';
 const NIGHT = '2026-10-29';
 const CELL = { campsiteId: CAMPSITE_ID, date: NIGHT };
+const ELSEWHERE = { campsiteId: '131745', date: NIGHT };
 const SITE = 'Loop A / 12';
 const SPOKEN = 'Thu, Oct 29';
 const HOLDER = 'Recreation.gov';
 const CART_URL = 'https://www.recreation.gov/cart';
+const HELD_AT = 1_767_225_600_000;
 
 const anchorFor = () => {
   const anchor = document.createElement('button');
@@ -26,7 +28,7 @@ const show = (over: Partial<SiteCartPopoverProps> = {}) => {
     site: SITE,
     night: SPOKEN,
     gate: { state: 'ready', onAddToCart: () => undefined },
-    action: null,
+    actions: NO_CART_ACTIONS,
     onClose: () => undefined,
     ...over,
   };
@@ -81,10 +83,12 @@ describe('SiteCartPopover', () => {
     expect(screen.getByText(gateCopy.cartNoCredentials())).toBeInTheDocument();
   });
 
-  test('a running hold locks the control rather than offering a second', () => {
+  test('a running hold on this cell locks the control rather than offering a second', () => {
     const onAddToCart = vi.fn();
-    const action: CartAction = { kind: 'pending', cell: CELL };
-    show({ gate: { state: 'ready', onAddToCart }, action });
+    show({
+      gate: { state: 'ready', onAddToCart },
+      actions: cartActionsOf({ kind: 'pending', cell: CELL }),
+    });
 
     expect(step()).toBeDisabled();
     expect(step()).toHaveAttribute('aria-busy', 'true');
@@ -94,9 +98,43 @@ describe('SiteCartPopover', () => {
     expect(onAddToCart).not.toHaveBeenCalled();
   });
 
+  test('a hold running on another cell locks this control too, and says why', () => {
+    const onAddToCart = vi.fn();
+    show({
+      gate: { state: 'ready', onAddToCart },
+      actions: cartActionsOf({ kind: 'pending', cell: ELSEWHERE }),
+    });
+
+    expect(step()).toBeDisabled();
+    expect(step()).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByText(bookingCopy.holdBusy)).toBeInTheDocument();
+    expect(step()).toHaveAccessibleName(`${bookingCopy.addToCart} — ${bookingCopy.holdBusy}`);
+
+    fireEvent.click(step());
+    expect(onAddToCart).not.toHaveBeenCalled();
+  });
+
+  test('a gated control is locked by someone else\'s hold as well', () => {
+    const onSignIn = vi.fn();
+    show({
+      gate: { state: 'signed_out', onSignIn },
+      actions: cartActionsOf({ kind: 'pending', cell: ELSEWHERE }),
+    });
+
+    expect(step()).toBeDisabled();
+    fireEvent.click(step());
+    expect(onSignIn).not.toHaveBeenCalled();
+  });
+
   test('a held site says whose cart it is in, how long, and links to it', () => {
-    const action: CartAction = { kind: 'held', cell: CELL, cartUrl: CART_URL, holder: HOLDER };
-    show({ action });
+    const held: CartAction = {
+      kind: 'held',
+      cell: CELL,
+      cartUrl: CART_URL,
+      heldAt: HELD_AT,
+      holder: HOLDER,
+    };
+    show({ actions: cartActionsOf(held) });
 
     const status = screen.getByRole('status');
     expect(status).toHaveTextContent(bookingCopy.heldTitle(HOLDER));
@@ -108,15 +146,29 @@ describe('SiteCartPopover', () => {
     expect(screen.queryByRole('button', { name: new RegExp(bookingCopy.addToCart) })).toBeNull();
   });
 
+  test('a held site is never offered a second hold, even once another one finished', () => {
+    show({
+      actions: cartActionsOf(
+        { kind: 'held', cell: CELL, cartUrl: CART_URL, heldAt: HELD_AT },
+        { kind: 'held', cell: ELSEWHERE, cartUrl: CART_URL, heldAt: HELD_AT },
+      ),
+    });
+
+    expect(screen.queryByRole('button', { name: new RegExp(bookingCopy.addToCart) })).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent(bookingCopy.heldTitle());
+  });
+
   test('a failed hold says so, by the reason the server gave, and offers a retry', () => {
     const onAddToCart = vi.fn();
-    const action: CartAction = {
-      kind: 'failed',
-      cell: CELL,
-      code: 'cart_not_added',
-      holder: HOLDER,
-    };
-    show({ gate: { state: 'ready', onAddToCart }, action });
+    show({
+      gate: { state: 'ready', onAddToCart },
+      actions: cartActionsOf({
+        kind: 'failed',
+        cell: CELL,
+        code: 'cart_not_added',
+        holder: HOLDER,
+      }),
+    });
 
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent(bookingCopy.holdFailed);
@@ -128,12 +180,14 @@ describe('SiteCartPopover', () => {
   });
 
   test('an answer about another cell is not read as this one', () => {
-    const action: CartAction = {
-      kind: 'held',
-      cell: { campsiteId: '999', date: NIGHT },
-      cartUrl: CART_URL,
-    };
-    show({ action });
+    show({
+      actions: cartActionsOf({
+        kind: 'held',
+        cell: { campsiteId: '999', date: NIGHT },
+        cartUrl: CART_URL,
+        heldAt: HELD_AT,
+      }),
+    });
 
     expect(screen.queryByRole('status')).toBeNull();
     expect(step()).toBeEnabled();
