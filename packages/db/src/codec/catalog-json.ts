@@ -86,9 +86,9 @@ const objectOf = <T extends object>(fields: { readonly [K in keyof T]-?: Field }
   spec: { kind: 'object', fields, nullable: null },
 });
 
-const nullableObjectOf = <T extends object>(
+const columnObjectOf = <T extends object>(
   fields: { readonly [K in keyof T]-?: Field },
-  nullEncoding: NullEncoding,
+  nullEncoding: NullEncoding = 'empty-object',
 ): Shape<T | null> => ({
   spec: { kind: 'object', fields, nullable: nullEncoding },
 });
@@ -106,7 +106,7 @@ export const addressShape: Shape<Address> = objectOf<Address>({
   full: optional(stringShape),
 });
 
-export const locationShape: Shape<CampgroundLocation> = objectOf<CampgroundLocation>({
+export const locationShape: Shape<CampgroundLocation | null> = columnObjectOf<CampgroundLocation>({
   latitude: optional(numberShape),
   longitude: optional(numberShape),
   region: optional(stringShape),
@@ -124,13 +124,13 @@ export const amenityShape: Shape<CampgroundAmenity> = objectOf<CampgroundAmenity
 
 export const amenitiesShape: Shape<CampgroundAmenity[]> = arrayOf(amenityShape);
 
-export const priceShape: Shape<CampgroundPrice> = objectOf<CampgroundPrice>({
+export const priceShape: Shape<CampgroundPrice | null> = columnObjectOf<CampgroundPrice>({
   minimum: optional(numberShape),
   maximum: optional(numberShape),
   currency: optional(stringShape),
 });
 
-export const scheduleShape: Shape<CampgroundSchedule> = objectOf<CampgroundSchedule>({
+export const scheduleShape: Shape<CampgroundSchedule | null> = columnObjectOf<CampgroundSchedule>({
   check_in: optional(stringShape),
   check_out: optional(stringShape),
 });
@@ -149,7 +149,7 @@ const ratingShape: Shape<CampgroundRating> = objectOf<CampgroundRating>({
   count: required(integerShape),
 });
 
-export const metadataShape: Shape<CampgroundMetadata> = objectOf<CampgroundMetadata>({
+export const metadataShape: Shape<CampgroundMetadata | null> = columnObjectOf<CampgroundMetadata>({
   activities: defaulted(arrayOf(stringShape), NO_ACTIVITIES),
   rating: optional(ratingShape),
   last_updated: optional(stringShape),
@@ -185,22 +185,19 @@ export const linkShape: Shape<CampgroundLink> = objectOf<CampgroundLink>({
 
 export const linksShape: Shape<CampgroundLink[]> = arrayOf(linkShape);
 
-export const contactShape: Shape<CampgroundContact> = objectOf<CampgroundContact>({
+export const contactShape: Shape<CampgroundContact | null> = columnObjectOf<CampgroundContact>({
   phone: optional(stringShape),
   email: optional(stringShape),
 });
 
 export const managementShape: Shape<CampgroundManagement | null> =
-  nullableObjectOf<CampgroundManagement>(
-    {
-      agency: required(stringShape),
-      website: optional(stringShape),
-    },
-    'empty-object',
-  );
+  columnObjectOf<CampgroundManagement>({
+    agency: required(stringShape),
+    website: optional(stringShape),
+  });
 
 export const geometryProvenanceShape: Shape<GeometryProvenance | null> =
-  nullableObjectOf<GeometryProvenance>(
+  columnObjectOf<GeometryProvenance>(
     {
       match_kind: required(stringShape),
       source: required(stringShape),
@@ -296,8 +293,10 @@ function encode(spec: Spec, value: unknown, path: string): unknown {
 function decode(spec: Spec, raw: unknown, path: string): unknown {
   switch (spec.kind) {
     case 'object': {
+      if (spec.nullable !== null && (!isPlainObject(raw) || Object.keys(raw).length === 0)) {
+        return null;
+      }
       if (!isPlainObject(raw)) throw new CatalogJsonError(path, 'expected an object');
-      if (spec.nullable !== null && Object.keys(raw).length === 0) return null;
       const read: Record<string, unknown> = {};
       for (const [name, field] of Object.entries(spec.fields)) {
         const member = raw[name];

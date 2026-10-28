@@ -19,7 +19,7 @@ import { is, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { withPostgis, type PostgisSession } from '../../../../scripts/schema-reference.mjs';
 import { createDb, migrateDb, type Db } from '../client.js';
-import * as catalogSchema from '../schema/catalog.js';
+import * as schema from '../schema/index.js';
 import { campgrounds } from '../schema/catalog.js';
 import {
   alertShape,
@@ -119,6 +119,26 @@ const geometryProvenance: GeometryProvenance = {
 };
 const sourcePayload = { id: 'abc', nested: { n: null, list: [1, 2] }, extra: 'kept' };
 
+const KOTLIN_DECODE_OBJECT_COLUMNS: readonly string[] = [
+  'campgrounds.location',
+  'campgrounds.default_campsite_schedule',
+  'campgrounds.price',
+  'campgrounds.management',
+  'campgrounds.contact',
+  'campgrounds.metadata',
+  'campgrounds.geometry_provenance',
+];
+
+const NULL_ON_EMPTY_SHAPES: ReadonlyArray<readonly [string, Shape<unknown>]> = [
+  ['campgrounds.location', locationShape],
+  ['campgrounds.default_campsite_schedule', scheduleShape],
+  ['campgrounds.price', priceShape],
+  ['campgrounds.management', managementShape],
+  ['campgrounds.contact', contactShape],
+  ['campgrounds.metadata', metadataShape],
+  ['campgrounds.geometry_provenance', geometryProvenanceShape],
+];
+
 interface Coverage {
   readonly columns: readonly string[];
   readonly value: unknown;
@@ -171,6 +191,13 @@ const PASSTHROUGH_COLUMNS: Readonly<Record<string, string>> = {
     'Kotlin binds the vendor object raw (Campflare per_night, currency_code, ...), not CampgroundPrice',
   'campsites.schedule':
     'Kotlin binds the vendor object raw (Campflare check_in_time, uniform, ...), not CampgroundSchedule',
+  'availability_watch.trigger_config':
+    'the API takes and returns a raw JsonObject (AvailabilityWatchCreateRequest); WatchTriggerConfig validates it, no typed shape',
+  'availability_watch.campsite_filters':
+    'the API takes and returns a raw JsonObject (AvailabilityWatchCreateRequest); no typed shape',
+  'ingest_runs.counts':
+    'AdminIngestReadRepo passes the stored JSON through as countsJson; no typed shape',
+  'api_cache.payload': 'ApiCacheRepo parses and writes a raw JsonElement; no typed shape',
   'tesla_superchargers.amenities': 'Kotlin binds a raw JsonElement; no typed shape',
   'tesla_superchargers.availability_profile': 'Kotlin binds a raw JsonElement; no typed shape',
   'tesla_superchargers.hardware_counts': 'Kotlin binds a raw JsonElement; no typed shape',
@@ -181,8 +208,8 @@ const PASSTHROUGH_COLUMNS: Readonly<Record<string, string>> = {
   'planet_fitness_locations.payload': 'Kotlin binds a raw JsonElement; no typed shape',
 };
 
-function catalogJsonbColumns(): string[] {
-  const exports: unknown[] = Object.values(catalogSchema);
+function schemaJsonbColumns(): string[] {
+  const exports: unknown[] = Object.values(schema);
   return exports
     .filter((exported): exported is PgTable => is(exported, PgTable))
     .flatMap((table) => {
@@ -211,7 +238,7 @@ describe('decode', () => {
 
   test('supplies the defaults the writer omitted', () => {
     expect(decodeCatalogJson(amenityShape, { key: 'showers' }).present).toBe(true);
-    expect(decodeCatalogJson(metadataShape, {}).activities).toEqual([]);
+    expect(decodeCatalogJson(metadataShape, { last_updated: 'x' })?.activities).toEqual([]);
   });
 
   test('applies defaults inside array elements and nested objects', () => {
@@ -228,9 +255,9 @@ describe('decode', () => {
   });
 
   test('does not share a default between two decodes', () => {
-    const first = decodeCatalogJson(metadataShape, {});
-    first.activities!.push('mutated');
-    expect(decodeCatalogJson(metadataShape, {}).activities).toEqual([]);
+    const first = decodeCatalogJson(metadataShape, { last_updated: 'x' });
+    first!.activities!.push('mutated');
+    expect(decodeCatalogJson(metadataShape, { last_updated: 'x' })?.activities).toEqual([]);
   });
 
   test('reads a row exactly as the Kotlin writer stores it', () => {
@@ -253,8 +280,8 @@ describe('decode', () => {
   test('a missing column reads as the empty value', () => {
     expect(decodeCatalogJson(amenitiesShape, null)).toEqual([]);
     expect(decodeCatalogJson(equipmentShape, undefined)).toEqual([]);
-    expect(decodeCatalogJson(metadataShape, null)).toEqual({ activities: [] });
-    expect(decodeCatalogJson(priceShape, {})).toEqual({});
+    expect(decodeCatalogJson(metadataShape, null)).toBeNull();
+    expect(decodeCatalogJson(priceShape, {})).toBeNull();
   });
 
   test('treats an explicit null like an absent key', () => {
@@ -305,6 +332,27 @@ describe('decode', () => {
     expect(decodeCatalogJson(geometryProvenanceShape, null)).toBeNull();
   });
 
+  test.each(NULL_ON_EMPTY_SHAPES)(
+    '%s reads an empty or non-object value as null',
+    (_column, shape) => {
+      expect(decodeCatalogJson(shape, {})).toBeNull();
+      expect(decodeCatalogJson(shape, null)).toBeNull();
+      expect(decodeCatalogJson(shape, undefined)).toBeNull();
+      expect(decodeCatalogJson(shape, [])).toBeNull();
+      expect(decodeCatalogJson(shape, 'text')).toBeNull();
+    },
+  );
+
+  test('exactly the columns Kotlin reads through decodeObjectColumn read {} as null', () => {
+    expect(NULL_ON_EMPTY_SHAPES.map(([column]) => column).sort()).toEqual(
+      [...KOTLIN_DECODE_OBJECT_COLUMNS].sort(),
+    );
+  });
+
+  test('a nested object is not nulled, only the column itself', () => {
+    expect(decodeCatalogJson(locationShape, { address: {} })).toEqual({ address: {} });
+  });
+
   test('a non-empty value for a nullable shape still has to be complete', () => {
     expect(() => decodeCatalogJson(managementShape, { website: 'https://example.test' })).toThrow(
       '$.agency',
@@ -327,7 +375,7 @@ describe('decode', () => {
     expect(decodeCatalogJson(contactShape, { phone: '555', future_key: 1 })).toEqual({
       phone: '555',
     });
-    expect(decodeCatalogJson(contactShape, {})).toEqual({});
+    expect(decodeCatalogJson(contactShape, {})).toBeNull();
   });
 
   test('an opaque payload keeps every key and every null', () => {
@@ -440,8 +488,8 @@ describe('every covered shape', () => {
     }
   });
 
-  test('covers every typed JSONB catalog column, and names why each remaining one is not', () => {
-    const everyColumn = catalogJsonbColumns();
+  test('accounts for every JSONB column in the schema, and names why each uncovered one is not', () => {
+    const everyColumn = schemaJsonbColumns();
     const accounted = new Set([
       ...COVERED_SHAPES.flatMap((entry) => entry.columns),
       ...Object.keys(PASSTHROUGH_COLUMNS),
@@ -544,10 +592,12 @@ describe('through a database', () => {
       { key: 'showers', present: true },
       { key: 'wifi', present: false },
     ]);
-    expect(decodeCatalogJson(metadataShape, row!.metadata)).toEqual({ activities: [] });
+    expect(decodeCatalogJson(metadataShape, row!.metadata)).toBeNull();
     expect(decodeCatalogJson(alertsShape, row!.alerts)).toEqual([{ body: 'Road work' }]);
     expect(decodeCatalogJson(priceShape, row!.price)).toEqual({ minimum: 12 });
-    expect(decodeCatalogJson(locationShape, row!.location)).toEqual({});
+    expect(decodeCatalogJson(locationShape, row!.location)).toBeNull();
+    expect(decodeCatalogJson(contactShape, row!.contact)).toBeNull();
+    expect(decodeCatalogJson(scheduleShape, row!.defaultCampsiteSchedule)).toBeNull();
     expect(decodeCatalogJson(managementShape, row!.management)).toBeNull();
     expect(decodeCatalogJson(geometryProvenanceShape, row!.geometryProvenance)).toBeNull();
     expect(decodeCatalogJson(linksShape, row!.links)).toEqual([]);
