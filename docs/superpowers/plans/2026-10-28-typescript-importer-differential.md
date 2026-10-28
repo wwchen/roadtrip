@@ -257,7 +257,7 @@ git commit -m "feat(worker): mirror RawCaptureStore, Envelope and InputBundle"
 - Reference: `backend/src/main/kotlin/ca/floo/roadtrip/repo/{CampgroundRepo,CampsiteRepo,TeslaSuperchargerRepo,PlanetFitnessLocationRepo,PoiRepo,ImportRunRepo,SqlBindSupport}.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/model/domain/*UpsertCandidate.kt`, `backend/src/main/kotlin/ca/floo/roadtrip/model/domain/provider/*.kt`
 
 **Interfaces:**
-- Consumes: `Db` and the codec from `@roadtrip/db`.
+- Consumes: `Db` and the codec from `@roadtrip/db`. Also, from Task 2's `packages/worker/src/etl/envelope.ts`, the opaque-payload carrier: `type OpaquePayloadJson` (a unique-symbol branded string), `serializeOpaquePayload(value: unknown): OpaquePayloadJson`, `type WideNumber`, `isWideNumber(value): value is WideNumber`, and `RequestMeta` / `ResponseMeta`. **Every opaque passthrough column is written by passing `serializeOpaquePayload`'s branded result to the JSONB parameter.** A parsed payload may contain `WideNumber` carriers for integers wider than IEEE-754 exact range; `structuredClone` throws on them, and an object spread or a `JSON.parse(JSON.stringify(x))` round trip corrupts them silently. So the opaque write path takes the payload as parsed and never copies it. Type the repo parameter as `OpaquePayloadJson`, not `string`, so a bare `JSON.stringify` at a call site fails to typecheck.
 - Produces, in `@roadtrip/domain`:
   - `const DataProvider = { CAMPFLARE: 'campflare', RECGOV: 'recgov', ASPIRA: 'aspira', STRAPI: 'bcparks-strapi', RESERVEAMERICA: 'reserveamerica', RESERVECALIFORNIA: 'reservecalifornia', TESLA_SUPERCHARGER: 'tesla_supercharger', PLANET_FITNESS_LOCATION: 'planet_fitness_location' } as const` plus `dataProviders`, following `amenity.ts`'s `memberList` idiom
   - `type DataProviderRef = { provider: DataProvider; serialize(): string }` with one constructor per `DataProviderRef.kt` variant and `parseDataProviderRef(provider, ref)`
@@ -282,7 +282,7 @@ Column-by-column JSONB handling, which is the whole point of this task:
 | `campgrounds.{location, default_campsite_schedule, price, management, contact, metadata}` | its `columnObjectOf` shape — absent encodes to `{}` |
 | `campgrounds.geometry_provenance` | `geometryProvenanceShape` — absent encodes to SQL `NULL` |
 | `campgrounds.{amenities, links, photos, alerts, cell_service, booking_aliases}` and `campsites.{equipment, photos, attributes, booking_aliases}` | the array shape |
-| `campgrounds.{connections, source_payload}`, `campsites.{price, schedule, source_payload}`, `tesla_superchargers.*`, `planet_fitness_locations.*` | `sourcePayloadShape` (opaque passthrough); absent becomes `{}` for object columns and `[]` for array ones, matching `jsonObject` / `jsonArray` |
+| `campgrounds.{connections, source_payload}`, `campsites.{price, schedule, source_payload}`, `tesla_superchargers.*`, `planet_fitness_locations.*` | the opaque passthrough: `serializeOpaquePayload` from Task 2 for a value that came from a capture payload, `sourcePayloadShape` for one the adapter built itself; absent becomes `{}` for object columns and `[]` for array ones, matching `jsonObject` / `jsonArray` |
 
 - [ ] **Step 1: Write the failing tests**
 
