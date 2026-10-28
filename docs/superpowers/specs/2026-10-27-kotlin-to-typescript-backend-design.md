@@ -233,11 +233,18 @@ different as text. A text comparison would report a spurious difference on a lar
 share of the catalog and bury the real ones.
 
 **And `{}` is null on read, for every object column, not just the ones with a required
-field.** `CatalogColumnJson.decodeObject` returns null for any empty JSON object, and
-`CampgroundRepo` reads `contact`, `metadata`, `price` and `location` through
-`decodeObjectColumn`. An earlier draft of this paragraph said the divergence was
-limited to shapes whose required field was absent — that was a wrong ruling of mine,
-caught by the Task 7 re-review, and it understated the surface considerably. The codec
+field.** `CatalogColumnJson.decodeObject` returns null when the parsed element is not
+a `JsonObject` or is empty — so `{}`, `[]`, `"text"` and `null` all read as null. The
+columns are **every one `CampgroundRepo` reads through `decodeObjectColumn`**, which is
+seven: `location`, `default_campsite_schedule`, `price`, `management`, `contact`,
+`metadata`, `geometry_provenance`. `CampsiteRepo` uses only `decodeListColumn`.
+
+Two earlier drafts of this paragraph were wrong, both mine. The first said the
+divergence was limited to shapes whose required field was absent; the second named
+four columns instead of seven. The enumeration is given here only as a convenience —
+the authority is the set of `decodeObjectColumn` call sites, and nothing in the
+TypeScript reads them, so a new Kotlin call site is a silent divergence until someone
+looks. The codec
 matches Kotlin here rather than the harness papering over it, because a codec that
 reads a stored row differently from the system that wrote it is the one thing this
 seam exists to prevent.
