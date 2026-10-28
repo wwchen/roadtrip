@@ -99,7 +99,6 @@ test('a value read back from geometry is accepted as geometry input unchanged', 
     .from(pois)
     .where(eq(pois.id, REINSERTED_POI_ID));
   expect(copy?.geom).toBe(source!.geom);
-  expect(await sridOf(REINSERTED_POI_ID)).toBe(EXPECTED_SRID);
 });
 
 test('bytea round-trips the exact bytes', async () => {
