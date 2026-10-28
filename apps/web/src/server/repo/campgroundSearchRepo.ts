@@ -1,9 +1,8 @@
-import { GEOMETRY_SRID, POI_TYPES, type Db, type PoiType } from '@roadtrip/db';
+import { CAMPGROUND_POI_TYPE, GEOMETRY_SRID, type Db } from '@roadtrip/db';
 import { sql } from 'drizzle-orm';
 import { causeChain, isGeometryParseFault, isTopologyFault } from './faults';
 import { idString } from './ids';
 
-const CAMPGROUND_POI_TYPE: PoiType = POI_TYPES[0];
 const TOPOLOGY_FAULT_EMPTY_RESULT = 'GEOS topology fault in a polygon query, returning empty:';
 const INVALID_BOUNDARY_MESSAGE = 'boundary is not valid GeoJSON geometry';
 const PROVIDER_SEPARATOR = sql`, `;

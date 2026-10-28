@@ -42,7 +42,13 @@ const MIN_LONGITUDE = -180;
 const MAX_LONGITUDE = 180;
 const COUNTRY_CODE_LENGTH = 2;
 
-export const POI_TYPES = ['campground', 'tesla_supercharger', 'planet_fitness_location'] as const;
+export const CAMPGROUND_POI_TYPE = 'campground';
+
+export const POI_TYPES = [
+  CAMPGROUND_POI_TYPE,
+  'tesla_supercharger',
+  'planet_fitness_location',
+] as const;
 
 export type PoiType = (typeof POI_TYPES)[number];
 

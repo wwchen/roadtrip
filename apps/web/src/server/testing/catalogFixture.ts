@@ -1,11 +1,11 @@
 import {
+  CAMPGROUND_POI_TYPE,
   campgrounds,
   campsites,
   createDb,
   ewkt,
   migrateDb,
   poiCampgrounds,
-  POI_TYPES,
   pois,
   type Db,
   type PoiType,
@@ -15,8 +15,7 @@ import { withPostgis, type PostgisSession } from '../../../../../scripts/schema-
 import { openServerDb } from '../db';
 
 const CATALOG_DATABASE = 'roadtrip_web_read';
-const POI_TYPE = POI_TYPES[0];
-const OTHER_POI_TYPE = POI_TYPES[1];
+const OTHER_POI_TYPE: PoiType = 'tesla_supercharger';
 
 const CRESCENT_WKT =
   'POLYGON((-119.7 38.8,-119.2 38.8,-119.2 38.9,-119.6 38.9,-119.6 39.2,-119.2 39.2,-119.2 39.3,-119.7 39.3,-119.7 38.8))';
@@ -149,7 +148,7 @@ async function seedCatalog(db: Db): Promise<void> {
       .insert(pois)
       .values({
         id: seed.poiId,
-        poiType: seed.poiType ?? POI_TYPE,
+        poiType: seed.poiType ?? CAMPGROUND_POI_TYPE,
         geom: ewkt(seed.wkt),
         deletedAt,
       });

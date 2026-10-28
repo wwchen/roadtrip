@@ -1,3 +1,4 @@
+import { CAMPGROUND_POI_TYPE } from '@roadtrip/db';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import {
@@ -28,7 +29,6 @@ import { findDetailByPoi, findSummariesByPoiIds } from './campgroundReadRepo';
 import { causeChain } from './faults';
 
 const READ_ONLY_FAILURE = /read-only transaction/;
-const SERVER_TEST_POI_TYPE = 'campground';
 const SERVER_TEST_GEOMETRY = 'SRID=4326;POINT(0 0)';
 
 let fixture: CatalogFixture;
@@ -135,7 +135,7 @@ test('a malformed JSONB field becomes null and names itself in decodeErrors', as
 test('the read connection rejects a write', async () => {
   const failure = await fixture.readDb
     .execute(
-      sql`INSERT INTO pois (poi_type, geom) VALUES (${SERVER_TEST_POI_TYPE}, ${SERVER_TEST_GEOMETRY})`,
+      sql`INSERT INTO pois (poi_type, geom) VALUES (${CAMPGROUND_POI_TYPE}, ${SERVER_TEST_GEOMETRY})`,
     )
     .then(
       () => undefined,
