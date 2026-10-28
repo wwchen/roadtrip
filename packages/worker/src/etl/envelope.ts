@@ -13,7 +13,7 @@ export interface ResponseMeta {
 
 declare const opaquePayloadBrand: unique symbol;
 
-export type OpaquePayloadJson = string & { readonly [opaquePayloadBrand]: 'jsonb-object' };
+export type OpaquePayloadJson = string & { readonly [opaquePayloadBrand]: 'jsonb-value' };
 
 export type WideNumber = Readonly<{ rawJSON: string }>;
 
@@ -51,9 +51,14 @@ export function isWideNumber(value: unknown): value is WideNumber {
   return sourceAwareJson.isRawJSON(value);
 }
 
+const OPAQUE_PAYLOAD_OPENERS = ['{', '['];
+
 export function serializeOpaquePayload(value: unknown): OpaquePayloadJson {
-  if (!isRecord(value) || isWideNumber(value)) throw new Error('opaque payload must be a JSON object');
-  return JSON.stringify(value) as OpaquePayloadJson;
+  const serialized = JSON.stringify(value) as string | undefined;
+  if (serialized === undefined || !OPAQUE_PAYLOAD_OPENERS.includes(serialized.charAt(0))) {
+    throw new Error('opaque payload must serialise to a JSON object or array');
+  }
+  return serialized as OpaquePayloadJson;
 }
 
 function parseKeepingDigits(text: string): unknown {

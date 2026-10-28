@@ -270,17 +270,40 @@ describe('the wide-number carrier contract', () => {
     ['undefined', undefined],
     ['a string', 'text'],
     ['an already-stringified object', '{"photo_id":1}'],
-    ['an array', [1, 2]],
+    ['a Date, which would serialise to a quoted string', new Date(0)],
     ['a number', 7],
     ['a boolean', true],
-  ])('serializeOpaquePayload rejects %s, because every opaque column is a jsonb object', (_label, value) => {
-    expect(() => serializeOpaquePayload(value)).toThrow(/must be a JSON object/);
+  ])('serializeOpaquePayload rejects %s, because it is not a JSON object or array', (_label, value) => {
+    expect(() => serializeOpaquePayload(value)).toThrow(/must serialise to a JSON object or array/);
+  });
+
+  test('serializeOpaquePayload accepts an array payload, as the array-typed opaque columns need', () => {
+    expect(serializeOpaquePayload([])).toBe('[]');
+    expect(serializeOpaquePayload(['wifi', 'restrooms'])).toBe('["wifi","restrooms"]');
+  });
+
+  test('serializeOpaquePayload accepts an array containing objects', () => {
+    expect(serializeOpaquePayload([{ name: 'a', n: 1 }, { name: 'b', tags: ['x'] }])).toBe(
+      '[{"name":"a","n":1},{"name":"b","tags":["x"]}]',
+    );
+  });
+
+  test('wide integers survive inside an array nested in an object and at depth two', () => {
+    const raw = `{"list":[1,[${WIDE_INTEGER}],{"deep":{"ids":[${HUGE_INTEGER},${NEGATIVE_WIDE_INTEGER}]}}]}`;
+    const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload;
+    expect(serializeOpaquePayload(payload)).toBe(raw);
+  });
+
+  test('wide integers survive in a top-level array payload', () => {
+    const raw = `[${WIDE_INTEGER},{"x":${HUGE_INTEGER}}]`;
+    const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload;
+    expect(serializeOpaquePayload(payload)).toBe(raw);
   });
 
   test('serializeOpaquePayload rejects a payload that is itself a wide integer', () => {
     const wideTop = parseEnvelope(envelopeWithRawPayload(HUGE_INTEGER)).payload;
     expect(isWideNumber(wideTop)).toBe(true);
-    expect(() => serializeOpaquePayload(wideTop)).toThrow(/must be a JSON object/);
+    expect(() => serializeOpaquePayload(wideTop)).toThrow(/must serialise to a JSON object or array/);
   });
 
   test('HAZARD: structuredClone of a payload holding a carried integer throws', () => {

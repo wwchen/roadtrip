@@ -32,7 +32,7 @@ const REAL_RECGOV_SOURCE = 'recgov-campsites';
 const REAL_RECGOV_ENVELOPES = 4001;
 const REAL_RECGOV_FIRST_PART = 'facility-10000305';
 const REAL_RECGOV_LAST_PART = 'facility-275092';
-const REAL_DATA_TIMEOUT_MS = 120_000;
+const REAL_DATA_TIMEOUT_MS = 60_000;
 const OLD_TIME = new Date('2001-01-01T00:00:00Z');
 const NEW_TIME = new Date('2030-01-01T00:00:00Z');
 
