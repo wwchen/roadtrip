@@ -623,6 +623,10 @@ Expected: `0 differences` across every diffed table.
 
 Both write their own tables and their own POI type, so this task proves the whole pipe — registry → capture store → orchestrator → repo → POI link — on the two simplest adapters before any campground exists.
 
+**This is also the first task where the harness can run a real import end to end, so it owes Task 5 the coverage Task 5 could not give itself.** Until an adapter existed, `--reference-dump`, `--emit-seed`, `--passes 2` and `--prove-update-keys` had no end-to-end exercise. Run each of them once over these two targets and record the result and the timing: a `--passes 2` run must be clean (these adapters are idempotent), a `--prove-update-keys` run must be clean, `--emit-seed` must produce a dump and its provenance sidecar, and a `--reference-dump` run must produce the dump on the first invocation and reuse it on the second, refusing it if the provenance key has moved. Anything that only works on an empty database is better found here than in Task 14.
+
+Expect `import_runs.seen_count` to be the first column that trips, since it is compared and depends on the exact parse and transform counting rather than on any row's content.
+
 `TeslaIndexEtl` side-loads `data/raw/tesla-locations/<slug>/<newest>.json` from `ctx.rawDir` rather than through `InputBundle`; it is not a declared input. Its unit test asserts that a slug directory with no `.json` file is skipped rather than throwing, and that the newest file per slug is the one read.
 
 ### Task 7: Campflare
