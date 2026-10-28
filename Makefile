@@ -127,10 +127,12 @@ test: _ensure-hooks
 	# tsconfig type-checks them (and scripts/schema-reference.d.mts with them).
 	npm run typecheck --workspace @roadtrip/domain
 	npm run typecheck --workspace @roadtrip/db
+	npm run typecheck --workspace @roadtrip/worker
 	# The packages' own suites. They resolve each other through dist, so they
 	# follow the build above; the db suite boots PostGIS containers.
 	npm run test --workspace @roadtrip/domain
 	npm run test --workspace @roadtrip/db
+	npm run test --workspace @roadtrip/worker
 	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
 	node --test scripts/check-package-boundaries.test.mjs && node scripts/check-package-boundaries.mjs
 	node scripts/check-color-tokens.mjs
