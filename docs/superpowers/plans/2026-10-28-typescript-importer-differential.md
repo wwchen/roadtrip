@@ -71,7 +71,7 @@ Five conditions the spec implies that no task's own tests would otherwise exerci
   - `type AgencyConfig = { kind: 'constant'; value: string } | { kind: 'derived'; field: string }`, mirroring `AgencyConfig.kt`
   - `interface GeometryPolicy { sources: GeometrySourceSpec[]; match: MatchPolicy }`, `interface GeometrySourceSpec { input: string; format: GeometryFormat; state?: string; nameProperty?: string }`, `interface MatchPolicy { fuzzyThreshold: number; parentFallback: boolean }` — field for field with `GeometryPolicy.kt`, including its default `fuzzyThreshold`
   - `type ImportSection = 'poi_data' | 'campsite_data'`
-  - `interface ImportTarget { name: string; section: ImportSection; entry: EtlEntry }`
+  - `interface ImportTarget { name: string; section: ImportSection }` — name and section only, as Kotlin's `RegistryTargets` emits. An earlier version of this plan carried the row's terminal `EtlEntry` here and Task 1 spent a fix round pinning it to the *last* entry; Task 4 then showed `runTarget` re-resolves the row by name and never reads it, so the field was dead surface that tests had to fabricate, and a hand-built target with a mismatched entry would silently run the registry's. Removed.
   - `importTargets(registry: PoiRegistry, implemented: ReadonlySet<string>): ImportTarget[]`
 
 Package manifest mirrors `packages/db/package.json`: `"name": "@roadtrip/worker"`, `"private": true`, `"type": "module"`, `engines.node >= 22.12.0`, scripts `build` / `typecheck` / `test`, dependencies `@roadtrip/db`, `@roadtrip/domain`, `yaml`. Add a `bin` entry `roadtrip-import` → `./dist/cli/import.js` in Task 4.
@@ -724,7 +724,13 @@ Rule, applied to Step 1's three measured times. CI runs the full capture set in 
 
 Path filter: `packages/**`, `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/**`, `backend/src/main/kotlin/ca/floo/roadtrip/repo/**`, `backend/src/main/kotlin/ca/floo/roadtrip/model/domain/**`, `backend/src/main/kotlin/ca/floo/roadtrip/tools/**`, `backend/src/main/resources/poi-registry.yaml`, `backend/src/main/resources/db/migration/**`, `data/raw/**`, `scripts/importer-differential*.mjs`, `scripts/schema-reference.mjs`, `.github/workflows/ci.yml`.
 
-- [ ] **Step 5: Produce the seed dump spec §8.1 step 5 consumes**
+- [ ] **Step 5: Close the silent-no-op hole the partial registry left open**
+
+Through Tasks 6–13 the adapter registry is deliberately incomplete, so `importTargets` skipping a row with no registered adapter is correct. Once every adapter exists that tolerance becomes a hazard: a typo in an `adapter:` name silently shrinks the target set and the import reports success over fewer sources, where Kotlin fails loudly when it builds its registry (`createPoiTerminal` errors on an unknown adapter).
+
+Add an assertion that every **enabled** `poi_data` and `campsite_data` row resolves an adapter, and fail with the offending row and adapter name when one does not. Prove it: misspell one `adapter:` value in a copy of the registry and show the CLI exiting non-zero and naming it. This is Review Focus #1's class — a run that does less than asked must not report success.
+
+- [ ] **Step 6: Produce the seed dump spec §8.1 step 5 consumes**
 
 Run: `node scripts/importer-differential.mjs --emit-seed <path>` — a `pg_dump` of the TypeScript database taken after a clean diff, with a provenance sidecar naming the commit and the capture-set hash. The dump itself is not committed; the target and its provenance format are.
 
