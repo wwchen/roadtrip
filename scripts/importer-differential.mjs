@@ -35,8 +35,8 @@
 //        [--prove-update-keys]
 
 import { execFile, spawn } from 'node:child_process';
-import { readdirSync, statSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
@@ -44,6 +44,8 @@ import { createDb, migrateDb } from '@roadtrip/db';
 import {
   blankSql,
   COPIED_TABLES,
+  coverageSql,
+  COVERAGE_EXEMPT_TABLES,
   diffSql,
   DIFFED_TABLES,
   fingerprintSql,
@@ -87,11 +89,19 @@ const PSQL = 'psql';
 const STDIN_SCRIPT = '-';
 
 const PROVENANCE_SUFFIX = '.provenance.json';
+// Everything a cached Kotlin dump is a function of. The Kotlin ETL, repo and
+// domain trees and the registry decide what it writes; data/raw is what it
+// reads. The last two are the schema itself, which the dump's rows have to fit:
+// the Flyway migrations are what the database it is restored into was built
+// from, and the Drizzle schema is what the diff's column lists are derived
+// from, so a migration must retire a dump taken before it.
 const PROVENANCE_TREES = [
   'data/raw',
   'backend/src/main/kotlin/ca/floo/roadtrip/service/etl',
   'backend/src/main/kotlin/ca/floo/roadtrip/repo',
   'backend/src/main/kotlin/ca/floo/roadtrip/model/domain',
+  'backend/src/main/resources/db/migration',
+  'packages/db/src/schema',
 ];
 const PROVENANCE_FILES = [REGISTRY_RELATIVE_PATH];
 const PROVENANCE_INDENT = 2;
@@ -107,6 +117,87 @@ const USAGE =
 
 class MissingBuildError extends Error {}
 
+// Absent *and* stale, because this is the only guard standing between an edit
+// to packages/*/src and a clean diff over the previous build. Tasks 6-13 each
+// end on this command right after editing TypeScript, so an existence-only
+// check reports "0 differences" for code that never executed — which is worse
+// than no harness, since everything downstream would be declared correct by it.
+//
+// Refuses rather than rebuilding: a gate that silently rebuilds makes it
+// impossible to tell afterwards which build a recorded result came from, and
+// `npm run build` is three seconds.
+const BUILD_SOURCE_DIR = 'src';
+const BUILD_OUTPUT_DIR = 'dist';
+const BUILD_SCRIPT = 'build';
+const TEST_SOURCE_SUFFIXES = ['.test.ts', '.test.tsx'];
+
+function newestFile(dir, skip = () => false) {
+  let newest;
+  const walk = (current) => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!entry.isFile() || skip(entry.name)) continue;
+      const { mtimeMs } = statSync(full);
+      if (newest === undefined || mtimeMs > newest.mtimeMs) newest = { path: full, mtimeMs };
+    }
+  };
+  try {
+    walk(dir);
+  } catch {
+    return undefined;
+  }
+  return newest;
+}
+
+// The workspaces the two commands below load through `dist`, in dependency
+// order, read from the root manifest so a new package cannot escape the check.
+function buildableWorkspaces() {
+  const { workspaces = [] } = JSON.parse(readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
+  const dirs = [];
+  for (const pattern of workspaces) {
+    if (!pattern.endsWith('/*')) continue;
+    const parent = path.join(REPO_ROOT, pattern.slice(0, -2));
+    for (const entry of readdirSync(parent, { withFileTypes: true })) {
+      if (entry.isDirectory()) dirs.push(path.join(parent, entry.name));
+    }
+  }
+  return dirs.filter((dir) => {
+    try {
+      const manifest = JSON.parse(readFileSync(path.join(dir, 'package.json'), 'utf8'));
+      return manifest.scripts?.[BUILD_SCRIPT] !== undefined;
+    } catch {
+      return false;
+    }
+  });
+}
+
+export function staleBuilds() {
+  const stale = [];
+  for (const dir of buildableWorkspaces()) {
+    const relative = path.relative(REPO_ROOT, dir);
+    // Test sources are excluded from each package's build, so they can be
+    // newer than dist without anything being stale.
+    const source = newestFile(
+      path.join(dir, BUILD_SOURCE_DIR),
+      (name) => TEST_SOURCE_SUFFIXES.some((suffix) => name.endsWith(suffix)),
+    );
+    if (source === undefined) continue;
+    const output = newestFile(path.join(dir, BUILD_OUTPUT_DIR));
+    if (output === undefined) {
+      stale.push(`${relative} has no ${BUILD_OUTPUT_DIR}/`);
+      continue;
+    }
+    if (source.mtimeMs > output.mtimeMs) {
+      stale.push(`${relative}: ${path.relative(REPO_ROOT, source.path)} is newer than its ${BUILD_OUTPUT_DIR}/`);
+    }
+  }
+  return stale;
+}
+
 async function loadWorker() {
   const entry = path.join(REPO_ROOT, WORKER_ENTRY);
   try {
@@ -115,6 +206,13 @@ async function loadWorker() {
     throw new MissingBuildError(
       `@roadtrip/worker is not built: ${WORKER_ENTRY} is missing. Run \`${WORKER_BUILD_COMMAND}\` ` +
         'before the differential; this is a missing build, not a clean diff.',
+    );
+  }
+  const stale = staleBuilds();
+  if (stale.length > 0) {
+    throw new MissingBuildError(
+      `the build is stale, so the TypeScript importer on disk is not the one in src:\n  ${stale.join('\n  ')}\n` +
+        `Run \`${WORKER_BUILD_COMMAND}\` before the differential; this is a stale build, not a clean diff.`,
     );
   }
   return import('@roadtrip/worker');
@@ -136,6 +234,7 @@ function registryTargets(registry) {
     .map(({ row, section }) => ({
       name: row.name,
       section,
+      category: row.category,
       slugs: row.etls.map((etl) => etl.slug),
       inputs: [...new Set(row.etls.flatMap((etl) => etl.inputs))],
     }));
@@ -246,7 +345,7 @@ async function runProcess(command, args, label) {
 // arguments.
 const quoteForGradle = (value) => (/[\s"]/.test(value) ? JSON.stringify(value) : value);
 
-async function runKotlinImport({ jdbcUrl, user, password, rawDir, staticDir, targets, pass }) {
+async function runKotlinImport({ jdbcUrl, user, password, rawDir, staticDir, targets, passes, pass }) {
   const args = [
     '--jdbc-url',
     jdbcUrl,
@@ -258,12 +357,14 @@ async function runKotlinImport({ jdbcUrl, user, password, rawDir, staticDir, tar
     rawDir,
     '--static-dir',
     staticDir,
+    '--passes',
+    String(passes),
     ...targets.flatMap((target) => ['--target', target]),
   ];
   await runProcess(
     GRADLE_WRAPPER,
     [GRADLE_IMPORT_TASK, `--args=${args.map(quoteForGradle).join(' ')}`],
-    `the Kotlin importer (pass ${pass})`,
+    passes === 1 ? `the Kotlin importer (pass ${pass})` : `the Kotlin importer (passes ${pass}-${pass + passes - 1})`,
   );
 }
 
@@ -356,15 +457,28 @@ async function auditKeys(db, table, schema) {
   );
 }
 
-// Audits every key on both sides and counts the rows, which is everything the
-// refusals below need and nothing the comparison needs. Separate from the diff
-// so a run where one side never wrote anything is refused before a single
-// comparison has been made, rather than after one has quietly come back clean.
+async function auditCoverage(db, table, schema) {
+  if (Object.hasOwn(COVERAGE_EXEMPT_TABLES, table)) return;
+  const [{ present, covered }] = await db.$client.unsafe(coverageSql(table, schema));
+  if (present === covered) return;
+  throw new Error(
+    `${schema}.${table}: the diff reaches ${covered} of ${present} row(s). ` +
+      `${present - covered} row(s) are invisible to the comparison — for pois that is a poi with no ` +
+      'link row — so a clean diff over this table would prove nothing about them.',
+  );
+}
+
+// Audits every key and the diff's coverage on both sides and counts the rows,
+// which is everything the refusals below need and nothing the comparison needs.
+// Separate from the diff so a run where one side never wrote anything, or wrote
+// rows the diff cannot see, is refused before a single comparison has been
+// made, rather than after one has quietly come back clean.
 export async function tableCounts(db) {
   const counts = {};
   for (const spec of DIFFED_TABLES) {
     for (const side of SIDES) {
       await auditKeys(db, spec.table, side.schema);
+      await auditCoverage(db, spec.table, side.schema);
       const [{ rows }] = await db.$client.unsafe(rowCountSql(spec.table, side.schema));
       counts[`${side.name}.${spec.table}`] = rows;
     }
@@ -372,11 +486,11 @@ export async function tableCounts(db) {
   return counts;
 }
 
-export async function diffDatabases(db, { maxDifferences = DEFAULT_MAX_DIFFERENCES } = {}) {
+export async function diffDatabases(db, { maxDifferences = DEFAULT_MAX_DIFFERENCES, counts: given } = {}) {
   if (!Number.isSafeInteger(maxDifferences) || maxDifferences < 1) {
     throw new Error(`--max-differences must be a positive integer, got ${maxDifferences}`);
   }
-  const counts = await tableCounts(db);
+  const counts = given ?? (await tableCounts(db));
   const differences = [];
   for (const spec of DIFFED_TABLES) {
     if (differences.length >= maxDifferences) continue;
@@ -388,18 +502,56 @@ export async function diffDatabases(db, { maxDifferences = DEFAULT_MAX_DIFFERENC
   return { differences: differences.slice(0, maxDifferences), counts };
 }
 
-function totalRows(counts, side) {
-  return SUBSTANTIVE_TABLES.reduce((sum, table) => sum + counts[`${side}.${table}`], 0);
+// Which sinks the selected targets must have filled. Summing every diffed table
+// and demanding the total be non-zero is too weak: a target whose own sink
+// stayed empty is then covered by another target's rows, and its table is
+// silently undiffed. A row's section and category say exactly which table it
+// writes, so the expectation is per target.
+//
+// import_runs is never in this set, deliberately: the orchestrator opens a run
+// before any adapter produces a candidate, so a no-op import still leaves rows
+// there and a guard that counted them would pass the vacuous run it exists to
+// catch.
+const OWNER_TABLE_BY_CATEGORY = {
+  campground: 'campgrounds',
+  supercharger: 'tesla_superchargers',
+  'planet-fitness': 'planet_fitness_locations',
+};
+const POI_TABLE = 'pois';
+const CAMPSITE_TABLE = 'campsites';
+
+export function expectedTables(selected) {
+  const expected = new Set();
+  for (const target of selected) {
+    if (target.section === 'campsite_data') {
+      expected.add(CAMPSITE_TABLE);
+      continue;
+    }
+    const owner = OWNER_TABLE_BY_CATEGORY[target.category];
+    if (owner === undefined) {
+      throw new Error(
+        `poi_data '${target.name}' has category '${target.category}', which names no catalog table; ` +
+          `known: ${Object.keys(OWNER_TABLE_BY_CATEGORY).join(', ')}`,
+      );
+    }
+    expected.add(owner);
+    expected.add(POI_TABLE);
+  }
+  const unknown = [...expected].filter((table) => !SUBSTANTIVE_TABLES.includes(table));
+  if (unknown.length > 0) throw new Error(`expected table(s) are not diffed: ${unknown.join(', ')}`);
+  return [...expected];
 }
 
-function assertBothSidesWrote(counts) {
-  for (const side of SIDES) {
-    if (totalRows(counts, side.name) === 0) {
-      throw new Error(
-        `the ${side.name} importer wrote zero rows to every diffed table but import_runs ` +
-          `(${SUBSTANTIVE_TABLES.join(', ')}). Refusing to report a diff: "one side did not run" ` +
-          'is not "one side has no rows".',
-      );
+function assertBothSidesWrote(counts, selected) {
+  for (const table of expectedTables(selected)) {
+    for (const side of SIDES) {
+      if (counts[`${side.name}.${table}`] === 0) {
+        throw new Error(
+          `the ${side.name} importer wrote zero rows to ${table}, which the selected target(s) ` +
+            `(${selected.map((target) => target.name).join(', ')}) must write. Refusing to report a ` +
+            'diff: "one side did not run" is not "one side has no rows".',
+        );
+      }
     }
   }
 }
@@ -486,7 +638,7 @@ function cacheRefusal(wanted, found) {
 
 async function readProvenance(dumpPath) {
   try {
-    return JSON.parse(await readFile(`${dumpPath}${PROVENANCE_SUFFIX}`, 'utf8'));
+    return JSON.parse(readFileSync(`${dumpPath}${PROVENANCE_SUFFIX}`, 'utf8'));
   } catch {
     return undefined;
   }
@@ -515,13 +667,18 @@ const REFERENCE_DUMP_FLAGS = [
 // must not carry the other importer's.
 const SEED_DUMP_FLAGS = ['--no-owner', '--no-privileges', `--schema=${TYPESCRIPT_SCHEMA}`];
 
-async function dumpDatabase(postgres, user, database, flags) {
-  return postgres.exec([PG_DUMP, '-U', user, '-d', database, ...flags]);
+// Streamed to and from a file rather than through a string. A dump of the
+// catalog at full scale — ~300k campsites each carrying a source_payload — is
+// far past V8's maximum string length, so collecting it would throw
+// `Invalid string length` instead of writing a dump, and that is exactly the
+// `--reference-dump <cached>` command Tasks 6-13 are told to use.
+async function dumpDatabase(postgres, user, database, flags, outPath) {
+  await postgres.exec([PG_DUMP, '-U', user, '-d', database, ...flags], { outputFile: outPath });
 }
 
-async function restoreDatabase(postgres, user, database, sql) {
+async function restoreDatabase(postgres, user, database, inPath) {
   await postgres.exec([PSQL, '-U', user, '-d', database, '-v', 'ON_ERROR_STOP=1', '-f', STDIN_SCRIPT], {
-    input: sql,
+    inputFile: inPath,
   });
 }
 
@@ -544,6 +701,11 @@ export async function runDifferential({
   importers = DEFAULT_IMPORTERS,
 } = {}) {
   const { loadPoiRegistry } = await loadWorker();
+  if (!Number.isSafeInteger(passes) || passes < 1) {
+    // Without this, `--passes abc` runs no importer at all and then fails with
+    // "wrote zero rows", which names the wrong problem.
+    throw new Error(`--passes must be a positive integer, got ${passes}`);
+  }
   const effectivePasses = proveUpdateKeys ? Math.max(passes, PROVE_UPDATE_KEYS_PASSES) : passes;
 
   if (proveUpdateKeys && referenceDump !== undefined) {
@@ -583,14 +745,16 @@ export async function runDifferential({
         console.log(`not restoring ${referenceDump}: ${refusal}`);
       }
 
-      for (let pass = 1; pass <= effectivePasses; pass += 1) {
-        if (proveUpdateKeys && pass === PROVE_UPDATE_KEYS_PASSES) {
-          await blankBothSides([kotlinDb, typescriptDb]);
-        }
+      // One Gradle invocation per segment rather than per pass: the JVM and
+      // Gradle's own startup are ~28 s each and the Kotlin CLI loops over the
+      // targets itself. --prove-update-keys is the only mode that needs two
+      // segments, because its blanking step has to land between them.
+      const segments = proveUpdateKeys ? [1, 1] : [effectivePasses];
+      let completed = 0;
+      for (const [segment, segmentPasses] of segments.entries()) {
+        if (segment > 0) await blankBothSides([kotlinDb, typescriptDb]);
         if (restoring) {
-          if (pass === 1) {
-            await restoreDatabase(postgres, user, KOTLIN_DB, await readFile(referenceDump, 'utf8'));
-          }
+          if (segment === 0) await restoreDatabase(postgres, user, KOTLIN_DB, referenceDump);
         } else {
           await importers.kotlin({
             jdbcUrl,
@@ -601,32 +765,42 @@ export async function runDifferential({
             staticDir,
             registryPath,
             targets: targetNames,
+            passes: segmentPasses,
+            pass: completed + 1,
+          });
+        }
+        // The TypeScript CLI has no --passes and node's startup is milliseconds,
+        // so this side simply runs again.
+        for (let pass = completed + 1; pass <= completed + segmentPasses; pass += 1) {
+          await importers.typescript({
+            databaseUrl: postgres.connectionString(TYPESCRIPT_DB),
+            rawDir,
+            staticDir,
+            registryPath,
+            targets: targetNames,
+            passes: 1,
             pass,
           });
         }
-        await importers.typescript({
-          databaseUrl: postgres.connectionString(TYPESCRIPT_DB),
-          rawDir,
-          staticDir,
-          registryPath,
-          targets: targetNames,
-          pass,
-        });
+        completed += segmentPasses;
       }
 
       if (referenceDump !== undefined && !restoring) {
-        await writeFile(referenceDump, await dumpDatabase(postgres, user, KOTLIN_DB, REFERENCE_DUMP_FLAGS));
+        await dumpDatabase(postgres, user, KOTLIN_DB, REFERENCE_DUMP_FLAGS, referenceDump);
         await writeFile(`${referenceDump}${PROVENANCE_SUFFIX}`, JSON.stringify(wanted, undefined, PROVENANCE_INDENT));
       }
 
       await createReferenceSchema(typescriptDb);
       await copyKotlinRows(postgres, user);
 
-      assertBothSidesWrote(await tableCounts(typescriptDb));
-      const result = await diffDatabases(typescriptDb, { maxDifferences });
+      // Counted once and handed to the diff, so the key audit, the coverage
+      // audit and the row counts are not paid twice over ~480k rows.
+      const counts = await tableCounts(typescriptDb);
+      assertBothSidesWrote(counts, selected);
+      const result = await diffDatabases(typescriptDb, { maxDifferences, counts });
 
       if (emitSeed !== undefined && result.differences.length === 0) {
-        await writeFile(emitSeed, await dumpDatabase(postgres, user, TYPESCRIPT_DB, SEED_DUMP_FLAGS));
+        await dumpDatabase(postgres, user, TYPESCRIPT_DB, SEED_DUMP_FLAGS, emitSeed);
         await writeFile(`${emitSeed}${PROVENANCE_SUFFIX}`, JSON.stringify(wanted, undefined, PROVENANCE_INDENT));
       }
       return result;

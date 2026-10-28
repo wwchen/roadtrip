@@ -31,12 +31,23 @@ function statsLine(stats: EtlStats): string {
   return JSON.stringify(stats, (_key, value) => (typeof value === 'bigint' ? value.toString() : value));
 }
 
-function selectTargets(all: ImportTarget[], names: string[]): ImportTarget[] | string {
+function selectTargets(
+  all: ImportTarget[],
+  declared: ReadonlySet<string>,
+  names: string[],
+): ImportTarget[] | string {
   if (names.length === 0) return all;
-  const known = new Set(all.map((target) => target.name));
-  const unknown = names.filter((name) => !known.has(name));
+  const runnable = new Set(all.map((target) => target.name));
+  const unknown = names.filter((name) => !declared.has(name));
   if (unknown.length > 0) {
-    return `unknown or unrunnable target(s): ${unknown.join(', ')}; runnable: ${[...known].join(', ')}`;
+    return `unknown target(s): ${unknown.join(', ')}; the registry declares: ${[...declared].join(', ')}`;
+  }
+  const unimplemented = names.filter((name) => !runnable.has(name));
+  if (unimplemented.length > 0) {
+    return (
+      `target(s) not yet implemented: ${unimplemented.join(', ')} — no adapter is registered for ` +
+      `their etl slug. Runnable today: ${runnable.size === 0 ? '(none)' : [...runnable].join(', ')}`
+    );
   }
   const wanted = new Set(names);
   return all.filter((target) => wanted.has(target.name));
@@ -77,8 +88,9 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
   let db: Db | undefined;
   try {
     const registry = loadPoiRegistry(values.registry ?? path.join(staticDir, DEFAULT_REGISTRY_RELATIVE_PATH));
+    const declared = new Set(importTargets(registry, undefined).map((target) => target.name));
     const runnable = importTargets(registry, implementedSlugs(registry, io.adapters));
-    const selected = selectTargets(runnable, values.target ?? []);
+    const selected = selectTargets(runnable, declared, values.target ?? []);
     if (typeof selected === 'string') {
       io.err(selected);
       return EXIT_USAGE;

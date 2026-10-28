@@ -1,19 +1,33 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { createDb, migrateDb } from '@roadtrip/db';
 import {
+  BASE_TABLES_SQL,
   blankSql,
   columnsOf,
   COPIED_TABLES,
   DIFFED_TABLES,
   fingerprintSql,
+  KOTLIN_SCHEMA,
+  NOT_IMPORTED_TABLES,
   textDiffSql,
+  TYPESCRIPT_SCHEMA,
 } from './importer-diff-columns.mjs';
-import { createReferenceSchema, diffDatabases, runDifferential } from './importer-differential.mjs';
+import {
+  createReferenceSchema,
+  diffDatabases,
+  runDifferential,
+  staleBuilds,
+} from './importer-differential.mjs';
 import { withPostgis } from './schema-reference.mjs';
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const WORKER_SOURCE_PROBE = 'packages/worker/src/cli/run-cli.ts';
+const STALE_SKEW_MS = 60_000;
 
 const FIXTURE_DB = 'roadtrip_differential_fixture';
 const FIXTURE_PREPARE = false;
@@ -54,15 +68,16 @@ INSERT INTO public.import_runs (source, status, seen_count) VALUES ('${RUN_SOURC
 const copiedTableNames = COPIED_TABLES.map((table) => table.name);
 
 async function reseed(db) {
-  await db.$client.unsafe(
-    `TRUNCATE ${copiedTableNames.map((name) => `public.${name}`).join(', ')} CASCADE`,
-  );
-  await db.$client.unsafe(
-    `TRUNCATE ${copiedTableNames.map((name) => `reference.${name}`).join(', ')} CASCADE`,
-  );
+  for (const schema of [TYPESCRIPT_SCHEMA, KOTLIN_SCHEMA]) {
+    await db.$client.unsafe(
+      `TRUNCATE ${copiedTableNames.map((name) => `${schema}.${name}`).join(', ')} CASCADE`,
+    );
+  }
   await db.$client.unsafe(SEED);
   for (const name of copiedTableNames) {
-    await db.$client.unsafe(`INSERT INTO reference.${name} SELECT * FROM public.${name}`);
+    await db.$client.unsafe(
+      `INSERT INTO ${KOTLIN_SCHEMA}.${name} SELECT * FROM ${TYPESCRIPT_SCHEMA}.${name}`,
+    );
   }
 }
 
@@ -107,7 +122,65 @@ test('every diffed table names every one of its columns as compared or ignored',
         `${spec.table}.${column} is ignored with no reason`,
       );
     }
+    // A column left in `compared` while also being added to `ignored` would
+    // keep both assertions above green while the diff stopped looking at it.
+    assert.deepEqual(
+      spec.compared.filter((column) => Object.hasOwn(spec.ignored, column)),
+      [],
+      `${spec.table}: column(s) both compared and ignored`,
+    );
   }
+});
+
+// Stub importers for the guards that sit after an import. They write through
+// the same connection string the real CLIs are given, so everything the guards
+// run over — the migrations, the reference schema, the binary COPY, the key and
+// coverage audits — is the production path; only the two importers are stubbed.
+async function writeRows(databaseUrl, statements) {
+  const side = createDb(databaseUrl, { prepare: FIXTURE_PREPARE });
+  try {
+    for (const statement of statements) await side.$client.unsafe(statement);
+  } finally {
+    await side.$client.end();
+  }
+}
+
+const writeNothing = async () => {};
+
+const writeGym = async ({ databaseUrl }) =>
+  writeRows(databaseUrl, [
+    `INSERT INTO ${TYPESCRIPT_SCHEMA}.planet_fitness_locations (location_id, name)
+     VALUES ('${FITNESS_ID}', 'Stub gym')`,
+    `INSERT INTO ${TYPESCRIPT_SCHEMA}.pois (poi_type, geom)
+     VALUES ('planet_fitness_location', 'SRID=4326;POINT(-122.27 44.7)')`,
+    `INSERT INTO ${TYPESCRIPT_SCHEMA}.poi_planet_fitness_locations (poi_id, planet_fitness_location_id)
+     SELECT p.id, l.id FROM ${TYPESCRIPT_SCHEMA}.pois p, ${TYPESCRIPT_SCHEMA}.planet_fitness_locations l`,
+  ]);
+
+const writeCampground = async ({ databaseUrl }) =>
+  writeRows(databaseUrl, [
+    `INSERT INTO ${TYPESCRIPT_SCHEMA}.campgrounds (data_provider, data_provider_ref, name)
+     VALUES ('${PROVIDER}', '${REF}', 'Stub campground')`,
+    `INSERT INTO ${TYPESCRIPT_SCHEMA}.pois (poi_type, geom)
+     VALUES ('campground', 'SRID=4326;POINT(-122.25 44.5)')`,
+    `INSERT INTO ${TYPESCRIPT_SCHEMA}.poi_campgrounds (poi_id, campground_id)
+     SELECT p.id, c.id FROM ${TYPESCRIPT_SCHEMA}.pois p, ${TYPESCRIPT_SCHEMA}.campgrounds c`,
+  ]);
+
+test('a source file newer than its build refuses the run instead of diffing the old build', async (t) => {
+  assert.deepEqual(staleBuilds(), [], 'run `npm run build` first: this suite needs a current build');
+
+  const source = path.join(REPO_ROOT, WORKER_SOURCE_PROBE);
+  const original = (await stat(source)).mtime;
+  const future = new Date(Date.now() + STALE_SKEW_MS);
+  await utimes(source, future, future);
+  try {
+    assert.notDeepEqual(staleBuilds(), [], 'touching a source file did not register as stale');
+    await assert.rejects(runDifferential(), /stale build, not a clean diff/);
+  } finally {
+    await utimes(source, original, original);
+  }
+  assert.deepEqual(staleBuilds(), [], 'the probe did not restore the source file mtime');
 });
 
 test('a run over a raw dir with no captures fails instead of reporting a clean diff', async () => {
@@ -187,14 +260,23 @@ test(
 
         await t.test('a row present on one side only is reported with the right kind', async () => {
           await reseed(db);
-          await db.$client.unsafe(`DELETE FROM reference.planet_fitness_locations`);
+          // The poi goes with its owner. Deleting only the owner cascades the
+          // link row and leaves the poi orphaned, which the coverage audit
+          // refuses before any comparison — correctly, but that is the orphan
+          // test's subject, not this one's.
           await db.$client.unsafe(
-            `DELETE FROM public.tesla_superchargers WHERE location_slug = '${TESLA_SLUG}'`,
+            `DELETE FROM ${KOTLIN_SCHEMA}.pois WHERE poi_type = 'planet_fitness_location'`,
           );
-          // Each delete cascades to the owner's link row, so the poi it owned
-          // stops being reachable on that side too: the pois rows below are
-          // the link-table join reporting the same two absences through the
-          // owner's natural key, which is the only key a poi has.
+          await db.$client.unsafe(`DELETE FROM ${KOTLIN_SCHEMA}.planet_fitness_locations`);
+          await db.$client.unsafe(
+            `DELETE FROM ${TYPESCRIPT_SCHEMA}.pois WHERE poi_type = 'tesla_supercharger'`,
+          );
+          await db.$client.unsafe(
+            `DELETE FROM ${TYPESCRIPT_SCHEMA}.tesla_superchargers WHERE location_slug = '${TESLA_SLUG}'`,
+          );
+          // The pois rows below are the link-table join reporting the same two
+          // absences through the owner's natural key, which is the only key a
+          // poi has.
           assert.deepEqual(await diffOnly(), [
             {
               table: 'tesla_superchargers',
@@ -223,10 +305,35 @@ test(
           ]);
         });
 
+        await t.test('every base table in the schema is diffed or named as not imported', async () => {
+          const rows = await db.$client.unsafe(BASE_TABLES_SQL);
+          const present = rows.map((row) => row.name);
+          const accounted = new Set([...copiedTableNames, ...NOT_IMPORTED_TABLES]);
+          assert.deepEqual(
+            present.filter((name) => !accounted.has(name)),
+            [],
+            'table(s) in the schema that are neither diffed nor named as not imported',
+          );
+          assert.deepEqual(
+            NOT_IMPORTED_TABLES.filter((name) => !present.includes(name)),
+            [],
+            'table(s) named as not imported that the schema does not have',
+          );
+        });
+
+        await t.test('a poi with no link row is refused rather than silently undiffed', async () => {
+          await reseed(db);
+          await db.$client.unsafe(
+            `INSERT INTO ${TYPESCRIPT_SCHEMA}.pois (poi_type, geom)
+             VALUES ('campground', 'SRID=4326;POINT(-122.3 44.8)')`,
+          );
+          await assert.rejects(diffDatabases(db), /pois: the diff reaches 3 of 4 row\(s\)/);
+        });
+
         await t.test('a duplicated key is refused rather than silently cross-joined', async () => {
           await reseed(db);
           await db.$client.unsafe(
-            `INSERT INTO public.campgrounds (data_provider, data_provider_ref, name, deleted_at)
+            `INSERT INTO ${TYPESCRIPT_SCHEMA}.campgrounds (data_provider, data_provider_ref, name, deleted_at)
              VALUES ('${PROVIDER}', '${REF}', 'Soft-deleted twin', now())`,
           );
           await assert.rejects(diffDatabases(db), /campgrounds.*appears 2 times/s);
@@ -235,11 +342,11 @@ test(
         await t.test('blanking leaves every row changed and every CHECK satisfied', async () => {
           await reseed(db);
           for (const spec of DIFFED_TABLES) {
-            const before = (await db.$client.unsafe(fingerprintSql(spec, 'public')))[0];
-            const statements = blankSql(spec, 'public');
+            const before = (await db.$client.unsafe(fingerprintSql(spec, TYPESCRIPT_SCHEMA)))[0];
+            const statements = blankSql(spec, TYPESCRIPT_SCHEMA);
             assert.ok(statements.length > 0, `${spec.table}: nothing to blank`);
             for (const statement of statements) await db.$client.unsafe(statement);
-            const after = (await db.$client.unsafe(fingerprintSql(spec, 'public')))[0];
+            const after = (await db.$client.unsafe(fingerprintSql(spec, TYPESCRIPT_SCHEMA)))[0];
             assert.equal(after.rows, before.rows, `${spec.table}: blanking lost rows`);
             assert.notEqual(
               after.fingerprint,
@@ -253,28 +360,36 @@ test(
           'a run whose TypeScript side wrote zero rows fails instead of reporting a clean diff',
           async () => {
             const root = await rawDirWithOneCapture();
-            const kotlinOnly = {
-              async kotlin({ databaseUrl }) {
-                const side = createDb(databaseUrl, { prepare: FIXTURE_PREPARE });
-                try {
-                  await side.$client.unsafe(
-                    `INSERT INTO public.campgrounds (data_provider, data_provider_ref, name)
-                     VALUES ('${PROVIDER}', '${REF}', 'Kotlin-only row')`,
-                  );
-                } finally {
-                  await side.$client.end();
-                }
-              },
-              async typescript() {},
-            };
+            // The Kotlin stub writes exactly what 'Planet Fitness' must write,
+            // so its side passes the per-section expectation and the refusal
+            // that fires is unambiguously about the TypeScript side.
             await assert.rejects(
               runDifferential({
                 rawDir: path.join(root, 'data/raw'),
                 staticDir: root,
                 targets: [PLANET_FITNESS_TARGET],
-                importers: kotlinOnly,
+                importers: { kotlin: writeGym, typescript: writeNothing },
               }),
-              /wrote zero rows/,
+              /the typescript importer wrote zero rows to planet_fitness_locations/,
+            );
+          },
+        );
+
+        await t.test(
+          'a run whose TypeScript side filled a different table fails instead of reporting a clean diff',
+          async () => {
+            const root = await rawDirWithOneCapture();
+            // Both sides write rows, so any guard that only asks whether the
+            // diffed tables are empty in total is satisfied. What is missing is
+            // the table the selected target itself writes.
+            await assert.rejects(
+              runDifferential({
+                rawDir: path.join(root, 'data/raw'),
+                staticDir: root,
+                targets: [PLANET_FITNESS_TARGET],
+                importers: { kotlin: writeGym, typescript: writeCampground },
+              }),
+              /the typescript importer wrote zero rows to planet_fitness_locations/,
             );
           },
         );

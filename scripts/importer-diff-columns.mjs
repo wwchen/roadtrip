@@ -416,6 +416,69 @@ export function rowCountSql(table, schema) {
   return `SELECT count(*)::int AS rows FROM ${quote(schema, table)}`;
 }
 
+// A table whose side select reaches fewer rows than the table holds has rows
+// the diff cannot see at all, and this is not hypothetical: `pois` is reached
+// only through its three link tables, so a poi written without its link row is
+// invisible to the comparison on both sides. CampgroundRepo inserts the poi
+// before the link and the link carries ON CONFLICT (campground_id) DO NOTHING,
+// so a port that dedupes differently produces exactly that orphan — and the
+// row-level diff would come back clean over it.
+//
+// With this holding, and the keys proved unique, every row of every table is on
+// one side of the FULL OUTER JOIN, which is what makes a cross-side row-count
+// comparison redundant rather than a second guard.
+//
+// `coveredBy` names the exemption when there is one: import_runs is append-only
+// and its side select deliberately keeps only the newest run per source, so its
+// covered count is lower by design and the run count it does not keep is
+// compared as the derived `runs` column instead.
+export function coverageSql(table, schema) {
+  const diffed = DIFFED_TABLES.find((candidate) => candidate.table === table);
+  if (diffed === undefined) throw new Error(`no diffed table named '${table}'`);
+  return `WITH side AS (
+            ${rowSelect(diffed, schema, diffed.comparedForDiff)}
+          )
+          SELECT (SELECT count(*)::int FROM ${quote(schema, table)}) AS present,
+                 (SELECT count(*)::int FROM side) AS covered`;
+}
+
+// Every other base table the migrated schema holds. The completeness test
+// holds `COPIED_TABLES ∪ this` against information_schema, so a migration that
+// adds a table has to land in one list or the other — which is the same net as
+// the per-column one, at table granularity. A table the catalog importer
+// writes belongs in DIFFED_TABLES; anything else belongs here.
+export const NOT_IMPORTED_TABLES = [
+  'api_cache',
+  'app_user',
+  'availability',
+  'availability_fetch_call',
+  'availability_poller',
+  'availability_run',
+  'availability_watch',
+  'availability_watch_poller',
+  'availability_watch_target',
+  'ingest_runs',
+  'spatial_ref_sys',
+  'user_booking_credentials',
+  'user_identity',
+  'user_role',
+  'user_session',
+  'user_settings',
+  'vendor_rate_limit_bucket',
+];
+
+export const BASE_TABLES_SQL = `SELECT table_name AS name
+  FROM information_schema.tables
+  WHERE table_schema = '${TYPESCRIPT_SCHEMA}' AND table_type = 'BASE TABLE'
+  ORDER BY table_name`;
+
+// The tables whose side select must reach every row. import_runs is the one
+// exemption and it is named here rather than inferred, so a future table that
+// needs one has to say so.
+export const COVERAGE_EXEMPT_TABLES = {
+  import_runs: 'append-only; the side select keeps the newest run per source and compares the rest as `runs`',
+};
+
 // Blanks every compared column that is not part of the key, so each importer's
 // pass 2 has to write it back from the captures. A column missing from one
 // implementation's ON CONFLICT update set stays blank on that side alone and

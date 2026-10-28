@@ -20,20 +20,20 @@ function requireEtls(row: Row): void {
 function targetsFor(
   section: ImportSection,
   rows: readonly Row[],
-  implemented: ReadonlySet<string>,
+  implemented: ReadonlySet<string> | undefined,
 ): ImportTarget[] {
   return rows
     .filter((row) => {
       if (!row.enabled) return false;
       requireEtls(row);
-      return row.etls.every((etl) => implemented.has(etl.slug));
+      return implemented === undefined || row.etls.every((etl) => implemented.has(etl.slug));
     })
     .map((row) => ({ name: row.name, section }));
 }
 
 export function importTargets(
   registry: PoiRegistry,
-  implemented: ReadonlySet<string>,
+  implemented: ReadonlySet<string> | undefined,
 ): ImportTarget[] {
   return [
     ...targetsFor('poi_data', registry.poiData, implemented),

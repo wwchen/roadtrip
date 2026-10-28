@@ -1,5 +1,7 @@
 export interface ExecOptions {
   input?: string;
+  inputFile?: string;
+  outputFile?: string;
 }
 
 export interface PostgisSession {

@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -142,33 +144,52 @@ async function docker(...args) {
   }
 }
 
-// `docker exec` with a program's exit status, stderr and (optionally) stdin
-// exposed. `docker()` above cannot stand in for it: execFile has no stdin
-// option, and a caller that pipes a dump file into psql needs one. Used for
-// the work that has to happen *inside* the container — a binary COPY piped
-// between two of its databases, pg_dump, psql -f — rather than over TCP.
-async function dockerExec(container, argv, { input } = {}) {
+// `docker exec` with a program's exit status, stderr and its two data
+// directions exposed. `docker()` above cannot stand in for it: execFile has no
+// stdin option, and it buffers stdout into a string. Used for the work that has
+// to happen *inside* the container — a binary COPY piped between two of its
+// databases, pg_dump, psql -f — rather than over TCP.
+//
+// `inputFile` and `outputFile` stream, and they are not a convenience:
+// a pg_dump of the catalog at full scale is far past V8's maximum string
+// length, so a dump that is collected into a string throws
+// `Invalid string length` rather than producing a file. `input` and the
+// returned stdout string stay for the small cases (a psql query, one COPY's
+// progress line); anything whose size follows the row count uses the file form.
+async function dockerExec(container, argv, { input, inputFile, outputFile } = {}) {
+  const stdin = input !== undefined || inputFile !== undefined;
+  const sink = outputFile === undefined ? undefined : createWriteStream(outputFile);
+  const written = sink === undefined ? undefined : once(sink, 'close');
   return new Promise((resolve, reject) => {
-    const stdio = input === undefined ? ['ignore', 'pipe', 'pipe'] : ['pipe', 'pipe', 'pipe'];
-    const child = spawn('docker', ['exec', ...(input === undefined ? [] : ['-i']), container, ...argv], { stdio });
+    const child = spawn('docker', ['exec', ...(stdin ? ['-i'] : []), container, ...argv], {
+      stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+    });
     let stdout = '';
     let stderr = '';
-    child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk;
-    });
     child.stderr.on('data', (chunk) => {
       stderr += chunk;
     });
+    if (sink === undefined) {
+      child.stdout.setEncoding('utf8');
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk;
+      });
+    } else {
+      child.stdout.pipe(sink);
+    }
     child.on('error', (error) =>
       reject(error.code === 'ENOENT' ? new Error('docker is not installed or not on PATH') : error),
     );
-    child.on('close', (code) => {
+    child.on('close', async (code) => {
+      if (written !== undefined) await written.catch(() => {});
       if (code === 0) resolve(stdout);
       else reject(new Error(`docker exec ${argv[0]} exited ${code}: ${stderr.trim() || stdout.trim()}`));
     });
-    if (input !== undefined) {
+    if (inputFile !== undefined) {
+      child.stdin.on('error', () => {});
+      createReadStream(inputFile).pipe(child.stdin);
+    } else if (input !== undefined) {
       child.stdin.on('error', () => {});
       child.stdin.end(input);
     }

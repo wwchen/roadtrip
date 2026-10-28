@@ -180,11 +180,19 @@ describe('import cli', () => {
     expect(only.out).toEqual(['campsite_data:Campflare Campsites']);
   });
 
-  test('an unknown or unrunnable --target is a usage error naming the runnable ones', async () => {
+  test('a --target the registry declares but no adapter implements says so', async () => {
     const result = await cli(FAKE_ADAPTERS, ['--list', '--target', 'Planet Fitness']);
     expect(result.code).toBe(EXIT_USAGE);
-    expect(result.err.join('\n')).toContain('Planet Fitness');
+    expect(result.err.join('\n')).toContain('not yet implemented: Planet Fitness');
     expect(result.err.join('\n')).toContain('Campflare Campgrounds');
+    expect(result.out).toEqual([]);
+  });
+
+  test('a --target the registry does not declare is reported as unknown, not unimplemented', async () => {
+    const result = await cli(FAKE_ADAPTERS, ['--list', '--target', 'No Such Row']);
+    expect(result.code).toBe(EXIT_USAGE);
+    expect(result.err.join('\n')).toContain('unknown target(s): No Such Row');
+    expect(result.err.join('\n')).not.toContain('not yet implemented');
     expect(result.out).toEqual([]);
   });
 

@@ -19,6 +19,9 @@ private const val RAW_DIR_FLAG = "--raw-dir"
 private const val STATIC_DIR_FLAG = "--static-dir"
 private const val TARGET_FLAG = "--target"
 private const val SOURCE_FLAG = "--source"
+private const val PASSES_FLAG = "--passes"
+
+private const val DEFAULT_PASSES = 1
 
 private const val DEFAULT_DB_USER = "roadtrip"
 private const val DEFAULT_DB_PASSWORD = "roadtrip"
@@ -29,7 +32,8 @@ private const val USAGE_EXIT_CODE = 2
 
 private const val USAGE =
     "usage: importCatalog --jdbc-url <url> --raw-dir <dir> --static-dir <dir> " +
-        "[--db-user <user>] [--db-password <password>] [--target <name>]... [--source <slug>]..."
+        "[--db-user <user>] [--db-password <password>] [--passes <n>] " +
+        "[--target <name>]... [--source <slug>]..."
 
 private class UsageError(
     message: String,
@@ -41,6 +45,7 @@ private data class Options(
     val dbPassword: String,
     val rawDir: File,
     val staticDir: File,
+    val passes: Int,
     val targets: List<String>,
     val sources: List<String>,
 )
@@ -56,18 +61,28 @@ private fun parse(args: Array<String>): Options {
         when (flag) {
             TARGET_FLAG -> targets += value
             SOURCE_FLAG -> sources += value
-            JDBC_URL_FLAG, DB_USER_FLAG, DB_PASSWORD_FLAG, RAW_DIR_FLAG, STATIC_DIR_FLAG -> single[flag] = value
+            JDBC_URL_FLAG, DB_USER_FLAG, DB_PASSWORD_FLAG, RAW_DIR_FLAG, STATIC_DIR_FLAG, PASSES_FLAG ->
+                single[flag] = value
             else -> throw UsageError("unknown flag '$flag'")
         }
         index += 2
     }
     val required = { flag: String -> single[flag] ?: throw UsageError("$flag is required") }
+    val passesValue = single[PASSES_FLAG]
+    val passes =
+        if (passesValue == null) {
+            DEFAULT_PASSES
+        } else {
+            passesValue.toIntOrNull()?.takeIf { it >= DEFAULT_PASSES }
+                ?: throw UsageError("$PASSES_FLAG must be a positive integer, got '$passesValue'")
+        }
     return Options(
         jdbcUrl = required(JDBC_URL_FLAG),
         dbUser = single[DB_USER_FLAG] ?: DEFAULT_DB_USER,
         dbPassword = single[DB_PASSWORD_FLAG] ?: DEFAULT_DB_PASSWORD,
         rawDir = File(required(RAW_DIR_FLAG)),
         staticDir = File(required(STATIC_DIR_FLAG)),
+        passes = passes,
         targets = targets,
         sources = sources,
     )
@@ -137,19 +152,23 @@ fun main(args: Array<String>) {
                 staticDir = options.staticDir,
                 etlRegistry = productionEtlRegistry(repos),
             )
-        for (name in names) {
-            val phase = importTargets.getValue(name).importPhases.single()
-            val section = phase.section
-            try {
-                val summary =
-                    when (section) {
-                        Phase.Import.Section.POI_DATA -> orchestrator.runPoiData(name).toString()
-                        Phase.Import.Section.CAMPSITE_DATA -> orchestrator.runCampsiteData(name).toString()
-                    }
-                println("${section.rowValue}:$name $summary")
-            } catch (e: Exception) {
-                System.err.println("${section.rowValue}:$name failed: ${e.message ?: e.javaClass.simpleName}")
-                exitProcess(FAILURE_EXIT_CODE)
+        for (pass in 1..options.passes) {
+            for (name in names) {
+                val phase = importTargets.getValue(name).importPhases.single()
+                val section = phase.section
+                try {
+                    val summary =
+                        when (section) {
+                            Phase.Import.Section.POI_DATA -> orchestrator.runPoiData(name).toString()
+                            Phase.Import.Section.CAMPSITE_DATA -> orchestrator.runCampsiteData(name).toString()
+                        }
+                    println("pass $pass ${section.rowValue}:$name $summary")
+                } catch (e: Exception) {
+                    System.err.println(
+                        "pass $pass ${section.rowValue}:$name failed: ${e.message ?: e.javaClass.simpleName}",
+                    )
+                    exitProcess(FAILURE_EXIT_CODE)
+                }
             }
         }
     }
