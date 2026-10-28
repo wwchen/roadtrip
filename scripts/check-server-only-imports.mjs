@@ -152,7 +152,7 @@ async function main() {
   const violations = await findClientBoundaryViolations(REPO_ROOT);
   if (violations.length > 0) {
     console.error(
-      `${WEB_DIRECTORY}/ must keep ${FORBIDDEN_PACKAGE} and ${SERVER_DIRECTORY}/ out of client components, and must not use NEXT_PUBLIC_ names: they are inlined into the bundle every visitor downloads. Move the server work behind a server component or route handler and pass plain props down. Only literal specifiers are checked: import(someVariable) and require(someVariable) cannot be seen, so do not rely on this gate for them.\n`,
+      `${WEB_DIRECTORY}/ must keep ${FORBIDDEN_PACKAGE} and ${SERVER_DIRECTORY}/ out of client components, and must not use NEXT_PUBLIC_ names: they are inlined into the bundle every visitor downloads. Move the server work behind a server component or route handler and pass plain props down. Only literal specifiers are checked: import(someVariable), require(someVariable) and template specifiers that begin with an interpolation cannot be seen, so do not rely on this gate for them.\n`,
     );
     console.error(violations.join('\n'));
     process.exitCode = 1;
