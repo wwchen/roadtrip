@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { parseEnvelope } from './envelope.js';
+import { isWideNumber, parseEnvelope, serializeOpaquePayload } from './envelope.js';
 
 const TEMP_DIR_PREFIX = 'envelope-';
 const WIDE_INTEGER = '72157625256027958';
@@ -13,6 +13,9 @@ const FETCHER_VERSION = '1';
 const FETCHED_AT = '2026-06-07T21:33:18Z';
 const POLLER_RUN_ID = 42;
 const HTTP_OK = 200;
+const BAD_POLLER_RUN_ID = 'abc';
+const FRACTIONAL_POLLER_RUN_ID = 1.5;
+const BAD_PART = 5;
 
 let dir = '';
 let counter = 0;
@@ -110,6 +113,69 @@ describe('parseEnvelope wire format', () => {
     expect(() => parseEnvelope(file)).toThrow(new RegExp(`${field.replace('.', '\\.')}`));
   });
 
+  test.each([
+    ['request', (e: Record<string, unknown>) => ((e.request as Record<string, unknown>).headers = { nested: { a: 'b' } })],
+    ['response', (e: Record<string, unknown>) => ((e.response as Record<string, unknown>).headers = { endpoint_status: { equipment: 200 } })],
+    ['request', (e: Record<string, unknown>) => ((e.request as Record<string, unknown>).headers = { count: 7 })],
+    ['response', (e: Record<string, unknown>) => ((e.response as Record<string, unknown>).headers = ['a'])],
+  ])('a %s header map holding a non-string value or a non-object is rejected', (side, mutate) => {
+    const file = envelopeWith((e) => {
+      mutate(e);
+    });
+    expect(() => parseEnvelope(file)).toThrow(new RegExp(`${side}\\.headers`));
+  });
+
+  test('absent headers on request and response default to empty maps', () => {
+    const envelope = parseEnvelope(
+      envelopeWith((e) => {
+        delete (e.request as Record<string, unknown>).headers;
+        delete (e.response as Record<string, unknown>).headers;
+      }),
+    );
+    expect(envelope.request.headers).toEqual({});
+    expect(envelope.response.headers).toEqual({});
+  });
+
+  test('unknown keys inside request and response are dropped', () => {
+    const envelope = parseEnvelope(
+      envelopeWith((e) => {
+        (e.request as Record<string, unknown>).extra = 'x';
+        (e.response as Record<string, unknown>).extra = 'y';
+      }),
+    );
+    expect(envelope.request).toEqual({ url: 'https://example.test/', method: 'GET', headers: { accept: '*/*' } });
+    expect(envelope.response).toEqual({ status: HTTP_OK, headers: {} });
+  });
+
+  test.each([
+    ['a string', BAD_POLLER_RUN_ID],
+    ['a fraction', FRACTIONAL_POLLER_RUN_ID],
+  ])('a poller_run_id that is %s is rejected', (_label, value) => {
+    const file = envelopeWith((e) => {
+      e.poller_run_id = value;
+    });
+    expect(() => parseEnvelope(file)).toThrow(/poller_run_id/);
+  });
+
+  test('a poller_run_id wider than the safe range is rejected rather than carried as a non-number', () => {
+    const file = fileHolding(BASE_ENVELOPE.replace('"poller_run_id": null', `"poller_run_id": ${WIDE_INTEGER}`));
+    expect(() => parseEnvelope(file)).toThrow(/poller_run_id/);
+  });
+
+  test('a part that is not a string is rejected and a null part is absent', () => {
+    const bad = envelopeWith((e) => {
+      e.part = BAD_PART;
+    });
+    expect(() => parseEnvelope(bad)).toThrow(/part must be a string/);
+    const absent = parseEnvelope(
+      envelopeWith((e) => {
+        e.part = null;
+      }),
+    );
+    expect(absent.part).toBeUndefined();
+    expect(absent).not.toHaveProperty('part');
+  });
+
   test('a numeric fetcher_version is rejected rather than coerced to a string', () => {
     const file = envelopeWith((e) => {
       e.fetcher_version = 2;
@@ -158,5 +224,67 @@ describe('parseEnvelope number fidelity', () => {
     const raw = `[${Number.MAX_SAFE_INTEGER},${Number.MAX_SAFE_INTEGER + 1},9007199254740993]`;
     const envelope = parseEnvelope(envelopeWithRawPayload(raw));
     expect(JSON.stringify(envelope.payload)).toBe(raw);
+  });
+});
+
+describe('the wide-number carrier contract', () => {
+  function parsedWide(): unknown {
+    return parseEnvelope(envelopeWithRawPayload(`{"photo_id":${WIDE_INTEGER}}`)).payload;
+  }
+
+  function wideField(): unknown {
+    return (parsedWide() as Record<string, unknown>).photo_id;
+  }
+
+  test('isWideNumber recognises a carried integer and nothing else', () => {
+    expect(isWideNumber(wideField())).toBe(true);
+    expect(isWideNumber(7)).toBe(false);
+    expect(isWideNumber(WIDE_INTEGER)).toBe(false);
+    expect(isWideNumber({ rawJSON: WIDE_INTEGER })).toBe(false);
+    expect(isWideNumber(null)).toBe(false);
+  });
+
+  test('serializeOpaquePayload writes a carried integer as an unquoted literal with its digits', () => {
+    expect(serializeOpaquePayload(parsedWide())).toBe(`{"photo_id":${WIDE_INTEGER}}`);
+  });
+
+  test('serializeOpaquePayload handles a payload that is itself a wide integer, and a null payload', () => {
+    const wideTop = parseEnvelope(envelopeWithRawPayload(HUGE_INTEGER)).payload;
+    expect(serializeOpaquePayload(wideTop)).toBe(HUGE_INTEGER);
+    expect(serializeOpaquePayload(null)).toBe('null');
+  });
+
+  test('serializeOpaquePayload refuses a value JSON cannot represent', () => {
+    expect(() => serializeOpaquePayload(undefined)).toThrow(/not JSON-serializable/);
+  });
+
+  test('HAZARD: structuredClone of a payload holding a carried integer throws', () => {
+    expect(() => structuredClone(parsedWide())).toThrow();
+  });
+
+  test('HAZARD: object spread of a carried integer silently loses the digits', () => {
+    const spread = { ...(wideField() as object) };
+    expect(isWideNumber(spread)).toBe(false);
+    expect(serializeOpaquePayload(spread)).toBe(`{"rawJSON":"${WIDE_INTEGER}"}`);
+  });
+
+  test('HAZARD: a serialize-then-parse round trip rounds the integer, so serialize once from the parsed value', () => {
+    const roundTripped = JSON.parse(serializeOpaquePayload(parsedWide())) as { photo_id: number };
+    expect(typeof roundTripped.photo_id).toBe('number');
+    expect(String(roundTripped.photo_id)).not.toBe(WIDE_INTEGER);
+    expect(serializeOpaquePayload(roundTripped)).not.toContain(WIDE_INTEGER);
+  });
+});
+
+describe('number normalisation is intended', () => {
+  test('decimal literals are normalised, so the differential must compare jsonb values and never jsonb text: 10.0 serialises as 10', () => {
+    const decimals = parseEnvelope(envelopeWithRawPayload('{"minValue":0.0,"maxValue":10.0,"exp":1e2}')).payload;
+    expect(serializeOpaquePayload(decimals)).toBe('{"minValue":0,"maxValue":10,"exp":100}');
+  });
+
+  test('wide integers beside a normalised decimal keep their digits, because their value changes if they are rounded', () => {
+    const raw = `{"id":${WIDE_INTEGER},"maxValue":10.0}`;
+    const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload;
+    expect(serializeOpaquePayload(payload)).toBe(`{"id":${WIDE_INTEGER},"maxValue":10}`);
   });
 });

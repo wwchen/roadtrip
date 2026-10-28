@@ -1,11 +1,24 @@
 import { readFileSync } from 'node:fs';
 
+export interface RequestMeta {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+}
+
+export interface ResponseMeta {
+  status: number;
+  headers: Record<string, string>;
+}
+
+export type WideNumber = Readonly<{ rawJSON: string }>;
+
 export interface Envelope {
   fetcher: string;
   fetcherVersion: string;
   fetchedAt: string;
-  request: unknown;
-  response: unknown;
+  request: RequestMeta;
+  response: ResponseMeta;
   pollerRunId: number | null;
   payload: unknown;
   part?: string;
@@ -17,6 +30,7 @@ interface SourceAwareJson {
     reviver: (this: unknown, key: string, value: unknown, context: { source?: string }) => unknown,
   ): unknown;
   rawJSON(text: string): object;
+  isRawJSON(value: unknown): boolean;
 }
 
 const sourceAwareJson = JSON as unknown as SourceAwareJson;
@@ -27,6 +41,16 @@ function reviveNumber(_key: string, value: unknown, context: { source?: string }
   if (typeof value !== 'number' || source === undefined) return value;
   const losesDigits = INTEGER_LITERAL.test(source) ? !Number.isSafeInteger(value) : !Number.isFinite(value);
   return losesDigits ? sourceAwareJson.rawJSON(source) : value;
+}
+
+export function isWideNumber(value: unknown): value is WideNumber {
+  return sourceAwareJson.isRawJSON(value);
+}
+
+export function serializeOpaquePayload(value: unknown): string {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) throw new Error('opaque payload is not JSON-serializable');
+  return serialized;
 }
 
 function parseKeepingDigits(text: string): unknown {
@@ -52,13 +76,15 @@ function requireRecord(file: string, value: unknown, label: string): Record<stri
   return value;
 }
 
-function requireStringMapIfPresent(file: string, record: Record<string, unknown>, label: string): void {
-  const headers = record.headers;
-  if (headers === undefined) return;
-  const map = requireRecord(file, headers, `${label}.headers`);
+function requireHeaders(file: string, record: Record<string, unknown>, label: string): Record<string, string> {
+  if (record.headers === undefined) return {};
+  const map = requireRecord(file, record.headers, `${label}.headers`);
+  const headers: Record<string, string> = {};
   for (const [name, value] of Object.entries(map)) {
     if (typeof value !== 'string') fail(file, `${label}.headers.${name} must be a string`);
+    headers[name] = value;
   }
+  return headers;
 }
 
 function requirePollerRunId(file: string, value: unknown): number | null {
@@ -82,16 +108,21 @@ export function parseEnvelope(file: string): Envelope {
   }
   const wire = requireRecord(file, parsed, 'envelope');
 
-  const request = requireRecord(file, wire.request, 'request');
-  requireString(file, request, 'url', 'request.url');
-  requireString(file, request, 'method', 'request.method');
-  requireStringMapIfPresent(file, request, 'request');
+  const requestWire = requireRecord(file, wire.request, 'request');
+  const request: RequestMeta = {
+    url: requireString(file, requestWire, 'url', 'request.url'),
+    method: requireString(file, requestWire, 'method', 'request.method'),
+    headers: requireHeaders(file, requestWire, 'request'),
+  };
 
-  const response = requireRecord(file, wire.response, 'response');
-  if (typeof response.status !== 'number' || !Number.isInteger(response.status)) {
+  const responseWire = requireRecord(file, wire.response, 'response');
+  if (typeof responseWire.status !== 'number' || !Number.isInteger(responseWire.status)) {
     fail(file, 'response.status must be an integer');
   }
-  requireStringMapIfPresent(file, response, 'response');
+  const response: ResponseMeta = {
+    status: responseWire.status,
+    headers: requireHeaders(file, responseWire, 'response'),
+  };
 
   if (!('payload' in wire)) fail(file, 'payload is required');
 

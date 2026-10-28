@@ -2,9 +2,16 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync }
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import type { DataSourceEntry } from '../registry/poi-registry.js';
 import { NoCaptureError, RawCaptureStore } from './raw-capture-store.js';
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  const listNames = actual.readdirSync as (dir: string) => string[];
+  const listReversed = (dir: string): string[] => [...listNames(dir)].reverse();
+  return { ...actual, readdirSync: listReversed };
+});
 
 const TEMP_DIR_PREFIX = 'raw-capture-store-';
 const RAW_DIR_SEGMENTS = ['data', 'raw'];
