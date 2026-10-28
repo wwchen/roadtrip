@@ -14,15 +14,21 @@
 
 This is a deliberately thin slice pulled forward out of §10 step 7. **In scope:** two SSR pages and two JSON route handlers, read-only, over the existing catalog tables. **Out of scope and must not be touched:** the Kotlin backend, `recgov-companion`, Postgres, the observability services, `frontend/`, auth, the availability read path, writes of any kind, and `deploy.sh` / `deploy.yml`. The frozen-contract gate, the Playwright port and the preview-deploy lifecycle that §10 step 7 actually requires are **not** in scope; this plan does not close step 7.
 
+## Decided
+
+**Q4 — read-only access uses the connection parameter.** `default_transaction_read_only=on`, ruled in: it needs no change to the production database, which is the whole point of a parallel app, and it is reversible by disconnecting. A dedicated `nextweb_reader` role is better long-term but requires `CREATE ROLE` and `GRANT` on production, and a read-only prototype does not get to mutate production in order to exist.
+
+**Write this down beside it, in `docs/web-app.md` and in `db.ts`'s commit message:** `default_transaction_read_only` is a guard against *accidental* writes, not a security boundary. A session can `SET transaction_read_only = off` and write. For this app's purpose that is sufficient; the honest framing matters so nobody later reads it as isolation it does not provide. Task 3's test proves the guard is on, not that it cannot be lifted.
+
+**Q5 — `apps/web` is the directory.** `packages/*` for libraries, `apps/*` for deployables, and §1's two runtimes mean `apps/worker` will want the same home. Task 1's `sparsePaths` registration stays where it is: a new top-level directory that nobody registers fails the guard and silently empties every future worktree.
+
 ## Open questions — answer before Task 6
 
-These block the two deployment tasks, not the first five. Tasks 1–5 can proceed while they are open.
+These block the two deployment tasks only. Tasks 1–5 proceed while they are open, and execution stops before Task 6 if they have not arrived.
 
 1. **SSH to mini-ca is blocked in this session.** `ssh mini@mini-ca` is refused by the sandbox classifier ("Production Reads"). Tasks 6 and 7 need it to add the Compose service, take the `pg_dump`, and run the mini-ca half of the probe. Either a permission rule for `Bash(ssh mini@mini-ca *)`, or the user runs the handful of commands each task names.
 2. **The public hostname.** `caddy/Caddyfile` only imports per-sandbox vhosts, and Cloudflare Zero Trust — not this repo — owns which hostnames reach `caddy:80`. A committed Caddy vhost is enough **only if** a `*.floo.ca` wildcard rule already points at the tunnel's caddy origin. Which hostname should the app get, and does that wildcard exist, or is a new Zero Trust public-hostname rule needed? That rule is a dashboard change nobody here can make.
-3. **Region pair.** The two latency numbers are only comparable with the regions stated. Where is mini-ca physically, and which Neon region + Vercel function region should the managed side use? Default if unanswered: Neon `aws-us-west-2` and the Vercel function pinned to `pdx1`, with both recorded alongside the numbers.
-4. **How read-only is enforced on production.** This plan uses `default_transaction_read_only=on` as a connection parameter, which Postgres enforces and which requires **no change to the production database**. A dedicated `nextweb_reader` role with `GRANT SELECT` is the better long-term answer but needs a one-time `CREATE ROLE` on production. Confirm the connection-parameter approach is acceptable for now.
-5. **`apps/web` as the directory.** `apps/*` is a new top-level workspace glob, chosen because §1 implies a second runtime (`apps/worker`) later. Say so if a top-level `web/` is preferred.
+3. **Region pair.** The two latency numbers are only comparable with the regions stated. Where is mini-ca physically, and which Neon region + Vercel function region should the managed side use? Fallback, put forward and not yet confirmed: Neon `aws-us-west-2` and the Vercel function pinned to `pdx1`, with both recorded alongside the numbers.
 
 ## Global Constraints
 
@@ -60,16 +66,23 @@ A new top-level directory is load-bearing in four places on this repo, and missi
 - Consumes: nothing.
 - Produces: the `@roadtrip/web` workspace, built by the root `npm run build` through `scripts/build-workspaces.mjs`'s dependency ordering. Scripts: `build` (`next build`), `dev`, `typecheck` (`tsc --noEmit`), `test` (`vitest run`). No `prepare` script.
 
-- [ ] **Step 1: Write the failing registration check**
+- [ ] **Step 1: Create the workspace manifest and the app, and commit it unregistered**
 
-Nothing new to write — `scripts/check-worktree-sparse-paths.mjs` already fails on an unregistered tracked directory. Create `apps/web/package.json` with name `@roadtrip/web`, version `0.1.0`, `private: true`, `type: module`, `engines.node >=22.12.0`, dependencies `next` `16.4.3`, `react` `19.3.1`, `react-dom` `19.3.1`, and devDependencies `@types/node`, `@types/react`, `@types/react-dom`, `typescript`, `vitest` at the same ranges `frontend/package.json` uses. Add `apps/*` to the root `workspaces`. Do **not** yet touch `.claude/settings.json`.
+`scripts/check-worktree-sparse-paths.mjs` reads `git ls-tree -d -r --name-only HEAD`, so it sees **tracked directories at HEAD only** — an uncommitted or merely staged `apps/` is invisible to it. The failure proof therefore needs a commit first. That is why this task commits twice.
+
+Create `apps/web/package.json` with name `@roadtrip/web`, version `0.1.0`, `private: true`, `type: module`, `engines.node >=22.12.0`, dependencies `next` `16.4.3`, `react` `19.3.1`, `react-dom` `19.3.1`, and devDependencies `@types/node`, `@types/react`, `@types/react-dom`, `typescript`, `vitest` at the same ranges `frontend/package.json` uses. Add `apps/*` to the root `workspaces`. Then do steps 5 and 6's app files and install, and commit — **without** touching `.claude/settings.json`:
+
+```bash
+git add apps/web package.json package-lock.json
+git commit -m "feat(web): add the apps/web workspace, before registering it"
+```
 
 - [ ] **Step 2: Run the guard to verify it fails**
 
 Run: `node scripts/check-worktree-sparse-paths.mjs`
 Expected: exit 1, naming `apps` under "Tracked directories missing from Claude worktrees".
 
-This is the task's proof that the registration gate can fail. Record the output in the commit message.
+This is the task's proof that the registration gate can fail, and it is the reason for the two-commit shape. Paste the output into the next commit's message. If it passes here, stop and report: either the guard has stopped working or `apps/` did not land in the commit, and both matter more than the task.
 
 - [ ] **Step 3: Register `apps` in `.claude/settings.json` → `worktree.sparsePaths`**
 
@@ -80,7 +93,7 @@ Insert `"apps"` in the existing alphabetical position (before `backend`).
 Run: `node scripts/check-worktree-sparse-paths.mjs`
 Expected: `worktree sparsePaths ok — 21 cone-mode entries ...` (20 today, plus `apps`)
 
-- [ ] **Step 5: Add the minimal App Router app**
+- [ ] **Step 5: Add the minimal App Router app** (done as part of step 1's commit)
 
 `apps/web/next.config.ts` exports a config with `output: 'standalone'` (the mini-ca image needs it) and `outputFileTracingRoot` set to the repo root two levels up, because the workspace root holds the hoisted `node_modules`. `apps/web/tsconfig.json` extends `../../tsconfig.base.json` with `jsx: 'preserve'`, `noEmit: true`, `moduleResolution: 'bundler'`, `lib: ['ES2023', 'DOM', 'DOM.Iterable']`, the Next plugin, `composite: false`, and `paths` mapping `@/*` to `./src/*` — mirroring `frontend/tsconfig.json`'s conventions. `layout.tsx` is a root layout with `html`/`body`; `page.tsx` renders the app name and links to the two real routes added in Task 4.
 
@@ -108,9 +121,11 @@ Expected: green. If `npm ci` is slow, the relevant assertion is that the new lin
 - [ ] **Step 9: Commit**
 
 ```bash
-git add apps/web package.json package-lock.json .claude/settings.json .github/workflows/ci.yml Makefile
-git commit -m "feat(web): register the apps/web Next.js workspace"
+git add .claude/settings.json .github/workflows/ci.yml Makefile
+git commit -m "feat(web): register apps/ in sparsePaths, make test and CI"
 ```
+
+Include step 2's captured failure output in this message — it is the evidence that the registration gate can fail, and the commit is where it belongs.
 
 ---
 
@@ -233,7 +248,7 @@ Ports `CampgroundRepo.findPoiDetailByPoi`, `CampgroundRepo.findSummariesByPoiIds
 - Create: `apps/web/vitest.config.ts`
 
 **Interfaces:**
-- Consumes: `createDb`, `migrateDb`, `type Db`, the schema tables and `ewkt` from `@roadtrip/db`; `withPostgis` and `type PostgisSession` from `scripts/schema-reference.mjs` (as `packages/db/src/types/geometry.test.ts` does) for the tests.
+- Consumes: `createDb`, `migrateDb`, `type Db`, the schema tables and `ewkt` from `@roadtrip/db`; `withPostgis` and `type PostgisSession` from `scripts/schema-reference.mjs` (as `packages/db/src/types/geometry.test.ts` does) for the tests. **Two known hazards there:** the relative depth is five levels up from `apps/web/src/server/repo/`, not the four `packages/db/src/types/` uses; and that module is a `.mjs` typed by a sibling `.d.mts`, which `packages/db` resolves under `nodenext` while this app's tsconfig uses `bundler`. Resolve the second concretely — either a `tsconfig.typecheck.json` that includes the test files under `nodenext` (mirroring `packages/db`'s two-tsconfig split) or a local `.d.ts` shim re-exporting those types — and say in the report which way and why. Not with a type assertion and not with `@ts-expect-error`.
 - Produces:
   - `config.ts`: `readonly databaseUrl: string`, `readonly databasePrepare: boolean`, `readonly enabledDataProviders: ReadonlySet<string>`, `readonly searchResultLimit: number` — read from `DATABASE_URL`, `DATABASE_PREPARE`, `ENABLED_DATA_PROVIDERS` (comma-separated), `SEARCH_RESULT_LIMIT`, each with a named `const` default. `databaseUrl` throws a named error when unset.
   - `db.ts`: `export function serverDb(): Db` — a module-level memoized `createDb(config.databaseUrl, { prepare: config.databasePrepare, connection: { default_transaction_read_only: READ_ONLY } })`. First line of the file is `import 'server-only';` so Next's own bundler also rejects a client import, independent of Task 2's guard.
@@ -353,7 +368,7 @@ Two SSR pages and two JSON route handlers. All four are `force-dynamic` so `next
 **Interfaces:**
 - Consumes: `getCampgroundDetail`, `searchCampgrounds` from Task 3's service.
 - Produces:
-  - `boundary.ts`: `parsePoiId(raw: string): bigint | null` and `bboxToPolygonGeoJson(raw: string): string | null` — a `w,s,e,n` bbox string to a GeoJSON polygon, `null` on anything malformed. Pure, no database.
+  - `boundary.ts`: `parsePoiId(raw: string): bigint | null`, `bboxToPolygonGeoJson(raw: string): string | null` — a `w,s,e,n` bbox string to a GeoJSON polygon, `null` on anything malformed — and `DEFAULT_SEARCH_BBOX`. All pure, no database. `DEFAULT_SEARCH_BBOX` lives **here, not in `config.ts`**: it is a route-layer presentation default and nothing about it differs per environment.
   - `/campgrounds/<poiId>` — the detail page. Unparseable or unknown id → `notFound()`.
   - `/search?bbox=w,s,e,n` — the list page. Missing bbox uses `DEFAULT_SEARCH_BBOX`; malformed bbox renders an error state, not a 500.
   - `/api/probe/campground-search?bbox=...` — the same service call as `/search`, returning JSON and setting `Server-Timing: db;dur=<ms>`. This is the probe's measurement surface: it isolates the read from React rendering, which is what §9 P1 asks about.
@@ -455,10 +470,12 @@ Named constants for `DEFAULT_RUNS` (enough for a stable p95 — 200), `DEFAULT_W
 Run: `node --test scripts/probe-read-latency.test.mjs`
 Expected: PASS.
 
-- [ ] **Step 5: Choose the probe boundary from the real data and freeze it**
+- [ ] **Step 5: Prove the harness end-to-end, with a provisional boundary**
 
-The number only means something over a representative row count. Against production (or the Neon restore once Task 7 has one), find the densest populated region: run the search for several candidate bboxes and record `totalInBoundary` for each. Pick the one whose count is the largest realistic map viewport, and write it as `PROBE_BOUNDARY_BBOX` in the script with the row count it covers in the commit message.
-Expected: a bbox returning on the order of hundreds of campgrounds, not two and not the whole continent.
+The representative boundary cannot be chosen yet: it needs a database with real row counts, and neither exists during this run (production is SSH-blocked, Task 7 is out of scope). So `PROBE_BOUNDARY_BBOX` is declared with a `PROVISIONAL` marker in a comment-free named constant whose name says so — `PROVISIONAL_PROBE_BOUNDARY_BBOX` — and **Task 7 step 3 freezes the real one** against the Neon restore, where candidate bboxes can be compared by `totalInBoundary`.
+
+Run the harness against the local PostGIS fixture database and dev server from Task 4 step 7.
+Expected: it completes its runs, prints p50/p95 for both total and db, reports the cold sample separately, and appends one parseable JSON line to `--out`. A harness that has only been unit-tested has not been shown to work against an HTTP server.
 
 - [ ] **Step 6: Add a `probe-latency` Makefile target**
 
@@ -575,6 +592,9 @@ The dump never leaves mini-ca over the tunnel and the production database is nev
 `scripts/restore-catalog-to-managed.mjs` drives the load against the direct endpoint and then asserts equality: for each restored table, the row count on Neon equals the count mini-ca reported. A restore whose counts were never compared is not a restore.
 Expected: every count matches, and the probe boundary from Task 5 step 5 returns the same `totalInBoundary` on both databases.
 
+Then **freeze the probe boundary**, which Task 5 left provisional because no database with real row counts existed yet. Run the search for several candidate bboxes against the restore and record `totalInBoundary` for each; pick the one matching the largest realistic map viewport, rename the constant from `PROVISIONAL_PROBE_BOUNDARY_BBOX` to `PROBE_BOUNDARY_BBOX`, and put the row count it covers in the commit message.
+Expected: a bbox returning on the order of hundreds of campgrounds, not two and not the whole continent. Re-run Task 6's mini-ca measurement against the frozen boundary if it had already run against the provisional one — the two numbers are only comparable over the same query.
+
 Then record Neon's PostGIS version (`SELECT postgis_full_version()`) and re-run Task 3's two fault cases against it — the malformed boundary and the self-intersecting polygon. Task 3's classification is a PostGIS-3.4-confirmed string match, so this is where a version difference would surface as a 500 on Vercel that mini-ca does not have.
 Expected: both classify the same way. If they do not, that is a finding to report, not something to paper over by broadening the match.
 
@@ -587,7 +607,9 @@ Expected: a definite pass/fail per setting. Write the answer, the pooler endpoin
 
 - [ ] **Step 5: Create the Vercel project and measure what `data/raw` costs**
 
-Connect `wwchen/roadtrip`, Root Directory `apps/web`, **"Include files outside root directory" enabled** — with `./` as the root the workspace build does not resolve. Install command `npm ci` at the root; build command `npm run build` at the root (so `packages/*/dist` exists before `next build`, per the Global Constraints); output `.next`. Environment variables: `DATABASE_URL` (the pooled endpoint), `DATABASE_PREPARE`, `ENABLED_DATA_PROVIDERS`. All three are server-only and **none** is `NEXT_PUBLIC_`-prefixed. Pin the function region per open question 3.
+Connect `wwchen/roadtrip`, Root Directory `apps/web`, **"Include files outside root directory" enabled** — with `./` as the root the workspace build does not resolve. Install command `npm ci` at the root; build command `npm run build` at the root (so `packages/*/dist` exists before `next build`, per the Global Constraints); output `.next`.
+
+The root build also builds `frontend`'s Vite bundle, which Vercel never serves. That waste is deliberate: the root `npm run build` is the exact command `make test` and CI run, so it cannot drift from what they prove, and `scripts/build-workspaces.mjs` already orders the workspace graph. Measure it with the `data/raw` figure below — both are the same question, build minutes — and recommend then rather than adding a narrower build script now. (Verified: `@lew-ds/*` resolve from `registry.npmjs.org` and the repo has no `.npmrc`, so the root `npm ci` needs no registry auth.) Environment variables: `DATABASE_URL` (the pooled endpoint), `DATABASE_PREPARE`, `ENABLED_DATA_PROVIDERS`. All three are server-only and **none** is `NEXT_PUBLIC_`-prefixed. Pin the function region per open question 3.
 
 Measured locally for reference: a `--depth=1` clone of this repo transfers 133 MB of packed objects and checks out 1.9 GB across 22,163 files in **10.9 s**, of which `data/raw` is 1.7 GB and 19,136 files.
 
