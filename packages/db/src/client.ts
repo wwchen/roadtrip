@@ -24,7 +24,7 @@ export interface CreateDbOptions {
 export function createDb(url: string, opts: CreateDbOptions = {}): Db {
   const client = postgres(url, {
     prepare: opts.prepare ?? DEFAULT_PREPARE,
-    connection: { ...opts.connection },
+    connection: opts.connection,
   });
   return drizzle(client, { schema });
 }
