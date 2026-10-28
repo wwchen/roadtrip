@@ -18,7 +18,8 @@
 - Nothing in `@roadtrip/db` may be imported by `frontend/`. It depends on a Postgres driver.
 - Every new top-level directory must be added to `.claude/settings.json` → `worktree.sparsePaths`. Cone mode can only enumerate, never subtract, so an unregistered directory is absent from every future worktree and `scripts/check-worktree-sparse-paths.mjs` fails the build.
 - The schema reference is produced by running all 66 Flyway migrations, never by reading them and never from a production database.
-- `CHECK` constraint names are pinned explicitly to match Flyway's. There are 107 of them.
+- `CHECK` constraint names are pinned explicitly to match Flyway's. The produced schema has **76**; 107 is the count of `CHECK (` occurrences in the migration source text, which includes constraints on tables and columns later migrations dropped.
+- **`scripts/schema-reference.mjs` drives `docker` directly rather than using `@testcontainers/postgresql@12.2.1`**, which the Tech Stack line above names. This is a deliberate deviation and the better call: one container serves both databases, the image pin is literally the same code on both sides of the comparison, it adds no dependency, and it is what let Task 6 reuse Task 2's container setup rather than write a second one. Recorded here because the stack line would otherwise read as unmet.
 - Transaction-mode pooling requires `prepare: false` in postgres.js.
 
 ## Review Focus
