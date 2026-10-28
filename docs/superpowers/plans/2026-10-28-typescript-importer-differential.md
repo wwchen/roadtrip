@@ -474,7 +474,9 @@ git commit -m "feat(worker): port the ETL orchestrator, transform context and sh
   - from `importer-diff-columns.mjs`: `DIFFED_TABLES` — for each of `campgrounds`, `campsites`, `tesla_superchargers`, `planet_fitness_locations`, `pois`, `import_runs`: its key columns, its ignored columns with a reason per entry, and (for `pois`) the link table and owner key it joins through — and `diffSql(table)`, the one statement per table whose compared column list is derived from `getTableConfig`
   - from `importer-differential.mjs`: `runDifferential({ rawDir, staticDir, targets, sources, referenceDump, maxDifferences, emitSeed })` → `{ differences: Difference[], counts: Record<string, number> }`, and `interface Difference { table: string; key: string[]; kind: 'missing_in_kotlin' | 'missing_in_typescript' | 'differs'; columns: string[] }`
   - the CLI flags `--target <name>` (repeatable), `--source <slug>` (repeatable; restricts which `data_source` captures *both* importers read, for Task 14's CI subset fallback — it must constrain the Kotlin side too or the diff is meaningless), `--reference-dump <path>`, `--max-differences <n>` (default 50), `--emit-seed <path>` (after a clean diff, `pg_dump` the TypeScript database plus a provenance sidecar, for spec §8.1's seed), and `--passes <n>` (default 1)
-  - `--passes 2` runs **each importer twice over the same captures** before the rows are diffed, so the compared state is the one `ON CONFLICT DO UPDATE` produced rather than the one `INSERT` produced. Two empty databases only ever insert, so a single pass cannot see the update half of any upsert — spec §4 states this, and Task 3 found that dropping any of the 28 campground or 29 campsite conflict-update keys leaves a one-pass differential green. `--reference-dump` caches the Kotlin side per pass count; a dump taken at one pass count must not be restored for another, so the pass count joins the provenance key.
+  - `--passes <n>` runs **each importer n times over the same captures** before the rows are diffed. At `n = 2` this proves the `ON CONFLICT` branch is reached and is idempotent — no duplicated rows, no widened conflict target, no second POI per campground — at full scale. It does **not** prove the update carries values: `.values(chunk.map(campgroundRow))` writes every column on insert regardless of `CONFLICT_UPDATE_KEYS`, so with identical captures a dropped update key leaves the correct pass-1 value in place and the rows stay byte-identical. Do not write an assertion that assumes otherwise.
+  - `--prove-update-keys` is what proves the update writes. After pass 1 it blanks every updatable column **in both databases**, then runs pass 2; each side must restore every column from the captures, so a column absent from one implementation's update set stays blank on that side alone and the diff names it. Blanking is generated from `getTableConfig` so it cannot drift from the schema: identity and key columns are left alone, nullable columns go to `NULL`, `jsonb` object columns to `'{}'` and array columns to `'[]'` (satisfying their `jsonb_typeof` CHECKs), and a non-nullable scalar goes to a fixed sentinel that satisfies its own CHECK — `name` and `status` carry `nonBlank` checks, so the sentinel is a non-empty string. The mode fails loudly if blanking left any row unchanged, since a blank step that blanked nothing makes the whole run vacuous.
+  - `--reference-dump` caches the Kotlin side per mode; a dump taken under one mode must not be restored under another, so the pass count and `--prove-update-keys` both join the provenance key.
   - Gradle: `./gradlew :backend:importCatalog --args="--jdbc-url <url> --raw-dir <dir> --static-dir <dir> [--target <name>] [--source <slug>]"`
 
 How it runs:
@@ -691,18 +693,23 @@ Both targets read the same `reservecalifornia-catalog` input (823 envelopes). `B
 - Create: `docs/superpowers/2026-10-28-step-4-rulings.md`
 - Reference: `.github/workflows/ci.yml`'s `schema-equivalence` job for the job's shape
 
-- [ ] **Step 1: Run the full differential over every target, both ways**
+- [ ] **Step 1: Run the full differential over every target, all three ways**
 
-Run: `time node scripts/importer-differential.mjs` then `time node scripts/importer-differential.mjs --passes 2`
-Expected: `0 differences` across every diffed table and all 18 targets, in both runs. Record both wall-clock times and the per-table row counts.
+Run, timing each: `node scripts/importer-differential.mjs`, then `--passes 2`, then `--prove-update-keys`.
+Expected: `0 differences` across every diffed table and all 18 targets, in all three runs. Record all three wall-clock times and the per-table row counts.
 
-- [ ] **Step 2: Prove the full run can still fail, and that the second pass earns its place**
+- [ ] **Step 2: Prove the full run can still fail**
 
 Run: mutate one row per diffed table in the `reference` schema of a completed run and re-diff.
 Expected: one difference per diffed table, each naming the mutated column. A clean run that cannot go red is worth nothing.
 
-Then, separately: drop one conflict-update key from `campground-repo.ts` — `statusDescription`, which Task 3 used — and run the differential at `--passes 1` and at `--passes 2`.
-Expected: the one-pass run is clean and the two-pass run reports a difference on `status_description` across every campground row. If the two-pass run is also clean, the second pass is not exercising the update path and the `--passes` implementation is wrong. Revert the mutation.
+- [ ] **Step 3: Prove each mode catches what it claims, and only that**
+
+Drop `statusDescription` from `CONFLICT_UPDATE_KEYS` in `campground-repo.ts` and run all three modes.
+Expected: the single pass is clean, `--passes 2` is **also clean**, and `--prove-update-keys` reports a difference on `status_description` across every campground row. The middle result is not a failure — it is the point. With identical captures a dropped update key leaves the correct pass-1 value in place, so `--passes 2` cannot see it, and an assertion that expects it to would send the next person debugging a correct harness.
+
+Then revert that mutation and widen the conflict target instead: replace `targetWhere: sql\`deleted_at IS NULL\`` with no `targetWhere`.
+Expected: the single pass is clean and `--passes 2` reports differences, because the re-import is where a wrong conflict target first duplicates or fails. That is the property `--passes 2` exists for. Revert.
 
 - [ ] **Step 3: Add the `make importer-diff` target**
 
@@ -710,7 +717,7 @@ The full differential is **not** added to `make test`: it needs `data/raw`, whic
 
 - [ ] **Step 4: Decide and wire the CI job**
 
-Rule, applied to Step 1's two measured times. CI runs the full capture set at **both** pass counts if the whole job — checkout, Gradle, four imports, two diffs — lands under 30 minutes on a GitHub runner. If it does not, the one-pass run keeps the full capture set and the two-pass run drops to a `--source`-filtered subset covering one target per adapter family; the one-pass run is the stronger check of parse and transform and has the more rows to lose, while the two-pass run is checking one specific thing — that the update half of each upsert agrees — and a subset establishes that per adapter. If even that does not fit, the two-pass full run stays the `make importer-diff` gate before landing. `data/raw` is already in every CI checkout (138 MiB packed), so the captures cost nothing extra. Record both measurements and the resulting choice in the job's comment and in the rulings file.
+Rule, applied to Step 1's three measured times. CI runs the full capture set in **all three** modes if the whole job lands under 30 minutes on a GitHub runner. If it does not, the single pass keeps the full capture set and the other two drop to a `--source`-filtered subset covering one target per adapter family: the single pass is the strongest check of parse and transform and has by far the most rows to lose, while `--passes 2` and `--prove-update-keys` each check one specific structural property that a per-adapter subset establishes. If even that does not fit, the full-set runs of those two stay the `make importer-diff` gate before landing. `data/raw` is already in every CI checkout (138 MiB packed), so the captures cost nothing extra. Record all three measurements and the resulting choice in the job's comment and in the rulings file.
 
 Path filter: `packages/**`, `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/**`, `backend/src/main/kotlin/ca/floo/roadtrip/repo/**`, `backend/src/main/kotlin/ca/floo/roadtrip/model/domain/**`, `backend/src/main/kotlin/ca/floo/roadtrip/tools/**`, `backend/src/main/resources/poi-registry.yaml`, `backend/src/main/resources/db/migration/**`, `data/raw/**`, `scripts/importer-differential*.mjs`, `scripts/schema-reference.mjs`, `.github/workflows/ci.yml`.
 

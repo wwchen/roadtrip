@@ -234,14 +234,38 @@ upsert is invisible to the diff: step 4 found that dropping any of the 28 campgr
 because the importer's steady state is the refresh, not the seed — `make data-import`
 runs against a database that already holds the catalog. A wrong update-key list
 produces an identical first import and a divergent second one, which is the failure
-mode least likely to be noticed and most likely to be live. Step 4 closed it two ways:
-per-table update-path unit tests that re-upsert a fully-populated row over another and
-assert every column, each proven by mutation; and a **second differential pass** —
-both importers run twice over the same captures before the rows are diffed, so the
-compared state is the one `ON CONFLICT` produced. Run the harness both ways. The
-one-pass run is the stronger check of parse and transform, because an insert-path error
-that the update path happens to correct would be masked by two passes; the two-pass run
-is the only one that sees the refresh. Neither subsumes the other.
+mode least likely to be noticed and most likely to be live.
+
+Step 4 closed it two ways. First, per-table update-path unit tests that re-upsert a
+fully-populated row over another and assert every column, each proven by mutation —
+these work precisely because the second row's values differ from the first's. Second,
+the harness gained two modes beyond the single pass:
+
+- **`--passes 2`** runs both importers twice over the same captures. It proves the
+  `ON CONFLICT` branch is reached and is idempotent — that a re-import does not
+  duplicate rows, has not widened the conflict target, and does not create a second
+  POI per campground — at full scale against real captures. It does **not** prove the
+  update carries changed values. With identical input, a column dropped from the
+  update set simply keeps the value pass 1 inserted, which is the correct value, so
+  the rows stay byte-identical and the diff sees nothing. An earlier draft of this
+  paragraph claimed otherwise and would have sent someone debugging the harness over
+  a premise that was wrong.
+- **`--prove-update-keys`** blanks every updatable column in both databases after
+  pass 1, then runs pass 2. Each side must restore every column from the captures, so
+  a column missing from one implementation's update set stays blank on that side alone
+  and the diff names it. This is a complete proof of the update-key list, not a sample.
+
+Run all three. None subsumes another: the single pass is the strongest check of parse
+and transform, because an insert-path error that the update path would correct is
+masked by any second pass; `--passes 2` is the only one that exercises re-import at
+scale; `--prove-update-keys` is the only one that proves the update writes at all.
+
+The fuller version of this — pass 1 over an older capture and pass 2 over the newest,
+so a genuinely changed upstream value has to propagate — is a better match for what
+`make data-import` does, and ten of the twenty-five declared inputs hold more than one
+capture, so the data for it already exists. It belongs with step 5's seed-and-refresh
+story rather than here, because `--prove-update-keys` already proves the column list
+completely and deterministically.
 
 **The diff must compare JSONB as `jsonb`, not as `::text`.** Task 7 found that Kotlin
 writes `12.0` where TypeScript writes `12`: equal under the `jsonb` `=` operator,
