@@ -40,7 +40,7 @@ LANGUAGE sql STABLE AS $$
   ) per_kind
 $$;
 --> statement-breakpoint
--- Repeatable migration: read-only grants for the grafana_reader role.
+-- One-shot migration: read-only grants for the grafana_reader role.
 --
 -- The role itself (and its password) is bootstrapped by postgres-init/, which
 -- is infra-layer. This migration only owns schema-adjacent concerns: what the
