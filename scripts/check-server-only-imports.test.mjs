@@ -183,3 +183,54 @@ test('ignores unresolvable specifiers, cycles, and skipped directories', async (
 
   assert.deepEqual(await findClientBoundaryViolations(root), []);
 });
+
+test('rejects magic-comment, backtick and unspaced specifiers reaching @roadtrip/db', async (context) => {
+  const root = await fixture({
+    'src/components/Magic.tsx': `${CLIENT}const db = await import(/* webpackChunkName: "db" */ '@roadtrip/db');`,
+    'src/components/Backtick.tsx': `${CLIENT}const db = await import(\`@roadtrip/db\`);`,
+    'src/components/Compact.tsx': `${CLIENT}import{pois}from'@roadtrip/db';`,
+    'src/components/LineComment.tsx': `${CLIENT}const db = await import(// split\n  '@roadtrip/db');`,
+    'src/components/StrayQuote.tsx': `${CLIENT}// loaded via import "\nimport { pois } from '@roadtrip/db';`,
+  });
+  context.after(() => rm(root, { recursive: true, force: true }));
+
+  const violations = await findClientBoundaryViolations(root);
+
+  assert.equal(violations.length, 5);
+  for (const name of ['Magic', 'Backtick', 'Compact', 'LineComment', 'StrayQuote']) {
+    assert.ok(violations.some((violation) => violation.includes(`/${name}.tsx:`)), name);
+  }
+});
+
+test('follows a magic-comment dynamic import of a relative helper chain', async (context) => {
+  const root = await fixture({
+    'src/components/Lazy.tsx': `${CLIENT}const rows = await import(/* webpackChunkName: "rows" */ './lib/rows');`,
+    'src/components/Backtick.tsx': `${CLIENT}const rows = await import(\`./lib/rows\`);`,
+    'src/components/lib/rows.ts': "import{pois}from'@roadtrip/db';",
+  });
+  context.after(() => rm(root, { recursive: true, force: true }));
+
+  const violations = await findClientBoundaryViolations(root);
+
+  assert.equal(violations.length, 1);
+  assert.match(violations[0], /^apps\/web\/src\/components\/lib\/rows\.ts:1: imports @roadtrip\/db \(reached from client component apps\/web\/src\/components\/(Lazy|Backtick)\.tsx\)$/);
+});
+
+test('recognises the directive after a byte order mark', async (context) => {
+  const root = await fixture({
+    'src/components/Bom.tsx': `﻿${CLIENT}import { pois } from '@roadtrip/db';`,
+  });
+  context.after(() => rm(root, { recursive: true, force: true }));
+
+  assert.equal((await findClientBoundaryViolations(root)).length, 1);
+});
+
+test('does not read NEXT_PUBLIC_ in prose files', async (context) => {
+  const root = await fixture({
+    'README.md': 'Never use NEXT_PUBLIC_ names here.',
+    'docs/notes.mdx': 'NEXT_PUBLIC_TOKEN is forbidden.',
+  });
+  context.after(() => rm(root, { recursive: true, force: true }));
+
+  assert.deepEqual(await findClientBoundaryViolations(root), []);
+});

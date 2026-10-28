@@ -3,6 +3,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { findModuleSpecifiers, SKIPPED_DIRECTORIES as SHARED_SKIPPED_DIRECTORIES, SOURCE_EXTENSION } from './module-specifiers.mjs';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const WEB_DIRECTORY = 'apps/web';
@@ -11,10 +12,8 @@ const SERVER_DIRECTORY = 'apps/web/src/server';
 const ALIAS_PREFIX = '@/';
 const FORBIDDEN_PACKAGE = '@roadtrip/db';
 const FORBIDDEN_PACKAGE_DIRECTORY = 'packages/db';
-const SOURCE_EXTENSION = /\.[cm]?[jt]sx?$/;
-const SKIPPED_DIRECTORIES = new Set(['node_modules', 'dist', 'storybook-static', '.next']);
-const MODULE_SPECIFIER =
-  /(?:from\s+|import\s*(?:\(\s*)?|require\s*\(\s*)['"]([^'"]+)['"]/g;
+const SKIPPED_DIRECTORIES = new Set([...SHARED_SKIPPED_DIRECTORIES, '.next']);
+const PROSE_EXTENSION = /\.mdx?$/;
 const CLIENT_DIRECTIVE = /^(?:'use client'|"use client")(?:\s*;|\s*$|[ \t]*(?:\r?\n|\/\/|\/\*))/;
 const PUBLIC_ENV_NAME = /NEXT_PUBLIC_\w*/g;
 const RESOLVABLE_SUFFIXES = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'];
@@ -24,7 +23,7 @@ const COMPILED_SUFFIX_SOURCES = new Map([
   ['.mjs', ['.mts']],
   ['.cjs', ['.cts']],
 ]);
-const BYTE_ORDER_MARK = /^﻿/;
+const BYTE_ORDER_MARK = /^\uFEFF/;
 const LEADING_LINE_COMMENT = /^\/\/[^\n]*(?:\n|$)/;
 const LEADING_BLOCK_COMMENT = /^\/\*[\s\S]*?\*\//;
 
@@ -93,12 +92,11 @@ async function readModules(files, repoRoot) {
   const modules = new Map();
   for (const file of sources) {
     const source = await readFile(file, 'utf8');
-    const imports = [...source.matchAll(MODULE_SPECIFIER)].map((match) => {
-      const specifier = match[1];
+    const imports = findModuleSpecifiers(source).map(({ specifier, line }) => {
       const target = specifierTarget(specifier, file, repoRoot);
       return {
         specifier,
-        line: lineOf(source, match.index),
+        line,
         forbiddenPackage: reachesForbiddenPackage(specifier, target, repoRoot),
         server: target !== null && isInside(path.join(repoRoot, SERVER_DIRECTORY), target),
         resolved: target === null ? null : resolveSource(target, known),
@@ -142,7 +140,7 @@ export async function findClientBoundaryViolations(repoRoot) {
     }
   }
 
-  for (const file of files) {
+  for (const file of files.filter((candidate) => !PROSE_EXTENSION.test(candidate))) {
     const source = await readFile(file, 'utf8');
     for (const match of source.matchAll(PUBLIC_ENV_NAME)) {
       violations.push(`${path.relative(repoRoot, file)}:${lineOf(source, match.index)}: references ${match[0]}`);
@@ -155,7 +153,7 @@ async function main() {
   const violations = await findClientBoundaryViolations(REPO_ROOT);
   if (violations.length > 0) {
     console.error(
-      `${WEB_DIRECTORY}/ must keep ${FORBIDDEN_PACKAGE} and ${SERVER_DIRECTORY}/ out of client components, and must not use NEXT_PUBLIC_ names: they are inlined into the bundle every visitor downloads. Move the server work behind a server component or route handler and pass plain props down:\n`,
+      `${WEB_DIRECTORY}/ must keep ${FORBIDDEN_PACKAGE} and ${SERVER_DIRECTORY}/ out of client components, and must not use NEXT_PUBLIC_ names: they are inlined into the bundle every visitor downloads. Move the server work behind a server component or route handler and pass plain props down. Only literal specifiers are checked: import(someVariable) and require(someVariable) cannot be seen, so do not rely on this gate for them.\n`,
     );
     console.error(violations.join('\n'));
     process.exitCode = 1;

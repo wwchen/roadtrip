@@ -25,6 +25,10 @@ test('rejects every import form that reaches @roadtrip/db', async (context) => {
     'src/subpath.ts': "import { client } from '@roadtrip/db/client';",
     'src/dynamic.ts': "const db = await import('@roadtrip/db');",
     'src/required.cjs': "const db = require('@roadtrip/db');",
+    'src/magic.ts': "const db = await import(/* webpackChunkName: \"db\" */ '@roadtrip/db');",
+    'src/backtick.ts': 'const db = await import(`@roadtrip/db`);',
+    'src/compact.ts': "import{schema}from'@roadtrip/db';",
+    'src/stray-quote.ts': "// loaded via import \"\nimport { schema } from '@roadtrip/db';",
     'src/Thing.test.tsx': "import { schema } from '@roadtrip/db';",
     'vite.config.ts': "import { schema } from '@roadtrip/db';",
     '.storybook/main.ts': "import { schema } from '@roadtrip/db';",
@@ -33,7 +37,7 @@ test('rejects every import form that reaches @roadtrip/db', async (context) => {
 
   const violations = await findPackageBoundaryViolations(root);
 
-  assert.equal(violations.length, 8);
+  assert.equal(violations.length, 12);
   assert.ok(violations.every((violation) => violation.includes('imports @roadtrip/db')));
 });
 
@@ -42,12 +46,13 @@ test('rejects relative paths that reach into packages/db', async (context) => {
     'src/shallow.ts': "import { schema } from '../../packages/db/src/schema';",
     'src/lib/deep.ts': "export * from '../../../packages/db';",
     'src/lib/dynamic.ts': "const db = await import('../../../packages/db/dist/index.js');",
+    'src/lib/magic.ts': "const db = await import(/* webpackChunkName: \"db\" */ '../../../packages/db');",
   });
   context.after(() => rm(root, { recursive: true, force: true }));
 
   const violations = await findPackageBoundaryViolations(root);
 
-  assert.equal(violations.length, 3);
+  assert.equal(violations.length, 4);
   assert.ok(violations.every((violation) => violation.includes('imports ')));
 });
 
