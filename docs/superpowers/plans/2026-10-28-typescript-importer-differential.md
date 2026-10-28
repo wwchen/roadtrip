@@ -22,7 +22,7 @@ Every task's requirements implicitly include these.
 - **`campsites.price` and `campsites.schedule` are raw vendor JSON**, not `CampgroundPrice` / `CampgroundSchedule`. `CampsiteRepo.kt:338-339` reads both through `parseJsonElement`. The identically named *campground* columns are those shapes; only the campsite pair is raw. Write them through the opaque passthrough, never through `priceShape` / `scheduleShape`.
 - **The diff compares JSONB as `jsonb`, never as `::text`.** Kotlin writes `12.0` where TypeScript writes `12`; equal under `=`, different as text.
 - **The importer refreshes nothing.** There are no materialized views; `campground_canonical` and `campsite_canonical` were dropped in V44.
-- **`data/raw` is tracked in git but excluded from Claude worktrees** (`scripts/check-worktree-sparse-paths.mjs` `EXCLUDED`). Anything that reads it must fail loudly when it is absent. Run the full harness from the main checkout or a non-sparse worktree.
+- **`data/raw` is tracked in git**, 19,136 files and 1.7 G, and is present in this worktree. `scripts/check-worktree-sparse-paths.mjs` lists it under `EXCLUDED`, which only means the guard tolerates its absence from `worktree.sparsePaths`; nothing prunes it, and `core.sparseCheckout` is not set here. Work in this worktree — the harness runs in place. The requirement that stands regardless of where it runs: **anything that reads the captures must fail loudly when they are absent or partial**, never report a clean diff over nothing. That is Review Focus #1, and it is about a gate that cannot fail, not about a working directory.
 - **The new package lives at `packages/worker`**, inside the existing `packages/*` workspace glob, so no new top-level directory and no `.claude/settings.json` → `worktree.sparsePaths` edit is needed. Spec §10 step 2's sparsePaths warning applies only if that choice is changed.
 - **One root lockfile.** `scripts/check-single-lockfile.mjs` fails on a second one; add dependencies with a root `npm install --workspace @roadtrip/worker`.
 - **The frontend must not reach `@roadtrip/db`** (`scripts/check-package-boundaries.mjs`). Nothing in this plan touches `frontend/`.
@@ -572,7 +572,7 @@ git commit -m "test: add the importer differential harness, red against an unpor
 
 ### Tasks 6–13: the vendor adapters
 
-These eight tasks share one shape, so it is written once here. **Each needs a checkout that has `data/raw`** — the main checkout or a non-sparse worktree — because every one of them ends on a differential run. Their unit tests do not.
+These eight tasks share one shape, so it is written once here. Each ends on a differential run over `data/raw`, which is present in this worktree; their unit tests do not need it.
 
 Each task:
 
