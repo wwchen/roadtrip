@@ -55,6 +55,9 @@ export const bookingCopy = {
   holdUnansweredTitle: 'No answer from the booking site',
   holdUnanswered: (holder?: string) =>
     `We stopped waiting. The hold may still have landed — check your ${holder ?? UNNAMED_BOOKING_LABEL} cart before trying again.`,
+  /** Survives into the new hold: the earlier one may still be in the cart alongside it. */
+  heldAfterLapse: (holder?: string) =>
+    `You held this site earlier too — check your ${holder ?? UNNAMED_BOOKING_LABEL} cart for a duplicate before checking out.`,
   /** Our own clock, not the vendor's, so the sentence says the site may still be held. */
   holdLapsedTitle: 'That hold has run out',
   holdLapsed: (holder?: string) =>

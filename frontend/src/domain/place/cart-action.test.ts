@@ -168,6 +168,34 @@ describe('nextCartActions, the hold lapsing', () => {
     });
   });
 
+  test('re-holding after a lapse remembers it, so the new hold can warn of a duplicate', () => {
+    const lapsed = nextCartActions(heldOn(requested(NO_CART_ACTIONS)), { type: 'expired', cell });
+    const asked = requested(lapsed);
+
+    expect(cartActionFor(asked, '42', '2026-07-04')).toMatchObject({
+      kind: 'pending',
+      afterLapse: true,
+    });
+    expect(cartActionFor(heldOn(asked), '42', '2026-07-04')).toMatchObject({
+      kind: 'held',
+      afterLapse: true,
+    });
+  });
+
+  test('a first hold carries no duplicate warning', () => {
+    const held = heldOn(requested(NO_CART_ACTIONS));
+
+    expect(cartActionFor(held, '42', '2026-07-04')).not.toHaveProperty('afterLapse');
+  });
+
+  test('a hold after a failure is not a duplicate, so it carries no warning either', () => {
+    const failed = failedOn(requested(NO_CART_ACTIONS));
+
+    expect(cartActionFor(heldOn(requested(failed)), '42', '2026-07-04')).not.toHaveProperty(
+      'afterLapse',
+    );
+  });
+
   test('expiry applies to a hold and to nothing else, a lapsed one included', () => {
     const pending = requested(NO_CART_ACTIONS);
     const failed = failedOn(pending);

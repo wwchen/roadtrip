@@ -144,6 +144,21 @@ export const Unanswered: Story = {
   args: {
     ...BASE,
     gate: { state: 'ready', onAddToCart: noop },
-    actions: cartActionsOf({ kind: 'failed', cell: CELL, code: HOLD_UNANSWERED }),
+    actions: cartActionsOf({ kind: 'failed', cell: CELL, code: HOLD_UNANSWERED, holder: HOLDER }),
+  },
+};
+
+export const HeldAfterLapse: Story = {
+  args: {
+    ...BASE,
+    gate: { state: 'ready', onAddToCart: noop },
+    actions: cartActionsOf({
+      kind: 'held',
+      cell: CELL,
+      cartUrl: CART_URL,
+      heldAt: HELD_AT,
+      holder: HOLDER,
+      afterLapse: true,
+    }),
   },
 };

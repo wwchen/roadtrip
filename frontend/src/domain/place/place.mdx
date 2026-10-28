@@ -151,12 +151,32 @@ cart, because if our clock runs early the site is still held and a silent flip b
 "Add to cart" would walk the user into a second hold on a site they already have —
 the same harm as the one-slot bug, arriving by a different road.
 
-**A hold that never answers gives up.** `addToCart` carries its own
-`CART_HOLD_DEADLINE_MS`, set past the backend's companion budget so tripping it means
-the server is not answering at all rather than that the work is slow. Without it a
-stalled POST held the whole grid's lock indefinitely. The panel then says we stopped
-waiting and that the hold **may** still have landed; it never claims the hold failed,
-because nothing on this side can know.
+Re-holding from there can still produce two holds; that is inherent, since nothing
+tells us whether the first one stands. What the design does guarantee is that the
+notice **survives the second hold**: a `pending` raised from `lapsed` carries
+`afterLapse`, the new `held` inherits it, and the held panel keeps one line pointing
+at the cart to check for a duplicate. Otherwise the success panel would replace the
+only warning the user ever got, exactly when it had just come true.
+
+**A hold that never answers gives up.** Without a deadline a stalled POST held the
+whole grid's lock indefinitely. `addToCart` carries `CART_HOLD_DEADLINE_MS`, and the
+number is **derived rather than chosen**: a direct hold pays `health` and one cookie
+refresh on `fireTimeout` and then the hold itself on `companionTimeout`, so the
+server's worst case is `companionTimeout × 5/3` — 300s on the defaults — and the
+client waits past that with headroom. Tripping it therefore means the server is not
+answering at all, not that a hold is slow.
+
+That coupling is live: `recgov-atc.companion-timeout` is env-tunable, so raising it
+in an environment moves the worst case and can overtake this deadline, at which point
+a hold still running reads as unanswered and the cell is offered again — two real
+holds on one site-night. `api/booking-deadline.test.ts` reads the two defaults out of
+`BookingConfig.kt` and fails when they grow past what the client allows. It cannot see
+deployed config, only defaults, so a production bump is still a judgement call someone
+has to make with this relationship in hand.
+
+The panel then says we stopped waiting and that the hold **may** still have landed; it
+never claims the hold failed, because nothing on this side can know. It names the
+provider's cart, from the capability gate when the refusal itself carried no name.
 
 There is no optimistic cell: a cell reads *held* only once the vendor said so, and a
 refusal says which refusal it was, by the server's own code through

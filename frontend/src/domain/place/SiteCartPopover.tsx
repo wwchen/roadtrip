@@ -149,6 +149,9 @@ export function SiteCartPopover({
             {bookingCopy.heldTitle(held.holder)}
           </p>
           <p className="rt-site-cart__hint">{bookingCopy.checkOutSoon(held.holder)}</p>
+          {held.afterLapse ? (
+            <p className="rt-site-cart__warn">{bookingCopy.heldAfterLapse(held.holder)}</p>
+          ) : null}
           <a
             className="rt-site-cart__link"
             href={held.cartUrl}

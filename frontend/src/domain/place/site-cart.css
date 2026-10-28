@@ -120,6 +120,12 @@
   color: var(--rt-warn);
 }
 
+.rt-site-cart__warn {
+  color: var(--rt-warn);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
 .rt-site-cart__link {
   color: var(--rt-brand-text);
   font-size: 12px;

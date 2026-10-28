@@ -6,8 +6,15 @@ export interface CartActionCell {
 }
 
 export type CartAction =
-  | { kind: 'pending'; cell: CartActionCell }
-  | { kind: 'held'; cell: CartActionCell; cartUrl: string; heldAt: number; holder?: string }
+  | { kind: 'pending'; cell: CartActionCell; afterLapse?: true }
+  | {
+      kind: 'held';
+      cell: CartActionCell;
+      cartUrl: string;
+      heldAt: number;
+      holder?: string;
+      afterLapse?: true;
+    }
   | { kind: 'lapsed'; cell: CartActionCell; cartUrl: string; holder?: string }
   | { kind: 'failed'; cell: CartActionCell; code: string; holder?: string };
 
@@ -60,7 +67,11 @@ export function nextCartActions(current: CartActions, event: CartActionEvent): C
     case 'requested':
       if (holdInFlight(current) !== null) return current;
       if (standing?.kind === 'held') return current;
-      return written(current, key, { kind: 'pending', cell: event.cell });
+      return written(current, key, {
+        kind: 'pending',
+        cell: event.cell,
+        ...(standing?.kind === 'lapsed' ? { afterLapse: true } : null),
+      });
     case 'held':
       if (standing?.kind !== 'pending') return current;
       return written(current, key, {
@@ -69,6 +80,7 @@ export function nextCartActions(current: CartActions, event: CartActionEvent): C
         cartUrl: event.cartUrl,
         heldAt: event.heldAt,
         ...(event.holder ? { holder: event.holder } : null),
+        ...(standing.afterLapse ? { afterLapse: true } : null),
       });
     case 'failed':
       if (standing?.kind !== 'pending') return current;

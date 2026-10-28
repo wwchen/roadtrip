@@ -180,6 +180,37 @@ describe('SiteCartPopover', () => {
     expect(onAddToCart).toHaveBeenCalledTimes(1);
   });
 
+  test('a hold taken after a lapse keeps warning that an earlier one may stand', () => {
+    show({
+      actions: cartActionsOf({
+        kind: 'held',
+        cell: CELL,
+        cartUrl: CART_URL,
+        heldAt: HELD_AT,
+        holder: HOLDER,
+        afterLapse: true,
+      }),
+    });
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(bookingCopy.heldTitle(HOLDER));
+    expect(status).toHaveTextContent(bookingCopy.heldAfterLapse(HOLDER));
+  });
+
+  test('a first hold says nothing about duplicates', () => {
+    show({
+      actions: cartActionsOf({
+        kind: 'held',
+        cell: CELL,
+        cartUrl: CART_URL,
+        heldAt: HELD_AT,
+        holder: HOLDER,
+      }),
+    });
+
+    expect(screen.queryByText(bookingCopy.heldAfterLapse(HOLDER))).toBeNull();
+  });
+
   test('a lapsed hold says so rather than flipping back to a bare offer', () => {
     show({
       actions: cartActionsOf({ kind: 'lapsed', cell: CELL, cartUrl: CART_URL, holder: HOLDER }),
@@ -206,14 +237,14 @@ describe('SiteCartPopover', () => {
     expect(onAddToCart).toHaveBeenCalledExactlyOnceWith(CAMPSITE_ID, NIGHT);
   });
 
-  test('a hold we stopped waiting for never claims it failed', () => {
+  test('a hold we stopped waiting for never claims it failed, and names the cart', () => {
     show({
-      actions: cartActionsOf({ kind: 'failed', cell: CELL, code: HOLD_UNANSWERED }),
+      actions: cartActionsOf({ kind: 'failed', cell: CELL, code: HOLD_UNANSWERED, holder: HOLDER }),
     });
 
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent(bookingCopy.holdUnansweredTitle);
-    expect(alert).toHaveTextContent(bookingCopy.holdUnanswered());
+    expect(alert).toHaveTextContent(bookingCopy.holdUnanswered(HOLDER));
     expect(alert).not.toHaveTextContent(bookingCopy.holdFailed);
     expect(step()).toBeEnabled();
   });

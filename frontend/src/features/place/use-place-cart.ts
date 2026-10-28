@@ -34,34 +34,40 @@ export function usePlaceCart(capabilities: WatchCapabilities): PlaceCart {
     standing.current = actions;
   }, [actions]);
 
-  const hold = useCallback((campsiteId: string, date: string) => {
-    if (running.current) return;
-    if (cartActionFor(standing.current, campsiteId, date)?.kind === 'held') return;
-    running.current = true;
-    const cell: CartActionCell = { campsiteId, date };
-    dispatch({ type: 'requested', cell });
-    void addToCart({
-      campsite_id: Number(campsiteId),
-      start_date: date,
-      end_date: stayEndDate(date),
-    })
-      .then((answer) => {
-        dispatch({
-          type: 'held',
-          cell,
-          cartUrl: answer.cart_url,
-          heldAt: Date.now(),
-          ...(answer.provider_display ? { holder: answer.provider_display } : null),
+  const provider = capabilities.addToCartProviderDisplay;
+
+  const hold = useCallback(
+    (campsiteId: string, date: string) => {
+      if (running.current) return;
+      if (cartActionFor(standing.current, campsiteId, date)?.kind === 'held') return;
+      running.current = true;
+      const cell: CartActionCell = { campsiteId, date };
+      dispatch({ type: 'requested', cell });
+      void addToCart({
+        campsite_id: Number(campsiteId),
+        start_date: date,
+        end_date: stayEndDate(date),
+      })
+        .then((answer) => {
+          dispatch({
+            type: 'held',
+            cell,
+            cartUrl: answer.cart_url,
+            heldAt: Date.now(),
+            ...(answer.provider_display ? { holder: answer.provider_display } : null),
+          });
+        })
+        .catch((err: unknown) => {
+          const { error: code, provider_display: named } = addToCartFailure(err);
+          const holder = named ?? provider;
+          dispatch({ type: 'failed', cell, code, ...(holder ? { holder } : null) });
+        })
+        .finally(() => {
+          running.current = false;
         });
-      })
-      .catch((err: unknown) => {
-        const { error: code, provider_display: holder } = addToCartFailure(err);
-        dispatch({ type: 'failed', cell, code, ...(holder ? { holder } : null) });
-      })
-      .finally(() => {
-        running.current = false;
-      });
-  }, []);
+    },
+    [provider],
+  );
 
   useEffect(() => {
     const timers = expiries.current;
@@ -76,12 +82,6 @@ export function usePlaceCart(capabilities: WatchCapabilities): PlaceCart {
           dispatch({ type: 'expired', cell: action.cell });
         }, remaining),
       );
-    }
-    for (const [key, timer] of timers) {
-      if (actions.get(key) === undefined) {
-        clearTimeout(timer);
-        timers.delete(key);
-      }
     }
   }, [actions]);
 

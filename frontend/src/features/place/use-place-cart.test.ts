@@ -73,7 +73,9 @@ describe('usePlaceCart, the gate it publishes', () => {
 });
 
 const ready = () => {
-  const hook = renderHook(() => usePlaceCart(capabilities({ addToCart: 'ready' })));
+  const hook = renderHook(() =>
+    usePlaceCart(capabilities({ addToCart: 'ready', addToCartProviderDisplay: HOLDER })),
+  );
   const gate = hook.result.current.gate;
   if (gate.state !== 'ready') throw new Error(gate.state);
   return { hook, hold: gate.onAddToCart };
@@ -245,6 +247,23 @@ describe('usePlaceCart, the vendor deadline', () => {
     expect(actionAt(hook)?.kind).toBe('held');
   });
 
+  test('re-holding a lapsed cell carries the duplicate warning into the new hold', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const hook = await holdThenWait();
+    await act(async () => {
+      vi.advanceTimersByTime(CART_HOLD_MS);
+    });
+    expect(actionAt(hook)?.kind).toBe('lapsed');
+
+    const gate = hook.result.current.gate;
+    if (gate.state !== 'ready') throw new Error(gate.state);
+    await act(async () => {
+      gate.onAddToCart(CAMPSITE_ID, NIGHT);
+    });
+
+    expect(actionAt(hook)).toMatchObject({ kind: 'held', afterLapse: true });
+  });
+
   test('a lapsed hold leaves no timer behind', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const hook = await holdThenWait();
@@ -302,7 +321,7 @@ describe('usePlaceCart, a hold that never answers', () => {
     });
     await waitFor(() => expect(actionAt(hook)?.kind).toBe('failed'));
 
-    expect(actionAt(hook)).toMatchObject({ code: HOLD_UNANSWERED });
+    expect(actionAt(hook)).toMatchObject({ code: HOLD_UNANSWERED, holder: HOLDER });
     expect(holdInFlight(hook.result.current.actions)).toBeNull();
 
     vi.stubGlobal('fetch', vi.fn(async () => held()));

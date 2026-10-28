@@ -3,13 +3,24 @@ import type {
   AddToCartResponseDto,
   ApiErrorSchema,
 } from './generated/api-types';
-import { jsonPostOk, type RequestOptions } from './http';
+import { jsonPostOk } from './http';
 
 const ADD_TO_CART_URL = '/api/booking/add-to-cart';
 
 const SECONDS_IN_MS = 1_000;
 
-export const CART_HOLD_DEADLINE_MS = 240 * SECONDS_IN_MS;
+const COMPANION_RUN_BUDGET_MS = 180 * SECONDS_IN_MS;
+
+const PREFLIGHT_SHARE_OF_RUN = 3;
+
+const PREFLIGHT_STEPS = 2;
+
+const SERVER_WORST_CASE_MS =
+  COMPANION_RUN_BUDGET_MS + PREFLIGHT_STEPS * (COMPANION_RUN_BUDGET_MS / PREFLIGHT_SHARE_OF_RUN);
+
+const DEADLINE_HEADROOM_MS = 30 * SECONDS_IN_MS;
+
+export const CART_HOLD_DEADLINE_MS = SERVER_WORST_CASE_MS + DEADLINE_HEADROOM_MS;
 
 export const HOLD_UNANSWERED = 'hold_unanswered';
 
@@ -48,15 +59,12 @@ export function addToCartFailure(err: unknown): AddToCartFailure {
   };
 }
 
-export async function addToCart(
-  fields: AddToCartFields,
-  { signal }: RequestOptions = {},
-): Promise<AddToCartResponse> {
+export async function addToCart(fields: AddToCartFields): Promise<AddToCartResponse> {
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), CART_HOLD_DEADLINE_MS);
   try {
     return await jsonPostOk<AddToCartResponse>(ADD_TO_CART_URL, fields, {
-      signal: signal ? AbortSignal.any([signal, deadline.signal]) : deadline.signal,
+      signal: deadline.signal,
     });
   } catch (err) {
     throw deadline.signal.aborted ? new CartHoldUnanswered() : err;
