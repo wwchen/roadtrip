@@ -15,8 +15,6 @@ export interface FlushCounts {
   skipped: number;
 }
 
-export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
-
 export type Executor = Pick<Db, 'execute' | 'insert' | 'select' | 'update'>;
 
 export function requireCatalogBatchWithinLimit(label: string, size: number): void {

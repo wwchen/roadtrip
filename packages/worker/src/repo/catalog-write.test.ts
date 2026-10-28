@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import {
   campgrounds,
   contactShape,
@@ -49,6 +50,9 @@ const MULTI_CHUNK_SIZE = MAX_CATALOG_UPSERT_BATCH_SIZE;
 const ENVELOPE_DIR_PREFIX = 'catalog-write-';
 const FETCHED_AT = '2026-06-07T21:33:18Z';
 const HTTP_OK = 200;
+const TARGET_KEY = 'update-target';
+const EXPECTED_KEY = 'update-expected';
+const SECOND_PARENT_REF = 'parent-2';
 const TENANT = 'wa';
 const RESOURCE_LOCATION_ID = 123;
 
@@ -772,6 +776,213 @@ describe('Planet Fitness locations', () => {
       upsertPlanetFitnessLocationBatch(db, [planetFitness({ longitude: Number.POSITIVE_INFINITY })]),
     ).rejects.toThrow(/finite/);
     expect(await count('planet_fitness_locations')).toBe(0);
+  });
+});
+
+type Variant = 'first' | 'second';
+
+const pick = <T>(variant: Variant, first: T, second: T): T => (variant === 'first' ? first : second);
+
+interface UpdatePathSpec {
+  table: string;
+  keyColumn: string;
+  identityColumns: readonly string[];
+  write: (key: string, variant: Variant) => Promise<unknown>;
+}
+
+async function comparableRow(spec: UpdatePathSpec, key: string): Promise<Row> {
+  const removed = spec.identityColumns.map((column) => `- '${column}'`).join(' ');
+  const row = await one(
+    sql.raw(`SELECT (to_jsonb(t) ${removed})::text AS r FROM ${spec.table} t WHERE ${spec.keyColumn} = '${key}'`),
+  );
+  return JSON.parse(row.r) as Row;
+}
+
+async function updatePathOutcome(spec: UpdatePathSpec) {
+  await spec.write(TARGET_KEY, 'first');
+  const before = await comparableRow(spec, TARGET_KEY);
+  await spec.write(EXPECTED_KEY, 'second');
+  const expected = await comparableRow(spec, EXPECTED_KEY);
+  await spec.write(TARGET_KEY, 'second');
+  const after = await comparableRow(spec, TARGET_KEY);
+  const unchangedByFixture = Object.keys(expected).filter((column) => isDeepStrictEqual(before[column], expected[column]));
+  return { before, expected, after, unchangedByFixture };
+}
+
+function fullCampground(key: string, variant: Variant): CampgroundUpsertCandidate {
+  return {
+    dataProviderRef: DataProviderRef.campflare(key),
+    bookingProvider: pick(variant, 'recgov', 'campflare'),
+    bookingProviderRef: pick(variant, 'br-1', 'br-2'),
+    bookingAliases: pick(variant, [{ provider: 'recgov' as const, ref: '1' }], [{ provider: 'aspira' as const, ref: '2' }]),
+    name: pick(variant, 'Name 1', 'Name 2'),
+    parentName: pick(variant, 'Parent 1', 'Parent 2'),
+    latitude: 1,
+    longitude: 1,
+    status: pick(variant, 'open', 'closed'),
+    statusDescription: pick(variant, 'status 1', 'status 2'),
+    kind: pick(variant, 'campground', 'dispersed'),
+    shortDescription: pick(variant, 'short 1', 'short 2'),
+    mediumDescription: pick(variant, 'medium 1', 'medium 2'),
+    longDescription: pick(variant, 'long 1', 'long 2'),
+    location: pick(variant, { region: 'OR' }, { region: 'WA' }),
+    defaultCampsiteSchedule: pick(variant, { check_in: '14:00' }, { check_in: '16:00' }),
+    amenities: pick(variant, [{ key: 'showers' as const }], [{ key: 'wifi' as const }]),
+    maxRvLength: pick(variant, 30, 40),
+    maxTrailerLength: pick(variant, 20, 25),
+    hasPullThroughSites: pick(variant, true, false),
+    bigRigFriendly: pick(variant, false, true),
+    reservationUrl: pick(variant, 'https://example.test/1', 'https://example.test/2'),
+    links: pick(variant, [{ url: 'https://example.test/l1' }], [{ url: 'https://example.test/l2' }]),
+    photos: pick(variant, [{ url: 'https://example.test/p1' }], [{ url: 'https://example.test/p2' }]),
+    alerts: pick(variant, [{ body: 'alert 1' }], [{ body: 'alert 2' }]),
+    price: pick(variant, { minimum: 10 }, { minimum: 20 }),
+    cellService: pick(variant, [{ carrier: 'verizon' as const, average: 3 }], [{ carrier: 'att' as const, average: 4 }]),
+    management: pick(variant, { agency: 'Agency 1' }, { agency: 'Agency 2' }),
+    contact: pick(variant, { phone: '555-0001' }, { phone: '555-0002' }),
+    connections: serializeOpaquePayload({ variant: pick(variant, 1, 2) }),
+    metadata: pick(variant, { last_updated: '2026-01-01' }, { last_updated: '2026-02-02' }),
+    sourcePayload: serializeOpaquePayload({ variant: pick(variant, 'a', 'b') }),
+    geometryProvenance: pick(
+      variant,
+      { match_kind: 'name', source: 'osm', matched_name: 'One' },
+      { match_kind: 'proximity', source: 'usgs', matched_name: 'Two' },
+    ),
+  };
+}
+
+function fullCampsite(key: string, variant: Variant): CampsiteUpsertCandidate {
+  return {
+    dataProviderRef: DataProviderRef.campflare(key),
+    parentDataProviderRef: DataProviderRef.campflare(pick(variant, PARENT_REF, SECOND_PARENT_REF)),
+    bookingProvider: pick(variant, 'recgov', 'campflare'),
+    bookingProviderRef: pick(variant, 'sbr-1', 'sbr-2'),
+    bookingAliases: pick(variant, [{ provider: 'recgov' as const, ref: '1' }], [{ provider: 'aspira' as const, ref: '2' }]),
+    name: pick(variant, 'Site 1', 'Site 2'),
+    kind: pick(variant, CampsiteKind.TENT, CampsiteKind.RV),
+    loopName: pick(variant, 'Loop A', 'Loop B'),
+    latitude: pick(variant, 10, 20),
+    longitude: pick(variant, -10, -20),
+    reservationUrl: pick(variant, 'https://example.test/s1', 'https://example.test/s2'),
+    equipment: pick(variant, ['tent'], ['trailer']),
+    kindListed: pick(variant, 'Tent', 'RV'),
+    schedule: serializeOpaquePayload({ check_in_time: pick(variant, '14:00', '16:00') }),
+    price: serializeOpaquePayload({ per_night: pick(variant, 10, 20) }),
+    firepit: pick(variant, true, false),
+    picnicTable: pick(variant, false, true),
+    adaAccessible: pick(variant, true, false),
+    waterHookups: pick(variant, false, true),
+    electricHookups: pick(variant, true, false),
+    sewerHookups: pick(variant, false, true),
+    maxPeople: pick(variant, 4, 8),
+    maxCars: pick(variant, 1, 2),
+    pullThrough: pick(variant, true, false),
+    drivewayLength: pick(variant, 20, 30),
+    maxRvLength: pick(variant, 25, 35),
+    maxTrailerLength: pick(variant, 15, 18),
+    photos: pick(variant, [{ url: 'https://example.test/sp1' }], [{ url: 'https://example.test/sp2' }]),
+    attributes: pick(variant, [{ name: 'Shade' }], [{ name: 'Flat', value: 'yes' }]),
+    description: pick(variant, 'desc 1', 'desc 2'),
+    minPeople: pick(variant, 1, 2),
+    sourcePayload: serializeOpaquePayload({ variant: pick(variant, 'a', 'b') }),
+  };
+}
+
+function fullTesla(key: string, variant: Variant): TeslaSuperchargerUpsertCandidate {
+  return {
+    locationSlug: key,
+    commonSiteName: pick(variant, 'Site 1', 'Site 2'),
+    latitude: 1,
+    longitude: 1,
+    locationGuid: pick(variant, 'guid-1', 'guid-2'),
+    siteStatus: pick(variant, 'open', 'closed'),
+    accessType: pick(variant, 'public', 'private'),
+    openToPublic: pick(variant, true, false),
+    openToNonTeslas: pick(variant, true, false),
+    trailerFriendly: pick(variant, false, true),
+    twentyFourSeven: pick(variant, true, false),
+    stallCount: pick(variant, 8, 16),
+    maxPowerKw: pick(variant, 150, 250),
+    address: serializeOpaquePayload({ street: pick(variant, '1 Main', '2 Main') }),
+    region: pick(variant, 'CA', 'NV'),
+    country: pick(variant, 'US', 'CA'),
+    timeZone: pick(variant, 'America/Los_Angeles', 'America/Denver'),
+    amenities: serializeOpaquePayload([pick(variant, 'restrooms', 'wifi')]),
+    hardwareCounts: serializeOpaquePayload({ v3: pick(variant, 8, 16) }),
+    pricebooks: serializeOpaquePayload([{ id: pick(variant, 'a', 'b') }]),
+    availabilityProfile: serializeOpaquePayload({ busy: [pick(variant, 1, 2)] }),
+    infoUrl: pick(variant, 'https://example.test/t1', 'https://example.test/t2'),
+    indexPayload: serializeOpaquePayload({ i: pick(variant, 1, 2) }),
+    detailPayload: serializeOpaquePayload({ d: pick(variant, 1, 2) }),
+  };
+}
+
+function fullPlanetFitness(key: string, variant: Variant): PlanetFitnessLocationUpsertCandidate {
+  return {
+    locationId: key,
+    name: pick(variant, 'Gym 1', 'Gym 2'),
+    latitude: 1,
+    longitude: 1,
+    address: serializeOpaquePayload({ city: pick(variant, 'Salem', 'Eugene') }),
+    region: pick(variant, 'OR', 'WA'),
+    country: pick(variant, 'US', 'CA'),
+    phone: pick(variant, '555-0001', '555-0002'),
+    infoUrl: pick(variant, 'https://example.test/g1', 'https://example.test/g2'),
+    openingHours: pick(variant, '24/7', '6-22'),
+    amenities: serializeOpaquePayload([pick(variant, 'tanning', 'hydromassage')]),
+    payload: serializeOpaquePayload({ p: pick(variant, 1, 2) }),
+  };
+}
+
+describe('the conflict update path rewrites every updatable column', () => {
+  const TIMESTAMPS = ['id', 'created_at', 'updated_at', 'deleted_at'];
+
+  test('campgrounds', async () => {
+    const outcome = await updatePathOutcome({
+      table: 'campgrounds',
+      keyColumn: 'data_provider_ref',
+      identityColumns: [...TIMESTAMPS, 'data_provider', 'data_provider_ref'],
+      write: (key, variant) => upsertCampgroundBatch(db, [fullCampground(key, variant)]),
+    });
+    expect(outcome.unchangedByFixture).toEqual([]);
+    expect(outcome.after).toEqual(outcome.expected);
+  });
+
+  test('campsites', async () => {
+    await upsertCampgroundBatch(db, [
+      campground({ dataProviderRef: DataProviderRef.campflare(PARENT_REF) }),
+      campground({ dataProviderRef: DataProviderRef.campflare(SECOND_PARENT_REF) }),
+    ]);
+    const outcome = await updatePathOutcome({
+      table: 'campsites',
+      keyColumn: 'data_provider_ref',
+      identityColumns: [...TIMESTAMPS, 'data_provider', 'data_provider_ref'],
+      write: (key, variant) => upsertCampsiteBatch(db, [fullCampsite(key, variant)]),
+    });
+    expect(outcome.unchangedByFixture).toEqual([]);
+    expect(outcome.after).toEqual(outcome.expected);
+  });
+
+  test('tesla superchargers', async () => {
+    const outcome = await updatePathOutcome({
+      table: 'tesla_superchargers',
+      keyColumn: 'location_slug',
+      identityColumns: [...TIMESTAMPS, 'location_slug'],
+      write: (key, variant) => upsertTeslaSuperchargerBatch(db, [fullTesla(key, variant)]),
+    });
+    expect(outcome.unchangedByFixture).toEqual([]);
+    expect(outcome.after).toEqual(outcome.expected);
+  });
+
+  test('planet fitness locations', async () => {
+    const outcome = await updatePathOutcome({
+      table: 'planet_fitness_locations',
+      keyColumn: 'location_id',
+      identityColumns: [...TIMESTAMPS, 'location_id'],
+      write: (key, variant) => upsertPlanetFitnessLocationBatch(db, [fullPlanetFitness(key, variant)]),
+    });
+    expect(outcome.unchangedByFixture).toEqual([]);
+    expect(outcome.after).toEqual(outcome.expected);
   });
 });
 

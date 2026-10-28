@@ -189,6 +189,19 @@ async function bulkUpsertCampgroundPois(tx: Executor, rows: readonly CampgroundP
   }
 }
 
+function requireCampgroundId(
+  idByProviderRef: ReadonlyMap<string, bigint>,
+  record: CampgroundUpsertCandidate,
+): bigint {
+  const id = idByProviderRef.get(refKeyOf(record));
+  if (id === undefined) {
+    throw new Error(
+      `campground upsert returned no id for provider=${record.dataProviderRef.provider} ref=${record.dataProviderRef.serialize()}`,
+    );
+  }
+  return id;
+}
+
 async function upsertCampgroundsInTransaction(
   tx: Executor,
   records: readonly CampgroundUpsertCandidate[],
@@ -196,7 +209,7 @@ async function upsertCampgroundsInTransaction(
   if (records.length === 0) return 0;
   const idByProviderRef = await bulkUpsertCampgroundRows(tx, records);
   const poiRows = records.map((record) => ({
-    campgroundId: idByProviderRef.get(refKeyOf(record))!,
+    campgroundId: requireCampgroundId(idByProviderRef, record),
     longitude: record.longitude,
     latitude: record.latitude,
   }));
