@@ -414,6 +414,11 @@ jobs:
       - name: Run @roadtrip/web tests
         run: npm run test --workspace @roadtrip/web
 
+      - name: Check client boundary
+        run: |
+          node --test scripts/check-server-only-imports.test.mjs
+          node scripts/check-server-only-imports.mjs
+
       - name: Build @roadtrip/web
         run: npm run build --workspace @roadtrip/web
 

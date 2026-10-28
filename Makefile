@@ -136,6 +136,7 @@ test: _ensure-hooks
 	npm run build --workspace @roadtrip/web
 	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
 	node --test scripts/check-package-boundaries.test.mjs && node scripts/check-package-boundaries.mjs
+	node --test scripts/check-server-only-imports.test.mjs && node scripts/check-server-only-imports.mjs
 	node scripts/check-color-tokens.mjs
 	node scripts/check-css-blocks.mjs
 	node scripts/check-token-usage.mjs
