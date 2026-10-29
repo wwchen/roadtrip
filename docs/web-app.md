@@ -58,7 +58,7 @@ target, whatever its branch. The first build here was of `claude/nextjs-parallel
 | `connect_timeout` | 10 s, in the URL | A suspended compute resumed inside the first connection in about 1 s (0.97 s measured directly, 0.85 s through the deployed `/api/health`). 10 s is ten times that and well under the platform's own limit. postgres.js default is 30 s. |
 | `idle_timeout` | 20 s, in the URL | A frozen serverless instance should not hold sockets the pooler will have closed; the pooler multiplexes, so reconnecting is cheap. |
 | `max` | postgres.js default, 10 | **Not settable from the URL.** postgres.js does not coerce `max`, and builds its slots with `Array(options.max)`, so `?max=5` yields `Array('5')`, one slot, whatever the number. Setting it deliberately needs a `max` option on `createDb` in `packages/db`. 10 per instance is tolerable behind the pooler; revisit if instance counts grow. |
-| statement timeout | 3 s, on the `roadtrip_web` role | Not sendable from the client (Neon ignores startup parameters), but a **role-level** setting works, with the pooler caveat under "Server-side timeouts on Neon" below. |
+| statement timeout | 10 s, on the `roadtrip_web` role | Not sendable from the client (Neon ignores startup parameters), but a **role-level** setting works, with the pooler caveat under "Server-side timeouts on Neon" below. |
 
 `connect_timeout` and `idle_timeout` are carried in `DATABASE_URL` because postgres.js reads them
 from the query string; changing them is a Vercel env edit, not a code change.
@@ -172,7 +172,7 @@ still read `on` through the pooler and `off` directly). That fails safe for read
 a role's `default_transaction_read_only` must be set before its first pooled connection; a role
 created, connected, and then altered can disagree with its own configuration.
 
-`roadtrip_web` carries `default_transaction_read_only = on` and `statement_timeout = 3s`. The
+`roadtrip_web` carries `default_transaction_read_only = on` and `statement_timeout = 10s`. It was set to 3 s first and raised to 10 s: the first query after a redeploy or a compute resume measured 1.3 s on a cold cache, leaving only ~2.2x headroom, and since the bbox area cap is the primary bound this timeout only has to catch an unknown pathological plan. A timeout that fails a legitimately cold request is a worse failure than a loose bound. The
 bbox area cap and this timeout are the two bounds on `/api/campgrounds/search`; the cap keeps
 ordinary requests far under the timeout (the slowest in-limit measurement was 183 ms).
 
