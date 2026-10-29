@@ -258,7 +258,21 @@ git commit -m "feat(web): serve campground detail, search, and health routes"
 2. **`data/raw` is 1.7 GB and excluded from this worktree** by `sparsePaths`, so the import must run from the main checkout, which other sessions share.
 3. **Neon's `branch_logical_size_limit` on this account is 1 GiB.** A full import of every source may not fit.
 
-- [ ] **Step 1: Probe the schema path before anything else**
+- [ ] **Step 1: Unblock the schema path (probe already done — findings below)**
+
+**The probe ran and found a hard blocker, since resolved in principle.** `migrateDb` against Neon fails with SQLSTATE 42501 on `GRANT pg_read_all_stats TO grafana_reader` in `0001_raw_objects.sql`. Measured facts:
+
+- `0001` is 18 statements. **17 succeed on Neon; exactly one fails.** All eight *other* `grafana_reader` privilege statements were executed against Neon successfully. The distinction is clean: those are **object privileges**, needing schema ownership, which Neon's owner has. The failing one is the file's only **role membership** grant, needing `ADMIN OPTION` on a predefined role, which no Neon role holds — not `roadtrip`, not `neon_superuser` (both checked).
+- The failure is total: Drizzle rolls the set back, leaving zero roadtrip tables.
+- The app needs `campground_site_summary` from that same file, so the file cannot be skipped.
+- **The user has confirmed Grafana is not part of the new deployment**, so nothing downstream depends on this grant.
+- Editing it cannot affect step 2's equivalence proof: `scripts/schema-reference.mjs` dumps with `pg_dump --schema-only --no-owner --no-privileges`, and a role-membership grant is cluster-level and never emitted by a single-database dump.
+
+**Do:** make that one statement conditional on capability — `GRANT` only when `pg_has_role(current_user, 'pg_read_all_stats', 'MEMBER WITH ADMIN OPTION')`, otherwise raise a notice naming the host as unable. Change nothing else in the file. Then run `npm run migrate --workspace @roadtrip/db` against the Neon **direct** endpoint and confirm the full schema lands, `campground_site_summary` exists, and `\d pois` shows `geometry(Geometry,4326)`. Re-run the schema-equivalence gate locally and confirm it is still green — that is the assertion that matters, not the reasoning above.
+
+**Also record:** Neon runs **PostGIS 3.3**, while production and the test containers run 3.4.
+
+- [ ] **Step 1b: superseded — original probe text**
 
 Create a Neon project, Postgres **16** (matching production), in a sensibly-chosen region — record which, but it need not be comparable against anything. Enable PostGIS: `CREATE EXTENSION IF NOT EXISTS postgis`.
 
@@ -267,14 +281,20 @@ Expected, if all is well: both migrations apply, `campground_site_summary` exist
 
 **If the `grafana_reader` block fails:** do **not** edit the migration — it is the schema proven byte-identical to Flyway's, and editing it breaks the equivalence gate. Report the exact failure. That outcome is itself a finding worth having: **C4 names Neon as a datastore that must work**, and "the committed schema migration cannot run on Neon unmodified" is evidence against an assumption the spec treats as settled. Try the obvious narrow workarounds first (pre-creating the role, granting from a role that can) and say which, if any, worked.
 
-- [ ] **Step 2: Populate it with the importer, not a copy**
+- [ ] **Step 2: Populate it with the importer, not a copy of production**
 
-Point a Kotlin backend at the Neon database (`POSTGRES_URL` as a JDBC URL with `sslmode=require`) and run `make data-import` against it, from a checkout that has `data/raw`.
+**Pointing a Kotlin backend straight at Neon does not work, for the same reason step 1 found.** The backend runs Flyway on boot, and `R__grafana_reader_grants.sql` carries the identical `GRANT pg_read_all_stats` statement. Gating that one too would mean editing the migrations that run against **production** on every backend boot — far more invasive than the `packages/db` change, for a path that only exists to load a scratch database.
 
-Work out the least invasive way to do this and **say what you landed on**. Running a local backend process against a remote database changes nothing on mini-ca and touches no production service — confirm that is true of whatever you choose. If the only workable route would disturb a running service or require changes to deploy tooling, **stop and report rather than improvising**: the constraint that is firm is *no copy of production*, not any particular route to data.
+**So do it in two hops, which touches no production tooling at all:**
 
-Start with a single `TARGET` rather than `--all`, both to keep inside the size limit and to fail fast.
-Expected: rows land in `campgrounds`, `campsites`, `pois` and `poi_campgrounds`; record the counts and the database size against the 1 GiB limit.
+1. Run `make data-import` against a **local** Postgres, where Flyway works unchanged and the grant succeeds. This is the project's own importer doing its normal job — the data originates from `data/raw`, not from production. Note that `data/raw` is excluded from this worktree by `sparsePaths`, so the import runs from a checkout that has it.
+2. Move the catalog tables' **rows** from that freshly-imported local database into Neon, whose schema came from step 1's migrations. Tables: `pois`, `campgrounds`, `campsites`, `poi_campgrounds`, and the supercharger / Planet Fitness pairs if they are cheap. Nothing else — `api_cache`, `raw_objects` and the availability tables are the bulk of the database, are read by none of this app, and would not fit the 1 GiB limit.
+
+This satisfies the firm constraint — **no copy of production** — because what is copied is a database the importer just built locally. Say in the report which mechanism you used for hop 2 and confirm the row counts match on both sides; a transfer whose counts were never compared is not a transfer.
+
+Start with a single `TARGET` rather than `--all`, to stay inside the size limit and to fail fast. Record the resulting counts and the Neon database size against 1 GiB.
+
+If hop 1 or hop 2 turns out to need a change to production tooling or a running service, **stop and report rather than improvising.**
 
 - [ ] **Step 3: Re-check the geometry-fault classification on Neon**
 
