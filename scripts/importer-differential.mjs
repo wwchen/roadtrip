@@ -67,7 +67,9 @@ const TYPESCRIPT_DB = 'roadtrip_ts';
 const DRIZZLE_PREPARE = false;
 
 const WORKER_ENTRY = 'packages/worker/dist/cli/import.js';
-const WORKER_BUILD_COMMAND = 'npm run build';
+const WORKER_PACKAGE = '@roadtrip/worker';
+const BUILD_WORKSPACES_SCRIPT = 'scripts/build-workspaces.mjs';
+const WORKER_BUILD_COMMAND = `node ${BUILD_WORKSPACES_SCRIPT} ${WORKER_PACKAGE}`;
 const REGISTRY_RELATIVE_PATH = 'backend/src/main/resources/poi-registry.yaml';
 const DEFAULT_RAW_RELATIVE_PATH = 'data/raw';
 
@@ -130,6 +132,20 @@ export function positiveInteger(flag, raw, fallback) {
   return Number.parseInt(raw, 10);
 }
 
+// How a run is cut into Gradle invocations, and how many passes it therefore
+// performs. One segment per invocation, because the Kotlin CLI loops over the
+// targets itself and Gradle's startup is ~30 s; --prove-update-keys is the only
+// mode needing two, since its blanking step has to land between them.
+//
+// `passes` is what provenance records, so it has to be what the run actually
+// performs: a key claiming three passes over a run that did two would later
+// authorise reusing a dump that does not match. Pure, so a test can pin it.
+export function passPlan(requested, proveUpdateKeys) {
+  const passes = proveUpdateKeys ? Math.max(requested, PROVE_UPDATE_KEYS_PASSES) : requested;
+  const segments = proveUpdateKeys ? [BLANK_AFTER_PASS, passes - BLANK_AFTER_PASS] : [passes];
+  return { passes, segments };
+}
+
 function assertPositiveInteger(flag, value) {
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new Error(`${flag} must be a positive integer, got ${JSON.stringify(value)}`);
@@ -142,13 +158,17 @@ function assertPositiveInteger(flag, value) {
 // check reports "0 differences" for code that never executed — which is worse
 // than no harness, since everything downstream would be declared correct by it.
 //
-// Refuses rather than rebuilding: a gate that silently rebuilds makes it
-// impossible to tell afterwards which build a recorded result came from, and
-// `npm run build` is three seconds.
+// It triggers a build rather than refusing; see `assertCurrentBuild` for why
+// a verdict here cannot be made to work.
 const BUILD_SOURCE_DIR = 'src';
 const BUILD_OUTPUT_DIR = 'dist';
 const BUILD_SCRIPT = 'build';
 const TEST_SOURCE_SUFFIXES = ['.test.ts', '.test.tsx'];
+
+// Watched alongside src/, because both decide what the build emits: a changed
+// tsconfig can retarget or re-root the output, and a changed package.json can
+// change the build script itself. Neither touches a file under src/.
+const BUILD_INPUT_FILES = ['tsconfig.json', 'package.json'];
 
 // Directory mtimes count, not just file mtimes: deleting a source file touches
 // its directory and no file at all, so a delete with no other edit is
@@ -174,13 +194,24 @@ function newestEntry(dir, skip = () => false) {
   return newest;
 }
 
-function directoryExists(dir) {
+// Three outcomes, not two. A path that is absent is a workspace this guard has
+// no business checking; a path that exists but cannot be read is a workspace it
+// cannot vouch for, and collapsing the second into the first is how the guard
+// fails open — the same shape as the read error that round 2 closed inside
+// `newestEntry`, surviving one function along.
+const PRESENT = 'present';
+const ABSENT = 'absent';
+const UNREADABLE = 'unreadable';
+
+function directoryState(dir) {
   try {
-    return statSync(dir).isDirectory();
-  } catch {
-    return false;
+    return statSync(dir).isDirectory() ? PRESENT : ABSENT;
+  } catch (error) {
+    return error.code === 'ENOENT' ? ABSENT : UNREADABLE;
   }
 }
+
+class UncheckableWorkspace extends Error {}
 
 // The workspaces the two importers load through `dist`, read from the root
 // manifest so a new package cannot escape the check.
@@ -190,19 +221,31 @@ function buildableWorkspaces(root) {
   for (const pattern of workspaces) {
     if (!pattern.endsWith('/*')) continue;
     const parent = path.join(root, pattern.slice(0, -2));
-    if (!directoryExists(parent)) continue;
+    const state = directoryState(parent);
+    if (state === ABSENT) continue;
+    if (state === UNREADABLE) {
+      throw new UncheckableWorkspace(`${path.relative(root, parent)} could not be read`);
+    }
     for (const entry of readdirSync(parent, { withFileTypes: true })) {
       if (entry.isDirectory()) dirs.push(path.join(parent, entry.name));
     }
   }
   return dirs.filter((dir) => {
-    const manifest = path.join(dir, 'package.json');
-    if (!directoryExists(path.join(dir, BUILD_SOURCE_DIR))) return false;
-    try {
-      return JSON.parse(readFileSync(manifest, 'utf8')).scripts?.[BUILD_SCRIPT] !== undefined;
-    } catch {
-      return false;
+    const relative = path.relative(root, dir);
+    const source = directoryState(path.join(dir, BUILD_SOURCE_DIR));
+    if (source === UNREADABLE) {
+      throw new UncheckableWorkspace(`${relative}: its ${BUILD_SOURCE_DIR}/ could not be read`);
     }
+    if (source === ABSENT) return false;
+    const manifest = path.join(dir, 'package.json');
+    let parsed;
+    try {
+      parsed = JSON.parse(readFileSync(manifest, 'utf8'));
+    } catch (error) {
+      if (error.code === 'ENOENT') return false;
+      throw new UncheckableWorkspace(`${relative}: its package.json could not be read (${error.message})`);
+    }
+    return parsed.scripts?.[BUILD_SCRIPT] !== undefined;
   });
 }
 
@@ -221,7 +264,17 @@ export function staleBuilds(root = REPO_ROOT) {
       stale.push(`${relative}: its ${BUILD_SOURCE_DIR}/ could not be read (${error.message})`);
       continue;
     }
-    if (!directoryExists(path.join(dir, BUILD_OUTPUT_DIR))) {
+    for (const name of BUILD_INPUT_FILES) {
+      const file = path.join(dir, name);
+      try {
+        const { mtimeMs } = statSync(file);
+        if (mtimeMs > source.mtimeMs) source = { path: file, mtimeMs };
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        stale.push(`${relative}: its ${name} could not be read (${error.message})`);
+      }
+    }
+    if (directoryState(path.join(dir, BUILD_OUTPUT_DIR)) !== PRESENT) {
       stale.push(`${relative} has no ${BUILD_OUTPUT_DIR}/`);
       continue;
     }
@@ -253,7 +306,16 @@ export function staleBuilds(root = REPO_ROOT) {
 export async function assertCurrentBuild({ root = REPO_ROOT, build = runBuild } = {}) {
   const entry = path.join(root, WORKER_ENTRY);
   const missing = !existsSync(entry);
-  const stale = staleBuilds(root);
+  let stale;
+  try {
+    stale = staleBuilds(root);
+  } catch (error) {
+    if (!(error instanceof UncheckableWorkspace)) throw error;
+    throw new MissingBuildError(
+      `the build cannot be checked: ${error.message}. Refusing to run: a workspace this guard ` +
+        'cannot read is a workspace it cannot vouch for, and that is not a clean diff.',
+    );
+  }
   if (!missing && stale.length === 0) return;
 
   const why = missing ? [`${WORKER_ENTRY} is missing`] : stale;
@@ -274,8 +336,18 @@ export async function assertCurrentBuild({ root = REPO_ROOT, build = runBuild } 
   }
 }
 
+// Builds @roadtrip/worker and its workspace dependencies, not every workspace.
+// `npm run build` with no argument also builds the frontend, so a pre-existing
+// frontend type error would refuse the differential as "the TypeScript importer
+// on disk is not the one in src" — false, and about a workspace Tasks 6-13
+// never touch. build-workspaces.mjs keeps the topological order; this only
+// tells it where to stop.
 async function runBuild() {
-  await runProcess('npm', ['run', BUILD_SCRIPT], WORKER_BUILD_COMMAND);
+  await runProcess(
+    'node',
+    [path.join(REPO_ROOT, BUILD_WORKSPACES_SCRIPT), WORKER_PACKAGE],
+    WORKER_BUILD_COMMAND,
+  );
 }
 
 async function loadWorker(build) {
@@ -771,7 +843,7 @@ export async function runDifferential({
   // was reached — twenty minutes in.
   assertPositiveInteger('--passes', passes);
   assertPositiveInteger('--max-differences', maxDifferences);
-  const effectivePasses = proveUpdateKeys ? Math.max(passes, PROVE_UPDATE_KEYS_PASSES) : passes;
+  const { passes: effectivePasses, segments } = passPlan(passes, proveUpdateKeys);
 
   if (proveUpdateKeys && referenceDump !== undefined) {
     // The mode exists to make both importers write every column back after the
@@ -815,18 +887,6 @@ export async function runDifferential({
         console.log(`not restoring ${referenceDump}: ${refusal}`);
       }
 
-      // One Gradle invocation per segment rather than per pass: the JVM and
-      // Gradle's own startup are ~28 s each and the Kotlin CLI loops over the
-      // targets itself. --prove-update-keys is the only mode that needs two
-      // segments, because its blanking step has to land between them.
-      // Under --prove-update-keys the blanking lands after the first pass, so
-      // the run splits there and every remaining pass follows it. Splitting
-      // into [1, 1] regardless would have run two passes while the provenance
-      // key recorded --passes 3, which would later authorise reusing a dump
-      // the run never produced.
-      const segments = proveUpdateKeys
-        ? [BLANK_AFTER_PASS, effectivePasses - BLANK_AFTER_PASS]
-        : [effectivePasses];
       let completed = 0;
       for (const [segment, segmentPasses] of segments.entries()) {
         if (segment > 0) await blankBothSides([kotlinDb, typescriptDb]);

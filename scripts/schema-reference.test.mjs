@@ -8,6 +8,8 @@ import { assertPlausibleSchema, normalize, withPostgis, writeReference } from '.
 const SHELL = 'bash';
 const SHELL_FLAG = '-lc';
 const STREAM_BODY = 'first\nsecond\n';
+const LARGE_INPUT_BYTES = 5 * 1024 * 1024;
+const CHILD_DIAGNOSIS = 'relation "campsites" does not exist';
 
 const PREAMBLE = `--
 -- PostgreSQL database dump
@@ -148,6 +150,23 @@ test('one container serves several databases and refuses to dump an unmigrated o
       const input = path.join(dir, 'input');
       await writeFile(input, STREAM_BODY);
       assert.equal(await postgres.exec(['cat'], { inputFile: input }), STREAM_BODY);
+    });
+
+    await context.test('a stdin-fed command that dies early reports its own words, not EPIPE', async () => {
+      // `psql -f -` under ON_ERROR_STOP on a bad restore: it stops reading, so
+      // the pump fails with EPIPE while the diagnosis is on the child's
+      // stderr. Reporting only the broken pipe sends the reader after the
+      // wrong thing entirely.
+      const big = path.join(dir, 'big-input');
+      await writeFile(big, 'x'.repeat(LARGE_INPUT_BYTES));
+      await assert.rejects(
+        postgres.exec([SHELL, SHELL_FLAG, `echo '${CHILD_DIAGNOSIS}' >&2; exit 3`], { inputFile: big }),
+        (error) => {
+          assert.match(error.message, new RegExp(CHILD_DIAGNOSIS), 'the child stderr is missing');
+          assert.match(error.message, /exited 3/, 'the exit code is missing');
+          return true;
+        },
+      );
     });
   });
 });

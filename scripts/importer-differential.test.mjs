@@ -13,7 +13,9 @@ import {
   DIFFED_TABLES,
   fingerprintSql,
   KOTLIN_SCHEMA,
+  NARROWING_SQL,
   NOT_IMPORTED_TABLES,
+  sideSelectSql,
   textDiffSql,
   TYPESCRIPT_SCHEMA,
 } from './importer-diff-columns.mjs';
@@ -21,6 +23,7 @@ import {
   assertCurrentBuild,
   createReferenceSchema,
   diffDatabases,
+  passPlan,
   positiveInteger,
   runDifferential,
   staleBuilds,
@@ -134,13 +137,42 @@ test('every diffed table names every one of its columns as compared or ignored',
     );
     // A narrowed side select is only safe if something checks what it leaves
     // out: either a `joins` list, which coverageSql tests with NOT EXISTS, or
-    // a named exemption. Without this, a future narrowing would be undiffed
-    // rows that nothing reports.
-    if (spec.rowSelect !== undefined) {
+    // a named exemption. Keyed on what the generated SQL does rather than on
+    // whether a `rowSelect` field is set, so a narrowing added to the default
+    // builder is caught too.
+    if (NARROWING_SQL.test(sideSelectSql(spec.table, TYPESCRIPT_SCHEMA))) {
       assert.ok(
         spec.joins !== undefined || Object.hasOwn(COVERAGE_EXEMPT_TABLES, spec.table),
         `${spec.table} narrows its side select with neither a joins list nor a coverage exemption`,
       );
+    }
+  }
+});
+
+test('the pass plan performs exactly the pass count it records', () => {
+  // The left column is what provenance stores; a plan that recorded more
+  // passes than it ran would later authorise reusing a dump the run never
+  // produced. The segments are Gradle invocations, split where the blanking
+  // step has to land.
+  assert.deepEqual(passPlan(1, false), { passes: 1, segments: [1] });
+  assert.deepEqual(passPlan(2, false), { passes: 2, segments: [2] });
+  assert.deepEqual(passPlan(3, false), { passes: 3, segments: [3] });
+  assert.deepEqual(passPlan(1, true), { passes: 2, segments: [1, 1] });
+  assert.deepEqual(passPlan(2, true), { passes: 2, segments: [1, 1] });
+  assert.deepEqual(passPlan(3, true), { passes: 3, segments: [1, 2] });
+  assert.deepEqual(passPlan(5, true), { passes: 5, segments: [1, 4] });
+
+  for (const proveUpdateKeys of [false, true]) {
+    for (const requested of [1, 2, 3, 5, 10]) {
+      const plan = passPlan(requested, proveUpdateKeys);
+      assert.equal(
+        plan.segments.reduce((sum, segment) => sum + segment, 0),
+        plan.passes,
+        `passPlan(${requested}, ${proveUpdateKeys}) runs a different number of passes than it records`,
+      );
+      assert.ok(plan.segments.every((segment) => segment >= 1), 'an empty segment is a Gradle run with no passes');
+      assert.equal(plan.segments.length, proveUpdateKeys ? 2 : 1);
+      assert.ok(plan.passes >= requested, 'a plan may raise the pass count, never lower it');
     }
   }
 });
@@ -255,6 +287,35 @@ test('the build guard sees every way the output can stop matching the source', a
       await chmod(path.join(pkg, 'src'), READABLE_MODE);
     }
   });
+
+  await t.test('a tsconfig newer than the output is stale', async () => {
+    const { root, pkg } = await scratchWorkspace();
+    await writeFile(path.join(pkg, 'tsconfig.json'), '{}');
+    await touchFuture(path.join(pkg, 'tsconfig.json'));
+    assert.match(staleBuilds(root).join('\n'), /tsconfig\.json is newer than its dist\//);
+  });
+
+  await t.test('a package.json newer than the output is stale', async () => {
+    const { root, pkg } = await scratchWorkspace();
+    await touchFuture(path.join(pkg, 'package.json'));
+    assert.match(staleBuilds(root).join('\n'), /package\.json is newer than its dist\//);
+  });
+
+  await t.test('a workspace whose src cannot even be stat-ed refuses the whole guard', async () => {
+    const { root, pkg } = await scratchWorkspace();
+    await chmod(pkg, UNREADABLE_MODE);
+    try {
+      assert.throws(() => staleBuilds(root), /could not be read/);
+    } finally {
+      await chmod(pkg, READABLE_MODE);
+    }
+  });
+
+  await t.test('a malformed workspace manifest refuses the whole guard', async () => {
+    const { root, pkg } = await scratchWorkspace();
+    await writeFile(path.join(pkg, 'package.json'), '{ not json');
+    assert.throws(() => staleBuilds(root), /package\.json could not be read/);
+  });
 });
 
 test('a stale build is rebuilt rather than refused, and a failing build refuses', async (t) => {
@@ -290,6 +351,23 @@ test('a stale build is rebuilt rather than refused, and a failing build refuses'
     const { root } = await scratchWorkspace({ withDist: false });
     const build = async () => {};
     await assert.rejects(assertCurrentBuild({ root, build }), /still missing/);
+  });
+
+  await t.test('a workspace the guard cannot read refuses rather than rebuilding', async () => {
+    const { root, pkg, entry } = await scratchWorkspace({ dist: { 'index.js': '' } });
+    await writeFile(entry, '');
+    await writeFile(path.join(pkg, 'package.json'), '{ not json');
+    let built = 0;
+    await assert.rejects(
+      assertCurrentBuild({
+        root,
+        build: async () => {
+          built += 1;
+        },
+      }),
+      /cannot be checked/,
+    );
+    assert.equal(built, 0, 'the guard built over a workspace it could not check');
   });
 
   await t.test('a current build neither rebuilds nor refuses', async () => {

@@ -306,6 +306,20 @@ function rowSelect(diffed, schema, columns) {
   return `SELECT ARRAY[${key}] AS ${KEY_COLUMN}, ${columns.join(', ')} FROM ${quote(schema, diffed.table)}`;
 }
 
+// The statement the diff reads one side through. Exported so the completeness
+// test can ask what the select actually does rather than whether a `rowSelect`
+// field happens to be set: a narrowing introduced some other way — a WHERE
+// added to the default builder, say — would escape a check keyed on the field
+// and not one keyed on this.
+export function sideSelectSql(table, schema) {
+  const diffed = DIFFED_TABLES.find((candidate) => candidate.table === table);
+  if (diffed === undefined) throw new Error(`no diffed table named '${table}'`);
+  return rowSelect(diffed, schema, diffed.comparedForDiff);
+}
+
+// Anything that can make a side select read fewer rows than its table holds.
+export const NARROWING_SQL = /\b(WHERE|JOIN|UNION|GROUP\s+BY|DISTINCT|LIMIT|HAVING)\b/i;
+
 function sides(diffed, columns) {
   return `kotlin AS (
             ${rowSelect(diffed, KOTLIN_SCHEMA, columns)}

@@ -203,8 +203,19 @@ async function dockerExec(container, argv, { input, inputFile, outputFile } = {}
   try {
     [code] = await Promise.all([exited, ...pumps]);
   } catch (error) {
+    // The child's own diagnosis outranks the pipe's. A command fed from a file
+    // that dies early — `psql -f -` under ON_ERROR_STOP on a bad restore, which
+    // is the shape of every cached-dump run — closes its stdin, so the pump
+    // fails with EPIPE while the real story is on the child's stderr. Wait for
+    // the exit that is already on its way and report both.
     child.kill('SIGKILL');
-    throw new Error(`docker exec ${argv[0]} failed: ${error.message}`, { cause: error });
+    const reaped = await exited.catch(() => undefined);
+    const detail = [
+      reaped === undefined ? undefined : `exited ${reaped}`,
+      stderr.trim() || undefined,
+      error.message,
+    ].filter((part) => part !== undefined);
+    throw new Error(`docker exec ${argv[0]} failed: ${detail.join(': ')}`, { cause: error });
   }
   if (code !== 0) {
     throw new Error(`docker exec ${argv[0]} exited ${code}: ${stderr.trim() || stdout.trim()}`);
