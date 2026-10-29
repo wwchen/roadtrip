@@ -2,7 +2,7 @@ import path from 'node:path';
 import { addressJson, type Address } from '../../etl/address.js';
 import { serializeOpaquePayload, parseEnvelope, type OpaquePayloadJson } from '../../etl/envelope.js';
 import type { InputBundle } from '../../etl/input-bundle.js';
-import type { JsonObject } from '../../etl/json-decode.js';
+import { fieldOf, isJsonObject, type JsonObject } from '../../etl/json-decode.js';
 import { nonBlank } from '../../etl/kotlin-text.js';
 import { newestJsonFileIn } from '../../etl/raw-capture-store.js';
 import type { ParseResult, SourceEtl, TransformResult } from '../../etl/source-etl.js';
@@ -64,14 +64,13 @@ function addressOf(detail: TeslaLocationDetail | undefined): Address | null {
 }
 
 function arrayField(raw: JsonObject | null | undefined, key: string): OpaquePayloadJson | null {
-  const value = raw === null || raw === undefined || !Object.hasOwn(raw, key) ? undefined : raw[key];
+  const value = fieldOf(raw, key);
   return Array.isArray(value) ? serializeOpaquePayload(value) : null;
 }
 
 function objectField(raw: JsonObject | null | undefined, key: string): OpaquePayloadJson | null {
-  const value = raw === null || raw === undefined || !Object.hasOwn(raw, key) ? undefined : raw[key];
-  const isObject = typeof value === 'object' && value !== null && !Array.isArray(value);
-  return isObject ? serializeOpaquePayload(value) : null;
+  const value = fieldOf(raw, key);
+  return isJsonObject(value) ? serializeOpaquePayload(value) : null;
 }
 
 function transformRow(

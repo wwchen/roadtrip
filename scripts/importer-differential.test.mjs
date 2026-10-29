@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { chmod, mkdtemp, mkdir, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -21,11 +22,14 @@ import {
 } from './importer-diff-columns.mjs';
 import {
   assertCurrentBuild,
+  copiedTableCounts,
   createReferenceSchema,
   diffDatabases,
+  dumpSeed,
   passPlan,
   positiveInteger,
   runDifferential,
+  SEED_DUMP_FLAGS,
   staleBuilds,
 } from './importer-differential.mjs';
 import { withPostgis } from './schema-reference.mjs';
@@ -625,6 +629,32 @@ test(
             );
           },
         );
+        const seedDumpTo = async (flags) => {
+          const dir = await mkdtemp(path.join(tmpdir(), 'roadtrip-seed-'));
+          const seedPath = path.join(dir, 'seed.sql');
+          const user = new URL(postgres.connectionString(FIXTURE_DB)).username;
+          await reseed(db);
+          const expected = await copiedTableCounts(db);
+          return { seedPath, run: () => dumpSeed(postgres, user, FIXTURE_DB, seedPath, expected, flags) };
+        };
+
+        await t.test('an emitted seed restores into a fresh database with every row it was dumped from', async () => {
+          const { seedPath, run } = await seedDumpTo(SEED_DUMP_FLAGS);
+          await run();
+          assert.ok(existsSync(seedPath));
+        });
+
+        await t.test('a seed taken with --schema=public is refused and not left behind', async () => {
+          const { seedPath, run } = await seedDumpTo(['--no-owner', '--no-privileges', `--schema=${TYPESCRIPT_SCHEMA}`]);
+          await assert.rejects(run(), /already exists/);
+          assert.equal(existsSync(seedPath), false);
+        });
+
+        await t.test('a seed that still carries the reference schema is refused', async () => {
+          const { seedPath, run } = await seedDumpTo(['--no-owner', '--no-privileges']);
+          await assert.rejects(run(), /carries the reference schema/);
+          assert.equal(existsSync(seedPath), false);
+        });
       } finally {
         await db.$client.end();
       }

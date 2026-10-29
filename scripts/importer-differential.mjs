@@ -36,7 +36,7 @@
 
 import { execFile, spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
@@ -797,11 +797,25 @@ const REFERENCE_DUMP_FLAGS = [
   ...COPIED_TABLES.map((table) => `--table=${TYPESCRIPT_SCHEMA}.${table.name}`),
 ];
 
-// --schema=public, because by the time a clean diff has been reported the
-// TypeScript database also holds the `reference` schema this harness filled
-// with the Kotlin side's rows, and a seed of the TypeScript importer's output
-// must not carry the other importer's.
-const SEED_DUMP_FLAGS = ['--no-owner', '--no-privileges', `--schema=${TYPESCRIPT_SCHEMA}`];
+// A plain dump of the database, minus the `reference` schema. By the time a
+// clean diff has been reported the TypeScript database also holds the
+// `reference` schema this harness filled with the Kotlin side's rows, and a
+// seed of the TypeScript importer's output must not carry the other importer's.
+//
+// Not `--schema=public`, which looks like the same exclusion and is not: it
+// strips the `CREATE EXTENSION postgis` a plain dump carries and adds a
+// `CREATE SCHEMA public` that a fresh database rejects, so the seed loaded
+// nothing — `schema "public" already exists`, then `type "public.geometry" does
+// not exist` — and the harness reported success over it. verifySeed is what
+// keeps that from recurring.
+export const SEED_DUMP_FLAGS = ['--no-owner', '--no-privileges', `--exclude-schema=${KOTLIN_SCHEMA}`];
+
+const MAINTENANCE_DB = 'postgres';
+const SEED_CHECK_DB = 'roadtrip_seed_check';
+const COUNT_FIELD_SEPARATOR = ',';
+const PSQL_TUPLES_ONLY = '-At';
+const PSQL_FIELD_SEPARATOR_FLAG = '-F';
+const PSQL_COMMAND_FLAG = '-c';
 
 // Streamed to and from a file rather than through a string. A dump of the
 // catalog at full scale — ~300k campsites each carrying a source_payload — is
@@ -816,6 +830,87 @@ async function restoreDatabase(postgres, user, database, inPath) {
   await postgres.exec([PSQL, '-U', user, '-d', database, '-v', 'ON_ERROR_STOP=1', '-f', STDIN_SCRIPT], {
     inputFile: inPath,
   });
+}
+
+const countStatement = (schema) =>
+  COPIED_TABLES.map((table) => `SELECT '${table.name}' AS name, count(*) AS count FROM ${schema}.${table.name}`).join(' UNION ALL ');
+
+export async function copiedTableCounts(db) {
+  const rows = await db.$client.unsafe(countStatement(TYPESCRIPT_SCHEMA));
+  return Object.fromEntries(rows.map((row) => [row.name, Number(row.count)]));
+}
+
+// A seed that is never loaded is an unproven artifact, the same mistake as a
+// gate that cannot fail. This restores it into a throwaway database of the
+// kind spec §8.1 step 5 will restore it into (a fresh one from template0, with
+// no PostGIS and no tables), under ON_ERROR_STOP, and compares the row count of
+// every table the harness copies against the database it was dumped from.
+async function dropDatabaseIfExists(postgres, user, database) {
+  await postgres.exec([
+    PSQL,
+    '-U',
+    user,
+    '-d',
+    MAINTENANCE_DB,
+    '-v',
+    'ON_ERROR_STOP=1',
+    PSQL_COMMAND_FLAG,
+    `DROP DATABASE IF EXISTS ${database}`,
+  ]);
+}
+
+export async function verifySeed(postgres, user, seedPath, expected, database = SEED_CHECK_DB) {
+  await dropDatabaseIfExists(postgres, user, database);
+  await postgres.createDatabase(database);
+  try {
+    await checkRestoredSeed(postgres, user, seedPath, expected, database);
+  } finally {
+    await dropDatabaseIfExists(postgres, user, database);
+  }
+}
+
+async function checkRestoredSeed(postgres, user, seedPath, expected, database) {
+  await restoreDatabase(postgres, user, database, seedPath);
+  const out = await postgres.exec([
+    PSQL,
+    '-U',
+    user,
+    '-d',
+    database,
+    PSQL_TUPLES_ONLY,
+    PSQL_FIELD_SEPARATOR_FLAG,
+    COUNT_FIELD_SEPARATOR,
+    '-v',
+    'ON_ERROR_STOP=1',
+    PSQL_COMMAND_FLAG,
+    `${countStatement(TYPESCRIPT_SCHEMA)} UNION ALL SELECT '${KOTLIN_SCHEMA}', count(*) FROM pg_namespace WHERE nspname = '${KOTLIN_SCHEMA}'`,
+  ]);
+  const restored = Object.fromEntries(
+    out
+      .trim()
+      .split('\n')
+      .map((line) => {
+        const [name, count] = line.split(COUNT_FIELD_SEPARATOR);
+        return [name, Number(count)];
+      }),
+  );
+  const problems = [];
+  if (restored[KOTLIN_SCHEMA] !== 0) problems.push(`the seed carries the ${KOTLIN_SCHEMA} schema`);
+  for (const [table, rows] of Object.entries(expected)) {
+    if (restored[table] !== rows) problems.push(`${table}: dumped ${rows} row(s), restored ${restored[table]}`);
+  }
+  if (!Object.values(expected).some((rows) => rows > 0)) problems.push('the dumped database holds no rows at all');
+  if (problems.length > 0) throw new Error(`the seed does not restore faithfully: ${problems.join('; ')}`);
+}
+
+export async function dumpSeed(postgres, user, database, outPath, expected, flags = SEED_DUMP_FLAGS) {
+  await dumpDatabase(postgres, user, database, flags, outPath);
+  try {
+    await verifySeed(postgres, user, outPath, expected);
+  } catch (error) {
+    await rm(outPath, { force: true });
+    throw error;
+  }
 }
 
 // --- the run ----------------------------------------------------------------
@@ -937,7 +1032,7 @@ export async function runDifferential({
       const result = await diffDatabases(typescriptDb, { maxDifferences, counts });
 
       if (emitSeed !== undefined && result.differences.length === 0) {
-        await dumpDatabase(postgres, user, TYPESCRIPT_DB, SEED_DUMP_FLAGS, emitSeed);
+        await dumpSeed(postgres, user, TYPESCRIPT_DB, emitSeed, await copiedTableCounts(typescriptDb));
         await writeFile(`${emitSeed}${PROVENANCE_SUFFIX}`, JSON.stringify(wanted, undefined, PROVENANCE_INDENT));
       }
       return result;

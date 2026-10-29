@@ -55,6 +55,19 @@ describe('InputBundle', () => {
     expect(() => new InputBundle(new Map()).soleEnvelopes()).toThrow(/exactly one data_source input; got 0/);
   });
 
+  test('soleEnvelope returns the one envelope of the one input', () => {
+    expect(new InputBundle(new Map([['only', [e1]]])).soleEnvelope()).toBe(e1);
+  });
+
+  test('soleEnvelope rejects an input with zero or several envelopes, and zero or several inputs', () => {
+    expect(() => new InputBundle(new Map([['only', []]])).soleEnvelope()).toThrow(/exactly one envelope, got 0/);
+    expect(() => new InputBundle(new Map([['only', [e1, e2]]])).soleEnvelope()).toThrow(/exactly one envelope, got 2/);
+    expect(() => new InputBundle(new Map()).soleEnvelope()).toThrow(/exactly one data_source input; got 0/);
+    expect(() => new InputBundle(new Map([['a', [e1]], ['b', [e1]]])).soleEnvelope()).toThrow(
+      /exactly one data_source input; got 2/,
+    );
+  });
+
   test('dataSourceSlugs keeps declaration order rather than sorting', () => {
     const bundle = new InputBundle(
       new Map([

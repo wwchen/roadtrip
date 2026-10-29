@@ -5,10 +5,14 @@ export type JsonObject = Readonly<Record<string, unknown>>;
 const INT_MIN = -(2 ** 31);
 const INT_MAX = 2 ** 31 - 1;
 
+const WIDE_INTEGER_LITERAL = /^-?\d+$/;
+const WIDE_INTEGER_KIND = 'integer beyond 2^53';
+const WIDE_NUMBER_KIND = 'number beyond the double range';
+
 function kindOf(value: unknown): string {
   if (value === null) return 'null';
   if (Array.isArray(value)) return 'array';
-  if (isWideNumber(value)) return 'number';
+  if (isWideNumber(value)) return WIDE_INTEGER_LITERAL.test(value.rawJSON) ? WIDE_INTEGER_KIND : WIDE_NUMBER_KIND;
   return typeof value;
 }
 
@@ -20,12 +24,12 @@ function present(source: JsonObject, key: string): unknown {
   return Object.hasOwn(source, key) ? source[key] : undefined;
 }
 
-function isObject(value: unknown): value is JsonObject {
+export function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value) && !isWideNumber(value);
 }
 
 function decodeObject(key: string, value: unknown): JsonObject {
-  if (!isObject(value)) mismatch(key, 'object', value);
+  if (!isJsonObject(value)) mismatch(key, 'object', value);
   return value;
 }
 
@@ -99,6 +103,10 @@ function decodeStringMap(key: string, value: unknown): Record<string, string> {
 
 export function hasField(source: JsonObject, key: string): boolean {
   return Object.hasOwn(source, key);
+}
+
+export function fieldOf(source: JsonObject | null | undefined, key: string): unknown {
+  return source === null || source === undefined || !Object.hasOwn(source, key) ? undefined : source[key];
 }
 
 export function asObject(value: unknown, label: string): JsonObject {

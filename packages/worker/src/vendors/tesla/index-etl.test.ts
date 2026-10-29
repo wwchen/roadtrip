@@ -47,8 +47,8 @@ function writeCapture(slug: string, file: string, contents: string): void {
   writeFileSync(path.join(dir, file), contents);
 }
 
-function transformedNames(slugs: string[]): Map<string, string> {
-  const rows = slugs.map((slug) => ({
+function indexRowsFor(slugs: string[]) {
+  return slugs.map((slug) => ({
     latitude: INDEX_LATITUDE,
     longitude: INDEX_LONGITUDE,
     title: 'locations',
@@ -56,7 +56,10 @@ function transformedNames(slugs: string[]): Map<string, string> {
     location_url_slug: slug,
     supercharger_function: { show_on_find_us: SHOWN_ON_FIND_US, site_status: SITE_STATUS },
   }));
-  const dto = decodeTeslaIndex({ data: { data: rows } });
+}
+
+function transformedNames(slugs: string[]): Map<string, string> {
+  const dto = decodeTeslaIndex({ data: { data: indexRowsFor(slugs) } });
   const ctx = TransformCtx.load(rawDir, EMPTY_REGISTRY);
   const names = new Map<string, string>();
   for (const result of new TeslaIndexEtl().transform(dto, ctx)) {
@@ -110,5 +113,18 @@ describe('tesla-locations side-load', () => {
 
     expect(transformedNames(['broken']).get('broken')).toBe('Supercharger broken');
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('slug=broken'));
+  });
+});
+
+describe('sanitized slug collisions', () => {
+  test('two upstream slugs that sanitize to the same key fail the run instead of overwriting a row', () => {
+    const dto = decodeTeslaIndex({ data: { data: indexRowsFor(['A/b', 'a-b']) } });
+    const ctx = TransformCtx.load(rawDir, EMPTY_REGISTRY);
+
+    expect(() => [...new TeslaIndexEtl().transform(dto, ctx)]).toThrow(/1 sanitized location_slug collision\(s\).*a-b/);
+  });
+
+  test('distinct slugs that stay distinct once sanitized do not collide', () => {
+    expect([...transformedNames(['A/b', 'a-c']).keys()]).toEqual(['a-b', 'a-c']);
   });
 });
