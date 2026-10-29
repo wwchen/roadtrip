@@ -58,7 +58,7 @@ target, whatever its branch. The first build here was of `claude/nextjs-parallel
 | `connect_timeout` | 10 s, in the URL | A suspended compute resumed inside the first connection in about 1 s (0.97 s measured directly, 0.85 s through the deployed `/api/health`). 10 s is ten times that and well under the platform's own limit. postgres.js default is 30 s. |
 | `idle_timeout` | 20 s, in the URL | A frozen serverless instance should not hold sockets the pooler will have closed; the pooler multiplexes, so reconnecting is cheap. |
 | `max` | postgres.js default, 10 | **Not settable from the URL.** postgres.js does not coerce `max`, and builds its slots with `Array(options.max)`, so `?max=5` yields `Array('5')`, one slot, whatever the number. Setting it deliberately needs a `max` option on `createDb` in `packages/db`. 10 per instance is tolerable behind the pooler; revisit if instance counts grow. |
-| statement timeout | **none** | Neon ignores startup parameters on both endpoints (below), so `statement_timeout` cannot be sent from the client. It could be set at role level the way read-only is; the bbox area cap bounds the query instead. |
+| statement timeout | 3 s, on the `roadtrip_web` role | Not sendable from the client (Neon ignores startup parameters), but a **role-level** setting works, with the pooler caveat under "Server-side timeouts on Neon" below. |
 
 `connect_timeout` and `idle_timeout` are carried in `DATABASE_URL` because postgres.js reads them
 from the query string; changing them is a Vercel env edit, not a code change.
@@ -144,6 +144,38 @@ Planet Fitness and Tesla were not moved: this app reads neither.
 The Kotlin backend is never pointed at Neon: its Flyway `R__grafana_reader_grants.sql` carries the
 same `GRANT pg_read_all_stats` that `0001_raw_objects.sql` used to, and Neon cannot run it.
 
+### Server-side timeouts on Neon
+
+Measured 2026-10-29 with throwaway roles (dropped afterwards), so a reliable server-side
+`statement_timeout` **is** available, through exactly one route:
+
+| Route | Direct endpoint | Pooled endpoint |
+|---|---|---|
+| startup parameter (what postgres.js `connection` sends) | ignored | ignored |
+| `options=-c statement_timeout=...` in the URL | works | **rejected** at connect: "unsupported startup parameter in options" |
+| `ALTER ROLE ... SET statement_timeout` | works at once | works for **new** server connections only |
+| `BEGIN; SET LOCAL statement_timeout ...; <query>; COMMIT` | works | works (transaction-scoped, so safe under transaction pooling) |
+| session `SET statement_timeout` | works | **leaks**: it stuck to the pooled server connection and showed up in later, unrelated sessions |
+
+The pooled caveats are why a role setting can look inert. Neon's pooler keeps server connections
+open, and a role setting is applied only when a backend starts: after `ALTER ROLE`, existing
+pooled backends keep the old value until they end, which is how a fresh client connection read
+`statement_timeout = 0` right after the setting was applied. After changing a role setting, end
+that role's backends (`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = '...'`).
+`pg_sleep(5)` was then cancelled at 3 s through the pooled endpoint on a probe role carrying the
+same two settings as `roadtrip_web`.
+
+The pooler also pins reported parameters per role: `default_transaction_read_only` is reported by
+the server, and the pooler held the value it first saw for a role, so changing that one at role
+level after the role has connected through the pooler had no effect (a role later set to `off`
+still read `on` through the pooler and `off` directly). That fails safe for read-only, but it means
+a role's `default_transaction_read_only` must be set before its first pooled connection; a role
+created, connected, and then altered can disagree with its own configuration.
+
+`roadtrip_web` carries `default_transaction_read_only = on` and `statement_timeout = 3s`. The
+bbox area cap and this timeout are the two bounds on `/api/campgrounds/search`; the cap keeps
+ordinary requests far under the timeout (the slowest in-limit measurement was 183 ms).
+
 ### The `pg_read_all_stats` grant
 
 Granting a predefined role needs superuser or `ADMIN OPTION` on it; no Neon role has either.
@@ -151,15 +183,23 @@ Granting a predefined role needs superuser or `ADMIN OPTION` on it; no Neon role
 `pg_has_role(current_user, 'pg_read_all_stats', 'MEMBER WITH ADMIN OPTION')` and raises a notice
 otherwise. The other `grafana_reader` statements are object privileges and run on Neon as written.
 
+The Drizzle copy of that grant and Flyway's `R__grafana_reader_grants.sql` therefore differ on
+purpose: the Drizzle one is capability-gated, and Flyway's, which production runs on every boot,
+is untouched. The schema equivalence gate cannot see the difference, because it dumps with
+`--no-privileges` and a role-membership grant is cluster-level and never emitted.
+
 ## Known query cost and the bbox cap
 
-`/api/campgrounds/search` is public and has no server-side timeout. Its plan depends on a row
+`/api/campgrounds/search` is public. Its plan depends on a row
 estimate of 1 for the spatial filter on `pois`, which, past a certain box size, makes the planner
 nest a sequential scan of `poi_campgrounds` inside the loop over matching POIs (121 million
 filtered rows for a continental box). The same plan appears on PostGIS 3.4, so it is not a Neon
-artefact. The query itself is unchanged; the endpoint instead refuses boxes over
+artefact. The query itself is unchanged; the endpoint instead refuses a box with south greater
+than north (a signed area would otherwise be negative and slip past the cap) and boxes over
 `MAX_BBOX_AREA_SQUARE_DEGREES` (36, in `apps/web/src/server/boundary.ts`) with a 400, and `/search`
-renders the same message as its alert.
+renders the same message as its alert. A `bbox` given more than once is refused the same way on
+both surfaces (a 400 on the route, the alert on the page) rather than answering for whichever value
+happens to come first.
 
 Measured on Neon at 0.25 CU (`EXPLAIN ANALYZE` of the search query, 2026-10-29):
 

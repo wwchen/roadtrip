@@ -192,7 +192,8 @@ lines to 342. I audited Tasks 1 to 4 for anything the cut left purposeless:
   not. Cost if wrong: a later task widens it, which is additive.
 - **Each JSONB field decodes independently, with `decodeErrors`.** The JSONB columns carry no
   `.$type<>` (step 2), so `decodeCatalogJson` is the only correct read. But the codec is strict
-  and production rows predate it. A field whose decode throws `CatalogJsonError` becomes `null`
+  and production rows were thought to predate it (measured later for `location` and `amenities`, they did not; see "Which of the
+  plan's hazards proved real"). A field whose decode throws `CatalogJsonError` becomes `null`
   and its name is appended to `decodeErrors` on the DTO. This is the difference between "the
   campground page is down" and "one field on the campground page is missing", and drift stays
   visible. Any other error still propagates. Cost if wrong: one extra DTO field.
@@ -444,9 +445,6 @@ The project's habit is that the live system wins over the document.
 - **The `data/raw` build cost.** Measured at 133 MB packed and 1.9 GB checked out in 10.9 s
   locally, and 41 s for the clone on Vercel inside a 162 s deployment. Found not to matter, so
   nothing is being done about it. A real cost, a negligible one.
-- **JSONB codec strictness.** The reason for per-field decoding and `decodeErrors`. It shaped
-  the design and the malformed-row test exercises it; the ledger records no live row that failed
-  to decode.
 - **The `bigint` serialization hazard**, in the half I did not get wrong: real for the query
   builder, absent from the raw-SQL reads this app writes.
 
@@ -457,6 +455,15 @@ The project's habit is that the live system wins over the document.
 - **`data/raw` needing a sparse checkout in this worktree.** It is not sparse here, so the main
   checkout, which other sessions share, was never touched. My `sparsePaths` assumption was wrong.
 - **`force-dynamic` being load-bearing.** My brief's claim; it is defensive only.
+- **JSONB codec strictness, as a premise.** The premise was "real rows predate the codec, so some
+  will fail to decode". It did not hold: 78 live rows returned zero `decodeErrors`, and the
+  reviewer extended that to about 1,400 rows across 7 queries, still zero. **The design is
+  retained and must not be read as licence to cast.** Per-field decoding with `decodeErrors` stays
+  as cheap insurance, because the JSONB columns carry no `.$type<>` and `decodeCatalogJson` is the
+  only correct read: `row.amenities as CampgroundAmenity[]` is exactly the defect step 2's ruling
+  caught, and a clean sample does not make it safe. The sample also covers only `location` and
+  `amenities`: `price` and `contact` have no HTTP surface and were never sampled, so for those two
+  the premise is untested, not disproved.
 
 **Found that the plan did not predict:** Neon ignoring startup parameters (the largest), the
 unbounded bbox cost, the production alias being public, the shipped SPA guard's parsing holes, and

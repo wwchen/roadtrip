@@ -59,7 +59,7 @@ async function main() {
   const violations = await findPackageBoundaryViolations(REPO_ROOT);
   if (violations.length > 0) {
     console.error(
-      `${FRONTEND_DIRECTORY}/ must not depend on ${FORBIDDEN_PACKAGE}: it carries a Postgres driver. Import shared vocabulary from @roadtrip/domain instead. Only literal specifiers are checked: import(someVariable), require(someVariable) and template specifiers that begin with an interpolation cannot be seen, so do not rely on this gate for them.\n`,
+      `${FRONTEND_DIRECTORY}/ must not depend on ${FORBIDDEN_PACKAGE}: it carries a Postgres driver. Import shared vocabulary from @roadtrip/domain instead. Only literal specifiers are checked: import(someVariable), require(someVariable) and template specifiers that begin with an interpolation cannot be resolved, so do not rely on this gate for them.\n`,
     );
     console.error(violations.join('\n'));
     process.exitCode = 1;
