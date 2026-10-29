@@ -600,7 +600,9 @@ The steps, per task, with `<TARGET>` standing for the task's registry row names:
 - [ ] **Step 1: Run the differential for `<TARGET>` and record that it is red**
 
 Run: `node scripts/importer-differential.mjs --target '<TARGET>'`
-Expected: non-zero, every row `missing_in_typescript`.
+Expected: non-zero **because the TypeScript importer refuses the target**, not because rows are reported missing. Task 4's CLI exits 1 with "no adapters registered" while the registry is empty, and with "target(s) not yet implemented" once it holds some but not this one. Either way the harness surfaces a failed import rather than diffing a database one side never wrote to — a run that reported `missing_in_typescript` here would mean the harness had accepted a no-op import, which is the vacuous pass Review Focus #1 forbids.
+
+Record which message fired. This is the same correction already applied to Task 5's step 7; the diff's ability to report a row present on one side only is proven on synthetic fixtures by Task 5's own tests, not here.
 
 - [ ] **Step 2: Write the unit tests this task owns** (listed per task below; none for some)
 - [ ] **Step 3: Run them to verify they fail**
