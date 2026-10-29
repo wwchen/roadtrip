@@ -47,7 +47,7 @@ queried on every hit would let any crawler or uptime checker hold the database a
 | Request | Result | Touches the database |
 |---|---|---|
 | no `Authorization` header | `200 {"status":"ok"}` | **no**: it proves only that the function is running |
-| `Authorization: Bearer <HEALTH_DATABASE_TOKEN>` | the probe: `200 {"status":"ok"}` or `503 {"status":"unavailable"}`, with the 5 second race | yes |
+| `Authorization: Bearer <HEALTH_DATABASE_TOKEN>` | the probe: `200 {"status":"ok"}` or `503 {"status":"unavailable"}`, with a 12 second race | yes |
 | any other `Authorization` header (wrong secret, wrong scheme, empty) | `401 {"status":"unauthorized"}` with `WWW-Authenticate: Bearer` | no |
 
 **An uptime checker should use the plain request** to learn the site is up, and the bearer form,
@@ -55,7 +55,7 @@ at a modest interval, only if it must learn the database is reachable. Each bear
 suspended compute, so the interval sets the minimum the database is awake.
 
 Decisions: the secret travels in a **header**, not a query parameter, because a query string lands
-in access logs and referrers. A refused database request gets **401**, not 404: a checker with a
+in access logs and referrers. The probe's race (`DATABASE_PING_TIMEOUT_MS`, 12 s) is deliberately **longer** than the `roadtrip_web` role's 10 s `statement_timeout`: on a stuck database Postgres aborts the query first and the probe reports what the database said, not a guess of its own, and a compute resume (3.45 s measured) has more than 3x headroom. Do not tidy the two to match; the race must stay above the statement timeout. A refused database request gets **401**, not 404: a checker with a
 stale token should be told it is an authentication problem, and the token is the secret, not the
 existence of the mode. The check **fails closed**: if `HEALTH_DATABASE_TOKEN` is unset, empty or
 only whitespace, no header authenticates, and a configured value is compared exactly and never
