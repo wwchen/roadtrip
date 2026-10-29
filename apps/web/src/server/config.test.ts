@@ -53,3 +53,14 @@ test('the search result limit cannot be configured above its ceiling', () => {
   vi.stubEnv('SEARCH_RESULT_LIMIT', String(MAX_LIMIT + 1));
   expect(() => config.searchResultLimit).toThrow(ConfigError);
 });
+
+test('the health database token is unavailable unless it holds a non-blank value', () => {
+  vi.stubEnv('HEALTH_DATABASE_TOKEN', undefined);
+  expect(config.healthDatabaseToken).toBeUndefined();
+  vi.stubEnv('HEALTH_DATABASE_TOKEN', '');
+  expect(config.healthDatabaseToken).toBeUndefined();
+  vi.stubEnv('HEALTH_DATABASE_TOKEN', '  \t ');
+  expect(config.healthDatabaseToken).toBeUndefined();
+  vi.stubEnv('HEALTH_DATABASE_TOKEN', 'a-secret');
+  expect(config.healthDatabaseToken).toBe('a-secret');
+});

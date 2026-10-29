@@ -2,6 +2,7 @@ const DATABASE_URL_VARIABLE = 'DATABASE_URL';
 const DATABASE_PREPARE_VARIABLE = 'DATABASE_PREPARE';
 const ENABLED_DATA_PROVIDERS_VARIABLE = 'ENABLED_DATA_PROVIDERS';
 const SEARCH_RESULT_LIMIT_VARIABLE = 'SEARCH_RESULT_LIMIT';
+const HEALTH_DATABASE_TOKEN_VARIABLE = 'HEALTH_DATABASE_TOKEN';
 
 const DEFAULT_DATABASE_PREPARE = true;
 const DEFAULT_ENABLED_DATA_PROVIDERS: readonly string[] = ['campflare', 'bcparks-strapi', 'aspira'];
@@ -46,6 +47,12 @@ function listFrom(variable: string, fallback: readonly string[]): readonly strin
     .filter((entry) => entry.length > 0);
 }
 
+function secretFrom(variable: string): string | undefined {
+  const raw = process.env[variable];
+  if (raw === undefined || raw.trim().length === 0) return undefined;
+  return raw;
+}
+
 export const config = {
   get databaseUrl(): string {
     const raw = process.env[DATABASE_URL_VARIABLE];
@@ -59,6 +66,9 @@ export const config = {
   },
   get enabledDataProviders(): readonly string[] {
     return listFrom(ENABLED_DATA_PROVIDERS_VARIABLE, DEFAULT_ENABLED_DATA_PROVIDERS);
+  },
+  get healthDatabaseToken(): string | undefined {
+    return secretFrom(HEALTH_DATABASE_TOKEN_VARIABLE);
   },
   get searchResultLimit(): number {
     return boundedIntegerFrom(

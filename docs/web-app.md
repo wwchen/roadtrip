@@ -30,6 +30,7 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 | `DATABASE_URL` | sensitive | the Neon **pooled** endpoint as the `roadtrip_web` role, plus `connect_timeout=10&idle_timeout=20` |
 | `DATABASE_PREPARE` | plain | `true` |
 | `ENABLED_DATA_PROVIDERS` | plain | `campflare,bcparks-strapi,aspira` |
+| `HEALTH_DATABASE_TOKEN` | sensitive | the bearer secret for the database mode of `/api/health` (below) |
 
 Deployment protection (checked 2026-10-29): Vercel Authentication is on with
 `all_except_custom_domains`. The production alias `roadtrip-web-nu.vercel.app` answers without a
@@ -37,6 +38,33 @@ login; the per-deployment, branch and team-slug URLs redirect to Vercel login.
 
 The first deployment of a project with no production deployment is assigned the production
 target, whatever its branch. The first build here was of `claude/nextjs-parallel-read-app-19ceab`.
+
+## Health endpoint
+
+`/api/health` has two modes, because Neon autosuspends an idle compute and a public endpoint that
+queried on every hit would let any crawler or uptime checker hold the database awake and billed.
+
+| Request | Result | Touches the database |
+|---|---|---|
+| no `Authorization` header | `200 {"status":"ok"}` | **no**: it proves only that the function is running |
+| `Authorization: Bearer <HEALTH_DATABASE_TOKEN>` | the probe: `200 {"status":"ok"}` or `503 {"status":"unavailable"}`, with the 5 second race | yes |
+| any other `Authorization` header (wrong secret, wrong scheme, empty) | `401 {"status":"unauthorized"}` with `WWW-Authenticate: Bearer` | no |
+
+**An uptime checker should use the plain request** to learn the site is up, and the bearer form,
+at a modest interval, only if it must learn the database is reachable. Each bearer hit wakes a
+suspended compute, so the interval sets the minimum the database is awake.
+
+Decisions: the secret travels in a **header**, not a query parameter, because a query string lands
+in access logs and referrers. A refused database request gets **401**, not 404: a checker with a
+stale token should be told it is an authentication problem, and the token is the secret, not the
+existence of the mode. The check **fails closed**: if `HEALTH_DATABASE_TOKEN` is unset, empty or
+only whitespace, no header authenticates, and a configured value is compared exactly and never
+trimmed. Comparison is `timingSafeEqual` over SHA-256 digests of both values, so neither length nor
+content leaks through timing. The unauthenticated path does not construct a database client; a
+test with the real service asserts `serverDb()` and the ping are not called. The variable is
+server-only and must never be `NEXT_PUBLIC_`-prefixed. It is set in Vercel (sensitive, Production
+and Preview) and is not declared in `secrets/registry.yaml`, which is generated into Docker
+Compose and has no Vercel consumer.
 
 ## Neon
 
@@ -55,7 +83,7 @@ target, whatever its branch. The first build here was of `claude/nextjs-parallel
 | Setting | Value | Evidence |
 |---|---|---|
 | `prepare` | `true` | 1164 queries over 12 fresh clients and one long-lived client at concurrency 24 to 30: 1164 succeeded with `prepare: true` and 1164 with `prepare: false`, no `prepared statement ... does not exist` or `already exists` errors in either. Wall time was the same within 3%. `true` is therefore safe and is kept for the plan reuse. |
-| `connect_timeout` | 10 s, in the URL | A suspended compute resumed inside the first connection in about 1 s (0.97 s measured directly, 0.85 s through the deployed `/api/health`). 10 s is ten times that and well under the platform's own limit. postgres.js default is 30 s. |
+| `connect_timeout` | 10 s, in the URL | A suspended compute resumed inside the first connection in about 1 s (0.97 s measured directly, 0.85 s through the deployed `/api/health`, which then queried on every hit). 10 s is ten times that and well under the platform's own limit. postgres.js default is 30 s. |
 | `idle_timeout` | 20 s, in the URL | A frozen serverless instance should not hold sockets the pooler will have closed; the pooler multiplexes, so reconnecting is cheap. |
 | `max` | postgres.js default, 10 | **Not settable from the URL.** postgres.js does not coerce `max`, and builds its slots with `Array(options.max)`, so `?max=5` yields `Array('5')`, one slot, whatever the number. Setting it deliberately needs a `max` option on `createDb` in `packages/db`. 10 per instance is tolerable behind the pooler; revisit if instance counts grow. |
 | statement timeout | 10 s, on the `roadtrip_web` role | Not sendable from the client (Neon ignores startup parameters), but a **role-level** setting works, with the pooler caveat under "Server-side timeouts on Neon" below. |
