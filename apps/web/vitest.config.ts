@@ -14,6 +14,7 @@ const serverOnlyNoop = path.join(
 );
 
 export default defineConfig({
+  oxc: { jsx: { runtime: 'automatic' } },
   resolve: { alias: { [SERVER_ONLY_PACKAGE]: serverOnlyNoop, [SOURCE_ALIAS]: SOURCE_DIRECTORY } },
   test: {
     testTimeout: CONTAINER_TIMEOUT_MS,

@@ -2,22 +2,14 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { parsePoiId } from '@/server/boundary';
 import { getCampgroundDetail } from '@/server/service/campgroundService';
+import { safeLink } from './safeLink';
 
 export const dynamic = 'force-dynamic';
 
 const SEARCH_PATH = '/search';
-const LINKABLE_PROTOCOLS: readonly string[] = ['http:', 'https:'];
 
 interface CampgroundPageProps {
   params: Promise<{ poiId: string }>;
-}
-
-function safeLink(raw: string): string | null {
-  try {
-    return LINKABLE_PROTOCOLS.includes(new URL(raw).protocol) ? raw : null;
-  } catch {
-    return null;
-  }
 }
 
 function Field({ label, value }: { label: string; value: string | number | boolean | null }) {
