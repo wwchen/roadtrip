@@ -2,7 +2,9 @@ import { config } from '../config';
 import { serverDb } from '../db';
 import type { CampgroundDetailDto, CampgroundSearchDto } from '../dto';
 import { findDetailByPoi, findSummariesByPoiIds } from '../repo/campgroundReadRepo';
-import { searchWithinBoundary } from '../repo/campgroundSearchRepo';
+import { InvalidBoundaryError, searchWithinBoundary } from '../repo/campgroundSearchRepo';
+
+export { InvalidBoundaryError };
 
 export function getCampgroundDetail(poiId: bigint): Promise<CampgroundDetailDto | null> {
   return findDetailByPoi(serverDb(), poiId);

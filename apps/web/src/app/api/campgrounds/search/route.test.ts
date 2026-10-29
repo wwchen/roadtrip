@@ -1,0 +1,71 @@
+import { beforeEach, expect, test, vi } from 'vitest';
+import type { CampgroundSearchDto } from '@/server/dto';
+
+const searchCampgrounds = vi.fn();
+
+class StubInvalidBoundaryError extends Error {}
+
+vi.mock('@/server/service/campgroundService', () => ({
+  searchCampgrounds,
+  InvalidBoundaryError: StubInvalidBoundaryError,
+}));
+
+const { GET } = await import('./route');
+
+const SEARCH_URL = 'http://localhost/api/campgrounds/search';
+const SERVER_TIMING_PATTERN = /^db;dur=\d+\.\d$/;
+const STATUS_OK = 200;
+const STATUS_BAD_REQUEST = 400;
+const EMPTY_RESULT: CampgroundSearchDto = {
+  poiIds: [],
+  totalInBoundary: 0,
+  totalMatching: 0,
+  truncated: false,
+  campgrounds: [],
+};
+
+beforeEach(() => {
+  searchCampgrounds.mockReset();
+  searchCampgrounds.mockResolvedValue(EMPTY_RESULT);
+});
+
+test('a missing bbox searches the default and reports database time', async () => {
+  const response = await GET(new Request(SEARCH_URL));
+  expect(response.status).toBe(STATUS_OK);
+  expect(response.headers.get('Server-Timing')).toMatch(SERVER_TIMING_PATTERN);
+  expect(await response.json()).toEqual(EMPTY_RESULT);
+  expect(searchCampgrounds).toHaveBeenCalledTimes(1);
+});
+
+test('Server-Timing covers the service call and not the serialization', async () => {
+  const SERVICE_DELAY_MS = 50;
+  const MAX_DURATION_MS = 500;
+  searchCampgrounds.mockImplementation(
+    () => new Promise((resolve) => setTimeout(() => resolve(EMPTY_RESULT), SERVICE_DELAY_MS)),
+  );
+  const response = await GET(new Request(SEARCH_URL));
+  const duration = Number(response.headers.get('Server-Timing')?.split('=')[1]);
+  expect(duration).toBeGreaterThanOrEqual(SERVICE_DELAY_MS - 5);
+  expect(duration).toBeLessThan(MAX_DURATION_MS);
+});
+
+test.each(['garbage', '', '1,2,3', '0,-91,10,10'])(
+  'a malformed bbox %j is a 400 and never reaches the service',
+  async (bbox) => {
+    const response = await GET(new Request(`${SEARCH_URL}?bbox=${encodeURIComponent(bbox)}`));
+    expect(response.status).toBe(STATUS_BAD_REQUEST);
+    expect(await response.json()).toHaveProperty('error');
+    expect(searchCampgrounds).not.toHaveBeenCalled();
+  },
+);
+
+test('a boundary the service rejects is a 400', async () => {
+  searchCampgrounds.mockRejectedValue(new StubInvalidBoundaryError());
+  const response = await GET(new Request(`${SEARCH_URL}?bbox=0,0,1,1`));
+  expect(response.status).toBe(STATUS_BAD_REQUEST);
+});
+
+test('any other failure propagates rather than being reported as the caller fault', async () => {
+  searchCampgrounds.mockRejectedValue(new Error('connection refused'));
+  await expect(GET(new Request(`${SEARCH_URL}?bbox=0,0,1,1`))).rejects.toThrow('connection refused');
+});

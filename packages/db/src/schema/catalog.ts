@@ -36,10 +36,10 @@ import {
 const MIN_CADENCE_SEC = 5;
 const MIN_LENGTH = 0;
 const MIN_COUNT = 0;
-const MIN_LATITUDE = -90;
-const MAX_LATITUDE = 90;
-const MIN_LONGITUDE = -180;
-const MAX_LONGITUDE = 180;
+export const MIN_LATITUDE = -90;
+export const MAX_LATITUDE = 90;
+export const MIN_LONGITUDE = -180;
+export const MAX_LONGITUDE = 180;
 const COUNTRY_CODE_LENGTH = 2;
 
 export const CAMPGROUND_POI_TYPE = 'campground';
