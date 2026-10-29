@@ -43,8 +43,10 @@ const INTEGER_LITERAL = /^-?\d+$/;
 function reviveNumber(_key: string, value: unknown, context: { source?: string }): unknown {
   const source = context.source;
   if (typeof value !== 'number' || source === undefined) return value;
-  const losesDigits = INTEGER_LITERAL.test(source) ? !Number.isSafeInteger(value) : !Number.isFinite(value);
-  return losesDigits ? sourceAwareJson.rawJSON(source) : value;
+  const losesInformation = INTEGER_LITERAL.test(source)
+    ? !Number.isSafeInteger(value)
+    : !Number.isFinite(value) || Number.isInteger(value);
+  return losesInformation ? sourceAwareJson.rawJSON(source) : value;
 }
 
 export function isWideNumber(value: unknown): value is WideNumber {

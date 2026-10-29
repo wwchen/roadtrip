@@ -214,6 +214,14 @@ describe('parseEnvelope number fidelity', () => {
     expect(typeof payload.min).toBe('number');
   });
 
+  test('a whole number written with a fraction or exponent is carried with its spelling, a fraction that is not whole is not', () => {
+    const raw = '{"a":25.0,"b":1e2,"c":-0.0,"d":1.0e2,"e":25.5,"f":1e-1,"g":25}';
+    const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload as Record<string, unknown>;
+    expect(['a', 'b', 'c', 'd'].map((key) => isWideNumber(payload[key]))).toEqual([true, true, true, true]);
+    expect(['e', 'f', 'g'].map((key) => typeof payload[key])).toEqual(['number', 'number', 'number']);
+    expect(JSON.stringify(payload)).toBe('{"a":25.0,"b":1e2,"c":-0.0,"d":1.0e2,"e":25.5,"f":0.1,"g":25}');
+  });
+
   test('a long digit run inside a string is left a string', () => {
     const raw = `{"photo_id":"${WIDE_INTEGER}","note":"id ${HUGE_INTEGER} here"}`;
     const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload;
@@ -325,14 +333,14 @@ describe('the wide-number carrier contract', () => {
 });
 
 describe('number normalisation is intended', () => {
-  test('decimal literals are normalised, so the differential must compare jsonb values and never jsonb text: 10.0 serialises as 10', () => {
-    const decimals = parseEnvelope(envelopeWithRawPayload('{"minValue":0.0,"maxValue":10.0,"exp":1e2}')).payload;
-    expect(serializeOpaquePayload(decimals)).toBe('{"minValue":0,"maxValue":10,"exp":100}');
+  test('a decimal that is not whole is respelled, so the differential must compare jsonb values and never jsonb text: 2.50 serialises as 2.5', () => {
+    const decimals = parseEnvelope(envelopeWithRawPayload('{"price":2.50,"small":1e-1,"neg":-0.250}')).payload;
+    expect(serializeOpaquePayload(decimals)).toBe('{"price":2.5,"small":0.1,"neg":-0.25}');
   });
 
-  test('wide integers beside a normalised decimal keep their digits, because their value changes if they are rounded', () => {
-    const raw = `{"id":${WIDE_INTEGER},"maxValue":10.0}`;
+  test('wide integers beside a respelled decimal keep their digits, because their value changes if they are rounded', () => {
+    const raw = `{"id":${WIDE_INTEGER},"maxValue":10.50}`;
     const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload;
-    expect(serializeOpaquePayload(payload)).toBe(`{"id":${WIDE_INTEGER},"maxValue":10}`);
+    expect(serializeOpaquePayload(payload)).toBe(`{"id":${WIDE_INTEGER},"maxValue":10.5}`);
   });
 });

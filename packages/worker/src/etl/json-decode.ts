@@ -8,11 +8,17 @@ const INT_MAX = 2 ** 31 - 1;
 const WIDE_INTEGER_LITERAL = /^-?\d+$/;
 const WIDE_INTEGER_KIND = 'integer beyond 2^53';
 const WIDE_NUMBER_KIND = 'number beyond the double range';
+const FRACTIONAL_SPELLING_KIND = 'integral number written with a fraction or exponent';
+
+function wideKindOf(rawJSON: string): string {
+  if (WIDE_INTEGER_LITERAL.test(rawJSON)) return WIDE_INTEGER_KIND;
+  return Number.isFinite(Number(rawJSON)) ? FRACTIONAL_SPELLING_KIND : WIDE_NUMBER_KIND;
+}
 
 function kindOf(value: unknown): string {
   if (value === null) return 'null';
   if (Array.isArray(value)) return 'array';
-  if (isWideNumber(value)) return WIDE_INTEGER_LITERAL.test(value.rawJSON) ? WIDE_INTEGER_KIND : WIDE_NUMBER_KIND;
+  if (isWideNumber(value)) return wideKindOf(value.rawJSON);
   return typeof value;
 }
 

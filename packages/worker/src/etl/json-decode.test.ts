@@ -93,6 +93,12 @@ describe('scalar strictness', () => {
     expect(() => requiredString({ k: wide(BEYOND_DOUBLE) }, 'k')).toThrow('k: expected string, got number beyond the double range');
   });
 
+  test('a whole number written with a fraction is refused by Int and Long as Kotlin refuses it, and Double still takes it', () => {
+    expect(() => nullableInt({ k: wide('12.0') }, 'k')).toThrow('k: expected int, got integral number written with a fraction or exponent');
+    expect(() => requiredLong({ k: wide('1.0e2') }, 'k')).toThrow('k: expected long, got integral number written with a fraction or exponent');
+    expect(nullableDouble({ k: wide('12.0') }, 'k')).toBe(12);
+  });
+
   test('Long accepts exactly representable integers, and a wide one throws instead of rounding', () => {
     expect(requiredLong({ k: SAFE_LONG_MAX }, 'k')).toBe(SAFE_LONG_MAX);
     expect(requiredLong({ k: -SAFE_LONG_MAX }, 'k')).toBe(-SAFE_LONG_MAX);
