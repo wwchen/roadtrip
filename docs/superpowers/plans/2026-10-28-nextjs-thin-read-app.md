@@ -230,6 +230,8 @@ The search route wraps only the service call in `performance.now()`, so the repo
 Run: `env -u DATABASE_URL npm run build --workspace @roadtrip/web`
 Expected: succeeds. If it fails with a connection error, a route is being prerendered and is missing `force-dynamic` — fix that rather than supplying a build-time `DATABASE_URL`.
 
+**Correction, established by Task 4's mutation check: `force-dynamic` is *not* load-bearing in Next 16.4.3, and this step does not prove that it is.** An earlier draft of this plan asserted that without the directive Next would prerender, open a database connection at build time, and fail every Vercel build. Removing it from all four routes was tried: the no-database build still succeeds and all four routes are still reported dynamic, because GET route handlers are uncached by default and both pages read `params`/`searchParams`. So the directive is **defensive**, protecting against a later edit that would make a route prerenderable — for instance dropping the `searchParams` read from `/search`. Keep it, and guard its presence with a per-route assertion that `dynamic === 'force-dynamic'`, since a passing build cannot distinguish its presence from its absence.
+
 - [ ] **Step 7: Verify the routes serve real data locally**
 
 Start a PostGIS container, apply `migrateDb`, insert fixture rows, run `npm run dev --workspace @roadtrip/web` against it, and fetch all four routes.
