@@ -281,7 +281,12 @@ Expected: rows land in `campgrounds`, `campsites`, `pois` and `poi_campgrounds`;
 Record `SELECT postgis_full_version()` and re-run Task 3's malformed-boundary case against Neon. Task 3's classification is a PostGIS-3.4-confirmed string match, so this is where a version difference would surface as a 500 on Vercel that local Postgres does not have.
 Expected: it classifies the same way. If not, report it — do not broaden the match to paper over it.
 
-- [ ] **Step 4: Determine `prepare` for Neon's pooler and record it beside the connection string**
+- [ ] **Step 4: Determine `prepare` for Neon's pooler, and the rest of the serverless connection config, and record them beside the connection string**
+
+**Two items carried here from Task 4's review, because they are deployment concerns rather than route concerns:**
+
+- **The postgres.js client sets no `max`, `connect_timeout` or statement timeout.** Task 4's `/api/health` bounds its own *response* with a 5-second race, but nothing bounds the *resource*: a blackholed database can pin pooled connections, and a hang on a page or the search API surfaces as a platform 504 rather than the 500 the error matrix predicts. A serverless function holding up to postgres.js's default of 10 connections per instance is also the wrong shape for Vercel. Decide `max`, `connect_timeout` and an idle timeout deliberately for this environment and record them with `prepare`.
+- **`/api/health` is public and runs a query on every hit.** Neon autosuspends an idle compute, so an uptime checker or a crawler polling this endpoint would hold the database awake and bill for it. Decide whether to keep it open, gate it, or make it cheaper, and say which.
 
 §2 is explicit that this is pooler- and version-dependent and must be determined, not assumed. Neon's pooler is PgBouncer in transaction mode, with protocol-level prepared statements since PgBouncer 1.22, so expect `prepare: true` to work — and prove it rather than trusting the changelog. Run the search query repeatedly over concurrent pooled connections with `prepare: true`, then `false`, and record which succeeded.
 Expected: a definite answer, written into `docs/web-app.md` next to the connection string with the date and the endpoint it applies to — §2 says "rather than in someone's memory." Set `DATABASE_PREPARE` in Vercel accordingly.
