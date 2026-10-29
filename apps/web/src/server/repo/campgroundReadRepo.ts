@@ -166,6 +166,7 @@ export async function findSummariesByPoiIds(
     WHERE pc.poi_id IN (${idList})
       AND cg.deleted_at IS NULL
       AND p.deleted_at IS NULL
+    ORDER BY cg.id
   `);
 
   const byPoi = new Map<string, CampgroundSummaryDto>();
@@ -173,6 +174,7 @@ export async function findSummariesByPoiIds(
     const decoder = createColumnDecoder();
     const location = decoder.decode(LOCATION_COLUMN, locationShape, row.location);
     const poiId = idString(row.poi_id);
+    if (byPoi.has(poiId)) continue;
     byPoi.set(poiId, {
       poiId,
       campgroundId: idString(row.id),
