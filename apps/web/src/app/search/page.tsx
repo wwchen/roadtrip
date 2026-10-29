@@ -6,7 +6,6 @@ import type { CampgroundSearchDto } from '@/server/dto';
 export const dynamic = 'force-dynamic';
 
 const CAMPGROUND_PATH_PREFIX = '/campgrounds/';
-const REPEATED_PARAMETER_BBOX = '';
 const SINGULAR_COUNT = 1;
 
 interface SearchPageProps {
@@ -42,8 +41,8 @@ function SearchResults({ result }: { result: CampgroundSearchDto }) {
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const supplied = (await searchParams)[BBOX_PARAMETER];
-  const raw = Array.isArray(supplied) ? REPEATED_PARAMETER_BBOX : supplied;
-  const outcome = await searchByBbox(raw);
+  const outcome = await searchByBbox(supplied);
+  const shown = typeof supplied === 'string' ? supplied : undefined;
 
   return (
     <main>
@@ -51,7 +50,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       <form method="get">
         <label>
           Bounding box (west,south,east,north){' '}
-          <input name={BBOX_PARAMETER} defaultValue={raw ?? DEFAULT_SEARCH_BBOX} size={40} />
+          <input name={BBOX_PARAMETER} defaultValue={shown ?? DEFAULT_SEARCH_BBOX} size={40} />
         </label>{' '}
         <button type="submit">Search</button>
       </form>

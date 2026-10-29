@@ -98,6 +98,19 @@ test('a box over the area limit renders its own alert and never reaches the serv
   expect(searchCampgrounds).not.toHaveBeenCalled();
 });
 
+test.each(['-180,90,180,-90', '-180,37,180,0.09'])(
+  'an inverted or mixed-extent box %j renders an alert and never reaches the service',
+  async (bbox) => {
+    const markup = await render({ bbox });
+    expect(markup).toContain(ALERT_MARKER);
+    expect(searchCampgrounds).not.toHaveBeenCalled();
+  },
+);
+
+test('an inverted box names its own problem on the page', async () => {
+  expect(await render({ bbox: '-180,90,180,-90' })).toContain('south greater than north');
+});
+
 test('a boundary the service rejects renders the alert, not an error', async () => {
   searchCampgrounds.mockRejectedValue(new StubInvalidBoundaryError());
   const markup = await render({ bbox: '0,0,1,1' });

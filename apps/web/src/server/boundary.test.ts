@@ -125,3 +125,26 @@ test('the area limit is the one the measurements chose', () => {
 test('an antimeridian box is still reported as such when it is also large', () => {
   expect(parseBbox('180,-90,-180,90')).toEqual({ problem: 'crosses-antimeridian' });
 });
+
+test.each(['-180,90,180,-90', '-180,37,180,0.09', '-130,50,-65,25', '0,6,6,0', '-123,41,-120,38', '0,0.5,0.5,0'])(
+  'parseBbox names the box %j inverted-latitudes, whatever its absolute area',
+  (raw) => {
+    expect(parseBbox(raw)).toEqual({ problem: 'inverted-latitudes' });
+    expect(bboxToPolygonGeoJson(raw)).toBeNull();
+  },
+);
+
+test.each(['-180,0,180,37', '-180,-90,180,89', '-130,0,-65,50'])(
+  'parseBbox names the mixed-extent box %j too-large',
+  (raw) => {
+    expect(parseBbox(raw)).toEqual({ problem: 'too-large' });
+  },
+);
+
+test('a zero-height box is neither inverted nor too large', () => {
+  expect(parseBbox('-180,10,180,10')).toHaveProperty('polygon');
+});
+
+test('an antimeridian box that is also latitude-inverted is reported as antimeridian', () => {
+  expect(parseBbox('180,90,-180,-90')).toEqual({ problem: 'crosses-antimeridian' });
+});

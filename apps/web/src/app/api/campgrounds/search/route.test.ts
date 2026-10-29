@@ -69,6 +69,30 @@ test.each(['-130,25,-65,50', '-180,-90,180,90', '-125,42,-116,49'])(
   },
 );
 
+test.each(['-180,90,180,-90', '-180,37,180,0.09', '-130,50,-65,25', '0,6,6,0'])(
+  'a latitude-inverted or mixed-extent box %j is a 400 and never reaches the service',
+  async (bbox) => {
+    const response = await GET(new Request(`${SEARCH_URL}?bbox=${bbox}`));
+    expect(response.status).toBe(STATUS_BAD_REQUEST);
+    expect(searchCampgrounds).not.toHaveBeenCalled();
+  },
+);
+
+test('an inverted box says why', async () => {
+  const response = await GET(new Request(`${SEARCH_URL}?bbox=-180,90,180,-90`));
+  expect(((await response.json()) as { error: string }).error).toContain('south greater than north');
+});
+
+test.each([
+  'bbox=-120.4,38.7,-119.6,39.4&bbox=1,2,3,4',
+  'bbox=0,0,1,1&bbox=0,0,1,1',
+  'bbox=-120.4,38.7,-119.6,39.4&bbox=',
+])('a repeated bbox (%s) is a 400 on the route exactly as the page treats it', async (query) => {
+  const response = await GET(new Request(`${SEARCH_URL}?${query}`));
+  expect(response.status).toBe(STATUS_BAD_REQUEST);
+  expect(searchCampgrounds).not.toHaveBeenCalled();
+});
+
 test('a box exactly at the area limit is searched', async () => {
   const response = await GET(new Request(`${SEARCH_URL}?bbox=0,0,6,6`));
   expect(response.status).toBe(STATUS_OK);
