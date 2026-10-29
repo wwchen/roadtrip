@@ -179,5 +179,5 @@ The cost is not smooth: the plan flips between 49 and 60 square degrees, and a 1
 square degrees stayed fast, so area is a proxy for the plan rather than the cause. 36 square
 degrees (6 by 6 degrees, a state-sized viewport) is 27% under 49, the largest box that was fast in
 every sample, and 40% under 60, the smallest slow one; every measured case at or under it took
-150 ms or less. If the data or the
-statistics change, re-measure before raising it.
+150 ms or less. The cap sits just under a flip that depends on planner statistics, so do not raise
+it without re-measuring, and re-measure if the data or the statistics change.
