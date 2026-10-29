@@ -1,5 +1,11 @@
 import { expect, test } from 'vitest';
-import { DEFAULT_SEARCH_BBOX, bboxToPolygonGeoJson, parseBbox, parsePoiId } from './boundary';
+import {
+  DEFAULT_SEARCH_BBOX,
+  MAX_BBOX_AREA_SQUARE_DEGREES,
+  bboxToPolygonGeoJson,
+  parseBbox,
+  parsePoiId,
+} from './boundary';
 
 const MAX_BIGINT_ID = '9223372036854775807';
 const PAST_BIGINT_ID = '92233720368547758070';
@@ -50,9 +56,12 @@ test('bboxToPolygonGeoJson produces a closed 5-point polygon', () => {
   ]);
 });
 
-test('bboxToPolygonGeoJson accepts the extreme valid corners', () => {
-  expect(bboxToPolygonGeoJson('-180,-90,180,90')).not.toBeNull();
-});
+test.each(['-180,-90,-174,-84', '174,84,180,90', '-180,-90,-180,90'])(
+  'bboxToPolygonGeoJson accepts the extreme valid corners %j',
+  (raw) => {
+    expect(bboxToPolygonGeoJson(raw)).not.toBeNull();
+  },
+);
 
 test.each([
   '1,2,3',
@@ -92,4 +101,27 @@ test('parseBbox calls a malformed box malformed, not antimeridian', () => {
 
 test('parseBbox accepts west equal to east without calling it antimeridian', () => {
   expect(parseBbox('5,0,5,10')).toHaveProperty('polygon');
+});
+
+test.each(['-130,25,-65,50', '-180,-90,180,90', '-125,42,-116,49', '0,0,6.01,6', '0,0,10,10'])(
+  'parseBbox names the box %j too-large and builds no polygon',
+  (raw) => {
+    expect(parseBbox(raw)).toEqual({ problem: 'too-large' });
+    expect(bboxToPolygonGeoJson(raw)).toBeNull();
+  },
+);
+
+test.each(['0,0,6,6', '-123,38,-120,41', '-180,0,-144,1', '0,0,36,1', DEFAULT_SEARCH_BBOX])(
+  'parseBbox accepts the box %j at or under the area limit',
+  (raw) => {
+    expect(parseBbox(raw)).toHaveProperty('polygon');
+  },
+);
+
+test('the area limit is the one the measurements chose', () => {
+  expect(MAX_BBOX_AREA_SQUARE_DEGREES).toBe(36);
+});
+
+test('an antimeridian box is still reported as such when it is also large', () => {
+  expect(parseBbox('180,-90,-180,90')).toEqual({ problem: 'crosses-antimeridian' });
 });

@@ -59,6 +59,22 @@ test.each(['garbage', '', '1,2,3', '0,-91,10,10', '170,0,-170,10'])(
   },
 );
 
+test.each(['-130,25,-65,50', '-180,-90,180,90', '-125,42,-116,49'])(
+  'a box over the area limit %j is a 400 that says so and never reaches the service',
+  async (bbox) => {
+    const response = await GET(new Request(`${SEARCH_URL}?bbox=${bbox}`));
+    expect(response.status).toBe(STATUS_BAD_REQUEST);
+    expect(((await response.json()) as { error: string }).error).toContain('square degrees');
+    expect(searchCampgrounds).not.toHaveBeenCalled();
+  },
+);
+
+test('a box exactly at the area limit is searched', async () => {
+  const response = await GET(new Request(`${SEARCH_URL}?bbox=0,0,6,6`));
+  expect(response.status).toBe(STATUS_OK);
+  expect(searchCampgrounds).toHaveBeenCalledTimes(1);
+});
+
 test('a boundary the service rejects is a 400', async () => {
   searchCampgrounds.mockRejectedValue(new StubInvalidBoundaryError());
   const response = await GET(new Request(`${SEARCH_URL}?bbox=0,0,1,1`));

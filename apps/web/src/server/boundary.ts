@@ -10,6 +10,8 @@ const BBOX_PART_COUNT = 4;
 const COORDINATE_PATTERN = /^-?\d+(?:\.\d+)?$/;
 const POLYGON_TYPE = 'Polygon';
 
+export const MAX_BBOX_AREA_SQUARE_DEGREES = 36;
+
 export function parsePoiId(raw: string): bigint | null {
   const match = POI_ID_PATTERN.exec(raw);
   if (match === null) return null;
@@ -21,7 +23,7 @@ function within(value: number, minimum: number, maximum: number): boolean {
   return value >= minimum && value <= maximum;
 }
 
-export type BboxProblem = 'malformed' | 'crosses-antimeridian';
+export type BboxProblem = 'malformed' | 'crosses-antimeridian' | 'too-large';
 
 export type ParsedBbox = { polygon: string } | { problem: BboxProblem };
 
@@ -36,6 +38,7 @@ export function parseBbox(raw: string): ParsedBbox {
     within(south, MIN_LATITUDE, MAX_LATITUDE) && within(north, MIN_LATITUDE, MAX_LATITUDE);
   if (!longitudesValid || !latitudesValid) return { problem: 'malformed' };
   if (west > east) return { problem: 'crosses-antimeridian' };
+  if ((east - west) * (north - south) > MAX_BBOX_AREA_SQUARE_DEGREES) return { problem: 'too-large' };
   return {
     polygon: JSON.stringify({
       type: POLYGON_TYPE,

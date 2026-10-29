@@ -1,4 +1,9 @@
-import { DEFAULT_SEARCH_BBOX, parseBbox, type BboxProblem } from './boundary';
+import {
+  DEFAULT_SEARCH_BBOX,
+  MAX_BBOX_AREA_SQUARE_DEGREES,
+  parseBbox,
+  type BboxProblem,
+} from './boundary';
 import type { CampgroundSearchDto } from './dto';
 import { InvalidBoundaryError, searchCampgrounds } from './service/campgroundService';
 
@@ -8,6 +13,7 @@ export const BBOX_PROBLEM_MESSAGES: Record<BboxProblem, string> = {
   malformed: `bbox must be west,south,east,north in degrees, for example ${DEFAULT_SEARCH_BBOX}`,
   'crosses-antimeridian':
     'a bbox crossing the antimeridian (west greater than east) is not supported',
+  'too-large': `a bbox may cover at most ${MAX_BBOX_AREA_SQUARE_DEGREES} square degrees (about 6 by 6 degrees); zoom in`,
 };
 
 export type BboxSearchOutcome =

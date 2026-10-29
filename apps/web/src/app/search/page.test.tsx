@@ -90,6 +90,14 @@ test('a box crossing the antimeridian renders its own alert instead of an empty 
   expect(searchCampgrounds).not.toHaveBeenCalled();
 });
 
+test('a box over the area limit renders its own alert and never reaches the service', async () => {
+  const markup = await render({ bbox: '-130,25,-65,50' });
+  expect(markup).toContain(ALERT_MARKER);
+  expect(markup).toContain('square degrees');
+  expect(markup).not.toContain('No campgrounds matched');
+  expect(searchCampgrounds).not.toHaveBeenCalled();
+});
+
 test('a boundary the service rejects renders the alert, not an error', async () => {
   searchCampgrounds.mockRejectedValue(new StubInvalidBoundaryError());
   const markup = await render({ bbox: '0,0,1,1' });
