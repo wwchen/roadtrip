@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { DEFAULT_SEARCH_BBOX, bboxToPolygonGeoJson, parsePoiId } from './boundary';
+import { DEFAULT_SEARCH_BBOX, bboxToPolygonGeoJson, parseBbox, parsePoiId } from './boundary';
 
 const MAX_BIGINT_ID = '9223372036854775807';
 const PAST_BIGINT_ID = '92233720368547758070';
@@ -75,4 +75,21 @@ test.each([
 
 test('the default search bbox is itself a valid bbox', () => {
   expect(bboxToPolygonGeoJson(DEFAULT_SEARCH_BBOX)).not.toBeNull();
+});
+
+test.each(['170,0,-170,10', '0.0001,0,0,10', '180,-90,-180,90'])(
+  'bboxToPolygonGeoJson rejects the west-greater-than-east box %j and parseBbox names why',
+  (raw) => {
+    expect(bboxToPolygonGeoJson(raw)).toBeNull();
+    expect(parseBbox(raw)).toEqual({ problem: 'crosses-antimeridian' });
+  },
+);
+
+test('parseBbox calls a malformed box malformed, not antimeridian', () => {
+  expect(parseBbox('garbage')).toEqual({ problem: 'malformed' });
+  expect(parseBbox('-200,0,-300,10')).toEqual({ problem: 'malformed' });
+});
+
+test('parseBbox accepts west equal to east without calling it antimeridian', () => {
+  expect(parseBbox('5,0,5,10')).toHaveProperty('polygon');
 });

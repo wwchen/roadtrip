@@ -1,35 +1,28 @@
 import Link from 'next/link';
-import { DEFAULT_SEARCH_BBOX, bboxToPolygonGeoJson } from '@/server/boundary';
+import { BBOX_PARAMETER, BBOX_PROBLEM_MESSAGES, searchByBbox } from '@/server/bboxSearch';
+import { DEFAULT_SEARCH_BBOX } from '@/server/boundary';
 import type { CampgroundSearchDto } from '@/server/dto';
-import { InvalidBoundaryError, searchCampgrounds } from '@/server/service/campgroundService';
 
 export const dynamic = 'force-dynamic';
 
-const BBOX_PARAMETER = 'bbox';
 const CAMPGROUND_PATH_PREFIX = '/campgrounds/';
-const INVALID_BBOX_MESSAGE =
-  'The bounding box is not valid. Use west,south,east,north in degrees, for example';
+const REPEATED_PARAMETER_BBOX = '';
+const SINGULAR_COUNT = 1;
 
 interface SearchPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-async function searchOrNull(bbox: string): Promise<CampgroundSearchDto | null> {
-  const boundary = bboxToPolygonGeoJson(bbox);
-  if (boundary === null) return null;
-  try {
-    return await searchCampgrounds(boundary);
-  } catch (error) {
-    if (error instanceof InvalidBoundaryError) return null;
-    throw error;
-  }
+function counted(count: number, singular: string, plural: string): string {
+  return `${count} ${count === SINGULAR_COUNT ? singular : plural}`;
 }
 
 function SearchResults({ result }: { result: CampgroundSearchDto }) {
+  if (result.totalMatching === 0) return <p>No campgrounds matched this area.</p>;
   return (
     <>
       <p>
-        {result.totalMatching} matching {result.totalMatching === 1 ? 'campground' : 'campgrounds'}
+        {counted(result.totalMatching, 'matching campground', 'matching campgrounds')}
         {result.truncated ? `, showing the nearest ${result.campgrounds.length}` : ''}
       </p>
       <ul>
@@ -37,7 +30,9 @@ function SearchResults({ result }: { result: CampgroundSearchDto }) {
           <li key={campground.poiId}>
             <Link href={`${CAMPGROUND_PATH_PREFIX}${campground.poiId}`}>{campground.name}</Link>
             {campground.region === null ? '' : ` (${campground.region})`}
-            {campground.siteSummary === null ? '' : `, ${campground.siteSummary.siteTotal} sites`}
+            {campground.siteSummary === null
+              ? ''
+              : `, ${counted(campground.siteSummary.siteTotal, 'site', 'sites')}`}
           </li>
         ))}
       </ul>
@@ -46,9 +41,9 @@ function SearchResults({ result }: { result: CampgroundSearchDto }) {
 }
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
-  const supplied = (await searchParams)[BBOX_PARAMETER] ?? DEFAULT_SEARCH_BBOX;
-  const bbox = typeof supplied === 'string' ? supplied : '';
-  const result = await searchOrNull(bbox);
+  const supplied = (await searchParams)[BBOX_PARAMETER];
+  const raw = Array.isArray(supplied) ? REPEATED_PARAMETER_BBOX : supplied;
+  const outcome = await searchByBbox(raw);
 
   return (
     <main>
@@ -56,16 +51,14 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       <form method="get">
         <label>
           Bounding box (west,south,east,north){' '}
-          <input name={BBOX_PARAMETER} defaultValue={bbox} size={40} />
+          <input name={BBOX_PARAMETER} defaultValue={raw ?? DEFAULT_SEARCH_BBOX} size={40} />
         </label>{' '}
         <button type="submit">Search</button>
       </form>
-      {result === null ? (
-        <p role="alert">
-          {INVALID_BBOX_MESSAGE} <code>{DEFAULT_SEARCH_BBOX}</code>.
-        </p>
+      {outcome.status === 'rejected' ? (
+        <p role="alert">{BBOX_PROBLEM_MESSAGES[outcome.problem]}</p>
       ) : (
-        <SearchResults result={result} />
+        <SearchResults result={outcome.result} />
       )}
     </main>
   );

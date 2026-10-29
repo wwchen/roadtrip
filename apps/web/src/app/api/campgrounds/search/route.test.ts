@@ -49,7 +49,7 @@ test('Server-Timing covers the service call and not the serialization', async ()
   expect(duration).toBeLessThan(MAX_DURATION_MS);
 });
 
-test.each(['garbage', '', '1,2,3', '0,-91,10,10'])(
+test.each(['garbage', '', '1,2,3', '0,-91,10,10', '170,0,-170,10'])(
   'a malformed bbox %j is a 400 and never reaches the service',
   async (bbox) => {
     const response = await GET(new Request(`${SEARCH_URL}?bbox=${encodeURIComponent(bbox)}`));

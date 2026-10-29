@@ -1,7 +1,7 @@
 import { serverDb } from '../db';
 import { pingDatabase } from '../repo/healthRepo';
 
-const DATABASE_PING_TIMEOUT_MS = 5000;
+export const DATABASE_PING_TIMEOUT_MS = 5000;
 const DATABASE_UNREACHABLE_MESSAGE = 'database health check failed:';
 const PING_TIMEOUT_MESSAGE = 'database ping timed out';
 

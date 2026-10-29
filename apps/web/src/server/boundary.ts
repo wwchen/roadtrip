@@ -21,26 +21,38 @@ function within(value: number, minimum: number, maximum: number): boolean {
   return value >= minimum && value <= maximum;
 }
 
-export function bboxToPolygonGeoJson(raw: string): string | null {
+export type BboxProblem = 'malformed' | 'crosses-antimeridian';
+
+export type ParsedBbox = { polygon: string } | { problem: BboxProblem };
+
+export function parseBbox(raw: string): ParsedBbox {
   const parts = raw.split(BBOX_SEPARATOR);
-  if (parts.length !== BBOX_PART_COUNT) return null;
-  if (!parts.every((part) => COORDINATE_PATTERN.test(part))) return null;
+  if (parts.length !== BBOX_PART_COUNT) return { problem: 'malformed' };
+  if (!parts.every((part) => COORDINATE_PATTERN.test(part))) return { problem: 'malformed' };
   const [west, south, east, north] = parts.map(Number) as [number, number, number, number];
   const longitudesValid =
     within(west, MIN_LONGITUDE, MAX_LONGITUDE) && within(east, MIN_LONGITUDE, MAX_LONGITUDE);
   const latitudesValid =
     within(south, MIN_LATITUDE, MAX_LATITUDE) && within(north, MIN_LATITUDE, MAX_LATITUDE);
-  if (!longitudesValid || !latitudesValid) return null;
-  return JSON.stringify({
-    type: POLYGON_TYPE,
-    coordinates: [
-      [
-        [west, south],
-        [east, south],
-        [east, north],
-        [west, north],
-        [west, south],
+  if (!longitudesValid || !latitudesValid) return { problem: 'malformed' };
+  if (west > east) return { problem: 'crosses-antimeridian' };
+  return {
+    polygon: JSON.stringify({
+      type: POLYGON_TYPE,
+      coordinates: [
+        [
+          [west, south],
+          [east, south],
+          [east, north],
+          [west, north],
+          [west, south],
+        ],
       ],
-    ],
-  });
+    }),
+  };
+}
+
+export function bboxToPolygonGeoJson(raw: string): string | null {
+  const parsed = parseBbox(raw);
+  return 'polygon' in parsed ? parsed.polygon : null;
 }
