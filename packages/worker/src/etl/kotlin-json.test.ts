@@ -7,10 +7,7 @@ import {
   booleanOrNull,
   contentOrNull,
   doubleOrNull,
-  doubleToInt,
   intOrNull,
-  kotlinDoubleFromText,
-  kotlinIntFromText,
   primitiveOf,
 } from './kotlin-json.js';
 
@@ -18,7 +15,6 @@ const TEMP_DIR_PREFIX = 'kotlin-json-';
 const HTTP_OK = 200;
 const INT_MAX = 2147483647;
 const INT_MIN = -2147483648;
-const NO_BREAK_SPACE = String.fromCodePoint(0xa0);
 
 let dir = '';
 let counter = 0;
@@ -64,6 +60,11 @@ const KOTLIN_PRIMITIVES: ReadonlyArray<readonly [string, Accessors]> = [
   ['-2147483648', { content: '-2147483648', int: INT_MIN, double: INT_MIN, bool: null }],
   ['1e400', { content: '1e400', int: null, double: Infinity, bool: null }],
   ['12345678901234567890', { content: '12345678901234567890', int: null, double: 1.2345678901234567e19, bool: null }],
+  ['1.10', { content: '1.10', int: null, double: 1.1, bool: null }],
+  ['1e-1', { content: '1e-1', int: null, double: 0.1, bool: null }],
+  ['1e20', { content: '1e20', int: null, double: 1e20, bool: null }],
+  ['7.02e-05', { content: '7.02e-05', int: null, double: 7.02e-5, bool: null }],
+  ['100000000000000000000.0', { content: '100000000000000000000.0', int: null, double: 1e20, bool: null }],
   ['true', { content: 'true', int: null, double: null, bool: true }],
   ['false', { content: 'false', int: null, double: null, bool: false }],
   ['null', { content: null, int: null, double: null, bool: null }],
@@ -100,13 +101,6 @@ describe('JsonPrimitive accessors, pinned to kotlinx.serialization 1.11.0', () =
     expect(intOrNull(valueOf('25'))).toBe(25);
   });
 
-  test('a non-integral number keeps its value but not its spelling, the one accessor that diverges from Kotlin', () => {
-    const value = valueOf('1.10');
-    expect(contentOrNull(value)).toBe('1.1');
-    expect(doubleOrNull(value)).toBe(1.1);
-    expect(intOrNull(value)).toBeNull();
-  });
-
   test('an absent value reads as null through every accessor', () => {
     expect([contentOrNull(undefined), intOrNull(undefined), doubleOrNull(undefined), booleanOrNull(undefined)]).toEqual([
       null,
@@ -126,67 +120,5 @@ describe('JsonPrimitive accessors, pinned to kotlinx.serialization 1.11.0', () =
     expect(() => intOrNull(value)).toThrow(/is not a JsonPrimitive/);
     expect(() => doubleOrNull(value)).toThrow(/is not a JsonPrimitive/);
     expect(() => booleanOrNull(value)).toThrow(/is not a JsonPrimitive/);
-  });
-});
-
-describe('kotlinIntFromText', () => {
-  test.each([
-    ['0012', 12],
-    ['-5', -5],
-    ['100e-2', 1],
-    ['1e+2', 100],
-    ['-1e0', -1],
-    ['\t12\n', 12],
-    ['9223372036854775807', null],
-    ['1e19', null],
-    ['-', null],
-    ['', null],
-    ['1 2', null],
-    ['12abc', null],
-    ['- 5', null],
-    [`${NO_BREAK_SPACE}12`, null],
-    ['.5', null],
-    ['5.', null],
-    ['12e-1', null],
-  ])('%j', (text, expected) => {
-    expect(kotlinIntFromText(text)).toBe(expected);
-  });
-});
-
-describe('kotlinDoubleFromText', () => {
-  test.each([
-    ['5.', 5],
-    ['.5', 0.5],
-    ['-.5e1', -5],
-    ['1.5F', 1.5],
-    ['  2.5  ', 2.5],
-    ['+Infinity', Infinity],
-    ['-Infinity', -Infinity],
-    ['', null],
-    ['1_0', null],
-    ['e5', null],
-    ['1e', null],
-    ['0.0.1', null],
-  ])('%j', (text, expected) => {
-    expect(kotlinDoubleFromText(text)).toBe(expected);
-  });
-
-  test('NaN reads as NaN, not as absent', () => {
-    expect(kotlinDoubleFromText('NaN')).toBeNaN();
-  });
-});
-
-describe('doubleToInt, Kotlin Double.toInt', () => {
-  test.each([
-    [2.9, 2],
-    [-2.9, -2],
-    [1e10, INT_MAX],
-    [-1e10, INT_MIN],
-    [Infinity, INT_MAX],
-    [-Infinity, INT_MIN],
-    [NaN, 0],
-    [-0.5, 0],
-  ])('%s', (value, expected) => {
-    expect(Object.is(doubleToInt(value), expected)).toBe(true);
   });
 });

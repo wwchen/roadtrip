@@ -93,10 +93,24 @@ describe('scalar strictness', () => {
     expect(() => requiredString({ k: wide(BEYOND_DOUBLE) }, 'k')).toThrow('k: expected string, got number beyond the double range');
   });
 
-  test('a whole number written with a fraction is refused by Int and Long as Kotlin refuses it, and Double still takes it', () => {
-    expect(() => nullableInt({ k: wide('12.0') }, 'k')).toThrow('k: expected int, got integral number written with a fraction or exponent');
-    expect(() => requiredLong({ k: wide('1.0e2') }, 'k')).toThrow('k: expected long, got integral number written with a fraction or exponent');
+  test('Int and Long refuse a literal with a fraction, as Kotlin does, and Double still takes it', () => {
+    expect(() => nullableInt({ k: wide('12.0') }, 'k')).toThrow('k: expected int, got number whose literal is not an integer in range');
+    expect(() => requiredLong({ k: wide('1.0e2') }, 'k')).toThrow('k: expected long, got number whose literal is not an integer in range');
+    expect(() => nullableInt({ k: wide('-0.0') }, 'k')).toThrow('k: expected int');
+    expect(() => nullableInt({ k: wide('12e-1') }, 'k')).toThrow('k: expected int');
     expect(nullableDouble({ k: wide('12.0') }, 'k')).toBe(12);
+  });
+
+  test('Int and Long accept a whole exponent literal, as Kotlin does', () => {
+    expect(nullableInt({ k: wide('1e2') }, 'k')).toBe(100);
+    expect(requiredLong({ k: wide('10e-1') }, 'k')).toBe(1);
+    expect(nullableInt({ k: wide('250e-1') }, 'k')).toBe(25);
+  });
+
+  test('an exponent literal that leaves the Int range is refused by Int and a wide one by Long', () => {
+    expect(() => nullableInt({ k: wide('1e10') }, 'k')).toThrow('k: expected int');
+    expect(() => requiredLong({ k: wide('1e17') }, 'k')).toThrow('k: expected long');
+    expect(requiredLong({ k: wide('1e15') }, 'k')).toBe(1e15);
   });
 
   test('Long accepts exactly representable integers, and a wide one throws instead of rounding', () => {

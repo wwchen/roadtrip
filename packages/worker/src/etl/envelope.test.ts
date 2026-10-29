@@ -214,12 +214,25 @@ describe('parseEnvelope number fidelity', () => {
     expect(typeof payload.min).toBe('number');
   });
 
-  test('a whole number written with a fraction or exponent is carried with its spelling, a fraction that is not whole is not', () => {
-    const raw = '{"a":25.0,"b":1e2,"c":-0.0,"d":1.0e2,"e":25.5,"f":1e-1,"g":25}';
+  test('a number whose canonical spelling differs from its source is carried, so Kotlin sees the same text', () => {
+    const raw =
+      '{"a":25.0,"b":1e2,"c":-0.0,"d":1.0e2,"e":1e-1,"f":1.10,"g":1e20,"h":7.02e-05,"i":100000000000000000000.0,"j":-0}';
     const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload as Record<string, unknown>;
-    expect(['a', 'b', 'c', 'd'].map((key) => isWideNumber(payload[key]))).toEqual([true, true, true, true]);
-    expect(['e', 'f', 'g'].map((key) => typeof payload[key])).toEqual(['number', 'number', 'number']);
-    expect(JSON.stringify(payload)).toBe('{"a":25.0,"b":1e2,"c":-0.0,"d":1.0e2,"e":25.5,"f":0.1,"g":25}');
+    expect(Object.values(payload).map(isWideNumber)).toEqual(Array(10).fill(true));
+    expect(JSON.stringify(payload)).toBe(raw);
+  });
+
+  test('the first integer past the safe range is carried even though its text survives a round trip', () => {
+    const [last, first] = parseEnvelope(
+      envelopeWithRawPayload(`[${Number.MAX_SAFE_INTEGER},${Number.MAX_SAFE_INTEGER + 1}]`),
+    ).payload as unknown[];
+    expect([isWideNumber(last), isWideNumber(first)]).toEqual([false, true]);
+  });
+
+  test('a number already spelled the way JavaScript spells it stays a plain number', () => {
+    const raw = '{"a":25.5,"b":0.1,"c":25,"d":-3,"e":38.40831195138031,"f":1e+21,"g":1.5e-7}';
+    const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload as Record<string, unknown>;
+    expect(Object.values(payload).map((value) => typeof value)).toEqual(Array(7).fill('number'));
   });
 
   test('a long digit run inside a string is left a string', () => {
@@ -332,15 +345,14 @@ describe('the wide-number carrier contract', () => {
   });
 });
 
-describe('number normalisation is intended', () => {
-  test('a decimal that is not whole is respelled, so the differential must compare jsonb values and never jsonb text: 2.50 serialises as 2.5', () => {
-    const decimals = parseEnvelope(envelopeWithRawPayload('{"price":2.50,"small":1e-1,"neg":-0.250}')).payload;
-    expect(serializeOpaquePayload(decimals)).toBe('{"price":2.5,"small":0.1,"neg":-0.25}');
+describe('number spelling survives the opaque round trip', () => {
+  test('respelled decimals keep their text, so a payload is stored the way the vendor wrote it', () => {
+    const raw = '{"price":2.50,"small":1e-1,"neg":-0.250,"whole":10.0}';
+    expect(serializeOpaquePayload(parseEnvelope(envelopeWithRawPayload(raw)).payload)).toBe(raw);
   });
 
-  test('wide integers beside a respelled decimal keep their digits, because their value changes if they are rounded', () => {
+  test('wide integers beside a respelled decimal keep their digits', () => {
     const raw = `{"id":${WIDE_INTEGER},"maxValue":10.50}`;
-    const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload;
-    expect(serializeOpaquePayload(payload)).toBe(`{"id":${WIDE_INTEGER},"maxValue":10.5}`);
+    expect(serializeOpaquePayload(parseEnvelope(envelopeWithRawPayload(raw)).payload)).toBe(raw);
   });
 });

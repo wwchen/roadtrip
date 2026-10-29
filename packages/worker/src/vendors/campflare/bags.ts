@@ -11,7 +11,8 @@ import {
   type CarrierSignal,
 } from '@roadtrip/domain';
 import { fieldOf, isJsonObject, type JsonObject } from '../../etl/json-decode.js';
-import { booleanOrNull, doubleOrNull, doubleToInt, isNonStringPrimitive } from '../../etl/kotlin-json.js';
+import { booleanOrNull, doubleOrNull, isNonStringPrimitive } from '../../etl/kotlin-json.js';
+import { doubleToInt } from '../../etl/kotlin-number.js';
 import { doubleField, stringField } from './support.js';
 
 const TOILET_KIND_KEY = 'toilet_kind';

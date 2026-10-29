@@ -61,6 +61,12 @@ describe('campsite price and schedule are raw vendor json', () => {
     expect(JSON.parse(record.schedule as string)).toEqual({ check_in_time: '14:00', uniform: true });
   });
 
+  test('an object with none of the typed keys, or an empty one, is still stored as it came', () => {
+    const record = recordOf(`{${BASE},"price":{"uniform":true,"per_night":null},"schedule":{}}`);
+    expect(JSON.parse(record.price as string)).toEqual({ uniform: true, per_night: null });
+    expect(JSON.parse(record.schedule as string)).toEqual({});
+  });
+
   test('a json null or a non-object is no payload at all', () => {
     expect(recordOf(`{${BASE},"price":null,"schedule":[1]}`)).toMatchObject({ price: null, schedule: null });
   });
@@ -118,6 +124,6 @@ describe('the rest of the record', () => {
 
   test('the source payload is the row verbatim', () => {
     const record = recordOf(`{${BASE},"driveway_length":25.0,"unmapped":{"a":[1,2.50]}}`);
-    expect(record.sourcePayload).toBe(`{"id":"s1","campground_id":"c1","name":"Site 1","driveway_length":25.0,"unmapped":{"a":[1,2.5]}}`);
+    expect(record.sourcePayload).toBe(`{"id":"s1","campground_id":"c1","name":"Site 1","driveway_length":25.0,"unmapped":{"a":[1,2.50]}}`);
   });
 });

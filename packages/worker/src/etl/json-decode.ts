@@ -1,18 +1,21 @@
 import { isWideNumber } from './envelope.js';
+import { kotlinIntFromText, kotlinLongFromText } from './kotlin-number.js';
 
 export type JsonObject = Readonly<Record<string, unknown>>;
 
 const INT_MIN = -(2 ** 31);
 const INT_MAX = 2 ** 31 - 1;
+const MIN_SAFE_LONG = BigInt(Number.MIN_SAFE_INTEGER);
+const MAX_SAFE_LONG = BigInt(Number.MAX_SAFE_INTEGER);
 
 const WIDE_INTEGER_LITERAL = /^-?\d+$/;
 const WIDE_INTEGER_KIND = 'integer beyond 2^53';
 const WIDE_NUMBER_KIND = 'number beyond the double range';
-const FRACTIONAL_SPELLING_KIND = 'integral number written with a fraction or exponent';
+const RESPELLED_NUMBER_KIND = 'number whose literal is not an integer in range';
 
 function wideKindOf(rawJSON: string): string {
   if (WIDE_INTEGER_LITERAL.test(rawJSON)) return WIDE_INTEGER_KIND;
-  return Number.isFinite(Number(rawJSON)) ? FRACTIONAL_SPELLING_KIND : WIDE_NUMBER_KIND;
+  return Number.isFinite(Number(rawJSON)) ? RESPELLED_NUMBER_KIND : WIDE_NUMBER_KIND;
 }
 
 function kindOf(value: unknown): string {
@@ -57,6 +60,11 @@ function decodeDouble(key: string, value: unknown): number {
 }
 
 function decodeInt(key: string, value: unknown): number {
+  if (isWideNumber(value)) {
+    const decoded = kotlinIntFromText(value.rawJSON);
+    if (decoded === null) mismatch(key, 'int', value);
+    return decoded;
+  }
   if (typeof value !== 'number') mismatch(key, 'int', value);
   if (!Number.isInteger(value) || value < INT_MIN || value > INT_MAX) {
     throw new Error(`${key}: ${String(value)} is not a 32-bit integer`);
@@ -65,6 +73,11 @@ function decodeInt(key: string, value: unknown): number {
 }
 
 function decodeLong(key: string, value: unknown): number {
+  if (isWideNumber(value)) {
+    const decoded = kotlinLongFromText(value.rawJSON);
+    if (decoded === null || decoded < MIN_SAFE_LONG || decoded > MAX_SAFE_LONG) mismatch(key, 'long', value);
+    return Number(decoded);
+  }
   if (typeof value !== 'number') mismatch(key, 'long', value);
   if (!Number.isSafeInteger(value)) throw new Error(`${key}: ${String(value)} is not an exactly representable integer`);
   return value;

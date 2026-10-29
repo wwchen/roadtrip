@@ -43,9 +43,7 @@ const INTEGER_LITERAL = /^-?\d+$/;
 function reviveNumber(_key: string, value: unknown, context: { source?: string }): unknown {
   const source = context.source;
   if (typeof value !== 'number' || source === undefined) return value;
-  const losesInformation = INTEGER_LITERAL.test(source)
-    ? !Number.isSafeInteger(value)
-    : !Number.isFinite(value) || Number.isInteger(value);
+  const losesInformation = (INTEGER_LITERAL.test(source) && !Number.isSafeInteger(value)) || String(value) !== source;
   return losesInformation ? sourceAwareJson.rawJSON(source) : value;
 }
 
