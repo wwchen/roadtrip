@@ -904,11 +904,12 @@ async function checkRestoredSeed(postgres, user, seedPath, expected, database) {
 }
 
 export async function dumpSeed(postgres, user, database, outPath, expected, flags = SEED_DUMP_FLAGS) {
-  await dumpDatabase(postgres, user, database, flags, outPath);
   try {
+    await dumpDatabase(postgres, user, database, flags, outPath);
     await verifySeed(postgres, user, outPath, expected);
   } catch (error) {
     await rm(outPath, { force: true });
+    await rm(`${outPath}${PROVENANCE_SUFFIX}`, { force: true });
     throw error;
   }
 }

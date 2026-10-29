@@ -41,6 +41,12 @@ function envelopeWithName(name: string): string {
   });
 }
 
+function envelopeWithRawDetail(rawDetail: string): string {
+  const base = JSON.parse(envelopeWithName('unused')) as Record<string, unknown>;
+  const { payload: _payload, ...rest } = base;
+  return JSON.stringify({ ...rest, payload: '__PAYLOAD__' }).replace('"__PAYLOAD__"', `{"data":{"data":${rawDetail}}}`);
+}
+
 function writeCapture(slug: string, file: string, contents: string): void {
   const dir = path.join(rawDir, 'tesla-locations', slug);
   mkdirSync(dir, { recursive: true });
@@ -58,16 +64,19 @@ function indexRowsFor(slugs: string[]) {
   }));
 }
 
-function transformedNames(slugs: string[]): Map<string, string> {
+function transformedRecords(slugs: string[]): Map<string, TeslaSuperchargerUpsertCandidate> {
   const dto = decodeTeslaIndex({ data: { data: indexRowsFor(slugs) } });
   const ctx = TransformCtx.load(rawDir, EMPTY_REGISTRY);
-  const names = new Map<string, string>();
+  const records = new Map<string, TeslaSuperchargerUpsertCandidate>();
   for (const result of new TeslaIndexEtl().transform(dto, ctx)) {
     if (!result.ok) throw new Error(result.errors.join(', '));
-    const record: TeslaSuperchargerUpsertCandidate = result.record;
-    names.set(record.locationSlug, record.commonSiteName);
+    records.set(result.record.locationSlug, result.record);
   }
-  return names;
+  return records;
+}
+
+function transformedNames(slugs: string[]): Map<string, string> {
+  return new Map([...transformedRecords(slugs)].map(([slug, record]) => [slug, record.commonSiteName]));
 }
 
 beforeEach(() => {
@@ -126,5 +135,19 @@ describe('sanitized slug collisions', () => {
 
   test('distinct slugs that stay distinct once sanitized do not collide', () => {
     expect([...transformedNames(['A/b', 'a-c']).keys()]).toEqual(['a-b', 'a-c']);
+  });
+});
+
+describe('opaque detail fields', () => {
+  test('an availabilityProfile that is an object is kept and one that is a wide integer is dropped, not crashed on', () => {
+    writeCapture('object', NEWEST_CAPTURE, envelopeWithRawDetail('{"name":"Obj","availabilityProfile":{"a":1}}'));
+    writeCapture('wide', NEWEST_CAPTURE, envelopeWithRawDetail('{"name":"Wide","availabilityProfile":12345678901234567890}'));
+    writeCapture('array', NEWEST_CAPTURE, envelopeWithRawDetail('{"name":"Arr","availabilityProfile":[1]}'));
+
+    const records = transformedRecords(['object', 'wide', 'array']);
+
+    expect(records.get('object')?.availabilityProfile).toBe('{"a":1}');
+    expect(records.get('wide')?.availabilityProfile).toBeNull();
+    expect(records.get('array')?.availabilityProfile).toBeNull();
   });
 });

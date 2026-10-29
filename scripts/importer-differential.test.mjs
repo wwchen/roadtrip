@@ -629,12 +629,12 @@ test(
             );
           },
         );
-        const seedDumpTo = async (flags) => {
+        const seedDumpTo = async (flags, adjustExpected = (counts) => counts) => {
           const dir = await mkdtemp(path.join(tmpdir(), 'roadtrip-seed-'));
           const seedPath = path.join(dir, 'seed.sql');
           const user = new URL(postgres.connectionString(FIXTURE_DB)).username;
           await reseed(db);
-          const expected = await copiedTableCounts(db);
+          const expected = adjustExpected(await copiedTableCounts(db));
           return { seedPath, run: () => dumpSeed(postgres, user, FIXTURE_DB, seedPath, expected, flags) };
         };
 
@@ -654,6 +654,22 @@ test(
           const { seedPath, run } = await seedDumpTo(['--no-owner', '--no-privileges']);
           await assert.rejects(run(), /carries the reference schema/);
           assert.equal(existsSync(seedPath), false);
+        });
+        await t.test('a seed that restores cleanly but with the wrong row counts is refused and removed', async () => {
+          const { seedPath, run } = await seedDumpTo(SEED_DUMP_FLAGS, (counts) => ({
+            ...counts,
+            tesla_superchargers: counts.tesla_superchargers + 1,
+          }));
+          await assert.rejects(run(), /tesla_superchargers: dumped 2 row\(s\), restored 1/);
+          assert.equal(existsSync(seedPath), false);
+        });
+
+        await t.test('a pg_dump that fails leaves neither a partial seed nor a stale sidecar', async () => {
+          const { seedPath, run } = await seedDumpTo(['--no-such-option']);
+          await writeFile(`${seedPath}.provenance.json`, '{}');
+          await assert.rejects(run(), /pg_dump/);
+          assert.equal(existsSync(seedPath), false);
+          assert.equal(existsSync(`${seedPath}.provenance.json`), false);
         });
       } finally {
         await db.$client.end();

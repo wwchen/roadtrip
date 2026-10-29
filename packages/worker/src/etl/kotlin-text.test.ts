@@ -1,16 +1,44 @@
 import { describe, expect, test } from 'vitest';
-import { isKotlinBlank, nonBlank } from './kotlin-text.js';
+import { isKotlinBlank, kotlinTrim, nonBlank } from './kotlin-text.js';
 
-const NBSP = ' ';
-const FIGURE_SPACE = ' ';
-const NARROW_NBSP = ' ';
+const NBSP = '\u00a0';
+const FIGURE_SPACE = '\u2007';
+const NARROW_NBSP = '\u202f';
 const FILE_SEPARATOR = '\u001c';
-const LINE_SEPARATOR = ' ';
-const PARAGRAPH_SEPARATOR = ' ';
-const IDEOGRAPHIC_SPACE = '　';
-const BYTE_ORDER_MARK = '﻿';
+const GROUP_SEPARATOR = '\u001d';
+const RECORD_SEPARATOR = '\u001e';
+const UNIT_SEPARATOR = '\u001f';
+const LINE_SEPARATOR = '\u2028';
+const PARAGRAPH_SEPARATOR = '\u2029';
+const IDEOGRAPHIC_SPACE = '\u3000';
+const BYTE_ORDER_MARK = '\ufeff';
 const NEXT_LINE = '\u0085';
-const ZERO_WIDTH_SPACE = '​';
+const ZERO_WIDTH_SPACE = '\u200b';
+
+const KOTLIN_WHITESPACE: [string, string][] = [
+  ['no-break space', NBSP],
+  ['figure space', FIGURE_SPACE],
+  ['narrow no-break space', NARROW_NBSP],
+  ['file separator', FILE_SEPARATOR],
+  ['group separator', GROUP_SEPARATOR],
+  ['record separator', RECORD_SEPARATOR],
+  ['unit separator', UNIT_SEPARATOR],
+  ['line separator', LINE_SEPARATOR],
+  ['paragraph separator', PARAGRAPH_SEPARATOR],
+  ['ideographic space', IDEOGRAPHIC_SPACE],
+];
+
+describe('kotlinTrim', () => {
+  test.each(KOTLIN_WHITESPACE)('strips a %s from the front and from the back, but not from the middle', (_name, space) => {
+    expect(kotlinTrim(`${space}a`)).toBe('a');
+    expect(kotlinTrim(`a${space}`)).toBe('a');
+    expect(kotlinTrim(`a${space}b`)).toBe(`a${space}b`);
+  });
+
+  test('keeps a byte order mark at either end, which JavaScript trim() would strip', () => {
+    expect(kotlinTrim(`${BYTE_ORDER_MARK}a${BYTE_ORDER_MARK}`)).toBe(`${BYTE_ORDER_MARK}a${BYTE_ORDER_MARK}`);
+  });
+});
 
 describe('isKotlinBlank', () => {
   test.each([
@@ -20,6 +48,9 @@ describe('isKotlinBlank', () => {
     ['a figure space', FIGURE_SPACE],
     ['a narrow no-break space', NARROW_NBSP],
     ['a file separator, which JavaScript trim() keeps', FILE_SEPARATOR],
+    ['a group separator', GROUP_SEPARATOR],
+    ['a record separator', RECORD_SEPARATOR],
+    ['a unit separator', UNIT_SEPARATOR],
     ['a line separator', LINE_SEPARATOR],
     ['a paragraph separator', PARAGRAPH_SEPARATOR],
     ['an ideographic space', IDEOGRAPHIC_SPACE],

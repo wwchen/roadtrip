@@ -21,6 +21,7 @@ const INT_MAX = 2_147_483_647;
 const INT_MIN = -2_147_483_648;
 const SAFE_LONG_MAX = Number.MAX_SAFE_INTEGER;
 const WIDE_INTEGER = '12345678901234567890';
+const NEGATIVE_WIDE_INTEGER = '-12345678901234567890';
 const BEYOND_DOUBLE = '1e400';
 
 function wide(literal: string): unknown {
@@ -83,6 +84,13 @@ describe('scalar strictness', () => {
 
   test('Int rejects a wide integer by name rather than as "number"', () => {
     expect(() => nullableInt({ k: wide(WIDE_INTEGER) }, 'k')).toThrow('k: expected int, got integer beyond 2^53');
+  });
+
+  test('a negative wide integer is named as an integer, and a literal beyond the double range as a number', () => {
+    expect(() => requiredLong({ k: wide(NEGATIVE_WIDE_INTEGER) }, 'k')).toThrow('k: expected long, got integer beyond 2^53');
+    expect(() => nullableInt({ k: wide(NEGATIVE_WIDE_INTEGER) }, 'k')).toThrow('k: expected int, got integer beyond 2^53');
+    expect(() => requiredLong({ k: wide(BEYOND_DOUBLE) }, 'k')).toThrow('k: expected long, got number beyond the double range');
+    expect(() => requiredString({ k: wide(BEYOND_DOUBLE) }, 'k')).toThrow('k: expected string, got number beyond the double range');
   });
 
   test('Long accepts exactly representable integers, and a wide one throws instead of rounding', () => {
