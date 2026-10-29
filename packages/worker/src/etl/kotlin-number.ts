@@ -64,7 +64,8 @@ export function kotlinLongFromText(text: string): bigint | null {
   if (accumulator === null) return null;
   if (exponentDigits !== undefined) {
     const magnitude = lexExponent(exponentDigits);
-    return scaledByExponent(accumulator, exponentSign === NEGATIVE_SIGN ? wrapLong(-magnitude) : magnitude, negative);
+    if (exponentSign !== NEGATIVE_SIGN) return scaledByExponent(accumulator, magnitude, negative);
+    return magnitude === LONG_MIN ? null : scaledByExponent(accumulator, -magnitude, negative);
   }
   if (accumulator === LONG_MIN && !negative) return null;
   return negative ? accumulator : -accumulator;
