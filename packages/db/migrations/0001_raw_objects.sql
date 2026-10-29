@@ -68,7 +68,15 @@ $$;
 -- for backend sessions. PostgreSQL masks other users' query text without this
 -- predefined role. Keep the privilege narrow: stats visibility only, still no
 -- writes and no raw api_cache payload access.
-GRANT pg_read_all_stats TO grafana_reader;
+DO $$
+BEGIN
+  IF pg_has_role(current_user, 'pg_read_all_stats', 'MEMBER WITH ADMIN OPTION') THEN
+    GRANT pg_read_all_stats TO grafana_reader;
+  ELSE
+    RAISE NOTICE 'skipping GRANT pg_read_all_stats TO grafana_reader: this host cannot grant a predefined role';
+  END IF;
+END
+$$;
 --> statement-breakpoint
 REVOKE ALL PRIVILEGES ON SCHEMA public FROM grafana_reader;
 --> statement-breakpoint
