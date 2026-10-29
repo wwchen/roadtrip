@@ -26,6 +26,15 @@ export class InputBundle {
     return sole as Envelope[];
   }
 
+  soleEnvelope(): Envelope {
+    const envelopes = this.soleEnvelopes();
+    const [only] = envelopes;
+    if (envelopes.length !== 1 || only === undefined) {
+      throw new Error(`expected exactly one envelope, got ${envelopes.length}`);
+    }
+    return only;
+  }
+
   dataSourceSlugs(): string[] {
     return [...this.rawCaptures.keys()];
   }

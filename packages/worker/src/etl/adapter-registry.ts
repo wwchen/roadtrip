@@ -1,10 +1,16 @@
 import type { EtlEntry, PoiRegistry } from '../registry/poi-registry.js';
+import { PlanetFitnessEtl } from '../vendors/osmpf/planet-fitness.js';
+import { TeslaIndexEtl } from '../vendors/tesla/index-etl.js';
 import type { AnyTerminalEtlBinding } from './terminal-binding.js';
+import { planetFitnessBinding, teslaSuperchargerBinding } from './terminal-sinks.js';
 
 export type AdapterFactory = (entry: EtlEntry) => AnyTerminalEtlBinding;
 export type AdapterRegistry = Readonly<Record<string, AdapterFactory>>;
 
-export const adapterRegistry: Record<string, AdapterFactory> = {};
+export const adapterRegistry: Record<string, AdapterFactory> = {
+  PlanetFitnessEtl: () => planetFitnessBinding(new PlanetFitnessEtl()),
+  TeslaIndexEtl: () => teslaSuperchargerBinding(new TeslaIndexEtl()),
+};
 
 export function adapterFor(adapters: AdapterRegistry, name: string): AdapterFactory | undefined {
   return Object.hasOwn(adapters, name) ? adapters[name] : undefined;

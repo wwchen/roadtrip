@@ -8,3 +8,11 @@ export function collapseAsciiWhitespace(value: string): string {
 export function kotlinTrim(value: string): string {
   return value.replace(KOTLIN_TRIM_EDGE, '');
 }
+
+export function isKotlinBlank(value: string): boolean {
+  return kotlinTrim(value) === '';
+}
+
+export function nonBlank(value: string | null | undefined): string | null {
+  return value == null || isKotlinBlank(value) ? null : value;
+}

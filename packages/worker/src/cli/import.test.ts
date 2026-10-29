@@ -8,9 +8,10 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 const PACKAGE_DIR = fileURLToPath(new URL('../..', import.meta.url));
 const BUILT_CLI = path.join(PACKAGE_DIR, 'dist', 'cli', 'import.js');
 const BUILD_TIMEOUT_MS = 120_000;
-const EXIT_FAILED = 1;
-const EMPTY_REGISTRY_MESSAGE = 'no adapters registered';
-const CLI_ARGS = ['--list', '--raw-dir', 'data/raw', '--static-dir', '.'];
+const EXIT_OK = 0;
+const REPO_ROOT = path.resolve(PACKAGE_DIR, '..', '..');
+const CLI_ARGS = ['--list', '--raw-dir', path.join(REPO_ROOT, 'data', 'raw'), '--static-dir', REPO_ROOT];
+const IMPLEMENTED_TARGETS = ['poi_data:Planet Fitness', 'poi_data:Tesla Superchargers'];
 
 let linkDir = '';
 let symlinkedCli = '';
@@ -33,17 +34,17 @@ afterAll(() => {
 });
 
 describe('built import cli', () => {
-  test('run by its real path, an empty adapter registry exits non-zero with the message', () => {
+  test('run by its real path, it lists the targets whose adapters the build registers', () => {
     const result = runBuilt(BUILT_CLI);
-    expect(result.status).toBe(EXIT_FAILED);
-    expect(result.stderr).toContain(EMPTY_REGISTRY_MESSAGE);
-    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(EXIT_OK);
+    expect(result.stdout.split('\n')).toEqual(expect.arrayContaining(IMPLEMENTED_TARGETS));
   });
 
   test('run through a symlink, as an installed bin is, it behaves identically', () => {
     const result = runBuilt(symlinkedCli);
-    expect(result.status).toBe(EXIT_FAILED);
-    expect(result.stderr).toContain(EMPTY_REGISTRY_MESSAGE);
-    expect(result.stdout).toBe('');
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(EXIT_OK);
+    expect(result.stdout).toBe(runBuilt(BUILT_CLI).stdout);
   });
 });

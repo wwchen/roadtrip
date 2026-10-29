@@ -69,6 +69,12 @@ function loadNewestEnvelopesFrom(dir: string): Envelope[] {
   return isDirectory(newest) ? loadPages(newest) : [parseEnvelope(newest)];
 }
 
+export function newestJsonFileIn(dir: string): string | null {
+  const names = (listNames(dir) ?? []).filter((name) => isJsonFile(path.join(dir, name)));
+  if (names.length === 0) return null;
+  return path.join(dir, names.reduce((best, name) => (compareCodeUnits(name, best) > 0 ? name : best)));
+}
+
 export class RawCaptureStore {
   constructor(
     private readonly rawDir: string,
