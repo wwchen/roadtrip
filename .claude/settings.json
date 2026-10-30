@@ -30,6 +30,7 @@
       ".claude",
       ".githooks",
       ".github",
+      "apps",
       "backend",
       "caddy",
       "companion",

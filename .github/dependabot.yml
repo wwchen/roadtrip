@@ -58,3 +58,41 @@ updates:
     groups:
       actions-minor-and-patch:
         update-types: [minor, patch]
+
+  # Base images in the three Dockerfiles. Until now nothing watched these, so
+  # cloudflared sat nine releases behind its upstream and the companion's
+  # playwright tag drifted two minors away from the npm package it ships for.
+  - package-ecosystem: docker
+    directories:
+      - /
+      - /data
+      - /companion
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      docker-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # The playwright image is ABI-coupled to companion/package.json: the image
+      # carries the browser binaries, the npm package decides which build it
+      # looks for, and a mismatch throws a missing-executable error out of
+      # launchPersistentContext. Dependabot cannot bump a Dockerfile tag and an
+      # npm dependency in one PR, so the image stays out of its hands and moves
+      # with the package — the npm bump PR edits the tag too, and
+      # CompanionPlaywrightLockstepTest fails the build when it doesn't.
+      - dependency-name: "mcr.microsoft.com/playwright"
+
+  # Service images in the compose files the deploy host and sandboxes run.
+  # Rolling tags here (caddy:2-alpine) only ever produce major PRs, which is
+  # the point of pinning them that way.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      docker-compose-minor-and-patch:
+        update-types: [minor, patch]

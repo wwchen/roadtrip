@@ -25,6 +25,11 @@ test('rejects every import form that reaches @roadtrip/db', async (context) => {
     'src/subpath.ts': "import { client } from '@roadtrip/db/client';",
     'src/dynamic.ts': "const db = await import('@roadtrip/db');",
     'src/required.cjs': "const db = require('@roadtrip/db');",
+    'src/magic.ts': "const db = await import(/* webpackChunkName: \"db\" */ '@roadtrip/db');",
+    'src/backtick.ts': 'const db = await import(`@roadtrip/db`);',
+    'src/compact.ts': "import{schema}from'@roadtrip/db';",
+    'src/template.ts': 'const db = await import(`@roadtrip/db${name}`);',
+    'src/stray-quote.ts': "// loaded via import \"\nimport { schema } from '@roadtrip/db';",
     'src/Thing.test.tsx': "import { schema } from '@roadtrip/db';",
     'vite.config.ts': "import { schema } from '@roadtrip/db';",
     '.storybook/main.ts': "import { schema } from '@roadtrip/db';",
@@ -33,7 +38,7 @@ test('rejects every import form that reaches @roadtrip/db', async (context) => {
 
   const violations = await findPackageBoundaryViolations(root);
 
-  assert.equal(violations.length, 8);
+  assert.equal(violations.length, 13);
   assert.ok(violations.every((violation) => violation.includes('imports @roadtrip/db')));
 });
 
@@ -42,12 +47,13 @@ test('rejects relative paths that reach into packages/db', async (context) => {
     'src/shallow.ts': "import { schema } from '../../packages/db/src/schema';",
     'src/lib/deep.ts': "export * from '../../../packages/db';",
     'src/lib/dynamic.ts': "const db = await import('../../../packages/db/dist/index.js');",
+    'src/lib/magic.ts': "const db = await import(/* webpackChunkName: \"db\" */ '../../../packages/db');",
   });
   context.after(() => rm(root, { recursive: true, force: true }));
 
   const violations = await findPackageBoundaryViolations(root);
 
-  assert.equal(violations.length, 3);
+  assert.equal(violations.length, 4);
   assert.ok(violations.every((violation) => violation.includes('imports ')));
 });
 
@@ -65,6 +71,7 @@ test('allows @roadtrip/domain, lookalike names and installed packages', async (c
   const root = await fixture({
     'src/ok.ts': "import { amenity } from '@roadtrip/domain';",
     'src/lookalike.ts': "import { x } from '@roadtrip/db-tools';",
+    'src/lookalike-template.ts': 'const x = await import(`@roadtrip/db-tools${name}`);',
     'src/sibling.ts': "import { x } from '../../packages/db-tools/src';",
     'src/domain.ts': "import { x } from '../../packages/domain/src';",
     'src/local/index.ts': "import { x } from '../packages/db';",
