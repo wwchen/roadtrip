@@ -811,6 +811,38 @@ describe('the Aspira campsites adapter, the payload is the vendor JSON', () => {
     expect(text).toContain(`"value":${WIDE_ID},"values":[${WIDE_ID}]`);
   });
 
+  test.each([
+    '0.0',
+    '-0.0',
+    '1.0',
+    '1.10',
+    '2.50',
+    '100.00',
+    '1e2',
+    '1E5',
+    '1e+2',
+    '1e20',
+    '7.02e-05',
+    '5e-324',
+    '1e400',
+    '-1e400',
+    '9007199254740992',
+    '9007199254740993',
+    '-9007199254740993',
+    '123456789012345678901234567890',
+    '0.1000000000000000055511151231257827',
+    '1.7976931348623157e308',
+  ])('the vendor spelling %s survives as a value, a values element, and inside a nested object and array', (literal) => {
+    const record = waRecord({
+      definedAttributes:
+        `[{"attributeDefinitionId":1,"value":${literal},"values":[${literal}]},` +
+        `{"attributeDefinitionId":2,"value":{"a":${literal}},"values":[[${literal}],{"b":[${literal}]}]}]`,
+    });
+    const text = String(record.sourcePayload);
+    expect(text).toContain(`"value":${literal},"values":[${literal}]`);
+    expect(text).toContain(`"value":{"a":${literal}},"values":[[${literal}],{"b":[${literal}]}]`);
+  });
+
   test('a nested object or array kept as a value is copied whole', () => {
     const record = waRecord({
       definedAttributes: `[{"attributeDefinitionId":1,"value":{"a":[1.0,{"b":null}]},"values":[{"c":1.50}]}]`,
