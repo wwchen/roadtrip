@@ -418,7 +418,8 @@ describe('the Aspira campsites adapter, finding the parent', () => {
     const sharing = (mapId: string, name: string) =>
       `{"mapId":${mapId},"transactionLocationId":${LEAF_TRANSACTION},"resourceLocationId":5,"localizedValues":${title(name)}}`;
     const maps = `[${sharing('61', 'First')},${sharing('62', 'Second')},${sharing('63', 'Third')}]`;
-    for (const resource of [{ resourceLocationId: '5' }, { resourceLocationId: '5', mapIds: `[${OTHER_MAP}]` }]) {
+    const resources: Record<string, string>[] = [{ resourceLocationId: '5' }, { resourceLocationId: '5', mapIds: `[${OTHER_MAP}]` }];
+    for (const resource of resources) {
       const record = waRecord(resource, maps);
       expect(record.parentDataProviderRef?.serialize()).toBe(`${LEAF_TRANSACTION}:63`);
       expect(JSON.parse(record.sourcePayload as string)).toMatchObject({
