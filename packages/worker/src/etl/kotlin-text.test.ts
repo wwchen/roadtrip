@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { carrierFromVendorName } from '@roadtrip/domain';
-import { isKotlinBlank, kotlinEqualsIgnoreCase, kotlinTrim, nonBlank } from './kotlin-text.js';
+import { isKotlinBlank, kotlinEqualsIgnoreCase, kotlinStringToBooleanStrictOrNull, kotlinTrim, nonBlank } from './kotlin-text.js';
 
 const NBSP = '\u00a0';
 const FIGURE_SPACE = '\u2007';
@@ -167,5 +167,22 @@ describe('the whitespace class in packages/domain and in kotlinTrim', () => {
     expect(trimmedByKotlinTrim).toContain(0xa0);
     expect(trimmedByKotlinTrim).toContain(0x1c);
     expect(trimmedByKotlinTrim).not.toContain(0xfeff);
+  });
+});
+
+describe('kotlinStringToBooleanStrictOrNull, Kotlin String.toBooleanStrictOrNull', () => {
+  test.each([
+    ['true', true],
+    ['false', false],
+    ['TRUE', null],
+    ['True', null],
+    ['FALSE', null],
+    [' true', null],
+    ['true ', null],
+    ['1', null],
+    ['yes', null],
+    ['', null],
+  ])('%j', (text, expected) => {
+    expect(kotlinStringToBooleanStrictOrNull(text)).toBe(expected);
   });
 });

@@ -1,6 +1,6 @@
 import { isWideNumber, type WideNumber } from './envelope.js';
 import { isJsonObject, type JsonObject } from './json-decode.js';
-import { kotlinDoubleFromText, kotlinIntFromText } from './kotlin-number.js';
+import { kotlinDoubleFromText, kotlinIntFromText, kotlinLongFromText } from './kotlin-number.js';
 
 const INT_MIN = -(2 ** 31);
 const INT_MAX = 2 ** 31 - 1;
@@ -76,4 +76,9 @@ export function jsonArrayOf(value: unknown): unknown[] {
 export function jsonObjectOf(value: unknown): JsonObject {
   if (!isJsonObject(value)) throw new Error('Element is not a JsonObject');
   return value;
+}
+
+export function longOrNull(value: unknown): bigint | null {
+  const content = contentOrNull(value);
+  return content === null ? null : kotlinLongFromText(content);
 }

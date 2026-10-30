@@ -34,3 +34,11 @@ export function kotlinEqualsIgnoreCase(value: string | null | undefined, asciiTa
   }
   return true;
 }
+
+const TRUE_TEXT = 'true';
+const FALSE_TEXT = 'false';
+
+export function kotlinStringToBooleanStrictOrNull(value: string): boolean | null {
+  if (value === TRUE_TEXT) return true;
+  return value === FALSE_TEXT ? false : null;
+}

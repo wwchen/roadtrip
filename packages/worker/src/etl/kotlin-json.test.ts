@@ -9,6 +9,7 @@ import {
   doubleOrNull,
   intOrNull,
   jsonArrayOf,
+  longOrNull,
   jsonObjectOf,
   primitiveOf,
 } from './kotlin-json.js';
@@ -43,47 +44,48 @@ afterAll(() => {
 interface Accessors {
   content: string | null;
   int: number | null;
+  long: bigint | null;
   double: number | null;
   bool: boolean | null;
 }
 
 const KOTLIN_PRIMITIVES: ReadonlyArray<readonly [string, Accessors]> = [
-  ['25.0', { content: '25.0', int: null, double: 25, bool: null }],
-  ['25', { content: '25', int: 25, double: 25, bool: null }],
-  ['25.5', { content: '25.5', int: null, double: 25.5, bool: null }],
-  ['1e2', { content: '1e2', int: 100, double: 100, bool: null }],
-  ['1E2', { content: '1E2', int: 100, double: 100, bool: null }],
-  ['1.0e2', { content: '1.0e2', int: null, double: 100, bool: null }],
-  ['10e-1', { content: '10e-1', int: 1, double: 1, bool: null }],
-  ['-0', { content: '-0', int: 0, double: -0, bool: null }],
-  ['-0.0', { content: '-0.0', int: null, double: -0, bool: null }],
-  ['2147483647', { content: '2147483647', int: INT_MAX, double: INT_MAX, bool: null }],
-  ['2147483648', { content: '2147483648', int: null, double: INT_MAX + 1, bool: null }],
-  ['-2147483648', { content: '-2147483648', int: INT_MIN, double: INT_MIN, bool: null }],
-  ['1e400', { content: '1e400', int: null, double: Infinity, bool: null }],
-  ['12345678901234567890', { content: '12345678901234567890', int: null, double: 1.2345678901234567e19, bool: null }],
-  ['1.10', { content: '1.10', int: null, double: 1.1, bool: null }],
-  ['1e-1', { content: '1e-1', int: null, double: 0.1, bool: null }],
-  ['1e20', { content: '1e20', int: null, double: 1e20, bool: null }],
-  ['7.02e-05', { content: '7.02e-05', int: null, double: 7.02e-5, bool: null }],
-  ['100000000000000000000.0', { content: '100000000000000000000.0', int: null, double: 1e20, bool: null }],
-  ['true', { content: 'true', int: null, double: null, bool: true }],
-  ['false', { content: 'false', int: null, double: null, bool: false }],
-  ['null', { content: null, int: null, double: null, bool: null }],
-  ['"12"', { content: '12', int: 12, double: 12, bool: null }],
-  ['" 12 "', { content: ' 12 ', int: 12, double: 12, bool: null }],
-  ['"12.5"', { content: '12.5', int: null, double: 12.5, bool: null }],
-  ['"+5"', { content: '+5', int: null, double: 5, bool: null }],
-  ['"1e2 "', { content: '1e2 ', int: 100, double: 100, bool: null }],
-  ['"true"', { content: 'true', int: null, double: null, bool: true }],
-  ['"null"', { content: 'null', int: null, double: null, bool: null }],
-  ['"1.5f"', { content: '1.5f', int: null, double: 1.5, bool: null }],
-  ['"1.5d"', { content: '1.5d', int: null, double: 1.5, bool: null }],
-  ['"NaN"', { content: 'NaN', int: null, double: NaN, bool: null }],
-  ['"Infinity"', { content: 'Infinity', int: null, double: Infinity, bool: null }],
-  ['"1_0"', { content: '1_0', int: null, double: null, bool: null }],
-  ['"1."', { content: '1.', int: null, double: 1, bool: null }],
-  ['"  "', { content: '  ', int: null, double: null, bool: null }],
+  ['25.0', { content: '25.0', int: null, long: null, double: 25, bool: null }],
+  ['25', { content: '25', int: 25, long: 25n, double: 25, bool: null }],
+  ['25.5', { content: '25.5', int: null, long: null, double: 25.5, bool: null }],
+  ['1e2', { content: '1e2', int: 100, long: 100n, double: 100, bool: null }],
+  ['1E2', { content: '1E2', int: 100, long: 100n, double: 100, bool: null }],
+  ['1.0e2', { content: '1.0e2', int: null, long: null, double: 100, bool: null }],
+  ['10e-1', { content: '10e-1', int: 1, long: 1n, double: 1, bool: null }],
+  ['-0', { content: '-0', int: 0, long: 0n, double: -0, bool: null }],
+  ['-0.0', { content: '-0.0', int: null, long: null, double: -0, bool: null }],
+  ['2147483647', { content: '2147483647', int: INT_MAX, long: 2147483647n, double: INT_MAX, bool: null }],
+  ['2147483648', { content: '2147483648', int: null, long: 2147483648n, double: INT_MAX + 1, bool: null }],
+  ['-2147483648', { content: '-2147483648', int: INT_MIN, long: -2147483648n, double: INT_MIN, bool: null }],
+  ['1e400', { content: '1e400', int: null, long: null, double: Infinity, bool: null }],
+  ['12345678901234567890', { content: '12345678901234567890', int: null, long: null, double: 1.2345678901234567e19, bool: null }],
+  ['1.10', { content: '1.10', int: null, long: null, double: 1.1, bool: null }],
+  ['1e-1', { content: '1e-1', int: null, long: null, double: 0.1, bool: null }],
+  ['1e20', { content: '1e20', int: null, long: null, double: 1e20, bool: null }],
+  ['7.02e-05', { content: '7.02e-05', int: null, long: null, double: 7.02e-5, bool: null }],
+  ['100000000000000000000.0', { content: '100000000000000000000.0', int: null, long: null, double: 1e20, bool: null }],
+  ['true', { content: 'true', int: null, long: null, double: null, bool: true }],
+  ['false', { content: 'false', int: null, long: null, double: null, bool: false }],
+  ['null', { content: null, int: null, long: null, double: null, bool: null }],
+  ['"12"', { content: '12', int: 12, long: 12n, double: 12, bool: null }],
+  ['" 12 "', { content: ' 12 ', int: 12, long: 12n, double: 12, bool: null }],
+  ['"12.5"', { content: '12.5', int: null, long: null, double: 12.5, bool: null }],
+  ['"+5"', { content: '+5', int: null, long: null, double: 5, bool: null }],
+  ['"1e2 "', { content: '1e2 ', int: 100, long: 100n, double: 100, bool: null }],
+  ['"true"', { content: 'true', int: null, long: null, double: null, bool: true }],
+  ['"null"', { content: 'null', int: null, long: null, double: null, bool: null }],
+  ['"1.5f"', { content: '1.5f', int: null, long: null, double: 1.5, bool: null }],
+  ['"1.5d"', { content: '1.5d', int: null, long: null, double: 1.5, bool: null }],
+  ['"NaN"', { content: 'NaN', int: null, long: null, double: NaN, bool: null }],
+  ['"Infinity"', { content: 'Infinity', int: null, long: null, double: Infinity, bool: null }],
+  ['"1_0"', { content: '1_0', int: null, long: null, double: null, bool: null }],
+  ['"1."', { content: '1.', int: null, long: null, double: 1, bool: null }],
+  ['"  "', { content: '  ', int: null, long: null, double: null, bool: null }],
 ];
 
 describe('JsonPrimitive accessors, pinned to kotlinx.serialization 1.11.0', () => {
@@ -92,6 +94,7 @@ describe('JsonPrimitive accessors, pinned to kotlinx.serialization 1.11.0', () =
     const observed = {
       content: contentOrNull(value),
       int: intOrNull(value),
+      long: longOrNull(value),
       double: doubleOrNull(value),
       bool: booleanOrNull(value),
     };
@@ -104,12 +107,25 @@ describe('JsonPrimitive accessors, pinned to kotlinx.serialization 1.11.0', () =
   });
 
   test('an absent value reads as null through every accessor', () => {
-    expect([contentOrNull(undefined), intOrNull(undefined), doubleOrNull(undefined), booleanOrNull(undefined)]).toEqual([
-      null,
-      null,
-      null,
-      null,
-    ]);
+    expect([
+      contentOrNull(undefined),
+      intOrNull(undefined),
+      longOrNull(undefined),
+      doubleOrNull(undefined),
+      booleanOrNull(undefined),
+    ]).toEqual([null, null, null, null, null]);
+  });
+
+  test('longOrNull runs the lenient lexer over the content, so it is not String.toLongOrNull', () => {
+    expect(longOrNull(valueOf('" 7 "'))).toBe(7n);
+    expect(longOrNull(valueOf('"1e1"'))).toBe(10n);
+    expect(longOrNull(valueOf('"+7"'))).toBeNull();
+  });
+
+  test('longOrNull keeps a Long that no double and no int can hold', () => {
+    expect(longOrNull(valueOf('9223372036854775807'))).toBe(9223372036854775807n);
+    expect(longOrNull(valueOf('9223372036854775808'))).toBeNull();
+    expect(intOrNull(valueOf('9223372036854775807'))).toBeNull();
   });
 
   test.each([
@@ -120,6 +136,7 @@ describe('JsonPrimitive accessors, pinned to kotlinx.serialization 1.11.0', () =
     expect(() => primitiveOf(value)).toThrow(/is not a JsonPrimitive/);
     expect(() => contentOrNull(value)).toThrow(/is not a JsonPrimitive/);
     expect(() => intOrNull(value)).toThrow(/is not a JsonPrimitive/);
+    expect(() => longOrNull(value)).toThrow(/is not a JsonPrimitive/);
     expect(() => doubleOrNull(value)).toThrow(/is not a JsonPrimitive/);
     expect(() => booleanOrNull(value)).toThrow(/is not a JsonPrimitive/);
   });

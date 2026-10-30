@@ -181,17 +181,90 @@ function rintLiterals(random, count) {
   return [...literals];
 }
 
-function compareStdlib(rows, numberModule) {
+function compareStdlib(rows, numberModule, textModule) {
   const problems = [];
   for (const line of rows) {
-    const [literal, intValue, longValue] = line.split(FIELD_SEPARATOR);
+    const [literal, intValue, longValue, booleanValue] = line.split(FIELD_SEPARATOR);
     const int = renderResult(numberModule.kotlinStringToIntOrNull(literal));
     const long = renderResult(numberModule.kotlinStringToLongOrNull(literal));
-    if (int !== intValue || long !== longValue) {
-      problems.push(`String.toIntOrNull/toLongOrNull ${JSON.stringify(literal)}: java int=${intValue} long=${longValue}; port int=${int} long=${long}`);
+    const strict = renderResult(textModule.kotlinStringToBooleanStrictOrNull(literal));
+    if (int !== intValue || long !== longValue || strict !== booleanValue) {
+      problems.push(
+        `String.toIntOrNull/toLongOrNull/toBooleanStrictOrNull ${JSON.stringify(literal)}: ` +
+          `java int=${intValue} long=${longValue} boolean=${booleanValue}; port int=${int} long=${long} boolean=${strict}`,
+      );
     }
   }
   return problems;
+}
+
+const CASE_STRING_LITERALS = [
+  '\u03a3', '\u03a3\u03a3', '\u03a3\u039f\u03a3', '\u03a3\u039f\u03a3 \u03a3\u039f\u03a3', '\u03a3\u039f\u03a3.',
+  '\u03c3\u03bf\u03c2', '\u0391\u03a3', '\u0391\u03a3\u0391', "O\u03a3'", '\u03a3-\u03a3', '\u03a31',
+  '\u00df', '\u00dfx', '\u0130', '\u0131', '\u017f', '\ufb00', '\u01f1', '\u01f2', '\u01f3',
+  'State Park', 'STATE PARK', 'wa', 'WA', ' wa ', '\u0130STANBUL', 'i\u0307',
+];
+
+const ASCII_ALPHANUMERIC = /[a-zA-Z0-9]/;
+
+const JAVA_CASE_DIVERGENCES = new Set([
+  'uppercase unit U+0277',
+  'uppercase unit U+027c',
+  'uppercase unit U+ab4b',
+  'uppercase unit U+ab4c',
+  'lowercase unit U+a7dd',
+  'lowercase unit U+a7e2',
+  'lowercase unit U+ab6c',
+  'lowercase unit U+ab6d',
+  'lowercase string "\u03a3-\u03a3"',
+]);
+
+function unitCodesOf(text) {
+  return Array.from({ length: text.length }, (_, index) => text.charCodeAt(index)).join(',');
+}
+
+function reachesAscii(...codeLists) {
+  return codeLists.some((codes) =>
+    codes.split(',').some((code) => ASCII_ALPHANUMERIC.test(String.fromCharCode(Number(code)))),
+  );
+}
+
+function caseProblem(key, javaCodes, portCodes, allowed) {
+  if (portCodes === javaCodes) return [];
+  allowed.add(key);
+  if (JAVA_CASE_DIVERGENCES.has(key) && !reachesAscii(javaCodes, portCodes)) return [];
+  return [`${key}: java [${javaCodes}], port [${portCodes}]`];
+}
+
+function caseProblems(label, shown, javaLower, javaUpper, source, allowed) {
+  return [
+    ...caseProblem(`lowercase ${label} ${shown}`, javaLower, unitCodesOf(source.toLowerCase()), allowed),
+    ...caseProblem(`uppercase ${label} ${shown}`, javaUpper, unitCodesOf(source.toUpperCase()), allowed),
+  ];
+}
+
+function compareCase(unitRows, stringRows) {
+  const problems = [];
+  const allowed = new Set();
+  let units = 0;
+  for (const line of unitRows) {
+    if (line === '') continue;
+    units += 1;
+    const [unit, javaLower, javaUpper] = line.split(FIELD_SEPARATOR);
+    const shown = `U+${Number(unit).toString(16).padStart(4, '0')}`;
+    problems.push(...caseProblems('unit', shown, javaLower, javaUpper, String.fromCharCode(Number(unit)), allowed));
+  }
+  let strings = 0;
+  for (const line of stringRows) {
+    if (line === '') continue;
+    strings += 1;
+    const [literal, javaLower, javaUpper] = line.split(FIELD_SEPARATOR);
+    problems.push(...caseProblems('string', JSON.stringify(literal), javaLower, javaUpper, literal, allowed));
+  }
+  for (const key of JAVA_CASE_DIVERGENCES) {
+    if (!allowed.has(key)) problems.push(`stale case divergence allowance: java and the port now agree on ${key}`);
+  }
+  return { problems, units, strings, allowed: allowed.size };
 }
 
 function compareRint(rows, numberModule) {
@@ -270,18 +343,28 @@ async function main() {
     const rintCases = rintLiterals(mulberry32(seed + 1), Math.max(1000, Math.floor(count / 4)));
     writeFileSync(rintFile, `${rintCases.join('\n')}\n`);
     const ignoreCase = compareIgnoreCase(lines(java(jars, scratch, 'ignorecase')), textModule);
+    const caseFile = path.join(scratch, 'case-strings.txt');
+    writeFileSync(caseFile, `${CASE_STRING_LITERALS.join('\n')}\n`);
+    const caseMapping = compareCase(
+      lines(java(jars, scratch, 'case')),
+      lines(java(jars, scratch, 'casestrings', caseFile)),
+    );
     const problems = [
       ...overrides.problems,
       ...compareIntegral(lines(java(jars, scratch, 'parse', casesFile)), numberModule),
-      ...compareStdlib(lines(java(jars, scratch, 'stdlib', stdlibFile)), numberModule),
+      ...compareStdlib(lines(java(jars, scratch, 'stdlib', stdlibFile)), numberModule, textModule),
       ...compareRint(lines(java(jars, scratch, 'rint', rintFile)), numberModule),
       ...ignoreCase.problems,
+      ...caseMapping.problems,
     ];
     console.log(
       `kotlinx-serialization-json ${version}: ${overrides.checked} exponents checked against ${overrides.overrides} overrides ` +
         `(${overrides.expected} differ from correctly rounded), ${cases.length} literals (seed ${seed}), ` +
         `${stdlibCases.length} String.toIntOrNull/toLongOrNull literals, ${rintCases.length} rint operands, ` +
-        `${ignoreCase.pairs} equalsIgnoreCase pairs over every UTF-16 unit, ${problems.length} mismatch(es)`,
+        `${ignoreCase.pairs} equalsIgnoreCase pairs over every UTF-16 unit, ` +
+        `${caseMapping.units} lowercase/uppercase units and ${caseMapping.strings} case-mapped strings ` +
+        `(${caseMapping.allowed} known Java divergences, none reaching ASCII), ` +
+        `${problems.length} mismatch(es)`,
     );
     for (const problem of problems.slice(0, MAX_REPORTED)) console.error(`  ${problem}`);
     process.exitCode = problems.length === 0 ? 0 : 1;

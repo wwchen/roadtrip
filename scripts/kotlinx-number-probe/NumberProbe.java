@@ -1,5 +1,6 @@
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Locale;
 import kotlin.text.StringsKt;
 import kotlinx.serialization.internal.IntSerializer;
 import kotlinx.serialization.json.Json;
@@ -12,6 +13,8 @@ public class NumberProbe {
     private static final String STDLIB_MODE = "stdlib";
     private static final String RINT_MODE = "rint";
     private static final String IGNORE_CASE_MODE = "ignorecase";
+    private static final String CASE_MODE = "case";
+    private static final String CASE_STRING_MODE = "casestrings";
     private static final int CODE_UNITS = 0x10000;
     private static final String FIELD_SEPARATOR = "\t";
     private static final int[] POW_EXPONENTS = exponents();
@@ -43,7 +46,29 @@ public class NumberProbe {
     }
 
     private static String stdlib(String literal) {
-        return literal + FIELD_SEPARATOR + StringsKt.toIntOrNull(literal) + FIELD_SEPARATOR + StringsKt.toLongOrNull(literal);
+        return literal + FIELD_SEPARATOR + StringsKt.toIntOrNull(literal) + FIELD_SEPARATOR + StringsKt.toLongOrNull(literal)
+            + FIELD_SEPARATOR + StringsKt.toBooleanStrictOrNull(literal);
+    }
+
+    private static String codesOf(String text) {
+        StringBuilder codes = new StringBuilder();
+        for (int i = 0; i < text.length(); i++) {
+            if (i > 0) codes.append(',');
+            codes.append((int) text.charAt(i));
+        }
+        return codes.toString();
+    }
+
+    private static void caseMapping(StringBuilder out) {
+        for (int unit = 0; unit < CODE_UNITS; unit++) {
+            String candidate = String.valueOf((char) unit);
+            out.append(unit).append(FIELD_SEPARATOR).append(codesOf(candidate.toLowerCase(Locale.ROOT)))
+                .append(FIELD_SEPARATOR).append(codesOf(candidate.toUpperCase(Locale.ROOT))).append('\n');
+        }
+    }
+
+    private static String caseString(String literal) {
+        return literal + FIELD_SEPARATOR + codesOf(literal.toLowerCase(Locale.ROOT)) + FIELD_SEPARATOR + codesOf(literal.toUpperCase(Locale.ROOT));
     }
 
     private static String rint(String literal) {
@@ -74,6 +99,10 @@ public class NumberProbe {
             for (String literal : Files.readAllLines(Paths.get(args[1]))) out.append(rint(literal)).append('\n');
         } else if (IGNORE_CASE_MODE.equals(args[0])) {
             ignoreCase(out);
+        } else if (CASE_MODE.equals(args[0])) {
+            caseMapping(out);
+        } else if (CASE_STRING_MODE.equals(args[0])) {
+            for (String literal : Files.readAllLines(Paths.get(args[1]))) out.append(caseString(literal)).append('\n');
         } else {
             throw new IllegalArgumentException(args[0]);
         }
