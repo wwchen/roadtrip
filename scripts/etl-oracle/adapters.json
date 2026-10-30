@@ -44,6 +44,24 @@
       ],
       "minimumCases": 150,
       "minimumTransformed": 145
+    },
+    "reserveamerica-campgrounds": {
+      "module": "vendors/reserveamerica/campgrounds",
+      "export": "ReserveAmericaCampgroundsEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 138,
+      "minimumTransformed": 88
+    },
+    "reserveamerica-campsites": {
+      "module": "vendors/reserveamerica/sites",
+      "export": "ReserveAmericaSitesEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 42,
+      "minimumTransformed": 36
     }
   },
   "calls": {
