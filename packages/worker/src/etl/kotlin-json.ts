@@ -82,3 +82,9 @@ export function longOrNull(value: unknown): bigint | null {
   const content = contentOrNull(value);
   return content === null ? null : kotlinLongFromText(content);
 }
+
+export function longOf(value: unknown): bigint {
+  const parsed = longOrNull(value);
+  if (parsed === null) throw new Error('Element is not a Long');
+  return parsed;
+}

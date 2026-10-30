@@ -11,6 +11,8 @@ const BUILD_FILE = path.join(REPO_ROOT, 'backend/build.gradle.kts');
 const GRADLE_CACHE = path.join(os.homedir(), '.gradle/caches/modules-2/files-2.1');
 const WORKER_DIST = path.join(REPO_ROOT, 'packages/worker/dist/etl');
 const TEXT_MODULE = 'kotlin-text.js';
+const JSON_MODULE = 'kotlin-json.js';
+const THROWS = 'THROWS';
 const OVERRIDES_SOURCE = path.join(REPO_ROOT, 'packages/worker/src/etl/java-pow10.ts');
 const SERIALIZATION_VERSION = /kotlinx-serialization-json:([0-9.]+)/;
 const DEFAULT_CASES = 20000;
@@ -408,18 +410,37 @@ function renderResult(value) {
   return value === null ? 'null' : String(value);
 }
 
-function compareIntegral(rows, numberModule) {
+function renderThrowing(read, literal) {
+  try {
+    return String(read(literal));
+  } catch {
+    return THROWS;
+  }
+}
+
+function compareIntegral(rows, numberModule, jsonModule) {
   const problems = [];
+  let getterThrows = 0;
+  let getterReads = 0;
   for (const line of rows) {
-    const [literal, intValue, longValue, strict] = line.split(FIELD_SEPARATOR);
+    const [literal, intValue, longValue, strict, getter] = line.split(FIELD_SEPARATOR);
     const int = renderResult(numberModule.kotlinIntFromText(literal));
     const long = renderResult(numberModule.kotlinLongFromText(literal));
+    const portGetter = renderThrowing(jsonModule.longOf, literal);
+    if (getter === THROWS) getterThrows += 1;
+    else getterReads += 1;
+    if (portGetter !== getter) {
+      problems.push(`${literal}: java JsonPrimitive.long=${getter}; port longOf=${portGetter}`);
+    }
     const mismatch = int !== intValue || long !== longValue;
     const strictMismatch =
       STRICT_JSON_NUMBER.test(literal) && (strict === 'THROWS' ? int !== 'null' : strict !== int);
     if (mismatch || strictMismatch) {
       problems.push(`${literal}: java int=${intValue} long=${longValue} strict=${strict}; port int=${int} long=${long}`);
     }
+  }
+  if (getterThrows === 0 || getterReads === 0) {
+    problems.push(`JsonPrimitive.long probe saw ${getterThrows} throwing and ${getterReads} reading literals; it proves nothing unless both occur`);
   }
   return problems;
 }
@@ -448,6 +469,7 @@ async function main() {
     const casesFile = path.join(scratch, 'cases.txt');
     writeFileSync(casesFile, `${cases.join('\n')}\n`);
     const textModule = await import(pathToFileURL(path.join(WORKER_DIST, TEXT_MODULE)).href);
+    const jsonModule = await import(pathToFileURL(path.join(WORKER_DIST, JSON_MODULE)).href);
     const stdlibFile = path.join(scratch, 'stdlib.txt');
     const stdlibCases = stdlibLiterals(cases);
     writeFileSync(stdlibFile, `${stdlibCases.join('\n')}\n`);
@@ -464,7 +486,7 @@ async function main() {
     const sigma = compareSigmaContexts(lines(java(jars, scratch, 'sigma')));
     const problems = [
       ...overrides.problems,
-      ...compareIntegral(lines(java(jars, scratch, 'parse', casesFile)), numberModule),
+      ...compareIntegral(lines(java(jars, scratch, 'parse', casesFile)), numberModule, jsonModule),
       ...compareStdlib(lines(java(jars, scratch, 'stdlib', stdlibFile)), numberModule, textModule),
       ...compareRint(lines(java(jars, scratch, 'rint', rintFile)), numberModule),
       ...ignoreCase.problems,

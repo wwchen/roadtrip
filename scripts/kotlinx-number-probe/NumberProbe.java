@@ -19,6 +19,7 @@ public class NumberProbe {
     private static final String CAPITAL_SIGMA = "\u03a3";
     private static final int CODE_UNITS = 0x10000;
     private static final String FIELD_SEPARATOR = "\t";
+    private static final String THROWS = "THROWS";
     private static final int[] POW_EXPONENTS = exponents();
 
     private static int[] exponents() {
@@ -33,18 +34,25 @@ public class NumberProbe {
         String intValue = "ERR";
         String longValue = "ERR";
         String strict;
+        String getter = THROWS;
         try {
             JsonPrimitive primitive = (JsonPrimitive) Json.Default.parseToJsonElement("\"" + literal + "\"");
             intValue = String.valueOf(JsonElementKt.getIntOrNull(primitive));
             longValue = String.valueOf(JsonElementKt.getLongOrNull(primitive));
+            try {
+                getter = String.valueOf(JsonElementKt.getLong(primitive));
+            } catch (Throwable thrown) {
+                getter = THROWS;
+            }
         } catch (Throwable ignored) {
         }
         try {
             strict = String.valueOf(Json.Default.decodeFromString(IntSerializer.INSTANCE, literal));
         } catch (Throwable thrown) {
-            strict = "THROWS";
+            strict = THROWS;
         }
-        return literal + FIELD_SEPARATOR + intValue + FIELD_SEPARATOR + longValue + FIELD_SEPARATOR + strict;
+        return literal + FIELD_SEPARATOR + intValue + FIELD_SEPARATOR + longValue + FIELD_SEPARATOR + strict
+            + FIELD_SEPARATOR + getter;
     }
 
     private static String stdlib(String literal) {

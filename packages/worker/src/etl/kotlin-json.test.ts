@@ -9,6 +9,7 @@ import {
   doubleOrNull,
   intOrNull,
   jsonArrayOf,
+  longOf,
   longOrNull,
   jsonObjectOf,
   primitiveOf,
@@ -126,6 +127,18 @@ describe('JsonPrimitive accessors, pinned to kotlinx.serialization 1.11.0', () =
     expect(longOrNull(valueOf('9223372036854775807'))).toBe(9223372036854775807n);
     expect(longOrNull(valueOf('9223372036854775808'))).toBeNull();
     expect(intOrNull(valueOf('9223372036854775807'))).toBeNull();
+  });
+
+  test('longOf reads what longOrNull reads and throws where longOrNull gives null, JSON null included', () => {
+    expect(longOf(valueOf('7'))).toBe(7n);
+    expect(longOf(valueOf('"1e1"'))).toBe(10n);
+    expect(longOf(valueOf('9223372036854775807'))).toBe(9223372036854775807n);
+    expect(() => longOf(valueOf('null'))).toThrow();
+    expect(() => longOf(valueOf('1.5'))).toThrow();
+    expect(() => longOf(valueOf('"+7"'))).toThrow();
+    expect(() => longOf(valueOf('9223372036854775808'))).toThrow();
+    expect(() => longOf(valueOf('{"a":1}'))).toThrow();
+    expect(() => longOf(undefined)).toThrow();
   });
 
   test.each([
