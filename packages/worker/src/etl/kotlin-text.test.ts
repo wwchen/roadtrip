@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { carrierFromVendorName } from '@roadtrip/domain';
 import { isKotlinBlank, kotlinEqualsIgnoreCase, kotlinTrim, nonBlank } from './kotlin-text.js';
 
 const NBSP = '\u00a0';
@@ -139,5 +140,32 @@ describe('kotlinEqualsIgnoreCase, Java String.equalsIgnoreCase against an ASCII 
   test('a sharp s is not an s', () => {
     expect(kotlinEqualsIgnoreCase(LATIN_SMALL_SHARP_S, 's')).toBe(false);
     expect(kotlinEqualsIgnoreCase(`${LATIN_SMALL_SHARP_S}`, 'ss')).toBe(false);
+  });
+});
+
+const BASIC_MULTILINGUAL_PLANE = 0x10000;
+const MINIMUM_WHITESPACE_UNITS = 25;
+
+describe('the whitespace class in packages/domain and in kotlinTrim', () => {
+  function unitsTrimmedBy(trims: (unit: string) => boolean): number[] {
+    const units: number[] = [];
+    for (let code = 0; code < BASIC_MULTILINGUAL_PLANE; code += 1) {
+      if (trims(String.fromCharCode(code))) units.push(code);
+    }
+    return units;
+  }
+
+  const trimmedByKotlinTrim = unitsTrimmedBy((unit) => kotlinTrim(`${unit}x${unit}`) === 'x');
+  const trimmedByDomain = unitsTrimmedBy((unit) => carrierFromVendorName(`${unit}Sprint${unit}`) !== null);
+
+  test('are the same set of UTF-16 units, so the copy in domain cannot drift from the worker helper', () => {
+    expect(trimmedByDomain).toEqual(trimmedByKotlinTrim);
+  });
+
+  test('and that set is the Kotlin one, not an empty or ASCII-only stand-in', () => {
+    expect(trimmedByKotlinTrim.length).toBeGreaterThanOrEqual(MINIMUM_WHITESPACE_UNITS);
+    expect(trimmedByKotlinTrim).toContain(0xa0);
+    expect(trimmedByKotlinTrim).toContain(0x1c);
+    expect(trimmedByKotlinTrim).not.toContain(0xfeff);
   });
 });

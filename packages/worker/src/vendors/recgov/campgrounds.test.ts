@@ -274,10 +274,15 @@ describe('the agency, derived through ORGANIZATION[0].OrgName', () => {
     ['a null OrgName', '[{"OrgName":null}]'],
     ['an empty OrgName', '[{"OrgName":""}]'],
     ['a whitespace OrgName, no-break space included', '[{"OrgName":" \\t\\u00a0 "}]'],
+    ['an OrgName of only a file separator, which Kotlin counts as whitespace', '[{"OrgName":"\\u001c"}]'],
     ['an OrgName that is an object', '[{"OrgName":{"Name":"National Park Service"}}]'],
     ['an OrgName that is a list', '[{"OrgName":["National Park Service"]}]'],
   ])('%s has no management', (_label, organization) => {
     expect(agencyOf(organization)).toBeNull();
+  });
+
+  test('a byte order mark is a name, because Kotlin does not count it as whitespace', () => {
+    expect(agencyOf('[{"OrgName":"\\ufeff"}]')).toBe(String.fromCodePoint(0xfeff));
   });
 
   test('keeps the name exactly as written, untrimmed', () => {
