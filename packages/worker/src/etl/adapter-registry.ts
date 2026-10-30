@@ -8,6 +8,8 @@ import { CampflareCampsitesEtl } from '../vendors/campflare/campsites.js';
 import { PlanetFitnessEtl } from '../vendors/osmpf/planet-fitness.js';
 import { RecGovCampgroundsEtl } from '../vendors/recgov/campgrounds.js';
 import { RecGovCampsitesEtl } from '../vendors/recgov/campsites.js';
+import { ReserveAmericaCampgroundsEtl } from '../vendors/reserveamerica/campgrounds.js';
+import { ReserveAmericaSitesEtl } from '../vendors/reserveamerica/sites.js';
 import { TeslaIndexEtl } from '../vendors/tesla/index-etl.js';
 import type { AnyTerminalEtlBinding } from './terminal-binding.js';
 import {
@@ -21,6 +23,7 @@ export type AdapterFactory = (entry: EtlEntry) => AnyTerminalEtlBinding;
 export type AdapterRegistry = Readonly<Record<string, AdapterFactory>>;
 
 const TENANT_ARG = 'tenant';
+const CONTRACT_ARG = 'contract';
 const MAPS_INPUT_ARG = 'maps_input';
 const INVENTORY_INPUT_ARG = 'inventory_input';
 const DICTIONARIES_INPUT_ARG = 'dictionaries_input';
@@ -70,6 +73,10 @@ export const adapterRegistry: Record<string, AdapterFactory> = {
   PlanetFitnessEtl: () => planetFitnessBinding(new PlanetFitnessEtl()),
   RecGovCampgroundsEtl: (entry) => campgroundBinding(new RecGovCampgroundsEtl(entry.slug)),
   RecGovCampsitesEtl: (entry) => campsiteBinding(new RecGovCampsitesEtl(entry.slug)),
+  ReserveAmericaCampgroundsEtl: (entry) =>
+    campgroundBinding(new ReserveAmericaCampgroundsEtl(entry.slug, requiredArg(entry, CONTRACT_ARG))),
+  ReserveAmericaSitesEtl: (entry) =>
+    campsiteBinding(new ReserveAmericaSitesEtl(entry.slug, requiredArg(entry, CONTRACT_ARG))),
   TeslaIndexEtl: () => teslaSuperchargerBinding(new TeslaIndexEtl()),
 };
 
