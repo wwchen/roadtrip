@@ -1,0 +1,279 @@
+#!/usr/bin/env node
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
+import { resultOf } from './etl-oracle/case-shape.mjs';
+import { compareCallCase, compareEtlCase, summarise } from './etl-oracle/compare.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(HERE, '..');
+const ORACLE_DIR = path.join(HERE, 'etl-oracle');
+const WORKER_DIR = path.join(REPO_ROOT, 'packages/worker');
+const KOTLIN_MAIN = path.join(REPO_ROOT, 'backend/src/main/kotlin');
+const KOTLIN_CLASSES = path.join(REPO_ROOT, 'backend/build/classes/kotlin/main');
+const MANIFEST = JSON.parse(readFileSync(path.join(ORACLE_DIR, 'adapters.json'), 'utf8'));
+const WORKER_PACKAGE = '@roadtrip/worker';
+const CLASSPATH_ENV = 'ETL_ORACLE_CLASSPATH';
+const MAX_FAILURES_SHOWN = 20;
+const MAX_INPUT_SHOWN = 700;
+const DEFAULT_EXPLORE_CASES = 500;
+const USAGE = [
+  'usage: node scripts/etl-oracle.mjs [check]',
+  '       node scripts/etl-oracle.mjs explore --generator <name> --seed <n> [--cases <n>]',
+  '',
+  'check (the default and the only gate): runs the worker unit tests under a recorder that captures every',
+  'parse and transform they perform on the adapters in scripts/etl-oracle/adapters.json, replays the same',
+  'inputs through the real Kotlin adapters on the JVM, and compares the two outputs. It also replays the',
+  'committed call cases in scripts/etl-oracle/cases/*.jsonl against the Kotlin function they name. Fully',
+  'deterministic: the same tests and case files give the same answer every run.',
+  '',
+  'explore: draws cases from scripts/etl-oracle/explore/<name>.mjs with a seeded generator and compares them',
+  'the same way, against the built worker (dist). --seed is required, so a run is always reproducible.',
+  'It is exploratory and must never be part of a default or CI run.',
+  '',
+  'The comparison cannot tell an absent field, a null and an empty list apart: all three are dropped from',
+  'both sides before they are compared.',
+  '',
+  `The JVM classpath is read from Gradle (:backend:printRuntimeClasspath); set ${CLASSPATH_ENV} to reuse one.`,
+  'The backend must have been compiled (./gradlew :backend:classes), because the oracle runs build/classes.',
+].join('\n');
+
+function fail(message) {
+  console.error(message);
+  process.exit(2);
+}
+
+function newestMtime(dir) {
+  let newest = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    newest = Math.max(newest, entry.isDirectory() ? newestMtime(full) : statSync(full).mtimeMs);
+  }
+  return newest;
+}
+
+function assertKotlinBuilt() {
+  if (!existsSync(KOTLIN_CLASSES)) fail(`${KOTLIN_CLASSES} is missing: run ./gradlew :backend:classes first`);
+  if (newestMtime(KOTLIN_MAIN) > newestMtime(KOTLIN_CLASSES)) {
+    fail('backend/src/main is newer than backend/build/classes: run ./gradlew :backend:classes so the oracle is not the previous Kotlin');
+  }
+}
+
+function classpath() {
+  const given = process.env[CLASSPATH_ENV];
+  if (given !== undefined && given !== '') return given;
+  const output = execFileSync('./gradlew', ['-q', '-I', path.join(ORACLE_DIR, 'printcp.gradle'), ':backend:printRuntimeClasspath'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    maxBuffer: 1 << 26,
+  });
+  const line = output.split('\n').find((candidate) => candidate.startsWith('CP='));
+  if (line === undefined) fail('Gradle did not print a CP= line for :backend:printRuntimeClasspath');
+  return line.slice('CP='.length);
+}
+
+function replayOnJvm(cases, scratch) {
+  const cp = classpath();
+  const classes = path.join(scratch, 'classes');
+  execFileSync('javac', ['-cp', cp, '-d', classes, path.join(ORACLE_DIR, 'Oracle.java')], { stdio: ['ignore', 'ignore', 'inherit'] });
+  const file = path.join(scratch, 'cases.jsonl');
+  writeFileSync(file, `${cases.map((current) => JSON.stringify(current)).join('\n')}\n`);
+  const output = execFileSync('java', ['-cp', `${cp}${path.delimiter}${classes}`, 'Oracle', file], {
+    encoding: 'utf8',
+    maxBuffer: 1 << 28,
+  });
+  return output.replace(/\n$/, '').split('\n').filter((line) => line !== '').map((line) => JSON.parse(line));
+}
+
+function recordUnitTestCases(scratch) {
+  const out = path.join(scratch, 'recorded.jsonl');
+  const run = spawnSync('npx', ['vitest', 'run', '--config', path.join(ORACLE_DIR, 'vitest.config.mjs')], {
+    cwd: WORKER_DIR,
+    env: { ...process.env, ETL_ORACLE_OUT: out },
+    stdio: ['ignore', 'ignore', 'inherit'],
+  });
+  if (!existsSync(out)) fail('the worker unit tests recorded no adapter cases');
+  const cases = readFileSync(out, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  return { cases, unitTestsPassed: run.status === 0 };
+}
+
+function buildWorker() {
+  execFileSync('node', [path.join(HERE, 'build-workspaces.mjs'), WORKER_PACKAGE], { cwd: REPO_ROOT, stdio: ['ignore', 'ignore', 'inherit'] });
+}
+
+async function workerExport(moduleName, exportName) {
+  const url = pathToFileURL(path.join(WORKER_DIR, 'dist', `${moduleName}.js`)).href;
+  return (await import(url))[exportName];
+}
+
+function callCases() {
+  const dir = path.join(ORACLE_DIR, 'cases');
+  const cases = [];
+  for (const name of readdirSync(dir).filter((file) => file.endsWith('.jsonl')).sort()) {
+    for (const line of readFileSync(path.join(dir, name), 'utf8').split('\n').filter((text) => text !== '')) {
+      const spec = JSON.parse(line);
+      const entry = MANIFEST.calls[spec.call];
+      if (entry === undefined) fail(`${name}: no call named ${spec.call} in adapters.json`);
+      cases.push({ kind: 'call', call: spec.call, file: name, ...entry, args: spec.args });
+    }
+  }
+  return cases;
+}
+
+async function runCallsOnTs(cases) {
+  const { parseEnvelope } = await import('@roadtrip/worker');
+  const scratch = mkdtempSync(path.join(os.tmpdir(), 'etl-oracle-call-'));
+  try {
+    const results = [];
+    for (const [index, current] of cases.entries()) {
+      const fn = await workerExport(current.module, current.export);
+      const args = current.args.map((arg, position) => {
+        if (current.argTypes[position] !== 'json') return arg;
+        const file = path.join(scratch, `arg-${index}-${position}.json`);
+        writeFileSync(file, `{"fetcher":"f","fetcher_version":"1","fetched_at":"t","request":{"url":"u","method":"GET"},"response":{"status":200},"payload":${arg}}`);
+        return parseEnvelope(file).payload;
+      });
+      try {
+        results.push({ threw: false, value: fn(...args) });
+      } catch {
+        results.push({ threw: true, value: null });
+      }
+    }
+    return results;
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+function describeFailure(failure) {
+  const shown = JSON.stringify(failure.case.inputs ?? failure.case.args ?? {}).slice(0, MAX_INPUT_SHOWN);
+  const label = failure.case.test ?? failure.case.call ?? failure.case.adapter;
+  return `CASE ${failure.index} [${label}]\n  inputs ${shown}\n  ${failure.problems.join('\n  ')}`;
+}
+
+function report(title, summary) {
+  console.log(`${title}: ${summary.compared} cases, ${summary.failures.length} disagreement(s)`);
+  for (const failure of summary.failures.slice(0, MAX_FAILURES_SHOWN)) console.log(describeFailure(failure));
+  return summary.failures.length === 0;
+}
+
+async function check(scratch) {
+  assertKotlinBuilt();
+  const { cases: recorded, unitTestsPassed } = recordUnitTestCases(scratch);
+  if (!unitTestsPassed) console.log('the worker unit tests failed; the recorded cases are compared anyway');
+  const etlKotlin = replayOnJvm(recorded, scratch);
+  const transformed = recorded.filter((current) => current.tsParse === 'ok' && current.tsTransformRan).length;
+  const etlOk = report(`recorded unit-test cases (${transformed} compared through transform)`, summarise(recorded, etlKotlin, compareEtlCase));
+  const calls = callCases();
+  let callOk = true;
+  if (calls.length > 0) {
+    buildWorker();
+    const tsResults = await runCallsOnTs(calls);
+    const kotlinResults = replayOnJvm(calls, scratch);
+    callOk = report('committed call cases', summarise(tsResults.map((value, index) => ({ ...calls[index], ...value })), kotlinResults, compareCallCase));
+  }
+  return etlOk && callOk && unitTestsPassed;
+}
+
+async function runEtlOnTs(descriptor) {
+  const { InputBundle, TransformCtx, parseEnvelope } = await import('@roadtrip/worker');
+  const entry = MANIFEST.adapters[descriptor.adapter];
+  const Etl = await workerExport(entry.module, entry.export);
+  const etl = new Etl(...descriptor.ctor);
+  const scratch = mkdtempSync(path.join(os.tmpdir(), 'etl-oracle-ts-'));
+  try {
+    let counter = 0;
+    const captures = new Map(
+      Object.entries(descriptor.inputs).map(([slug, envelopes]) => [
+        slug,
+        envelopes.map((envelope) => {
+          counter += 1;
+          const file = path.join(scratch, `envelope-${counter}.json`);
+          const part = envelope.part === null ? '' : `,"part":${JSON.stringify(envelope.part)}`;
+          writeFileSync(
+            file,
+            `{"fetcher":"f","fetcher_version":"1","fetched_at":"t","request":{"url":${JSON.stringify(envelope.url)},"method":"GET"},"response":{"status":200}${part},"payload":${envelope.payload}}`,
+          );
+          return parseEnvelope(file);
+        }),
+      ]),
+    );
+    const { subcategory, agency, args, inputs } = descriptor.registry;
+    const row = {
+      name: 'Oracle',
+      enabled: true,
+      category: 'campground',
+      subcategory: subcategory ?? undefined,
+      agency: agency ?? undefined,
+      etls: [{ slug: etl.etlSlug, adapter: entry.export, inputs, args }],
+    };
+    const registry = { dataSources: [], poiData: [row], campsiteData: [], bookingProviders: [], dataSource: () => undefined, poiDataByName: () => row, campsiteDataByName: () => undefined };
+    const ctx = TransformCtx.load('/unused', registry);
+    const outcome = { ...descriptor, tsParse: 'ok', tsParseBad: [], tsTransformRan: true, tsTransform: 'ok', tsResults: [] };
+    try {
+      for (const result of etl.parse(new InputBundle(captures))) {
+        if (!result.ok) {
+          outcome.tsParseBad.push(result.errors);
+          continue;
+        }
+        try {
+          for (const record of etl.transform(result.dto, ctx)) outcome.tsResults.push(resultOf(record, entry.opaqueFields));
+        } catch {
+          outcome.tsTransform = 'throws';
+        }
+      }
+    } catch {
+      outcome.tsParse = 'throws';
+      outcome.tsTransform = 'skipped';
+    }
+    return outcome;
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+async function explore(values, scratch) {
+  if (values.generator === undefined) fail('explore needs --generator <name>');
+  if (values.seed === undefined) fail('explore needs an explicit --seed, so that every run can be reproduced');
+  const seed = Number(values.seed);
+  if (!Number.isInteger(seed)) fail(`--seed must be an integer, got ${values.seed}`);
+  const count = Number(values.cases ?? DEFAULT_EXPLORE_CASES);
+  assertKotlinBuilt();
+  buildWorker();
+  const generator = await import(pathToFileURL(path.join(ORACLE_DIR, 'explore', `${values.generator}.mjs`)).href);
+  const descriptors = generator.generate({ seed, count }).map((descriptor) => ({
+    kind: 'etl',
+    kotlin: MANIFEST.adapters[descriptor.adapter].kotlin,
+    test: `${values.generator} seed ${seed}`,
+    ...descriptor,
+  }));
+  const withTs = [];
+  for (const descriptor of descriptors) withTs.push(await runEtlOnTs(descriptor));
+  const kotlin = replayOnJvm(withTs, scratch);
+  return report(`explore ${values.generator} (seed ${seed})`, summarise(withTs, kotlin, compareEtlCase));
+}
+
+async function main() {
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
+    options: { generator: { type: 'string' }, seed: { type: 'string' }, cases: { type: 'string' }, help: { type: 'boolean' } },
+  });
+  if (values.help) {
+    console.log(USAGE);
+    return;
+  }
+  const mode = positionals[0] ?? 'check';
+  if (mode !== 'check' && mode !== 'explore') fail(`${USAGE}\n\nunknown mode ${mode}`);
+  const scratch = mkdtempSync(path.join(os.tmpdir(), 'etl-oracle-'));
+  try {
+    const ok = mode === 'check' ? await check(scratch) : await explore(values, scratch);
+    process.exitCode = ok ? 0 : 1;
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+await main();

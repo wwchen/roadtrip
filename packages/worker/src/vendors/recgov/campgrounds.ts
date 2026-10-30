@@ -1,7 +1,7 @@
 import {
   BookingProvider,
-  Carrier,
   DataProviderRef,
+  carrierFromVendorName,
   type Address,
   type CampgroundContact,
   type CampgroundLink,
@@ -68,21 +68,6 @@ const RAW_PATH_SEPARATOR = '.';
 const RAW_PATH_SEGMENT = /^([^[\]]+)(?:\[(\d+)\])?$/;
 const RAW_PATH_FIELD_GROUP = 1;
 const RAW_PATH_INDEX_GROUP = 2;
-const DOUBLE_QUOTE = '"';
-const BACKSLASH = '\\';
-const FIRST_PRINTABLE_CODE_UNIT = 0x20;
-
-const VENDOR_CARRIERS: ReadonlyMap<string, Carrier> = new Map([
-  ['verizon', Carrier.VERIZON],
-  ['at&t', Carrier.ATT],
-  ['t-mobile', Carrier.TMOBILE],
-  ['sprint', Carrier.SPRINT],
-  ['us cellular', Carrier.US_CELLULAR],
-]);
-
-function carrierFromVendorName(name: string): Carrier | null {
-  return VENDOR_CARRIERS.get(kotlinTrim(name).toLowerCase()) ?? null;
-}
 
 function textField(raw: JsonObject | null, key: string): string | null {
   return contentOrNull(fieldOf(raw, key));
@@ -107,15 +92,8 @@ function round2(value: number): number {
   return kotlinRint(value * RATING_ROUNDING_SCALE) / RATING_ROUNDING_SCALE;
 }
 
-function rawFacilityId(value: unknown): string | null {
-  if (typeof value === 'string') {
-    for (let index = 0; index < value.length; index += 1) {
-      const unit = value.charCodeAt(index);
-      if (value.charAt(index) === DOUBLE_QUOTE || value.charAt(index) === BACKSLASH || unit < FIRST_PRINTABLE_CODE_UNIT) return null;
-    }
-  } else if (isJsonObject(value) || Array.isArray(value)) {
-    return null;
-  }
+export function rawFacilityId(value: unknown): string | null {
+  if (isJsonObject(value) || Array.isArray(value)) return null;
   const content = contentOrNull(value);
   const id = content === null ? null : kotlinStringToLongOrNull(content);
   return id === null ? null : id.toString();

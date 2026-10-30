@@ -33,9 +33,28 @@ export interface RecGovDto {
   enrichmentById: ReadonlyMap<string, JsonObject>;
 }
 
-const RECDATA_KEY = 'RECDATA';
-const FACILITY_ID_KEY = 'FacilityID';
-const FACILITY_ADDRESS_KEY = 'FACILITYADDRESS';
+const FIELD = {
+  recData: 'RECDATA',
+  facilityId: 'FacilityID',
+  facilityName: 'FacilityName',
+  facilityLatitude: 'FacilityLatitude',
+  facilityLongitude: 'FacilityLongitude',
+  facilityPhone: 'FacilityPhone',
+  facilityReservationUrl: 'FacilityReservationURL',
+  facilityAddress: 'FACILITYADDRESS',
+  streetAddress: 'FacilityStreetAddress1',
+  city: 'City',
+  stateCode: 'AddressStateCode',
+  postalCode: 'PostalCode',
+  countryCode: 'AddressCountryCode',
+} as const;
+
+const EXPECTED = {
+  long: 'a long',
+  double: 'a double',
+  finiteDouble: 'a finite double',
+  array: 'an array',
+} as const;
 
 function mismatch(key: string, expected: string): never {
   throw new Error(`${key}: expected ${expected}`);
@@ -54,51 +73,51 @@ function primitiveContent(key: string, value: unknown, expected: string): string
 }
 
 function longIdOf(key: string, value: unknown): string {
-  const parsed = kotlinLongFromText(primitiveContent(key, value, 'a long'));
-  if (parsed === null) mismatch(key, 'a long');
+  const parsed = kotlinLongFromText(primitiveContent(key, value, EXPECTED.long));
+  if (parsed === null) mismatch(key, EXPECTED.long);
   return parsed.toString();
 }
 
 function nullableDoubleOf(source: JsonObject, key: string): number | null {
   const value = presentValue(source, key);
   if (value === undefined) return null;
-  const parsed = kotlinDoubleFromText(primitiveContent(key, value, 'a double'));
-  if (parsed === null || !Number.isFinite(parsed)) mismatch(key, 'a finite double');
+  const parsed = kotlinDoubleFromText(primitiveContent(key, value, EXPECTED.double));
+  if (parsed === null || !Number.isFinite(parsed)) mismatch(key, EXPECTED.finiteDouble);
   return parsed;
 }
 
 function decodeAddress(value: unknown, label: string): RidbFacilityAddress {
   const source = asObject(value, label);
   return {
-    facilityStreetAddress1: nullableString(source, 'FacilityStreetAddress1'),
-    city: nullableString(source, 'City'),
-    addressStateCode: nullableString(source, 'AddressStateCode'),
-    postalCode: nullableString(source, 'PostalCode'),
-    addressCountryCode: nullableString(source, 'AddressCountryCode'),
+    facilityStreetAddress1: nullableString(source, FIELD.streetAddress),
+    city: nullableString(source, FIELD.city),
+    addressStateCode: nullableString(source, FIELD.stateCode),
+    postalCode: nullableString(source, FIELD.postalCode),
+    addressCountryCode: nullableString(source, FIELD.countryCode),
   };
 }
 
 function decodeAddresses(source: JsonObject): RidbFacilityAddress[] | null {
-  const value = presentValue(source, FACILITY_ADDRESS_KEY);
+  const value = presentValue(source, FIELD.facilityAddress);
   if (value === undefined) return null;
-  if (!Array.isArray(value)) mismatch(FACILITY_ADDRESS_KEY, 'an array');
-  return value.map((entry, index) => decodeAddress(entry, `${FACILITY_ADDRESS_KEY}[${index}]`));
+  if (!Array.isArray(value)) mismatch(FIELD.facilityAddress, EXPECTED.array);
+  return value.map((entry, index) => decodeAddress(entry, `${FIELD.facilityAddress}[${index}]`));
 }
 
 function decodeFacility(value: unknown, index: number): RidbFacility {
-  const source = asObject(value, `${RECDATA_KEY}[${index}]`);
+  const source = asObject(value, `${FIELD.recData}[${index}]`);
   return {
-    facilityId: longIdOf(FACILITY_ID_KEY, fieldOf(source, FACILITY_ID_KEY)),
-    facilityName: nullableString(source, 'FacilityName'),
-    facilityLatitude: nullableDoubleOf(source, 'FacilityLatitude'),
-    facilityLongitude: nullableDoubleOf(source, 'FacilityLongitude'),
-    facilityPhone: nullableString(source, 'FacilityPhone'),
-    facilityReservationUrl: nullableString(source, 'FacilityReservationURL'),
+    facilityId: longIdOf(FIELD.facilityId, fieldOf(source, FIELD.facilityId)),
+    facilityName: nullableString(source, FIELD.facilityName),
+    facilityLatitude: nullableDoubleOf(source, FIELD.facilityLatitude),
+    facilityLongitude: nullableDoubleOf(source, FIELD.facilityLongitude),
+    facilityPhone: nullableString(source, FIELD.facilityPhone),
+    facilityReservationUrl: nullableString(source, FIELD.facilityReservationUrl),
     facilityAddress: decodeAddresses(source),
   };
 }
 
 export function decodeRidbPage(payload: unknown): RidbFacility[] {
   const page = asObject(payload, 'payload');
-  return arrayOrEmpty(page, RECDATA_KEY).map(decodeFacility);
+  return arrayOrEmpty(page, FIELD.recData).map(decodeFacility);
 }

@@ -10,7 +10,7 @@ import type { ParseResult, TransformResult } from '../../etl/source-etl.js';
 import { TransformCtx } from '../../etl/transform-ctx.js';
 import type { CampgroundUpsertCandidate } from '../../model/campground-candidate.js';
 import { loadPoiRegistry, type PoiDataEntry, type PoiRegistry } from '../../registry/poi-registry.js';
-import { RecGovCampgroundsEtl, stringAtRawPath } from './campgrounds.js';
+import { RecGovCampgroundsEtl, rawFacilityId, stringAtRawPath } from './campgrounds.js';
 import type { RecGovDto } from './dto.js';
 
 const TEMP_DIR_PREFIX = 'recgov-campgrounds-';
@@ -544,6 +544,8 @@ describe('cell service', () => {
     ['an unparseable average', '{"carrier":"Verizon","average_rating":"n/a","number_of_ratings":3}'],
     ['an entry that is not an object', '"Verizon"'],
     ['an entry that is null', 'null'],
+    ['an unreadable average behind a count that is null', '{"carrier":"Verizon","average_rating":{},"number_of_ratings":null}'],
+    ['an unreadable average behind a count that is absent', '{"carrier":"Verizon","average_rating":[1]}'],
   ])('drops %s', (_label, entry) => {
     expect(cellOf(`[${entry}]`)).toEqual([]);
   });
@@ -568,6 +570,7 @@ describe('cell service', () => {
     ['a null ratings value', '{"aggregate_cell_coverage_ratings":null}'],
     ['a carrier that is an object', '{"aggregate_cell_coverage_ratings":[{"carrier":{},"average_rating":1,"number_of_ratings":1}]}'],
     ['a count that is a list', '{"aggregate_cell_coverage_ratings":[{"carrier":"Sprint","average_rating":1,"number_of_ratings":[1]}]}'],
+    ['an average that is an object behind a readable count', '{"aggregate_cell_coverage_ratings":[{"carrier":"Verizon","average_rating":{},"number_of_ratings":3}]}'],
   ])('fails the run on %s', (_label, aggregate) => {
     expect(() => recordOf('', enrichmentOf(aggregate))).toThrow();
   });
@@ -858,6 +861,45 @@ describe('location, address and region', () => {
     expect(record.longitude).toBe(-119.25);
     expect(record.location.latitude).toBe(38.5);
     expect(record.location.longitude).toBe(-119.25);
+  });
+});
+
+describe('rawFacilityId, the raw pass reading a FacilityID as String.toLong', () => {
+  test.each([
+    ['12', '12'],
+    ['+5', '5'],
+    ['-5', '-5'],
+    ['007', '7'],
+    [String.fromCodePoint(0x663), '3'],
+    [12, '12'],
+    [-7, '-7'],
+    ['9223372036854775807', '9223372036854775807'],
+  ])('%j reads as %j', (value, expected) => {
+    expect(rawFacilityId(value)).toBe(expected);
+  });
+
+  test.each([
+    ['text with a double quote inside', '1"2'],
+    ['text with a backslash inside', '1\\2'],
+    ['text with a quote at either end', '"12"'],
+    ['text with a quote at the front', '"12'],
+    ['text with a quote at the back', '12"'],
+    ['text with a control character', '1\u00012'],
+    ['text with a tab', '1\t2'],
+    ['text with a no-break space', `12${NO_BREAK_SPACE}`],
+    ['a leading space', ' 12'],
+    ['an exponent', '1e3'],
+    ['a fraction', '12.0'],
+    ['an empty string', ''],
+    ['a sign alone', '+'],
+    ['a value beyond a Long', '9223372036854775808'],
+    ['a boolean', true],
+    ['a null', null],
+    ['an absent value', undefined],
+    ['an object', { FacilityID: 12 }],
+    ['a list', ['12']],
+  ])('%s reads as nothing', (_label, value) => {
+    expect(rawFacilityId(value)).toBeNull();
   });
 });
 

@@ -23,11 +23,22 @@ const TYPE_OF_USE_LABEL = 'Type of use';
 const CAMPGROUND_MARKER = '/campground/';
 const URL_ID_TERMINATORS = ['/', '?'];
 const PARENT_FACILITY_KEY = '_parent_facility_id';
-const CAMPSITES_KEY = 'campsites';
-const ATTRIBUTES_KEY = 'attributes';
-const ATTRIBUTE_NAME_KEY = 'attribute_name';
-const ATTRIBUTE_VALUE_KEY = 'attribute_value';
-const EQUIPMENT_KEY = 'equipment_types';
+
+const FIELD = {
+  campsites: 'campsites',
+  attributes: 'attributes',
+  attributeName: 'attribute_name',
+  attributeValue: 'attribute_value',
+  equipment: 'equipment_types',
+  site: 'site',
+  loop: 'loop',
+  campsiteType: 'campsite_type',
+  campsiteReserveType: 'campsite_reserve_type',
+  typeOfUse: 'type_of_use',
+  maxPeople: 'max_num_people',
+  minPeople: 'min_num_people',
+} as const;
+
 const NO_ENVELOPES_SUFFIX = 'no envelopes captured (run fetch_recgov_campsites.py first)';
 const MISSING_FACILITY_ID = 'missing facility id in request URL';
 const EXPECTED_OBJECT_PAYLOAD = 'expected JSON object payload';
@@ -54,7 +65,7 @@ function primitiveStringField(source: JsonObject, key: string): string | null {
 }
 
 function equipmentNames(raw: JsonObject): string[] {
-  const entries = fieldOf(raw, EQUIPMENT_KEY);
+  const entries = fieldOf(raw, FIELD.equipment);
   if (!Array.isArray(entries)) return [];
   const names: string[] = [];
   for (const entry of entries) {
@@ -89,19 +100,19 @@ function promoteAttributes(raw: JsonObject): PromotedAttributes {
     maxRvLength: null,
     attributes: [],
   };
-  const entries = fieldOf(raw, ATTRIBUTES_KEY);
+  const entries = fieldOf(raw, FIELD.attributes);
   for (const entry of Array.isArray(entries) ? entries : []) {
     if (!isJsonObject(entry)) continue;
-    const name = primitiveStringField(entry, ATTRIBUTE_NAME_KEY);
+    const name = primitiveStringField(entry, FIELD.attributeName);
     if (name === null) continue;
-    const value = primitiveStringField(entry, ATTRIBUTE_VALUE_KEY);
+    const value = primitiveStringField(entry, FIELD.attributeValue);
     if (!promoteOne(promoted, name.toLowerCase(), value)) {
       promoted.attributes.push(value === null ? { name } : { name, value });
     }
   }
-  const reserveType = primitiveStringField(raw, 'campsite_reserve_type');
+  const reserveType = primitiveStringField(raw, FIELD.campsiteReserveType);
   if (reserveType !== null) promoted.attributes.push({ name: RESERVE_TYPE_LABEL, value: reserveType });
-  const typeOfUse = primitiveStringField(raw, 'type_of_use');
+  const typeOfUse = primitiveStringField(raw, FIELD.typeOfUse);
   if (typeOfUse !== null) promoted.attributes.push({ name: TYPE_OF_USE_LABEL, value: typeOfUse });
   return promoted;
 }
@@ -155,15 +166,15 @@ function campsiteRecord(
   facilityId: string,
 ): CampsiteUpsertCandidate {
   const promoted = promoteAttributes(raw);
-  const campsiteType = primitiveStringField(raw, 'campsite_type');
+  const campsiteType = primitiveStringField(raw, FIELD.campsiteType);
   const siteKind = campsiteKindRecGov(campsiteType);
   return {
     dataProviderRef: DataProviderRef.recGov(campsiteId),
     bookingProvider: BookingProvider.RECGOV,
     bookingProviderRef: campsiteId,
     parentDataProviderRef: DataProviderRef.recGov(facilityId),
-    name: primitiveStringField(raw, 'site') ?? campsiteId,
-    loopName: primitiveStringField(raw, 'loop'),
+    name: primitiveStringField(raw, FIELD.site) ?? campsiteId,
+    loopName: primitiveStringField(raw, FIELD.loop),
     kind: siteKind.kind,
     kindListed: campsiteType,
     equipment: equipmentNames(raw),
@@ -171,12 +182,12 @@ function campsiteRecord(
     picnicTable: promoted.picnicTable,
     adaAccessible: promoted.adaAccessible,
     electricHookups: siteKind.electric,
-    maxPeople: intOrNull(fieldOf(raw, 'max_num_people')),
+    maxPeople: intOrNull(fieldOf(raw, FIELD.maxPeople)),
     maxCars: promoted.maxCars,
     drivewayLength: promoted.drivewayLength,
     maxRvLength: promoted.maxRvLength,
     attributes: promoted.attributes,
-    minPeople: intOrNull(fieldOf(raw, 'min_num_people')),
+    minPeople: intOrNull(fieldOf(raw, FIELD.minPeople)),
     sourcePayload: serializeOpaquePayload({ ...raw, [PARENT_FACILITY_KEY]: facilityId }),
   };
 }
@@ -203,7 +214,7 @@ export class RecGovCampsitesEtl implements SourceEtl<Envelope[], CampsiteUpsertC
         yield { ok: false, sourceId, errors: [EXPECTED_OBJECT_PAYLOAD] };
         continue;
       }
-      const rawCampsites = fieldOf(payload, CAMPSITES_KEY);
+      const rawCampsites = fieldOf(payload, FIELD.campsites);
       if (!isJsonObject(rawCampsites)) {
         yield { ok: false, sourceId, errors: [MISSING_CAMPSITES] };
         continue;
