@@ -210,6 +210,8 @@ const SIGMA = '\u03a3';
 const NON_NORMALIZED = /[^a-z0-9 ]/g;
 const SPACE = ' ';
 const ASCII_REACHING = 'ascii';
+const SIGMA_CONTEXT_FLOOR = 0x10000;
+const MINIMUM_SIGMA_DIVERGENCES = 1000;
 const NON_ASCII = 'non-ascii';
 
 const JAVA_CASE_DIVERGENCES = new Map([
@@ -343,6 +345,7 @@ function compareCase(codePointRows, stringRows) {
 
 function compareSigmaContexts(rows) {
   const problems = [];
+  const surviving = [];
   let compared = 0;
   let raw = 0;
   for (const line of rows) {
@@ -354,13 +357,26 @@ function compareSigmaContexts(rows) {
     if (portLower === javaLower) continue;
     raw += 1;
     if (normalizeProjection(textOfCodes(javaLower)) !== normalizeProjection(textOfCodes(portLower))) {
-      problems.push(
+      surviving.push(
         `final-sigma context U+${Number(unit).toString(16).padStart(4, '0')} survives normalize's projection: ` +
           `java [${javaLower}], port [${portLower}]`,
       );
     }
   }
-  return { problems, compared, raw, survivingNormalize: problems.length };
+  problems.push(...surviving);
+  if (compared < SIGMA_CONTEXT_FLOOR) {
+    problems.push(
+      `the final-sigma sweep compared ${compared} contexts, below the floor of ${SIGMA_CONTEXT_FLOOR}; ` +
+        'a truncated sweep would report no surviving divergence whatever the port did',
+    );
+  }
+  if (raw < MINIMUM_SIGMA_DIVERGENCES) {
+    problems.push(
+      `the final-sigma sweep found ${raw} raw divergence(s), below the floor of ${MINIMUM_SIGMA_DIVERGENCES}; ` +
+        'a port side that trivially agrees would otherwise pass the projection check vacuously',
+    );
+  }
+  return { problems, compared, raw, survivingNormalize: surviving.length };
 }
 
 function compareRint(rows, numberModule) {

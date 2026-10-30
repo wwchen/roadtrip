@@ -178,6 +178,23 @@ describe('the two numeric readers the walk uses, which Kotlin picks per field', 
     );
   });
 
+  test.each([
+    ['10', ['Borrowed']],
+    ['1e1', []],
+    [' 10 ', []],
+    ['+10', ['Borrowed']],
+  ])(
+    'the parent mapLinks lookup matches childMapId %j by the stdlib parser, borrowing %j',
+    (spelling, borrowed) => {
+      const walked = leaves(
+        '[{"mapId":1,"localizedValues":[{"cultureName":"en-US","title":"Parent"}],"mapLinks":' +
+          `[{"childMapId":${JSON.stringify(spelling)},"localizations":[{"cultureName":"en-US","title":"Borrowed"}]}]},` +
+          '{"mapId":10,"transactionLocationId":7,"parentMap":{"mapId":1}}]',
+      );
+      expect(walked.map((leaf) => leaf.name)).toEqual(borrowed);
+    },
+  );
+
   test('resourceLocationId and childMapId follow transactionLocationId, not mapId', () => {
     const lenient = leaves(
       `[{"mapId":1,"transactionLocationId":7,"resourceLocationId":"1e1","localizedValues":[${EN_US}]}]`,

@@ -1,5 +1,7 @@
 const CONSTANT_AGENCY = 'constant';
 const MAX_FINGERPRINT_DEPTH = 12;
+const ANONYMOUS = '<anonymous>';
+const CLASS_KEY = 'class';
 
 export function etlEntryFor(registry, slug) {
   for (const row of [...registry.poiData, ...registry.campsiteData]) {
@@ -39,21 +41,27 @@ export function registryWithOverride(registry, slug, override) {
   return { ...registry, poiData, poiDataByName: (name) => poiData.find((row) => row.name === name) };
 }
 
+function classNameOf(value) {
+  return value.constructor?.name ?? ANONYMOUS;
+}
+
 function fingerprintValue(value, depth) {
   if (depth > MAX_FINGERPRINT_DEPTH) throw new Error('an etl instance nests deeper than the fingerprint walks');
-  if (typeof value === 'function') return undefined;
+  if (typeof value === 'function') return `function:${value.name === '' ? ANONYMOUS : value.name}`;
   if (typeof value === 'bigint') return `bigint:${value}`;
   if (value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map((element) => fingerprintValue(element, depth + 1));
-  const entries = Object.entries(value)
+  return Object.fromEntries([[CLASS_KEY, classNameOf(value)], ...fingerprintEntries(value, depth)]);
+}
+
+function fingerprintEntries(value, depth) {
+  return Object.entries(value)
     .map(([key, entry]) => [key, fingerprintValue(entry, depth + 1)])
-    .filter(([, entry]) => entry !== undefined)
     .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
-  return Object.fromEntries(entries);
 }
 
 export function instanceFingerprint(etl) {
-  return JSON.stringify({ class: etl.constructor.name, own: fingerprintValue({ ...etl }, 0) });
+  return JSON.stringify({ class: classNameOf(etl), own: Object.fromEntries(fingerprintEntries({ ...etl }, 0)) });
 }
 
 function constructedFingerprint(adapterRegistry, entry) {

@@ -321,7 +321,51 @@ test('the fingerprint is key-order independent, and separates bigint from its de
   );
 });
 
-test('the fingerprint ignores methods, so a class gaining one does not invalidate every case', () => {
-  const plain = { constructor: { name: 'X' }, etlSlug: 's' };
-  assert.equal(instanceFingerprint(plain), instanceFingerprint({ ...plain, helper: () => 1 }));
+test('the fingerprint separates two classes holding identical own state', () => {
+  class RecGovCampsitesEtl {
+    constructor(slug) {
+      this.etlSlug = slug;
+    }
+  }
+  const left = new RecGovCampgroundsEtl('shared-slug');
+  const right = new RecGovCampsitesEtl('shared-slug');
+  assert.deepEqual({ ...left }, { ...right });
+  assert.notEqual(instanceFingerprint(left), instanceFingerprint(right));
+});
+
+test('a prototype method is invisible to the fingerprint, and an own function field is named', () => {
+  class WithMethod {
+    constructor(slug) {
+      this.etlSlug = slug;
+    }
+
+    helper() {
+      return 1;
+    }
+  }
+  class WithoutMethod {
+    constructor(slug) {
+      this.etlSlug = slug;
+    }
+  }
+  assert.equal(
+    instanceFingerprint(new WithMethod('s')).replace('WithMethod', 'X'),
+    instanceFingerprint(new WithoutMethod('s')).replace('WithoutMethod', 'X'),
+  );
+
+  const named = (pick) => ({ constructor: { name: 'X' }, pick });
+  assert.notEqual(
+    instanceFingerprint(named(function chooseAspira() {})),
+    instanceFingerprint(named(function chooseStrapi() {})),
+  );
+});
+
+test('the fingerprint separates two nested classes with no own state, which is Task 11 shape', () => {
+  class ProviderAspira {}
+  class ProviderStrapi {}
+  const withProvider = (provider) => ({ constructor: { name: 'AspiraCampsitesEtl' }, provider });
+  assert.notEqual(
+    instanceFingerprint(withProvider(new ProviderAspira())),
+    instanceFingerprint(withProvider(new ProviderStrapi())),
+  );
 });
