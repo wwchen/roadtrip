@@ -17,8 +17,8 @@
     "@roadtrip/domain": "0.1.0",
     "drizzle-orm": "0.45.4",
     "next": "16.4.3",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "server-only": "0.0.1"
   },
   "devDependencies": {
