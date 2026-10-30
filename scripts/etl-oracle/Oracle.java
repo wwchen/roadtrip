@@ -1,4 +1,6 @@
 import java.io.File;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -11,10 +13,15 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import kotlin.Unit;
 import kotlin.sequences.SequencesKt;
+import kotlinx.serialization.KSerializer;
+import kotlinx.serialization.SerializersKt;
 import kotlinx.serialization.json.Json;
 import kotlinx.serialization.json.JsonArray;
+import kotlinx.serialization.json.JsonBuilder;
 import kotlinx.serialization.json.JsonElement;
+import kotlinx.serialization.json.JsonKt;
 import kotlinx.serialization.json.JsonNull;
 import kotlinx.serialization.json.JsonObject;
 import kotlinx.serialization.json.JsonPrimitive;
@@ -34,6 +41,10 @@ import ca.floo.roadtrip.service.etl.framework.TransformCtx;
 
 public class Oracle {
     static final Json JSON = Json.Default;
+    static final Json WIRE = JsonKt.Json(Json.Default, (JsonBuilder builder) -> {
+        builder.setEncodeDefaults(true);
+        return Unit.INSTANCE;
+    });
     static final int MAX_DEPTH = 24;
     static final String ETL_KIND = "etl";
     static final String CALL_KIND = "call";
@@ -94,6 +105,8 @@ public class Oracle {
             Method ser = k.getMethod("serialize");
             return esc(String.valueOf(ser.invoke(o)));
         } catch (NoSuchMethodException ignored) { }
+        KSerializer<Object> wire = SerializersKt.serializerOrNull(k);
+        if (wire != null) return WIRE.encodeToString(wire, o);
         StringBuilder b = new StringBuilder("{");
         boolean first = true;
         Method[] methods = k.getMethods();
@@ -282,12 +295,14 @@ public class Oracle {
     }
 
     public static void main(String[] args) throws Exception {
+        PrintStream protocol = System.out;
+        System.setOut(new PrintStream(OutputStream.nullOutputStream()));
         registry = PoiRegistry.Companion.load(new File(args[1]));
         for (String line : Files.readAllLines(Paths.get(args[0]))) {
             if (line.isBlank()) continue;
             JsonObject c = (JsonObject) JSON.parseToJsonElement(line);
             String kind = text(c, "kind");
-            System.out.println(ETL_KIND.equals(kind) ? runEtl(c) : runCall(c));
+            protocol.println(ETL_KIND.equals(kind) ? runEtl(c) : runCall(c));
         }
     }
 }
