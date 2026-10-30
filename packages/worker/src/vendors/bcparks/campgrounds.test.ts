@@ -270,6 +270,17 @@ describe('the BC Parks campgrounds adapter, transform', () => {
     expect([record?.latitude, record?.longitude, record?.mediumDescription]).toEqual([50, -123, 'First.']);
   });
 
+  test('the first Strapi row for a name supplies the point even when that row is off the earth', () => {
+    const [record] = recordsOf(
+      inputsOf(
+        maps(leafNode('11', 'Alice Lake')),
+        strapi(area('Alice Lake', {}, '95', '-123'), area('Alice Lake Provincial Park', {}, '50.4', '-123.1')),
+      ),
+    );
+    expect([record?.latitude, record?.longitude]).toEqual([95, -123]);
+    expect(record?.geometryProvenance).toEqual({ match_kind: 'exact', source: STRAPI, matched_name: 'alice lake' });
+  });
+
   test('a Strapi row off the earth is never matched, so its leaf is dropped', () => {
     const records = recordsOf(
       inputsOf(maps(leafNode('11', 'Nowhere'), leafNode('12', 'Alice Lake', { resourceLocationId: '101' })), strapi(area('Nowhere', {}, '95', '-123'), ALICE_LAKE)),

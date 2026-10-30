@@ -15,8 +15,8 @@
       "opaqueFields": [
         "sourcePayload"
       ],
-      "minimumCases": 13,
-      "minimumTransformed": 7
+      "minimumCases": 14,
+      "minimumTransformed": 8
     },
     "recgov-campgrounds": {
       "module": "vendors/recgov/campgrounds",
