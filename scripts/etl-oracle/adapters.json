@@ -62,6 +62,24 @@
       ],
       "minimumCases": 42,
       "minimumTransformed": 36
+    },
+    "reservecalifornia-campgrounds": {
+      "module": "vendors/reservecalifornia/campgrounds",
+      "export": "ReserveCaliforniaCampgroundsEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 85,
+      "minimumTransformed": 66
+    },
+    "reservecalifornia-campsites": {
+      "module": "vendors/reservecalifornia/sites",
+      "export": "ReserveCaliforniaSitesEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 78,
+      "minimumTransformed": 67
     }
   },
   "calls": {

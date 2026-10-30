@@ -9,6 +9,8 @@ const WORKER_SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 const OUT = process.env.ETL_ORACLE_OUT;
 if (OUT === undefined) throw new Error('ETL_ORACLE_OUT names the file the recorded cases are written to');
 
+const { stringifyInDocumentOrder } = await import(path.join(WORKER_SRC, 'etl/document-order.ts'));
+
 const recorded = [];
 const byDto = new WeakMap();
 
@@ -19,7 +21,7 @@ function inputsOf(bundle) {
       url: envelope.request.url,
       fetchedAt: envelope.fetchedAt,
       part: envelope.part ?? null,
-      payload: JSON.stringify(envelope.payload),
+      payload: stringifyInDocumentOrder(envelope.payload),
     }));
   }
   return inputs;
