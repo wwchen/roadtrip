@@ -15,8 +15,8 @@
       "opaqueFields": [
         "sourcePayload"
       ],
-      "minimumCases": 164,
-      "minimumTransformed": 150
+      "minimumCases": 167,
+      "minimumTransformed": 154
     },
     "bcparks-campgrounds": {
       "module": "vendors/bcparks/campgrounds",
