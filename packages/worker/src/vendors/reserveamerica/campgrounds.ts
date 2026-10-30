@@ -7,12 +7,12 @@ import { isKotlinBlank, kotlinTrim, nonBlank } from '../../etl/kotlin-text.js';
 import type { ParseResult, SourceEtl, TransformResult } from '../../etl/source-etl.js';
 import type { TransformCtx } from '../../etl/transform-ctx.js';
 import type { CampgroundUpsertCandidate } from '../../model/campground-candidate.js';
+import { firstGroup } from './catalog-parser.js';
 import type { ReserveAmericaDto } from './dto.js';
 import type { ParsedPark } from './parsed-park.js';
 
 const PARK_PART_PREFIX = 'park-';
 const JAVA_WHITESPACE = '[ \\t\\n\\x0B\\f\\r]';
-const FIRST_GROUP = 1;
 const LATITUDE = new RegExp(`place:location:latitude"${JAVA_WHITESPACE}+content='([^']+)'`);
 const LONGITUDE = new RegExp(`place:location:longitude"${JAVA_WHITESPACE}+content='([^']+)'`);
 const OG_TITLE = new RegExp(`og:title"${JAVA_WHITESPACE}+content='([^']+)'`);
@@ -53,10 +53,6 @@ function settingsOf(ctx: TransformCtx, etlSlug: string, contract: string): Reser
     titleSuffix: ctx.argFor(etlSlug, TITLE_SUFFIX_ARG) ?? `, ${region}`,
     sourceIdPrefix: ctx.argFor(etlSlug, SOURCE_ID_PREFIX_ARG) ?? DEFAULT_SOURCE_ID_PREFIX,
   };
-}
-
-function firstGroup(pattern: RegExp, html: string): string | null {
-  return pattern.exec(html)?.[FIRST_GROUP] ?? null;
 }
 
 function doubleGroup(pattern: RegExp, html: string): number | null {

@@ -12,6 +12,10 @@ const PARK_ID = /parkId=(\d+)/;
 const LABEL_TEXT = />([^<]+)<\/a>/;
 const FIRST_GROUP = 1;
 
+export function firstGroup(pattern: RegExp, text: string): string | null {
+  return pattern.exec(text)?.[FIRST_GROUP] ?? null;
+}
+
 export function siteRows(html: string): string[] {
   const starts = [...html.matchAll(SITE_LABEL)].map((match) => match.index);
   return starts.map((start, position) => html.substring(start, starts[position + 1] ?? html.length));
@@ -20,12 +24,12 @@ export function siteRows(html: string): string[] {
 export function parseCatalog(html: string): CatalogSite[] {
   const sites: CatalogSite[] = [];
   for (const row of siteRows(html)) {
-    const siteId = SITE_ID.exec(row)?.[FIRST_GROUP];
-    if (siteId === undefined) continue;
-    const parkId = PARK_ID.exec(row)?.[FIRST_GROUP];
-    if (parkId === undefined) continue;
-    const label = LABEL_TEXT.exec(row)?.[FIRST_GROUP];
-    const name = label === undefined ? '' : kotlinTrim(label);
+    const siteId = firstGroup(SITE_ID, row);
+    if (siteId === null) continue;
+    const parkId = firstGroup(PARK_ID, row);
+    if (parkId === null) continue;
+    const label = firstGroup(LABEL_TEXT, row);
+    const name = label === null ? '' : kotlinTrim(label);
     sites.push({ parkId, siteId, name: name === '' ? siteId : name });
   }
   return sites;

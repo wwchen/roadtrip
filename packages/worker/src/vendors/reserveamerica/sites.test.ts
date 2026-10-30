@@ -18,10 +18,12 @@ const NY_SLUG = 'reserveamerica-ny-campsites';
 const AB_INPUT = 'reserveamerica-campsites-abpp';
 const NY_INPUT = 'reserveamerica-campsites-ny';
 const HTTP_OK = 200;
+const OBJECT_NOT_PRIMITIVE = 'Element a JsonObject is not a JsonPrimitive';
+const ARRAY_NOT_PRIMITIVE = 'Element a JsonArray is not a JsonPrimitive';
+const SOLE_INPUT_REFUSAL = 'soleEnvelopes() requires exactly one data_source input; got 2';
 const FETCHED_AT = '2026-06-17T00:00:00Z';
 const UNIT_SEPARATOR = String.fromCodePoint(0x1f);
-const CAPTURE_ROOT = decodeURIComponent(new URL('../../../../../data/raw/', import.meta.url).pathname);
-const CAPTURE_DIR = '2026-07-05T20-28-53Z';
+const FIXTURE_ROOT = decodeURIComponent(new URL('./fixtures/', import.meta.url).pathname);
 const KOTLIN_WHITESPACE_CODE_POINTS = [
   0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0xa0, 0x1680, 0x2000, 0x2001, 0x2005, 0x2007, 0x200a,
   0x2028, 0x2029, 0x202f, 0x205f, 0x3000,
@@ -146,7 +148,7 @@ describe('transform', () => {
 
 describe('real captures', () => {
   function captured(tenant: string, file: string): unknown {
-    return parseEnvelope(`${CAPTURE_ROOT}reserveamerica-campsites-${tenant}/${CAPTURE_DIR}/${file}`).payload;
+    return parseEnvelope(`${FIXTURE_ROOT}campsites-${tenant}/${file}`).payload;
   }
 
   test.each([
@@ -214,13 +216,13 @@ describe('parse', () => {
       ]),
     );
 
-    expect(() => [...new ReserveAmericaSitesEtl(NY_SLUG, 'NY').parse(bundle)]).toThrow();
+    expect(() => [...new ReserveAmericaSitesEtl(NY_SLUG, 'NY').parse(bundle)]).toThrow(SOLE_INPUT_REFUSAL);
   });
 
   test('reads a JSON primitive payload as its text and throws on a container', () => {
     expect(parsedOf(NY_SLUG, 'NY', NY_INPUT, [5, null, true])[0]?.ok).toBe(false);
-    expect(() => parsedOf(NY_SLUG, 'NY', NY_INPUT, [{}])).toThrow();
-    expect(() => parsedOf(NY_SLUG, 'NY', NY_INPUT, [row('1', '2', 'a'), []])).toThrow();
+    expect(() => parsedOf(NY_SLUG, 'NY', NY_INPUT, [{}])).toThrow(OBJECT_NOT_PRIMITIVE);
+    expect(() => parsedOf(NY_SLUG, 'NY', NY_INPUT, [row('1', '2', 'a'), []])).toThrow(ARRAY_NOT_PRIMITIVE);
   });
 
   test('an input with no envelopes is a bad parse, not a thrown refusal, since there is nothing to concatenate', () => {

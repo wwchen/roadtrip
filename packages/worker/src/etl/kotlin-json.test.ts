@@ -108,9 +108,9 @@ describe('JsonPrimitive accessors, pinned to kotlinx.serialization 1.11.0', () =
     expect(contentOf(valueOf('"<p>"'))).toBe('<p>');
     expect(contentOf(valueOf('25.0'))).toBe('25.0');
     expect(contentOf(valueOf('true'))).toBe('true');
-    expect(() => contentOf(valueOf('{}'))).toThrow();
-    expect(() => contentOf(valueOf('[]'))).toThrow();
-    expect(() => contentOf(undefined)).toThrow();
+    expect(() => contentOf(valueOf('{}'))).toThrow('Element a JsonObject is not a JsonPrimitive');
+    expect(() => contentOf(valueOf('[]'))).toThrow('Element a JsonArray is not a JsonPrimitive');
+    expect(() => contentOf(undefined)).toThrow('Element is not a JsonPrimitive');
   });
 
   test('a number written with a fraction is not read as an int even though its value is whole', () => {

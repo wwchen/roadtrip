@@ -15,6 +15,10 @@ const AB_INPUT = 'reserveamerica-abpp';
 const NY_INPUT = 'reserveamerica-ny';
 const RAW_DIR = '/unused';
 const HTTP_OK = 200;
+const OBJECT_NOT_PRIMITIVE = 'Element a JsonObject is not a JsonPrimitive';
+const ARRAY_NOT_PRIMITIVE = 'Element a JsonArray is not a JsonPrimitive';
+const SOLE_INPUT_REFUSAL = 'soleEnvelopes() requires exactly one data_source input; got 2';
+const NON_FINITE_REFUSAL = 'is not a finite double';
 const FETCHED_AT = '2026-06-17T00:00:00Z';
 const PRODUCTION_REGISTRY_PATH = decodeURIComponent(
   new URL('../../../../../backend/src/main/resources/poi-registry.yaml', import.meta.url).pathname,
@@ -28,9 +32,9 @@ const FILE_SEPARATOR = String.fromCodePoint(0x1c);
 const VERTICAL_TAB = String.fromCodePoint(0x0b);
 const FORM_FEED = String.fromCodePoint(0x0c);
 const ARABIC_INDIC_SEVEN = String.fromCodePoint(0x667);
-const CAPTURE_ROOT = decodeURIComponent(new URL('../../../../../data/raw/', import.meta.url).pathname);
-const AB_CAPTURE_DIR = 'reserveamerica-abpp/2026-06-08T15-00-19Z';
-const NY_CAPTURE_DIR = 'reserveamerica-ny/2026-06-22T15-20-19Z';
+const FIXTURE_ROOT = decodeURIComponent(new URL('./fixtures/', import.meta.url).pathname);
+const AB_FIXTURE_DIR = 'parks-abpp';
+const NY_FIXTURE_DIR = 'parks-ny';
 
 const KOTLIN_WHITESPACE_CODE_POINTS = [
   0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0xa0, 0x1680, 0x2000, 0x2001, 0x2005, 0x2007, 0x200a,
@@ -335,14 +339,14 @@ describe('which envelopes become parks', () => {
       ]),
     );
 
-    expect(() => [...new ReserveAmericaCampgroundsEtl(NY_SLUG, 'NY').parse(bundle)]).toThrow();
+    expect(() => [...new ReserveAmericaCampgroundsEtl(NY_SLUG, 'NY').parse(bundle)]).toThrow(SOLE_INPUT_REFUSAL);
   });
 
   test('a payload that is a JSON primitive other than a string reads as its text, and a container throws', () => {
     expect(parsedOf(NY_SLUG, 'NY', NY_INPUT, [{ part: 'park-1', payload: 5 }])[0]?.ok).toBe(false);
     expect(parsedOf(NY_SLUG, 'NY', NY_INPUT, [{ part: 'park-1', payload: null }])[0]?.ok).toBe(false);
-    expect(() => parsedOf(NY_SLUG, 'NY', NY_INPUT, [{ part: 'park-1', payload: {} }])).toThrow();
-    expect(() => parsedOf(NY_SLUG, 'NY', NY_INPUT, [{ part: 'park-1', payload: [] }])).toThrow();
+    expect(() => parsedOf(NY_SLUG, 'NY', NY_INPUT, [{ part: 'park-1', payload: {} }])).toThrow(OBJECT_NOT_PRIMITIVE);
+    expect(() => parsedOf(NY_SLUG, 'NY', NY_INPUT, [{ part: 'park-1', payload: [] }])).toThrow(ARRAY_NOT_PRIMITIVE);
   });
 
   test('a payload container on a page that is skipped anyway is never read', () => {
@@ -429,7 +433,7 @@ describe('numbers', () => {
       const etl = new ReserveAmericaCampgroundsEtl(NY_SLUG, 'NY');
       const [parsed] = [...etl.parse(bundleOf(NY_INPUT, [parkCapture('1', { lat })]))];
       if (parsed === undefined || !parsed.ok) throw new Error(`${lat} should have parsed`);
-      expect(() => [...etl.transform(parsed.dto, PRODUCTION_CTX)]).toThrow();
+      expect(() => [...etl.transform(parsed.dto, PRODUCTION_CTX)]).toThrow(NON_FINITE_REFUSAL);
     }
   });
 
@@ -443,14 +447,14 @@ describe('numbers', () => {
       for (const result of etl.transform(parsed.dto, PRODUCTION_CTX)) {
         if (result.ok) seen.push(result.record.dataProviderRef.serialize());
       }
-    }).toThrow();
+    }).toThrow(NON_FINITE_REFUSAL);
     expect(seen).toEqual(['ra-1']);
   });
 });
 
 describe('real captures', () => {
   function captured(directory: string, file: string): Capture {
-    const envelope = parseEnvelope(`${CAPTURE_ROOT}${directory}/${file}`);
+    const envelope = parseEnvelope(`${FIXTURE_ROOT}${directory}/${file}`);
     return { ...(envelope.part === undefined ? {} : { part: envelope.part }), payload: envelope.payload };
   }
 
@@ -459,7 +463,7 @@ describe('real captures', () => {
     ['park-331050.json', 'Peaceful Valley Provincial Recreation Area', 52.9330556, -114.0830556, '(403)748-3939'],
     ['park-330119.json', 'Fish Creek Provincial Park', 50.9094444, -114.0202778, '(403)678-0760'],
   ])('the Alberta page %s', (file, name, lat, lon, phone) => {
-    const [record] = abRecords([captured(AB_CAPTURE_DIR, file)]);
+    const [record] = abRecords([captured(AB_FIXTURE_DIR, file)]);
 
     expect(record?.name).toBe(name);
     expect(record?.latitude).toBe(lat);
@@ -470,7 +474,7 @@ describe('real captures', () => {
   });
 
   test('the New York page park-2116.json', () => {
-    const [record] = nyRecords([captured(NY_CAPTURE_DIR, 'park-2116.json')]);
+    const [record] = nyRecords([captured(NY_FIXTURE_DIR, 'park-2116.json')]);
 
     expect(record?.name).toBe('DeVeaux Woods State Park');
     expect(record?.location).toEqual({ latitude: 43.1192139, longitude: -79.057425, region: 'NY', country: 'US' });
@@ -479,7 +483,7 @@ describe('real captures', () => {
   });
 
   test('a New York day-use page with no coordinates is dropped rather than placed at zero', () => {
-    const results = parsedOf(NY_SLUG, 'NY', NY_INPUT, [captured(NY_CAPTURE_DIR, 'park-10885.json')]);
+    const results = parsedOf(NY_SLUG, 'NY', NY_INPUT, [captured(NY_FIXTURE_DIR, 'park-10885.json')]);
 
     expect(results).toEqual([{ ok: false, errors: [`${NY_SLUG}: no park pages parsed`] }]);
   });
@@ -658,6 +662,6 @@ describe('the settings arguments', () => {
     const etl = new ReserveAmericaCampgroundsEtl('variant', 'NY');
 
     expect(() => [...etl.transform(dto, ctxWith({}, null))]).toThrow('variant is missing required poi_data.agency');
-    expect(() => [...etl.transform(dto, ctxWith({}, { kind: 'derived', field: 'X' }))]).toThrow("not a constant agency");
+    expect(() => [...etl.transform(dto, ctxWith({}, { kind: 'derived', field: 'X' }))]).toThrow('not a constant agency');
   });
 });

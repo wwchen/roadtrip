@@ -3,10 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { parseCatalog, siteRows } from './catalog-parser.js';
 
 const SMALLEST_CAPTURE = decodeURIComponent(
-  new URL(
-    '../../../../../data/raw/reserveamerica-campsites-ny/2026-07-05T20-28-53Z/campsite-3485-0.json',
-    import.meta.url,
-  ).pathname,
+  new URL('./fixtures/campsites-ny/campsite-3485-0.json', import.meta.url).pathname,
 );
 const SMALLEST_CAPTURE_ROW_COUNT = 1;
 const UNIT_SEPARATOR = String.fromCodePoint(0x1f);
