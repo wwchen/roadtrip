@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'vitest';
-import { doubleToInt, kotlinDoubleFromText, kotlinIntFromText, kotlinLongFromText } from './kotlin-number.js';
+import {
+  doubleToInt,
+  kotlinDoubleFromText,
+  kotlinIntFromText,
+  kotlinLongFromText,
+  kotlinRint,
+  kotlinStringToIntOrNull,
+  kotlinStringToLongOrNull,
+} from './kotlin-number.js';
 
 const INT_MAX = 2147483647;
 const INT_MIN = -2147483648;
@@ -163,5 +171,109 @@ describe('doubleToInt, Kotlin Double.toInt', () => {
     [-0.5, 0],
   ])('%s', (value, expected) => {
     expect(Object.is(doubleToInt(value), expected)).toBe(true);
+  });
+});
+
+const ARABIC_INDIC_THREE = String.fromCodePoint(0x663);
+const ARABIC_INDIC_ONE_TWO_THREE = String.fromCodePoint(0x661, 0x662, 0x663);
+const ARABIC_INDIC_ZERO = String.fromCodePoint(0x660);
+const FULLWIDTH_TWO_FIVE = String.fromCodePoint(0xff12, 0xff15);
+const MATHEMATICAL_DOUBLE_STRUCK_FIVE = String.fromCodePoint(0x1d7d3);
+const SUPERSCRIPT_TWO = String.fromCodePoint(0xb2);
+const ARABIC_DECIMAL_SEPARATOR = String.fromCodePoint(0x66b);
+
+const KOTLIN_STDLIB_INTEGRAL: ReadonlyArray<readonly [string, number | null, bigint | null]> = [
+  ['25', 25, 25n],
+  ['+25', 25, 25n],
+  ['-25', -25, -25n],
+  ['', null, null],
+  ['+', null, null],
+  ['-', null, null],
+  [' 25', null, null],
+  ['25 ', null, null],
+  ['25.0', null, null],
+  ['1e2', null, null],
+  ['0x10', null, null],
+  ['1_0', null, null],
+  ['--1', null, null],
+  ['+-1', null, null],
+  ['-+1', null, null],
+  ['a1', null, null],
+  ['1a', null, null],
+  ['1 2', null, null],
+  ['-0', 0, 0n],
+  ['+0', 0, 0n],
+  ['00000000000000000000025', 25, 25n],
+  ['2147483647', 2147483647, 2147483647n],
+  ['+2147483647', 2147483647, 2147483647n],
+  ['2147483648', null, 2147483648n],
+  ['+2147483648', null, 2147483648n],
+  ['-2147483648', -2147483648, -2147483648n],
+  ['-2147483649', null, -2147483649n],
+  ['9223372036854775807', null, 9223372036854775807n],
+  ['+9223372036854775807', null, 9223372036854775807n],
+  ['9223372036854775808', null, null],
+  ['-9223372036854775808', null, -9223372036854775808n],
+  ['-9223372036854775809', null, null],
+  [ARABIC_INDIC_THREE, 3, 3n],
+  [ARABIC_INDIC_ONE_TWO_THREE, 123, 123n],
+  [ARABIC_INDIC_ZERO, 0, 0n],
+  [`25${ARABIC_INDIC_THREE}`, 253, 253n],
+  [FULLWIDTH_TWO_FIVE, 25, 25n],
+  [MATHEMATICAL_DOUBLE_STRUCK_FIVE, null, null],
+  [SUPERSCRIPT_TWO, null, null],
+  [`${ARABIC_DECIMAL_SEPARATOR}3`, null, null],
+];
+
+describe('Kotlin String.toIntOrNull and toLongOrNull, which read decimal text and not the kotlinx lexer rule', () => {
+  test.each(KOTLIN_STDLIB_INTEGRAL)('%j', (text, int, long) => {
+    expect(kotlinStringToIntOrNull(text)).toBe(int);
+    expect(kotlinStringToLongOrNull(text)).toBe(long);
+  });
+
+  test('the same literal the kotlinx lexer accepts is refused when it needs an exponent or a fraction', () => {
+    expect(kotlinIntFromText('1e2')).toBe(100);
+    expect(kotlinStringToIntOrNull('1e2')).toBeNull();
+    expect(kotlinIntFromText(' 12')).toBe(12);
+    expect(kotlinStringToIntOrNull(' 12')).toBeNull();
+  });
+});
+
+describe('kotlinRint, kotlin.math.round, which rounds a tie to the even neighbour', () => {
+  test.each([
+    [0.5, 0],
+    [1.5, 2],
+    [2.5, 2],
+    [3.5, 4],
+    [-1.5, -2],
+    [-2.5, -2],
+    [-3.5, -4],
+    [0.49999999999999994, 0],
+    [0.5000000000000001, 1],
+    [433.5, 434],
+    [434.5, 434],
+    [4503599627370495.5, 4503599627370496],
+    [4503599627370497, 4503599627370497],
+    [1e300, 1e300],
+    [Infinity, Infinity],
+    [-Infinity, -Infinity],
+  ])('%s', (value, expected) => {
+    expect(kotlinRint(value)).toBe(expected);
+  });
+
+  test('keeps the sign of a result that rounds to zero', () => {
+    expect(Object.is(kotlinRint(-0.3), -0)).toBe(true);
+    expect(Object.is(kotlinRint(-0.5), -0)).toBe(true);
+    expect(Object.is(kotlinRint(-0), -0)).toBe(true);
+    expect(Object.is(kotlinRint(0.3), 0)).toBe(true);
+  });
+
+  test('NaN stays NaN', () => {
+    expect(kotlinRint(NaN)).toBeNaN();
+  });
+
+  test('a tie is not what JavaScript Math.round gives', () => {
+    expect(Math.round(2.5)).toBe(3);
+    expect(kotlinRint(2.5)).toBe(2);
   });
 });

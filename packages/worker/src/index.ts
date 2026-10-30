@@ -34,3 +34,5 @@ export * from './vendors/tesla/dto.js';
 export * from './vendors/tesla/index-etl.js';
 export * from './vendors/campflare/campgrounds.js';
 export * from './vendors/campflare/campsites.js';
+export { RecGovCampgroundsEtl } from './vendors/recgov/campgrounds.js';
+export { RecGovCampsitesEtl } from './vendors/recgov/campsites.js';

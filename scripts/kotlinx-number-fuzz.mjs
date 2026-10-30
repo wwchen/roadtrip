@@ -10,6 +10,7 @@ const PROBE_DIR = path.join(REPO_ROOT, 'scripts/kotlinx-number-probe');
 const BUILD_FILE = path.join(REPO_ROOT, 'backend/build.gradle.kts');
 const GRADLE_CACHE = path.join(os.homedir(), '.gradle/caches/modules-2/files-2.1');
 const WORKER_DIST = path.join(REPO_ROOT, 'packages/worker/dist/etl');
+const TEXT_MODULE = 'kotlin-text.js';
 const OVERRIDES_SOURCE = path.join(REPO_ROOT, 'packages/worker/src/etl/java-pow10.ts');
 const SERIALIZATION_VERSION = /kotlinx-serialization-json:([0-9.]+)/;
 const DEFAULT_CASES = 20000;
@@ -104,6 +105,10 @@ function java(jars, scratch, mode, input) {
   });
 }
 
+function lines(output) {
+  return output.replace(/\n$/, '').split('\n');
+}
+
 function bitsOf(value) {
   return new BigInt64Array(new Float64Array([value]).buffer)[0];
 }
@@ -145,6 +150,73 @@ function printOverrides(rows) {
     .filter(({ exponent, bits }) => Math.abs(exponent) <= 400 && bitsOf(Number(`1e${exponent}`)) !== bits)
     .map(({ exponent, text }) => `  [${exponent}, ${text.replace('E', 'e')}],`);
   return `export const JAVA_POW10_OVERRIDES: ReadonlyMap<number, number> = new Map<number, number>([\n${lines.join('\n')}\n]);\n`;
+}
+
+const STDLIB_EDGE_LITERALS = [
+  '', '+', '-', ' 25', '25 ', '+25', '-25', '+-1', '-+1', '--1', '0x10', '1_0', '-0', '+0', '00000000000000000000025',
+  '2147483647', '+2147483647', '2147483648', '-2147483648', '-2147483649', '+9223372036854775807',
+  '\u0663', '\u0661\u0662\u0663', '25\u0663', '\uff12\uff15', '\u{1d7d3}', '\u00b2', '\u066b3', '\u0660', '\u06f5',
+  '\u0966\u0967', '\u1810', '\ua9d5', '\u17e5', '\u1bb5', '\u1c43', '\u19d9', '\u0e55', '\u0ed9', '\u0f23',
+];
+
+const RINT_EDGE_LITERALS = [
+  '0.5', '1.5', '2.5', '3.5', '-0.5', '-1.5', '-2.5', '-0.0', '0.0', '0.3', '-0.3', '0.49999999999999994',
+  '0.5000000000000001', '4503599627370495.5', '4503599627370496', '4503599627370497', '-4503599627370495.5',
+  '1e300', '-1e300', '1e-300', '433.5', '434.5', '12.5', '37.5', '62.5', '87.5',
+];
+
+function stdlibLiterals(cases) {
+  return [...new Set([...STDLIB_EDGE_LITERALS, ...cases])];
+}
+
+function rintLiterals(random, count) {
+  const literals = new Set(RINT_EDGE_LITERALS);
+  while (literals.size < count) {
+    const whole = Math.floor(random() * 2000) - 1000;
+    literals.add(String(whole + 0.5));
+    literals.add(String(Number((whole + random()).toFixed(1 + Math.floor(random() * 6)))));
+    literals.add(String((random() - 0.5) * 10 ** Math.floor(random() * 18)));
+    literals.add(String(whole / 8));
+  }
+  return [...literals];
+}
+
+function compareStdlib(rows, numberModule) {
+  const problems = [];
+  for (const line of rows) {
+    const [literal, intValue, longValue] = line.split(FIELD_SEPARATOR);
+    const int = renderResult(numberModule.kotlinStringToIntOrNull(literal));
+    const long = renderResult(numberModule.kotlinStringToLongOrNull(literal));
+    if (int !== intValue || long !== longValue) {
+      problems.push(`String.toIntOrNull/toLongOrNull ${JSON.stringify(literal)}: java int=${intValue} long=${longValue}; port int=${int} long=${long}`);
+    }
+  }
+  return problems;
+}
+
+function compareRint(rows, numberModule) {
+  const problems = [];
+  for (const line of rows) {
+    const [literal, javaBits] = line.split(FIELD_SEPARATOR);
+    const bits = bitsOf(numberModule.kotlinRint(Number(literal)));
+    if (String(bits) !== javaBits) problems.push(`rint(${literal}): java bits ${javaBits}, port bits ${bits}`);
+  }
+  return problems;
+}
+
+function compareIgnoreCase(rows, textModule) {
+  const javaPairs = new Set(rows.filter((row) => row !== '').map((row) => row.replace(FIELD_SEPARATOR, ':')));
+  const problems = [];
+  const portPairs = new Set();
+  for (let unit = 0; unit < 0x10000; unit += 1) {
+    const candidate = String.fromCharCode(unit);
+    for (let letter = 97; letter <= 122; letter += 1) {
+      if (textModule.kotlinEqualsIgnoreCase(candidate, String.fromCharCode(letter))) portPairs.add(`${unit}:${String.fromCharCode(letter)}`);
+    }
+  }
+  for (const pair of javaPairs) if (!portPairs.has(pair)) problems.push(`equalsIgnoreCase: java equates ${pair}, port does not`);
+  for (const pair of portPairs) if (!javaPairs.has(pair)) problems.push(`equalsIgnoreCase: port equates ${pair}, java does not`);
+  return { problems, pairs: javaPairs.size };
 }
 
 function renderResult(value) {
@@ -190,10 +262,26 @@ async function main() {
     const cases = generate(count, seed);
     const casesFile = path.join(scratch, 'cases.txt');
     writeFileSync(casesFile, `${cases.join('\n')}\n`);
-    const problems = [...overrides.problems, ...compareIntegral(java(jars, scratch, 'parse', casesFile).trim().split('\n'), numberModule)];
+    const textModule = await import(pathToFileURL(path.join(WORKER_DIST, TEXT_MODULE)).href);
+    const stdlibFile = path.join(scratch, 'stdlib.txt');
+    const stdlibCases = stdlibLiterals(cases);
+    writeFileSync(stdlibFile, `${stdlibCases.join('\n')}\n`);
+    const rintFile = path.join(scratch, 'rint.txt');
+    const rintCases = rintLiterals(mulberry32(seed + 1), Math.max(1000, Math.floor(count / 4)));
+    writeFileSync(rintFile, `${rintCases.join('\n')}\n`);
+    const ignoreCase = compareIgnoreCase(lines(java(jars, scratch, 'ignorecase')), textModule);
+    const problems = [
+      ...overrides.problems,
+      ...compareIntegral(lines(java(jars, scratch, 'parse', casesFile)), numberModule),
+      ...compareStdlib(lines(java(jars, scratch, 'stdlib', stdlibFile)), numberModule),
+      ...compareRint(lines(java(jars, scratch, 'rint', rintFile)), numberModule),
+      ...ignoreCase.problems,
+    ];
     console.log(
       `kotlinx-serialization-json ${version}: ${overrides.checked} exponents checked against ${overrides.overrides} overrides ` +
-        `(${overrides.expected} differ from correctly rounded), ${cases.length} literals (seed ${seed}), ${problems.length} mismatch(es)`,
+        `(${overrides.expected} differ from correctly rounded), ${cases.length} literals (seed ${seed}), ` +
+        `${stdlibCases.length} String.toIntOrNull/toLongOrNull literals, ${rintCases.length} rint operands, ` +
+        `${ignoreCase.pairs} equalsIgnoreCase pairs over every UTF-16 unit, ${problems.length} mismatch(es)`,
     );
     for (const problem of problems.slice(0, MAX_REPORTED)) console.error(`  ${problem}`);
     process.exitCode = problems.length === 0 ? 0 : 1;

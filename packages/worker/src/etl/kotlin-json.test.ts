@@ -8,6 +8,8 @@ import {
   contentOrNull,
   doubleOrNull,
   intOrNull,
+  jsonArrayOf,
+  jsonObjectOf,
   primitiveOf,
 } from './kotlin-json.js';
 
@@ -120,5 +122,20 @@ describe('JsonPrimitive accessors, pinned to kotlinx.serialization 1.11.0', () =
     expect(() => intOrNull(value)).toThrow(/is not a JsonPrimitive/);
     expect(() => doubleOrNull(value)).toThrow(/is not a JsonPrimitive/);
     expect(() => booleanOrNull(value)).toThrow(/is not a JsonPrimitive/);
+  });
+});
+
+describe('jsonArray and jsonObject, which throw on any other element', () => {
+  test('return the element when it has the asked shape', () => {
+    expect(jsonArrayOf(valueOf('[1,2]'))).toHaveLength(2);
+    expect(jsonObjectOf(valueOf('{"a":1}'))).toEqual({ a: 1 });
+  });
+
+  test.each(['null', '1', '"x"', 'true', '{}', '1.10', '100000000000000000000'])('%s is not a JsonArray', (jsonText) => {
+    expect(() => jsonArrayOf(valueOf(jsonText))).toThrow('JsonArray');
+  });
+
+  test.each(['null', '1', '"x"', 'true', '[]', '1.10', '100000000000000000000'])('%s is not a JsonObject', (jsonText) => {
+    expect(() => jsonObjectOf(valueOf(jsonText))).toThrow('JsonObject');
   });
 });

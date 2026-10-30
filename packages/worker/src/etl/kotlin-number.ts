@@ -89,3 +89,55 @@ export function doubleToInt(value: number): number {
   if (Number.isNaN(value)) return 0;
   return Math.max(INT_MIN, Math.min(INT_MAX, Math.trunc(value))) + 0;
 }
+
+const STDLIB_INT_BOUND = 2n ** 31n;
+const STDLIB_LONG_BOUND = 2n ** 63n;
+const STDLIB_SIGN = /^[+-]/;
+const DECIMAL_DIGIT_UNIT = /^\p{Nd}$/u;
+const DECIMALS_PER_BLOCK = 10;
+
+function isDecimalDigitUnit(codeUnit: number): boolean {
+  return codeUnit >= 0 && DECIMAL_DIGIT_UNIT.test(String.fromCharCode(codeUnit));
+}
+
+function decimalDigitValue(codeUnit: number): number | null {
+  if (!isDecimalDigitUnit(codeUnit)) return null;
+  let blockStart = codeUnit;
+  while (isDecimalDigitUnit(blockStart - 1)) blockStart -= 1;
+  return (codeUnit - blockStart) % DECIMALS_PER_BLOCK;
+}
+
+function stdlibIntegral(text: string, bound: bigint): bigint | null {
+  const signed = STDLIB_SIGN.test(text);
+  const negative = text.startsWith(NEGATIVE_SIGN);
+  const start = signed ? 1 : 0;
+  if (text.length === start) return null;
+  let magnitude = 0n;
+  for (let index = start; index < text.length; index += 1) {
+    const digit = decimalDigitValue(text.charCodeAt(index));
+    if (digit === null) return null;
+    magnitude = magnitude * DECIMAL_RADIX + BigInt(digit);
+  }
+  const value = negative ? -magnitude : magnitude;
+  return value < -bound || value >= bound ? null : value;
+}
+
+export function kotlinStringToLongOrNull(text: string): bigint | null {
+  return stdlibIntegral(text, STDLIB_LONG_BOUND);
+}
+
+export function kotlinStringToIntOrNull(text: string): number | null {
+  const value = stdlibIntegral(text, STDLIB_INT_BOUND);
+  return value === null ? null : Number(value);
+}
+
+const HALF = 0.5;
+const NEGATIVE_ZERO = -0;
+
+export function kotlinRint(value: number): number {
+  const floor = Math.floor(value);
+  const fraction = value - floor;
+  let rounded = floor;
+  if (fraction > HALF || (fraction === HALF && floor % 2 !== 0)) rounded = floor + 1;
+  return rounded === 0 && (value < 0 || Object.is(value, NEGATIVE_ZERO)) ? NEGATIVE_ZERO : rounded;
+}

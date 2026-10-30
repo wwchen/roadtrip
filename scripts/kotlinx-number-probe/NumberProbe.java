@@ -1,5 +1,6 @@
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import kotlin.text.StringsKt;
 import kotlinx.serialization.internal.IntSerializer;
 import kotlinx.serialization.json.Json;
 import kotlinx.serialization.json.JsonElementKt;
@@ -8,6 +9,10 @@ import kotlinx.serialization.json.JsonPrimitive;
 public class NumberProbe {
     private static final String PARSE_MODE = "parse";
     private static final String POW_MODE = "pow";
+    private static final String STDLIB_MODE = "stdlib";
+    private static final String RINT_MODE = "rint";
+    private static final String IGNORE_CASE_MODE = "ignorecase";
+    private static final int CODE_UNITS = 0x10000;
     private static final String FIELD_SEPARATOR = "\t";
     private static final int[] POW_EXPONENTS = exponents();
 
@@ -37,6 +42,23 @@ public class NumberProbe {
         return literal + FIELD_SEPARATOR + intValue + FIELD_SEPARATOR + longValue + FIELD_SEPARATOR + strict;
     }
 
+    private static String stdlib(String literal) {
+        return literal + FIELD_SEPARATOR + StringsKt.toIntOrNull(literal) + FIELD_SEPARATOR + StringsKt.toLongOrNull(literal);
+    }
+
+    private static String rint(String literal) {
+        return literal + FIELD_SEPARATOR + Double.doubleToLongBits(Math.rint(Double.parseDouble(literal)));
+    }
+
+    private static void ignoreCase(StringBuilder out) {
+        for (int unit = 0; unit < CODE_UNITS; unit++) {
+            String candidate = String.valueOf((char) unit);
+            for (char letter = 'a'; letter <= 'z'; letter++) {
+                if (StringsKt.equals(candidate, String.valueOf(letter), true)) out.append(unit).append(FIELD_SEPARATOR).append(letter).append('\n');
+            }
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         StringBuilder out = new StringBuilder();
         if (POW_MODE.equals(args[0])) {
@@ -46,6 +68,12 @@ public class NumberProbe {
             }
         } else if (PARSE_MODE.equals(args[0])) {
             for (String literal : Files.readAllLines(Paths.get(args[1]))) out.append(read(literal)).append('\n');
+        } else if (STDLIB_MODE.equals(args[0])) {
+            for (String literal : Files.readAllLines(Paths.get(args[1]))) out.append(stdlib(literal)).append('\n');
+        } else if (RINT_MODE.equals(args[0])) {
+            for (String literal : Files.readAllLines(Paths.get(args[1]))) out.append(rint(literal)).append('\n');
+        } else if (IGNORE_CASE_MODE.equals(args[0])) {
+            ignoreCase(out);
         } else {
             throw new IllegalArgumentException(args[0]);
         }

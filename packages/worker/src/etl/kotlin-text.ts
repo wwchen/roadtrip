@@ -16,3 +16,21 @@ export function isKotlinBlank(value: string): boolean {
 export function nonBlank(value: string | null | undefined): string | null {
   return value == null || isKotlinBlank(value) ? null : value;
 }
+
+const CASE_FOLDS_TO_ASCII = new Map<number, string>([
+  [0x130, 'i'],
+  [0x131, 'i'],
+  [0x17f, 's'],
+]);
+
+function foldedToAsciiLowerCase(codeUnit: number): string {
+  return CASE_FOLDS_TO_ASCII.get(codeUnit) ?? String.fromCharCode(codeUnit).toLowerCase();
+}
+
+export function kotlinEqualsIgnoreCase(value: string | null | undefined, asciiTarget: string): boolean {
+  if (value == null || value.length !== asciiTarget.length) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    if (foldedToAsciiLowerCase(value.charCodeAt(index)) !== asciiTarget.charAt(index).toLowerCase()) return false;
+  }
+  return true;
+}

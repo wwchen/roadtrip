@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { isKotlinBlank, kotlinTrim, nonBlank } from './kotlin-text.js';
+import { isKotlinBlank, kotlinEqualsIgnoreCase, kotlinTrim, nonBlank } from './kotlin-text.js';
 
 const NBSP = '\u00a0';
 const FIGURE_SPACE = '\u2007';
@@ -81,5 +81,63 @@ describe('nonBlank', () => {
     expect(nonBlank(undefined)).toBeNull();
     expect(nonBlank('')).toBeNull();
     expect(nonBlank(`${NBSP}${FILE_SEPARATOR}`)).toBeNull();
+  });
+});
+
+const LATIN_CAPITAL_I_WITH_DOT_ABOVE = String.fromCodePoint(0x130);
+const LATIN_SMALL_DOTLESS_I = String.fromCodePoint(0x131);
+const LATIN_SMALL_LONG_S = String.fromCodePoint(0x17f);
+const KELVIN_SIGN = String.fromCodePoint(0x212a);
+const LATIN_SMALL_SHARP_S = String.fromCodePoint(0xdf);
+
+describe('kotlinEqualsIgnoreCase, Java String.equalsIgnoreCase against an ASCII target', () => {
+  test.each([
+    ['true', 'true'],
+    ['TRUE', 'true'],
+    ['tRuE', 'true'],
+    ['Image', 'Image'],
+    ['IMAGE', 'Image'],
+    ['image', 'Image'],
+    ['official web site', 'Official Web Site'],
+  ])('%j equals %j', (value, target) => {
+    expect(kotlinEqualsIgnoreCase(value, target)).toBe(true);
+  });
+
+  test.each([
+    ['', 'true'],
+    ['tru', 'true'],
+    ['truee', 'true'],
+    ['yes', 'true'],
+    ['true ', 'true'],
+    [' true', 'true'],
+    ['Imagf', 'Image'],
+  ])('%j does not equal %j', (value, target) => {
+    expect(kotlinEqualsIgnoreCase(value, target)).toBe(false);
+  });
+
+  test('null never equals a text', () => {
+    expect(kotlinEqualsIgnoreCase(null, 'true')).toBe(false);
+    expect(kotlinEqualsIgnoreCase(undefined, 'true')).toBe(false);
+  });
+
+  test.each([
+    ['a capital I with a dot above, which Java lower-cases to i', LATIN_CAPITAL_I_WITH_DOT_ABOVE, 'i'],
+    ['a dotless i, which Java upper-cases to I', LATIN_SMALL_DOTLESS_I, 'I'],
+    ['a long s, which Java upper-cases to S', LATIN_SMALL_LONG_S, 'S'],
+    ['a Kelvin sign, which Java lower-cases to k', KELVIN_SIGN, 'k'],
+    ['a long s inside a word', `official web ${LATIN_SMALL_LONG_S}ite`, 'Official Web Site'],
+    ['a capital I with a dot above inside a word', `${LATIN_CAPITAL_I_WITH_DOT_ABOVE}mage`, 'Image'],
+  ])('%s equals its ASCII look-alike', (_label, value, target) => {
+    expect(kotlinEqualsIgnoreCase(value, target)).toBe(true);
+  });
+
+  test('which JavaScript lower-casing alone would miss', () => {
+    expect(LATIN_CAPITAL_I_WITH_DOT_ABOVE.toLowerCase()).not.toBe('i');
+    expect(LATIN_SMALL_LONG_S.toLowerCase()).not.toBe('s');
+  });
+
+  test('a sharp s is not an s', () => {
+    expect(kotlinEqualsIgnoreCase(LATIN_SMALL_SHARP_S, 's')).toBe(false);
+    expect(kotlinEqualsIgnoreCase(`${LATIN_SMALL_SHARP_S}`, 'ss')).toBe(false);
   });
 });
