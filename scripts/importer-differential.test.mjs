@@ -22,6 +22,7 @@ import {
 } from './importer-diff-columns.mjs';
 import {
   assertCurrentBuild,
+  auditRowPreservation,
   collisionsFrom,
   copiedTableCounts,
   createReferenceSchema,
@@ -49,6 +50,7 @@ const CONTAINER_TEST_TIMEOUT_MS = 900_000;
 const PROVIDER = 'test';
 const REF = 'cg-1';
 const SITE_REF = 'cs-1';
+const OTHER_REF = 'cg-2';
 const TESLA_SLUG = 'tesla-slug-1';
 const FITNESS_ID = 'pf-1';
 const RUN_SOURCE = 'test-source';
@@ -154,6 +156,18 @@ test('every diffed table names every one of its columns as compared or ignored',
       );
     }
   }
+});
+
+test('a campsite side select that reads fewer rows than the table holds is refused', async () => {
+  const counts = (selected, present) => ({
+    $client: { unsafe: async (statement) => [{ rows: statement.includes('selected') ? selected : present }] },
+  });
+  const campsitesSpec = DIFFED_TABLES.find((spec) => spec.table === 'campsites');
+  await auditRowPreservation(counts(5, 5), campsitesSpec, TYPESCRIPT_SCHEMA);
+  await assert.rejects(
+    auditRowPreservation(counts(4, 5), campsitesSpec, TYPESCRIPT_SCHEMA),
+    /reads 4 of 5 row\(s\)/,
+  );
 });
 
 const statsLine = (fields) => JSON.stringify({ name: 'Row', etlSlug: 'row-slug', runId: '1', ...fields });
@@ -486,6 +500,22 @@ test(
           );
           assert.deepEqual(await diffOnly(), [
             { table: 'campgrounds', key: [PROVIDER, REF], kind: 'differs', columns: ['name'] },
+          ]);
+        });
+
+        await t.test('a campsite attached to a different existing campground is reported', async () => {
+          await reseed(db);
+          for (const schema of [TYPESCRIPT_SCHEMA, KOTLIN_SCHEMA]) {
+            await db.$client.unsafe(
+              `INSERT INTO ${schema}.campgrounds (id, data_provider, data_provider_ref, name)
+               VALUES (900001, '${PROVIDER}', '${OTHER_REF}', 'Other Campground')`,
+            );
+          }
+          await db.$client.unsafe(
+            `UPDATE ${TYPESCRIPT_SCHEMA}.campsites SET campground_id = 900001 WHERE data_provider_ref = '${SITE_REF}'`,
+          );
+          assert.deepEqual(await diffOnly(), [
+            { table: 'campsites', key: [PROVIDER, SITE_REF], kind: 'differs', columns: ['campground_key'] },
           ]);
         });
 

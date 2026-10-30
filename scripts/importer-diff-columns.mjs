@@ -186,6 +186,26 @@ function importRunsRowSelect(schema, comparedColumns) {
           WHERE newest = 1`;
 }
 
+// A campsite's surrogate campground_id is ignored, so which campground a
+// campsite hangs off was compared nowhere: one resolved to the wrong existing
+// parent passed. The parent's natural key is read through the foreign key
+// instead, as the derived column below. LEFT JOIN on campgrounds' primary key
+// adds a column and cannot drop or repeat a row, which tableCounts checks
+// against the table's own count rather than assuming.
+const CAMPSITE_PARENT_KEY = 'campground_key';
+const CAMPSITE_PARENT_KEY_SEPARATOR = '/';
+const CAMPSITE_DERIVED = {
+  [CAMPSITE_PARENT_KEY]: "the parent campground's natural key, read through campground_id",
+};
+
+function campsitesRowSelect(schema, comparedColumns) {
+  const inner = comparedColumns.filter((column) => column !== CAMPSITE_PARENT_KEY).map((column) => `s.${column}`);
+  return `SELECT ARRAY[s.data_provider::text, s.data_provider_ref::text] AS ${KEY_COLUMN}, ${inner.join(', ')},
+                 c.data_provider || '${CAMPSITE_PARENT_KEY_SEPARATOR}' || c.data_provider_ref AS ${CAMPSITE_PARENT_KEY}
+          FROM ${quote(schema, 'campsites')} s
+          LEFT JOIN ${quote(schema, 'campgrounds')} c ON c.id = s.campground_id`;
+}
+
 function poisRowSelect(schema, comparedColumns) {
   const columns = comparedColumns.map((column) => `p.${column}`).join(', ');
   return POI_JOINS.map(
@@ -223,8 +243,10 @@ export const DIFFED_TABLES = [
     ignored: {
       ...SURROGATE_AND_CLOCK,
       campground_id:
-        'surrogate FK to campgrounds.id; the parent is compared through its own natural key in the campgrounds diff',
+        "surrogate FK to campgrounds.id; the parent is compared through its natural key as the derived campground_key",
     },
+    derived: CAMPSITE_DERIVED,
+    rowSelect: campsitesRowSelect,
     // campsites_kind_wire_check enumerates the allowed kinds, so the generic
     // non-empty sentinel would fail the CHECK rather than blank the column.
     blankOverrides: { kind: "'tent'" },
@@ -426,6 +448,12 @@ export function fingerprintSql(diffed, schema) {
           FROM side`;
 }
 
+export function selectedRowCountSql(table, schema) {
+  const diffed = DIFFED_TABLES.find((candidate) => candidate.table === table);
+  if (diffed === undefined) throw new Error(`no diffed table named '${table}'`);
+  return `SELECT count(*)::int AS rows FROM (${rowSelect(diffed, schema, diffed.comparedForDiff)}) selected`;
+}
+
 export function rowCountSql(table, schema) {
   return `SELECT count(*)::int AS rows FROM ${quote(schema, table)}`;
 }
@@ -501,7 +529,11 @@ export const BASE_TABLES_SQL = `SELECT table_name AS name
 // quietly join the third group.
 export const COVERAGE_EXEMPT_TABLES = {
   import_runs: 'append-only; the side select keeps the newest run per source and compares the rest as `runs`',
+  campsites:
+    'the side select LEFT JOINs campgrounds on its primary key only to derive campground_key, so it keeps every row; tableCounts checks that against the table count',
 };
+
+export const ROW_PRESERVING_SELECT_TABLES = ['campsites'];
 
 // Blanks every compared column that is not part of the key, so each importer's
 // pass 2 has to write it back from the captures. A column missing from one

@@ -51,7 +51,9 @@ import {
   fingerprintSql,
   keyAuditSql,
   KOTLIN_SCHEMA,
+  ROW_PRESERVING_SELECT_TABLES,
   rowCountSql,
+  selectedRowCountSql,
   SIDES,
   SUBSTANTIVE_TABLES,
   TYPESCRIPT_SCHEMA,
@@ -648,7 +650,19 @@ async function auditKeys(db, table, schema) {
   );
 }
 
+export async function auditRowPreservation(db, spec, schema) {
+  if (!ROW_PRESERVING_SELECT_TABLES.includes(spec.table)) return;
+  const [{ rows: selected }] = await db.$client.unsafe(selectedRowCountSql(spec.table, schema));
+  const [{ rows: present }] = await db.$client.unsafe(rowCountSql(spec.table, schema));
+  if (selected === present) return;
+  throw new Error(
+    `${schema}.${spec.table}: the side select reads ${selected} of ${present} row(s), ` +
+      'so the comparison cannot see the rest and a clean diff would prove nothing about them.',
+  );
+}
+
 async function auditCoverage(db, spec, schema) {
+  await auditRowPreservation(db, spec, schema);
   if (Object.hasOwn(COVERAGE_EXEMPT_TABLES, spec.table) || spec.joins === undefined) return;
   const [{ uncovered }] = await db.$client.unsafe(coverageSql(spec.table, schema));
   if (uncovered === 0) return;
