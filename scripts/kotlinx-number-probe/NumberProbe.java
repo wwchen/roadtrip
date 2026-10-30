@@ -4,7 +4,9 @@ import java.util.Locale;
 import kotlin.text.StringsKt;
 import kotlinx.serialization.internal.IntSerializer;
 import kotlinx.serialization.json.Json;
+import kotlinx.serialization.json.JsonElement;
 import kotlinx.serialization.json.JsonElementKt;
+import kotlinx.serialization.json.JsonNull;
 import kotlinx.serialization.json.JsonPrimitive;
 
 public class NumberProbe {
@@ -20,6 +22,7 @@ public class NumberProbe {
     private static final int CODE_UNITS = 0x10000;
     private static final String FIELD_SEPARATOR = "\t";
     private static final String THROWS = "THROWS";
+    private static final String NOT_A_NUMBER_TOKEN = "SKIP";
     private static final int[] POW_EXPONENTS = exponents();
 
     private static int[] exponents() {
@@ -35,6 +38,7 @@ public class NumberProbe {
         String longValue = "ERR";
         String strict;
         String getter = THROWS;
+        String unquotedGetter = NOT_A_NUMBER_TOKEN;
         try {
             JsonPrimitive primitive = (JsonPrimitive) Json.Default.parseToJsonElement("\"" + literal + "\"");
             intValue = String.valueOf(JsonElementKt.getIntOrNull(primitive));
@@ -47,12 +51,23 @@ public class NumberProbe {
         } catch (Throwable ignored) {
         }
         try {
+            JsonElement token = Json.Default.parseToJsonElement(literal);
+            if (token instanceof JsonPrimitive && !((JsonPrimitive) token).isString() && !(token instanceof JsonNull)) {
+                try {
+                    unquotedGetter = String.valueOf(JsonElementKt.getLong((JsonPrimitive) token));
+                } catch (Throwable thrown) {
+                    unquotedGetter = THROWS;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
             strict = String.valueOf(Json.Default.decodeFromString(IntSerializer.INSTANCE, literal));
         } catch (Throwable thrown) {
             strict = THROWS;
         }
         return literal + FIELD_SEPARATOR + intValue + FIELD_SEPARATOR + longValue + FIELD_SEPARATOR + strict
-            + FIELD_SEPARATOR + getter;
+            + FIELD_SEPARATOR + getter + FIELD_SEPARATOR + unquotedGetter;
     }
 
     private static String stdlib(String literal) {

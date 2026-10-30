@@ -12,7 +12,9 @@ const GRADLE_CACHE = path.join(os.homedir(), '.gradle/caches/modules-2/files-2.1
 const WORKER_DIST = path.join(REPO_ROOT, 'packages/worker/dist/etl');
 const TEXT_MODULE = 'kotlin-text.js';
 const JSON_MODULE = 'kotlin-json.js';
+const ENVELOPE_MODULE = 'envelope.js';
 const THROWS = 'THROWS';
+const NOT_A_NUMBER_TOKEN = 'SKIP';
 const OVERRIDES_SOURCE = path.join(REPO_ROOT, 'packages/worker/src/etl/java-pow10.ts');
 const SERIALIZATION_VERSION = /kotlinx-serialization-json:([0-9.]+)/;
 const DEFAULT_CASES = 20000;
@@ -418,12 +420,14 @@ function renderThrowing(read, literal) {
   }
 }
 
-function compareIntegral(rows, numberModule, jsonModule) {
+function compareIntegral(rows, numberModule, jsonModule, envelopeModule) {
   const problems = [];
   let getterThrows = 0;
   let getterReads = 0;
+  let unquotedThrows = 0;
+  let unquotedReads = 0;
   for (const line of rows) {
-    const [literal, intValue, longValue, strict, getter] = line.split(FIELD_SEPARATOR);
+    const [literal, intValue, longValue, strict, getter, unquotedGetter] = line.split(FIELD_SEPARATOR);
     const int = renderResult(numberModule.kotlinIntFromText(literal));
     const long = renderResult(numberModule.kotlinLongFromText(literal));
     const portGetter = renderThrowing(jsonModule.longOf, literal);
@@ -432,12 +436,27 @@ function compareIntegral(rows, numberModule, jsonModule) {
     if (portGetter !== getter) {
       problems.push(`${literal}: java JsonPrimitive.long=${getter}; port longOf=${portGetter}`);
     }
+    if (STRICT_JSON_NUMBER.test(literal)) {
+      if (unquotedGetter === NOT_A_NUMBER_TOKEN) {
+        problems.push(`${literal}: java did not read it as an unquoted number token`);
+      } else {
+        const portUnquoted = renderThrowing(jsonModule.longOf, envelopeModule.parseKeepingDigits(literal));
+        if (unquotedGetter === THROWS) unquotedThrows += 1;
+        else unquotedReads += 1;
+        if (portUnquoted !== unquotedGetter) {
+          problems.push(`${literal}: java unquoted JsonPrimitive.long=${unquotedGetter}; port longOf=${portUnquoted}`);
+        }
+      }
+    }
     const mismatch = int !== intValue || long !== longValue;
     const strictMismatch =
       STRICT_JSON_NUMBER.test(literal) && (strict === 'THROWS' ? int !== 'null' : strict !== int);
     if (mismatch || strictMismatch) {
       problems.push(`${literal}: java int=${intValue} long=${longValue} strict=${strict}; port int=${int} long=${long}`);
     }
+  }
+  if (unquotedThrows === 0 || unquotedReads === 0) {
+    problems.push(`unquoted JsonPrimitive.long probe saw ${unquotedThrows} throwing and ${unquotedReads} reading literals; it proves nothing unless both occur`);
   }
   if (getterThrows === 0 || getterReads === 0) {
     problems.push(`JsonPrimitive.long probe saw ${getterThrows} throwing and ${getterReads} reading literals; it proves nothing unless both occur`);
@@ -470,6 +489,7 @@ async function main() {
     writeFileSync(casesFile, `${cases.join('\n')}\n`);
     const textModule = await import(pathToFileURL(path.join(WORKER_DIST, TEXT_MODULE)).href);
     const jsonModule = await import(pathToFileURL(path.join(WORKER_DIST, JSON_MODULE)).href);
+    const envelopeModule = await import(pathToFileURL(path.join(WORKER_DIST, ENVELOPE_MODULE)).href);
     const stdlibFile = path.join(scratch, 'stdlib.txt');
     const stdlibCases = stdlibLiterals(cases);
     writeFileSync(stdlibFile, `${stdlibCases.join('\n')}\n`);
@@ -486,7 +506,7 @@ async function main() {
     const sigma = compareSigmaContexts(lines(java(jars, scratch, 'sigma')));
     const problems = [
       ...overrides.problems,
-      ...compareIntegral(lines(java(jars, scratch, 'parse', casesFile)), numberModule, jsonModule),
+      ...compareIntegral(lines(java(jars, scratch, 'parse', casesFile)), numberModule, jsonModule, envelopeModule),
       ...compareStdlib(lines(java(jars, scratch, 'stdlib', stdlibFile)), numberModule, textModule),
       ...compareRint(lines(java(jars, scratch, 'rint', rintFile)), numberModule),
       ...ignoreCase.problems,

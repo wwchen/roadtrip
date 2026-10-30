@@ -65,7 +65,7 @@ export function serializeOpaquePayload(value: unknown): OpaquePayloadJson {
   return serialized as OpaquePayloadJson;
 }
 
-function parseKeepingDigits(text: string): unknown {
+export function parseKeepingDigits(text: string): unknown {
   return sourceAwareJson.parse(text, reviveNumber);
 }
 
