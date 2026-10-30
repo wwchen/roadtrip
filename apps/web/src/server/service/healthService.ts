@@ -16,10 +16,14 @@ function timeoutAfter(milliseconds: number): { expired: Promise<never>; cancel: 
   return { expired, cancel: () => clearTimeout(timer) };
 }
 
+async function probe(): Promise<void> {
+  return pingDatabase(await serverDb());
+}
+
 export async function isDatabaseReachable(): Promise<boolean> {
   const timeout = timeoutAfter(DATABASE_PING_TIMEOUT_MS);
   try {
-    await Promise.race([pingDatabase(serverDb()), timeout.expired]);
+    await Promise.race([probe(), timeout.expired]);
     return true;
   } catch (error) {
     console.error(DATABASE_UNREACHABLE_MESSAGE, error);

@@ -6,12 +6,12 @@ import { InvalidBoundaryError, searchWithinBoundary } from '../repo/campgroundSe
 
 export { InvalidBoundaryError };
 
-export function getCampgroundDetail(poiId: bigint): Promise<CampgroundDetailDto | null> {
-  return findDetailByPoi(serverDb(), poiId);
+export async function getCampgroundDetail(poiId: bigint): Promise<CampgroundDetailDto | null> {
+  return findDetailByPoi(await serverDb(), poiId);
 }
 
 export async function searchCampgrounds(boundaryGeoJson: string): Promise<CampgroundSearchDto> {
-  const db = serverDb();
+  const db = await serverDb();
   const found = await searchWithinBoundary(
     db,
     boundaryGeoJson,

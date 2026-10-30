@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 const pingDatabase = vi.fn();
+const serverDb = vi.fn();
 
-vi.mock('../db', () => ({ serverDb: () => ({}) }));
+vi.mock('../db', () => ({ serverDb }));
 vi.mock('../repo/healthRepo', () => ({ pingDatabase }));
 
 const { DATABASE_PING_TIMEOUT_MS, ROLE_STATEMENT_TIMEOUT_MS, isDatabaseReachable } =
@@ -24,6 +25,8 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.spyOn(console, 'error').mockImplementation(() => {});
   pingDatabase.mockReset();
+  serverDb.mockReset();
+  serverDb.mockResolvedValue({});
 });
 
 afterEach(() => {
@@ -79,4 +82,15 @@ test('a rejection arriving after the timeout is not an unhandled rejection', asy
 
 test('the ping timeout outlives the role statement timeout', () => {
   expect(DATABASE_PING_TIMEOUT_MS).toBeGreaterThan(ROLE_STATEMENT_TIMEOUT_MS);
+});
+
+test('a hung handle lookup reports unreachable at the timeout', async () => {
+  serverDb.mockReturnValue(new Promise<never>(() => {}));
+  pingDatabase.mockResolvedValue(undefined);
+  const watched = watch(isDatabaseReachable());
+  await vi.advanceTimersByTimeAsync(DATABASE_PING_TIMEOUT_MS - 1);
+  expect(watched.verdict()).toBeUndefined();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(watched.verdict()).toBe(false);
+  expect(pingDatabase).not.toHaveBeenCalled();
 });

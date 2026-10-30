@@ -29,7 +29,7 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 |---|---|---|
 | `DATABASE_URL` | sensitive | the Neon **pooled** endpoint as the `roadtrip_web` role, plus `connect_timeout=10&idle_timeout=20` |
 | `DATABASE_PREPARE` | plain | `true` |
-| `ENABLED_DATA_PROVIDERS` | plain | `campflare,bcparks-strapi,aspira` |
+| `ENABLED_DATA_PROVIDERS` | plain | `campflare,bcparks-strapi,aspira`; set but empty is a `ConfigError`, never "none enabled" |
 | `HEALTH_DATABASE_TOKEN` | sensitive | the bearer secret for the database mode of `/api/health` (below) |
 
 Deployment protection (checked 2026-10-29): Vercel Authentication is on with
@@ -101,6 +101,18 @@ succeeded when connected as the owner role. The earlier claim in the plan that t
 guards against accidental writes was true on a plain Postgres (the local test fixture) and false
 here; Task 3's read-only test passes locally and says nothing about Neon. The parameter stays in
 `openServerDb` because it still works against ordinary Postgres, but on Neon it does nothing.
+
+Because the parameter cannot be trusted, `serverDb` no longer trusts it. On the first use of the
+handle it runs `SELECT current_setting('default_transaction_read_only')` and throws
+`DatabaseNotReadOnlyError` unless the answer is `on`; an unreadable answer is refused too, rather
+than assumed read-only. So the guarantee is now checked wherever the app runs instead of being
+asserted by a parameter the target ignores, and a `DATABASE_URL` pointed at a writable role fails
+closed on the first read instead of quietly permitting writes. The check is memoised per process,
+and a failed check is retried rather than poisoning the handle. Two limits worth knowing: it is a
+login-time snapshot, so it cannot see a later `ALTER ROLE` (and under the pooler it reads whatever
+the first pooled backend reports — see "Server-side timeouts on Neon"), and a session that holds
+the grants could still `SET transaction_read_only = off`. The grants, not this check, are the
+backstop.
 
 What does work on Neon is a **role-level setting**, applied by the server at login whatever the
 client sends. The app connects as a dedicated role, `roadtrip_web`:

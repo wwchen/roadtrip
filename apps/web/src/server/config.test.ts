@@ -64,3 +64,11 @@ test('the health database token is unavailable unless it holds a non-blank value
   vi.stubEnv('HEALTH_DATABASE_TOKEN', 'a-secret');
   expect(config.healthDatabaseToken).toBe('a-secret');
 });
+
+test('a set but empty provider list is refused rather than read as none enabled', () => {
+  vi.stubEnv('ENABLED_DATA_PROVIDERS', '');
+  expect(() => config.enabledDataProviders).toThrow(ConfigError);
+  expect(() => config.enabledDataProviders).toThrow(/ENABLED_DATA_PROVIDERS must list at least one/);
+  vi.stubEnv('ENABLED_DATA_PROVIDERS', ' , ');
+  expect(() => config.enabledDataProviders).toThrow(ConfigError);
+});

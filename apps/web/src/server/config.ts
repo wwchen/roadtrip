@@ -41,10 +41,12 @@ function boundedIntegerFrom(variable: string, fallback: number, maximum: number)
 function listFrom(variable: string, fallback: readonly string[]): readonly string[] {
   const raw = process.env[variable];
   if (raw === undefined) return fallback;
-  return raw
+  const entries = raw
     .split(PROVIDER_SEPARATOR)
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
+  if (entries.length === 0) throw new ConfigError(variable, 'must list at least one entry');
+  return entries;
 }
 
 function secretFrom(variable: string): string | undefined {
