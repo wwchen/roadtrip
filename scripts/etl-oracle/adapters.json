@@ -30,6 +30,26 @@
         "string"
       ],
       "minimumCases": 70
+    },
+    "aspira-normalize": {
+      "module": "vendors/aspira/normalize",
+      "export": "normalize",
+      "kotlinClass": "ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampgroundsEtlKt",
+      "kotlinMethod": "normalize",
+      "argTypes": [
+        "string"
+      ],
+      "minimumCases": 93
+    },
+    "aspira-csv-split": {
+      "module": "vendors/aspira/us-campgrounds-csv",
+      "export": "csvSplit",
+      "kotlinClass": "ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampgroundsEtlKt",
+      "kotlinMethod": "csvSplit",
+      "argTypes": [
+        "string"
+      ],
+      "minimumCases": 37
     }
   }
 }
