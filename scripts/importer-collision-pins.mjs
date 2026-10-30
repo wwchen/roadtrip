@@ -17,5 +17,9 @@ export const COLLISION_PINS = {
   'BC Aspira Resources': { count: 0, reason: NONE_EXPECTED },
   'Parks Canada Aspira Resources': { count: 0, reason: NONE_EXPECTED },
   'Planet Fitness': { count: 0, reason: NONE_EXPECTED },
+  'Alberta Provincial Parks': { count: 0, reason: NONE_EXPECTED },
+  'New York State Parks': { count: 0, reason: NONE_EXPECTED },
+  'Alberta Provincial Park Sites': { count: 0, reason: NONE_EXPECTED },
+  'New York State Park Sites': { count: 0, reason: NONE_EXPECTED },
   'Tesla Superchargers': { count: 0, reason: NONE_EXPECTED },
 };
