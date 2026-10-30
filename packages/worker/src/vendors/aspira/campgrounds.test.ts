@@ -216,7 +216,7 @@ describe('the Aspira campgrounds adapter, parse', () => {
   });
 
   test('a maps payload that is not an array throws', () => {
-    expect(() => parsed(WA_SLUG, waInputs('{"mapId":1}', WA_CSV_ROWS))).toThrow();
+    expect(() => parsed(WA_SLUG, waInputs('{"mapId":1}', WA_CSV_ROWS))).toThrow('Element is not a JsonArray');
   });
 
   test('a multi-part maps feed throws, since the walk reads exactly one envelope', () => {

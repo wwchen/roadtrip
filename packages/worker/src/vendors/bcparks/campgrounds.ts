@@ -32,20 +32,22 @@ const COUNTRY = 'CA';
 const NO_LEAVES = 'no Aspira leaves from /api/maps';
 const NO_STRAPI_ROWS = 'no BC Parks Strapi rows parsed';
 const NO_INVENTORY = 'no inventory envelopes';
+const NO_MATCHING_ELEMENT = 'Collection contains no element matching the predicate.';
+const EMPTY_LIST = 'List is empty.';
+const MORE_THAN_ONE_ELEMENT = 'List has more than one element.';
 const STRAPI_ORCS_KEY = 'strapi_orcs';
 const STRAPI_URL_KEY = 'strapi_url';
 
 function requiredRoleSlug(slugs: readonly string[], role: string): string {
   const found = slugs.find((slug) => slug.includes(role));
-  if (found === undefined) throw new Error(`no input slug contains '${role}'`);
+  if (found === undefined) throw new Error(NO_MATCHING_ELEMENT);
   return found;
 }
 
 function soleGeometryInput(geometry: GeometryPolicy): string {
   const [only] = geometry.sources;
-  if (geometry.sources.length !== 1 || only === undefined) {
-    throw new Error(`expected exactly one geometry source, got ${geometry.sources.length}`);
-  }
+  if (only === undefined) throw new Error(EMPTY_LIST);
+  if (geometry.sources.length > 1) throw new Error(MORE_THAN_ONE_ELEMENT);
   return only.input;
 }
 

@@ -172,10 +172,15 @@ describe('the BC Parks campgrounds adapter, parse', () => {
   });
 
   test('a missing maps, inventory or Strapi input throws rather than reporting', () => {
-    for (const slug of [MAPS, INVENTORY, STRAPI]) {
+    const expected: [string, string][] = [
+      [MAPS, 'Collection contains no element matching the predicate.'],
+      [INVENTORY, 'Collection contains no element matching the predicate.'],
+      [STRAPI, `input '${STRAPI}' is not a declared data_source input`],
+    ];
+    for (const [slug, message] of expected) {
       const inputs = inputsOf(maps(leafNode('1', 'Alice Lake')), strapi(ALICE_LAKE));
       delete inputs[slug];
-      expect(() => parsed(inputs), slug).toThrow();
+      expect(() => parsed(inputs), slug).toThrow(message);
     }
   });
 

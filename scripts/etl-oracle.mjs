@@ -19,6 +19,7 @@ const REGISTRY_PATH = path.join(REPO_ROOT, 'backend/src/main/resources/poi-regis
 const MANIFEST = JSON.parse(readFileSync(path.join(ORACLE_DIR, 'adapters.json'), 'utf8'));
 const WORKER_PACKAGE = '@roadtrip/worker';
 const CLASSPATH_ENV = 'ETL_ORACLE_CLASSPATH';
+const KOTLIN_LOGS_ENV = 'ETL_ORACLE_KOTLIN_LOGS';
 const DEFAULT_FETCHED_AT = '2026-06-17T00:00:00Z';
 const MAX_FAILURES_SHOWN = 20;
 const MAX_INPUT_SHOWN = 700;
@@ -65,6 +66,12 @@ const USAGE = [
   '  - An adapter that reads the clock (Instant.now) cannot be reconciled by any replay.',
   '',
   `The JVM classpath is read from Gradle (:backend:printRuntimeClasspath); set ${CLASSPATH_ENV} to reuse one.`,
+  `The Kotlin adapters' own log output is discarded by default so that a green run stays quiet; set ${KOTLIN_LOGS_ENV} to any value to send it to stderr when diagnosing a disagreement.`,
+  '',
+  'Nested domain classes that have a generated serializer are rendered by it, with defaults encoded. That is not the form the',
+  'importer stores (its catalog JSON omits defaults and nulls); it is chosen because the oracle compares in-memory transform',
+  'outputs, strips nulls on both sides, and would otherwise hide a non-null default (an amenity\'s present = true) that the',
+  'TypeScript record carries explicitly. Do not switch encodeDefaults off on the grounds that storage omits them.',
   'The backend must have been compiled (./gradlew :backend:classes), because the oracle runs build/classes.',
 ].join('\n');
 

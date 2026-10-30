@@ -46,6 +46,7 @@ public class Oracle {
         return Unit.INSTANCE;
     });
     static final int MAX_DEPTH = 24;
+    static final String KOTLIN_LOGS_ENV = "ETL_ORACLE_KOTLIN_LOGS";
     static final String ETL_KIND = "etl";
     static final String CALL_KIND = "call";
     static final String REGISTRY_CLASS = "ca.floo.roadtrip.service.etl.framework.ProductionTerminalEtlRegistryKt";
@@ -105,7 +106,12 @@ public class Oracle {
             Method ser = k.getMethod("serialize");
             return esc(String.valueOf(ser.invoke(o)));
         } catch (NoSuchMethodException ignored) { }
-        KSerializer<Object> wire = SerializersKt.serializerOrNull(k);
+        KSerializer<Object> wire;
+        try {
+            wire = SerializersKt.serializerOrNull(k);
+        } catch (Throwable ignored) {
+            wire = null;
+        }
         if (wire != null) return WIRE.encodeToString(wire, o);
         StringBuilder b = new StringBuilder("{");
         boolean first = true;
@@ -296,7 +302,7 @@ public class Oracle {
 
     public static void main(String[] args) throws Exception {
         PrintStream protocol = System.out;
-        System.setOut(new PrintStream(OutputStream.nullOutputStream()));
+        System.setOut(System.getenv(KOTLIN_LOGS_ENV) == null ? new PrintStream(OutputStream.nullOutputStream()) : System.err);
         registry = PoiRegistry.Companion.load(new File(args[1]));
         for (String line : Files.readAllLines(Paths.get(args[0]))) {
             if (line.isBlank()) continue;
