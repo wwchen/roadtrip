@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { recordDocumentOrder } from './document-order.js';
 
 export interface RequestMeta {
   url: string;
@@ -66,7 +67,9 @@ export function serializeOpaquePayload(value: unknown): OpaquePayloadJson {
 }
 
 export function parseKeepingDigits(text: string): unknown {
-  return sourceAwareJson.parse(text, reviveNumber);
+  const value = sourceAwareJson.parse(text, reviveNumber);
+  recordDocumentOrder(text, value);
+  return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
