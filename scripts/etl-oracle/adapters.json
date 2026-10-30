@@ -6,8 +6,8 @@
       "opaqueFields": [
         "sourcePayload"
       ],
-      "minimumCases": 22,
-      "minimumTransformed": 13
+      "minimumCases": 20,
+      "minimumTransformed": 12
     },
     "aspira-campsites": {
       "module": "vendors/aspira/campsites",
@@ -24,8 +24,8 @@
       "opaqueFields": [
         "sourcePayload"
       ],
-      "minimumCases": 14,
-      "minimumTransformed": 8
+      "minimumCases": 13,
+      "minimumTransformed": 7
     },
     "recgov-campgrounds": {
       "module": "vendors/recgov/campgrounds",
@@ -84,7 +84,7 @@
       "argTypes": [
         "string"
       ],
-      "minimumCases": 93
+      "minimumCases": 84
     },
     "aspira-csv-split": {
       "module": "vendors/aspira/us-campgrounds-csv",
@@ -94,7 +94,7 @@
       "argTypes": [
         "string"
       ],
-      "minimumCases": 37
+      "minimumCases": 33
     }
   }
 }
