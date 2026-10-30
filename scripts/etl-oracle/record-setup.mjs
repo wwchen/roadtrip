@@ -47,7 +47,7 @@ async function patch(name, entry) {
   const originalTransform = exported.prototype.transform;
   exported.prototype.parse = function* (inputs) {
     const current = {
-      ...caseOf(name, entry, this, inputsOf(inputs)),
+      ...caseOf(name, this, inputsOf(inputs)),
       test: expect.getState().currentTestName ?? '',
       tsParse: 'ok',
       tsParseBad: [],

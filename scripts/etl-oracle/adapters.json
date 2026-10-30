@@ -3,10 +3,6 @@
     "recgov-campgrounds": {
       "module": "vendors/recgov/campgrounds",
       "export": "RecGovCampgroundsEtl",
-      "kotlin": "ca.floo.roadtrip.service.etl.vendors.recgov.RecGovCampgroundsEtl",
-      "constructorProperties": [
-        "etlSlug"
-      ],
       "opaqueFields": [
         "sourcePayload"
       ],
@@ -16,10 +12,6 @@
     "recgov-campsites": {
       "module": "vendors/recgov/campsites",
       "export": "RecGovCampsitesEtl",
-      "kotlin": "ca.floo.roadtrip.service.etl.vendors.recgov.RecGovCampsitesEtl",
-      "constructorProperties": [
-        "etlSlug"
-      ],
       "opaqueFields": [
         "sourcePayload"
       ],

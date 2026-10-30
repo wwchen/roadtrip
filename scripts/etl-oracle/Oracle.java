@@ -1,5 +1,4 @@
 import java.io.File;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -19,11 +18,15 @@ import kotlinx.serialization.json.JsonElement;
 import kotlinx.serialization.json.JsonNull;
 import kotlinx.serialization.json.JsonObject;
 import kotlinx.serialization.json.JsonPrimitive;
+import com.charleskorn.kaml.Yaml;
+import com.charleskorn.kaml.YamlNode;
 import ca.floo.roadtrip.model.metadata.Envelope;
 import ca.floo.roadtrip.model.metadata.ParseResult;
 import ca.floo.roadtrip.model.metadata.RequestMeta;
 import ca.floo.roadtrip.model.metadata.ResponseMeta;
 import ca.floo.roadtrip.model.metadata.TransformResult;
+import ca.floo.roadtrip.model.metadata.registry.EtlEntry;
+import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry;
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry;
 import ca.floo.roadtrip.service.etl.framework.InputBundle;
 import ca.floo.roadtrip.service.etl.framework.SourceEtl;
@@ -34,36 +37,10 @@ public class Oracle {
     static final int MAX_DEPTH = 24;
     static final String ETL_KIND = "etl";
     static final String CALL_KIND = "call";
-    static final String BOOKING_PROVIDERS_YAML = String.join("\n",
-        "booking_providers:",
-        "  - id: recgov",
-        "    display_name: Recreation.gov",
-        "    sells: true",
-        "    tenants:",
-        "      - host: www.recreation.gov",
-        "  - id: campflare",
-        "    display_name: Campflare",
-        "    sells: false",
-        "    tenants:",
-        "      - host: campflare.com",
-        "  - id: aspira",
-        "    display_name: Aspira NextGen",
-        "    sells: true",
-        "    tenants:",
-        "      - code: bc",
-        "        host: camping.bcparks.ca",
-        "  - id: reserveamerica",
-        "    display_name: ReserveAmerica",
-        "    sells: true",
-        "    tenants:",
-        "      - code: ABPP",
-        "        host: shop.albertaparks.ca",
-        "  - id: reservecalifornia",
-        "    display_name: ReserveCalifornia",
-        "    sells: true",
-        "    tenants:",
-        "      - host: www.reservecalifornia.com",
-        "");
+    static final String REGISTRY_CLASS = "ca.floo.roadtrip.service.etl.framework.ProductionTerminalEtlRegistryKt";
+    static final String CONSTANT_AGENCY = "constant";
+    static final String DERIVED_FROM_FIELD_KEY = "derived_from_field";
+    static PoiRegistry registry;
 
     static String esc(String s) {
         StringBuilder b = new StringBuilder("\"");
@@ -138,52 +115,59 @@ public class Oracle {
         return e instanceof JsonPrimitive && !(e instanceof JsonNull) ? ((JsonPrimitive) e).getContent() : null;
     }
 
-    static String yamlQuote(String s) {
-        return esc(s);
+    static EtlEntry etlEntryFor(String slug) {
+        for (PoiDataEntry row : registry.getPoiData()) {
+            for (EtlEntry entry : row.getEtls()) if (entry.getSlug().equals(slug)) return entry;
+        }
+        for (var row : registry.getCampsiteData()) {
+            for (EtlEntry entry : row.getEtls()) if (entry.getSlug().equals(slug)) return entry;
+        }
+        throw new IllegalArgumentException("no etl with slug '" + slug + "' in the POI registry");
     }
 
-    static String registryYaml(String slug, String adapterName, JsonObject registry) {
-        List<String> lines = new ArrayList<>();
-        JsonArray inputs = (JsonArray) registry.get("inputs");
-        lines.add(inputs.isEmpty() ? "data_sources: []" : "data_sources:");
-        for (JsonElement i : inputs) {
-            String input = ((JsonPrimitive) i).getContent();
-            lines.add("  - slug: " + yamlQuote(input));
-            lines.add("    name: " + yamlQuote(input));
-            lines.add("    fetcher:");
-            lines.add("      executor: python");
-            lines.add("      filename: fetch.py");
-            lines.add("      output_dir_prefix: " + yamlQuote(input));
-        }
-        lines.add("poi_data:");
-        lines.add("  - name: Oracle");
-        lines.add("    category: campground");
-        String subcategory = text(registry, "subcategory");
-        if (subcategory != null) lines.add("    subcategory: " + yamlQuote(subcategory));
-        JsonElement agency = registry.get("agency");
-        if (agency instanceof JsonObject) {
-            JsonObject a = (JsonObject) agency;
-            if ("constant".equals(text(a, "kind"))) lines.add("    agency: " + yamlQuote(text(a, "value")));
-            else {
-                lines.add("    agency:");
-                lines.add("      derived_from_field: " + yamlQuote(text(a, "field")));
+    @SuppressWarnings("unchecked")
+    static SourceEtl<?, ?> etlFor(EtlEntry entry) throws Exception {
+        Class<?> kt = Class.forName(REGISTRY_CLASS);
+        Map<?, ?> poiAdapters = (Map<?, ?>) kt.getMethod("getPoiAdapters").invoke(null);
+        Map<?, ?> campsiteAdapters = (Map<?, ?>) kt.getMethod("getCampsiteAdapters").invoke(null);
+        Object spec = poiAdapters.get(entry.getAdapter());
+        Object factory = spec != null ? spec.getClass().getMethod("getCreate").invoke(spec) : campsiteAdapters.get(entry.getAdapter());
+        if (factory == null) throw new IllegalArgumentException("no adapter named '" + entry.getAdapter() + "'");
+        Object definition = ((kotlin.jvm.functions.Function1<EtlEntry, Object>) factory).invoke(entry);
+        return (SourceEtl<?, ?>) definition.getClass().getMethod("getEtl").invoke(definition);
+    }
+
+    static YamlNode agencyNodeOf(JsonElement agency) {
+        if (!(agency instanceof JsonObject)) return null;
+        JsonObject a = (JsonObject) agency;
+        String body = CONSTANT_AGENCY.equals(text(a, "kind"))
+            ? esc(text(a, "value"))
+            : DERIVED_FROM_FIELD_KEY + ": " + esc(text(a, "field"));
+        return Yaml.Companion.getDefault().parseToYamlNode(body);
+    }
+
+    static PoiRegistry withOverride(String slug, JsonObject recorded) {
+        YamlNode agency = agencyNodeOf(recorded.get("agency"));
+        String subcategory = text(recorded, "subcategory");
+        List<PoiDataEntry> poiData = new ArrayList<>();
+        boolean found = false;
+        for (PoiDataEntry row : registry.getPoiData()) {
+            EtlEntry terminal = row.getEtls().isEmpty() ? null : row.getEtls().get(row.getEtls().size() - 1);
+            if (terminal != null && terminal.getSlug().equals(slug)) {
+                found = true;
+                poiData.add(new PoiDataEntry(row.getName(), row.getEnabled(), row.getCategory(), subcategory, agency, row.getEtls()));
+            } else {
+                poiData.add(row);
             }
         }
-        lines.add("    etls:");
-        lines.add("      - slug: " + yamlQuote(slug));
-        lines.add("        adapter: " + yamlQuote(adapterName));
-        StringBuilder in = new StringBuilder("        inputs: [");
-        boolean first = true;
-        for (JsonElement i : inputs) { if (!first) in.append(", "); first = false; in.append(yamlQuote(((JsonPrimitive) i).getContent())); }
-        lines.add(in.append(']').toString());
-        JsonObject args = (JsonObject) registry.get("args");
-        if (args != null && !args.isEmpty()) {
-            lines.add("        args:");
-            for (Map.Entry<String, JsonElement> e : args.entrySet()) {
-                lines.add("          " + yamlQuote(e.getKey()) + ": " + yamlQuote(((JsonPrimitive) e.getValue()).getContent()));
+        if (!found) {
+            if (subcategory != null || agency != null) {
+                throw new IllegalArgumentException(
+                    "no poi_data row has terminal etl '" + slug + "', so its recorded subcategory/agency cannot be applied");
             }
+            return registry;
         }
-        return String.join("\n", lines) + "\n" + BOOKING_PROVIDERS_YAML;
+        return new PoiRegistry(registry.getDataSources(), poiData, registry.getCampsiteData(), registry.getBookingProviders());
     }
 
     static Envelope envelopeOf(JsonObject e) {
@@ -197,13 +181,8 @@ public class Oracle {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     static String runEtl(JsonObject c) throws Exception {
-        String kotlin = text(c, "kotlin");
-        List<String> ctor = new ArrayList<>();
-        for (JsonElement a : (JsonArray) c.get("ctor")) ctor.add(((JsonPrimitive) a).getContent());
-        Class<?>[] types = new Class<?>[ctor.size()];
-        Arrays.fill(types, String.class);
-        Constructor<?> constructor = Class.forName(kotlin).getConstructor(types);
-        SourceEtl etl = (SourceEtl) constructor.newInstance(ctor.toArray());
+        String slug = text(c, "slug");
+        SourceEtl etl = etlFor(etlEntryFor(slug));
         LinkedHashMap<String, List<Envelope>> captures = new LinkedHashMap<>();
         List<String> fetchedAt = new ArrayList<>();
         for (Map.Entry<String, JsonElement> in : ((JsonObject) c.get("inputs")).entrySet()) {
@@ -216,8 +195,7 @@ public class Oracle {
             captures.put(in.getKey(), envelopes);
         }
         InputBundle bundle = new InputBundle(captures);
-        String yaml = registryYaml(etl.getEtlSlug(), Class.forName(kotlin).getSimpleName(), (JsonObject) c.get("registry"));
-        TransformCtx ctx = TransformCtx.Companion.load(new File("/unused"), PoiRegistry.Companion.loadString(yaml, "oracle.yaml"));
+        TransformCtx ctx = TransformCtx.Companion.load(new File("/unused"), withOverride(slug, (JsonObject) c.get("registry")));
         List<String> out = new ArrayList<>();
         List<String> parseBad = new ArrayList<>();
         String parseOutcome = "ok";
@@ -304,6 +282,7 @@ public class Oracle {
     }
 
     public static void main(String[] args) throws Exception {
+        registry = PoiRegistry.Companion.load(new File(args[1]));
         for (String line : Files.readAllLines(Paths.get(args[0]))) {
             if (line.isBlank()) continue;
             JsonObject c = (JsonObject) JSON.parseToJsonElement(line);

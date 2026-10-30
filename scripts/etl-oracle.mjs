@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { resultOf } from './etl-oracle/case-shape.mjs';
 import { compareCallCase, compareEtlCase, floorProblems, summarise } from './etl-oracle/compare.mjs';
+import { registryWithOverride, requireEtlEntry, seamProblems } from './etl-oracle/registry-seam.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..');
@@ -14,6 +15,7 @@ const ORACLE_DIR = path.join(HERE, 'etl-oracle');
 const WORKER_DIR = path.join(REPO_ROOT, 'packages/worker');
 const KOTLIN_MAIN = path.join(REPO_ROOT, 'backend/src/main/kotlin');
 const KOTLIN_CLASSES = path.join(REPO_ROOT, 'backend/build/classes/kotlin/main');
+const REGISTRY_PATH = path.join(REPO_ROOT, 'backend/src/main/resources/poi-registry.yaml');
 const MANIFEST = JSON.parse(readFileSync(path.join(ORACLE_DIR, 'adapters.json'), 'utf8'));
 const WORKER_PACKAGE = '@roadtrip/worker';
 const CLASSPATH_ENV = 'ETL_ORACLE_CLASSPATH';
@@ -34,6 +36,12 @@ const USAGE = [
   'explore: draws cases from scripts/etl-oracle/explore/<name>.mjs with a seeded generator and compares them',
   'the same way, against the built worker (dist). --seed is required, so a run is always reproducible.',
   'It is exploratory and must never be part of a default or CI run.',
+  '',
+  'Both sides build the adapter the same way the importer does: they load backend/src/main/resources/poi-registry.yaml,',
+  "look the recorded etl slug up in it, and hand that EtlEntry to their own adapter registry (Kotlin's poiAdapters /",
+  "campsiteAdapters, TypeScript's adapterRegistry). Geometry, args, host, tenant and booking providers are therefore the",
+  "shipped ones on both sides. Only the row's subcategory and agency are overridden, from what the unit test's own ctx",
+  'reported, and check fails when a unit test read an arg the registry does not declare with that value.',
   '',
   'check also fails, whatever the comparison says, when an adapter in adapters.json has fewer recorded cases',
   'than its minimumCases, fewer compared through transform than its minimumTransformed, or when a call in',
@@ -95,7 +103,7 @@ function replayOnJvm(cases, scratch) {
   execFileSync('javac', ['-cp', cp, '-d', classes, path.join(ORACLE_DIR, 'Oracle.java')], { stdio: ['ignore', 'ignore', 'inherit'] });
   const file = path.join(scratch, 'cases.jsonl');
   writeFileSync(file, `${cases.map((current) => JSON.stringify(current)).join('\n')}\n`);
-  const output = execFileSync('java', ['-cp', `${cp}${path.delimiter}${classes}`, 'Oracle', file], {
+  const output = execFileSync('java', ['-cp', `${cp}${path.delimiter}${classes}`, 'Oracle', file, REGISTRY_PATH], {
     encoding: 'utf8',
     maxBuffer: 1 << 28,
   });
@@ -190,9 +198,14 @@ function report(title, summary) {
 
 async function check(scratch) {
   assertKotlinBuilt();
+  buildWorker();
   const { cases: recordedRaw, unitTestsPassed } = recordUnitTestCases(scratch);
   const recorded = recordedRaw.map((current) => ({ ...current, fetchedAt: fetchedAtOf(current.inputs) }));
   if (!unitTestsPassed) console.log('the worker unit tests failed; the recorded cases are compared anyway');
+  const { loadPoiRegistry } = await import('@roadtrip/worker');
+  const seam = seamProblems(recorded, loadPoiRegistry(REGISTRY_PATH), MANIFEST.adapters);
+  for (const problem of seam) console.log(`SEAM: ${problem}`);
+  if (seam.length > 0) return false;
   const etlKotlin = replayOnJvm(recorded, scratch);
   const transformed = recorded.filter((current) => current.tsParse === 'ok' && current.tsTransformRan).length;
   const etlOk = report(`recorded unit-test cases (${transformed} compared through transform)`, summarise(recorded, etlKotlin, compareEtlCase));
@@ -208,7 +221,6 @@ async function check(scratch) {
   for (const problem of floors.problems) console.log(`FLOOR: ${problem}`);
   let callOk = true;
   if (calls.length > 0) {
-    buildWorker();
     const tsResults = await runCallsOnTs(calls);
     const kotlinResults = replayOnJvm(calls, scratch);
     callOk = report('committed call cases', summarise(tsResults.map((value, index) => ({ ...calls[index], ...value })), kotlinResults, compareCallCase));
@@ -217,10 +229,13 @@ async function check(scratch) {
 }
 
 async function runEtlOnTs(descriptor) {
-  const { InputBundle, TransformCtx, parseEnvelope } = await import('@roadtrip/worker');
+  const { InputBundle, TransformCtx, adapterRegistry, loadPoiRegistry, parseEnvelope } = await import('@roadtrip/worker');
   const entry = MANIFEST.adapters[descriptor.adapter];
-  const Etl = await workerExport(entry.module, entry.export);
-  const etl = new Etl(...descriptor.ctor);
+  const registry = loadPoiRegistry(REGISTRY_PATH);
+  const etlEntry = requireEtlEntry(registry, descriptor.slug);
+  const factory = adapterRegistry[etlEntry.adapter];
+  if (factory === undefined) fail(`no adapter named '${etlEntry.adapter}' in the TypeScript adapterRegistry`);
+  const etl = factory(etlEntry).etl;
   const scratch = mkdtempSync(path.join(os.tmpdir(), 'etl-oracle-ts-'));
   try {
     let counter = 0;
@@ -239,17 +254,7 @@ async function runEtlOnTs(descriptor) {
         }),
       ]),
     );
-    const { subcategory, agency, args, inputs } = descriptor.registry;
-    const row = {
-      name: 'Oracle',
-      enabled: true,
-      category: 'campground',
-      subcategory: subcategory ?? undefined,
-      agency: agency ?? undefined,
-      etls: [{ slug: etl.etlSlug, adapter: entry.export, inputs, args }],
-    };
-    const registry = { dataSources: [], poiData: [row], campsiteData: [], bookingProviders: [], dataSource: () => undefined, poiDataByName: () => row, campsiteDataByName: () => undefined };
-    const ctx = TransformCtx.load('/unused', registry);
+    const ctx = TransformCtx.load('/unused', registryWithOverride(registry, descriptor.slug, descriptor.registry));
     const fetchedAt = [...captures.values()].flatMap((envelopes) => envelopes.map((envelope) => envelope.fetchedAt));
     const outcome = { ...descriptor, fetchedAt, tsParse: 'ok', tsParseBad: [], tsTransformRan: true, tsTransform: 'ok', tsResults: [] };
     try {
@@ -284,12 +289,7 @@ async function explore(values, scratch) {
   buildWorker();
   const generator = await import(pathToFileURL(path.join(ORACLE_DIR, 'explore', `${values.generator}.mjs`)).href);
   const descriptors = generator.generate({ seed, count }).map((descriptor) =>
-    withFetchedAt({
-      kind: 'etl',
-      kotlin: MANIFEST.adapters[descriptor.adapter].kotlin,
-      test: `${values.generator} seed ${seed}`,
-      ...descriptor,
-    }),
+    withFetchedAt({ kind: 'etl', test: `${values.generator} seed ${seed}`, ...descriptor }),
   );
   const withTs = [];
   for (const descriptor of descriptors) withTs.push(await runEtlOnTs(descriptor));

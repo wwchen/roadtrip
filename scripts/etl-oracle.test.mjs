@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { canonical, compareCallCase, compareEtlCase, floorProblems, strip, summarise } from './etl-oracle/compare.mjs';
+import { etlEntryFor, registryWithOverride, requireEtlEntry, seamProblems } from './etl-oracle/registry-seam.mjs';
 
 const okTs = (results) => ({ tsParse: 'ok', tsParseBad: [], tsTransformRan: true, tsTransform: 'ok', tsResults: results });
 const okKotlin = (results) => ({ parse: 'ok', parseBad: [], transform: 'ok', results });
@@ -127,4 +128,105 @@ test('a call with too few committed cases, or no floor, fails', () => {
 test('the counts come back per adapter', () => {
   const { counts } = floorProblems([...recordedFor('one', 3, 2)], adapters({}), {}, {});
   assert.deepEqual(counts, { one: { cases: 3, transformed: 2 } });
+});
+
+const seamRegistry = () => ({
+  dataSources: [],
+  poiData: [
+    {
+      name: 'Washington State Parks',
+      enabled: true,
+      category: 'campground',
+      subcategory: 'state',
+      agency: { kind: 'constant', value: 'WA State Parks' },
+      etls: [{ slug: 'aspira-wa-campgrounds', adapter: 'AspiraCampgroundsEtl', inputs: [], args: { tenant: 'wa', host: 'washington.goingtocamp.com' } }],
+    },
+    {
+      name: 'Rec.gov Campgrounds',
+      enabled: true,
+      category: 'campground',
+      subcategory: 'federal',
+      agency: { kind: 'derived', field: 'ORGANIZATION[0].OrgName' },
+      etls: [{ slug: 'recgov-campgrounds', adapter: 'RecGovCampgroundsEtl', inputs: [], args: {} }],
+    },
+  ],
+  campsiteData: [
+    { name: 'Rec.gov Campsites', enabled: true, etls: [{ slug: 'recgov-campsites', adapter: 'RecGovCampsitesEtl', inputs: [], args: {} }] },
+  ],
+  bookingProviders: [],
+});
+
+const seamCase = (fields) => ({ adapter: 'recgov-campgrounds', slug: 'recgov-campgrounds', registry: { subcategory: null, agency: null, args: {} }, ...fields });
+const seamAdapters = { 'recgov-campgrounds': { export: 'RecGovCampgroundsEtl' }, 'aspira-wa-campgrounds': { export: 'AspiraCampgroundsEtl' } };
+
+test('the etl entry is found by slug in either section, and nowhere else', () => {
+  const registry = seamRegistry();
+  assert.equal(etlEntryFor(registry, 'aspira-wa-campgrounds').adapter, 'AspiraCampgroundsEtl');
+  assert.equal(etlEntryFor(registry, 'recgov-campsites').adapter, 'RecGovCampsitesEtl');
+  assert.equal(etlEntryFor(registry, 'Rec.gov Campgrounds'), undefined);
+  assert.throws(() => requireEtlEntry(registry, 'nope'), /no etl with slug 'nope'/);
+});
+
+test('the override replaces the shipped subcategory and agency on the owning row only', () => {
+  const registry = seamRegistry();
+  const next = registryWithOverride(registry, 'recgov-campgrounds', { subcategory: 'overridden', agency: { kind: 'constant', value: 'Fixed Agency' } });
+  const [washington, recgov] = next.poiData;
+  assert.deepEqual(recgov.agency, { kind: 'constant', value: 'Fixed Agency' });
+  assert.equal(recgov.subcategory, 'overridden');
+  assert.equal(washington, registry.poiData[0]);
+  assert.equal(registry.poiData[1].subcategory, 'federal', 'the registry handed in is not mutated');
+  assert.equal(next.poiDataByName('Rec.gov Campgrounds'), recgov);
+});
+
+test('a null override clears what the shipped row declares, because the test ctx had nothing there', () => {
+  const next = registryWithOverride(seamRegistry(), 'recgov-campgrounds', { subcategory: null, agency: null });
+  assert.equal(next.poiData[1].subcategory, undefined);
+  assert.equal(next.poiData[1].agency, undefined);
+});
+
+test('a derived agency override survives as derived, not as a constant', () => {
+  const next = registryWithOverride(seamRegistry(), 'recgov-campgrounds', { subcategory: null, agency: { kind: 'derived', field: 'X.Y' } });
+  assert.deepEqual(next.poiData[1].agency, { kind: 'derived', field: 'X.Y' });
+});
+
+test('a slug no poi_data row owns keeps the registry, and refuses an override it could not apply', () => {
+  const registry = seamRegistry();
+  assert.equal(registryWithOverride(registry, 'recgov-campsites', { subcategory: null, agency: null }), registry);
+  assert.throws(
+    () => registryWithOverride(registry, 'recgov-campsites', { subcategory: 'state', agency: null }),
+    /no poi_data row has terminal etl 'recgov-campsites'/,
+  );
+});
+
+test('the seam check passes a case whose slug, adapter name and read args all match the registry', () => {
+  assert.deepEqual(seamProblems([seamCase({})], seamRegistry(), seamAdapters), []);
+  const aspira = seamCase({ adapter: 'aspira-wa-campgrounds', slug: 'aspira-wa-campgrounds', registry: { subcategory: null, agency: null, args: { tenant: 'wa' } } });
+  assert.deepEqual(seamProblems([aspira], seamRegistry(), seamAdapters), []);
+});
+
+test('the seam check reports a slug the registry does not declare', () => {
+  const problems = seamProblems([seamCase({ slug: 'gone' })], seamRegistry(), seamAdapters);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /no etl with slug 'gone'/);
+});
+
+test('the seam check reports an adapters.json export the registry row does not name', () => {
+  const adapters = { 'recgov-campgrounds': { export: 'RecGovCampsitesEtl' } };
+  const problems = seamProblems([seamCase({})], seamRegistry(), adapters);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /exports 'RecGovCampsitesEtl' but registry etl 'recgov-campgrounds' names adapter 'RecGovCampgroundsEtl'/);
+});
+
+test('the seam check reports an arg the unit test read with a value the registry does not declare', () => {
+  const wrong = seamCase({ adapter: 'aspira-wa-campgrounds', slug: 'aspira-wa-campgrounds', registry: { subcategory: null, agency: null, args: { tenant: 'bc' } } });
+  const problems = seamProblems([wrong], seamRegistry(), seamAdapters);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /args\.tenant='bc'.*registry declares 'wa'/);
+  const absent = seamCase({ registry: { subcategory: null, agency: null, args: { host: 'x' } } });
+  assert.equal(seamProblems([absent], seamRegistry(), seamAdapters).length, 1);
+});
+
+test('the same seam problem found in many cases is reported once', () => {
+  const broken = Array.from({ length: 5 }, () => seamCase({ slug: 'gone' }));
+  assert.equal(seamProblems(broken, seamRegistry(), seamAdapters).length, 1);
 });

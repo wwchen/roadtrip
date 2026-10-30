@@ -79,8 +79,8 @@ function campgroundCase(t, n) {
   }
   return {
     adapter: 'recgov-campgrounds',
-    ctor: ['recgov-campgrounds'],
-    registry: { subcategory: 'federal', ...t.pick(AGENCIES), args: {}, inputs: Object.keys(inputs) },
+    slug: 'recgov-campgrounds',
+    registry: { subcategory: 'federal', ...t.pick(AGENCIES), args: {} },
     inputs,
   };
 }
@@ -125,8 +125,8 @@ function campsiteCase(t, n) {
   const inputs = { 'recgov-campsites-raw': [{ url, part: t.pick([null, null, 'part-1']), payload }] };
   return {
     adapter: 'recgov-campsites',
-    ctor: ['recgov-campsites'],
-    registry: { subcategory: null, agency: null, args: {}, inputs: Object.keys(inputs) },
+    slug: 'recgov-campsites',
+    registry: { subcategory: null, agency: null, args: {} },
     inputs,
   };
 }

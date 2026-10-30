@@ -3,14 +3,12 @@ export function agencyDescriptor(agency) {
   return agency.kind === 'constant' ? { kind: 'constant', value: agency.value } : { kind: 'derived', field: agency.field };
 }
 
-export function caseOf(name, entry, etl, inputs) {
+export function caseOf(name, etl, inputs) {
   return {
     kind: 'etl',
     adapter: name,
-    kotlin: entry.kotlin,
-    ctor: entry.constructorProperties.map((property) => String(etl[property])),
     slug: etl.etlSlug,
-    registry: { subcategory: null, agency: null, args: {}, inputs: Object.keys(inputs) },
+    registry: { subcategory: null, agency: null, args: {} },
     inputs,
   };
 }
