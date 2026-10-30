@@ -58,7 +58,10 @@ import {
   SUBSTANTIVE_TABLES,
   TYPESCRIPT_SCHEMA,
 } from './importer-diff-columns.mjs';
+import { COLLISION_PINS } from './importer-collision-pins.mjs';
 import { withPostgis } from './schema-reference.mjs';
+
+export { COLLISION_PINS };
 
 const run = promisify(execFile);
 
@@ -519,16 +522,31 @@ export function parseImporterStats(stdout) {
   return stats;
 }
 
-// One entry per selected target per pass, in target order. A selected target
-// the importer printed nothing for is refused for the same reason a missing
-// count is.
-export function collisionsFrom(stats, targetNames, pass) {
+// A target states its expected collision count in importer-collision-pins.mjs
+// or the run is refused: defaulting an unstated target to zero would let a new
+// adapter pass on an expectation nobody wrote.
+export function assertTargetsPinned(targetNames, pins = COLLISION_PINS) {
+  for (const name of targetNames) {
+    if (!Object.hasOwn(pins, name)) {
+      throw new Error(
+        `no pinned collision count for '${name}': add it to scripts/importer-collision-pins.mjs with the reason it is expected`,
+      );
+    }
+  }
+}
+
+// One entry per selected target per pass, in target order, carrying the pin the
+// count is held to. A selected target the importer printed nothing for is
+// refused for the same reason a missing count is.
+export function collisionsFrom(stats, targetNames, pass, pins = COLLISION_PINS) {
+  assertTargetsPinned(targetNames, pins);
   return targetNames.map((name) => {
     const found = (stats ?? []).find((entry) => entry.name === name);
     if (found === undefined) {
       throw new Error(`the typescript importer (pass ${pass}) printed no stats for '${name}', so its collisions are unknown`);
     }
-    return { name, etlSlug: found.etlSlug, pass, count: found.dedupeCollisions };
+    const pin = pins[name];
+    return { name, etlSlug: found.etlSlug, pass, count: found.dedupeCollisions, expected: pin.count, reason: pin.reason };
   });
 }
 
@@ -1021,6 +1039,7 @@ export async function runDifferential({
   const registry = loadPoiRegistry(registryPath);
   const selected = selectTargets(registry, { targets, sources });
   assertCapturesPresent(registry, selected, { rawDir, staticDir });
+  assertTargetsPinned(selected.map((target) => target.name));
   // Computed here only for its refusal. Left where it is used it would be
   // reached after both importers had run — twenty minutes to learn that a
   // poi_data category has no entry in the map.
@@ -1119,20 +1138,27 @@ export async function runDifferential({
 export function report({ differences, counts, collisions }) {
   for (const [key, value] of Object.entries(counts)) console.log(`${key}: ${value} row(s)`);
   for (const entry of collisions) {
-    console.log(`natural-key collisions, ${entry.name} (pass ${entry.pass}): ${entry.count}`);
+    console.log(`natural-key collisions, ${entry.name} (pass ${entry.pass}): ${entry.count} (pinned ${entry.expected})`);
   }
-  const colliding = collisions.filter((entry) => entry.count > 0);
-  if (colliding.length > 0) {
+  const moved = collisions.filter((entry) => entry.count !== entry.expected);
+  if (moved.length > 0) {
     console.error(
-      `\n${colliding.length} target pass(es) saw records repeating an earlier record's natural key: ` +
-        colliding.map((entry) => `${entry.name} (pass ${entry.pass}, ${entry.count})`).join(', ') +
-        '. First-wins dedupe and the database upsert then depend on iteration order, and the two importers ' +
-        'iterate integer-keyed objects in different orders, so a clean diff no longer proves the same winner was chosen.',
+      `\n${moved.length} target pass(es) moved off their pinned collision count:\n` +
+        moved
+          .map(
+            (entry) =>
+              `  ${entry.name} (pass ${entry.pass}): ${entry.count} collision(s), pinned ${entry.expected}, ` +
+              `${entry.count > entry.expected ? 'above' : 'below'} (${entry.reason})`,
+          )
+          .join('\n') +
+        '\nA count that differs from its pin means the capture or the adapter changed what repeats, and the ' +
+        'first-wins winner has to be re-adjudicated before a clean diff means anything. Update ' +
+        'scripts/importer-collision-pins.mjs only after doing so.',
     );
   }
   if (differences.length === 0) {
     console.log('0 differences across every diffed table');
-    return colliding.length === 0 ? CLEAN_EXIT_CODE : DIVERGED_EXIT_CODE;
+    return moved.length === 0 ? CLEAN_EXIT_CODE : DIVERGED_EXIT_CODE;
   }
   console.error(`\n${differences.length} difference(s):`);
   for (const difference of differences) {

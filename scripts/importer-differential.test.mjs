@@ -22,7 +22,9 @@ import {
 } from './importer-diff-columns.mjs';
 import {
   assertCurrentBuild,
+  assertTargetsPinned,
   auditRowPreservation,
+  COLLISION_PINS,
   collisionsFrom,
   copiedTableCounts,
   createReferenceSchema,
@@ -183,28 +185,76 @@ test('the TypeScript importer is read for natural-key collisions and refused whe
   for (const missing of [{}, { dedupeCollisions: null }, { dedupeCollisions: -1 }, { dedupeCollisions: 1.5 }, { dedupeCollisions: '0' }]) {
     assert.throws(() => parseImporterStats(statsLine(missing)), /carries no dedupeCollisions count/, JSON.stringify(missing));
   }
-  assert.throws(() => collisionsFrom([], ['Row'], 1), /printed no stats for 'Row'/);
-  assert.throws(() => collisionsFrom(undefined, ['Row'], 1), /printed no stats for 'Row'/);
-  assert.deepEqual(collisionsFrom(statsFor(['A', 'B']), ['B'], 2), [{ name: 'B', etlSlug: 'B-slug', pass: 2, count: 0 }]);
+  const pins = { Row: { count: 0, reason: 'none expected' }, B: { count: 0, reason: 'none expected' } };
+  assert.throws(() => collisionsFrom([], ['Row'], 1, pins), /printed no stats for 'Row'/);
+  assert.throws(() => collisionsFrom(undefined, ['Row'], 1, pins), /printed no stats for 'Row'/);
+  assert.deepEqual(collisionsFrom(statsFor(['A', 'B']), ['B'], 2, pins), [
+    { name: 'B', etlSlug: 'B-slug', pass: 2, count: 0, expected: 0, reason: 'none expected' },
+  ]);
 });
 
-test('a run that saw a natural-key collision fails even when every table diffs clean', () => {
-  const log = [];
+const withConsoleSilenced = (run) => {
+  const { log, error } = console;
+  console.log = () => undefined;
+  console.error = () => undefined;
+  try {
+    return run();
+  } finally {
+    console.log = log;
+    console.error = error;
+  }
+};
+
+const collisionEntry = (count, expected) => ({
+  name: 'Row',
+  etlSlug: 'row-slug',
+  pass: 1,
+  count,
+  expected,
+  reason: 'a pinned reason',
+});
+
+test('a collision count is held to its pin in both directions', () => {
+  const clean = { differences: [], counts: { 'typescript.campgrounds': 1 } };
+  const exit = (count, expected) => withConsoleSilenced(() => report({ ...clean, collisions: [collisionEntry(count, expected)] }));
+  assert.equal(exit(0, 0), 0, 'an unpinned-away zero is the expectation');
+  assert.equal(exit(40, 40), 0, 'a count equal to a non-zero pin passes');
+  assert.equal(exit(41, 40), 1, 'a count above its pin fails');
+  assert.equal(exit(3, 0), 1, 'a collision on a target pinned to none fails');
+  assert.equal(exit(37, 40), 1, 'a count below its pin fails: the capture changed');
+  assert.equal(exit(0, 40), 1, 'a pinned collision that vanished fails');
+});
+
+test('the report names the pin, the count and the direction it moved', () => {
   const err = [];
-  const { log: realLog, error: realError } = console;
-  console.log = (line) => log.push(line);
+  const { error, log } = console;
+  console.log = () => undefined;
   console.error = (line) => err.push(line);
   try {
-    const clean = { differences: [], counts: { 'typescript.campgrounds': 1 } };
-    assert.equal(report({ ...clean, collisions: [{ name: 'Row', etlSlug: 'row-slug', pass: 1, count: 0 }] }), 0);
-    assert.equal(report({ ...clean, collisions: [{ name: 'Row', etlSlug: 'row-slug', pass: 1, count: 3 }] }), 1);
+    report({ differences: [], counts: {}, collisions: [collisionEntry(37, 40)] });
+    report({ differences: [], counts: {}, collisions: [collisionEntry(41, 40)] });
   } finally {
-    console.log = realLog;
-    console.error = realError;
+    console.log = log;
+    console.error = error;
   }
-  assert.ok(log.includes('natural-key collisions, Row (pass 1): 0'));
-  assert.ok(log.includes('natural-key collisions, Row (pass 1): 3'));
-  assert.match(err.join('\n'), /Row \(pass 1, 3\)/);
+  assert.match(err[0], /Row \(pass 1\): 37 collision\(s\), pinned 40, below/);
+  assert.match(err[1], /Row \(pass 1\): 41 collision\(s\), pinned 40, above/);
+});
+
+test('a target with no pin is refused rather than read as zero', () => {
+  assert.throws(() => collisionsFrom(statsFor(['Row']), ['Row'], 1, {}), /no pinned collision count for 'Row'/);
+  assert.throws(() => assertTargetsPinned(['Row'], {}), /no pinned collision count for 'Row'/);
+  assert.doesNotThrow(() => assertTargetsPinned(['Row'], { Row: { count: 0, reason: 'none expected' } }));
+  const [entry] = collisionsFrom(statsFor(['Row'], 40), ['Row'], 1, { Row: { count: 40, reason: 'repeats in the capture' } });
+  assert.deepEqual(entry, { name: 'Row', etlSlug: 'Row-slug', pass: 1, count: 40, expected: 40, reason: 'repeats in the capture' });
+});
+
+test('every pin states a reason and a non-negative integer count', () => {
+  for (const [name, pin] of Object.entries(COLLISION_PINS)) {
+    assert.ok(Number.isInteger(pin.count) && pin.count >= 0, `${name}: pin count`);
+    assert.ok(typeof pin.reason === 'string' && pin.reason.trim() !== '', `${name}: pin has no reason`);
+  }
+  assert.equal(COLLISION_PINS['Campflare Campsites'].count, 40);
 });
 
 test('the pass plan performs exactly the pass count it records', () => {
