@@ -414,6 +414,20 @@ describe('the Aspira campsites adapter, finding the parent', () => {
     expect(JSON.parse(without.sourcePayload as string)).not.toHaveProperty('_parent_aspira_resource_loc');
   });
 
+  test('when several leaves share a resource location, the last one in the maps is the parent', () => {
+    const sharing = (mapId: string, name: string) =>
+      `{"mapId":${mapId},"transactionLocationId":${LEAF_TRANSACTION},"resourceLocationId":5,"localizedValues":${title(name)}}`;
+    const maps = `[${sharing('61', 'First')},${sharing('62', 'Second')},${sharing('63', 'Third')}]`;
+    for (const resource of [{ resourceLocationId: '5' }, { resourceLocationId: '5', mapIds: `[${OTHER_MAP}]` }]) {
+      const record = waRecord(resource, maps);
+      expect(record.parentDataProviderRef?.serialize()).toBe(`${LEAF_TRANSACTION}:63`);
+      expect(JSON.parse(record.sourcePayload as string)).toMatchObject({
+        _parent_aspira_map_id: 63,
+        _parent_leaf_name: 'Third',
+      });
+    }
+  });
+
   test('the parent leaf name and its own parent are recorded', () => {
     const record = waRecord({ mapIds: `[${LEAF_MAP}]` }, leafMaps(LEAF_MAP, 'Loop A', LEAF_RESOURCE_LOCATION, 'Park B'));
     expect(JSON.parse(record.sourcePayload as string)).toMatchObject({
