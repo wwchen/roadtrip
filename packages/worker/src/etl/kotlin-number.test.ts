@@ -157,6 +157,48 @@ describe('kotlinDoubleFromText', () => {
   test('NaN reads as NaN, not as absent', () => {
     expect(kotlinDoubleFromText('NaN')).toBeNaN();
   });
+
+  test.each([
+    ['0x1p3', 8],
+    ['0X1.8P1', 3],
+    ['0x.8p1', 1],
+    ['0x1.p1', 2],
+    ['0x1p+3', 8],
+    ['0x1p3d', 8],
+    ['0X1P3F', 8],
+    ['  0x1p3  ', 8],
+    ['-0x1p3', -8],
+    ['+0x1p3', 8],
+    ['0xAbCp-4', 171.75],
+    ['0x1p-1074', Number.MIN_VALUE],
+    ['0x1.fffffffffffffp1023', Number.MAX_VALUE],
+    ['0x1p1024', Infinity],
+    ['0x1.fffffffffffff8p1023', Infinity],
+    ['0x1p99999999999', Infinity],
+    ['0x1p-99999999999', 0],
+    ['0x1p-1075', 0],
+    ['0x1.8p-1075', Number.MIN_VALUE],
+    ['0x3p-1075', 2 * Number.MIN_VALUE],
+    ['0x0.0000000000001p-1022', Number.MIN_VALUE],
+    ['0x1.ffffffffffffep-1023', 2.225073858507201e-308],
+    ['0x1.00000000000008p0', 1],
+    ['0x1.00000000000008000001p0', 1.0000000000000002],
+    ['0x1.00000000000018p0', 1.0000000000000004],
+  ])('the hexadecimal floating point %j, which Kotlin reads and a decimal pattern does not', (text, expected) => {
+    expect(kotlinDoubleFromText(text)).toBe(expected);
+  });
+
+  test('a hexadecimal float keeps the sign of zero', () => {
+    expect(Object.is(kotlinDoubleFromText('-0x0p0'), -0)).toBe(true);
+    expect(Object.is(kotlinDoubleFromText('0x0p0'), 0)).toBe(true);
+  });
+
+  test.each(['0x10', '0x', '0x1p', '0xp3', '0x.p3', '0x1pa', '0x1p3x', '0x1.8', '0x1.8p', '0x1p3 x', '0xgp3', '1p3'])(
+    'a hexadecimal float needs digits and a binary exponent: %j',
+    (text) => {
+      expect(kotlinDoubleFromText(text)).toBeNull();
+    },
+  );
 });
 
 describe('doubleToInt, Kotlin Double.toInt', () => {

@@ -78,9 +78,55 @@ export function kotlinIntFromText(text: string): number | null {
   return narrowed < INT_MIN || narrowed > INT_MAX ? null : narrowed;
 }
 
+const HEX_DIGITS = '[0-9a-fA-F]';
+const HEX_FLOAT_TEXT = new RegExp(
+  `^${JAVA_PADDING}([+-]?)0[xX](?:(${HEX_DIGITS}+)\\.?(${HEX_DIGITS}*)|\\.(${HEX_DIGITS}+))[pP]([+-]?\\d+)[fFdD]?${JAVA_PADDING}$`,
+);
+const HEX_RADIX_PREFIX = '0x';
+const BITS_PER_HEX_DIGIT = 4;
+const SIGNIFICAND_BITS = 53;
+const MIN_LSB_EXPONENT = -1074;
+const MAX_BINARY_EXPONENT = 1024;
+const EXPONENT_CLAMP = 1 << 24;
+
+function bitLength(value: bigint): number {
+  return value.toString(2).length;
+}
+
+function roundedShiftRight(value: bigint, shift: number): bigint {
+  if (shift > bitLength(value)) return 0n;
+  const quotient = value >> BigInt(shift);
+  const remainder = value - (quotient << BigInt(shift));
+  const half = 1n << BigInt(shift - 1);
+  if (remainder > half || (remainder === half && (quotient & 1n) === 1n)) return quotient + 1n;
+  return quotient;
+}
+
+function hexFloatMagnitude(significand: bigint, binaryExponent: number): number {
+  if (significand === 0n) return 0;
+  const length = bitLength(significand);
+  if (length + binaryExponent > MAX_BINARY_EXPONENT) return Infinity;
+  const lsbExponent = Math.max(length + binaryExponent - SIGNIFICAND_BITS, MIN_LSB_EXPONENT);
+  const shift = lsbExponent - binaryExponent;
+  const rounded = shift > 0 ? roundedShiftRight(significand, shift) : significand << BigInt(-shift);
+  return Number(rounded) * 2 ** lsbExponent;
+}
+
+function hexFloatFromMatch(match: RegExpExecArray): number {
+  const [, sign, wholeDigits, fractionDigits, leadingFractionDigits, exponentText] = match;
+  const fraction = fractionDigits ?? leadingFractionDigits ?? '';
+  const significand = BigInt(`${HEX_RADIX_PREFIX}${wholeDigits ?? ''}${fraction}`);
+  const exponent = Math.max(-EXPONENT_CLAMP, Math.min(EXPONENT_CLAMP, Number(exponentText)));
+  const magnitude = hexFloatMagnitude(significand, exponent - BITS_PER_HEX_DIGIT * fraction.length);
+  return sign === NEGATIVE_SIGN ? -magnitude : magnitude;
+}
+
 export function kotlinDoubleFromText(text: string): number | null {
   const match = DOUBLE_TEXT.exec(text);
-  if (match === null) return null;
+  if (match === null) {
+    const hex = HEX_FLOAT_TEXT.exec(text);
+    return hex === null ? null : hexFloatFromMatch(hex);
+  }
   const literal = match[1] as string;
   return Number(INFINITY_TEXT.test(literal) ? literal : literal.replace(DOUBLE_SUFFIX, ''));
 }
