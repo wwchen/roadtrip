@@ -73,7 +73,7 @@ const hasParent = (record: CampsiteUpsertCandidate): record is ParentRecord =>
 
 const keyOfRef = (ref: DataProviderRef) => providerRefKey(ref.provider, ref.serialize());
 
-const refKeyOf = (record: CampsiteUpsertCandidate) => keyOfRef(record.dataProviderRef);
+export const campsiteNaturalKey = (record: CampsiteUpsertCandidate) => keyOfRef(record.dataProviderRef);
 
 const parentKeyOf = (record: ParentRecord) => keyOfRef(record.parentDataProviderRef);
 
@@ -143,7 +143,7 @@ function campsiteRow({ record, campgroundId }: ResolvedCampsite): PgInsertValue<
 
 async function bulkUpsertCampsiteRows(tx: Executor, rows: readonly ResolvedCampsite[]): Promise<void> {
   const columns = getTableColumns(campsites);
-  const deduped = distinctBy(rows, (row) => refKeyOf(row.record));
+  const deduped = distinctBy(rows, (row) => campsiteNaturalKey(row.record));
   for (const chunk of chunked(deduped, BULK_CHUNK_SIZE)) {
     await tx
       .insert(campsites)

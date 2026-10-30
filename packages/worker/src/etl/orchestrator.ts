@@ -23,6 +23,7 @@ export interface EtlStats {
   transformed: number;
   upserted: number;
   skipped: number;
+  dedupeCollisions: number;
 }
 
 export interface OrchestratorDeps {
@@ -86,6 +87,8 @@ export async function runTarget(target: ImportTarget, deps: OrchestratorDeps): P
   let transformBad = 0;
   let upserted = 0;
   let repoSkipped = 0;
+  let dedupeCollisions = 0;
+  const seenKeys = new Set<string>();
 
   const logRowError = (
     stage: string,
@@ -114,6 +117,9 @@ export async function runTarget(target: ImportTarget, deps: OrchestratorDeps): P
           continue;
         }
         transformOk++;
+        const naturalKey = binding.naturalKeyOf(transformResult.record);
+        if (seenKeys.has(naturalKey)) dedupeCollisions++;
+        else seenKeys.add(naturalKey);
         const counts = await batcher.add(transformResult.record);
         upserted += counts.upserted;
         repoSkipped += counts.skipped;
@@ -131,6 +137,11 @@ export async function runTarget(target: ImportTarget, deps: OrchestratorDeps): P
     log.info(
       `${target.section} '${target.name}' terminal slug=${etl.etlSlug} parseOk=${parseOk} parseBad=${parseBad} transformOk=${transformOk} transformBad=${transformBad} upserted=${upserted} repoSkipped=${repoSkipped}`,
     );
+    if (dedupeCollisions > 0) {
+      log.warn(
+        `${target.section} '${target.name}' terminal slug=${etl.etlSlug} saw ${dedupeCollisions} records whose natural key an earlier record already claimed; the first-wins dedupe and the database's last-wins upsert both depend on iteration order`,
+      );
+    }
     if (skipped > 0) {
       log.warn(
         `${target.section} '${target.name}' terminal slug=${etl.etlSlug} skipped ${skipped} records (parseBad=${parseBad} transformBad=${transformBad} repoSkipped=${repoSkipped})`,
@@ -144,6 +155,7 @@ export async function runTarget(target: ImportTarget, deps: OrchestratorDeps): P
       transformed: transformOk,
       upserted,
       skipped,
+      dedupeCollisions,
     };
   } catch (error) {
     await failImportRun(deps.db, runId, failureNotes(error));

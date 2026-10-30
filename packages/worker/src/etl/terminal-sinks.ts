@@ -4,8 +4,8 @@ import type { CampsiteUpsertCandidate } from '../model/campsite-candidate.js';
 import type { PlanetFitnessLocationUpsertCandidate } from '../model/planet-fitness-candidate.js';
 import type { TeslaSuperchargerUpsertCandidate } from '../model/tesla-candidate.js';
 import { MAX_CATALOG_UPSERT_BATCH_SIZE, type FlushCounts } from '../repo/bulk.js';
-import { upsertCampgroundBatch } from '../repo/campground-repo.js';
-import { upsertCampsiteBatch } from '../repo/campsite-repo.js';
+import { campgroundNaturalKey, upsertCampgroundBatch } from '../repo/campground-repo.js';
+import { campsiteNaturalKey, upsertCampsiteBatch } from '../repo/campsite-repo.js';
 import { upsertPlanetFitnessLocationBatch } from '../repo/planet-fitness-repo.js';
 import { upsertTeslaSuperchargerBatch } from '../repo/tesla-repo.js';
 import type { TerminalSink } from './batch.js';
@@ -29,6 +29,7 @@ export function campgroundBinding<DTO>(
 ): TerminalEtlBinding<DTO, CampgroundUpsertCandidate> {
   return {
     etl,
+    naturalKeyOf: campgroundNaturalKey,
     sink: (db: Db) =>
       terminalSink(async (records) => ({
         upserted: await upsertCampgroundBatch(db, records),
@@ -40,7 +41,11 @@ export function campgroundBinding<DTO>(
 export function campsiteBinding<DTO>(
   etl: SourceEtl<DTO, CampsiteUpsertCandidate>,
 ): TerminalEtlBinding<DTO, CampsiteUpsertCandidate> {
-  return { etl, sink: (db: Db) => terminalSink((records) => upsertCampsiteBatch(db, records)) };
+  return {
+    etl,
+    naturalKeyOf: campsiteNaturalKey,
+    sink: (db: Db) => terminalSink((records) => upsertCampsiteBatch(db, records)),
+  };
 }
 
 export function teslaSuperchargerBinding<DTO>(
@@ -48,6 +53,7 @@ export function teslaSuperchargerBinding<DTO>(
 ): TerminalEtlBinding<DTO, TeslaSuperchargerUpsertCandidate> {
   return {
     etl,
+    naturalKeyOf: (record) => record.locationSlug,
     sink: (db: Db) =>
       terminalSink(async (records) => ({
         upserted: await upsertTeslaSuperchargerBatch(db, records),
@@ -61,6 +67,7 @@ export function planetFitnessBinding<DTO>(
 ): TerminalEtlBinding<DTO, PlanetFitnessLocationUpsertCandidate> {
   return {
     etl,
+    naturalKeyOf: (record) => record.locationId,
     sink: (db: Db) =>
       terminalSink(async (records) => ({
         upserted: await upsertPlanetFitnessLocationBatch(db, records),

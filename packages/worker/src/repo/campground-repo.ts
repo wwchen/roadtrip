@@ -74,7 +74,7 @@ interface CampgroundPoiRow {
   latitude: number;
 }
 
-const refKeyOf = (record: CampgroundUpsertCandidate) =>
+export const campgroundNaturalKey = (record: CampgroundUpsertCandidate) =>
   providerRefKey(record.dataProviderRef.provider, record.dataProviderRef.serialize());
 
 function campgroundRow(record: CampgroundUpsertCandidate): PgInsertValue<typeof campgrounds> {
@@ -121,7 +121,7 @@ async function bulkUpsertCampgroundRows(
 ): Promise<Map<string, bigint>> {
   const idByProviderRef = new Map<string, bigint>();
   const columns = getTableColumns(campgrounds);
-  for (const chunk of chunked(distinctBy(records, refKeyOf), BULK_CHUNK_SIZE)) {
+  for (const chunk of chunked(distinctBy(records, campgroundNaturalKey), BULK_CHUNK_SIZE)) {
     const returned = await tx
       .insert(campgrounds)
       .values(chunk.map(campgroundRow))
@@ -193,7 +193,7 @@ function requireCampgroundId(
   idByProviderRef: ReadonlyMap<string, bigint>,
   record: CampgroundUpsertCandidate,
 ): bigint {
-  const id = idByProviderRef.get(refKeyOf(record));
+  const id = idByProviderRef.get(campgroundNaturalKey(record));
   if (id === undefined) {
     throw new Error(
       `campground upsert returned no id for provider=${record.dataProviderRef.provider} ref=${record.dataProviderRef.serialize()}`,

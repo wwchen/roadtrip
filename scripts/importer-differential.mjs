@@ -477,6 +477,59 @@ async function runProcess(command, args, label) {
   if (code !== CLEAN_EXIT_CODE) throw new Error(`${label} exited ${code}`);
 }
 
+async function runProcessTeeingStdout(command, args, label) {
+  const chunks = [];
+  const code = await new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd: REPO_ROOT, stdio: ['inherit', 'pipe', 'inherit'] });
+    child.stdout.on('data', (chunk) => {
+      chunks.push(chunk);
+      process.stdout.write(chunk);
+    });
+    child.on('error', reject);
+    child.on('close', resolve);
+  });
+  if (code !== CLEAN_EXIT_CODE) throw new Error(`${label} exited ${code}`);
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+// The TypeScript importer prints one JSON stats line per target. A count of
+// natural-key collisions is read from it, and a line without the count is a
+// refusal rather than a zero: an importer built before the counter existed
+// would otherwise read as "no collisions".
+export function parseImporterStats(stdout) {
+  const stats = [];
+  for (const line of stdout.split('\n')) {
+    if (!line.startsWith('{')) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (typeof parsed !== 'object' || parsed === null || typeof parsed.etlSlug !== 'string') continue;
+    if (!Number.isInteger(parsed.dedupeCollisions) || parsed.dedupeCollisions < 0) {
+      throw new Error(
+        `the typescript importer's stats line for '${parsed.name}' carries no dedupeCollisions count, so a run could not tell a collision from none`,
+      );
+    }
+    stats.push({ name: parsed.name, etlSlug: parsed.etlSlug, dedupeCollisions: parsed.dedupeCollisions });
+  }
+  return stats;
+}
+
+// One entry per selected target per pass, in target order. A selected target
+// the importer printed nothing for is refused for the same reason a missing
+// count is.
+export function collisionsFrom(stats, targetNames, pass) {
+  return targetNames.map((name) => {
+    const found = (stats ?? []).find((entry) => entry.name === name);
+    if (found === undefined) {
+      throw new Error(`the typescript importer (pass ${pass}) printed no stats for '${name}', so its collisions are unknown`);
+    }
+    return { name, etlSlug: found.etlSlug, pass, count: found.dedupeCollisions };
+  });
+}
+
 // Gradle re-splits --args on whitespace, honouring double quotes, so a target
 // name like "Planet Fitness" has to arrive quoted or it reaches the CLI as two
 // arguments.
@@ -506,7 +559,7 @@ async function runKotlinImport({ jdbcUrl, user, password, rawDir, staticDir, tar
 }
 
 async function runTypescriptImport({ databaseUrl, rawDir, staticDir, registryPath, targets, pass }) {
-  await runProcess(
+  const stdout = await runProcessTeeingStdout(
     NODE_EXECUTABLE,
     [
       path.join(REPO_ROOT, WORKER_ENTRY),
@@ -522,6 +575,7 @@ async function runTypescriptImport({ databaseUrl, rawDir, staticDir, registryPat
     ],
     `the TypeScript importer (pass ${pass})`,
   );
+  return parseImporterStats(stdout);
 }
 
 const DEFAULT_IMPORTERS = { kotlin: runKotlinImport, typescript: runTypescriptImport };
@@ -984,6 +1038,7 @@ export async function runDifferential({
       }
 
       let completed = 0;
+      const collisions = [];
       for (const [segment, segmentPasses] of segments.entries()) {
         if (segment > 0) await blankBothSides([kotlinDb, typescriptDb]);
         if (restoring) {
@@ -1005,7 +1060,7 @@ export async function runDifferential({
         // The TypeScript CLI has no --passes and node's startup is milliseconds,
         // so this side simply runs again.
         for (let pass = completed + 1; pass <= completed + segmentPasses; pass += 1) {
-          await importers.typescript({
+          const stats = await importers.typescript({
             databaseUrl: postgres.connectionString(TYPESCRIPT_DB),
             rawDir,
             staticDir,
@@ -1014,6 +1069,7 @@ export async function runDifferential({
             passes: 1,
             pass,
           });
+          collisions.push(...collisionsFrom(stats, targetNames, pass));
         }
         completed += segmentPasses;
       }
@@ -1032,11 +1088,11 @@ export async function runDifferential({
       assertBothSidesWrote(counts, selected);
       const result = await diffDatabases(typescriptDb, { maxDifferences, counts });
 
-      if (emitSeed !== undefined && result.differences.length === 0) {
+      if (emitSeed !== undefined && result.differences.length === 0 && collisions.every((entry) => entry.count === 0)) {
         await dumpSeed(postgres, user, TYPESCRIPT_DB, emitSeed, await copiedTableCounts(typescriptDb));
         await writeFile(`${emitSeed}${PROVENANCE_SUFFIX}`, JSON.stringify(wanted, undefined, PROVENANCE_INDENT));
       }
-      return result;
+      return { ...result, collisions };
     } finally {
       await typescriptDb.$client.end();
       await kotlinDb.$client.end();
@@ -1046,11 +1102,23 @@ export async function runDifferential({
 
 // --- the CLI ---------------------------------------------------------------
 
-function report({ differences, counts }) {
+export function report({ differences, counts, collisions }) {
   for (const [key, value] of Object.entries(counts)) console.log(`${key}: ${value} row(s)`);
+  for (const entry of collisions) {
+    console.log(`natural-key collisions, ${entry.name} (pass ${entry.pass}): ${entry.count}`);
+  }
+  const colliding = collisions.filter((entry) => entry.count > 0);
+  if (colliding.length > 0) {
+    console.error(
+      `\n${colliding.length} target pass(es) saw records repeating an earlier record's natural key: ` +
+        colliding.map((entry) => `${entry.name} (pass ${entry.pass}, ${entry.count})`).join(', ') +
+        '. First-wins dedupe and the database upsert then depend on iteration order, and the two importers ' +
+        'iterate integer-keyed objects in different orders, so a clean diff no longer proves the same winner was chosen.',
+    );
+  }
   if (differences.length === 0) {
     console.log('0 differences across every diffed table');
-    return CLEAN_EXIT_CODE;
+    return colliding.length === 0 ? CLEAN_EXIT_CODE : DIVERGED_EXIT_CODE;
   }
   console.error(`\n${differences.length} difference(s):`);
   for (const difference of differences) {

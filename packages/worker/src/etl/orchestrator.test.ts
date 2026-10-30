@@ -165,7 +165,7 @@ function harness(
 }
 
 function bindingOf<DTO, OUT>(etl: SourceEtl<DTO, OUT>, sink: TerminalSink<OUT>): TerminalEtlBinding<DTO, OUT> {
-  return { etl, sink: () => sink };
+  return { etl, sink: () => sink, naturalKeyOf: (record) => String(record) };
 }
 
 function run<OUT>(script: Script, sink: TerminalSink<number> = recordingSink<number>()): Promise<EtlStats> {
@@ -252,6 +252,31 @@ describe('runTarget', () => {
     const h = harness(slug, bindingOf(fanOutEtl(slug, [2, 0, 1]), sink));
     const stats = await runTarget(h.target, h.deps);
     expect(stats).toMatchObject({ parsed: 3, transformed: 3, upserted: 3, skipped: 0 });
+  });
+
+  test('records with distinct natural keys report no dedupe collision and log no warning', async () => {
+    const slug = nextSlug();
+    const h = harness(slug, bindingOf(fakeEtl(slug, { ok: 5 }), recordingSink<number>()));
+    const stats = await runTarget(h.target, h.deps);
+    expect(stats.dedupeCollisions).toBe(0);
+    expect(h.warnings.filter((line) => line.includes('natural key'))).toEqual([]);
+  });
+
+  test('a record repeating an earlier natural key is counted, and warned about once per run', async () => {
+    const slug = nextSlug();
+    const h = harness(slug, bindingOf(fanOutEtl(slug, [2, 0, 1]), recordingSink<number>()));
+    const stats = await runTarget(h.target, h.deps);
+    expect(stats).toMatchObject({ transformed: 3, dedupeCollisions: 1 });
+    expect(h.warnings.filter((line) => line.includes('saw 1 records whose natural key'))).toHaveLength(1);
+  });
+
+  test('a repeat is counted across batch boundaries, where the repo dedupe cannot see it', async () => {
+    const slug = nextSlug();
+    const sink = recordingSink<number>({ batchSize: 1 });
+    const h = harness(slug, bindingOf(fanOutEtl(slug, [3, 3]), sink));
+    const stats = await runTarget(h.target, h.deps);
+    expect(sink.written).toEqual([1, 1, 1, 1, 1, 1]);
+    expect(stats.dedupeCollisions).toBe(3);
   });
 
   test('an empty parse completes a run with zero counts and never calls the sink', async () => {

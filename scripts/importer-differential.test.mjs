@@ -22,12 +22,15 @@ import {
 } from './importer-diff-columns.mjs';
 import {
   assertCurrentBuild,
+  collisionsFrom,
   copiedTableCounts,
   createReferenceSchema,
   diffDatabases,
   dumpSeed,
+  parseImporterStats,
   passPlan,
   positiveInteger,
+  report,
   runDifferential,
   SEED_DUMP_FLAGS,
   staleBuilds,
@@ -153,6 +156,43 @@ test('every diffed table names every one of its columns as compared or ignored',
   }
 });
 
+const statsLine = (fields) => JSON.stringify({ name: 'Row', etlSlug: 'row-slug', runId: '1', ...fields });
+
+test('the TypeScript importer is read for natural-key collisions and refused when it does not say', () => {
+  assert.deepEqual(
+    parseImporterStats(`log line\n${statsLine({ dedupeCollisions: 0 })}\n${statsLine({ name: 'Two', dedupeCollisions: 7 })}\n`),
+    [
+      { name: 'Row', etlSlug: 'row-slug', dedupeCollisions: 0 },
+      { name: 'Two', etlSlug: 'row-slug', dedupeCollisions: 7 },
+    ],
+  );
+  for (const missing of [{}, { dedupeCollisions: null }, { dedupeCollisions: -1 }, { dedupeCollisions: 1.5 }, { dedupeCollisions: '0' }]) {
+    assert.throws(() => parseImporterStats(statsLine(missing)), /carries no dedupeCollisions count/, JSON.stringify(missing));
+  }
+  assert.throws(() => collisionsFrom([], ['Row'], 1), /printed no stats for 'Row'/);
+  assert.throws(() => collisionsFrom(undefined, ['Row'], 1), /printed no stats for 'Row'/);
+  assert.deepEqual(collisionsFrom(statsFor(['A', 'B']), ['B'], 2), [{ name: 'B', etlSlug: 'B-slug', pass: 2, count: 0 }]);
+});
+
+test('a run that saw a natural-key collision fails even when every table diffs clean', () => {
+  const log = [];
+  const err = [];
+  const { log: realLog, error: realError } = console;
+  console.log = (line) => log.push(line);
+  console.error = (line) => err.push(line);
+  try {
+    const clean = { differences: [], counts: { 'typescript.campgrounds': 1 } };
+    assert.equal(report({ ...clean, collisions: [{ name: 'Row', etlSlug: 'row-slug', pass: 1, count: 0 }] }), 0);
+    assert.equal(report({ ...clean, collisions: [{ name: 'Row', etlSlug: 'row-slug', pass: 1, count: 3 }] }), 1);
+  } finally {
+    console.log = realLog;
+    console.error = realError;
+  }
+  assert.ok(log.includes('natural-key collisions, Row (pass 1): 0'));
+  assert.ok(log.includes('natural-key collisions, Row (pass 1): 3'));
+  assert.match(err.join('\n'), /Row \(pass 1, 3\)/);
+});
+
 test('the pass plan performs exactly the pass count it records', () => {
   // The left column is what provenance stores; a plan that recorded more
   // passes than it ran would later authorise reusing a dump the run never
@@ -205,6 +245,14 @@ async function writeRows(databaseUrl, statements) {
     await side.$client.end();
   }
 }
+
+const statsFor = (targets, dedupeCollisions = 0) =>
+  targets.map((name) => ({ name, etlSlug: `${name}-slug`, dedupeCollisions }));
+
+const reporting = (write, dedupeCollisions = 0) => async (args) => {
+  await write(args);
+  return statsFor(args.targets, dedupeCollisions);
+};
 
 const writeNothing = async () => {};
 
@@ -604,7 +652,7 @@ test(
                 rawDir: path.join(root, 'data/raw'),
                 staticDir: root,
                 targets: [PLANET_FITNESS_TARGET],
-                importers: { kotlin: writeGym, typescript: writeNothing },
+                importers: { kotlin: writeGym, typescript: reporting(writeNothing) },
               }),
               /the typescript importer wrote zero rows to planet_fitness_locations/,
             );
@@ -623,7 +671,7 @@ test(
                 rawDir: path.join(root, 'data/raw'),
                 staticDir: root,
                 targets: [PLANET_FITNESS_TARGET],
-                importers: { kotlin: writeGym, typescript: writeCampground },
+                importers: { kotlin: writeGym, typescript: reporting(writeCampground) },
               }),
               /the typescript importer wrote zero rows to planet_fitness_locations/,
             );

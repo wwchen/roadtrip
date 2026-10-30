@@ -27,6 +27,8 @@ import kotlinx.serialization.json.JsonObject;
 import kotlinx.serialization.json.JsonPrimitive;
 import com.charleskorn.kaml.Yaml;
 import com.charleskorn.kaml.YamlNode;
+import ca.floo.roadtrip.model.domain.AmenityKey;
+import ca.floo.roadtrip.model.domain.CampgroundAmenity;
 import ca.floo.roadtrip.model.metadata.Envelope;
 import ca.floo.roadtrip.model.metadata.ParseResult;
 import ca.floo.roadtrip.model.metadata.RequestMeta;
@@ -46,6 +48,7 @@ public class Oracle {
         return Unit.INSTANCE;
     });
     static final int MAX_DEPTH = 24;
+    static final String DEFAULTS_PROBE_KEY = "\"present\":true";
     static final String KOTLIN_LOGS_ENV = "ETL_ORACLE_KOTLIN_LOGS";
     static final String ETL_KIND = "etl";
     static final String CALL_KIND = "call";
@@ -300,9 +303,18 @@ public class Oracle {
         }
     }
 
+    static void requireDefaultsEncoded() throws Exception {
+        String probe = render(new CampgroundAmenity(AmenityKey.TOILETS, true, null), 0);
+        if (!probe.contains(DEFAULTS_PROBE_KEY)) {
+            throw new IllegalStateException(
+                "the serializer rendering dropped a non-null default (" + probe + "): the oracle would hide state the TypeScript record carries");
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         PrintStream protocol = System.out;
         System.setOut(System.getenv(KOTLIN_LOGS_ENV) == null ? new PrintStream(OutputStream.nullOutputStream()) : System.err);
+        requireDefaultsEncoded();
         registry = PoiRegistry.Companion.load(new File(args[1]));
         for (String line : Files.readAllLines(Paths.get(args[0]))) {
             if (line.isBlank()) continue;
