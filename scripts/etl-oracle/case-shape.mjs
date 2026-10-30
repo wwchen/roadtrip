@@ -1,3 +1,5 @@
+import { instanceFingerprint } from './registry-seam.mjs';
+
 export function agencyDescriptor(agency) {
   if (agency === undefined || agency === null) return null;
   return agency.kind === 'constant' ? { kind: 'constant', value: agency.value } : { kind: 'derived', field: agency.field };
@@ -8,6 +10,7 @@ export function caseOf(name, etl, inputs) {
     kind: 'etl',
     adapter: name,
     slug: etl.etlSlug,
+    instance: instanceFingerprint(etl),
     registry: { subcategory: null, agency: null, args: {} },
     inputs,
   };

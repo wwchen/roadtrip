@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { canonical, compareCallCase, compareEtlCase, floorProblems, strip, summarise } from './etl-oracle/compare.mjs';
-import { etlEntryFor, registryWithOverride, requireEtlEntry, seamProblems } from './etl-oracle/registry-seam.mjs';
+import { etlEntryFor, instanceFingerprint, registryWithOverride, requireEtlEntry, seamProblems } from './etl-oracle/registry-seam.mjs';
 
 const okTs = (results) => ({ tsParse: 'ok', tsParseBad: [], tsTransformRan: true, tsTransform: 'ok', tsResults: results });
 const okKotlin = (results) => ({ parse: 'ok', parseBad: [], transform: 'ok', results });
@@ -139,7 +139,21 @@ const seamRegistry = () => ({
       category: 'campground',
       subcategory: 'state',
       agency: { kind: 'constant', value: 'WA State Parks' },
-      etls: [{ slug: 'aspira-wa-campgrounds', adapter: 'AspiraCampgroundsEtl', inputs: [], args: { tenant: 'wa', host: 'washington.goingtocamp.com' } }],
+      etls: [
+        {
+          slug: 'aspira-wa-campgrounds',
+          adapter: 'AspiraCampgroundsEtl',
+          inputs: ['uscampgrounds', 'apca-places'],
+          args: { tenant: 'wa', host: 'washington.goingtocamp.com' },
+          geometry: {
+            sources: [
+              { input: 'uscampgrounds', format: 'uscampgrounds_csv', state: 'WA' },
+              { input: 'apca-places', format: 'arcgis_centroids' },
+            ],
+            match: { fuzzyThreshold: 0.5, parentFallback: true },
+          },
+        },
+      ],
     },
     {
       name: 'Rec.gov Campgrounds',
@@ -156,8 +170,35 @@ const seamRegistry = () => ({
   bookingProviders: [],
 });
 
-const seamCase = (fields) => ({ adapter: 'recgov-campgrounds', slug: 'recgov-campgrounds', registry: { subcategory: null, agency: null, args: {} }, ...fields });
+class RecGovCampgroundsEtl {
+  constructor(slug) {
+    this.etlSlug = slug;
+  }
+}
+
+class AspiraCampgroundsEtl {
+  constructor(slug, tenant, geometry) {
+    this.etlSlug = slug;
+    this.aspiraTenant = tenant;
+    this.geometry = geometry;
+  }
+}
+
+const seamRegistryAdapters = {
+  RecGovCampgroundsEtl: (entry) => ({ etl: new RecGovCampgroundsEtl(entry.slug) }),
+  AspiraCampgroundsEtl: (entry) => ({ etl: new AspiraCampgroundsEtl(entry.slug, entry.args.tenant, entry.geometry) }),
+};
+
+const seamCase = (fields) => ({
+  adapter: 'recgov-campgrounds',
+  slug: 'recgov-campgrounds',
+  registry: { subcategory: null, agency: null, args: {} },
+  instance: instanceFingerprint(new RecGovCampgroundsEtl('recgov-campgrounds')),
+  ...fields,
+});
 const seamAdapters = { 'recgov-campgrounds': { export: 'RecGovCampgroundsEtl' }, 'aspira-wa-campgrounds': { export: 'AspiraCampgroundsEtl' } };
+const problemsFor = (cases, registry = seamRegistry(), adapters = seamAdapters) =>
+  seamProblems(cases, registry, adapters, seamRegistryAdapters);
 
 test('the etl entry is found by slug in either section, and nowhere else', () => {
   const registry = seamRegistry();
@@ -199,34 +240,88 @@ test('a slug no poi_data row owns keeps the registry, and refuses an override it
 });
 
 test('the seam check passes a case whose slug, adapter name and read args all match the registry', () => {
-  assert.deepEqual(seamProblems([seamCase({})], seamRegistry(), seamAdapters), []);
-  const aspira = seamCase({ adapter: 'aspira-wa-campgrounds', slug: 'aspira-wa-campgrounds', registry: { subcategory: null, agency: null, args: { tenant: 'wa' } } });
-  assert.deepEqual(seamProblems([aspira], seamRegistry(), seamAdapters), []);
+  assert.deepEqual(problemsFor([seamCase({})]), []);
+  const aspiraEntry = etlEntryFor(seamRegistry(), 'aspira-wa-campgrounds');
+  const aspira = seamCase({
+    adapter: 'aspira-wa-campgrounds',
+    slug: 'aspira-wa-campgrounds',
+    registry: { subcategory: null, agency: null, args: { tenant: 'wa' } },
+    instance: instanceFingerprint(new AspiraCampgroundsEtl('aspira-wa-campgrounds', 'wa', aspiraEntry.geometry)),
+  });
+  assert.deepEqual(problemsFor([aspira]), []);
 });
 
 test('the seam check reports a slug the registry does not declare', () => {
-  const problems = seamProblems([seamCase({ slug: 'gone' })], seamRegistry(), seamAdapters);
+  const problems = problemsFor([seamCase({ slug: 'gone' })]);
   assert.equal(problems.length, 1);
   assert.match(problems[0], /no etl with slug 'gone'/);
 });
 
 test('the seam check reports an adapters.json export the registry row does not name', () => {
   const adapters = { 'recgov-campgrounds': { export: 'RecGovCampsitesEtl' } };
-  const problems = seamProblems([seamCase({})], seamRegistry(), adapters);
+  const problems = problemsFor([seamCase({})], seamRegistry(), adapters);
   assert.equal(problems.length, 1);
   assert.match(problems[0], /exports 'RecGovCampsitesEtl' but registry etl 'recgov-campgrounds' names adapter 'RecGovCampgroundsEtl'/);
 });
 
 test('the seam check reports an arg the unit test read with a value the registry does not declare', () => {
-  const wrong = seamCase({ adapter: 'aspira-wa-campgrounds', slug: 'aspira-wa-campgrounds', registry: { subcategory: null, agency: null, args: { tenant: 'bc' } } });
-  const problems = seamProblems([wrong], seamRegistry(), seamAdapters);
+  const wrongEntry = etlEntryFor(seamRegistry(), 'aspira-wa-campgrounds');
+  const wrong = seamCase({
+    adapter: 'aspira-wa-campgrounds',
+    slug: 'aspira-wa-campgrounds',
+    registry: { subcategory: null, agency: null, args: { tenant: 'bc' } },
+    instance: instanceFingerprint(new AspiraCampgroundsEtl('aspira-wa-campgrounds', 'wa', wrongEntry.geometry)),
+  });
+  const problems = problemsFor([wrong]);
   assert.equal(problems.length, 1);
   assert.match(problems[0], /args\.tenant='bc'.*registry declares 'wa'/);
   const absent = seamCase({ registry: { subcategory: null, agency: null, args: { host: 'x' } } });
-  assert.equal(seamProblems([absent], seamRegistry(), seamAdapters).length, 1);
+  assert.equal(problemsFor([absent]).length, 1);
 });
 
 test('the same seam problem found in many cases is reported once', () => {
   const broken = Array.from({ length: 5 }, () => seamCase({ slug: 'gone' }));
-  assert.equal(seamProblems(broken, seamRegistry(), seamAdapters).length, 1);
+  assert.equal(problemsFor(broken).length, 1);
+});
+
+test('the seam check refuses a case whose instance differs from what the registry row builds', () => {
+  const stale = seamCase({ instance: instanceFingerprint(new RecGovCampgroundsEtl('something-else')) });
+  const problems = problemsFor([stale]);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /the unit test ran .*something-else.*but the registry row 'recgov-campgrounds' builds/);
+});
+
+test('the instance check catches constructor data the slug and args checks cannot see', () => {
+  const entry = etlEntryFor(seamRegistry(), 'aspira-wa-campgrounds');
+  const synthetic = { ...entry.geometry, sources: entry.geometry.sources.slice(0, 1), match: { fuzzyThreshold: 0.9, parentFallback: false } };
+  const built = seamCase({
+    adapter: 'aspira-wa-campgrounds',
+    slug: 'aspira-wa-campgrounds',
+    registry: { subcategory: null, agency: null, args: {} },
+    instance: instanceFingerprint(new AspiraCampgroundsEtl('aspira-wa-campgrounds', 'wa', synthetic)),
+  });
+  const problems = problemsFor([built]);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /not comparable with a replay of that row/);
+});
+
+test('the instance check reports an adapter the TypeScript registry does not have', () => {
+  const problems = seamProblems([seamCase({})], seamRegistry(), seamAdapters, {});
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /no adapter named 'RecGovCampgroundsEtl' in the TypeScript adapterRegistry/);
+});
+
+test('the fingerprint is key-order independent, and separates bigint from its decimal spelling', () => {
+  const left = { b: 2, a: { d: 4n, c: 3 } };
+  const right = { a: { c: 3, d: 4n }, b: 2 };
+  assert.equal(instanceFingerprint({ constructor: { name: 'X' }, ...left }), instanceFingerprint({ constructor: { name: 'X' }, ...right }));
+  assert.notEqual(
+    instanceFingerprint({ constructor: { name: 'X' }, v: 4n }),
+    instanceFingerprint({ constructor: { name: 'X' }, v: '4' }),
+  );
+});
+
+test('the fingerprint ignores methods, so a class gaining one does not invalidate every case', () => {
+  const plain = { constructor: { name: 'X' }, etlSlug: 's' };
+  assert.equal(instanceFingerprint(plain), instanceFingerprint({ ...plain, helper: () => 1 }));
 });

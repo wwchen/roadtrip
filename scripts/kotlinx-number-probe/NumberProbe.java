@@ -15,6 +15,8 @@ public class NumberProbe {
     private static final String IGNORE_CASE_MODE = "ignorecase";
     private static final String CASE_MODE = "case";
     private static final String CASE_STRING_MODE = "casestrings";
+    private static final String SIGMA_MODE = "sigma";
+    private static final String CAPITAL_SIGMA = "\u03a3";
     private static final int CODE_UNITS = 0x10000;
     private static final String FIELD_SEPARATOR = "\t";
     private static final int[] POW_EXPONENTS = exponents();
@@ -60,15 +62,24 @@ public class NumberProbe {
     }
 
     private static void caseMapping(StringBuilder out) {
-        for (int unit = 0; unit < CODE_UNITS; unit++) {
-            String candidate = String.valueOf((char) unit);
-            out.append(unit).append(FIELD_SEPARATOR).append(codesOf(candidate.toLowerCase(Locale.ROOT)))
+        for (int codePoint = 0; codePoint <= Character.MAX_CODE_POINT; codePoint++) {
+            String candidate = codePoint < CODE_UNITS
+                ? String.valueOf((char) codePoint)
+                : new String(Character.toChars(codePoint));
+            out.append(codePoint).append(FIELD_SEPARATOR).append(codesOf(candidate.toLowerCase(Locale.ROOT)))
                 .append(FIELD_SEPARATOR).append(codesOf(candidate.toUpperCase(Locale.ROOT))).append('\n');
         }
     }
 
     private static String caseString(String literal) {
         return literal + FIELD_SEPARATOR + codesOf(literal.toLowerCase(Locale.ROOT)) + FIELD_SEPARATOR + codesOf(literal.toUpperCase(Locale.ROOT));
+    }
+
+    private static void sigmaContexts(StringBuilder out) {
+        for (int unit = 0; unit < CODE_UNITS; unit++) {
+            String context = CAPITAL_SIGMA + (char) unit + CAPITAL_SIGMA;
+            out.append(unit).append(FIELD_SEPARATOR).append(codesOf(context.toLowerCase(Locale.ROOT))).append('\n');
+        }
     }
 
     private static String rint(String literal) {
@@ -101,6 +112,8 @@ public class NumberProbe {
             ignoreCase(out);
         } else if (CASE_MODE.equals(args[0])) {
             caseMapping(out);
+        } else if (SIGMA_MODE.equals(args[0])) {
+            sigmaContexts(out);
         } else if (CASE_STRING_MODE.equals(args[0])) {
             for (String literal : Files.readAllLines(Paths.get(args[1]))) out.append(caseString(literal)).append('\n');
         } else {

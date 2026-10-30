@@ -144,3 +144,59 @@ describe('the leaves walk, pass two over parent mapLinks', () => {
     expect(walked.map((leaf) => leaf.parentName)).toEqual([null]);
   });
 });
+
+describe('the two numeric readers the walk uses, which Kotlin picks per field', () => {
+  test.each([
+    ['1e1', 0],
+    ['+7', 1],
+    [' 7 ', 0],
+    ['7', 1],
+  ])(
+    'transactionLocationId %j is read by the stdlib parser, so it yields %i leaf/leaves',
+    (spelling, emitted) => {
+      const walked = leaves(
+        `[{"mapId":1,"transactionLocationId":${JSON.stringify(spelling)},"localizedValues":[${EN_US}]}]`,
+      );
+      expect(walked).toHaveLength(emitted);
+    },
+  );
+
+  test.each([
+    ['1e1', 10n],
+    [' 7 ', 7n],
+    ['7', 7n],
+  ])('mapId %j is read by the kotlinx lexer, so it keys as %s', (spelling, expected) => {
+    const walked = leaves(
+      `[{"mapId":${JSON.stringify(spelling)},"transactionLocationId":7,"localizedValues":[${EN_US}]}]`,
+    );
+    expect(walked.map((leaf) => leaf.mapId)).toEqual([expected]);
+  });
+
+  test('mapId "+7" is refused, because the lexer takes padding and exponents but not a sign', () => {
+    expect(() => leaves(`[{"mapId":"+7","transactionLocationId":7,"localizedValues":[${EN_US}]}]`)).toThrow(
+      'is not a Long',
+    );
+  });
+
+  test('resourceLocationId and childMapId follow transactionLocationId, not mapId', () => {
+    const lenient = leaves(
+      `[{"mapId":1,"transactionLocationId":7,"resourceLocationId":"1e1","localizedValues":[${EN_US}]}]`,
+    );
+    expect(lenient.map((leaf) => leaf.resourceLocationId)).toEqual([null]);
+    const signed = leaves(
+      `[{"mapId":1,"transactionLocationId":7,"resourceLocationId":"+9","localizedValues":[${EN_US}]}]`,
+    );
+    expect(signed.map((leaf) => leaf.resourceLocationId)).toEqual([9n]);
+
+    const exponentChild = leaves(
+      '[{"mapId":1,"localizedValues":[{"cultureName":"en-US","title":"Parent"}],"mapLinks":' +
+        '[{"childMapId":"1e1","transactionLocationId":7,"localizations":[{"cultureName":"en-US","title":"Child"}]}]}]',
+    );
+    expect(exponentChild).toEqual([]);
+    const signedChild = leaves(
+      '[{"mapId":1,"localizedValues":[{"cultureName":"en-US","title":"Parent"}],"mapLinks":' +
+        '[{"childMapId":"+9","transactionLocationId":7,"localizations":[{"cultureName":"en-US","title":"Child"}]}]}]',
+    );
+    expect(signedChild.map((leaf) => leaf.mapId)).toEqual([9n]);
+  });
+});

@@ -202,69 +202,165 @@ const CASE_STRING_LITERALS = [
   '\u03a3', '\u03a3\u03a3', '\u03a3\u039f\u03a3', '\u03a3\u039f\u03a3 \u03a3\u039f\u03a3', '\u03a3\u039f\u03a3.',
   '\u03c3\u03bf\u03c2', '\u0391\u03a3', '\u0391\u03a3\u0391', "O\u03a3'", '\u03a3-\u03a3', '\u03a31',
   '\u00df', '\u00dfx', '\u0130', '\u0131', '\u017f', '\ufb00', '\u01f1', '\u01f2', '\u01f3',
-  'State Park', 'STATE PARK', 'wa', 'WA', ' wa ', '\u0130STANBUL', 'i\u0307',
+  'State Park', 'STATE PARK', 'wa', 'WA', ' wa ', '\u0130STANBUL', 'i\u0307', '\u{1df95}',
 ];
 
 const ASCII_ALPHANUMERIC = /[a-zA-Z0-9]/;
+const SIGMA = '\u03a3';
+const NON_NORMALIZED = /[^a-z0-9 ]/g;
+const SPACE = ' ';
+const ASCII_REACHING = 'ascii';
+const NON_ASCII = 'non-ascii';
 
-const JAVA_CASE_DIVERGENCES = new Set([
-  'uppercase unit U+0277',
-  'uppercase unit U+027c',
-  'uppercase unit U+ab4b',
-  'uppercase unit U+ab4c',
-  'lowercase unit U+a7dd',
-  'lowercase unit U+a7e2',
-  'lowercase unit U+ab6c',
-  'lowercase unit U+ab6d',
-  'lowercase string "\u03a3-\u03a3"',
+const JAVA_CASE_DIVERGENCES = new Map([
+  ['uppercase codePoint U+0277', 'non-ascii'],
+  ['uppercase codePoint U+027c', 'non-ascii'],
+  ['lowercase codePoint U+a7dd', 'non-ascii'],
+  ['lowercase codePoint U+a7e2', 'non-ascii'],
+  ['uppercase codePoint U+ab4b', 'non-ascii'],
+  ['uppercase codePoint U+ab4c', 'non-ascii'],
+  ['lowercase codePoint U+ab6c', 'non-ascii'],
+  ['lowercase codePoint U+ab6d', 'non-ascii'],
+  ['lowercase codePoint U+1df40', 'non-ascii'],
+  ['uppercase codePoint U+1df41', 'non-ascii'],
+  ['lowercase codePoint U+1df48', 'non-ascii'],
+  ['uppercase codePoint U+1df49', 'non-ascii'],
+  ['lowercase codePoint U+1df4a', 'non-ascii'],
+  ['uppercase codePoint U+1df4b', 'non-ascii'],
+  ['lowercase codePoint U+1df4d', 'non-ascii'],
+  ['uppercase codePoint U+1df4e', 'non-ascii'],
+  ['lowercase codePoint U+1df51', 'non-ascii'],
+  ['uppercase codePoint U+1df52', 'non-ascii'],
+  ['lowercase codePoint U+1df68', 'non-ascii'],
+  ['uppercase codePoint U+1df69', 'non-ascii'],
+  ['lowercase codePoint U+1df6a', 'non-ascii'],
+  ['uppercase codePoint U+1df6b', 'non-ascii'],
+  ['lowercase codePoint U+1df6c', 'non-ascii'],
+  ['uppercase codePoint U+1df6d', 'non-ascii'],
+  ['lowercase codePoint U+1df6e', 'non-ascii'],
+  ['uppercase codePoint U+1df6f', 'non-ascii'],
+  ['lowercase codePoint U+1df72', 'non-ascii'],
+  ['uppercase codePoint U+1df73', 'non-ascii'],
+  ['lowercase codePoint U+1df74', 'non-ascii'],
+  ['uppercase codePoint U+1df75', 'non-ascii'],
+  ['lowercase codePoint U+1df76', 'non-ascii'],
+  ['uppercase codePoint U+1df77', 'non-ascii'],
+  ['lowercase codePoint U+1df78', 'non-ascii'],
+  ['uppercase codePoint U+1df79', 'non-ascii'],
+  ['lowercase codePoint U+1df7a', 'non-ascii'],
+  ['uppercase codePoint U+1df7b', 'non-ascii'],
+  ['lowercase codePoint U+1df7c', 'non-ascii'],
+  ['uppercase codePoint U+1df7d', 'non-ascii'],
+  ['lowercase codePoint U+1df7e', 'non-ascii'],
+  ['uppercase codePoint U+1df7f', 'non-ascii'],
+  ['uppercase codePoint U+1df95', 'ascii'],
+  ['uppercase string "\u{1df95}"', ASCII_REACHING],
+  ['lowercase string "\u03a3-\u03a3"', NON_ASCII],
 ]);
 
 function unitCodesOf(text) {
   return Array.from({ length: text.length }, (_, index) => text.charCodeAt(index)).join(',');
 }
 
-function reachesAscii(...codeLists) {
-  return codeLists.some((codes) =>
-    codes.split(',').some((code) => ASCII_ALPHANUMERIC.test(String.fromCharCode(Number(code)))),
-  );
+function textOfCodes(codes) {
+  return codes
+    .split(',')
+    .map((code) => String.fromCharCode(Number(code)))
+    .join('');
 }
 
-function caseProblem(key, javaCodes, portCodes, allowed) {
+function asciiAlnumOf(text) {
+  return [...text]
+    .filter((character) => ASCII_ALPHANUMERIC.test(character))
+    .sort()
+    .join('');
+}
+
+function normalizeProjection(text) {
+  return text.replace(NON_NORMALIZED, SPACE);
+}
+
+function caseProblem(key, javaCodes, portCodes, seen) {
   if (portCodes === javaCodes) return [];
-  allowed.add(key);
-  if (JAVA_CASE_DIVERGENCES.has(key) && !reachesAscii(javaCodes, portCodes)) return [];
-  return [`${key}: java [${javaCodes}], port [${portCodes}]`];
+  const javaText = textOfCodes(javaCodes);
+  const portText = textOfCodes(portCodes);
+  const reach = asciiAlnumOf(javaText) === asciiAlnumOf(portText) ? NON_ASCII : ASCII_REACHING;
+  const projected = normalizeProjection(javaText) !== normalizeProjection(portText);
+  seen.push({ key, reach, projected });
+  const allowed = JAVA_CASE_DIVERGENCES.get(key);
+  if (allowed === undefined) {
+    return [`unlisted case divergence ${key}: java [${javaCodes}], port [${portCodes}] (${reach})`];
+  }
+  if (allowed !== reach) {
+    return [`case divergence ${key} is listed as ${allowed} but now measures ${reach}: java [${javaCodes}], port [${portCodes}]`];
+  }
+  return [];
 }
 
-function caseProblems(label, shown, javaLower, javaUpper, source, allowed) {
+function caseProblems(label, shown, javaLower, javaUpper, source, seen) {
   return [
-    ...caseProblem(`lowercase ${label} ${shown}`, javaLower, unitCodesOf(source.toLowerCase()), allowed),
-    ...caseProblem(`uppercase ${label} ${shown}`, javaUpper, unitCodesOf(source.toUpperCase()), allowed),
+    ...caseProblem(`lowercase ${label} ${shown}`, javaLower, unitCodesOf(source.toLowerCase()), seen),
+    ...caseProblem(`uppercase ${label} ${shown}`, javaUpper, unitCodesOf(source.toUpperCase()), seen),
   ];
 }
 
-function compareCase(unitRows, stringRows) {
+function compareCase(codePointRows, stringRows) {
   const problems = [];
-  const allowed = new Set();
-  let units = 0;
-  for (const line of unitRows) {
+  const seen = [];
+  let codePoints = 0;
+  for (const line of codePointRows) {
     if (line === '') continue;
-    units += 1;
-    const [unit, javaLower, javaUpper] = line.split(FIELD_SEPARATOR);
-    const shown = `U+${Number(unit).toString(16).padStart(4, '0')}`;
-    problems.push(...caseProblems('unit', shown, javaLower, javaUpper, String.fromCharCode(Number(unit)), allowed));
+    codePoints += 1;
+    const [codePoint, javaLower, javaUpper] = line.split(FIELD_SEPARATOR);
+    const shown = `U+${Number(codePoint).toString(16).padStart(4, '0')}`;
+    problems.push(...caseProblems('codePoint', shown, javaLower, javaUpper, String.fromCodePoint(Number(codePoint)), seen));
   }
   let strings = 0;
   for (const line of stringRows) {
     if (line === '') continue;
     strings += 1;
     const [literal, javaLower, javaUpper] = line.split(FIELD_SEPARATOR);
-    problems.push(...caseProblems('string', JSON.stringify(literal), javaLower, javaUpper, literal, allowed));
+    problems.push(...caseProblems('string', JSON.stringify(literal), javaLower, javaUpper, literal, seen));
   }
-  for (const key of JAVA_CASE_DIVERGENCES) {
-    if (!allowed.has(key)) problems.push(`stale case divergence allowance: java and the port now agree on ${key}`);
+  const keys = new Set(seen.map((divergence) => divergence.key));
+  for (const key of JAVA_CASE_DIVERGENCES.keys()) {
+    if (!keys.has(key)) problems.push(`stale case divergence allowance: java and the port now agree on ${key}`);
   }
-  return { problems, units, strings, allowed: allowed.size };
+  const reachingAscii = seen.filter((divergence) => divergence.reach === ASCII_REACHING);
+  const changingNormalize = seen.filter((divergence) => divergence.projected);
+  for (const divergence of changingNormalize) {
+    problems.push(`case divergence ${divergence.key} survives normalize's [^a-z0-9 ] projection`);
+  }
+  return {
+    problems,
+    codePoints,
+    strings,
+    divergences: keys.size,
+    reachingAscii: reachingAscii.length,
+    survivingNormalize: changingNormalize.length,
+  };
+}
+
+function compareSigmaContexts(rows) {
+  const problems = [];
+  let compared = 0;
+  let raw = 0;
+  for (const line of rows) {
+    if (line === '') continue;
+    compared += 1;
+    const [unit, javaLower] = line.split(FIELD_SEPARATOR);
+    const context = `${SIGMA}${String.fromCharCode(Number(unit))}${SIGMA}`;
+    const portLower = unitCodesOf(context.toLowerCase());
+    if (portLower === javaLower) continue;
+    raw += 1;
+    if (normalizeProjection(textOfCodes(javaLower)) !== normalizeProjection(textOfCodes(portLower))) {
+      problems.push(
+        `final-sigma context U+${Number(unit).toString(16).padStart(4, '0')} survives normalize's projection: ` +
+          `java [${javaLower}], port [${portLower}]`,
+      );
+    }
+  }
+  return { problems, compared, raw, survivingNormalize: problems.length };
 }
 
 function compareRint(rows, numberModule) {
@@ -349,6 +445,7 @@ async function main() {
       lines(java(jars, scratch, 'case')),
       lines(java(jars, scratch, 'casestrings', caseFile)),
     );
+    const sigma = compareSigmaContexts(lines(java(jars, scratch, 'sigma')));
     const problems = [
       ...overrides.problems,
       ...compareIntegral(lines(java(jars, scratch, 'parse', casesFile)), numberModule),
@@ -356,14 +453,17 @@ async function main() {
       ...compareRint(lines(java(jars, scratch, 'rint', rintFile)), numberModule),
       ...ignoreCase.problems,
       ...caseMapping.problems,
+      ...sigma.problems,
     ];
     console.log(
       `kotlinx-serialization-json ${version}: ${overrides.checked} exponents checked against ${overrides.overrides} overrides ` +
         `(${overrides.expected} differ from correctly rounded), ${cases.length} literals (seed ${seed}), ` +
         `${stdlibCases.length} String.toIntOrNull/toLongOrNull literals, ${rintCases.length} rint operands, ` +
         `${ignoreCase.pairs} equalsIgnoreCase pairs over every UTF-16 unit, ` +
-        `${caseMapping.units} lowercase/uppercase units and ${caseMapping.strings} case-mapped strings ` +
-        `(${caseMapping.allowed} known Java divergences, none reaching ASCII), ` +
+        `${caseMapping.codePoints} case-mapped code points and ${caseMapping.strings} case-mapped strings ` +
+        `(${caseMapping.divergences} enumerated Java divergences, ${caseMapping.reachingAscii} reaching ASCII, ` +
+        `${caseMapping.survivingNormalize} surviving normalize's projection), ${sigma.compared} final-sigma contexts ` +
+        `(${sigma.raw} raw divergences, ${sigma.survivingNormalize} surviving normalize's projection), ` +
         `${problems.length} mismatch(es)`,
     );
     for (const problem of problems.slice(0, MAX_REPORTED)) console.error(`  ${problem}`);

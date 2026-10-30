@@ -28,13 +28,13 @@ function objectOrNull(value: unknown): JsonObject | null {
   return isJsonObject(value) ? value : null;
 }
 
-function requiredLong(value: unknown, label: string): bigint {
+function requiredLexedLong(value: unknown, label: string): bigint {
   const parsed = longOrNull(value);
   if (parsed === null) throw new Error(`aspira maps walk: ${label} is not a Long`);
   return parsed;
 }
 
-function lenientLong(value: unknown): bigint | null {
+function strictLong(value: unknown): bigint | null {
   const content = contentOrNull(value);
   return content === null ? null : kotlinStringToLongOrNull(content);
 }
@@ -57,7 +57,7 @@ function parentMapId(node: JsonObject): bigint | null {
   const parentMap = objectOrNull(fieldOf(node, PARENT_MAP_KEY));
   if (parentMap === null) return null;
   const raw = fieldOf(parentMap, MAP_ID_KEY);
-  return raw === undefined ? null : requiredLong(raw, `${PARENT_MAP_KEY}.${MAP_ID_KEY}`);
+  return raw === undefined ? null : requiredLexedLong(raw, `${PARENT_MAP_KEY}.${MAP_ID_KEY}`);
 }
 
 function titleFor(node: JsonObject, byId: ReadonlyMap<bigint, JsonObject>): string | null {
@@ -67,13 +67,13 @@ function titleFor(node: JsonObject, byId: ReadonlyMap<bigint, JsonObject>): stri
   if (parentId === null) return null;
   const parent = byId.get(parentId);
   if (parent === undefined) return null;
-  const ourId = requiredLong(fieldOf(node, MAP_ID_KEY), MAP_ID_KEY);
+  const ourId = requiredLexedLong(fieldOf(node, MAP_ID_KEY), MAP_ID_KEY);
   const mapLinks = arrayOrNull(fieldOf(parent, MAP_LINKS_KEY));
   if (mapLinks === null) return null;
   for (const link of mapLinks) {
     const object = objectOrNull(link);
     if (object === null) continue;
-    if (lenientLong(fieldOf(object, CHILD_MAP_ID_KEY)) === ourId) {
+    if (strictLong(fieldOf(object, CHILD_MAP_ID_KEY)) === ourId) {
       return localizedTitle(arrayOrNull(fieldOf(object, LOCALIZATIONS_KEY)));
     }
   }
@@ -95,7 +95,7 @@ export function walkAspiraLeaves(maps: readonly unknown[]): AspiraLeaf[] {
     if (object === null) continue;
     const raw = fieldOf(object, MAP_ID_KEY);
     if (raw === undefined) throw new Error(`aspira maps walk: node without mapId: ${JSON.stringify(object)}`);
-    byId.set(requiredLong(raw, MAP_ID_KEY), object);
+    byId.set(requiredLexedLong(raw, MAP_ID_KEY), object);
   }
 
   const seen = new Set<bigint>();
@@ -104,9 +104,9 @@ export function walkAspiraLeaves(maps: readonly unknown[]): AspiraLeaf[] {
   for (const node of maps) {
     const object = objectOrNull(node);
     if (object === null) continue;
-    const transactionLocationId = lenientLong(fieldOf(object, TRANSACTION_LOCATION_ID_KEY));
+    const transactionLocationId = strictLong(fieldOf(object, TRANSACTION_LOCATION_ID_KEY));
     if (transactionLocationId === null) continue;
-    const mapId = requiredLong(fieldOf(object, MAP_ID_KEY), MAP_ID_KEY);
+    const mapId = requiredLexedLong(fieldOf(object, MAP_ID_KEY), MAP_ID_KEY);
     if (seen.has(mapId)) continue;
     const title = titleFor(object, byId);
     if (title === null) continue;
@@ -114,7 +114,7 @@ export function walkAspiraLeaves(maps: readonly unknown[]): AspiraLeaf[] {
       name: title,
       transactionLocationId,
       mapId,
-      resourceLocationId: lenientLong(fieldOf(object, RESOURCE_LOCATION_ID_KEY)),
+      resourceLocationId: strictLong(fieldOf(object, RESOURCE_LOCATION_ID_KEY)),
       parentName: parentNameFor(object, byId),
     });
     seen.add(mapId);
@@ -128,9 +128,9 @@ export function walkAspiraLeaves(maps: readonly unknown[]): AspiraLeaf[] {
     for (const link of mapLinks) {
       const object = objectOrNull(link);
       if (object === null) continue;
-      const transactionLocationId = lenientLong(fieldOf(object, TRANSACTION_LOCATION_ID_KEY));
+      const transactionLocationId = strictLong(fieldOf(object, TRANSACTION_LOCATION_ID_KEY));
       if (transactionLocationId === null) continue;
-      const childMapId = lenientLong(fieldOf(object, CHILD_MAP_ID_KEY));
+      const childMapId = strictLong(fieldOf(object, CHILD_MAP_ID_KEY));
       if (childMapId === null) continue;
       if (seen.has(childMapId)) continue;
       const title = localizedTitle(arrayOrNull(fieldOf(object, LOCALIZATIONS_KEY)));
@@ -139,7 +139,7 @@ export function walkAspiraLeaves(maps: readonly unknown[]): AspiraLeaf[] {
         name: title,
         transactionLocationId,
         mapId: childMapId,
-        resourceLocationId: lenientLong(fieldOf(object, RESOURCE_LOCATION_ID_KEY)),
+        resourceLocationId: strictLong(fieldOf(object, RESOURCE_LOCATION_ID_KEY)),
         parentName: localizedTitle(arrayOrNull(fieldOf(nodeObject, LOCALIZED_VALUES_KEY))),
       });
       seen.add(childMapId);

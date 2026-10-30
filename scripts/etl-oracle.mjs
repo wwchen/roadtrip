@@ -41,7 +41,12 @@ const USAGE = [
   "look the recorded etl slug up in it, and hand that EtlEntry to their own adapter registry (Kotlin's poiAdapters /",
   "campsiteAdapters, TypeScript's adapterRegistry). Geometry, args, host, tenant and booking providers are therefore the",
   "shipped ones on both sides. Only the row's subcategory and agency are overridden, from what the unit test's own ctx",
-  'reported, and check fails when a unit test read an arg the registry does not declare with that value.',
+  'reported.',
+  '',
+  'Because the recorded TypeScript results come from the unit test\'s own etl instance while the replay constructs from',
+  'the shipped row, check refuses a case whose instance differs from the one that row builds, whose slug the registry',
+  'does not declare, whose adapters.json export the row does not name, or that read an arg the registry does not',
+  'declare with that value.',
   '',
   'check also fails, whatever the comparison says, when an adapter in adapters.json has fewer recorded cases',
   'than its minimumCases, fewer compared through transform than its minimumTransformed, or when a call in',
@@ -202,8 +207,8 @@ async function check(scratch) {
   const { cases: recordedRaw, unitTestsPassed } = recordUnitTestCases(scratch);
   const recorded = recordedRaw.map((current) => ({ ...current, fetchedAt: fetchedAtOf(current.inputs) }));
   if (!unitTestsPassed) console.log('the worker unit tests failed; the recorded cases are compared anyway');
-  const { loadPoiRegistry } = await import('@roadtrip/worker');
-  const seam = seamProblems(recorded, loadPoiRegistry(REGISTRY_PATH), MANIFEST.adapters);
+  const { adapterRegistry, loadPoiRegistry } = await import('@roadtrip/worker');
+  const seam = seamProblems(recorded, loadPoiRegistry(REGISTRY_PATH), MANIFEST.adapters, adapterRegistry);
   for (const problem of seam) console.log(`SEAM: ${problem}`);
   if (seam.length > 0) return false;
   const etlKotlin = replayOnJvm(recorded, scratch);

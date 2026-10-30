@@ -164,6 +164,42 @@ describe('the GeoJSON name property, which replaces the defaults rather than joi
   });
 });
 
+describe('the GeoJSON geometry gate, which only indexes Point features', () => {
+  function featureEnvelope(geometryJson: string): Envelope {
+    return envelopeOf(
+      `{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":${JSON.stringify(PARK)}},` +
+        `"geometry":${geometryJson}}]}`,
+    );
+  }
+
+  test('a non-Point geometry is skipped even though the feature is named and carries coordinates', () => {
+    expect(
+      indexOf(new GeoJsonFeaturesSource([featureEnvelope(`{"type":"Polygon","coordinates":[${LON},${LAT}]}`)])),
+    ).toEqual(new Map());
+    expect(
+      indexOf(new GeoJsonFeaturesSource([featureEnvelope(`{"type":"MultiPoint","coordinates":[${LON},${LAT}]}`)])),
+    ).toEqual(new Map());
+    expect(indexOf(new GeoJsonFeaturesSource([featureEnvelope(`{"coordinates":[${LON},${LAT}]}`)]))).toEqual(new Map());
+  });
+
+  test('the gate is case-sensitive and exact, as the Kotlin comparison is', () => {
+    expect(indexOf(new GeoJsonFeaturesSource([featureEnvelope(`{"type":"point","coordinates":[${LON},${LAT}]}`)]))).toEqual(
+      new Map(),
+    );
+    expect(
+      indexOf(new GeoJsonFeaturesSource([featureEnvelope(`{"type":"Point","coordinates":[${LON},${LAT}]}`)])).get(
+        normalize(PARK),
+      ),
+    ).toEqual(point());
+  });
+
+  test('a Point with fewer than two coordinates is skipped', () => {
+    expect(indexOf(new GeoJsonFeaturesSource([featureEnvelope(`{"type":"Point","coordinates":[${LON}]}`)]))).toEqual(
+      new Map(),
+    );
+  });
+});
+
 describe('the shipped Parks Canada policy, read from the real registry', () => {
   test('a park pins to its accommodation point, not its park centroid', () => {
     const registry = loadPoiRegistry(PRODUCTION_REGISTRY_PATH);
