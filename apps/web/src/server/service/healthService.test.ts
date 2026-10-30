@@ -5,7 +5,8 @@ const pingDatabase = vi.fn();
 vi.mock('../db', () => ({ serverDb: () => ({}) }));
 vi.mock('../repo/healthRepo', () => ({ pingDatabase }));
 
-const { DATABASE_PING_TIMEOUT_MS, isDatabaseReachable } = await import('./healthService');
+const { DATABASE_PING_TIMEOUT_MS, ROLE_STATEMENT_TIMEOUT_MS, isDatabaseReachable } =
+  await import('./healthService');
 
 const LATE_REJECTION_DELAY_MS = DATABASE_PING_TIMEOUT_MS + 1000;
 
@@ -74,4 +75,8 @@ test('a rejection arriving after the timeout is not an unhandled rejection', asy
   } finally {
     process.off('unhandledRejection', record);
   }
+});
+
+test('the ping timeout outlives the role statement timeout', () => {
+  expect(DATABASE_PING_TIMEOUT_MS).toBeGreaterThan(ROLE_STATEMENT_TIMEOUT_MS);
 });
