@@ -1,6 +1,7 @@
 import { isWideNumber, type WideNumber } from './envelope.js';
 import { isJsonObject, type JsonObject } from './json-decode.js';
 import { kotlinDoubleFromText, kotlinIntFromText, kotlinLongFromText } from './kotlin-number.js';
+import { kotlinEqualsIgnoreCase } from './kotlin-text.js';
 
 const INT_MIN = -(2 ** 31);
 const INT_MAX = 2 ** 31 - 1;
@@ -71,8 +72,8 @@ export function doubleOrNull(value: unknown): number | null {
 
 export function booleanOrNull(value: unknown): boolean | null {
   const content = contentOrNull(value);
-  if (content === TRUE_CONTENT) return true;
-  return content === FALSE_CONTENT ? false : null;
+  if (kotlinEqualsIgnoreCase(content, TRUE_CONTENT)) return true;
+  return kotlinEqualsIgnoreCase(content, FALSE_CONTENT) ? false : null;
 }
 
 export function jsonArrayOf(value: unknown): unknown[] {

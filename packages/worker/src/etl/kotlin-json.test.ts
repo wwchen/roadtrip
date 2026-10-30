@@ -103,6 +103,24 @@ describe('JsonPrimitive accessors, pinned to kotlinx.serialization 1.11.0', () =
     expect(observed).toEqual(expected);
   });
 
+  test('booleanOrNull reads true and false without regard to case, as kotlinx 1.11.0 does', () => {
+    const cases: [string, boolean | null][] = [
+      ['"True"', true],
+      ['"TRUE"', true],
+      ['"tRuE"', true],
+      ['"False"', false],
+      ['"FALSE"', false],
+      ['"fAlSe"', false],
+      ['"\u017f"', null],
+      ['"fal\u017fe"', false],
+      ['"truee"', null],
+      ['" true"', null],
+      ['"yes"', null],
+      ['"1"', null],
+    ];
+    expect(cases.map(([jsonText]) => booleanOrNull(valueOf(jsonText)))).toEqual(cases.map(([, expected]) => expected));
+  });
+
   test('contentOf is JsonPrimitive.content: JSON null reads as the text null, a container throws', () => {
     expect(contentOf(valueOf('null'))).toBe('null');
     expect(contentOf(valueOf('"<p>"'))).toBe('<p>');
