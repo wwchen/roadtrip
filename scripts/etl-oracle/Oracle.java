@@ -107,7 +107,13 @@ public class Oracle {
         if (k.getName().startsWith("java.")) return esc(o.toString());
         try {
             Method ser = k.getMethod("serialize");
-            return esc(String.valueOf(ser.invoke(o)));
+            String ref = String.valueOf(ser.invoke(o));
+            try {
+                Object provider = k.getMethod("getProvider").invoke(o);
+                return "{\"provider\":" + render(provider, depth + 1) + ",\"ref\":" + esc(ref) + "}";
+            } catch (NoSuchMethodException noProvider) {
+                return esc(ref);
+            }
         } catch (NoSuchMethodException ignored) { }
         KSerializer<Object> wire;
         try {

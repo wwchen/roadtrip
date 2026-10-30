@@ -19,7 +19,9 @@ export function caseOf(name, etl, inputs) {
 function plain(value) {
   if (value === null || value === undefined) return undefined;
   if (typeof value === 'bigint') return Number.isSafeInteger(Number(value)) ? Number(value) : value.toString();
-  if (typeof value === 'object' && typeof value.serialize === 'function') return value.serialize();
+  if (typeof value === 'object' && typeof value.serialize === 'function') {
+    return typeof value.provider === 'string' ? { provider: value.provider, ref: value.serialize() } : value.serialize();
+  }
   if (Array.isArray(value)) return value.map(plain);
   if (typeof value === 'object' && value.rawJSON === undefined) {
     return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, plain(entry)]));

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { resultOf } from './etl-oracle/case-shape.mjs';
 import { canonical, compareCallCase, compareEtlCase, floorProblems, strip, summarise } from './etl-oracle/compare.mjs';
 import { etlEntryFor, instanceFingerprint, registryWithOverride, requireEtlEntry, seamProblems } from './etl-oracle/registry-seam.mjs';
 
@@ -18,6 +19,14 @@ test('a value that differs, anywhere in the record, is reported with both sides'
   assert.match(problems[0], /results differ/);
   assert.match(problems[0], /"count":1/);
   assert.match(problems[0], /"count":2/);
+});
+
+test('a provider reference is rendered with its provider, so one ref under two providers differs', () => {
+  const ref = (provider) => ({ provider, serialize: () => '1:2' });
+  const rendered = (provider) => resultOf({ ok: true, record: { dataProviderRef: ref(provider) } }, []);
+  assert.deepEqual(rendered('bcparks-strapi').record.dataProviderRef, { provider: 'bcparks-strapi', ref: '1:2' });
+  assert.equal(compareEtlCase(okTs([rendered('aspira')]), okKotlin([rendered('bcparks-strapi')])).length, 1);
+  assert.deepEqual(compareEtlCase(okTs([rendered('aspira')]), okKotlin([rendered('aspira')])), []);
 });
 
 test('0 and false and the empty string are values, not absences', () => {
