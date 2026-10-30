@@ -190,7 +190,9 @@ public class Oracle {
         String url = text(e, "url");
         String part = text(e, "part");
         JsonElement payload = JSON.parseToJsonElement(text(e, "payload"));
-        return new Envelope("f", "1", "2026-06-17T00:00:00Z", new RequestMeta(url, "GET", new HashMap<>()), new ResponseMeta(200, new HashMap<>()), null, payload, part);
+        String fetchedAt = text(e, "fetchedAt");
+        if (fetchedAt == null) throw new IllegalArgumentException("a case envelope has no fetchedAt");
+        return new Envelope("f", "1", fetchedAt, new RequestMeta(url, "GET", new HashMap<>()), new ResponseMeta(200, new HashMap<>()), null, payload, part);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -203,9 +205,14 @@ public class Oracle {
         Constructor<?> constructor = Class.forName(kotlin).getConstructor(types);
         SourceEtl etl = (SourceEtl) constructor.newInstance(ctor.toArray());
         LinkedHashMap<String, List<Envelope>> captures = new LinkedHashMap<>();
+        List<String> fetchedAt = new ArrayList<>();
         for (Map.Entry<String, JsonElement> in : ((JsonObject) c.get("inputs")).entrySet()) {
             List<Envelope> envelopes = new ArrayList<>();
-            for (JsonElement e : (JsonArray) in.getValue()) envelopes.add(envelopeOf((JsonObject) e));
+            for (JsonElement e : (JsonArray) in.getValue()) {
+                Envelope envelope = envelopeOf((JsonObject) e);
+                envelopes.add(envelope);
+                fetchedAt.add(esc(envelope.getFetchedAt()));
+            }
             captures.put(in.getKey(), envelopes);
         }
         InputBundle bundle = new InputBundle(captures);
@@ -239,7 +246,7 @@ public class Oracle {
             parseOutcome = "throws";
             transformOutcome = "skipped";
         }
-        return "{\"parse\":\"" + parseOutcome + "\",\"parseBad\":[" + String.join(",", parseBad) + "],\"transform\":\"" + transformOutcome + "\",\"results\":[" + String.join(",", out) + "]}";
+        return "{\"fetchedAt\":[" + String.join(",", fetchedAt) + "],\"parse\":\"" + parseOutcome + "\",\"parseBad\":[" + String.join(",", parseBad) + "],\"transform\":\"" + transformOutcome + "\",\"results\":[" + String.join(",", out) + "]}";
     }
 
     static Object argOf(String type, JsonElement value) {

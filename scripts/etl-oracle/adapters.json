@@ -9,7 +9,9 @@
       ],
       "opaqueFields": [
         "sourcePayload"
-      ]
+      ],
+      "minimumCases": 240,
+      "minimumTransformed": 230
     },
     "recgov-campsites": {
       "module": "vendors/recgov/campsites",
@@ -20,7 +22,9 @@
       ],
       "opaqueFields": [
         "sourcePayload"
-      ]
+      ],
+      "minimumCases": 150,
+      "minimumTransformed": 145
     }
   },
   "calls": {
@@ -32,7 +36,8 @@
       "argTypes": [
         "json",
         "string"
-      ]
+      ],
+      "minimumCases": 70
     }
   }
 }

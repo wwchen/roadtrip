@@ -22,11 +22,14 @@ export function canonical(value) {
 }
 
 function shown(value) {
-  return JSON.stringify(value).slice(0, MAX_SHOWN);
+  return (JSON.stringify(value) ?? 'undefined').slice(0, MAX_SHOWN);
 }
 
 export function compareEtlCase(ts, kotlin) {
   const problems = [];
+  if (!isDeepStrictEqual(ts.fetchedAt, kotlin.fetchedAt)) {
+    problems.push(`the envelopes' fetched_at differ between the two sides: ts ${shown(ts.fetchedAt)}, kotlin ${shown(kotlin.fetchedAt)}`);
+  }
   if (ts.tsParse !== kotlin.parse) problems.push(`parse: ts ${ts.tsParse}, kotlin ${kotlin.parse}`);
   if (ts.tsParse !== 'ok') return problems;
   if (!isDeepStrictEqual(canonical(ts.tsParseBad), canonical(kotlin.parseBad))) {
@@ -56,4 +59,31 @@ export function summarise(cases, kotlinOutputs, compare) {
     if (problems.length > 0) failures.push({ index, case: current, problems });
   });
   return { compared: cases.length, failures };
+}
+
+export function floorProblems(recorded, adapters, calls, callCasesByName) {
+  const problems = [];
+  const counts = {};
+  for (const name of Object.keys(adapters)) counts[name] = { cases: 0, transformed: 0 };
+  for (const current of recorded) {
+    const count = counts[current.adapter];
+    if (count === undefined) continue;
+    count.cases += 1;
+    if (current.tsParse === 'ok' && current.tsTransformRan) count.transformed += 1;
+  }
+  for (const [name, entry] of Object.entries(adapters)) {
+    const { cases, transformed } = counts[name];
+    if (!Number.isInteger(entry.minimumCases) || !Number.isInteger(entry.minimumTransformed) || entry.minimumCases < 1 || entry.minimumTransformed < 1) {
+      problems.push(`${name}: adapters.json must set minimumCases and minimumTransformed to integers of at least 1`);
+      continue;
+    }
+    if (cases < entry.minimumCases) problems.push(`${name}: ${cases} recorded case(s), below the floor of ${entry.minimumCases}; no unit test under src/vendors exercises this adapter enough for a green run to mean anything`);
+    if (transformed < entry.minimumTransformed) problems.push(`${name}: ${transformed} case(s) compared through transform, below the floor of ${entry.minimumTransformed}`);
+  }
+  for (const [name, entry] of Object.entries(calls)) {
+    const count = callCasesByName[name] ?? 0;
+    if (!Number.isInteger(entry.minimumCases) || entry.minimumCases < 1) problems.push(`call ${name}: adapters.json must set minimumCases to an integer of at least 1`);
+    else if (count < entry.minimumCases) problems.push(`call ${name}: ${count} committed case(s), below the floor of ${entry.minimumCases}`);
+  }
+  return { problems, counts };
 }

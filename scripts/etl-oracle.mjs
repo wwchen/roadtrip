@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { resultOf } from './etl-oracle/case-shape.mjs';
-import { compareCallCase, compareEtlCase, summarise } from './etl-oracle/compare.mjs';
+import { compareCallCase, compareEtlCase, floorProblems, summarise } from './etl-oracle/compare.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..');
@@ -17,6 +17,7 @@ const KOTLIN_CLASSES = path.join(REPO_ROOT, 'backend/build/classes/kotlin/main')
 const MANIFEST = JSON.parse(readFileSync(path.join(ORACLE_DIR, 'adapters.json'), 'utf8'));
 const WORKER_PACKAGE = '@roadtrip/worker';
 const CLASSPATH_ENV = 'ETL_ORACLE_CLASSPATH';
+const DEFAULT_FETCHED_AT = '2026-06-17T00:00:00Z';
 const MAX_FAILURES_SHOWN = 20;
 const MAX_INPUT_SHOWN = 700;
 const DEFAULT_EXPLORE_CASES = 500;
@@ -34,8 +35,21 @@ const USAGE = [
   'the same way, against the built worker (dist). --seed is required, so a run is always reproducible.',
   'It is exploratory and must never be part of a default or CI run.',
   '',
-  'The comparison cannot tell an absent field, a null and an empty list apart: all three are dropped from',
-  'both sides before they are compared.',
+  'check also fails, whatever the comparison says, when an adapter in adapters.json has fewer recorded cases',
+  'than its minimumCases, fewer compared through transform than its minimumTransformed, or when a call in',
+  'adapters.json has fewer committed cases than its minimumCases: an adapter nothing exercises would otherwise',
+  'print a green run. Per-adapter counts are printed.',
+  '',
+  'Blind spots, all of them by construction:',
+  '  - An absent field, a null, an empty list, an empty object, and a null element inside a list (so [null, 1]',
+  '    equals [1]) are indistinguishable: all are dropped from both sides before they are compared.',
+  '  - Opaque JSON fields (sourcePayload, and raw price or schedule passthrough such as Campflare stores) are',
+  '    parsed and re-serialised, so key order and the vendor spelling of a number (1.10, 25.0, 1e2) are lost.',
+  '    The oracle says nothing about them; the unit tests and the importer differential are the only instruments.',
+  '  - Strings, numbers and booleans are compared as JSON values, so 4 and 4.0 are equal.',
+  '  - The recorded envelope keeps url, part, fetched_at and payload; fetched_at is carried to both sides and',
+  '    compared, but the other envelope fields (fetcher, response, headers) are fixed placeholders.',
+  '  - An adapter that reads the clock (Instant.now) cannot be reconciled by any replay.',
   '',
   `The JVM classpath is read from Gradle (:backend:printRuntimeClasspath); set ${CLASSPATH_ENV} to reuse one.`,
   'The backend must have been compiled (./gradlew :backend:classes), because the oracle runs build/classes.',
@@ -109,6 +123,20 @@ async function workerExport(moduleName, exportName) {
   return (await import(url))[exportName];
 }
 
+function withFetchedAt(descriptor) {
+  const inputs = Object.fromEntries(
+    Object.entries(descriptor.inputs).map(([slug, envelopes]) => [
+      slug,
+      envelopes.map((envelope) => ({ ...envelope, fetchedAt: envelope.fetchedAt ?? DEFAULT_FETCHED_AT })),
+    ]),
+  );
+  return { ...descriptor, inputs };
+}
+
+function fetchedAtOf(inputs) {
+  return Object.values(inputs).flatMap((envelopes) => envelopes.map((envelope) => envelope.fetchedAt));
+}
+
 function callCases() {
   const dir = path.join(ORACLE_DIR, 'cases');
   const cases = [];
@@ -162,12 +190,22 @@ function report(title, summary) {
 
 async function check(scratch) {
   assertKotlinBuilt();
-  const { cases: recorded, unitTestsPassed } = recordUnitTestCases(scratch);
+  const { cases: recordedRaw, unitTestsPassed } = recordUnitTestCases(scratch);
+  const recorded = recordedRaw.map((current) => ({ ...current, fetchedAt: fetchedAtOf(current.inputs) }));
   if (!unitTestsPassed) console.log('the worker unit tests failed; the recorded cases are compared anyway');
   const etlKotlin = replayOnJvm(recorded, scratch);
   const transformed = recorded.filter((current) => current.tsParse === 'ok' && current.tsTransformRan).length;
   const etlOk = report(`recorded unit-test cases (${transformed} compared through transform)`, summarise(recorded, etlKotlin, compareEtlCase));
   const calls = callCases();
+  const callCaseCounts = {};
+  for (const current of calls) callCaseCounts[current.call] = (callCaseCounts[current.call] ?? 0) + 1;
+  const floors = floorProblems(recorded, MANIFEST.adapters, MANIFEST.calls, callCaseCounts);
+  for (const [name, count] of Object.entries(floors.counts)) {
+    const entry = MANIFEST.adapters[name];
+    console.log(`  ${name}: ${count.cases} recorded (floor ${entry.minimumCases}), ${count.transformed} through transform (floor ${entry.minimumTransformed})`);
+  }
+  for (const [name, count] of Object.entries(callCaseCounts)) console.log(`  call ${name}: ${count} committed (floor ${MANIFEST.calls[name].minimumCases})`);
+  for (const problem of floors.problems) console.log(`FLOOR: ${problem}`);
   let callOk = true;
   if (calls.length > 0) {
     buildWorker();
@@ -175,7 +213,7 @@ async function check(scratch) {
     const kotlinResults = replayOnJvm(calls, scratch);
     callOk = report('committed call cases', summarise(tsResults.map((value, index) => ({ ...calls[index], ...value })), kotlinResults, compareCallCase));
   }
-  return etlOk && callOk && unitTestsPassed;
+  return etlOk && callOk && unitTestsPassed && floors.problems.length === 0;
 }
 
 async function runEtlOnTs(descriptor) {
@@ -195,7 +233,7 @@ async function runEtlOnTs(descriptor) {
           const part = envelope.part === null ? '' : `,"part":${JSON.stringify(envelope.part)}`;
           writeFileSync(
             file,
-            `{"fetcher":"f","fetcher_version":"1","fetched_at":"t","request":{"url":${JSON.stringify(envelope.url)},"method":"GET"},"response":{"status":200}${part},"payload":${envelope.payload}}`,
+            `{"fetcher":"f","fetcher_version":"1","fetched_at":${JSON.stringify(envelope.fetchedAt)},"request":{"url":${JSON.stringify(envelope.url)},"method":"GET"},"response":{"status":200}${part},"payload":${envelope.payload}}`,
           );
           return parseEnvelope(file);
         }),
@@ -212,7 +250,8 @@ async function runEtlOnTs(descriptor) {
     };
     const registry = { dataSources: [], poiData: [row], campsiteData: [], bookingProviders: [], dataSource: () => undefined, poiDataByName: () => row, campsiteDataByName: () => undefined };
     const ctx = TransformCtx.load('/unused', registry);
-    const outcome = { ...descriptor, tsParse: 'ok', tsParseBad: [], tsTransformRan: true, tsTransform: 'ok', tsResults: [] };
+    const fetchedAt = [...captures.values()].flatMap((envelopes) => envelopes.map((envelope) => envelope.fetchedAt));
+    const outcome = { ...descriptor, fetchedAt, tsParse: 'ok', tsParseBad: [], tsTransformRan: true, tsTransform: 'ok', tsResults: [] };
     try {
       for (const result of etl.parse(new InputBundle(captures))) {
         if (!result.ok) {
@@ -244,12 +283,14 @@ async function explore(values, scratch) {
   assertKotlinBuilt();
   buildWorker();
   const generator = await import(pathToFileURL(path.join(ORACLE_DIR, 'explore', `${values.generator}.mjs`)).href);
-  const descriptors = generator.generate({ seed, count }).map((descriptor) => ({
-    kind: 'etl',
-    kotlin: MANIFEST.adapters[descriptor.adapter].kotlin,
-    test: `${values.generator} seed ${seed}`,
-    ...descriptor,
-  }));
+  const descriptors = generator.generate({ seed, count }).map((descriptor) =>
+    withFetchedAt({
+      kind: 'etl',
+      kotlin: MANIFEST.adapters[descriptor.adapter].kotlin,
+      test: `${values.generator} seed ${seed}`,
+      ...descriptor,
+    }),
+  );
   const withTs = [];
   for (const descriptor of descriptors) withTs.push(await runEtlOnTs(descriptor));
   const kotlin = replayOnJvm(withTs, scratch);

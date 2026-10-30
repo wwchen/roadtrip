@@ -17,6 +17,7 @@ function inputsOf(bundle) {
   for (const slug of bundle.dataSourceSlugs()) {
     inputs[slug] = bundle.envelopes(slug).map((envelope) => ({
       url: envelope.request.url,
+      fetchedAt: envelope.fetchedAt,
       part: envelope.part ?? null,
       payload: JSON.stringify(envelope.payload),
     }));
