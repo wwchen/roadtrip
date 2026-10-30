@@ -5,6 +5,7 @@ import { kotlinDoubleFromText, kotlinIntFromText, kotlinLongFromText } from './k
 const INT_MIN = -(2 ** 31);
 const INT_MAX = 2 ** 31 - 1;
 const NEGATIVE_ZERO_CONTENT = '-0';
+const NULL_CONTENT = 'null';
 const TRUE_CONTENT = 'true';
 const FALSE_CONTENT = 'false';
 
@@ -42,6 +43,12 @@ export function contentOrNull(value: unknown): string | null {
   if (typeof primitive === 'number') return contentOfNumber(primitive);
   if (typeof primitive === 'boolean') return primitive ? TRUE_CONTENT : FALSE_CONTENT;
   return primitive.rawJSON;
+}
+
+export function contentOf(value: unknown): string {
+  const primitive = primitiveOf(value);
+  if (primitive === undefined) throw new Error('Element is not a JsonPrimitive');
+  return primitive === null ? NULL_CONTENT : (contentOrNull(primitive) as string);
 }
 
 export function intOrNull(value: unknown): number | null {

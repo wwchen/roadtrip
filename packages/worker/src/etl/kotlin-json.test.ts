@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { parseEnvelope } from './envelope.js';
 import {
   booleanOrNull,
+  contentOf,
   contentOrNull,
   doubleOrNull,
   intOrNull,
@@ -100,6 +101,16 @@ describe('JsonPrimitive accessors, pinned to kotlinx.serialization 1.11.0', () =
       bool: booleanOrNull(value),
     };
     expect(observed).toEqual(expected);
+  });
+
+  test('contentOf is JsonPrimitive.content: JSON null reads as the text null, a container throws', () => {
+    expect(contentOf(valueOf('null'))).toBe('null');
+    expect(contentOf(valueOf('"<p>"'))).toBe('<p>');
+    expect(contentOf(valueOf('25.0'))).toBe('25.0');
+    expect(contentOf(valueOf('true'))).toBe('true');
+    expect(() => contentOf(valueOf('{}'))).toThrow();
+    expect(() => contentOf(valueOf('[]'))).toThrow();
+    expect(() => contentOf(undefined)).toThrow();
   });
 
   test('a number written with a fraction is not read as an int even though its value is whole', () => {
