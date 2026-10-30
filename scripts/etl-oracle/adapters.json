@@ -9,6 +9,15 @@
       "minimumCases": 22,
       "minimumTransformed": 13
     },
+    "aspira-campsites": {
+      "module": "vendors/aspira/campsites",
+      "export": "AspiraCampsitesEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 164,
+      "minimumTransformed": 150
+    },
     "bcparks-campgrounds": {
       "module": "vendors/bcparks/campgrounds",
       "export": "BcParksCampgroundsEtl",
