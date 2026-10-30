@@ -72,6 +72,29 @@ pooler, pgbouncer — forbids it, and that is the pooling a serverless API requi
 The portable default is polling. Realtime may be added later as an adapter if
 polling proves measurably inadequate.
 
+C4 is now exercised against Neon, not just asserted, and the probe found two
+configuration differences it did not yet know about (run 2026-10-29; detail in
+[the read-app rulings](../2026-10-28-nextjs-read-app-rulings.md), Task 5):
+
+- **The migration set proven byte-identical to Flyway's could not be applied to
+  Neon** until one statement was capability-gated. `GRANT pg_read_all_stats TO
+  grafana_reader` needs `ADMIN OPTION` on a predefined role, and no role on Neon
+  holds it; `roadtrip` and `neon_superuser` were both checked. The grant now runs
+  only where the migrating role can perform it, and the equivalence gate cannot
+  see the difference. Supabase is also non-superuser and will likely behave the
+  same way; that is expected, not yet tested.
+- **Neon ignores session startup parameters** on both its direct and pooled
+  endpoints, so `default_transaction_read_only` sent at connection time was
+  silently a no-op there, and a `CREATE TABLE` succeeded through it. A
+  connection-level setting does not travel across datastores. The portable
+  mechanism is role-level settings plus grants, which Neon honours and which
+  survive its pooler.
+
+Both are the point of C4 rather than an objection to it: the datastore is
+configuration, and these are two configuration differences. Any future
+datastore-specific assumption should be probed against each of the three, not
+read off the documentation of one.
+
 ## Design
 
 ### 1. Two runtimes and a shared package

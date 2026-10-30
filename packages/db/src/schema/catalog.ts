@@ -36,13 +36,19 @@ import {
 const MIN_CADENCE_SEC = 5;
 const MIN_LENGTH = 0;
 const MIN_COUNT = 0;
-const MIN_LATITUDE = -90;
-const MAX_LATITUDE = 90;
-const MIN_LONGITUDE = -180;
-const MAX_LONGITUDE = 180;
+export const MIN_LATITUDE = -90;
+export const MAX_LATITUDE = 90;
+export const MIN_LONGITUDE = -180;
+export const MAX_LONGITUDE = 180;
 const COUNTRY_CODE_LENGTH = 2;
 
-export const POI_TYPES = ['campground', 'tesla_supercharger', 'planet_fitness_location'] as const;
+export const CAMPGROUND_POI_TYPE = 'campground';
+
+export const POI_TYPES = [
+  CAMPGROUND_POI_TYPE,
+  'tesla_supercharger',
+  'planet_fitness_location',
+] as const;
 
 export type PoiType = (typeof POI_TYPES)[number];
 
