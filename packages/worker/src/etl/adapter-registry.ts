@@ -10,6 +10,8 @@ import { RecGovCampgroundsEtl } from '../vendors/recgov/campgrounds.js';
 import { RecGovCampsitesEtl } from '../vendors/recgov/campsites.js';
 import { ReserveAmericaCampgroundsEtl } from '../vendors/reserveamerica/campgrounds.js';
 import { ReserveAmericaSitesEtl } from '../vendors/reserveamerica/sites.js';
+import { ReserveCaliforniaCampgroundsEtl } from '../vendors/reservecalifornia/campgrounds.js';
+import { ReserveCaliforniaSitesEtl } from '../vendors/reservecalifornia/sites.js';
 import { TeslaIndexEtl } from '../vendors/tesla/index-etl.js';
 import type { AnyTerminalEtlBinding } from './terminal-binding.js';
 import {
@@ -77,6 +79,8 @@ export const adapterRegistry: Record<string, AdapterFactory> = {
     campgroundBinding(new ReserveAmericaCampgroundsEtl(entry.slug, requiredArg(entry, CONTRACT_ARG))),
   ReserveAmericaSitesEtl: (entry) =>
     campsiteBinding(new ReserveAmericaSitesEtl(entry.slug, requiredArg(entry, CONTRACT_ARG))),
+  ReserveCaliforniaCampgroundsEtl: (entry) => campgroundBinding(new ReserveCaliforniaCampgroundsEtl(entry.slug)),
+  ReserveCaliforniaSitesEtl: (entry) => campsiteBinding(new ReserveCaliforniaSitesEtl(entry.slug)),
   TeslaIndexEtl: () => teslaSuperchargerBinding(new TeslaIndexEtl()),
 };
 
