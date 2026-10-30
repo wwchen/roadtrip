@@ -1,5 +1,23 @@
 {
   "adapters": {
+    "aspira-campgrounds": {
+      "module": "vendors/aspira/campgrounds",
+      "export": "AspiraCampgroundsEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 22,
+      "minimumTransformed": 13
+    },
+    "bcparks-campgrounds": {
+      "module": "vendors/bcparks/campgrounds",
+      "export": "BcParksCampgroundsEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 13,
+      "minimumTransformed": 7
+    },
     "recgov-campgrounds": {
       "module": "vendors/recgov/campgrounds",
       "export": "RecGovCampgroundsEtl",
