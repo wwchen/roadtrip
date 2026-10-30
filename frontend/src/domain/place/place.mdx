@@ -1,0 +1,437 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Place/Rules" />
+
+# The Place screen's rules
+
+The interface answers one question, *where am I sleeping*, and it answers it with
+two knobs: **where** and **when**. Everything on this page follows from that. The
+components beside it in the catalog (`Sheet`, `PlaceVerdict`, `NightsStrip`,
+`SiteMatrix`, `AlertRow`) are the rules in executable form; this page is the
+reasoning you would otherwise have to recover from them.
+
+Phase 1 builds the Place screen only. The other two screens appear below because
+the Place screen is defined against them.
+
+## Where and when
+
+*Where* is **pinned** (one place) or **open** (an area). *When* has three values,
+not two: **a night**, **a window** of nights, or **open**. The third value is not
+symmetry. A trip pins a route and a five-night window and then answers night by
+night, so a two-value *when* breaks on the first state the design has.
+
+> The narrowest pinned knob titles the screen. The widest open knob becomes the
+> answer.
+
+<table>
+  <thead>
+    <tr>
+      <th>where</th>
+      <th>when</th>
+      <th>screen</th>
+      <th>the answer is</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>route pinned</td>
+      <td>a window</td>
+      <td>Your nights</td>
+      <td>one row per night, gaps first</td>
+    </tr>
+    <tr>
+      <td>open</td>
+      <td>a night or a window</td>
+      <td>Where</td>
+      <td>ranked places on a map</td>
+    </tr>
+    <tr>
+      <td>pinned</td>
+      <td>open</td>
+      <td>Place</td>
+      <td>which dates are open</td>
+    </tr>
+    <tr>
+      <td>pinned</td>
+      <td>a night or a window, nothing open</td>
+      <td>Place, empty</td>
+      <td>an alert, or the reopening date</td>
+    </tr>
+  </tbody>
+</table>
+
+Pinning a knob is a navigation and unpinning it is going back. There is no tab bar,
+no menu and no modal routing. A notification that fires opens the Place screen with
+both knobs pinned, which is the one state the user asked to be told about.
+
+The Place screen has no map. The place is pinned, so geography is settled and
+showing it again would be the duplication the design exists to avoid.
+
+## Three heights, and a fact belongs to exactly one
+
+`Sheet` has three detents. Each `SheetSection` declares the detent at which its
+content first appears, `from` is required, and content with no declared height does
+not compile. That is what turns "a fact belongs to exactly one height" from a
+convention into a type error.
+
+<table>
+  <thead>
+    <tr>
+      <th>detent</th>
+      <th>the question it answers</th>
+      <th>what is there</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Peek</td>
+      <td>Should I go here?</td>
+      <td>the name, the verdict, the deciding facts, the origin of the drive time, freshness when the answer is stale, Reserve</td>
+    </tr>
+    <tr>
+      <td>Half</td>
+      <td>Which nights, exactly, and what if the one I want is shut?</td>
+      <td>the stay answer's status line, the nights strip, the sites open on the chosen night, Reserve, and one row offering to alert on a shut night in view</td>
+    </tr>
+    <tr>
+      <td>Full</td>
+      <td>Which site, exactly — and what is it like on arrival?</td>
+      <td>the site-by-date grid in place of the nights strip, then photographs, getting there, good to know, specs, contact, nearby, and the verified and provenance footer</td>
+    </tr>
+  </tbody>
+</table>
+
+### Full replaces the strip with the grid
+
+The same fact at more detail sits in the same place in the order. At Full the
+nights strip and the sites-open list give way to `SiteMatrix`, the site-by-date
+grid: every campsite against every night of the stay, with the Loop, Type and
+free-text filters and the sort. The place's own detail then scrolls *below* it, so
+nothing Full used to carry is lost. Half is unchanged, and so is Peek.
+
+That is a swap, not an addition, because the strip and the grid answer the same
+question — *which nights* — and "a fact belongs to exactly one height" applies to
+the two renderings of one answer as much as it does to two different answers. A
+sheet showing both would state the week twice.
+
+### An open cell is where a site is held
+
+The grid is also the one surface that can hold a *specific* campsite. An open cell
+is a control; clicking it opens `SiteCartPopover`, which names that site and that
+night and offers one hold in the caller's own cart at the booking vendor. A night
+that is not open is never that control, because there is nothing to hold.
+
+That hold is a real side effect with a fifteen-minute clock on the vendor's side, so
+it is explicit and single-fire. `cart-action.ts` is the whole lifecycle as a pure
+state machine, and the state it keeps is **a hold per (site, night)** rather than one
+slot. A single slot was wrong in a way that cost the user money: taking a second hold
+dropped the first cell's badge, which made the grid offer a site it had already held,
+and taking that offer spent a second hold on the same site-night. So a cell that is
+held stays held until its own deadline, and a cell that is held is never offered
+again — in the reducer, which refuses the request, and in the hook, which will not
+post for a cell it already holds.
+
+**One hold runs at a time**, because the companion serialises a profile's work and a
+second concurrent hold would come back `profile_busy`. While one runs, *every* cart
+control is disabled and `aria-busy`, not only the cell being held, and the others say
+`One hold at a time`. A control that looks live and swallows the click is worse than
+one that is visibly inert.
+
+**The claim expires with the vendor's hold.** `usePlaceCart` schedules one timer per
+held cell off `heldAt + CART_HOLD_MS` and dispatches `expired`. Nothing on the wire
+carries that deadline — `AddToCartResponseDto` has no expiry field — so the countdown
+starts when the answer lands and the duration lives in `lib/cart-hold.ts`, which is
+also where `checkOutSoon` reads its number, so the sentence and the timer cannot
+disagree.
+
+Because the fifteen minutes is **our** guess and not the vendor's word, a lapsed hold
+becomes its own state rather than disappearing. The cell drops its badge and is
+offered again, but the open panel *says* the hold ran out and keeps the link to the
+cart, because if our clock runs early the site is still held and a silent flip back to
+"Add to cart" would walk the user into a second hold on a site they already have —
+the same harm as the one-slot bug, arriving by a different road.
+
+Re-holding from there can still produce two holds; that is inherent, since nothing
+tells us whether the first one stands. What the design does guarantee is that the
+notice **survives the second hold**: a `pending` raised from `lapsed` carries
+`afterLapse`, the new `held` inherits it, and the held panel keeps one line pointing
+at the cart to check for a duplicate. Otherwise the success panel would replace the
+only warning the user ever got, exactly when it had just come true.
+
+**A hold that never answers gives up.** Without a deadline a stalled POST held the
+whole grid's lock indefinitely. `addToCart` carries `CART_HOLD_DEADLINE_MS`, and the
+number is **derived rather than chosen**: a direct hold pays `health` and one cookie
+refresh on `fireTimeout` and then the hold itself on `companionTimeout`, so the
+server's worst case is `companionTimeout × 5/3` — 300s on the defaults — and the
+client waits past that with headroom. Tripping it therefore means the server is not
+answering at all, not that a hold is slow.
+
+That coupling is live: `recgov-atc.companion-timeout` is env-tunable, so raising it
+in an environment moves the worst case and can overtake this deadline, at which point
+a hold still running reads as unanswered and the cell is offered again — two real
+holds on one site-night. `api/booking-deadline.test.ts` reads the two defaults out of
+`BookingConfig.kt` and fails when they grow past what the client allows. It cannot see
+deployed config, only defaults, so a production bump is still a judgement call someone
+has to make with this relationship in hand.
+
+The panel then says we stopped waiting and that the hold **may** still have landed; it
+never claims the hold failed, because nothing on this side can know. It names the
+provider's cart, from the capability gate when the refusal itself carried no name.
+
+There is no optimistic cell: a cell reads *held* only once the vendor said so, and a
+refusal says which refusal it was, by the server's own code through
+`lib/settings-errors.ts`, instead of quietly returning to the offer. A 200 **is** the
+hold — `BookingActionStatus` has one member and the route answers an error envelope
+for everything else — so the callers read the status code and not the body's `status`.
+
+Holding is a mutation, not a read. Raising to Full still issues no request — see
+*One read serves both detents* below, which the cart does not weaken.
+
+Hold state belongs to one place: `PlaceSurface` keys `StayPlace` by POI id, so opening
+another campground starts a fresh map and a fresh lock. Without that key a hold running
+on one campground disabled every cart control on the next, with copy naming no site.
+
+#### Closing the sheet mid-hold loses the receipt
+
+The hold is placed by a real browser at the vendor, so by the time the request is in
+flight the side effect is already happening. Unmounting the sheet cannot un-place it;
+it only discards the answer. The request is therefore **not** aborted on unmount — an
+abort would destroy the `cart_url` while leaving the hold — and the cost is a hold the
+user was never told about. Nothing can recover it on remount, because
+`POST /api/booking/add-to-cart` is the only booking route and there is no cart read.
+The one mitigation that exists today is that the cart URL is a fixed per-provider
+page, so the cart is still reachable without our receipt. Fixing this properly means
+either a cart-read endpoint or hoisting hold state above the sheet; both are their own
+change.
+
+#### The cart gate is a branch, not a visibility test
+
+`watch_capabilities.add_to_cart.state` on the week response decides what the offer
+says, backend-side, and the browser renders the branch it is given.
+
+<table>
+  <thead>
+    <tr>
+      <th>state</th>
+      <th>what the cell offers</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ready</code></td>
+      <td>the hold itself</td>
+    </tr>
+    <tr>
+      <td><code>signed_out</code></td>
+      <td>the control, with signing in as its action</td>
+    </tr>
+    <tr>
+      <td><code>no_credentials</code></td>
+      <td>the control, with <code>openSettings('booking')</code> as its action, naming the provider whose login is missing</td>
+    </tr>
+    <tr>
+      <td><code>unsupported</code></td>
+      <td>nothing — the cell stays text</td>
+    </tr>
+  </tbody>
+</table>
+
+Three of the four keep the control's shape, because hiding a gated control is
+indistinguishable from the campground not having the feature and the two states need
+different sentences. Only `unsupported` falls back to text, because there really is
+nothing the visitor could do. `domain/place/cart-gate.ts` is that union, the
+counterpart of `watch-gate.ts` for alerts, and `reachableCartGate` is the one place
+`unsupported` is turned into "no control".
+
+The grid is the one place the sheet's own width cap moves: 420px at Peek and Half,
+where it sits over the map, and the window's width at Full, where it covers the map
+anyway. On a phone 420px is the whole screen, so the week scrolls sideways under a
+frozen Site column. The grid caps its own height and scrolls its rows, so the place
+detail stays a short scroll below it rather than two hundred rows below it.
+
+The header compacts as the sheet rises, to the name and the stay answer's status
+line. The name is said once at every height. The verdict is the answer, so it rides
+at every height too; what compacts away is the facts that decide it (the drive time,
+the price, the fits line, the reasons and the freshness line), which stay at Peek.
+
+Half does not carry a price. The wire holds one `price` per POI, a range on the POI
+detail, and nothing per night or per site. A place-level *from* price belongs to
+Peek, said once.
+
+### Arriving from the map opens at Half
+
+`ARRIVAL_DETENT` maps `from-map` to Half and `cold` to Peek. Peek's content is the
+card the user has just tapped on the map, so opening there would show them the same
+deciding facts twice. Peek is for cold arrivals only: a notification, a deep link, or a
+place reached by name rather than off the map.
+
+Every type honours that, not only the campgrounds with a stay to check: a charger, a
+gym, a trailhead and a state park reached from the map open at Half too. The one
+exception is named rather than assumed — `PEEK_ONLY_CATEGORIES` in `PlaceSurface`
+holds the dropped pin, whose every fact fits in Peek, so raising it would open a
+sheet with nothing new in it.
+
+### One component, two consumers
+
+The Where card and the Place peek both render `PlaceVerdict`, so the two cannot
+phrase a verdict differently. That buys consistency and nothing else. A shared
+component rendered in two places on one path says the same thing twice, reliably.
+Non-repetition is enforced by the detent a screen opens at and by `SheetSection`
+levels, which is why the two rules are separate and neither stands in for the other.
+
+## A stay claim never comes from day rollups
+
+This is the rule that would otherwise ship a Reserve button that makes a false
+promise.
+
+There are two reads, and they answer different questions.
+
+- **The stay check**, `POST /api/pois/availability/stays`, answers *how does this
+  stay look here*. Its `open_sites` is the number of campsites bookable online
+  **for every night of the stay**.
+- **The day grid**, `GET /api/pois/{id}/campsites/availability`, answers *how does
+  each night look*. Its `AvailabilityDay` rollups are per-night counts.
+
+Three sites open on Saturday and three open on Sunday can mean that no single site
+is open on both nights. Summing, or taking the minimum of, the two rollups produces
+a number that reads like a stay and is not one. A Reserve button behind that number
+sends someone to a booking page for a stay that cannot be made.
+
+So the rule is structural:
+
+- "Open both nights", the verdict's count, and anything that sits behind a Reserve
+  button read the stay check. In the code that is `usePlaceStay` feeding
+  `PlaceVerdict`.
+- The nights strip and the site-by-date grid read the day grid and are per-night
+  context only. In the code that is `usePlaceNights` feeding `NightsStrip` and
+  `NightSites` at Half and `SiteMatrix` at Full. Neither is ever summed into a stay
+  claim. The grid renders cells, which is per-campsite-per-night and is exactly
+  what cells are for; what it may not do is add them up into a sentence about the
+  whole stay.
+
+The grid carries the same discipline inside itself. `nightOf` reads a night off its
+cells and nothing else: the most permissive cell decides, so one open site makes the
+night open however little else was read, while calling a night *shut* — full, closed
+or past — takes most of its sites having been read. A day with no cells, or one whose
+cells were mostly never read, is `unknown`. The server's `day.status` is a rollup of
+those same cells and is not read here, because it answers a different question: it
+refuses to call a campground full while even one site went unobserved, which is right
+for a claim and wrong for a night chip, where it turned a campground that is full but
+for two unread sites into `No data` the user could not even select. `SiteMatrix`
+applies the same rule one level down: `cellState` is a straight lookup of
+`day.cells[campsiteId]`, and a night the wire never answered is `unknown` rather
+than the rollup of the nights it did answer.
+
+### One read serves both detents
+
+`usePlaceNights` makes **two** requests and no more — the screen as a whole makes
+others, the stay check among them, but these two are the whole of the per-night
+read: the week from `GET /api/pois/{id}/campsites/availability`, and the campsite
+catalog from `GET /api/pois/{id}/campsites`. It publishes `days`, `dates`,
+`campsites` and `siteNames` off them, and the strip at Half and the grid at Full
+are both fed from that one view. Neither owns a query.
+
+This is the invariant most likely to be broken by the next feature, so it is worth
+stating plainly: **raising the sheet to Full must not issue a request.** A grid
+that fetched its own week would be a second rendering of the same nights that can
+disagree with the first, and a grid that fetched its own catalog would be the
+duplicate query this one already replaced. The catalog is a POI's fixed inventory
+and the strip already needed it for site names, so the metadata the Loop and Type
+filters read was on the wire before the grid existed.
+
+The grid's columns are `dates` — the stay's own nights, the same list the strip
+iterates — so the two detents cannot disagree about which nights are in view. That
+is also why the grid has no week paging: paging would either move the window the
+strip reads, leaving the strip and the verdict describing different nights, or give
+the grid a window of its own, which is the second read. Changing the window is the
+date picker's job.
+
+Every status the stay check can return has a sentence already, in `stayCopy` in
+`lib/strings.ts`, and the sheet renders the branch the server gives it. The browser
+invents no vocabulary of its own. A count dressed up as prose is not one of the
+branches.
+
+### A grid the booking site would not answer
+
+The same rule binds the grid's failures. A refused read has a server-stated code,
+`lib/availability-errors.ts` turns that code into the sentence written for it, and
+`usePlaceNights` carries it out as `failure`. The sheet shows that sentence in place
+of whichever reading of the week the detent would otherwise carry, the strip at Half
+or the grid at Full — not a week of `No data` chips, and not an empty grid, which are
+claims the server never made standing in for the reason it did state.
+
+The retry follows the same source: it is offered for a failure on the provider's end
+and withheld while the provider is rate-limiting us, because asking again is the one
+thing that cannot help there.
+
+## Getting out of the sheet
+
+`Sheet` takes an optional `onClose`. Given one it draws a close control beside the
+grabber — both 44px — and Escape inside the sheet dismisses it. The map surface
+passes `clearSelectedPoi`; the routed `?poi=<id>` page passes nothing, because it has
+nowhere to close to, and a gated control that cannot act is worse than no control.
+
+The sheet is not modal. Focus is never trapped, the map keeps its gestures, and the
+scrolling body is a tab stop so a keyboard can reach prose that holds no controls of
+its own.
+
+## Where Half ends and Full begins
+
+`POI_BLOCK_GROUPS` in `domain/poi/blocks.ts` lists the blocks in their one fixed
+order, and `PlaceSheet` splits that list into Half and Full after the `glance`
+group (`HALF_GROUP_COUNT`).
+
+That is **not** `RULE_BEFORE_GROUP`, although the constant is right there and
+invites it. `RULE_BEFORE_GROUP` sits after `gettingThere` and `goodToKnow`, and
+those two blocks answer *what is it like when I arrive*, which is Full. Splitting
+at the rule would pull them up into Half, where the question is *which nights*.
+The hairline keeps its own meaning in the block order, and the detent boundary
+is a separate decision that happens to share a list.
+
+The block order itself does not change. A type omits blocks; it never reorders them.
+What the sheet changes is that the groups become detents instead of scroll position.
+
+## What the sheet leaves out
+
+**The sheet renders no `hero` and no `identity`** (`SHEET_OMITS`).
+
+- `hero` is a 176px photograph. At the top of a 395px Half detent it pushes
+  `actions`, which holds Reserve, below the fold, and Reserve is the one thing Half
+  must guarantee. Moving it into Full would put it after `glance` on screen, which
+  breaks the older and stronger rule that the sequence never changes. So it is
+  omitted, and a type omitting a block is already how the order works.
+- `identity` is the name above the type's eyebrow. The sheet's header already owns
+  both, so rendering them again in the body is the repetition the detents exist to
+  prevent.
+
+## The header's one secondary line
+
+The header carries the name and exactly one secondary line, and that line is the
+type's own eyebrow, verbatim, from the same source the identity block reads:
+`Campground · <agency>`, `Charger · Tesla`, `National park`. Who manages a place
+tells a camper which booking system and which rules to expect, which is why it
+shares the type's line.
+
+Where the eyebrow would only repeat the name, the line carries that type's one
+identifying fact instead. A dropped pin is the whole of that case. Its name is a
+label, so a verbatim eyebrow would print *Dropped pin* above *Dropped pin*, and its
+coordinates are the only thing that says which pin it is. In the code that is the
+`locatedByPoint` branch in `domain/poi/types/place.tsx`.
+
+A street address is a location fact, not an identity one, so it does not go in the
+header. A campground's address survives at Full, in `contact`.
+
+## Recorded gaps
+
+Two things are missing from phase 1. They are stated here as gaps and are not
+worked around.
+
+- **No photographs anywhere.** The sheet omits `hero`, and nothing else renders a
+  photograph, so the Full list above promises photographs the sheet does not yet
+  show. The fix is not to reorder the blocks.
+- **No street address for `place`, `charger` or `group`.** The body block that
+  should hold it does not exist yet, and neither does the charger's common-site
+  label or a park group's state and manager. The answer is that block, not
+  overloading the header's single line.
+
+Both are open work. Neither is a decision that the information does not matter.

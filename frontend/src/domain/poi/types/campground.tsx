@@ -44,14 +44,16 @@ import {
   PoiVerifiedStamp,
   type PoiTag,
 } from '../PoiBlocks';
-import { PoiPageShell, type PoiBlockSlots } from '../PoiPageShell';
-import { presentSpecs, specsFrom, type PoiTypeProps } from './common';
+import type { PoiBlockSlots } from '../PoiPageShell';
+import { presentSpecs, renderPoiPage, specsFrom, type PoiTypeProps } from './common';
 import { CarrierSignals } from './CarrierSignals';
 
 /** What the neighbours of a campground are: other places to sleep, not other pins. */
 const NEARBY_HEADING = 'Campgrounds nearby';
 
-export function CampgroundPoiPage({ feature, variant, onClose, availability, nearby }: PoiTypeProps) {
+const KIND_LABEL = 'Campground';
+
+export function CampgroundPoiPage({ feature, variant, onClose, availability, nearby, render }: PoiTypeProps) {
   const p = feature.properties;
   const [lng, lat] = coordinatesOf(feature);
   const distance = useDistanceTo(lng, lat);
@@ -88,6 +90,8 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
     distance,
   ]);
 
+  const eyebrow = eyebrowFor(KIND_LABEL, name, agency);
+
   const tags: PoiTag[] = [
     ...amenityTags(p),
     ...activityList(p).map((label) => ({ label, absent: false })),
@@ -112,7 +116,7 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
       <PoiIdentity
         // "Campground · USDA Forest Service" over "Tuff Campground" says campground
         // twice; a name that does not carry its own type keeps the word.
-        eyebrow={eyebrowFor('Campground', name, agency)}
+        eyebrow={eyebrow}
         title={name}
         subtitle={subtitle}
       />
@@ -189,12 +193,14 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability, nea
       : null),
   };
 
-  return (
-    <PoiPageShell
-      variant={variant}
-      parent={parentStep ? { label: parentStep } : undefined}
-      blocks={blocks}
-    />
+  return renderPoiPage(
+    {
+      name,
+      subtitle: eyebrow,
+      blocks,
+      ...(parentStep ? { parent: { label: parentStep } } : null),
+    },
+    { render, variant },
   );
 }
 

@@ -16,10 +16,10 @@
  * `.lds-modal-scrim` ships a background, `display: flex` and centring, but no
  * position — so without this the settings form renders as a block wherever it was
  * mounted. Scoped by `:has()` to the settings modal's own body so it cannot restyle
- * a future modal that arrives with its own layout, and z-indexed above the drawer
- * since a modal is the top plane by definition. `--rt-z-modal` is the scale's name
+ * a future modal that arrives with its own layout, and z-indexed above the map
+ * chrome since a modal is the top plane by definition. `--rt-z-modal` is the scale's name
  * for that plane — and its own comment in tokens.css records that it is currently
- * tied with `--rt-z-topbar` and beaten by `--rt-z-popover`. */
+ * tied with `--rt-z-topbar`. */
 .lds-modal-scrim:has(.rt-settings-modal) {
   position: fixed;
   inset: 0;

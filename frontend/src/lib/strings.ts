@@ -20,6 +20,7 @@
 // of fragments and get the word order wrong.
 
 import type { StayAvailabilityStatus, StayFailureReason, StayOutcome } from '@/api/availability-api';
+import { CART_HOLD_MINUTES } from './cart-hold';
 import { entryOf } from './entry-of';
 
 /**
@@ -28,6 +29,9 @@ import { entryOf } from './entry-of';
  * used to collide on a single screen.
  */
 export const VENDOR = 'Recreation.gov';
+
+/** The bare noun, for the one sentence that already supplies its own "your". */
+const UNNAMED_BOOKING_LABEL = 'booking';
 
 /**
  * The neutral name for a booking site we cannot name. `heldTitle` and
@@ -39,38 +43,29 @@ const UNNAMED_BOOKING_SITE = 'the booking site';
 /** The possessive form, for the gate sentences that ask for a login. */
 const UNNAMED_BOOKING_ACCOUNT = 'your booking';
 
-/** The bare noun, for the one sentence that already supplies its own "your". */
-const UNNAMED_BOOKING_LABEL = 'booking';
-
-/**
- * The one template for the booking verb plus a name.
- *
- * Both surfaces that offer a named booking link — the cell popover's escape
- * hatch and the site-detail anchor — go through this, so a wording pass is one
- * edit rather than two that can drift apart.
- */
-const bookOn = (bookingSystem: string) => `Book on ${bookingSystem}`;
-
 export const bookingCopy = {
-  /** Named after whoever takes the booking at that link. Callers that have no
-   *  name of their own fall back to [openProvider]'s neutral noun. */
-  bookOn,
-  /** The popover's escape hatch, named after whoever takes the booking at that link. */
-  openProvider: (bookingSystem?: string) => bookOn(bookingSystem ?? UNNAMED_BOOKING_SITE),
-  addToCart: 'Add to cart',
-  /** The armed cell's label, before the second tap. */
-  book: 'Book',
-  /** The drawer's fallback when a pin carries a bare reserve URL and no label. */
+  /** The fallback when a pin carries a bare reserve URL and no label. */
   reserve: 'Reserve',
+  addToCart: 'Add to cart',
   holdRunning: 'Holding site… usually under a minute; can take a few',
-  // The three lines of the hold toast. Each takes the name of the provider that
-  // actually held the site, rather than naming one vendor for all of them.
-  heldTitle: (bookingSystem?: string) => `Site held in your ${bookingSystem ? `${bookingSystem} ` : ''}cart`,
-  openCart: (bookingSystem?: string) => `Open ${bookingSystem ?? 'your'} cart ↗`,
-  checkOutSoon: (bookingSystem?: string) =>
-    `Check out on ${bookingSystem ?? UNNAMED_BOOKING_SITE} within 15 minutes.`,
-  holdBusyTitle: 'One hold at a time',
-  holdBusyBody: 'A hold is already running — wait for it to finish before holding another site.',
+  holdFailed: 'Could not hold the site',
+  /** Why a second cart control is inert: the companion serialises a profile's work. */
+  holdBusy: 'One hold at a time; wait for the running one to finish.',
+  /** We gave up on the answer. Neither sentence may claim the hold failed — we cannot know. */
+  holdUnansweredTitle: 'No answer from the booking site',
+  holdUnanswered: (holder?: string) =>
+    `We stopped waiting. The hold may still have landed — check your ${holder ?? UNNAMED_BOOKING_LABEL} cart before trying again.`,
+  /** Survives into the new hold: the earlier one may still be in the cart alongside it. */
+  heldAfterLapse: (holder?: string) =>
+    `You held this site earlier too — check your ${holder ?? UNNAMED_BOOKING_LABEL} cart for a duplicate before checking out.`,
+  /** Our own clock, not the vendor's, so the sentence says the site may still be held. */
+  holdLapsedTitle: 'That hold has run out',
+  holdLapsed: (holder?: string) =>
+    `Our ${CART_HOLD_MINUTES} minutes are up. It may still be in your ${holder ?? UNNAMED_BOOKING_LABEL} cart — check there before holding it again.`,
+  heldTitle: (holder?: string) => `Site held in your ${holder ? `${holder} ` : ''}cart`,
+  openCart: (holder?: string) => `Open ${holder ?? 'your'} cart ↗`,
+  checkOutSoon: (holder?: string) =>
+    `Check out on ${holder ?? UNNAMED_BOOKING_SITE} within ${CART_HOLD_MINUTES} minutes.`,
 } as const;
 
 /**
@@ -82,12 +77,11 @@ export const bookingCopy = {
 export const gateCopy = {
   cartSignedOut: 'Sign in to hold sites from here',
   /** Named after the adapter the backend says would hold it, never the POI's. */
-  cartNoCredentials: (providerDisplay?: string) =>
-    `Add ${providerDisplay ?? UNNAMED_BOOKING_ACCOUNT} login in Settings`,
+  cartNoCredentials: (holder?: string) =>
+    `Add ${holder ?? UNNAMED_BOOKING_ACCOUNT} login in Settings`,
   watchSignedOut: 'Sign in to get an alert when a site opens up that night.',
   /** The word inside the day panel's sentence, and the sentence around it. */
   signIn: 'Sign in',
-  daySignedOutSuffix: ' to set availability alerts.',
   /** The add-to-cart row's help, as a link plus the prose that follows it. */
   editorNoCredentialsLink: (providerDisplay?: string) => `Add your ${providerDisplay ?? UNNAMED_BOOKING_LABEL} login`,
   editorNoCredentialsSuffix: ' in Settings to hold sites.',
@@ -95,19 +89,10 @@ export const gateCopy = {
 } as const;
 
 export const dayCopy = {
-  setWatch: 'Set watch',
-  watching: 'Watching - tap to remove',
-  working: 'Working…',
-  checking: 'Checking your availability alerts…',
-  checkFailed: "Couldn't check your availability alerts.",
-  retry: 'Retry',
   unsupported: 'Watches are not available for this campground.',
-  nothingToWatch: 'No online openings to watch for this day.',
 } as const;
 
 export const watchCopy = {
-  /** The panel titles. Both surfaces use the same one so signing in swaps only the body. */
-  title: (poiName: string) => `Watch ${poiName}`,
   slack: 'Slack',
   slackHelp: 'Post when a matching site opens.',
   email: 'Email',
@@ -118,16 +103,6 @@ export const watchCopy = {
   stopWhenTriggered: 'Stop when triggered',
   stopWhenTriggeredHelp: 'Mark done after a successful trigger.',
   close: 'Close',
-} as const;
-
-/** The banners a failing upstream produces. Each names the vendor, not "the provider". */
-export const upstreamCopy = {
-  rateLimitedTitle: `${VENDOR} is limiting our checks`,
-  erroredTitle: `${VENDOR} returned an error`,
-  unreachableTitle: `We can't reach ${VENDOR}`,
-  /** Copied to the clipboard for a bug report, so it carries the ids. */
-  reportDetail: (poiName: string, poiId: string | number, message: string) =>
-    `${VENDOR} error for ${poiName} (POI ${poiId}): ${message}`,
 } as const;
 
 /** The account surface's vendor-bearing strings. The rest of its copy is still inline. */
@@ -228,6 +203,7 @@ export const stayCopy = {
     if (outcome !== 'refused') return stayCopy.error;
     return (reason === null ? undefined : entryOf(STAY_REFUSAL_COPY, reason)) ?? stayCopy.refusedLine;
   },
+  reopens: (date: string) => `Reopens ${date}`,
   /** A card's answer, by status; `open` is the count of sites open every night. */
   result: {
     open: (open: number) => `${open} sites open`,
@@ -236,6 +212,72 @@ export const stayCopy = {
     closed_for_season: () => 'Closed for the season',
     no_data: () => 'No data for these dates',
   } satisfies Record<StayAvailabilityStatus, (open: number) => string>,
+} as const;
+
+export const placeCopy = {
+  driveFrom: (duration: string, origin: string) => `${duration} from ${origin}`,
+  priceFrom: (amount: string) => `From ${amount}`,
+  factsSeparator: ' · ',
+  loadFailed: "This place didn't load",
+  loadFailedBody: 'We could not fetch its details. Everything else still works.',
+  tryAgain: 'Try again',
+  refreshFailed: "Couldn't refresh this place",
+  refreshFailedBody: 'These are the details we loaded earlier. They may be out of date.',
+  noDetailView: 'No detail view for this place yet',
+  category: (category: string) => `Category: ${category || 'unknown'}`,
+} as const;
+
+export const nightsCopy = {
+  group: 'Nights',
+  open: (open: number) => (open === 1 ? '1 site open' : `${open} sites open`),
+  full: 'Full',
+  unknown: 'No data',
+  openCount: (open: number) => String(open),
+  fullCount: 'Full',
+  firstComeCount: 'First come',
+  closedCount: 'Closed',
+  pastCount: 'Past',
+  unknownCount: 'No data',
+  site: (campsiteRef: number | string) => `Site #${campsiteRef}`,
+  unread: 'The booking site did not answer for these nights.',
+  noneOpen: 'Nothing open this night.',
+  firstCome: 'First come, first served: nothing to reserve.',
+  closedNight: 'Closed this night.',
+  noDetail: 'No site detail for this night.',
+} as const;
+
+export const matrixCopy = {
+  group: 'Sites by date',
+  heading: (shown: number, total: number) =>
+    shown === total ? `${shown} sites by date` : `${shown} of ${total} sites by date`,
+  siteColumn: 'Site',
+  filterSites: 'Filter sites',
+  allLoops: 'All loops',
+  filterByLoop: 'Filter by loop',
+  allTypes: 'All types',
+  filterByType: 'Filter by site type',
+  sortSites: 'Sort sites',
+  sortBySite: 'Site',
+  sortByAvailable: 'Available first',
+  sortByLoop: 'Loop',
+  sortByType: 'Type',
+  key: 'What the letters mean',
+  noMatches: 'No sites match these filters.',
+  noSites: 'No reservable sites for this campground.',
+  cell: (site: string, date: string, status: string) => `${site} ${date}: ${status}`,
+  cellCart: (cell: string) => `${cell}; add to cart`,
+  cellHolding: (cell: string) => `${cell}; holding this site in your cart`,
+  cellHeld: (cell: string) => `${cell}; held in your cart`,
+  pickNight: (date: string) => `Show ${date}`,
+} as const;
+
+export const alertCopy = {
+  offer: 'Get an alert if a site opens up.',
+  create: 'Alert me',
+  createFor: (night: string) => `Alert me for ${night}`,
+  creating: 'Setting alert…',
+  creatingFor: (night: string) => `Setting alert for ${night}`,
+  createFailed: 'That alert was not set. Try again.',
 } as const;
 
 /** The campground filter block under the search row, and the cards' facet row. */

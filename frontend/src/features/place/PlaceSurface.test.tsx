@@ -1,0 +1,640 @@
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { STAY_ANSWER_EVENT, STAY_DONE_EVENT } from '@/api/availability-api';
+import { addLocalDays, localToday, localYmd } from '@/lib/local-date';
+import { longDayLabel } from '@/lib/week-labels';
+import { flattenHydratedPoi } from '@/lib/poi';
+import { queryKeys } from '@/queries/keys';
+import { bookingCopy, gateCopy, matrixCopy, nightsCopy, placeCopy, stayCopy } from '@/lib/strings';
+import { eventStreamResponse, jsonResponse, type StubEvent } from '@/test/fetch-stub';
+import { useMapStore } from '@/stores/mapStore';
+import { useTripStore } from '@/stores/tripStore';
+import { createTestQueryClient } from '@/test/query-client';
+import { MapPlaceSurface, PlaceSurface } from './PlaceSurface';
+
+const POI_ID = 42;
+const NAME = 'Upper Pines';
+const PARENT = 'Yosemite National Park';
+const AGENCY = 'National Park Service';
+const SUBTITLE = `Campground · ${AGENCY}`;
+const OPEN_SITES = 3;
+const CHECKED_SITES = 40;
+
+const PRICE_MINIMUM = 36;
+const PRICE_MAXIMUM = 42;
+const PRICE_FROM = 'From $36';
+
+const detail = () =>
+  jsonResponse({
+    type: 'Feature',
+    id: POI_ID,
+    geometry: { type: 'Point', coordinates: [-119.5383, 37.8651] },
+    properties: {
+      category: 'campground',
+      subcategory: 'federal',
+      name: NAME,
+      parent_name: PARENT,
+      agency: AGENCY,
+      availability_supported: true,
+      price: { minimum: PRICE_MINIMUM, maximum: PRICE_MAXIMUM, currency: 'USD' },
+    },
+  });
+
+const plainDetail = (category: string, name: string) =>
+  jsonResponse({
+    type: 'Feature',
+    id: POI_ID,
+    geometry: { type: 'Point', coordinates: [-119.5383, 37.8651] },
+    properties: { category, name },
+  });
+
+const SITE_ID = 11;
+const SITE_NAME = '12';
+const SITE_LOOP = 'Loop A';
+const ONE_NIGHT = 1;
+
+const stayStart = () => localYmd(localToday());
+const stayEnd = () => localYmd(addLocalDays(localToday(), ONE_NIGHT));
+
+const openCellLabel = () =>
+  `${SITE_LOOP} / ${SITE_NAME} ${longDayLabel(stayStart())}: available`;
+
+const grid = () =>
+  jsonResponse({
+    poi_id: POI_ID,
+    start_date: stayStart(),
+    end_date: stayEnd(),
+    state: 'available',
+    days: [],
+    watch_capabilities: { trigger_kinds: [], add_to_cart: { state: 'unsupported' } },
+  });
+
+const HOLDER = 'Recreation.gov';
+
+const gridWithSites = (cart: unknown = { state: 'unsupported' }) => () =>
+  jsonResponse({
+    poi_id: POI_ID,
+    start_date: stayStart(),
+    end_date: stayEnd(),
+    state: 'available',
+    days: [
+      {
+        date: stayStart(),
+        status: 'available',
+        watchable: false,
+        cells: { [SITE_ID]: { status: 'available', watchable: false } },
+      },
+    ],
+    watch_capabilities: { trigger_kinds: [], add_to_cart: cart },
+  });
+
+const catalog = (campsites: readonly unknown[] = []) => () =>
+  jsonResponse({ poi_id: POI_ID, type: 'campsites', campsites, reservation_url_templates: {} });
+
+const namedSite = {
+  id: SITE_ID,
+  campground_id: POI_ID,
+  name: SITE_NAME,
+  kind: 'tent',
+  kind_label: 'Tent',
+  loop_name: SITE_LOOP,
+  equipment: [],
+  attributes: [],
+  data_provider: 'rec_gov',
+  data_provider_ref: String(SITE_ID),
+};
+
+const watchList = () => jsonResponse({ total: 0, limit: 0, offset: 0, watches: [] });
+
+interface Stubs {
+  grid?: () => Response;
+  detail?: () => Response;
+  catalog?: () => Response;
+}
+
+function stubRoutes(stayEvents: readonly StubEvent[], over: Stubs = {}) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: unknown): Promise<Response> => {
+      const url = String(input);
+      if (url.includes('/availability/stays')) return eventStreamResponse(stayEvents);
+      if (url.includes('/campsites/availability')) return (over.grid ?? grid)();
+      if (url.includes('/campsites')) return (over.catalog ?? catalog())();
+      if (url.includes('/api/watches')) return watchList();
+      return (over.detail ?? detail)();
+    }),
+  );
+}
+
+function mount(arrival: 'cold' | 'from-map' = 'cold') {
+  const client = createTestQueryClient();
+  const view = render(
+    <QueryClientProvider client={client}>
+      <PlaceSurface poiId={POI_ID} arrival={arrival} />
+    </QueryClientProvider>,
+  );
+  return { ...view, client };
+}
+
+const refetchDetail = (client: ReturnType<typeof mount>['client']) =>
+  act(() => client.refetchQueries({ queryKey: queryKeys.pois.detail(POI_ID) }));
+
+const SERVER_ERROR = 500;
+const TOO_MANY_REQUESTS = 429;
+const BAD_GATEWAY = 502;
+const RATE_LIMITED_REASON = 'Booking site rate-limited us — try again shortly';
+const UPSTREAM_FAILED_REASON = `Booking site returned an error (upstream HTTP ${SERVER_ERROR})`;
+const GYM_CATEGORY = 'planet_fitness_location';
+const GYM_NAME = 'Planet Fitness Fresno';
+const DROPPED_PIN_CATEGORY = 'dropped-pin';
+const DROPPED_PIN_NAME = 'Dropped pin';
+const SHEET_TESTID = 'place-sheet';
+const CHROME_SELECTOR = '.rt-place-chrome';
+const UNRENDERED_CATEGORY = 'ski_resort';
+const DIRECTIONS_LABEL = 'Directions';
+const ROUTE_QUERY = '?route=abc123';
+const DETAIL_LNG = -119.5383;
+const DETAIL_LAT = 37.8651;
+const CAMPGROUND_KIND = 'CG';
+const ORIGIN_ROW = 0;
+
+const stubEverything = (respond: () => Promise<Response> | Response) =>
+  vi.stubGlobal('fetch', vi.fn(async () => respond()));
+
+beforeEach(() => {
+  useMapStore.getState().reset();
+  useTripStore.getState().reset();
+  window.history.replaceState(null, '', '/');
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('PlaceSurface', () => {
+  test('a stay that never answered says so, and claims nothing beside it', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'deadline_reached' } }]);
+
+    mount();
+
+    expect(await screen.findByText(stayCopy.timedOut)).toBeInTheDocument();
+    expect(screen.queryByText(stayCopy.pending)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: new RegExp(stayCopy.checkAgain, 'i') })).toBeInTheDocument();
+  });
+
+  test('the verdict is the stay check answer, under the name and the line the type states', async () => {
+    stubRoutes([
+      {
+        event: STAY_ANSWER_EVENT,
+        data: {
+          poi_id: POI_ID,
+          outcome: 'answered',
+          stay: {
+            status: 'open',
+            open_sites: OPEN_SITES,
+            checked_sites: CHECKED_SITES,
+            from_cache: false,
+          },
+        },
+      },
+      { event: STAY_DONE_EVENT, data: { outcome: 'complete' } },
+    ]);
+
+    mount();
+
+    expect(await screen.findByText(`${OPEN_SITES} sites open`)).toBeInTheDocument();
+    expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
+    expect(screen.queryByText(PARENT)).not.toBeInTheDocument();
+    expect(screen.queryByText(stayCopy.timedOut)).not.toBeInTheDocument();
+  });
+
+  test('a failed refresh keeps the last good copy and says it may be out of date', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+
+    const { client } = mount();
+
+    await screen.findByText(SUBTITLE);
+    expect(screen.queryByText(placeCopy.refreshFailed)).not.toBeInTheDocument();
+
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, SERVER_ERROR)));
+    await refetchDetail(client);
+
+    expect(await screen.findByText(placeCopy.refreshFailed)).toBeInTheDocument();
+    expect(screen.getByText(placeCopy.refreshFailedBody)).toBeInTheDocument();
+    expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
+    expect(screen.queryByText(placeCopy.loadFailed)).not.toBeInTheDocument();
+  });
+
+  test('trying the refresh again clears the warning once the read succeeds', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+
+    const { client } = mount();
+
+    await screen.findByText(SUBTITLE);
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, SERVER_ERROR)));
+    await refetchDetail(client);
+    await screen.findByText(placeCopy.refreshFailed);
+
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+    fireEvent.click(screen.getByRole('button', { name: placeCopy.tryAgain }));
+
+    await vi.waitFor(() => expect(screen.queryByText(placeCopy.refreshFailed)).not.toBeInTheDocument());
+    expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
+  });
+
+  test('names the place once, though the type still builds the identity block', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+
+    mount();
+
+    await screen.findByText(SUBTITLE);
+    expect(screen.getAllByText(NAME)).toHaveLength(1);
+  });
+
+  test('peek states the place-level from price, read off the POI record', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+
+    mount();
+
+    expect(await screen.findByText(PRICE_FROM)).toBeInTheDocument();
+  });
+
+  test('a grid the booking site refused says the reason it gave, and offers no retry it said would not help', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], {
+      grid: () => jsonResponse({ error: 'rate_limited' }, TOO_MANY_REQUESTS),
+    });
+
+    mount('from-map');
+
+    expect(await screen.findByText(RATE_LIMITED_REASON)).toBeInTheDocument();
+    expect(screen.getByText(nightsCopy.unread)).toBeInTheDocument();
+    expect(screen.queryByText(nightsCopy.unknown)).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /nights/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: placeCopy.tryAgain })).not.toBeInTheDocument();
+  });
+
+  test('a grid that failed on their end offers the retry the server says would help', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], {
+      grid: () => jsonResponse({ error: 'upstream_5xx', upstream_status: SERVER_ERROR }, BAD_GATEWAY),
+    });
+
+    mount('from-map');
+
+    expect(await screen.findByText(UPSTREAM_FAILED_REASON)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: placeCopy.tryAgain })).toBeInTheDocument();
+  });
+});
+
+describe('PlaceSurface, at the full detent', () => {
+  const raiseToFull = async () => {
+    const grabber = await screen.findByRole('button', { name: NAME });
+    fireEvent.keyDown(grabber, { key: 'ArrowUp' });
+    fireEvent.keyDown(grabber, { key: 'ArrowUp' });
+  };
+
+  test('the grid is fed by the week and the catalog the sheet already read, with no second request', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'completed' } }], {
+      grid: gridWithSites(),
+      catalog: catalog([namedSite]),
+    });
+
+    mount('from-map');
+    await raiseToFull();
+
+    expect(screen.getByTestId(SHEET_TESTID)).toHaveAttribute('data-detent', 'full');
+    expect(screen.getByRole('region', { name: matrixCopy.group })).toBeInTheDocument();
+    expect(await screen.findByRole('rowheader')).toHaveTextContent(`${SITE_LOOP} / ${SITE_NAME}`);
+
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
+      String(call[0]),
+    );
+    const weekReads = calls.filter((url) => url.includes('/campsites/availability'));
+    const catalogReads = calls.filter(
+      (url) => url.includes('/campsites') && !url.includes('/availability'),
+    );
+    expect(weekReads).toHaveLength(1);
+    expect(catalogReads).toHaveLength(1);
+  });
+});
+
+describe('PlaceSurface, with no dates pinned', () => {
+  const DISCOVERY_NIGHTS = 14;
+
+  const stayAsked = () => {
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter((made) =>
+      String(made[0]).includes('/availability/stays'),
+    );
+    return JSON.parse(String((calls.at(-1)?.[1] as RequestInit | undefined)?.body ?? '{}'));
+  };
+
+  const openNights = () => {
+    const today = localToday();
+    const open = [localYmd(today), localYmd(addLocalDays(today, ONE_NIGHT))];
+    return () =>
+      jsonResponse({
+        poi_id: POI_ID,
+        start_date: open[0],
+        end_date: localYmd(addLocalDays(today, DISCOVERY_NIGHTS)),
+        state: 'available',
+        days: open.map((date) => ({
+          date,
+          status: 'available',
+          watchable: false,
+          cells: { [SITE_ID]: { status: 'available', watchable: false } },
+        })),
+        watch_capabilities: { trigger_kinds: [], add_to_cart: { state: 'unsupported' } },
+      });
+  };
+
+  test('the sheet covers a fortnight, and asks the stay check about one night of it', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+
+    mount('from-map');
+
+    const strip = await screen.findByRole('group', { name: nightsCopy.group });
+    expect(within(strip).getAllByRole('button')).toHaveLength(DISCOVERY_NIGHTS);
+
+    const today = localToday();
+    expect(stayAsked()).toMatchObject({
+      start_date: localYmd(today),
+      end_date: localYmd(addLocalDays(today, ONE_NIGHT)),
+    });
+  });
+
+  test('picking a night in the strip asks the stay check about that night', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], { grid: openNights() });
+
+    mount('from-map');
+
+    const strip = await screen.findByRole('group', { name: nightsCopy.group });
+    await waitFor(() => expect(within(strip).getAllByRole('button')[1]).toBeEnabled());
+    fireEvent.click(within(strip).getAllByRole('button')[1]);
+
+    const night = localYmd(addLocalDays(localToday(), ONE_NIGHT));
+    await waitFor(() => expect(stayAsked()).toMatchObject({ start_date: night }));
+  });
+
+  test('the grid is read over the whole fortnight, not over the night in focus', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+
+    mount('from-map');
+
+    await screen.findByRole('group', { name: nightsCopy.group });
+
+    const today = localToday();
+    const read = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls
+      .map((made) => String(made[0]))
+      .find((url) => url.includes('/campsites/availability'));
+    expect(read).toContain(`start_date=${localYmd(today)}`);
+    expect(read).toContain(`end_date=${localYmd(addLocalDays(today, DISCOVERY_NIGHTS))}`);
+  });
+});
+
+describe('PlaceSurface, for a place with no stay to check', () => {
+  test('a place reached from the map opens at half, like every other place', async () => {
+    stubRoutes([], { detail: () => plainDetail(GYM_CATEGORY, GYM_NAME) });
+
+    mount('from-map');
+
+    expect(await screen.findByTestId(SHEET_TESTID)).toHaveAttribute('data-detent', 'half');
+  });
+
+  test('a dropped pin stays at peek, which is all it has', async () => {
+    stubRoutes([], { detail: () => plainDetail(DROPPED_PIN_CATEGORY, DROPPED_PIN_NAME) });
+
+    mount('from-map');
+
+    expect(await screen.findByTestId(SHEET_TESTID)).toHaveAttribute('data-detent', 'peek');
+  });
+});
+
+describe('PlaceSurface, before there is a place to show', () => {
+  test('holds the chrome with a skeleton while the detail loads, then swaps in the sheet', async () => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    stubEverything(async () => {
+      await held;
+      return detail();
+    });
+
+    const { container } = mount();
+
+    expect(container.querySelector(CHROME_SELECTOR)).not.toBeNull();
+    expect(screen.queryByTestId(SHEET_TESTID)).not.toBeInTheDocument();
+    expect(screen.queryByText(placeCopy.loadFailed)).not.toBeInTheDocument();
+
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+    await act(async () => {
+      release();
+    });
+
+    expect(await screen.findByTestId(SHEET_TESTID)).toBeInTheDocument();
+    expect(container.querySelector(CHROME_SELECTOR)).toBeNull();
+  });
+
+  test('a detail that never loaded says so, claims no place, and reads again on retry', async () => {
+    stubEverything(() => jsonResponse({ error: 'boom' }, SERVER_ERROR));
+
+    mount();
+
+    expect(await screen.findByText(placeCopy.loadFailed)).toBeInTheDocument();
+    expect(screen.getByText(placeCopy.loadFailedBody)).toBeInTheDocument();
+    expect(screen.queryByTestId(SHEET_TESTID)).not.toBeInTheDocument();
+    expect(screen.queryByText(placeCopy.refreshFailed)).not.toBeInTheDocument();
+
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+    fireEvent.click(screen.getByRole('button', { name: placeCopy.tryAgain }));
+
+    expect(await screen.findByText(SUBTITLE)).toBeInTheDocument();
+    expect(screen.queryByText(placeCopy.loadFailed)).not.toBeInTheDocument();
+  });
+
+  test('a category with no renderer says so instead of showing an empty sheet', async () => {
+    stubEverything(() =>
+      jsonResponse({
+        type: 'Feature',
+        id: POI_ID,
+        geometry: { type: 'Point', coordinates: [DETAIL_LNG, DETAIL_LAT] },
+        properties: { category: UNRENDERED_CATEGORY, name: 'Somewhere' },
+      }),
+    );
+
+    mount();
+
+    expect(await screen.findByText(placeCopy.noDetailView)).toBeInTheDocument();
+    expect(screen.getByText(placeCopy.category(UNRENDERED_CATEGORY))).toBeInTheDocument();
+    expect(screen.queryByTestId(SHEET_TESTID)).not.toBeInTheDocument();
+  });
+});
+
+describe('MapPlaceSurface', () => {
+  const mountOnMap = () => {
+    const client = createTestQueryClient();
+    return render(
+      <QueryClientProvider client={client}>
+        <MapPlaceSurface />
+      </QueryClientProvider>,
+    );
+  };
+
+  const select = (id: number) =>
+    act(() => {
+      useMapStore.getState().selectPoi(id);
+    });
+
+  test('renders nothing until a place is selected', () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+
+    const { container } = mountOnMap();
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  test('points the URL at the open place', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+    mountOnMap();
+
+    await select(POI_ID);
+
+    expect(window.location.search).toBe(`?poi=${POI_ID}`);
+  });
+
+  test('drops only ?poi= on close, leaving a route alone', async () => {
+    window.history.replaceState(null, '', `/${ROUTE_QUERY}`);
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+    mountOnMap();
+    await select(POI_ID);
+    expect(window.location.search).toContain('poi=');
+
+    act(() => useMapStore.getState().clearSelectedPoi());
+
+    expect(window.location.search).toBe(ROUTE_QUERY);
+  });
+
+  test('adding the place to a trip makes it the destination and closes the sheet', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }]);
+    mountOnMap();
+    await select(POI_ID);
+
+    fireEvent.click(await screen.findByRole('button', { name: DIRECTIONS_LABEL }));
+
+    const trip = useTripStore.getState();
+    expect(trip.stops).toEqual([null, { name: NAME, lng: DETAIL_LNG, lat: DETAIL_LAT, kind: CAMPGROUND_KIND }]);
+    expect(trip.mode).toBe('directions');
+    expect(trip.focusRow).toBe(ORIGIN_ROW);
+    await waitFor(() => expect(useMapStore.getState().selectedPoiId).toBeNull());
+  });
+});
+
+describe('PlaceSurface, the cart gate the week served', () => {
+  const raiseToFull = async () => {
+    const grabber = await screen.findByRole('button', { name: NAME });
+    fireEvent.keyDown(grabber, { key: 'ArrowUp' });
+    fireEvent.keyDown(grabber, { key: 'ArrowUp' });
+  };
+
+  const openCell = async (cart: unknown) => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], {
+      grid: gridWithSites(cart),
+      catalog: catalog([namedSite]),
+    });
+    mount('from-map');
+    await raiseToFull();
+    const cellLabel = openCellLabel();
+    fireEvent.click(await screen.findByRole('button', { name: matrixCopy.cellCart(cellLabel) }));
+    return screen.getByRole('group', { name: bookingCopy.addToCart });
+  };
+
+  test('a signed-out reader is offered the sign-in step, not a dead Add to cart', async () => {
+    const group = await openCell({
+      state: 'signed_out',
+      provider: 'recgov',
+      provider_display: HOLDER,
+    });
+
+    expect(group).toHaveTextContent(gateCopy.cartSignedOut);
+    expect(screen.getByRole('button', { name: new RegExp(bookingCopy.addToCart) })).toBeEnabled();
+  });
+
+  test('a reader with no saved provider login is named the login that is missing', async () => {
+    const group = await openCell({
+      state: 'no_credentials',
+      provider: 'recgov',
+      provider_display: HOLDER,
+    });
+
+    expect(group).toHaveTextContent(gateCopy.cartNoCredentials(HOLDER));
+  });
+
+  test('a campground with no cart at all leaves the cell as text', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], {
+      grid: gridWithSites({ state: 'unsupported' }),
+      catalog: catalog([namedSite]),
+    });
+    mount('from-map');
+    await raiseToFull();
+
+    const cellLabel = openCellLabel();
+    expect(await screen.findByLabelText(cellLabel)).toHaveTextContent('A');
+    expect(screen.queryByRole('button', { name: matrixCopy.cellCart(cellLabel) })).toBeNull();
+  });
+
+  test('a hold on one place cannot lock the cart on the next one opened', async () => {
+    const OTHER_POI_ID = POI_ID + 1;
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], {
+      grid: gridWithSites({ state: 'ready' }),
+      catalog: catalog([namedSite]),
+    });
+
+    const client = createTestQueryClient();
+    const view = render(
+      <QueryClientProvider client={client}>
+        <PlaceSurface poiId={POI_ID} arrival="from-map" />
+      </QueryClientProvider>,
+    );
+    await raiseToFull();
+
+    await act(async () => {
+      await client.prefetchQuery({
+        queryKey: queryKeys.pois.detail(OTHER_POI_ID),
+        queryFn: async () => flattenHydratedPoi(await detail().json()),
+      });
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: matrixCopy.cellCart(openCellLabel()) }));
+    fireEvent.click(screen.getByRole('button', { name: bookingCopy.addToCart }));
+    expect(screen.getByRole('button', { name: new RegExp(bookingCopy.addToCart) })).toBeDisabled();
+
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <PlaceSurface poiId={OTHER_POI_ID} arrival="from-map" />
+      </QueryClientProvider>,
+    );
+    await raiseToFull();
+
+    fireEvent.click(await screen.findByRole('button', { name: matrixCopy.cellCart(openCellLabel()) }));
+    const offer = screen.getByRole('button', { name: new RegExp(bookingCopy.addToCart) });
+    expect(offer).toBeEnabled();
+    expect(offer).not.toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryByText(bookingCopy.holdBusy)).toBeNull();
+  });
+
+  test('raising to full still issues no request, cart and all', async () => {
+    stubRoutes([{ event: STAY_DONE_EVENT, data: { outcome: 'complete' } }], {
+      grid: gridWithSites({ state: 'signed_out', provider_display: HOLDER }),
+      catalog: catalog([namedSite]),
+    });
+    mount('from-map');
+    await raiseToFull();
+    await screen.findByRole('rowheader');
+
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
+      String(call[0]),
+    );
+    expect(calls.filter((url) => url.includes('/campsites/availability'))).toHaveLength(1);
+    expect(calls.filter((url) => url.includes('/api/booking/add-to-cart'))).toHaveLength(0);
+  });
+});

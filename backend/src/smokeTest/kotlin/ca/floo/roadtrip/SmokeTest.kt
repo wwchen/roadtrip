@@ -23,7 +23,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 // Trip-critical smoke. Mirrors the deleted qa/smoke.spec.mjs: cold load →
-// /api/pois → Banff drawer. Gated on QA_BASE_URL so `gradle test` skips it
+// /api/pois → Banff place sheet. Gated on QA_BASE_URL so `gradle test` skips it
 // unless a stack is already up. Run via `make qa`.
 //
 // **`/` is the React app.** Two kinds of selector appear below, and which one a
@@ -33,8 +33,8 @@ import kotlin.test.assertTrue
 //       verbatim (see the notes in `StopRow.tsx` and `TopBar.tsx`) — the topbar is
 //       the one surface whose DOM contract was worth preserving, because these
 //       assertions are what proves the rewritten planner behaves;
-//   roles and accessible names for everything React reshaped — the drawer
-//       (`aside.rt-drawer`, `role=dialog`) and the legend (`.rt-legend*`). Where the
+//   roles and accessible names for everything React reshaped — the place sheet
+//       (a region named for the place) and the legend (`.rt-legend*`). Where the
 //       vanilla's hooks were ids on hand-built DOM (`#cg-drawer`, `#panel`,
 //       `#cg-agency-legend input[data-cg-agency]`), the port has real roles and
 //       names, so the smoke asks for those rather than pinning class names that only
@@ -61,16 +61,10 @@ class SmokeTest {
         playwright.close()
     }
 
-    /**
-     * The POI drawer, once it has finished sliding in.
-     *
-     * The vanilla's `#cg-drawer.open` has no counterpart: React's drawer
-     * (`features/drawer/Drawer.tsx`) unmounts when it closes rather than keeping one
-     * element alive and toggling a class, so "open" is a dialog being present at all.
-     * `--open` is still in the selector because that class lands a frame later, and an
-     * assertion that fires mid-animation reads a half-positioned panel.
-     */
-    private fun drawerOf(page: Page): Locator = page.locator("aside.rt-drawer.rt-drawer--open[role='dialog']")
+    private fun sheetOf(
+        page: Page,
+        name: String,
+    ): Locator = page.getByRole(AriaRole.REGION, Page.GetByRoleOptions().setName(name))
 
     /**
      * A legend agency row's clickable control.
@@ -98,7 +92,7 @@ class SmokeTest {
     ): Locator = agencyRow(page, agency).locator("input[type='checkbox']")
 
     @Test
-    fun `cold load - api pois - Banff campground drawer`() {
+    fun `cold load - api pois - Banff campground place sheet`() {
         val context =
             browser.newContext(
                 Browser
@@ -116,7 +110,7 @@ class SmokeTest {
             page.navigate("/")
 
             // 2. Drive search → result click, rather than clicking the dot on the
-            // map: a picked POI result opens its drawer by id (`useTripPlanner`'s
+            // map: a picked POI result opens its place sheet by id (`useTripPlanner`'s
             // `pickResult`), which dodges the pixel-rounding of hitting a 6px circle.
             // The topbar keeps the vanilla's DOM: the search input is
             // `.tb-row[data-i="0"] .tb-input`, and dropdown rows are `.tb-result`
@@ -145,11 +139,14 @@ class SmokeTest {
             )
             pinResult.first().click()
 
-            // 3. Drawer renders with name + reserve link. (Tunnel Mountain is
-            // a Parks Canada pin — no recgov_id — so the drawer skips the
-            // availability grid and shows the provider CTA the backend promoted.)
-            val drawer = drawerOf(page)
-            assertThat(drawer).isVisible(
+            // 3. The sheet renders with name + reserve link. (Tunnel Mountain is a
+            // Parks Canada pin and is availability-supported all the same: the CI
+            // fixture seeds booking_provider 'aspira' with a ref, and
+            // `availability_supported` is "this row names a booking identity", not
+            // "this row has a recgov_id". So the sheet opens at Half with the nights
+            // strip, beside the provider CTA the backend promoted.)
+            val sheet = sheetOf(page, "Tunnel Mountain")
+            assertThat(sheet).isVisible(
                 com.microsoft.playwright.assertions.LocatorAssertions
                     .IsVisibleOptions()
                     .setTimeout(10_000.0),
@@ -158,22 +155,28 @@ class SmokeTest {
             // "...- Village 2" / "...- Trailer Court"; the loose "Tunnel
             // Mountain" prefix is enough to confirm we landed on the
             // right cluster regardless of which sibling sort-orders first.
-            assertThat(drawer.locator("h2")).containsText("Tunnel Mountain")
+            assertThat(sheet.locator("h2")).containsText("Tunnel Mountain")
             assertTrue(page.url().contains("poi="), "opening a POI should update the visible URL")
 
-            // The drawer inherited the vanilla app's very high stacking level, but
-            // search now exists only in the topbar. A detail view must not trap the
-            // primary search/navigation surface on desktop.
             val topbar = page.locator("#topbar")
             assertThat(topbar).isVisible()
             assertThat(topbar.locator(".tb-input").first()).isVisible()
-            val topbarZ = page.evaluate("() => Number(getComputedStyle(document.querySelector('#topbar')).zIndex)") as Number
-            val drawerZ = page.evaluate("() => Number(getComputedStyle(document.querySelector('.rt-drawer')).zIndex)") as Number
-            assertTrue(topbarZ.toInt() > drawerZ.toInt(), "desktop drawer should remain below the topbar")
+            val topbarOnTop =
+                page.evaluate(
+                    """
+                    () => {
+                      const input = document.querySelector('#topbar .tb-input');
+                      const box = input.getBoundingClientRect();
+                      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+                      return hit != null && document.querySelector('#topbar').contains(hit);
+                    }
+                    """.trimIndent(),
+                ) as Boolean
+            assertTrue(topbarOnTop, "an open place sheet must not cover the topbar's search input")
 
             // The CTAs are LDS buttons rendered as anchors, in the actions row —
             // `a.cg-btn-primary` was the vanilla's hand-built equivalent.
-            val reserveBtn = drawer.locator(".rt-poi-actions a[href]").first()
+            val reserveBtn = sheet.locator(".rt-poi-actions a[href]").first()
             assertThat(reserveBtn).isVisible()
             val href = reserveBtn.getAttribute("href") ?: ""
             assertTrue(
@@ -438,13 +441,13 @@ class SmokeTest {
             assertTrue(canvas != null, "the MapLibre canvas has no bounding box")
             page.mouse().click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2)
 
-            val drawer = drawerOf(page)
-            assertThat(drawer).isVisible(
+            val gymSheet = sheetOf(page, "Rendered Gym")
+            assertThat(gymSheet).isVisible(
                 com.microsoft.playwright.assertions.LocatorAssertions
                     .IsVisibleOptions()
                     .setTimeout(MAP_READY_TIMEOUT_MS),
             )
-            assertThat(drawer.locator("h2")).containsText("Rendered Gym")
+            assertThat(gymSheet.locator("h2")).containsText("Rendered Gym")
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors while rendering a viewport POI: ${pageErrors.joinToString(" | ")}",
@@ -456,7 +459,7 @@ class SmokeTest {
     }
 
     @Test
-    fun `poi share link opens drawer by id`() {
+    fun `poi share link opens place sheet by id`() {
         val context =
             browser.newContext(
                 Browser
@@ -502,14 +505,13 @@ class SmokeTest {
 
         try {
             page.navigate("/?poi=4242")
-            val drawer = drawerOf(page)
-            assertThat(drawer).isVisible(
+            val sheet = sheetOf(page, "Shared Gym")
+            assertThat(sheet).isVisible(
                 com.microsoft.playwright.assertions.LocatorAssertions
                     .IsVisibleOptions()
                     .setTimeout(15_000.0),
             )
-            assertThat(drawer.locator("h2")).containsText("Shared Gym")
-            assertThat(drawer.locator(".rt-poi-share")).hasCount(0)
+            assertThat(sheet.locator("h2")).containsText("Shared Gym")
             assertTrue(page.url().contains("poi=4242"), "shared POI should be represented by the visible URL")
             assertTrue(
                 pageErrors.isEmpty(),
@@ -522,7 +524,7 @@ class SmokeTest {
     }
 
     @Test
-    fun `campground drawer surfaces promoted poi dto fields`() {
+    fun `campground place sheet surfaces promoted poi dto fields`() {
         val context =
             browser.newContext(
                 Browser
@@ -599,27 +601,27 @@ class SmokeTest {
         }
         try {
             page.navigate("/?poi=45626")
-            val drawer = drawerOf(page)
-            assertThat(drawer).isVisible(
+            val sheet = sheetOf(page, "Clear Lake SP Cabins")
+            assertThat(sheet).isVisible(
                 com.microsoft.playwright.assertions.LocatorAssertions
                     .IsVisibleOptions()
                     .setTimeout(15_000.0),
             )
-            assertThat(drawer.locator("h2")).containsText("Clear Lake SP Cabins")
             // The agency shares the eyebrow with the type — "Campground · <agency>" —
             // which is what identifies the place before its name locates it.
-            assertThat(drawer.locator(".rt-poi-eyebrow")).containsText("California State Parks")
-            // The provider description is prose, so it reads in "Good to know" rather
-            // than in a section named after the field it came from.
-            val about = drawer.locator(".rt-poi-slot--goodToKnow")
+            assertThat(sheet.locator("h2")).containsText("Clear Lake SP Cabins")
+            assertThat(sheet.getByText("Campground · California State Parks")).isVisible()
+            sheet
+                .getByRole(AriaRole.BUTTON, Locator.GetByRoleOptions().setName("Clear Lake SP Cabins"))
+                .click()
+            assertThat(sheet).hasAttribute("data-detent", "full")
+            val about = sheet.locator(".rt-poi-slot--goodToKnow")
             assertThat(about).containsText("Clear Lake State Park offers rental cabins")
             assertFalse(
                 about.textContent().contains("Raw-only description"),
-                "drawer prose should render DTO description, not raw upstream description",
+                "sheet prose should render DTO description, not raw upstream description",
             )
-            // Provenance is what is left once everything that is trip content has been
-            // promoted into a block above it — collapsed, and the last thing on the page.
-            val provenance = drawer.locator(".rt-poi-provenance")
+            val provenance = sheet.locator(".rt-poi-provenance")
             assertThat(provenance).hasCount(1)
             // Scoped to the PROMOTED half of the disclosure. The raw upstream table
             // sits in here too and shows every field the provider sent, verbatim and
@@ -637,14 +639,6 @@ class SmokeTest {
                 details.textContent().contains("raw-only.jpg"),
                 "source metadata should not render raw upstream media",
             )
-            val heroImage =
-                page.evaluate(
-                    """
-                    () => getComputedStyle(document.querySelector('.rt-poi-hero')).backgroundImage
-                    """.trimIndent(),
-                ) as String
-            assertTrue(heroImage.contains("/Place/629.jpg"), "drawer should use DTO photo_url as hero image")
-            assertFalse(heroImage.contains("raw-only.jpg"), "drawer hero should render DTO photo_url, not raw upstream media")
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during promoted POI DTO smoke: ${pageErrors.joinToString(" | ")}",

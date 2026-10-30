@@ -38,7 +38,7 @@ one collapses every named prop to `any`. Widen by intersection instead.
 ### Domain components (`frontend/src/features/<feature>/`)
 
 Compose primitives into feature-specific UI — `features/watches/WatchTable.tsx`,
-`features/trip/TopBar.tsx`, `features/drawer/PoiDrawer.tsx`. They import
+`features/trip/TopBar.tsx`, `features/place/PlaceSurface.tsx`. They import
 primitives from `@ui`, clients from `@/api`, stores from `@/stores`, and **never from
 another feature directory**. A thing two features need moves to `@/lib`, `@/ui` or a
 store.
@@ -57,11 +57,17 @@ features, features and pages may import domains, and domains never import featur
 compose multiple features to exercise a page, but production composition belongs in
 `pages/`.
 
-The `Campsite` type in `api/campsite-api.ts` is `CampsiteDto`, generated. Every type under `frontend/src/api/generated/` comes from the Kotlin `@Serializable` DTOs named in `model/api/ApiContract.kt`; `make test` and CI fail when the committed file and the DTOs disagree, so the closed type is closed by a build step rather than by hand. Never edit the generated file. When the drawer needs a new fact, the vendor ETL promotes it to a typed column and the DTO gains a field — and now nothing else: `make api-types` carries it to the frontend, and the compiler says which call sites can use it. The clients under `frontend/src/api/` keep their own exported names as aliases, so importers name `Campsite`, not `CampsiteDto`. Optional in a generated response type means the server omits the key; `null` never appears, because the one encoder never emits it. `features/availability/site-detail-facts.ts` is still the one place campsite facts are turned into copy.
+The `Campsite` type in `api/campsite-api.ts` is `CampsiteDto`, generated. Every type under `frontend/src/api/generated/` comes from the Kotlin `@Serializable` DTOs named in `model/api/ApiContract.kt`; `make test` and CI fail when the committed file and the DTOs disagree, so the closed type is closed by a build step rather than by hand. Never edit the generated file. When the place sheet needs a new fact, the vendor ETL promotes it to a typed column and the DTO gains a field — and now nothing else: `make api-types` carries it to the frontend, and the compiler says which call sites can use it. The clients under `frontend/src/api/` keep their own exported names as aliases, so importers name `Campsite`, not `CampsiteDto`. Optional in a generated response type means the server omits the key; `null` never appears, because the one encoder never emits it. `features/availability/site-detail-facts.ts` is the one place campsite facts are turned into copy. It is retained but currently imported by nothing: the spec keeps it for the sheet's site detail, which has not been built yet.
 
-The availability grid is the same rule applied to state. `GET /api/pois/{id}/campsites/availability` serves the week already fused (see `docs/reservation-providers.md`), and the grid renders `days[].cells` as they arrive: the day's rollup, whether a day or a cell is watchable, and whether add-to-cart is reachable are all read off the wire, never re-derived. `features/availability/matrix-rows.ts` looks a row's cell up by campsite id and falls back to `unknown`/unwatchable when the day has no cell for it; it never lets the day's rollup stand in for a missing cell. The only availability states the browser owns are the ones the server cannot know: the watch list is loading, the watch list failed, and nobody is signed in.
+The nights strip is the same rule applied to state. `GET /api/pois/{id}/campsites/availability` serves the week already fused (see `docs/reservation-providers.md`), and `domain/place/night-state.ts` reads each night off the day as it arrives. A day with no cells is `unknown`, and a day that claims to be open without an open cell is `unknown` too; the day's rollup never stands in for a missing cell. The only availability states the browser owns are the ones the server cannot know: the watch list is loading, the watch list failed, and nobody is signed in.
 
-Amenity, carrier, and campsite-kind labels are the same rule applied to display text: the backend owns the vocabulary (`AmenityKey`, `Carrier`, `CampsiteKind`) and ships one render-ready `label` per amenity and carrier entry — already "No showers" for an absence — plus `kind_label` on `CampsiteDto`, so the frontend keeps no vocabulary of its own; it renders the string it is given. `features/availability/matrix-rows.ts` builds the Type dropdown's options from each row's `kind`/`kind_label` pair and filters on the wire `kind`, never the label, so a rename of display text can never change which sites a filter matches.
+The place sheet shows that one week at two densities, and **reads it once**. `features/place/use-place-nights.ts` makes both calls the Place screen needs — the week from `GET /api/pois/{id}/campsites/availability` and the catalog from `GET /api/pois/{id}/campsites` — and publishes `days`, `dates`, `campsites` and `siteNames` off them. `NightsStrip` (Half) and `SiteMatrix` (Full) are both fed from that one view; neither owns a query, and there is no second read of the same week behind the detent change. The grid's columns are `dates`, the stay's own nights, so the two detents can never disagree about which nights are in view.
+
+`domain/place/SiteMatrix.tsx` is the site-by-date grid, with its row rules in `matrix-rows.ts`. It renders cells, which is per-campsite-per-night: `cellState` is a straight lookup of `day.cells[campsiteId]`, and a night the wire never answered is `unknown` rather than the rollup of the nights it did answer. Nothing in the grid is ever summed into a whole-stay claim — the verdict above it comes from the stay check and from nowhere else. Row order, the Loop and Type filters and the free-text query all read the catalog; `kind` is the wire value the filter runs on and `kind_label` is what the option reads as, so the frontend still keeps no vocabulary of its own.
+
+An **open** cell in that grid is also a control: it opens `domain/place/SiteCartPopover.tsx`, which holds that one campsite-night in the caller's own cart at the booking vendor through `POST /api/booking/add-to-cart`. That is the one mutation the Place screen makes, and it is a mutation only — raising to Full still issues no request. `domain/place/cart-action.ts` is the lifecycle as a pure state machine, keyed **per (site, night)**: a second hold must not drop the first cell's badge, because a cell that looks un-held is a cell the grid offers again, and taking that offer spends a second real hold on a site the user already has. One hold runs at a time (the companion serialises a profile's work), and while it does, every cart control is disabled and `aria-busy` — not only the cell being held. A hold's claim expires with the vendor's: `features/place/use-place-cart.ts` times each held cell to `lapsed` at `heldAt + CART_HOLD_MS`, since nothing on the wire carries that deadline, and `lib/cart-hold.ts` is the one home for the duration so the copy and the timer cannot disagree. `lapsed` is a state rather than a deletion because that fifteen minutes is our guess: the cell is offered again, but the panel says the hold ran out and keeps the cart link, so an early clock cannot walk someone into a second hold on a site they still have. `addToCart` also carries its own `CART_HOLD_DEADLINE_MS` so a stalled POST releases the grid-wide lock instead of holding it forever — and says the hold may still have landed, naming the provider's cart, rather than claiming it failed. That number is derived from the server's worst case, not chosen: a direct hold pays `health` and one cookie refresh on `fireTimeout` before the hold runs on `companionTimeout`, so the server can take `companionTimeout × 5/3` (300s on the defaults) and the client waits past that. `recgov-atc.companion-timeout` is env-tunable, so `api/booking-deadline.test.ts` reads the defaults straight out of `BookingConfig.kt` and fails when they grow past what the client allows; it cannot see deployed config, so a production bump still needs someone to carry the relationship across. Re-holding a lapsed cell can still produce two holds, so the warning survives into the new hold (`afterLapse`) rather than being replaced by the success panel. `PlaceSurface` keys `StayPlace` by POI id so none of this state can cross from one campground to the next. No cell reads as held until the vendor says so, a refusal renders the server's own code through `lib/settings-errors.ts` rather than reverting to the offer, and a 200 is itself the hold — `BookingActionStatus` has one member, so callers read the status code and not the body's `status`. Closing the sheet mid-request keeps the request (aborting cannot un-place the hold, only lose the `cart_url`) and there is no cart read to recover it from, which is recorded as a known cost rather than handled.
+
+Amenity, carrier, and campsite-kind labels are the same rule applied to display text: the backend owns the vocabulary (`AmenityKey`, `Carrier`, `CampsiteKind`) and ships one render-ready `label` per amenity and carrier entry — already "No showers" for an absence — plus `kind_label` on `CampsiteDto`, so the frontend keeps no vocabulary of its own; it renders the string it is given.
 
 ## Where copy lives
 
@@ -91,10 +97,14 @@ action becomes the one step that unlocks it.
 - `watch_capabilities.add_to_cart.state` on the week response is the cart gate:
   `ready | no_credentials | signed_out | unsupported`, decided backend-side. The
   browser renders the matching copy branch and never guesses which of the four
-  applies from what `trigger_kinds` omits.
-- `SiteMatrix`'s `watchGate` is the same idea for watches: `ready | signed-out |
-  blocked`. A watchable cell is a button in the first two, and the popover it
-  opens carries `WatchSignInGate` instead of `WatchEditor`.
+  applies from what `trigger_kinds` omits. `domain/place/cart-gate.ts` is that
+  union as the grid takes it, `features/place/use-place-cart.ts` maps the wire
+  state onto it and owns the mutation, and `domain/place/SiteCartPopover.tsx`
+  renders whichever branch it is handed. `no_credentials` sends the caller through
+  `openSettings('booking')` rather than a link.
+- `WatchGate` (`domain/place/watch-gate.ts`) is the same idea for alerts: `ready |
+  signed-out | blocked`. `AlertRow` offers the alert when `ready`, a sign-in
+  button when `signed-out`, and says why it cannot when `blocked`.
 - Only `unsupported` / `blocked` fall back to inert text, because there really is
   nothing the visitor could do.
 
@@ -115,7 +125,7 @@ and it comes from the M0 screens doc (4a, "One order, thirteen blocks").
   when" and "tell me more". Nothing else may express an order.
 - `PoiPageShell.tsx` takes a bag of blocks keyed by id and renders them in that
   order. A type omits a block by leaving the key out; a group with nothing in it
-  draws no band and no stray rule. `variant` is `panel` (the map drawer, ~520px) or
+  draws no band and no stray rule. `variant` is `panel` (the map's place sheet) or
   `page` (the routed detail page, which also shows the step above) — CSS and one
   nav, not structure.
 - **Nothing is printed twice.** The trail is one step, not a chain: the title says
@@ -139,8 +149,8 @@ and it comes from the M0 screens doc (4a, "One order, thirteen blocks").
   town stop, dropped pin, state — are rows in `place.tsx`'s descriptor table rather
   than components of their own.
 
-Two surfaces consume it and neither adds anything: `features/drawer/PoiDrawer`
-(the shell, the drag gesture, and the two states that have no page to show) and
+Two surfaces consume it and neither adds anything: `features/place/PlaceSurface`
+(the sheet, its detents, and the states that have no page to show) and
 `pages/poi/PoiPage` (the routed `?poi=<id>` page). **If one shows a block the other
 does not, that is a bug in one of them.** Adding a type is a row in `registry.ts`;
 adding a block is an id in `blocks.ts` and a component beside its neighbours.
@@ -212,7 +222,7 @@ the old one never held.
 
 Pure logic belongs in its own module beside the component that uses it — the ordering
 rules, the copy, the state machine — because that is the half worth testing directly.
-`features/availability/matrix-rows.ts` next to `SiteMatrix.tsx` is the pattern.
+`domain/place/night-state.ts` next to `NightsStrip.tsx` is the pattern.
 
 ## Forms on LDS: the controls are uncontrolled
 
@@ -336,27 +346,16 @@ from `@tokens` after a runtime swap so the map and charts re-resolve computed co
   - `--rt-chrome-top` — room a fixed deployment bar has taken off the top of the viewport.
     `app/shell.css` defaults it to `0px`; only `sandbox/sandbox.css` sets it, keyed on the
     `has-sandbox-chrome` class so the room can be reserved from a mirror before the
-    build-info fetch answers. The map shell, `body` padding, the desktop drawer, the legend
+    build-info fetch answers. The map shell, `body` padding, the legend
     and the topbar's max-height all offset by it — a new fixed surface, or anything sized
     against `100dvh` inside the map shell, should honour it rather than assume `top: 0`.
   - `--rt-topbar-bottom` — where the search panel's lower edge sits, relative to the map
-    shell, published by `features/trip/useTopbarClearance.ts` and consumed by the desktop
-    drawer, which starts below it. It is the panel's bottom edge and not its height
-    because the panel is itself inset from the top. The search popover is excluded on
-    purpose, so typing does not move the drawer.
-
-    The drawer spends it on `top`, not `padding-top`: the two surfaces **tile**, so the
-    drawer's box is the container for its contents and resizes with whatever the panel
-    above is doing — expanding the alerts list or opening the corridor results shortens
-    the drawer, collapsing them gives the height back. As padding the drawer's surface
-    ran the full viewport height behind the panel, which read as one sheet with an
-    unexplained empty band and hid the map above it.
-
-    The drawer reserves this much room **uncapped**, which only works because
-    `topbar.css` bounds the panel's own height at `min(50dvh, …)` and scrolls it
-    internally. Do not add a ceiling on the drawer side: clamping there silently returns
-    the drawer to underneath the panel whenever the panel is tall — a route with a
-    corridor results list is enough — which is the bug the clearance exists to prevent.
+    shell, published by `features/trip/useTopbarClearance.ts`. It is the panel's bottom
+    edge and not its height because the panel is itself inset from the top. The search
+    popover is excluded on purpose, so typing does not move it. Nothing reads it since
+    the desktop drawer was deleted. A surface that must start below the panel spends it
+    on `top`, not `padding-top`, and does not cap it, because `topbar.css` already bounds
+    the panel at `min(50dvh, …)` and scrolls it internally.
 - `node scripts/check-css-blocks.mjs` fails on an unbalanced brace, and
   `node scripts/check-token-usage.mjs` fails on a `var(--rt-*)` naming a token that does
   not exist or a declaration whose parens do not balance. Both are cheap insurance for

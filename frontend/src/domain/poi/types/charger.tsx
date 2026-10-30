@@ -24,8 +24,10 @@ import {
   PoiSpecs,
   type PoiTag,
 } from '../PoiBlocks';
-import { PoiPageShell, type PoiBlockSlots } from '../PoiPageShell';
-import { presentSpecs, type PoiTypeProps } from './common';
+import type { PoiBlockSlots } from '../PoiPageShell';
+import { presentSpecs, renderPoiPage, type PoiTypeProps } from './common';
+
+const EYEBROW = 'Charger · Tesla';
 
 /** The heading the charger's one spec block carries. */
 const CHARGING_HEADING = 'Charging';
@@ -33,7 +35,7 @@ const CHARGING_HEADING = 'Charging';
 /** Hour ticks under the busy-hours bars. */
 const BUSY_AXIS = ['12a', '6a', '12p', '6p', '12a'] as const;
 
-export function ChargerPoiPage({ feature, variant, onClose }: PoiTypeProps) {
+export function ChargerPoiPage({ feature, variant, onClose, render }: PoiTypeProps) {
   const p = feature.properties;
   const [lng, lat] = coordinatesOf(feature);
   const distance = useDistanceTo(lng, lat);
@@ -99,7 +101,7 @@ export function ChargerPoiPage({ feature, variant, onClose }: PoiTypeProps) {
   const blocks: PoiBlockSlots = {
     identity: (
       <PoiIdentity
-        eyebrow="Charger · Tesla"
+        eyebrow={EYEBROW}
         title={name}
         subtitle={subline([address, commonSite, distance])}
       />
@@ -159,7 +161,7 @@ export function ChargerPoiPage({ feature, variant, onClose }: PoiTypeProps) {
       : null),
   };
 
-  return <PoiPageShell variant={variant} blocks={blocks} />;
+  return renderPoiPage({ name, subtitle: EYEBROW, blocks }, { render, variant });
 }
 
 /** A numeric property, or 0 — every hardware spec is "render when non-zero". */
