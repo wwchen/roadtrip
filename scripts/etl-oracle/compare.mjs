@@ -18,7 +18,7 @@ export function strip(value) {
 }
 
 export function canonical(value) {
-  return JSON.parse(JSON.stringify(strip(value) ?? null));
+  return strip(JSON.parse(JSON.stringify(value ?? null))) ?? null;
 }
 
 function shown(value) {

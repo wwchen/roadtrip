@@ -21,6 +21,15 @@ test('a value that differs, anywhere in the record, is reported with both sides'
   assert.match(problems[0], /"count":2/);
 });
 
+test('a number JSON cannot hold is the same as an absence on both sides, wherever it was parsed', () => {
+  const recordedInTypescript = JSON.parse(JSON.stringify({ payload: { value: Infinity, kept: 1 } }));
+  const parsedFromKotlin = { payload: { value: Infinity, kept: 1 } };
+  assert.deepEqual(canonical(parsedFromKotlin), canonical(recordedInTypescript));
+  assert.deepEqual(canonical(parsedFromKotlin), { payload: { kept: 1 } });
+  assert.deepEqual(canonical(undefined), null);
+  assert.deepEqual(canonical({ a: null }), null);
+});
+
 test('a provider reference is rendered with its provider, so one ref under two providers differs', () => {
   const ref = (provider) => ({ provider, serialize: () => '1:2' });
   const rendered = (provider) => resultOf({ ok: true, record: { dataProviderRef: ref(provider) } }, []);
