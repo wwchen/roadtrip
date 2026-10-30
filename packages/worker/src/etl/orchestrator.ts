@@ -7,6 +7,7 @@ import { BatchAccumulator } from './batch.js';
 import type { Envelope } from './envelope.js';
 import { InputBundle } from './input-bundle.js';
 import type { RawCaptureStore } from './raw-capture-store.js';
+import { STDERR_LOG, type RunLog } from './run-log.js';
 import type { ParseResult, TransformResult } from './source-etl.js';
 import { TransformCtx } from './transform-ctx.js';
 
@@ -33,12 +34,7 @@ export interface OrchestratorDeps {
   log?: RunLog;
 }
 
-export interface RunLog {
-  info(message: string): void;
-  warn(message: string): void;
-}
-
-const STDERR_LOG: RunLog = { info: console.error, warn: console.error };
+export type { RunLog };
 
 function singleEtl(target: ImportTarget, registry: PoiRegistry): EtlEntry {
   const row =

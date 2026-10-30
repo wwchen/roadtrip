@@ -269,6 +269,17 @@ describe('the wide-number carrier contract', () => {
     expect(serializeOpaquePayload(parsedWide())).toBe(`{"photo_id":${WIDE_INTEGER}}`);
   });
 
+  test('serializeOpaquePayload writes a bigint as an unquoted literal with every digit, beyond the double range', () => {
+    expect(
+      serializeOpaquePayload({
+        id: BigInt(WIDE_INTEGER),
+        negative: BigInt(NEGATIVE_WIDE_INTEGER),
+        huge: BigInt(HUGE_INTEGER),
+      }),
+    ).toBe(`{"id":${WIDE_INTEGER},"negative":${NEGATIVE_WIDE_INTEGER},"huge":${HUGE_INTEGER}}`);
+    expect(serializeOpaquePayload([BigInt(WIDE_INTEGER)])).toBe(`[${WIDE_INTEGER}]`);
+  });
+
   test('serializeOpaquePayload returns the branded type, which a bare string does not satisfy', () => {
     expectTypeOf(serializeOpaquePayload).returns.toEqualTypeOf<OpaquePayloadJson>();
     expectTypeOf<OpaquePayloadJson>().toExtend<string>();
