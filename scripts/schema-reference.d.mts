@@ -1,4 +1,12 @@
+export interface ExecOptions {
+  input?: string;
+  inputFile?: string;
+  outputFile?: string;
+}
+
 export interface PostgisSession {
+  containerName(): string;
+  exec(argv: readonly string[], options?: ExecOptions): Promise<string>;
   createDatabase(name: string): Promise<void>;
   connectionString(name: string): string;
   migrateFlyway(name: string): Promise<void>;

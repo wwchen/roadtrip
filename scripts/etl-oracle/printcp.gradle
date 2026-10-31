@@ -1,0 +1,11 @@
+allprojects {
+    afterEvaluate { p ->
+        if (p.name == 'backend') {
+            p.tasks.register('printRuntimeClasspath') {
+                doLast {
+                    println "CP=" + p.sourceSets.main.runtimeClasspath.files.join(File.pathSeparator)
+                }
+            }
+        }
+    }
+}

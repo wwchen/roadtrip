@@ -1,0 +1,369 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterAll, beforeAll, describe, expect, expectTypeOf, test } from 'vitest';
+import { isWideNumber, parseEnvelope, serializeOpaquePayload, type OpaquePayloadJson } from './envelope.js';
+
+const TEMP_DIR_PREFIX = 'envelope-';
+const WIDE_INTEGER = '72157625256027958';
+const NEGATIVE_WIDE_INTEGER = '-9007199254740993';
+const BEYOND_DOUBLE_RANGE = '1e400';
+const HUGE_INTEGER = '123456789012345678901234567890';
+const FETCHER_VERSION = '1';
+const FETCHED_AT = '2026-06-07T21:33:18Z';
+const POLLER_RUN_ID = 42;
+const HTTP_OK = 200;
+const BAD_POLLER_RUN_ID = 'abc';
+const FRACTIONAL_POLLER_RUN_ID = 1.5;
+const BAD_PART = 5;
+
+let dir = '';
+let counter = 0;
+
+const BASE_ENVELOPE = `{
+  "fetcher": "fetch_fixture",
+  "fetcher_version": "${FETCHER_VERSION}",
+  "fetched_at": "${FETCHED_AT}",
+  "request": {"url": "https://example.test/", "method": "GET", "headers": {"accept": "*/*"}},
+  "response": {"status": ${HTTP_OK}, "headers": {}},
+  "poller_run_id": null,
+  "payload": null
+}`;
+
+function fileHolding(text: string): string {
+  counter += 1;
+  const file = path.join(dir, `envelope-${counter}.json`);
+  writeFileSync(file, text);
+  return file;
+}
+
+function envelopeWith(mutate: (envelope: Record<string, unknown>) => void): string {
+  const envelope = JSON.parse(BASE_ENVELOPE) as Record<string, unknown>;
+  mutate(envelope);
+  return fileHolding(JSON.stringify(envelope));
+}
+
+function envelopeWithRawPayload(rawPayload: string): string {
+  return fileHolding(BASE_ENVELOPE.replace('"payload": null', `"payload": ${rawPayload}`));
+}
+
+beforeAll(() => {
+  dir = mkdtempSync(path.join(os.tmpdir(), TEMP_DIR_PREFIX));
+});
+
+afterAll(() => {
+  rmSync(dir, { recursive: true, force: true });
+});
+
+describe('parseEnvelope wire format', () => {
+  test('snake_case wire keys map to camelCase fields', () => {
+    const envelope = parseEnvelope(
+      envelopeWith((e) => {
+        e.poller_run_id = POLLER_RUN_ID;
+        e.part = 'page-001';
+        e.payload = { a: 1 };
+      }),
+    );
+    expect(envelope).toMatchObject({
+      fetcher: 'fetch_fixture',
+      fetcherVersion: FETCHER_VERSION,
+      fetchedAt: FETCHED_AT,
+      pollerRunId: POLLER_RUN_ID,
+      part: 'page-001',
+      payload: { a: 1 },
+    });
+    expect(envelope.request).toEqual({ url: 'https://example.test/', method: 'GET', headers: { accept: '*/*' } });
+    expect(envelope.response).toEqual({ status: HTTP_OK, headers: {} });
+  });
+
+  test('a missing poller_run_id is null and a missing part is undefined, as Kotlin defaults them', () => {
+    const envelope = parseEnvelope(
+      envelopeWith((e) => {
+        delete e.poller_run_id;
+      }),
+    );
+    expect(envelope.pollerRunId).toBeNull();
+    expect(envelope.part).toBeUndefined();
+  });
+
+  test('a null payload is a valid payload and unknown top-level keys are ignored', () => {
+    const envelope = parseEnvelope(
+      envelopeWith((e) => {
+        e.extra = 'ignored';
+      }),
+    );
+    expect(envelope.payload).toBeNull();
+    expect(envelope).not.toHaveProperty('extra');
+  });
+
+  test.each([
+    ['fetcher', (e: Record<string, unknown>) => delete e.fetcher],
+    ['fetcher_version', (e: Record<string, unknown>) => delete e.fetcher_version],
+    ['fetched_at', (e: Record<string, unknown>) => delete e.fetched_at],
+    ['request', (e: Record<string, unknown>) => delete e.request],
+    ['response', (e: Record<string, unknown>) => delete e.response],
+    ['payload', (e: Record<string, unknown>) => delete e.payload],
+    ['request.url', (e: Record<string, unknown>) => delete (e.request as Record<string, unknown>).url],
+    ['request.method', (e: Record<string, unknown>) => delete (e.request as Record<string, unknown>).method],
+    ['response.status', (e: Record<string, unknown>) => delete (e.response as Record<string, unknown>).status],
+  ])('an envelope without %s is rejected, as Kotlin rejects it', (field, mutate) => {
+    const file = envelopeWith((e) => {
+      mutate(e);
+    });
+    expect(() => parseEnvelope(file)).toThrow(new RegExp(`${field.replace('.', '\\.')}`));
+  });
+
+  test.each([
+    ['request', (e: Record<string, unknown>) => ((e.request as Record<string, unknown>).headers = { nested: { a: 'b' } })],
+    ['response', (e: Record<string, unknown>) => ((e.response as Record<string, unknown>).headers = { endpoint_status: { equipment: 200 } })],
+    ['request', (e: Record<string, unknown>) => ((e.request as Record<string, unknown>).headers = { count: 7 })],
+    ['response', (e: Record<string, unknown>) => ((e.response as Record<string, unknown>).headers = ['a'])],
+  ])('a %s header map holding a non-string value or a non-object is rejected', (side, mutate) => {
+    const file = envelopeWith((e) => {
+      mutate(e);
+    });
+    expect(() => parseEnvelope(file)).toThrow(new RegExp(`${side}\\.headers`));
+  });
+
+  test('absent headers on request and response default to empty maps', () => {
+    const envelope = parseEnvelope(
+      envelopeWith((e) => {
+        delete (e.request as Record<string, unknown>).headers;
+        delete (e.response as Record<string, unknown>).headers;
+      }),
+    );
+    expect(envelope.request.headers).toEqual({});
+    expect(envelope.response.headers).toEqual({});
+  });
+
+  test('unknown keys inside request and response are dropped', () => {
+    const envelope = parseEnvelope(
+      envelopeWith((e) => {
+        (e.request as Record<string, unknown>).extra = 'x';
+        (e.response as Record<string, unknown>).extra = 'y';
+      }),
+    );
+    expect(envelope.request).toEqual({ url: 'https://example.test/', method: 'GET', headers: { accept: '*/*' } });
+    expect(envelope.response).toEqual({ status: HTTP_OK, headers: {} });
+  });
+
+  test.each([
+    ['a string', BAD_POLLER_RUN_ID],
+    ['a fraction', FRACTIONAL_POLLER_RUN_ID],
+  ])('a poller_run_id that is %s is rejected', (_label, value) => {
+    const file = envelopeWith((e) => {
+      e.poller_run_id = value;
+    });
+    expect(() => parseEnvelope(file)).toThrow(/poller_run_id/);
+  });
+
+  test('a poller_run_id wider than the safe range is rejected rather than carried as a non-number', () => {
+    const file = fileHolding(BASE_ENVELOPE.replace('"poller_run_id": null', `"poller_run_id": ${WIDE_INTEGER}`));
+    expect(() => parseEnvelope(file)).toThrow(/poller_run_id/);
+  });
+
+  test('a part that is not a string is rejected and a null part is absent', () => {
+    const bad = envelopeWith((e) => {
+      e.part = BAD_PART;
+    });
+    expect(() => parseEnvelope(bad)).toThrow(/part must be a string/);
+    const absent = parseEnvelope(
+      envelopeWith((e) => {
+        e.part = null;
+      }),
+    );
+    expect(absent.part).toBeUndefined();
+    expect(absent).not.toHaveProperty('part');
+  });
+
+  test('a numeric fetcher_version is rejected rather than coerced to a string', () => {
+    const file = envelopeWith((e) => {
+      e.fetcher_version = 2;
+    });
+    expect(() => parseEnvelope(file)).toThrow(/fetcher_version/);
+  });
+
+  test('a file that is not JSON is rejected and names the file', () => {
+    const file = fileHolding('{not json');
+    expect(() => parseEnvelope(file)).toThrow(file);
+  });
+});
+
+describe('parseEnvelope number fidelity', () => {
+  test('an integer wider than IEEE-754 exact range survives parsing with its digits intact', () => {
+    const envelope = parseEnvelope(envelopeWithRawPayload(`{"photo_id":${WIDE_INTEGER}}`));
+    expect(JSON.stringify(envelope.payload)).toBe(`{"photo_id":${WIDE_INTEGER}}`);
+  });
+
+  test('wide integers survive inside arrays and nested objects, negative and astronomically large included', () => {
+    const raw = `{"a":[${NEGATIVE_WIDE_INTEGER},{"b":${HUGE_INTEGER}}],"c":{"d":[${WIDE_INTEGER}]}}`;
+    const envelope = parseEnvelope(envelopeWithRawPayload(raw));
+    expect(JSON.stringify(envelope.payload)).toBe(raw);
+  });
+
+  test('a number literal beyond the double range is kept rather than becoming null', () => {
+    const envelope = parseEnvelope(envelopeWithRawPayload(`{"x":${BEYOND_DOUBLE_RANGE}}`));
+    expect(JSON.stringify(envelope.payload)).toBe(`{"x":${BEYOND_DOUBLE_RANGE}}`);
+  });
+
+  test('integers inside the safe range stay plain numbers so adapters read them unchanged', () => {
+    const raw = `{"max":${Number.MAX_SAFE_INTEGER},"min":${Number.MIN_SAFE_INTEGER},"small":7,"frac":2.5}`;
+    const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload as Record<string, unknown>;
+    expect(payload).toEqual({ max: Number.MAX_SAFE_INTEGER, min: Number.MIN_SAFE_INTEGER, small: 7, frac: 2.5 });
+    expect(typeof payload.max).toBe('number');
+    expect(typeof payload.min).toBe('number');
+  });
+
+  test('a number whose canonical spelling differs from its source is carried, so Kotlin sees the same text', () => {
+    const raw =
+      '{"a":25.0,"b":1e2,"c":-0.0,"d":1.0e2,"e":1e-1,"f":1.10,"g":1e20,"h":7.02e-05,"i":100000000000000000000.0,"j":-0}';
+    const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload as Record<string, unknown>;
+    expect(Object.values(payload).map(isWideNumber)).toEqual(Array(10).fill(true));
+    expect(JSON.stringify(payload)).toBe(raw);
+  });
+
+  test('the first integer past the safe range is carried even though its text survives a round trip', () => {
+    const [last, first] = parseEnvelope(
+      envelopeWithRawPayload(`[${Number.MAX_SAFE_INTEGER},${Number.MAX_SAFE_INTEGER + 1}]`),
+    ).payload as unknown[];
+    expect([isWideNumber(last), isWideNumber(first)]).toEqual([false, true]);
+  });
+
+  test('a number already spelled the way JavaScript spells it stays a plain number', () => {
+    const raw = '{"a":25.5,"b":0.1,"c":25,"d":-3,"e":38.40831195138031,"f":1e+21,"g":1.5e-7}';
+    const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload as Record<string, unknown>;
+    expect(Object.values(payload).map((value) => typeof value)).toEqual(Array(7).fill('number'));
+  });
+
+  test('a long digit run inside a string is left a string', () => {
+    const raw = `{"photo_id":"${WIDE_INTEGER}","note":"id ${HUGE_INTEGER} here"}`;
+    const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload;
+    expect(payload).toEqual({ photo_id: WIDE_INTEGER, note: `id ${HUGE_INTEGER} here` });
+  });
+
+  test('every integer from the first past the safe range onward is carried, where rounding starts', () => {
+    const raw = `[${Number.MAX_SAFE_INTEGER},${Number.MAX_SAFE_INTEGER + 1},9007199254740993]`;
+    const envelope = parseEnvelope(envelopeWithRawPayload(raw));
+    expect(JSON.stringify(envelope.payload)).toBe(raw);
+  });
+});
+
+describe('the wide-number carrier contract', () => {
+  function parsedWide(): unknown {
+    return parseEnvelope(envelopeWithRawPayload(`{"photo_id":${WIDE_INTEGER}}`)).payload;
+  }
+
+  function wideField(): unknown {
+    return (parsedWide() as Record<string, unknown>).photo_id;
+  }
+
+  test('isWideNumber recognises a carried integer and nothing else', () => {
+    expect(isWideNumber(wideField())).toBe(true);
+    expect(isWideNumber(7)).toBe(false);
+    expect(isWideNumber(WIDE_INTEGER)).toBe(false);
+    expect(isWideNumber({ rawJSON: WIDE_INTEGER })).toBe(false);
+    expect(isWideNumber(null)).toBe(false);
+  });
+
+  test('serializeOpaquePayload writes a carried integer as an unquoted literal with its digits', () => {
+    expect(serializeOpaquePayload(parsedWide())).toBe(`{"photo_id":${WIDE_INTEGER}}`);
+  });
+
+  test('serializeOpaquePayload writes a bigint as an unquoted literal with every digit, beyond the double range', () => {
+    expect(
+      serializeOpaquePayload({
+        id: BigInt(WIDE_INTEGER),
+        negative: BigInt(NEGATIVE_WIDE_INTEGER),
+        huge: BigInt(HUGE_INTEGER),
+      }),
+    ).toBe(`{"id":${WIDE_INTEGER},"negative":${NEGATIVE_WIDE_INTEGER},"huge":${HUGE_INTEGER}}`);
+    expect(serializeOpaquePayload([BigInt(WIDE_INTEGER)])).toBe(`[${WIDE_INTEGER}]`);
+  });
+
+  test('serializeOpaquePayload returns the branded type, which a bare string does not satisfy', () => {
+    expectTypeOf(serializeOpaquePayload).returns.toEqualTypeOf<OpaquePayloadJson>();
+    expectTypeOf<OpaquePayloadJson>().toExtend<string>();
+    expectTypeOf<string>().not.toExtend<OpaquePayloadJson>();
+    expectTypeOf(JSON.stringify({})).not.toExtend<OpaquePayloadJson>();
+  });
+
+  test('the branded value is still the plain JSON text', () => {
+    const serialized: string = serializeOpaquePayload({ a: [1, { b: null }], c: 'x' });
+    expect(serialized).toBe('{"a":[1,{"b":null}],"c":"x"}');
+    expect(typeof serialized).toBe('string');
+  });
+
+  test('an empty object serialises, since an empty object satisfies a jsonb object check', () => {
+    expect(serializeOpaquePayload({})).toBe('{}');
+  });
+
+  test.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['a string', 'text'],
+    ['an already-stringified object', '{"photo_id":1}'],
+    ['a Date, which would serialise to a quoted string', new Date(0)],
+    ['a number', 7],
+    ['a boolean', true],
+  ])('serializeOpaquePayload rejects %s, because it is not a JSON object or array', (_label, value) => {
+    expect(() => serializeOpaquePayload(value)).toThrow(/must serialise to a JSON object or array/);
+  });
+
+  test('serializeOpaquePayload accepts an array payload, as the array-typed opaque columns need', () => {
+    expect(serializeOpaquePayload([])).toBe('[]');
+    expect(serializeOpaquePayload(['wifi', 'restrooms'])).toBe('["wifi","restrooms"]');
+  });
+
+  test('serializeOpaquePayload accepts an array containing objects', () => {
+    expect(serializeOpaquePayload([{ name: 'a', n: 1 }, { name: 'b', tags: ['x'] }])).toBe(
+      '[{"name":"a","n":1},{"name":"b","tags":["x"]}]',
+    );
+  });
+
+  test('wide integers survive inside an array nested in an object and at depth two', () => {
+    const raw = `{"list":[1,[${WIDE_INTEGER}],{"deep":{"ids":[${HUGE_INTEGER},${NEGATIVE_WIDE_INTEGER}]}}]}`;
+    const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload;
+    expect(serializeOpaquePayload(payload)).toBe(raw);
+  });
+
+  test('wide integers survive in a top-level array payload', () => {
+    const raw = `[${WIDE_INTEGER},{"x":${HUGE_INTEGER}}]`;
+    const payload = parseEnvelope(envelopeWithRawPayload(raw)).payload;
+    expect(serializeOpaquePayload(payload)).toBe(raw);
+  });
+
+  test('serializeOpaquePayload rejects a payload that is itself a wide integer', () => {
+    const wideTop = parseEnvelope(envelopeWithRawPayload(HUGE_INTEGER)).payload;
+    expect(isWideNumber(wideTop)).toBe(true);
+    expect(() => serializeOpaquePayload(wideTop)).toThrow(/must serialise to a JSON object or array/);
+  });
+
+  test('HAZARD: structuredClone of a payload holding a carried integer throws', () => {
+    expect(() => structuredClone(parsedWide())).toThrow();
+  });
+
+  test('HAZARD: object spread of a carried integer silently loses the digits', () => {
+    const spread = { ...(wideField() as object) };
+    expect(isWideNumber(spread)).toBe(false);
+    expect(serializeOpaquePayload(spread)).toBe(`{"rawJSON":"${WIDE_INTEGER}"}`);
+  });
+
+  test('HAZARD: a serialize-then-parse round trip rounds the integer, so serialize once from the parsed value', () => {
+    const roundTripped = JSON.parse(serializeOpaquePayload(parsedWide())) as { photo_id: number };
+    expect(typeof roundTripped.photo_id).toBe('number');
+    expect(String(roundTripped.photo_id)).not.toBe(WIDE_INTEGER);
+    expect(serializeOpaquePayload(roundTripped)).not.toContain(WIDE_INTEGER);
+  });
+});
+
+describe('number spelling survives the opaque round trip', () => {
+  test('respelled decimals keep their text, so a payload is stored the way the vendor wrote it', () => {
+    const raw = '{"price":2.50,"small":1e-1,"neg":-0.250,"whole":10.0}';
+    expect(serializeOpaquePayload(parseEnvelope(envelopeWithRawPayload(raw)).payload)).toBe(raw);
+  });
+
+  test('wide integers beside a respelled decimal keep their digits', () => {
+    const raw = `{"id":${WIDE_INTEGER},"maxValue":10.50}`;
+    expect(serializeOpaquePayload(parseEnvelope(envelopeWithRawPayload(raw)).payload)).toBe(raw);
+  });
+});

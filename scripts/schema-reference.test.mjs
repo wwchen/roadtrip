@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { assertPlausibleSchema, normalize, withPostgis, writeReference } from './schema-reference.mjs';
+
+const SHELL = 'bash';
+const SHELL_FLAG = '-lc';
+const STREAM_BODY = 'first\nsecond\n';
+const LARGE_INPUT_BYTES = 5 * 1024 * 1024;
+const CHILD_DIAGNOSIS = 'relation "campsites" does not exist';
 
 const PREAMBLE = `--
 -- PostgreSQL database dump
@@ -93,7 +99,10 @@ test('an empty or near-empty schema is not accepted as a reference', () => {
   assert.throws(() => assertPlausibleSchema(normalize(RAW)), /CREATE TABLE/);
 });
 
-test('one container serves several databases and refuses to dump an unmigrated one', async () => {
+test('one container serves several databases and refuses to dump an unmigrated one', async (context) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'roadtrip-schema-exec-'));
+  context.after(() => rm(dir, { recursive: true, force: true }));
+
   await withPostgis(async (postgres) => {
     await postgres.createDatabase('migrated');
     await postgres.createDatabase('untouched');
@@ -101,6 +110,64 @@ test('one container serves several databases and refuses to dump an unmigrated o
     assert.match(postgres.connectionString('migrated'), /^postgres:\/\/.+@127\.0\.0\.1:\d+\/migrated$/);
     assert.match(await postgres.dump('migrated'), /CREATE TABLE public\.app_user /);
     await assert.rejects(postgres.dump('untouched'), /CREATE TABLE/);
+
+    await context.test('exec streams a command to a file and reports its exit status', async () => {
+      const out = path.join(dir, 'whole');
+      await postgres.exec([SHELL, SHELL_FLAG, `printf '${STREAM_BODY}'`], { outputFile: out });
+      assert.equal(await readFile(out, 'utf8'), STREAM_BODY);
+    });
+
+    await context.test('a command that dies mid-stream fails the call, however much it wrote', async () => {
+      // The shape of a truncated pg_dump: bytes on stdout, then a non-zero
+      // exit. If this resolved, the partial file would become the reference
+      // side of a differential and the diff would report the rows the dump
+      // never reached as missing_in_kotlin.
+      const out = path.join(dir, 'truncated');
+      await assert.rejects(
+        postgres.exec([SHELL, SHELL_FLAG, `printf '${STREAM_BODY}'; exit 3`], { outputFile: out }),
+        /exited 3/,
+      );
+      assert.equal(await readFile(out, 'utf8'), STREAM_BODY, 'the partial output should still be on disk');
+    });
+
+    await context.test('a sink that cannot be written fails the call rather than the process', async () => {
+      await assert.rejects(
+        postgres.exec([SHELL, SHELL_FLAG, `printf '${STREAM_BODY}'`], {
+          outputFile: path.join(dir, 'no-such-directory', 'out'),
+        }),
+        /ENOENT|failed/,
+      );
+    });
+
+    await context.test('an unreadable input file fails the call rather than the process', async () => {
+      await assert.rejects(
+        postgres.exec(['cat'], { inputFile: path.join(dir, 'missing-input') }),
+        /ENOENT|failed/,
+      );
+    });
+
+    await context.test('exec still streams a file into stdin', async () => {
+      const input = path.join(dir, 'input');
+      await writeFile(input, STREAM_BODY);
+      assert.equal(await postgres.exec(['cat'], { inputFile: input }), STREAM_BODY);
+    });
+
+    await context.test('a stdin-fed command that dies early reports its own words, not EPIPE', async () => {
+      // `psql -f -` under ON_ERROR_STOP on a bad restore: it stops reading, so
+      // the pump fails with EPIPE while the diagnosis is on the child's
+      // stderr. Reporting only the broken pipe sends the reader after the
+      // wrong thing entirely.
+      const big = path.join(dir, 'big-input');
+      await writeFile(big, 'x'.repeat(LARGE_INPUT_BYTES));
+      await assert.rejects(
+        postgres.exec([SHELL, SHELL_FLAG, `echo '${CHILD_DIAGNOSIS}' >&2; exit 3`], { inputFile: big }),
+        (error) => {
+          assert.match(error.message, new RegExp(CHILD_DIAGNOSIS), 'the child stderr is missing');
+          assert.match(error.message, /exited 3/, 'the exit code is missing');
+          return true;
+        },
+      );
+    });
   });
 });
 

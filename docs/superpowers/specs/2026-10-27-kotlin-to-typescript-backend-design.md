@@ -72,29 +72,6 @@ pooler, pgbouncer — forbids it, and that is the pooling a serverless API requi
 The portable default is polling. Realtime may be added later as an adapter if
 polling proves measurably inadequate.
 
-C4 is now exercised against Neon, not just asserted, and the probe found two
-configuration differences it did not yet know about (run 2026-10-29; detail in
-[the read-app rulings](../2026-10-28-nextjs-read-app-rulings.md), Task 5):
-
-- **The migration set proven byte-identical to Flyway's could not be applied to
-  Neon** until one statement was capability-gated. `GRANT pg_read_all_stats TO
-  grafana_reader` needs `ADMIN OPTION` on a predefined role, and no role on Neon
-  holds it; `roadtrip` and `neon_superuser` were both checked. The grant now runs
-  only where the migrating role can perform it, and the equivalence gate cannot
-  see the difference. Supabase is also non-superuser and will likely behave the
-  same way; that is expected, not yet tested.
-- **Neon ignores session startup parameters** on both its direct and pooled
-  endpoints, so `default_transaction_read_only` sent at connection time was
-  silently a no-op there, and a `CREATE TABLE` succeeded through it. A
-  connection-level setting does not travel across datastores. The portable
-  mechanism is role-level settings plus grants, which Neon honours and which
-  survive its pooler.
-
-Both are the point of C4 rather than an objection to it: the datastore is
-configuration, and these are two configuration differences. Any future
-datastore-specific assumption should be probed against each of the three, not
-read off the documentation of one.
-
 ## Design
 
 ### 1. Two runtimes and a shared package
@@ -249,6 +226,58 @@ importer against the same 19,136 envelopes into two databases and diff the rows.
 Deterministic input, deterministic output, no mocking, and a reference implementation
 that already works. This replaces most ETL unit tests with one harness and is
 stronger than what it replaces.
+
+**A single-pass differential proves the insert path and not the update path.** Two
+*empty* databases only ever `INSERT`, so the `ON CONFLICT DO UPDATE` half of every
+upsert is invisible to the diff: step 4 found that dropping any of the 28 campground or
+29 campsite conflict-update keys left the differential completely green. That matters
+because the importer's steady state is the refresh, not the seed — `make data-import`
+runs against a database that already holds the catalog. A wrong update-key list
+produces an identical first import and a divergent second one, which is the failure
+mode least likely to be noticed and most likely to be live.
+
+Step 4 closed it two ways. First, per-table update-path unit tests that re-upsert a
+fully-populated row over another and assert every column, each proven by mutation —
+these work precisely because the second row's values differ from the first's. Second,
+the harness gained two modes beyond the single pass:
+
+- **`--passes 2`** runs both importers twice over the same captures. It proves the
+  `ON CONFLICT` branch is reached and is idempotent — that a re-import does not
+  duplicate rows, has not widened the conflict target, and does not create a second
+  POI per campground — at full scale against real captures. It does **not** prove the
+  update carries changed values. With identical input, a column dropped from the
+  update set simply keeps the value pass 1 inserted, which is the correct value, so
+  the rows stay byte-identical and the diff sees nothing. An earlier draft of this
+  paragraph claimed otherwise and would have sent someone debugging the harness over
+  a premise that was wrong.
+- **`--prove-update-keys`** blanks every updatable column in both databases after
+  pass 1, then runs pass 2. Each side must restore every column from the captures, so
+  a column missing from one implementation's update set stays blank on that side alone
+  and the diff names it. This is a complete proof of the update-key list, not a sample.
+
+Run all three. None subsumes another: the single pass is the strongest check of parse
+and transform, because an insert-path error that the update path would correct is
+masked by any second pass; `--passes 2` is the only one that exercises re-import at
+scale; `--prove-update-keys` is the only one that proves the update writes at all.
+
+The fuller version of this — pass 1 over an older capture and pass 2 over the newest,
+so a genuinely changed upstream value has to propagate — is a better match for what
+`make data-import` does, and ten of the twenty-five declared inputs hold more than one
+capture, so the data for it already exists. It belongs with step 5's seed-and-refresh
+story rather than here, because `--prove-update-keys` already proves the column list
+completely and deterministically.
+
+**Whoever builds it should expect older captures not to parse, and not read that as a
+port defect.** The captures span months and both the envelope and the payload drift.
+Two of those ten sources already demonstrate it: `tesla-index`'s oldest capture carries
+`fetcher_version: "0-migrated"` against `"1"` for the other eight, and three of the
+`aspira-dictionaries-*` captures put nested objects under `response.headers`, which
+`ResponseMeta.headers` — a `Map<String, String>` — rejects outright, so *both*
+importers refuse them. None of the three is the newest in its source, which is the only
+reason today's single-pass run is unaffected. A pass-1 failure on an old capture is the
+vendor's shape changing, not the refresh property breaking. The envelope records
+`fetcher_version`, so comparing the pass-1 capture's version against the newest's is a
+cheap pre-check before anything is debugged.
 
 **The diff must compare JSONB as `jsonb`, not as `::text`.** Task 7 found that Kotlin
 writes `12.0` where TypeScript writes `12`: equal under the `jsonb` `=` operator,

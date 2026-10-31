@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
@@ -142,6 +144,85 @@ async function docker(...args) {
   }
 }
 
+// `docker exec` with a program's exit status, stderr and its two data
+// directions exposed. `docker()` above cannot stand in for it: execFile has no
+// stdin option, and it buffers stdout into a string. Used for the work that has
+// to happen *inside* the container — a binary COPY piped between two of its
+// databases, pg_dump, psql -f — rather than over TCP.
+//
+// `inputFile` and `outputFile` stream, and they are not a convenience:
+// a pg_dump of the catalog at full scale is far past V8's maximum string
+// length, so a dump that is collected into a string throws
+// `Invalid string length` rather than producing a file. `input` and the
+// returned stdout string stay for the small cases (a psql query, one COPY's
+// progress line); anything whose size follows the row count uses the file form.
+async function dockerExec(container, argv, { input, inputFile, outputFile } = {}) {
+  const stdin = input !== undefined || inputFile !== undefined;
+  const child = spawn('docker', ['exec', ...(stdin ? ['-i'] : []), container, ...argv], {
+    stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+  });
+
+  let stdout = '';
+  let stderr = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
+
+  // `pipeline` rather than `.pipe()`, and awaited alongside the exit rather
+  // than after it. A dump that stops early has to fail the run: if the sink's
+  // error were swallowed, or observed only once the child had closed, a
+  // truncated dump would resolve successfully and become the reference side of
+  // a differential — a false green with extra steps. A sink error that nothing
+  // is awaiting is worse still: it rejects unhandled, takes the process down
+  // before withPostgis's `finally`, and leaves the container running.
+  const pumps = [];
+  if (outputFile === undefined) {
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+  } else {
+    pumps.push(pipeline(child.stdout, createWriteStream(outputFile)));
+  }
+  if (inputFile !== undefined) {
+    pumps.push(pipeline(createReadStream(inputFile), child.stdin));
+  } else if (input !== undefined) {
+    child.stdin.on('error', () => {});
+    child.stdin.end(input);
+  }
+
+  const exited = new Promise((resolve, reject) => {
+    child.on('error', (error) =>
+      reject(error.code === 'ENOENT' ? new Error('docker is not installed or not on PATH') : error),
+    );
+    child.on('close', resolve);
+  });
+
+  let code;
+  try {
+    [code] = await Promise.all([exited, ...pumps]);
+  } catch (error) {
+    // The child's own diagnosis outranks the pipe's. A command fed from a file
+    // that dies early — `psql -f -` under ON_ERROR_STOP on a bad restore, which
+    // is the shape of every cached-dump run — closes its stdin, so the pump
+    // fails with EPIPE while the real story is on the child's stderr. Wait for
+    // the exit that is already on its way and report both.
+    child.kill('SIGKILL');
+    const reaped = await exited.catch(() => undefined);
+    const detail = [
+      reaped === undefined ? undefined : `exited ${reaped}`,
+      stderr.trim() || undefined,
+      error.message,
+    ].filter((part) => part !== undefined);
+    throw new Error(`docker exec ${argv[0]} failed: ${detail.join(': ')}`, { cause: error });
+  }
+  if (code !== 0) {
+    throw new Error(`docker exec ${argv[0]} exited ${code}: ${stderr.trim() || stdout.trim()}`);
+  }
+  return stdout;
+}
+
 async function waitForPostgres(container) {
   for (let attempt = 0; attempt < READY_ATTEMPTS; attempt += 1) {
     try {
@@ -179,6 +260,12 @@ export async function withPostgis(use) {
     await waitForPostgres(container);
     const port = await hostPort(container);
     return await use({
+      containerName() {
+        return container;
+      },
+      async exec(argv, options) {
+        return dockerExec(container, argv, options);
+      },
       async createDatabase(name) {
         await docker(
           'exec',
