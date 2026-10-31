@@ -187,3 +187,8 @@ export function kotlinRint(value: number): number {
   if (fraction > HALF || (fraction === HALF && floor % 2 !== 0)) rounded = floor + 1;
   return rounded === 0 && (value < 0 || Object.is(value, NEGATIVE_ZERO)) ? NEGATIVE_ZERO : rounded;
 }
+
+export function compareLongs(left: bigint, right: bigint): number {
+  if (left < right) return -1;
+  return left > right ? 1 : 0;
+}

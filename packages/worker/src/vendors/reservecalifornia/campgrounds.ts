@@ -11,7 +11,7 @@ import { stripTags } from '../../etl/html-text.js';
 import type { InputBundle } from '../../etl/input-bundle.js';
 import { fieldOf, isJsonObject, type JsonObject } from '../../etl/json-decode.js';
 import { booleanOrNull, contentOrNull, jsonObjectOf, longOrNull } from '../../etl/kotlin-json.js';
-import { kotlinDoubleFromText, kotlinStringToLongOrNull } from '../../etl/kotlin-number.js';
+import { compareLongs, kotlinDoubleFromText, kotlinStringToLongOrNull } from '../../etl/kotlin-number.js';
 import { kotlinTrim, nonBlank } from '../../etl/kotlin-text.js';
 import type { ParseResult, SourceEtl, TransformResult } from '../../etl/source-etl.js';
 import type { TransformCtx } from '../../etl/transform-ctx.js';
@@ -64,11 +64,6 @@ export const ACTIVITY_HINTS: readonly string[] = [
 
 export function reserveCaliforniaParkUrl(placeId: bigint): string {
   return `${PARK_URL_PREFIX}${placeId}`;
-}
-
-function compareLongs(left: bigint, right: bigint): number {
-  if (left < right) return -1;
-  return left > right ? 1 : 0;
 }
 
 function trimmedNonEmpty(value: string | null): string | null {

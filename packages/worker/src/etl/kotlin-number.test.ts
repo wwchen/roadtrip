@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  compareLongs,
   doubleToInt,
   kotlinDoubleFromText,
   kotlinIntFromText,
@@ -317,5 +318,23 @@ describe('kotlinRint, kotlin.math.round, which rounds a tie to the even neighbou
   test('a tie is not what JavaScript Math.round gives', () => {
     expect(Math.round(2.5)).toBe(3);
     expect(kotlinRint(2.5)).toBe(2);
+  });
+});
+
+describe('compareLongs, the order of Kotlin Long.compareTo', () => {
+  test('sorts numerically where the default sort of bigints is lexicographic', () => {
+    const ids = [10n, 9n, 100n, 2n, -5n, 0n];
+    expect([...ids].sort()).toEqual([-5n, 0n, 10n, 100n, 2n, 9n]);
+    expect([...ids].sort(compareLongs)).toEqual([-5n, 0n, 2n, 9n, 10n, 100n]);
+  });
+
+  test('tells apart longs that a double cannot', () => {
+    expect(compareLongs(9007199254740992n, 9007199254740993n)).toBe(-1);
+    expect(compareLongs(9007199254740993n, 9007199254740992n)).toBe(1);
+    expect(compareLongs(9223372036854775807n, -9223372036854775808n)).toBe(1);
+  });
+
+  test('is zero for equal longs', () => {
+    expect(compareLongs(7n, 7n)).toBe(0);
   });
 });
