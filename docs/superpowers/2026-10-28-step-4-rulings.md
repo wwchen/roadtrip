@@ -639,10 +639,12 @@ targets and almost none of the cost.
   by stripping them. The new `make importer-diff` target and the CI job carry
   comments on the same reading, since the brief requires the measurements to be
   recorded in the job's comment. Nothing else added on this branch carries one.
-- **The Rec.gov and Campflare *campground* collision pins rest on runs taken
-  before the pin landed**, unlike every other pin on the branch, which was
-  measured against the pin in place. Cost if wrong: a pin that was correct when
-  measured but is read as if it had been asserted.
+- **The Rec.gov and Campflare *campground* collision pins no longer rest on
+  pre-pin runs.** They were carried as such until Task 14, when all three
+  full-set modes ran with the gate live and reported every one of the eighteen
+  targets as `(pinned N)` — so each pin on the branch is now measured against
+  the pin in place, three times over. Recorded because the weaker claim stood
+  in this file first.
 - **`staleBuilds` can never report a current tree.** `apps/web` has a build
   script and a `src/` but emits to `.next`, not `dist`, so it is permanently
   reported stale and every differential run rebuilds the worker before it
