@@ -35,6 +35,7 @@ import {
   positiveInteger,
   report,
   runDifferential,
+  seedRefusal,
   SEED_DUMP_FLAGS,
   staleBuilds,
 } from './importer-differential.mjs';
@@ -247,6 +248,19 @@ test('a target with no pin is refused rather than read as zero', () => {
   assert.doesNotThrow(() => assertTargetsPinned(['Row'], { Row: { count: 0, reason: 'none expected' } }));
   const [entry] = collisionsFrom(statsFor(['Row'], 40), ['Row'], 1, { Row: { count: 40, reason: 'repeats in the capture' } });
   assert.deepEqual(entry, { name: 'Row', etlSlug: 'Row-slug', pass: 1, count: 40, expected: 40, reason: 'repeats in the capture' });
+});
+
+test('a seed is emitted on the run\'s own clean verdict, not on the absence of every collision', () => {
+  const difference = { table: 'campgrounds', key: ['p', 'r'], kind: 'differs', columns: ['name'] };
+  assert.equal(seedRefusal([], []), undefined, 'a clean run with no collisions emits');
+  assert.equal(
+    seedRefusal([], [collisionEntry(40, 40)]),
+    undefined,
+    'a collision sitting on its pin is adjudicated, so it must not suppress the seed',
+  );
+  assert.match(seedRefusal([difference], []), /1 difference\(s\)/);
+  assert.match(seedRefusal([], [collisionEntry(41, 40)]), /off their pinned collision count: Row \(pass 1\) 41 vs 40/);
+  assert.match(seedRefusal([], [collisionEntry(0, 40)]), /Row \(pass 1\) 0 vs 40/);
 });
 
 test('every pin states a reason and a non-negative integer count', () => {

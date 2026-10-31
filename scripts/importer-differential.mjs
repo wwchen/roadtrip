@@ -1000,6 +1000,18 @@ export async function dumpSeed(postgres, user, database, outPath, expected, flag
   }
 }
 
+export function seedRefusal(differences, collisions) {
+  if (differences.length > 0) return `${differences.length} difference(s) between the two importers`;
+  const moved = collisions.filter((entry) => entry.count !== entry.expected);
+  if (moved.length > 0) {
+    return (
+      `${moved.length} target pass(es) off their pinned collision count: ` +
+      moved.map((entry) => `${entry.name} (pass ${entry.pass}) ${entry.count} vs ${entry.expected}`).join(', ')
+    );
+  }
+  return undefined;
+}
+
 // --- the run ----------------------------------------------------------------
 
 export async function runDifferential({
@@ -1121,9 +1133,14 @@ export async function runDifferential({
       assertBothSidesWrote(counts, selected);
       const result = await diffDatabases(typescriptDb, { maxDifferences, counts });
 
-      if (emitSeed !== undefined && result.differences.length === 0 && collisions.every((entry) => entry.count === 0)) {
-        await dumpSeed(postgres, user, TYPESCRIPT_DB, emitSeed, await copiedTableCounts(typescriptDb));
-        await writeFile(`${emitSeed}${PROVENANCE_SUFFIX}`, JSON.stringify(wanted, undefined, PROVENANCE_INDENT));
+      if (emitSeed !== undefined) {
+        const refusal = seedRefusal(result.differences, collisions);
+        if (refusal === undefined) {
+          await dumpSeed(postgres, user, TYPESCRIPT_DB, emitSeed, await copiedTableCounts(typescriptDb));
+          await writeFile(`${emitSeed}${PROVENANCE_SUFFIX}`, JSON.stringify(wanted, undefined, PROVENANCE_INDENT));
+        } else {
+          console.error(`not emitting a seed to ${emitSeed}: ${refusal}`);
+        }
       }
       return { ...result, collisions };
     } finally {
