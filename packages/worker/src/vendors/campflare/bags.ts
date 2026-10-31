@@ -10,6 +10,7 @@ import {
   type CampgroundSchedule,
   type CarrierSignal,
 } from '@roadtrip/domain';
+import { documentEntries } from '../../etl/document-order.js';
 import { fieldOf, isJsonObject, type JsonObject } from '../../etl/json-decode.js';
 import { booleanOrNull, doubleOrNull, isNonStringPrimitive } from '../../etl/kotlin-json.js';
 import { doubleToInt } from '../../etl/kotlin-number.js';
@@ -64,7 +65,7 @@ function withToiletKind(entries: CampgroundAmenity[], toiletKind: string | null)
 
 export function amenities(raw: JsonObject): CampgroundAmenity[] {
   const entries: CampgroundAmenity[] = [];
-  for (const [key, value] of Object.entries(raw)) {
+  for (const [key, value] of documentEntries(raw)) {
     if (key === TOILET_KIND_KEY || value === null) continue;
     const known = WIRE_AMENITY_KEYS.has(key) ? (key as AmenityKey) : null;
     const present = isNonStringPrimitive(value) ? (booleanOrNull(value) ?? true) : true;

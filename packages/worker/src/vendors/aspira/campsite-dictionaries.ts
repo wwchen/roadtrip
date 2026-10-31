@@ -1,3 +1,4 @@
+import { documentValues } from '../../etl/document-order.js';
 import { fieldOf, isJsonObject, type JsonObject } from '../../etl/json-decode.js';
 import { contentOrNull, intOrNull } from '../../etl/kotlin-json.js';
 
@@ -140,7 +141,7 @@ function parseAttributeValueLabels(values: readonly unknown[] | null): Map<numbe
 
 function attributeDefinitionElements(attributes: unknown): unknown[] {
   if (Array.isArray(attributes)) return attributes;
-  return isJsonObject(attributes) ? Object.values(attributes) : [];
+  return isJsonObject(attributes) ? documentValues(attributes) : [];
 }
 
 function parseAttributes(attributes: unknown): Map<number, AttributeDefinition> {

@@ -1,5 +1,6 @@
 import { AmenityKey, Carrier } from '@roadtrip/domain';
 import { describe, expect, test } from 'vitest';
+import { parseKeepingDigits } from '../../etl/envelope.js';
 import type { JsonObject } from '../../etl/json-decode.js';
 import { alerts, amenities, carrierSignals, metadata, price, schedule } from './bags.js';
 
@@ -11,6 +12,16 @@ function obj(text: string): JsonObject {
 }
 
 describe('amenities', () => {
+  test('unknown keys that look like integers are listed in the order the document writes them', () => {
+    const raw = parseKeepingDigits('{"30": true, "water": true, "4": false, "toilets": true}') as JsonObject;
+    expect(amenities(raw)).toEqual([
+      { key: AmenityKey.OTHER, present: true, detail: '30' },
+      { key: AmenityKey.WATER, present: true },
+      { key: AmenityKey.OTHER, present: false, detail: '4' },
+      { key: AmenityKey.TOILETS, present: true },
+    ]);
+  });
+
   test('keys map to the vocabulary and json nulls drop out', () => {
     expect(amenities(obj('{"toilets": true, "water": false, "wifi": null, "showers": true}'))).toEqual([
       { key: AmenityKey.TOILETS, present: true },

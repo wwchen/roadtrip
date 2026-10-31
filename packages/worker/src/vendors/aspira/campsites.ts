@@ -5,6 +5,7 @@ import {
   DataProviderRef,
 } from '@roadtrip/domain';
 import { campsiteKindAspira } from '../../etl/campsite-kinds.js';
+import { documentEntries } from '../../etl/document-order.js';
 import { serializeOpaquePayload, type Envelope } from '../../etl/envelope.js';
 import { stripTags } from '../../etl/html-text.js';
 import type { InputBundle } from '../../etl/input-bundle.js';
@@ -105,7 +106,7 @@ export class AspiraCampsitesEtl implements SourceEtl<AspiraCampsitesDto, Campsit
         yield { ok: false, sourceId, errors: [EXPECTED_OBJECT_PAYLOAD] };
         continue;
       }
-      for (const [resourceId, raw] of Object.entries(payload)) {
+      for (const [resourceId, raw] of documentEntries(payload)) {
         if (resourceId === '') {
           yield { ok: false, sourceId, errors: [EMPTY_RESOURCE_ID] };
           continue;

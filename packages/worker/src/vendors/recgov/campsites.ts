@@ -1,5 +1,6 @@
 import { BookingProvider, DataProviderRef, type CampsiteAttribute } from '@roadtrip/domain';
 import { campsiteKindRecGov } from '../../etl/campsite-kinds.js';
+import { documentEntries } from '../../etl/document-order.js';
 import { serializeOpaquePayload, type Envelope } from '../../etl/envelope.js';
 import type { InputBundle } from '../../etl/input-bundle.js';
 import { fieldOf, isJsonObject, type JsonObject } from '../../etl/json-decode.js';
@@ -219,7 +220,7 @@ export class RecGovCampsitesEtl implements SourceEtl<Envelope[], CampsiteUpsertC
         yield { ok: false, sourceId, errors: [MISSING_CAMPSITES] };
         continue;
       }
-      for (const [campsiteId, element] of Object.entries(rawCampsites)) {
+      for (const [campsiteId, element] of documentEntries(rawCampsites)) {
         if (!isJsonObject(element)) {
           yield { ok: false, sourceId: campsiteId, errors: [EXPECTED_CAMPSITE_OBJECT] };
           continue;

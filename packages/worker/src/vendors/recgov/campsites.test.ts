@@ -234,6 +234,13 @@ describe('payload shape guards', () => {
   });
 });
 
+describe('document order', () => {
+  test('campsites are emitted, good and bad alike, in the order the document writes their ids', () => {
+    const results = transformed([{ payload: '{"campsites":{"30":{"site":"c"},"4":"x","200":{"site":"e"},"15":{"site":"b"}}}' }]);
+    expect(results.map((result) => (result.ok ? result.record.name : result.sourceId))).toEqual(['c', '4', 'e', 'b']);
+  });
+});
+
 describe('text fields', () => {
   test('are trimmed, and read by content when they are not text', () => {
     const campsite = oneCampsite('"site":"  A12 ","loop":"\\tNorth Loop\\n","campsite_type":" STANDARD NONELECTRIC "');

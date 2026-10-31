@@ -213,6 +213,27 @@ const DICTIONARY = JSON.stringify({
   },
 });
 
+describe('document order', () => {
+  test('resources are emitted in the order the inventory document writes their ids', () => {
+    const resource = resourceJson(BASIC_RESOURCE);
+    const inventory = `{"30":${resource},"4":${resource},"200":${resource},"15":${resource}}`;
+    const refs = recordsOf(WA_SLUG, waInputs([inventory])).map((record) => record.dataProviderRef.serialize());
+    expect(refs).toEqual(['wa:30', 'wa:4', 'wa:200', 'wa:15']);
+  });
+
+  test('of two attribute definitions sharing an id the one the dictionary writes last wins, whatever its key', () => {
+    const definition = (name: string) =>
+      `{"attributeDefinitionId":${VEHICLE_ATTRIBUTE},"localizedValues":[{"cultureName":"en-US","name":"${name}"}],"values":[]}`;
+    const dictionary = `{"attributes":{"9":${definition('Written first')},"2":${definition('Written last')}}}`;
+    const record = waRecord(
+      { definedAttributes: `[{"attributeDefinitionId":${VEHICLE_ATTRIBUTE},"value":3}]` },
+      LINKED_MAPS,
+      dictionary,
+    );
+    expect(record.attributes).toEqual([{ name: 'Written last', value: '3' }]);
+  });
+});
+
 describe('the Aspira campsites adapter, parse', () => {
   test('a run with every input yields one DTO carrying the inventory, the maps and the dictionaries', () => {
     const [result, ...rest] = parsed(WA_SLUG, waInputs([BASIC_INVENTORY, BASIC_INVENTORY], LINKED_MAPS, DICTIONARY));
