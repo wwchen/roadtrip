@@ -28,6 +28,7 @@ jobs:
       gradle_lint: ${{ steps.filter.outputs.gradle_lint }}
       schema_equivalence: ${{ steps.filter.outputs.schema_equivalence }}
       package_tests: ${{ steps.filter.outputs.package_tests }}
+      importer_differential: ${{ steps.filter.outputs.importer_differential }}
       web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -127,9 +128,39 @@ jobs:
               - 'scripts/schema-reference.mjs'
               - 'scripts/schema-reference.d.mts'
               - 'scripts/build-workspaces.mjs'
+              # The importer differential's own harness and the Kotlin oracle's
+              # comparison machinery. Their unit tests run on fixtures and need
+              # neither data/raw nor a JVM, so they belong in this cheap job
+              # rather than behind the hours-long importer-differential one — a
+              # harness edit should be checked in minutes.
+              - 'scripts/importer-*.mjs'
+              - 'scripts/etl-oracle.test.mjs'
+              - 'scripts/etl-oracle/**'
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.base.json'
+              - '.github/workflows/ci.yml'
+            # Everything either importer's stored rows are a function of: the
+            # TypeScript packages, the Kotlin ETL/repo/domain/tools trees, the
+            # registry that decides what runs, the Flyway migrations that build
+            # the schema it is compared in, the captures both sides read, and the
+            # harness itself. `scripts/importer-*.mjs` rather than
+            # `importer-differential*`: importer-diff-columns.mjs holds the
+            # column lists the comparison is made of and
+            # importer-collision-pins.mjs holds the counts it refuses on, and
+            # neither matches the narrower glob.
+            importer_differential:
+              - 'packages/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/service/etl/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/repo/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/model/domain/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/tools/**'
+              - 'backend/src/main/resources/poi-registry.yaml'
+              - 'backend/src/main/resources/db/migration/**'
+              - 'data/raw/**'
+              - 'scripts/importer-*.mjs'
+              - 'scripts/schema-reference.mjs'
+              - 'scripts/build-workspaces.mjs'
               - '.github/workflows/ci.yml'
             web:
               - 'apps/**'
@@ -356,6 +387,87 @@ jobs:
       - name: Check the schema normalizer still distinguishes what the gate compares
         run: node --test scripts/schema-reference.test.mjs
 
+  # The TypeScript importer against the Kotlin one: both run over every capture
+  # in data/raw into two databases in one PostGIS container, then every row of
+  # every diffed table is compared. This is the gate that the port of the ETL
+  # importer is faithful, and it is the reason a change under packages/worker can
+  # be trusted at all.
+  #
+  # ONE MODE, not three, and the measurements are the whole argument. The three
+  # modes see different classes of defect — the single pass checks parse and
+  # transform, `--passes 2` is the only one that can see a conflict-handling
+  # defect (a first import into an empty database exercises the INSERT path
+  # alone), and `--prove-update-keys` blanks every compared column between the
+  # passes so a column missing from one importer's ON CONFLICT update set stays
+  # blank on that side alone. Measured over the full capture set on an Apple
+  # Silicon laptop, each read from the run's own exit code:
+  #
+  #   single pass                  1,981 s  (33 m 01 s)
+  #   --passes 2                   3,352 s  (55 m 52 s)
+  #   --prove-update-keys          3,704 s  (61 m 44 s)
+  #
+  # The rule was: all three in CI if the whole job lands under 30 minutes on a
+  # GitHub runner, which is slower than that laptop. The three together are
+  # 9,037 s — 2 h 30 m 37 s — so the fallback applies and is not close. The
+  # single pass keeps the full capture set here; the other two are the
+  # `make importer-diff` gate before landing.
+  #
+  # The fallback's middle option — dropping those two to one target per adapter
+  # FAMILY — does not pay either. A 13-family subset in `--passes 2` had already
+  # run 1,481 s (24 m 41 s) with its Kotlin side complete and only 8 of its 13
+  # TypeScript targets done when the run was lost to a full Docker disk, so it
+  # was past 24 minutes before the five campsite targets were reached. The
+  # reason it cannot be cheap is structural:
+  #
+  # There are thirteen adapter families across the eighteen targets, and a
+  # campsite family cannot be selected without its parent campground target,
+  # because campsite adapters resolve parents through
+  # campgrounds.(data_provider, data_provider_ref). So any per-family subset is
+  # forced to contain Campflare Campsites (299,857 rows) and Rec.gov Campsites
+  # (105,452) — about 89% of the catalog's campsites. It drops five of eighteen
+  # targets and almost none of the cost.
+  #
+  # Nothing is fetched: data/raw is already in every checkout, so the captures
+  # cost this job nothing beyond the clone it would do anyway. Java is here for
+  # the Kotlin side (./gradlew :backend:importCatalog) and Node for the
+  # TypeScript side; the harness refuses to run at all if either importer exits
+  # non-zero, if a selected target has no capture, or if either side wrote no
+  # rows — "one side did not run" must never be reported as "one side has no
+  # rows". The harness's own unit tests run in package-tests, in minutes.
+  #
+  # timeout-minutes is 150 against a measured 33 minutes: a runner is slower
+  # than the laptop above, npm ci, the workspace build and the backend compile
+  # all land before the first row is read, and a job killed at its ceiling
+  # reports the same red as a real difference. Raise it rather than let that
+  # happen; if it is ever approached, the number above is the one to re-measure.
+  importer-differential:
+    needs: changes
+    if: needs.changes.outputs.importer_differential == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
+
+      - name: Diff the TypeScript importer against the Kotlin one over every capture
+        run: node scripts/importer-differential.mjs
+
   # Mirrored locally by `make test`. One job for both suites: the domain suite
   # runs in well under a second, so a job of its own would spend more on
   # checkout, npm ci and build than it ever saved. The db suite boots PostGIS
@@ -398,6 +510,20 @@ jobs:
 
       - name: Type-check @roadtrip/worker including tests
         run: npm run typecheck --workspace @roadtrip/worker
+
+      # The two gates that certify the other gates. The differential's harness
+      # test boots one PostGIS container and makes the same comparison the real
+      # run does over synthetic rows, then injects a difference per diffed table
+      # to prove the comparison can still fail; the oracle test covers the
+      # Kotlin-comparison machinery. Both are here because defects have been
+      # found in this proof machinery itself, where a wrong comparison reads as
+      # a clean diff rather than as a failure.
+      - name: Check the importer differential's own harness
+        run: node --test scripts/importer-differential.test.mjs
+
+      - name: Check the Kotlin oracle's comparison machinery
+        run: node --test scripts/etl-oracle.test.mjs
+
   web-tests:
     needs: changes
     if: needs.changes.outputs.web == 'true'
@@ -763,6 +889,7 @@ jobs:
       - gradle-lint
       - frontend-tests
       - schema-equivalence
+      - importer-differential
       - package-tests
       - web-tests
       - companion-tests
