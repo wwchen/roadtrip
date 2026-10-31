@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { createDb, type Db } from '@roadtrip/db';
-import { implementedSlugs, type AdapterRegistry } from '../etl/adapter-registry.js';
+import { assertEveryEnabledAdapterResolves, implementedSlugs, type AdapterRegistry } from '../etl/adapter-registry.js';
 import { runTarget, type EtlStats } from '../etl/orchestrator.js';
 import { RawCaptureStore } from '../etl/raw-capture-store.js';
 import { loadPoiRegistry } from '../registry/poi-registry.js';
@@ -15,6 +15,7 @@ const DATABASE_URL_ENV = 'DATABASE_URL';
 
 export interface CliIo {
   adapters: AdapterRegistry;
+  requireEveryEnabledAdapter: boolean;
   env: Readonly<Record<string, string | undefined>>;
   out: (line: string) => void;
   err: (line: string) => void;
@@ -88,6 +89,7 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
   let db: Db | undefined;
   try {
     const registry = loadPoiRegistry(values.registry ?? path.join(staticDir, DEFAULT_REGISTRY_RELATIVE_PATH));
+    if (io.requireEveryEnabledAdapter) assertEveryEnabledAdapterResolves(registry, io.adapters);
     const declared = new Set(importTargets(registry, undefined).map((target) => target.name));
     const runnable = importTargets(registry, implementedSlugs(registry, io.adapters));
     const selected = selectTargets(runnable, declared, values.target ?? []);

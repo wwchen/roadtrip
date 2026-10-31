@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,7 +7,7 @@ import { DataProviderRef } from '@roadtrip/domain';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { withPostgis, type PostgisSession } from '../../../../scripts/schema-reference.mjs';
-import type { AdapterRegistry } from '../etl/adapter-registry.js';
+import { adapterRegistry, type AdapterRegistry } from '../etl/adapter-registry.js';
 import type { ParseResult, SourceEtl, TransformResult } from '../etl/source-etl.js';
 import { campgroundBinding, campsiteBinding } from '../etl/terminal-sinks.js';
 import type { CampgroundUpsertCandidate } from '../model/campground-candidate.js';
@@ -102,6 +102,7 @@ function cli(adapters: AdapterRegistry, argv: string[], env: Record<string, stri
   const captured: Captured = { out: [], err: [] };
   const io: CliIo = {
     adapters,
+    requireEveryEnabledAdapter: false,
     env,
     out: (line) => captured.out.push(line),
     err: (line) => captured.err.push(line),
@@ -203,7 +204,7 @@ describe('import cli', () => {
   });
 
   test('missing required directories and unknown flags are usage errors', async () => {
-    const io: CliIo = { adapters: FAKE_ADAPTERS, env: {}, out: () => {}, err: () => {} };
+    const io: CliIo = { adapters: FAKE_ADAPTERS, requireEveryEnabledAdapter: false, env: {}, out: () => {}, err: () => {} };
     expect(await runCli(['--list'], io)).toBe(EXIT_USAGE);
     expect(await runCli(['--raw-dir', 'a', '--static-dir', 'b', '--bogus'], io)).toBe(EXIT_USAGE);
   });
@@ -219,6 +220,7 @@ describe('import cli', () => {
     const captured: Captured = { out: [], err: [] };
     const io: CliIo = {
       adapters: FAKE_ADAPTERS,
+      requireEveryEnabledAdapter: false,
       env: {},
       out: (line) => captured.out.push(line),
       err: (line) => captured.err.push(line),
@@ -287,5 +289,71 @@ describe('import cli', () => {
     });
     expect(result.code).toBe(EXIT_OK);
     expect(JSON.parse(result.out[0]!)).toMatchObject({ name: 'Campflare Campgrounds', upserted: 1 });
+  });
+});
+
+describe('the production adapter registry against the production poi registry', () => {
+  const MISSPELLED_ADAPTER = 'ReserveCaliforniaSiteEtl';
+  const CORRECT_ADAPTER = 'ReserveCaliforniaSitesEtl';
+  const MISSPELLED_ROW = 'California State Park Sites';
+  const MISSPELLED_SLUG = 'reservecalifornia-campsites';
+  const TARGET_COUNT = 18;
+
+  function strictCli(registryPath: string, argv: string[]): Promise<{ code: number } & Captured> {
+    const captured: Captured = { out: [], err: [] };
+    const io: CliIo = {
+      adapters: adapterRegistry,
+      requireEveryEnabledAdapter: true,
+      env: {},
+      out: (line) => captured.out.push(line),
+      err: (line) => captured.err.push(line),
+    };
+    const base = ['--raw-dir', path.join(staticDir, 'data', 'raw'), '--static-dir', staticDir, '--registry', registryPath];
+    return runCli([...base, ...argv], io).then((code) => ({ code, ...captured }));
+  }
+
+  test('every enabled row resolves an adapter, so the whole declared set is runnable', async () => {
+    const result = await strictCli(PRODUCTION_REGISTRY_PATH, ['--list']);
+    expect(result.err).toEqual([]);
+    expect(result.code).toBe(EXIT_OK);
+    expect(result.out).toHaveLength(TARGET_COUNT);
+  });
+
+  test('one misspelled adapter name fails the run and names the row, the adapter and the slug', async () => {
+    const yaml = readFileSync(PRODUCTION_REGISTRY_PATH, 'utf8');
+    const misspelled = yaml.replace(`adapter: ${CORRECT_ADAPTER}`, `adapter: ${MISSPELLED_ADAPTER}`);
+    expect(misspelled).not.toBe(yaml);
+    const registryPath = path.join(staticDir, 'misspelled-registry.yaml');
+    writeFileSync(registryPath, misspelled);
+
+    const result = await strictCli(registryPath, ['--list']);
+    expect(result.code).toBe(EXIT_FAILED);
+    expect(result.out).toEqual([]);
+    const err = result.err.join('\n');
+    expect(err).toContain('Unknown campsite_data adapter');
+    expect(err).toContain(MISSPELLED_ADAPTER);
+    expect(err).toContain(MISSPELLED_ROW);
+    expect(err).toContain(MISSPELLED_SLUG);
+  });
+
+  test('without the requirement the same misspelling silently shrinks the target set', async () => {
+    const yaml = readFileSync(PRODUCTION_REGISTRY_PATH, 'utf8');
+    const registryPath = path.join(staticDir, 'misspelled-registry.yaml');
+    writeFileSync(registryPath, yaml.replace(`adapter: ${CORRECT_ADAPTER}`, `adapter: ${MISSPELLED_ADAPTER}`));
+    const captured: Captured = { out: [], err: [] };
+    const io: CliIo = {
+      adapters: adapterRegistry,
+      requireEveryEnabledAdapter: false,
+      env: {},
+      out: (line) => captured.out.push(line),
+      err: (line) => captured.err.push(line),
+    };
+    const code = await runCli(
+      ['--raw-dir', path.join(staticDir, 'data', 'raw'), '--static-dir', staticDir, '--registry', registryPath, '--list'],
+      io,
+    );
+    expect(code).toBe(EXIT_OK);
+    expect(captured.out).toHaveLength(TARGET_COUNT - 1);
+    expect(captured.out.join('\n')).not.toContain(MISSPELLED_ROW);
   });
 });

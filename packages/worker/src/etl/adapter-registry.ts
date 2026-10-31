@@ -88,6 +88,27 @@ export function adapterFor(adapters: AdapterRegistry, name: string): AdapterFact
   return Object.hasOwn(adapters, name) ? adapters[name] : undefined;
 }
 
+const ADAPTER_SECTIONS = ['poi_data', 'campsite_data'] as const;
+
+export function assertEveryEnabledAdapterResolves(registry: PoiRegistry, adapters: AdapterRegistry): void {
+  const rowsBySection = { poi_data: registry.poiData, campsite_data: registry.campsiteData };
+  const unknown: string[] = [];
+  for (const section of ADAPTER_SECTIONS) {
+    for (const row of rowsBySection[section]) {
+      if (!row.enabled) continue;
+      for (const etl of row.etls) {
+        if (adapterFor(adapters, etl.adapter) !== undefined) continue;
+        unknown.push(`Unknown ${section} adapter: ${etl.adapter} (row='${row.name}', slug=${etl.slug})`);
+      }
+    }
+  }
+  if (unknown.length === 0) return;
+  throw new Error(
+    `${unknown.join('; ')}. An enabled registry row whose adapter does not resolve would be skipped, ` +
+      'and the import would report success over fewer sources than the registry declares.',
+  );
+}
+
 export function implementedSlugs(registry: PoiRegistry, adapters: AdapterRegistry): Set<string> {
   const slugs = new Set<string>();
   for (const row of [...registry.poiData, ...registry.campsiteData]) {
