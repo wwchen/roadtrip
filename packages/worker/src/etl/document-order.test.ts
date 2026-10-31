@@ -130,7 +130,7 @@ describe('document order of integer-like keys', () => {
     expect(documentKeys(cursor as Record<string, unknown>)).toEqual(['2', '1']);
   });
 
-  test('recordDocumentOrder on text with no integer-like key records nothing', () => {
+  test('text with no integer-like key reads back in the order it was written', () => {
     const value = JSON.parse('{"b":1,"a":2}') as Record<string, unknown>;
     recordDocumentOrder('{"b":1,"a":2}', value);
     expect(documentKeys(value)).toEqual(['b', 'a']);
