@@ -22,4 +22,6 @@ export const COLLISION_PINS = {
   'Alberta Provincial Park Sites': { count: 0, reason: NONE_EXPECTED },
   'New York State Park Sites': { count: 0, reason: NONE_EXPECTED },
   'Tesla Superchargers': { count: 0, reason: NONE_EXPECTED },
+  'California State Parks': { count: 0, reason: NONE_EXPECTED },
+  'California State Park Sites': { count: 0, reason: NONE_EXPECTED },
 };
