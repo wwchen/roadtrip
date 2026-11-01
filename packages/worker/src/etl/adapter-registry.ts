@@ -89,6 +89,30 @@ export function adapterFor(adapters: AdapterRegistry, name: string): AdapterFact
 }
 
 const ADAPTER_SECTIONS = ['poi_data', 'campsite_data'] as const;
+type AdapterSection = (typeof ADAPTER_SECTIONS)[number];
+
+// ProductionTerminalEtlRegistry.kt keeps two maps, poiAdapters and
+// campsiteAdapters, and resolves each section against its own: a poi_data row
+// naming a campsite adapter is refused at registry init. adapterRegistry above
+// is one map, so the section an adapter belongs to is declared here instead and
+// checked below. Without it a poi_data row naming AspiraCampsitesEtl resolves,
+// builds a campsiteBinding and writes campsite candidates for a POI target,
+// where the Kotlin refuses to start.
+export const ADAPTER_SECTION: Readonly<Record<string, AdapterSection>> = {
+  AspiraCampgroundsEtl: 'poi_data',
+  BcParksCampgroundsEtl: 'poi_data',
+  CampflareCampgroundsEtl: 'poi_data',
+  PlanetFitnessEtl: 'poi_data',
+  RecGovCampgroundsEtl: 'poi_data',
+  ReserveAmericaCampgroundsEtl: 'poi_data',
+  ReserveCaliforniaCampgroundsEtl: 'poi_data',
+  TeslaIndexEtl: 'poi_data',
+  AspiraCampsitesEtl: 'campsite_data',
+  CampflareCampsitesEtl: 'campsite_data',
+  RecGovCampsitesEtl: 'campsite_data',
+  ReserveAmericaSitesEtl: 'campsite_data',
+  ReserveCaliforniaSitesEtl: 'campsite_data',
+};
 
 export function assertEveryEnabledAdapterResolves(registry: PoiRegistry, adapters: AdapterRegistry): void {
   const rowsBySection = { poi_data: registry.poiData, campsite_data: registry.campsiteData };
@@ -97,8 +121,19 @@ export function assertEveryEnabledAdapterResolves(registry: PoiRegistry, adapter
     for (const row of rowsBySection[section]) {
       if (!row.enabled) continue;
       for (const etl of row.etls) {
-        if (adapterFor(adapters, etl.adapter) !== undefined) continue;
-        unknown.push(`Unknown ${section} adapter: ${etl.adapter} (row='${row.name}', slug=${etl.slug})`);
+        if (adapterFor(adapters, etl.adapter) === undefined) {
+          unknown.push(`Unknown ${section} adapter: ${etl.adapter} (row='${row.name}', slug=${etl.slug})`);
+          continue;
+        }
+        // Undefined for an adapter registered only by a test's own registry,
+        // which is section-agnostic by construction.
+        const declared = ADAPTER_SECTION[etl.adapter];
+        if (declared !== undefined && declared !== section) {
+          unknown.push(
+            `Unknown ${section} adapter: ${etl.adapter} (row='${row.name}', slug=${etl.slug}): ` +
+              `it is a ${declared} adapter`,
+          );
+        }
       }
     }
   }

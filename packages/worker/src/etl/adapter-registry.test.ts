@@ -4,7 +4,7 @@ import { loadPoiRegistry, type EtlEntry } from '../registry/poi-registry.js';
 import { AspiraCampgroundsEtl } from '../vendors/aspira/campgrounds.js';
 import { AspiraCampsitesEtl } from '../vendors/aspira/campsites.js';
 import { BcParksCampgroundsEtl } from '../vendors/bcparks/campgrounds.js';
-import { adapterRegistry } from './adapter-registry.js';
+import { ADAPTER_SECTION, adapterRegistry, assertEveryEnabledAdapterResolves } from './adapter-registry.js';
 
 const PRODUCTION_REGISTRY_PATH = decodeURIComponent(
   new URL('../../../../backend/src/main/resources/poi-registry.yaml', import.meta.url).pathname,
@@ -114,6 +114,48 @@ describe('the Aspira campsite adapters built from the production registry', () =
     });
     expect(() => built({ ...entry, args: { ...entry.args, parent_data_provider: 'constructor' } })).toThrow(
       'Unknown data provider: constructor',
+    );
+  });
+});
+
+describe('section-scoped adapter resolution', () => {
+  test('every registered adapter declares which section it belongs to', () => {
+    expect(Object.keys(ADAPTER_SECTION).sort()).toEqual(Object.keys(adapterRegistry).sort());
+  });
+
+  test('the production registry resolves with every row in its own section', () => {
+    expect(() => assertEveryEnabledAdapterResolves(REGISTRY, adapterRegistry)).not.toThrow();
+  });
+
+  test('a poi_data row naming a campsite adapter is refused, as the Kotlin refuses at init', () => {
+    const crossed = {
+      ...REGISTRY,
+      poiData: [
+        {
+          ...REGISTRY.poiData[0],
+          etls: [{ ...REGISTRY.poiData[0].etls[0], adapter: ASPIRA_CAMPSITES_ADAPTER }],
+        },
+      ],
+      campsiteData: [],
+    };
+    expect(() => assertEveryEnabledAdapterResolves(crossed, adapterRegistry)).toThrow(
+      /Unknown poi_data adapter: AspiraCampsitesEtl .*: it is a campsite_data adapter/,
+    );
+  });
+
+  test('a campsite_data row naming a poi adapter is refused the same way', () => {
+    const crossed = {
+      ...REGISTRY,
+      poiData: [],
+      campsiteData: [
+        {
+          ...REGISTRY.campsiteData[0],
+          etls: [{ ...REGISTRY.campsiteData[0].etls[0], adapter: ASPIRA_ADAPTER }],
+        },
+      ],
+    };
+    expect(() => assertEveryEnabledAdapterResolves(crossed, adapterRegistry)).toThrow(
+      /Unknown campsite_data adapter: AspiraCampgroundsEtl .*: it is a poi_data adapter/,
     );
   });
 });
