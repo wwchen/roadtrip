@@ -41,6 +41,9 @@ KOTLIN_PACKAGE_ROOT = "backend/src/main/kotlin/ca/floo/roadtrip"
 IMPORTER_KOTLIN_SOURCES = ("service/etl", "repo")
 IMPORTER_DIFFERENTIAL = "scripts/importer-differential.mjs"
 PROVENANCE_TREES_BLOCK = re.compile(r"const PROVENANCE_TREES = \[(.*?)\];", re.S)
+JS_CONST_LIST = "const {} = \\[(.*?)\\];"
+JS_QUOTED = re.compile(r"'([^']+)'")
+JS_BARE = re.compile(r"^[A-Z][A-Z0-9_]*$", re.M)
 KOTLIN_IMPORT = re.compile(
     r"^import ca\.floo\.roadtrip\.([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)?)", re.M
 )
@@ -52,6 +55,45 @@ def companion_key_inputs() -> list[str]:
     )
     assert declared, "COMPANION_IMAGE_INPUTS not found"
     return declared.group(1).split()
+
+
+def tracked_paths() -> set[str]:
+    out = subprocess.run(
+        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout
+    return set(out.splitlines())
+
+
+def js_path_list(name: str) -> list[str]:
+    """The string entries of a `const <name> = [...]` list in the differential.
+
+    A bare identifier entry is resolved through its own `const <IDENT> = '...'`,
+    so PROVENANCE_FILES' REGISTRY_RELATIVE_PATH is checked like any other path.
+    """
+    source = (ROOT / IMPORTER_DIFFERENTIAL).read_text()
+    block = re.search(JS_CONST_LIST.format(name), source, re.S)
+    assert block is not None, f"{name} not found in {IMPORTER_DIFFERENTIAL}"
+    paths = []
+    for entry in block.group(1).split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        quoted = JS_QUOTED.search(entry)
+        if quoted is not None:
+            paths.append(quoted.group(1))
+            continue
+        if JS_BARE.match(entry):
+            resolved = re.search(rf"const {entry} = '([^']+)'", source)
+            assert resolved is not None, f"{name} names {entry}, which resolves to no path"
+            paths.append(resolved.group(1))
+    return paths
+
+
+def path_exists(path: str, tracked: set[str]) -> bool:
+    if path in tracked:
+        return True
+    prefix = f"{path}/"
+    return any(candidate.startswith(prefix) for candidate in tracked)
 
 
 def importer_kotlin_trees() -> set[str]:
@@ -219,6 +261,40 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("importer_differential", gate["if"])
         self.assertIn("node scripts/importer-differential.mjs", job_commands(gate))
         self.assertIn("importer-differential", jobs["ci-passed"]["needs"])
+
+    def test_every_pinned_path_exists(self) -> None:
+        tracked = tracked_paths()
+        self.assertIn(IMPORTER_DIFFERENTIAL, tracked, "git ls-files returned nothing usable")
+
+        for name in ("PROVENANCE_TREES", "PROVENANCE_FILES"):
+            paths = js_path_list(name)
+            self.assertGreater(len(paths), 1, f"{name} parsed to {len(paths)} path(s)")
+            for path in paths:
+                self.assertTrue(
+                    path_exists(path, tracked),
+                    f"{name} pins {path}, which is not in this branch. provenanceFor() hashes "
+                    "every entry before any container starts, so one bad path fails every "
+                    "differential run, the CI job and make importer-diff included",
+                )
+
+        watched = path_filters()["importer_differential"]
+        for pattern in watched:
+            if pattern.endswith("/**"):
+                self.assertTrue(
+                    path_exists(pattern[: -len("/**")], tracked),
+                    f"the importer_differential filter watches {pattern}, which matches no tracked path",
+                )
+            elif "*" in pattern:
+                self.assertTrue(
+                    any(PurePosixPath(c).match(pattern) for c in tracked),
+                    f"the importer_differential filter watches {pattern}, which matches no tracked file",
+                )
+            else:
+                self.assertIn(
+                    pattern,
+                    tracked,
+                    f"the importer_differential filter watches {pattern}, which is not a tracked file",
+                )
 
     def test_the_cached_dump_provenance_covers_every_tree_it_imports(self) -> None:
         block = PROVENANCE_TREES_BLOCK.search((ROOT / IMPORTER_DIFFERENTIAL).read_text())

@@ -104,15 +104,11 @@ export const PROVENANCE_SUFFIX = '.provenance.json';
 // schema itself, which the dump's rows have to fit: the Flyway migrations are
 // what the database it is restored into was built from, and the Drizzle schema
 // is what the diff's column lists are derived from, so a migration must retire
-// a dump taken before it. The build files pin the serialization and jOOQ
-// versions the Kotlin side writes through.
-//
-// This list said ETL, repo and domain only until a sidecar from a full
-// --emit-seed run was read against the imports: service/etl and repo import
-// metadata, availability, support, client and db as well, so a dump taken
-// before an edit to any of them was reusable as if valid.
-// test_ci_image_builds.py derives the Kotlin half of this list from those
-// imports rather than trusting it.
+// a dump taken before it. The Gradle files pin the Kotlin, serialization and
+// jOOQ versions the Kotlin side writes through; config is reached through db.
+// test_ci_image_builds.py derives the Kotlin half of this list from the
+// imports, and checks every entry here is a path that exists, rather than
+// trusting either.
 const PROVENANCE_TREES = [
   'data/raw',
   'backend/src/main/kotlin/ca/floo/roadtrip/service/etl',
@@ -123,12 +119,19 @@ const PROVENANCE_TREES = [
   'backend/src/main/kotlin/ca/floo/roadtrip/support',
   'backend/src/main/kotlin/ca/floo/roadtrip/client',
   'backend/src/main/kotlin/ca/floo/roadtrip/db',
+  'backend/src/main/kotlin/ca/floo/roadtrip/config',
   'backend/src/main/kotlin/ca/floo/roadtrip/observability',
   'backend/src/main/kotlin/ca/floo/roadtrip/tools',
   'backend/src/main/resources/db/migration',
   'packages/db/src/schema',
 ];
-const PROVENANCE_FILES = [REGISTRY_RELATIVE_PATH, 'backend/build.gradle.kts', 'gradle/libs.versions.toml'];
+const PROVENANCE_FILES = [
+  REGISTRY_RELATIVE_PATH,
+  'backend/build.gradle.kts',
+  'build.gradle.kts',
+  'settings.gradle.kts',
+  'gradle.properties',
+];
 const PROVENANCE_INDENT = 2;
 
 const CLEAN_EXIT_CODE = 0;
