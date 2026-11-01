@@ -746,14 +746,27 @@ export async function diffDatabases(db, { maxDifferences = DEFAULT_MAX_DIFFERENC
 
 // Which sinks the selected targets must have filled. Summing every diffed table
 // and demanding the total be non-zero is too weak: a target whose own sink
-// stayed empty is then covered by another target's rows, and its table is
-// silently undiffed. A row's section and category say exactly which table it
-// writes, so the expectation is per target.
+// stayed empty would be covered by another target's rows. A row's section and
+// category say which table it writes, so this derives the set of tables the
+// selection must fill.
 //
-// import_runs is never in this set, deliberately: the orchestrator opens a run
-// before any adapter produces a candidate, so a no-op import still leaves rows
-// there and a guard that counted them would pass the vacuous run it exists to
-// catch.
+// What it is NOT is per target, and the difference matters when more than one
+// target is selected. The expectation is a set of TABLES, so over the full
+// eighteen -- ten of which share campgrounds and pois, eight campsites -- a
+// single target whose adapter yields no candidate on either side still passes:
+// its sinks are filled by the other seventeen and the run reports 0
+// differences. Both sides agreeing on nothing is not a difference, so the diff
+// cannot catch it either. Closing it needs a per-target floor, which the
+// schema can support (import_runs carries seen_count per source, and the
+// catalog rows carry data_provider); it is not implemented. The full-set runs
+// have that evidence from outside this guard, in the eighteen per-target
+// collision lines and eighteen import_runs rows, but nothing enforces it.
+//
+// import_runs is not in the expected set, deliberately: the orchestrator opens
+// a run before any adapter produces a candidate, so a no-op import still
+// leaves rows there and a guard that counted them would pass the vacuous run
+// it exists to catch. Its seen_count would be the per-target signal; the row
+// count is not.
 const OWNER_TABLE_BY_CATEGORY = {
   campground: 'campgrounds',
   supercharger: 'tesla_superchargers',

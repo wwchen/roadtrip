@@ -573,6 +573,27 @@ test(
           ]);
         });
 
+        await t.test('a changed scalar in import_runs is reported, like any other table', async () => {
+          await reseed(db);
+          await db.$client.unsafe(
+            `UPDATE ${KOTLIN_SCHEMA}.import_runs SET seen_count = seen_count + 1 WHERE source = '${RUN_SOURCE}'`,
+          );
+          assert.deepEqual(await diffOnly(), [
+            { table: 'import_runs', key: [RUN_SOURCE], kind: 'differs', columns: ['seen_count'] },
+          ]);
+        });
+
+        await t.test('a side that opened a different number of runs is reported', async () => {
+          await reseed(db);
+          await db.$client.unsafe(
+            `INSERT INTO ${TYPESCRIPT_SCHEMA}.import_runs (source, status, seen_count)
+             VALUES ('${RUN_SOURCE}', 'completed', 1)`,
+          );
+          assert.deepEqual(await diffOnly(), [
+            { table: 'import_runs', key: [RUN_SOURCE], kind: 'differs', columns: ['runs'] },
+          ]);
+        });
+
         await t.test('a campsite attached to a different existing campground is reported', async () => {
           await reseed(db);
           for (const schema of [TYPESCRIPT_SCHEMA, KOTLIN_SCHEMA]) {

@@ -419,11 +419,14 @@ jobs:
   #
   # ONE MODE, not three, and the measurements are the whole argument. The three
   # modes see different classes of defect — the single pass checks parse and
-  # transform, `--passes 2` is the only one that can see a conflict-handling
-  # defect (a first import into an empty database exercises the INSERT path
+  # transform, `--passes 2` reaches a conflict-handling defect the single pass
+  # cannot (a first import into an empty database exercises the INSERT path
   # alone), and `--prove-update-keys` blanks every compared column between the
   # passes so a column missing from one importer's ON CONFLICT update set stays
-  # blank on that side alone. Measured over the full capture set on an Apple
+  # blank on that side alone. `--passes 2` is not the ONLY mode reaching the
+  # conflict path: passPlan forces --prove-update-keys to two passes as well,
+  # and whether it subsumes --passes 2 is open and unmeasured. See the Makefile
+  # and docs/superpowers/2026-10-28-step-4-rulings.md, which say the same. Measured over the full capture set on an Apple
   # Silicon laptop, each read from the run's own exit code:
   #
   #   single pass                  1,981 s  (33 m 01 s)
@@ -537,9 +540,10 @@ jobs:
 
       # The two gates that certify the other gates. The differential's harness
       # test boots one PostGIS container and makes the same comparison the real
-      # run does over synthetic rows, then injects a difference per diffed table
-      # to prove the comparison can still fail; the oracle test covers the
-      # Kotlin-comparison machinery. Both are here because defects have been
+      # run does over synthetic rows, then injects a difference in every one of
+      # the six diffed tables -- import_runs included, in both its scalar
+      # columns and the derived run count -- to prove the comparison can still
+      # fail; the oracle test covers the Kotlin-comparison machinery. Both are here because defects have been
       # found in this proof machinery itself, where a wrong comparison reads as
       # a clean diff rather than as a failure.
       - name: Check the importer differential's own harness

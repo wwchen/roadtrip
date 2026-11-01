@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { resultOf } from './etl-oracle/case-shape.mjs';
 import { canonical, compareCallCase, compareEtlCase, floorProblems, strip, summarise } from './etl-oracle/compare.mjs';
 import { etlEntryFor, instanceFingerprint, registryWithOverride, requireEtlEntry, seamProblems } from './etl-oracle/registry-seam.mjs';
+
+const ORACLE_DIR = fileURLToPath(new URL('./etl-oracle', import.meta.url));
+const ORACLE_CONFIG = path.join(ORACLE_DIR, 'adapters.json');
+const CASES_DIR = path.join(ORACLE_DIR, 'cases');
+const CASES_SUFFIX = '.jsonl';
 
 const okTs = (results) => ({ tsParse: 'ok', tsParseBad: [], tsTransformRan: true, tsTransform: 'ok', tsResults: results });
 const okKotlin = (results) => ({ parse: 'ok', parseBad: [], transform: 'ok', results });
@@ -386,4 +394,31 @@ test('the fingerprint separates two nested classes with no own state, which is T
     instanceFingerprint(withProvider(new ProviderAspira())),
     instanceFingerprint(withProvider(new ProviderStrapi())),
   );
+});
+
+// The floors in adapters.json are only read by `etl-oracle.mjs check`, which
+// needs the Kotlin classes compiled and the worker suite run under a recorder
+// and so runs in no gate by design. Without this, emptying a committed corpus
+// leaves `make test` and CI green and the next `check` compares nothing for
+// that call.
+test('every committed call corpus still meets the floor adapters.json sets for it', () => {
+  const calls = JSON.parse(readFileSync(ORACLE_CONFIG, 'utf8')).calls;
+  const names = Object.keys(calls ?? {});
+  assert.ok(names.length > 0, 'adapters.json declares no calls, so this guard would check nothing');
+  for (const name of names) {
+    const { minimumCases } = calls[name];
+    assert.ok(
+      Number.isSafeInteger(minimumCases) && minimumCases > 0,
+      `${name}: minimumCases must be a positive integer, got ${JSON.stringify(minimumCases)}`,
+    );
+    const file = path.join(CASES_DIR, `${name}${CASES_SUFFIX}`);
+    assert.ok(existsSync(file), `${name}: ${file} is missing, so check would compare nothing for it`);
+    const recorded = readFileSync(file, 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '').length;
+    assert.ok(
+      recorded >= minimumCases,
+      `${name}: ${recorded} recorded case(s) against a floor of ${minimumCases}`,
+    );
+  }
 });
