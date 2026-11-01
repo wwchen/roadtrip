@@ -169,6 +169,10 @@ export function documentValues(object: Readonly<Record<string, unknown>>): unkno
 }
 
 function serializeValue(value: unknown): string {
+  // JSON.stringify throws on a bigint, so a caller carrying one had to pass a
+  // replacer, which this cannot take. A bigint is a JSON number literal and
+  // nothing else, so it is rendered here instead.
+  if (typeof value === 'bigint') return value.toString();
   if (Array.isArray(value)) return `[${value.map(serializeValue).join(',')}]`;
   if (isPlainObject(value)) {
     const members = documentKeys(value).map((key) => `${JSON.stringify(key)}:${serializeValue(value[key])}`);

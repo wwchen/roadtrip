@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { recordDocumentOrder } from './document-order.js';
+import { recordDocumentOrder, stringifyInDocumentOrder } from './document-order.js';
 
 export interface RequestMeta {
   url: string;
@@ -54,12 +54,15 @@ export function isWideNumber(value: unknown): value is WideNumber {
 
 const OPAQUE_PAYLOAD_OPENERS = ['{', '['];
 
-function carryBigint(_key: string, value: unknown): unknown {
-  return typeof value === 'bigint' ? sourceAwareJson.rawJSON(value.toString()) : value;
-}
-
+// Document order, not JSON.stringify: kotlinx writes a JsonObject's members in
+// the order the document had them, while a JS object reorders integer-like keys
+// on construction, so `{"2":…,"1":…}` in a vendor payload serialised as
+// `{"1":…,"2":…}` here. Every destination is jsonb today, which normalises key
+// order and hid it; that stops being true the moment a column is json or text,
+// or the pre-insert text is compared. The oracle recorder already had to do
+// this for the same reason.
 export function serializeOpaquePayload(value: unknown): OpaquePayloadJson {
-  const serialized = JSON.stringify(value, carryBigint) as string | undefined;
+  const serialized = stringifyInDocumentOrder(value) as string | undefined;
   if (serialized === undefined || !OPAQUE_PAYLOAD_OPENERS.includes(serialized.charAt(0))) {
     throw new Error('opaque payload must serialise to a JSON object or array');
   }

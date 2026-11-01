@@ -2,7 +2,13 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, expectTypeOf, test } from 'vitest';
-import { isWideNumber, parseEnvelope, serializeOpaquePayload, type OpaquePayloadJson } from './envelope.js';
+import {
+  isWideNumber,
+  parseEnvelope,
+  parseKeepingDigits,
+  serializeOpaquePayload,
+  type OpaquePayloadJson,
+} from './envelope.js';
 
 const TEMP_DIR_PREFIX = 'envelope-';
 const WIDE_INTEGER = '72157625256027958';
@@ -278,6 +284,19 @@ describe('the wide-number carrier contract', () => {
       }),
     ).toBe(`{"id":${WIDE_INTEGER},"negative":${NEGATIVE_WIDE_INTEGER},"huge":${HUGE_INTEGER}}`);
     expect(serializeOpaquePayload([BigInt(WIDE_INTEGER)])).toBe(`[${WIDE_INTEGER}]`);
+  });
+
+  test('serializeOpaquePayload keeps integer-like keys in the order the document had them', () => {
+    const reordered = '{"2":{"20":"b","3":"a"},"1":[{"9":0,"8":0}]}';
+    expect(serializeOpaquePayload(parseKeepingDigits(reordered))).toBe(reordered);
+    expect(JSON.stringify(parseKeepingDigits(reordered))).not.toBe(reordered);
+  });
+
+  test('serializeOpaquePayload leaves a document whose order is already natural alone', () => {
+    const natural = '{"b":1,"a":{"d":[1,2],"c":null},"e":true}';
+    const value = parseKeepingDigits(natural);
+    expect(serializeOpaquePayload(value)).toBe(natural);
+    expect(serializeOpaquePayload(value)).toBe(JSON.stringify(value));
   });
 
   test('serializeOpaquePayload returns the branded type, which a bare string does not satisfy', () => {
