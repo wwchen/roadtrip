@@ -39,6 +39,7 @@ import {
   seedRefusal,
   SEED_DUMP_FLAGS,
   staleBuilds,
+  targetFloorProblems,
 } from './importer-differential.mjs';
 import { withPostgis } from './schema-reference.mjs';
 
@@ -122,6 +123,52 @@ async function rawDirWithOneCapture() {
   await writeFile(path.join(capture, FIXTURE_PAGE), '{}');
   return root;
 }
+
+const seenMap = (perSide) => new Map(Object.entries(perSide).map(([side, runs]) => [side, new Map(Object.entries(runs))]));
+const oneTarget = [{ name: 'Target', slugs: ['slug-a'] }];
+
+test('the per-target floor passes only when both sides saw a candidate for every slug', () => {
+  assert.deepEqual(targetFloorProblems(seenMap({ kotlin: { 'slug-a': 1 }, typescript: { 'slug-a': 1 } }), oneTarget), []);
+});
+
+test('the per-target floor names the side that saw nothing, and the one that opened no run', () => {
+  const sawNothing = targetFloorProblems(
+    seenMap({ kotlin: { 'slug-a': 3 }, typescript: { 'slug-a': 0 } }),
+    oneTarget,
+  );
+  assert.deepEqual(sawNothing, ["'Target' (slug-a): the typescript importer saw 0 candidates"]);
+
+  const noRun = targetFloorProblems(seenMap({ kotlin: { 'slug-a': 3 }, typescript: {} }), oneTarget);
+  assert.deepEqual(noRun, ["'Target' (slug-a): the typescript importer opened no run"]);
+
+  const neither = targetFloorProblems(seenMap({ kotlin: {}, typescript: {} }), oneTarget);
+  assert.equal(neither.length, 2);
+});
+
+test('the per-target floor checks every slug of a target, not just one of them', () => {
+  const problems = targetFloorProblems(
+    seenMap({ kotlin: { 'slug-a': 1, 'slug-b': 1 }, typescript: { 'slug-a': 1, 'slug-b': 0 } }),
+    [{ name: 'Target', slugs: ['slug-a', 'slug-b'] }],
+  );
+  assert.deepEqual(problems, ["'Target' (slug-b): the typescript importer saw 0 candidates"]);
+});
+
+test('the per-target floor is per target, which is what the table expectation cannot be', () => {
+  const problems = targetFloorProblems(
+    seenMap({
+      kotlin: { 'busy-slug': 400000, 'quiet-slug': 0 },
+      typescript: { 'busy-slug': 400000, 'quiet-slug': 0 },
+    }),
+    [
+      { name: 'Busy', slugs: ['busy-slug'] },
+      { name: 'Quiet', slugs: ['quiet-slug'] },
+    ],
+  );
+  assert.deepEqual(problems, [
+    "'Quiet' (quiet-slug): the kotlin importer saw 0 candidates",
+    "'Quiet' (quiet-slug): the typescript importer saw 0 candidates",
+  ]);
+});
 
 test('every diffed table names every one of its columns as compared or ignored', () => {
   for (const spec of DIFFED_TABLES) {
@@ -337,20 +384,36 @@ const reporting = (write, dedupeCollisions = 0) => async (args) => {
 
 const writeNothing = async () => {};
 
-const gymWriter = (name) => async ({ databaseUrl }) =>
-  writeRows(databaseUrl, [
-    `INSERT INTO ${TYPESCRIPT_SCHEMA}.planet_fitness_locations (location_id, name)
+// The orchestrator opens one import_runs row per slug and completes it with
+// the number of candidates the adapter produced. A stub that skips it is not
+// standing in for the real importer, and the per-target floor reads exactly
+// that row.
+const SEEN_ONE = 1;
+const runRows = (slugs = [], seen = SEEN_ONE) =>
+  slugs.map(
+    (slug) =>
+      `INSERT INTO ${TYPESCRIPT_SCHEMA}.import_runs (source, status, seen_count)
+       VALUES ('${slug}', 'completed', ${seen})`,
+  );
+
+const gymWriter =
+  (name, seen = SEEN_ONE) =>
+  async ({ databaseUrl, slugs }) =>
+    writeRows(databaseUrl, [
+      `INSERT INTO ${TYPESCRIPT_SCHEMA}.planet_fitness_locations (location_id, name)
      VALUES ('${FITNESS_ID}', '${name}')`,
     `INSERT INTO ${TYPESCRIPT_SCHEMA}.pois (poi_type, geom)
      VALUES ('planet_fitness_location', 'SRID=4326;POINT(-122.27 44.7)')`,
     `INSERT INTO ${TYPESCRIPT_SCHEMA}.poi_planet_fitness_locations (poi_id, planet_fitness_location_id)
      SELECT p.id, l.id FROM ${TYPESCRIPT_SCHEMA}.pois p, ${TYPESCRIPT_SCHEMA}.planet_fitness_locations l`,
-  ]);
+      ...runRows(slugs, seen),
+    ]);
 
 const writeGym = gymWriter(GYM_NAME);
 const writeRenamedGym = gymWriter(RENAMED_GYM_NAME);
+const writeGymSeeingNothing = gymWriter(GYM_NAME, 0);
 
-const writeCampground = async ({ databaseUrl }) =>
+const writeCampground = async ({ databaseUrl, slugs }) =>
   writeRows(databaseUrl, [
     `INSERT INTO ${TYPESCRIPT_SCHEMA}.campgrounds (data_provider, data_provider_ref, name)
      VALUES ('${PROVIDER}', '${REF}', 'Stub campground')`,
@@ -358,6 +421,7 @@ const writeCampground = async ({ databaseUrl }) =>
      VALUES ('campground', 'SRID=4326;POINT(-122.25 44.5)')`,
     `INSERT INTO ${TYPESCRIPT_SCHEMA}.poi_campgrounds (poi_id, campground_id)
      SELECT p.id, c.id FROM ${TYPESCRIPT_SCHEMA}.pois p, ${TYPESCRIPT_SCHEMA}.campgrounds c`,
+    ...runRows(slugs),
   ]);
 
 // A throwaway workspace root, so nothing in this suite ever moves a tracked
@@ -831,6 +895,38 @@ test(
           }));
           await assert.rejects(run(), /tesla_superchargers: dumped 2 row\(s\), restored 1/);
           assert.equal(existsSync(seedPath), false);
+        });
+
+        await t.test(
+          'a target whose adapter saw nothing is refused, though its tables are full',
+          async () => {
+            const root = await rawDirWithOneCapture();
+            await assert.rejects(
+              runDifferential({
+                rawDir: path.join(root, 'data/raw'),
+                staticDir: root,
+                targets: [PLANET_FITNESS_TARGET],
+                importers: { kotlin: writeGym, typescript: reporting(writeGymSeeingNothing) },
+              }),
+              /'Planet Fitness' \(.*\): the typescript importer saw 0 candidates/,
+            );
+          },
+        );
+
+        await t.test('a target whose adapter opened no run at all is refused too', async () => {
+          const root = await rawDirWithOneCapture();
+          await assert.rejects(
+            runDifferential({
+              rawDir: path.join(root, 'data/raw'),
+              staticDir: root,
+              targets: [PLANET_FITNESS_TARGET],
+              importers: {
+                kotlin: writeGym,
+                typescript: reporting(async (args) => gymWriter(GYM_NAME)({ ...args, slugs: [] })),
+              },
+            }),
+            /'Planet Fitness' \(.*\): the typescript importer opened no run/,
+          );
         });
 
         const seedRunTo = async (typescript) => {

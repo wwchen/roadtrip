@@ -811,6 +811,61 @@ function assertBothSidesWrote(counts, selected) {
   }
 }
 
+// The per-target floor the table expectation above cannot give. import_runs
+// carries one row per source per pass, written with the etl slug, and
+// seen_count is how many candidates that adapter produced -- so a target whose
+// adapter yielded nothing has a row with seen_count 0 rather than no row, which
+// is why counting rows here would prove nothing. Both importers write it, and
+// the diff finds the two sides identical, so it is the one signal that is both
+// per target and symmetric.
+//
+// MAX over the source, because --passes 2 leaves one row per pass and
+// --prove-update-keys blanks seen_count to 0 between them: the question is
+// whether the adapter ever saw a candidate, not what the last row says.
+const IMPORT_RUNS_TABLE = 'import_runs';
+const NOTHING_SEEN = 0;
+
+async function seenPerSlug(db) {
+  const unions = SIDES.map(
+    (side) =>
+      `SELECT '${side.name}' AS side, source, COALESCE(seen_count, ${NOTHING_SEEN}) AS seen ` +
+      `FROM ${side.schema}.${IMPORT_RUNS_TABLE}`,
+  ).join(' UNION ALL ');
+  const rows = await db.$client.unsafe(
+    `SELECT side, source, MAX(seen) AS seen FROM (${unions}) runs GROUP BY side, source`,
+  );
+  const bySide = new Map(SIDES.map((side) => [side.name, new Map()]));
+  for (const row of rows) bySide.get(row.side).set(row.source, Number(row.seen));
+  return bySide;
+}
+
+export function targetFloorProblems(bySide, selected) {
+  const problems = [];
+  for (const target of selected) {
+    for (const slug of target.slugs) {
+      for (const side of SIDES) {
+        const seen = bySide.get(side.name)?.get(slug);
+        if (seen === undefined) {
+          problems.push(`'${target.name}' (${slug}): the ${side.name} importer opened no run`);
+        } else if (seen <= NOTHING_SEEN) {
+          problems.push(`'${target.name}' (${slug}): the ${side.name} importer saw 0 candidates`);
+        }
+      }
+    }
+  }
+  return problems;
+}
+
+async function assertEveryTargetSaw(db, selected) {
+  const problems = targetFloorProblems(await seenPerSlug(db), selected);
+  if (problems.length === 0) return;
+  throw new Error(
+    `${problems.join('; ')}. Refusing to report a diff: the table expectation cannot catch this, ` +
+      'because a target that produced nothing has its sinks filled by the other selected targets ' +
+      'and two sides that agree on nothing are not a difference.',
+  );
+}
+
 // --- --prove-update-keys ----------------------------------------------------
 
 // Blanks every compared, non-key column on both sides between pass 1 and
@@ -1091,6 +1146,7 @@ export async function runDifferential({
   expectedTables(selected);
 
   const targetNames = selected.map((target) => target.name);
+  const targetSlugs = selected.flatMap((target) => target.slugs);
   const wanted = await provenanceFor({ targets, sources, passes: effectivePasses, proveUpdateKeys });
 
   return withPostgis(async (postgres) => {
@@ -1131,6 +1187,7 @@ export async function runDifferential({
             staticDir,
             registryPath,
             targets: targetNames,
+            slugs: targetSlugs,
             passes: segmentPasses,
             pass: completed + 1,
           });
@@ -1144,6 +1201,7 @@ export async function runDifferential({
             staticDir,
             registryPath,
             targets: targetNames,
+            slugs: targetSlugs,
             passes: 1,
             pass,
           });
@@ -1164,6 +1222,7 @@ export async function runDifferential({
       // audit and the row counts are not paid twice over ~480k rows.
       const counts = await tableCounts(typescriptDb);
       assertBothSidesWrote(counts, selected);
+      await assertEveryTargetSaw(typescriptDb, selected);
       const result = await diffDatabases(typescriptDb, { maxDifferences, counts });
 
       if (emitSeed !== undefined) {
