@@ -21,7 +21,6 @@ export * from './etl/terminal-binding.js';
 export * from './etl/terminal-sinks.js';
 export * from './etl/orchestrator.js';
 export * from './etl/html-text.js';
-export * from './etl/geojson.js';
 export * from './etl/campsite-kinds.js';
 export * from './etl/adapter-registry.js';
 export * from './etl/address.js';
