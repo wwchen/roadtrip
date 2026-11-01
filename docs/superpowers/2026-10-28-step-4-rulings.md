@@ -470,11 +470,19 @@ demonstrated failing before any was trusted.
 
 - **The single pass** is the strongest check of parse and transform, and has by
   far the most rows to lose. It is the only mode in CI.
-- **`--passes 2`** is the only mode that can see a conflict-handling defect,
-  because a first import into an empty database exercises the INSERT path alone.
-  Demonstrated: with the campground `onConflictDoUpdate` clause removed
-  entirely, the single pass reports `0 differences` and exits 0 while
-  `--passes 2` fails on pass 2.
+- **`--passes 2`** reaches a conflict-handling defect that the single pass
+  cannot, because a first import into an empty database exercises the INSERT
+  path alone. Demonstrated: with the campground `onConflictDoUpdate` clause
+  removed entirely, the single pass reports `0 differences` and exits 0 while
+  `--passes 2` fails on pass 2. It was described here and in the Makefile as
+  *the only* mode that can see such a defect, and that was an overclaim:
+  `passPlan` forces `--prove-update-keys` to at least two passes too, so it
+  reaches the conflict path as well. Whether it strictly subsumes `--passes 2`
+  — which would make a 56-minute mode of `make importer-diff` redundant — is
+  open. No defect has been found that `--passes 2` catches and
+  `--prove-update-keys` misses, and none has been looked for. Ruling: keep both
+  and correct the claim. Cost if wrong: 56 minutes per pre-land gate run,
+  against dropping a gate on an unproven redundancy.
 - **`--prove-update-keys`** blanks every compared column between the passes, so a
   column missing from one importer's `ON CONFLICT` update set stays blank on
   that side alone. Demonstrated: with `name` dropped from the campground
@@ -616,8 +624,9 @@ targets and almost none of the cost.
   pass above — 108 campgrounds and 8,357 campsites identical on both sides, 0
   collisions against pins of 0 — so the gap is verified, not assumed.
 - **The Docker VM filled its disk partway through this task's measurements**,
-  which is what cost the two subset runs and blocked `make test` and the seed
-  dump. The cause is 418 anonymous, unreferenced Testcontainers volumes holding
+  which is what cost the two subset runs and, at the time, `make test` and the
+  seed dump. Both have since run: `make test` exits 0 in 7 m 01 s with the
+  harness file inside it (47 tests, 0 failures). The cause is 418 anonymous, unreferenced Testcontainers volumes holding
   96 GB, every one created in the 36 hours this step's differentials ran; the
   VM's overlay is 126 G with 0 available and `initdb` now fails with "No space
   left on device" before any gate can start. `make reclaim` cannot clear them by
@@ -626,10 +635,18 @@ targets and almost none of the cost.
   range, which is the right policy: a blanket `docker volume prune` would also
   destroy `cc-rewards-tracker-prod_db-data` and the Roadtrip Grafana, Loki,
   Prometheus and Tempo volumes, all of which are dangling. Removing the 418 by
-  id is the safe operation and needs a human. Worth considering whether the
-  harness should reclaim its own container's volume on the way out, since a
-  step that boots ~400 PostGIS containers should not be able to wedge the
-  machine it runs on.
+  id is the safe operation and needs a human.
+
+  **Root cause found and fixed.** `withPostgis` starts its container with
+  `docker run -d --rm` and tears it down with `docker rm -f`, which does not
+  take the container's anonymous volumes with it; `postgis/postgis:16-3.4`
+  declares `VOLUME /var/lib/postgresql/data`, so every harness container
+  orphaned one data volume. Three teardown sites now pass `-v`
+  (`schema-reference.mjs:323`, `schema-equivalence.test.mjs:98` and `:151`).
+  This is not a side issue: the full disk wedged the Docker VM mid-run, which
+  is what turned one stalled test into a three-hour `make test` and sent this
+  task chasing an emulation theory and then a phantom deadlock before the
+  daemon turned out to be the cause.
 
 - **`scripts/` carries explanatory inline comments throughout this branch,
   against the project's standing "no code comments" rule.** The harness's

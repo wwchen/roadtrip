@@ -173,8 +173,11 @@ test: _ensure-hooks
 #
 #   * the single pass is the strongest check of parse and transform, and has by
 #     far the most rows to lose;
-#   * `--passes 2` is the only mode that sees a conflict-handling defect, which
-#     an INSERT into an empty database cannot reach;
+#   * `--passes 2` reaches the conflict path, which an INSERT into an empty
+#     database cannot. It is not the only mode that does: passPlan forces
+#     `--prove-update-keys` to two passes as well, so whether that mode
+#     strictly subsumes this one is open and unmeasured -- do not drop this
+#     line on the assumption that it does;
 #   * `--prove-update-keys` blanks every compared column between the passes, so
 #     a column missing from one importer's ON CONFLICT update set stays blank on
 #     that side alone. With identical captures nothing else can see that.
@@ -182,6 +185,11 @@ test: _ensure-hooks
 # Each line is its own recipe line, so make stops on the first non-zero exit
 # and no mode's result is read through another's. IMPORTER_DIFF_ARGS passes
 # `--target`/`--source`/`--reference-dump` straight through for a narrower run.
+# `--reference-dump` is accepted by the first two modes only: the third refuses
+# it outright, since a restored Kotlin side re-writes nothing and so cannot
+# satisfy the blanking step. Passing it here therefore runs modes 1 and 2 to
+# completion and then fails in seconds on mode 3. Use the modes individually
+# when restoring a dump.
 IMPORTER_DIFF_ARGS ?=
 importer-diff:
 	node scripts/importer-differential.mjs $(IMPORTER_DIFF_ARGS)
