@@ -320,7 +320,7 @@ export async function withPostgis(use) {
       },
     });
   } finally {
-    await docker('rm', '-f', container).catch(() => {});
+    await docker('rm', '-f', '-v', container).catch(() => {});
   }
 }
 

@@ -95,7 +95,7 @@ async function startPooler(upstream) {
     await probePooler(uri);
     return { container, uri };
   } catch (error) {
-    await docker('rm', '-f', container).catch(() => {});
+    await docker('rm', '-f', '-v', container).catch(() => {});
     throw new PoolerUnavailable(error.message, { cause: error });
   }
 }
@@ -148,7 +148,7 @@ test('the schema equivalence gate', async (t) => {
           assert.ok(await db.select().from(campgrounds).limit(1));
         } finally {
           await db.$client.end();
-          await docker('rm', '-f', pooler.container).catch(() => {});
+          await docker('rm', '-f', '-v', pooler.container).catch(() => {});
         }
       },
     );
