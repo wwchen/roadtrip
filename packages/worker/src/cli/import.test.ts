@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,8 @@ const EXIT_OK = 0;
 const REPO_ROOT = path.resolve(PACKAGE_DIR, '..', '..');
 const CLI_ARGS = ['--list', '--raw-dir', path.join(REPO_ROOT, 'data', 'raw'), '--static-dir', REPO_ROOT];
 const IMPLEMENTED_TARGETS = ['poi_data:Planet Fitness', 'poi_data:Tesla Superchargers'];
+const REGISTRY_PATH = path.join(REPO_ROOT, 'backend', 'src', 'main', 'resources', 'poi-registry.yaml');
+const UNRESOLVABLE_ADAPTER = 'NoSuchAdapterEtl';
 
 let linkDir = '';
 let symlinkedCli = '';
@@ -39,6 +41,20 @@ describe('built import cli', () => {
     expect(result.stderr).toBe('');
     expect(result.status).toBe(EXIT_OK);
     expect(result.stdout.split('\n')).toEqual(expect.arrayContaining(IMPLEMENTED_TARGETS));
+  });
+
+  test('it refuses a registry whose enabled adapters do not resolve', () => {
+    const broken = path.join(linkDir, 'unresolvable-registry.yaml');
+    writeFileSync(
+      broken,
+      readFileSync(REGISTRY_PATH, 'utf8').replace(/adapter: \S+/g, `adapter: ${UNRESOLVABLE_ADAPTER}`),
+    );
+    const result = spawnSync(process.execPath, [BUILT_CLI, ...CLI_ARGS, '--registry', broken], {
+      cwd: PACKAGE_DIR,
+      encoding: 'utf8',
+    });
+    expect(result.status).not.toBe(EXIT_OK);
+    expect(result.stderr).toContain(`Unknown poi_data adapter: ${UNRESOLVABLE_ADAPTER}`);
   });
 
   test('run through a symlink, as an installed bin is, it behaves identically', () => {
