@@ -33,6 +33,7 @@ import {
   parseImporterStats,
   passPlan,
   positiveInteger,
+  PROVENANCE_SUFFIX,
   report,
   runDifferential,
   seedRefusal,
@@ -56,6 +57,8 @@ const SITE_REF = 'cs-1';
 const OTHER_REF = 'cg-2';
 const TESLA_SLUG = 'tesla-slug-1';
 const FITNESS_ID = 'pf-1';
+const GYM_NAME = 'Stub gym';
+const RENAMED_GYM_NAME = 'Renamed gym';
 const RUN_SOURCE = 'test-source';
 
 // One row per diffed table, inserted into the TypeScript schema only;
@@ -334,15 +337,18 @@ const reporting = (write, dedupeCollisions = 0) => async (args) => {
 
 const writeNothing = async () => {};
 
-const writeGym = async ({ databaseUrl }) =>
+const gymWriter = (name) => async ({ databaseUrl }) =>
   writeRows(databaseUrl, [
     `INSERT INTO ${TYPESCRIPT_SCHEMA}.planet_fitness_locations (location_id, name)
-     VALUES ('${FITNESS_ID}', 'Stub gym')`,
+     VALUES ('${FITNESS_ID}', '${name}')`,
     `INSERT INTO ${TYPESCRIPT_SCHEMA}.pois (poi_type, geom)
      VALUES ('planet_fitness_location', 'SRID=4326;POINT(-122.27 44.7)')`,
     `INSERT INTO ${TYPESCRIPT_SCHEMA}.poi_planet_fitness_locations (poi_id, planet_fitness_location_id)
      SELECT p.id, l.id FROM ${TYPESCRIPT_SCHEMA}.pois p, ${TYPESCRIPT_SCHEMA}.planet_fitness_locations l`,
   ]);
+
+const writeGym = gymWriter(GYM_NAME);
+const writeRenamedGym = gymWriter(RENAMED_GYM_NAME);
 
 const writeCampground = async ({ databaseUrl }) =>
   writeRows(databaseUrl, [
@@ -806,12 +812,45 @@ test(
           assert.equal(existsSync(seedPath), false);
         });
 
+        const seedRunTo = async (typescript) => {
+          const root = await rawDirWithOneCapture();
+          const dir = await mkdtemp(path.join(tmpdir(), 'roadtrip-seed-run-'));
+          const seedPath = path.join(dir, 'seed.sql');
+          const result = await runDifferential({
+            rawDir: path.join(root, 'data/raw'),
+            staticDir: root,
+            targets: [PLANET_FITNESS_TARGET],
+            importers: { kotlin: writeGym, typescript: reporting(typescript) },
+            emitSeed: seedPath,
+          });
+          return { seedPath, result };
+        };
+
+        await t.test('a run whose verdict is clean emits the seed and its sidecar', async () => {
+          const { seedPath, result } = await seedRunTo(writeGym);
+          assert.deepEqual(result.differences, []);
+          assert.ok(existsSync(seedPath), 'a clean verdict emitted no seed');
+          assert.ok(
+            existsSync(`${seedPath}${PROVENANCE_SUFFIX}`),
+            'a clean verdict emitted a seed with no provenance sidecar',
+          );
+        });
+
+        await t.test('a run whose verdict is not clean emits neither seed nor sidecar', async () => {
+          const { seedPath, result } = await seedRunTo(writeRenamedGym);
+          assert.equal(result.differences.length, 1);
+          assert.equal(result.differences[0].table, 'planet_fitness_locations');
+          assert.deepEqual(result.differences[0].columns, ['name']);
+          assert.equal(existsSync(seedPath), false, 'a difference still emitted a seed');
+          assert.equal(existsSync(`${seedPath}${PROVENANCE_SUFFIX}`), false);
+        });
+
         await t.test('a pg_dump that fails leaves neither a partial seed nor a stale sidecar', async () => {
           const { seedPath, run } = await seedDumpTo(['--no-such-option']);
-          await writeFile(`${seedPath}.provenance.json`, '{}');
+          await writeFile(`${seedPath}${PROVENANCE_SUFFIX}`, '{}');
           await assert.rejects(run(), /pg_dump/);
           assert.equal(existsSync(seedPath), false);
-          assert.equal(existsSync(`${seedPath}.provenance.json`), false);
+          assert.equal(existsSync(`${seedPath}${PROVENANCE_SUFFIX}`), false);
         });
       } finally {
         await db.$client.end();

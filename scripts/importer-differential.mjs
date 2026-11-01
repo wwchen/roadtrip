@@ -96,22 +96,39 @@ const PG_DUMP = 'pg_dump';
 const PSQL = 'psql';
 const STDIN_SCRIPT = '-';
 
-const PROVENANCE_SUFFIX = '.provenance.json';
-// Everything a cached Kotlin dump is a function of. The Kotlin ETL, repo and
-// domain trees and the registry decide what it writes; data/raw is what it
-// reads. The last two are the schema itself, which the dump's rows have to fit:
-// the Flyway migrations are what the database it is restored into was built
-// from, and the Drizzle schema is what the diff's column lists are derived
-// from, so a migration must retire a dump taken before it.
+export const PROVENANCE_SUFFIX = '.provenance.json';
+// Everything a cached Kotlin dump is a function of. The Kotlin ETL, repo,
+// domain, metadata, availability, support, client, db and observability trees
+// and the registry decide what it writes; tools is the CLI that runs them, and
+// data/raw is what it reads. The migrations and the Drizzle schema are the
+// schema itself, which the dump's rows have to fit: the Flyway migrations are
+// what the database it is restored into was built from, and the Drizzle schema
+// is what the diff's column lists are derived from, so a migration must retire
+// a dump taken before it. The build files pin the serialization and jOOQ
+// versions the Kotlin side writes through.
+//
+// This list said ETL, repo and domain only until a sidecar from a full
+// --emit-seed run was read against the imports: service/etl and repo import
+// metadata, availability, support, client and db as well, so a dump taken
+// before an edit to any of them was reusable as if valid.
+// test_ci_image_builds.py derives the Kotlin half of this list from those
+// imports rather than trusting it.
 const PROVENANCE_TREES = [
   'data/raw',
   'backend/src/main/kotlin/ca/floo/roadtrip/service/etl',
   'backend/src/main/kotlin/ca/floo/roadtrip/repo',
   'backend/src/main/kotlin/ca/floo/roadtrip/model/domain',
+  'backend/src/main/kotlin/ca/floo/roadtrip/model/metadata',
+  'backend/src/main/kotlin/ca/floo/roadtrip/model/availability',
+  'backend/src/main/kotlin/ca/floo/roadtrip/support',
+  'backend/src/main/kotlin/ca/floo/roadtrip/client',
+  'backend/src/main/kotlin/ca/floo/roadtrip/db',
+  'backend/src/main/kotlin/ca/floo/roadtrip/observability',
+  'backend/src/main/kotlin/ca/floo/roadtrip/tools',
   'backend/src/main/resources/db/migration',
   'packages/db/src/schema',
 ];
-const PROVENANCE_FILES = [REGISTRY_RELATIVE_PATH];
+const PROVENANCE_FILES = [REGISTRY_RELATIVE_PATH, 'backend/build.gradle.kts', 'gradle/libs.versions.toml'];
 const PROVENANCE_INDENT = 2;
 
 const CLEAN_EXIT_CODE = 0;

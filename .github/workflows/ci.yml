@@ -141,26 +141,47 @@ jobs:
               - 'tsconfig.base.json'
               - '.github/workflows/ci.yml'
             # Everything either importer's stored rows are a function of: the
-            # TypeScript packages, the Kotlin ETL/repo/domain/tools trees, the
-            # registry that decides what runs, the Flyway migrations that build
-            # the schema it is compared in, the captures both sides read, and the
-            # harness itself. `scripts/importer-*.mjs` rather than
-            # `importer-differential*`: importer-diff-columns.mjs holds the
-            # column lists the comparison is made of and
-            # importer-collision-pins.mjs holds the counts it refuses on, and
-            # neither matches the narrower glob.
+            # TypeScript packages, the Kotlin ETL/repo/domain/tools trees and the
+            # shared model/support trees they import, the registry that decides
+            # what runs, the Flyway migrations that build the schema it is
+            # compared in, the captures both sides read, the dependency pins both
+            # sides compile against, and the harness itself.
+            # `scripts/importer-*.mjs` rather than `importer-differential*`:
+            # importer-diff-columns.mjs holds the column lists the comparison is
+            # made of and importer-collision-pins.mjs holds the counts it refuses
+            # on, and neither matches the narrower glob. The shared trees are
+            # watched because service/etl and repo import them: an edit there
+            # changes what one importer writes while leaving this job unrun.
+            # client/ is a single import and the load-bearing one -- it is
+            # ReserveAmericaCatalogParser, which the TypeScript side
+            # reimplements in catalog-parser.ts. db/generated is absent
+            # deliberately: jOOQ generates it from the migrations, watched
+            # above. test_ci_image_builds.py derives this list from the imports
+            # rather than trusting it, so a new import of an unwatched tree
+            # fails there.
             importer_differential:
               - 'packages/**'
               - 'backend/src/main/kotlin/ca/floo/roadtrip/service/etl/**'
               - 'backend/src/main/kotlin/ca/floo/roadtrip/repo/**'
               - 'backend/src/main/kotlin/ca/floo/roadtrip/model/domain/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/model/metadata/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/model/availability/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/support/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/client/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/db/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/observability/**'
               - 'backend/src/main/kotlin/ca/floo/roadtrip/tools/**'
               - 'backend/src/main/resources/poi-registry.yaml'
               - 'backend/src/main/resources/db/migration/**'
+              - 'backend/build.gradle.kts'
+              - 'gradle/libs.versions.toml'
               - 'data/raw/**'
               - 'scripts/importer-*.mjs'
               - 'scripts/schema-reference.mjs'
               - 'scripts/build-workspaces.mjs'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
               - '.github/workflows/ci.yml'
             web:
               - 'apps/**'

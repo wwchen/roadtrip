@@ -34,6 +34,17 @@ PACKAGE_TYPECHECKS = (
 )
 FLYWAY_MIGRATIONS = "backend/src/main/resources/db/migration"
 
+KOTLIN_PACKAGE_ROOT = "backend/src/main/kotlin/ca/floo/roadtrip"
+# The two trees the differential's Kotlin side is built from. Whatever these
+# import is part of what that importer writes, so the path filter has to watch
+# it or the gate silently does not run.
+IMPORTER_KOTLIN_SOURCES = ("service/etl", "repo")
+IMPORTER_DIFFERENTIAL = "scripts/importer-differential.mjs"
+PROVENANCE_TREES_BLOCK = re.compile(r"const PROVENANCE_TREES = \[(.*?)\];", re.S)
+KOTLIN_IMPORT = re.compile(
+    r"^import ca\.floo\.roadtrip\.([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)?)", re.M
+)
+
 
 def companion_key_inputs() -> list[str]:
     declared = re.search(
@@ -41,6 +52,20 @@ def companion_key_inputs() -> list[str]:
     )
     assert declared, "COMPANION_IMAGE_INPUTS not found"
     return declared.group(1).split()
+
+
+def importer_kotlin_trees() -> set[str]:
+    trees: set[str] = set()
+    for source in IMPORTER_KOTLIN_SOURCES:
+        for path in (ROOT / KOTLIN_PACKAGE_ROOT / source).rglob("*.kt"):
+            for dotted in KOTLIN_IMPORT.findall(path.read_text()):
+                head, _, tail = dotted.partition(".")
+                nested = f"{head}/{tail}"
+                if tail and (ROOT / KOTLIN_PACKAGE_ROOT / nested).is_dir():
+                    trees.add(nested)
+                else:
+                    trees.add(head)
+    return {t for t in trees if (ROOT / KOTLIN_PACKAGE_ROOT / t).is_dir()}
 
 
 def make_recipe(target: str) -> list[str]:
@@ -172,6 +197,45 @@ class DeploymentContractTest(unittest.TestCase):
             any(pattern.startswith(SCHEMA_REFERENCE_TEST) for pattern in watched),
             f"{SCHEMA_REFERENCE_TEST} does not run the schema equivalence gate",
         )
+
+    def test_the_importer_differential_gate_watches_every_tree_it_imports(self) -> None:
+        jobs = workflow("ci.yml")["jobs"]
+        gate = jobs["importer-differential"]
+        watched = path_filters()["importer_differential"]
+        prefixes = tuple(p.removesuffix("/**").removesuffix("/*") for p in watched)
+
+        trees = importer_kotlin_trees()
+        self.assertIn("model/domain", trees, "the import scan found nothing; the regex or the paths moved")
+        for tree in sorted(trees):
+            path = f"{KOTLIN_PACKAGE_ROOT}/{tree}"
+            self.assertTrue(
+                any(path == prefix or path.startswith(f"{prefix}/") for prefix in prefixes),
+                f"{path} is imported by {' and '.join(IMPORTER_KOTLIN_SOURCES)} "
+                "but no importer_differential filter entry covers it, so an edit "
+                "there changes what the Kotlin importer writes without running the gate",
+            )
+
+        self.assertIn("importer_differential", jobs["changes"]["outputs"])
+        self.assertIn("importer_differential", gate["if"])
+        self.assertIn("node scripts/importer-differential.mjs", job_commands(gate))
+        self.assertIn("importer-differential", jobs["ci-passed"]["needs"])
+
+    def test_the_cached_dump_provenance_covers_every_tree_it_imports(self) -> None:
+        block = PROVENANCE_TREES_BLOCK.search((ROOT / IMPORTER_DIFFERENTIAL).read_text())
+        self.assertIsNotNone(block, f"PROVENANCE_TREES not found in {IMPORTER_DIFFERENTIAL}")
+        pinned = re.findall(r"'([^']+)'", block.group(1))
+        self.assertIn(f"{KOTLIN_PACKAGE_ROOT}/service/etl", pinned, "the parse found no Kotlin trees")
+
+        trees = importer_kotlin_trees()
+        self.assertIn("model/domain", trees, "the import scan found nothing; the regex or the paths moved")
+        for tree in sorted(trees):
+            path = f"{KOTLIN_PACKAGE_ROOT}/{tree}"
+            self.assertTrue(
+                any(path == entry or path.startswith(f"{entry}/") for entry in pinned),
+                f"{path} is imported by {' and '.join(IMPORTER_KOTLIN_SOURCES)} but no "
+                "PROVENANCE_TREES entry covers it, so --reference-dump would restore a dump "
+                "taken before an edit there as if it were still valid",
+            )
 
     def test_make_test_runs_the_gate_after_the_build_it_consumes(self) -> None:
         recipe = make_recipe("test")
