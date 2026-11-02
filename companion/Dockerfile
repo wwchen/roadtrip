@@ -3,7 +3,7 @@
 # decides which build it looks for. A mismatch fails at launchPersistentContext
 # with a missing-executable error, which surfaces as recgov_auth_check_exception
 # on every /login and /verify.
-FROM mcr.microsoft.com/playwright:v1.64.0-noble
+FROM mcr.microsoft.com/playwright:v1.64.1-noble
 
 WORKDIR /app
 
