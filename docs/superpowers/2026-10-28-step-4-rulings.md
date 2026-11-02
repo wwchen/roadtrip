@@ -6,6 +6,10 @@ the port of the Kotlin ETL importer to TypeScript and the differential that
 proves the two produce identical rows. Recorded here because the execution
 workspace that held them is throwaway scratch.
 
+State at handoff, what was ported, and everything still open are in
+[2026-10-28-step-4-handoff.md](2026-10-28-step-4-handoff.md). This file is the
+reasoning; that one is the punchlist.
+
 Each is a call the plan did not settle and that was taken without stopping to
 ask, with what it costs if it was wrong. A large share of them correct errors in
 the plan rather than deciding something new, and most of those share one cause:
