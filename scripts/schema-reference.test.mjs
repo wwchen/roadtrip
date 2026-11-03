@@ -3,14 +3,21 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { assertPlausibleSchema, dockerTimeoutMs, normalize, withPostgis, writeReference } from './schema-reference.mjs';
+import {
+  assertPlausibleSchema,
+  dockerTimeoutMs,
+  dockerWithin,
+  normalize,
+  withPostgis,
+  writeReference,
+} from './schema-reference.mjs';
 
 const SHELL = 'bash';
 const SHELL_FLAG = '-lc';
 const STREAM_BODY = 'first\nsecond\n';
 const LARGE_INPUT_BYTES = 5 * 1024 * 1024;
 const CHILD_DIAGNOSIS = 'relation "campsites" does not exist';
-const STUCK_SECONDS = 600;
+const STUCK_SECONDS = 20;
 const SHORT_TIMEOUT_MS = 1500;
 const TIMEOUT_SLACK_MS = 15_000;
 
@@ -172,6 +179,15 @@ test('one container serves several databases and refuses to dump an unmigrated o
         postgres.exec(['sleep', String(STUCK_SECONDS)], { timeoutMs: SHORT_TIMEOUT_MS, outputFile: path.join(dir, 'stuck') }),
         /timed out/,
       );
+    });
+
+    await context.test('a buffered docker call that never returns fails at its timeout too', async () => {
+      const started = Date.now();
+      await assert.rejects(
+        dockerWithin(SHORT_TIMEOUT_MS, ['exec', postgres.containerName(), 'sleep', String(STUCK_SECONDS)]),
+        new RegExp(`docker exec \\S+ timed out after ${SHORT_TIMEOUT_MS} ms`),
+      );
+      assert.ok(Date.now() - started < SHORT_TIMEOUT_MS + TIMEOUT_SLACK_MS, 'the timeout did not fire promptly');
     });
 
     await context.test('exec still streams a file into stdin', async () => {

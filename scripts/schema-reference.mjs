@@ -23,13 +23,14 @@ const DB_USER = 'reference';
 const DB_PASSWORD = 'reference';
 const DB_PORT = 5432;
 
-const READY_ATTEMPTS = 120;
+const READY_DEADLINE_MS = 3 * 60 * 1000;
 const READY_INTERVAL_MS = 1000;
 const MIN_REFERENCE_TABLES = 20;
 const MAX_OUTPUT_BYTES = 256 * 1024 * 1024;
 const DOCKER_TIMEOUT_ENV = 'ROADTRIP_DOCKER_TIMEOUT_MS';
 const DEFAULT_DOCKER_TIMEOUT_MS = 30 * 60 * 1000;
-const READY_PROBE_TIMEOUT_MS = 10 * 1000;
+const READY_PROBE_TIMEOUT_MS = 5 * 1000;
+const CONTROL_TIMEOUT_MS = 2 * 60 * 1000;
 
 const BOOKKEEPING = [
   /\bflyway_schema_history/,
@@ -149,7 +150,7 @@ export function dockerTimeoutMs(env = process.env) {
 
 const timedOut = (what, timeoutMs) => new Error(`${what} timed out after ${timeoutMs} ms; is the Docker daemon responding?`);
 
-async function dockerWithin(timeoutMs, args) {
+export async function dockerWithin(timeoutMs, args) {
   try {
     const { stdout } = await run('docker', args, { maxBuffer: MAX_OUTPUT_BYTES, timeout: timeoutMs, killSignal: 'SIGKILL' });
     return stdout;
@@ -162,6 +163,10 @@ async function dockerWithin(timeoutMs, args) {
 
 async function docker(...args) {
   return dockerWithin(dockerTimeoutMs(), args);
+}
+
+async function dockerControl(...args) {
+  return dockerWithin(CONTROL_TIMEOUT_MS, args);
 }
 
 // `docker exec` with a program's exit status, stderr and its two data
@@ -259,19 +264,21 @@ async function collectExec(child, argv, { input, inputFile, outputFile }, expire
 }
 
 async function waitForPostgres(container) {
-  for (let attempt = 0; attempt < READY_ATTEMPTS; attempt += 1) {
+  const deadline = Date.now() + READY_DEADLINE_MS;
+  while (Date.now() < deadline) {
+    const probeMs = Math.max(1, Math.min(READY_PROBE_TIMEOUT_MS, deadline - Date.now()));
     try {
-      await dockerWithin(READY_PROBE_TIMEOUT_MS, ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', DB_USER, '-d', MAINTENANCE_DB]);
+      await dockerWithin(probeMs, ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', DB_USER, '-d', MAINTENANCE_DB]);
       return;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, READY_INTERVAL_MS));
     }
   }
-  throw new Error(`Postgres in ${container} was not ready after ${READY_ATTEMPTS} attempts`);
+  throw new Error(`Postgres in ${container} was not ready after ${READY_DEADLINE_MS} ms`);
 }
 
 async function hostPort(container) {
-  const mapping = (await docker('port', container, `${DB_PORT}/tcp`)).split('\n')[0].trim();
+  const mapping = (await dockerControl('port', container, `${DB_PORT}/tcp`)).split('\n')[0].trim();
   return mapping.slice(mapping.lastIndexOf(':') + 1);
 }
 
@@ -302,7 +309,7 @@ export async function withPostgis(use) {
         return dockerExec(container, argv, options);
       },
       async createDatabase(name) {
-        await docker(
+        await dockerControl(
           'exec',
           container,
           'psql',
@@ -355,7 +362,7 @@ export async function withPostgis(use) {
       },
     });
   } finally {
-    await docker('rm', '-f', '-v', container).catch(() => {});
+    await dockerControl('rm', '-f', '-v', container).catch(() => {});
   }
 }
 

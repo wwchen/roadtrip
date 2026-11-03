@@ -14,6 +14,7 @@ export interface PostgisSession {
   dump(name: string): Promise<string>;
 }
 
+export function dockerWithin(timeoutMs: number, args: readonly string[]): Promise<string>;
 export function dockerTimeoutMs(env?: Record<string, string | undefined>): number;
 export function normalize(sql: string): string;
 export function assertPlausibleSchema(sql: string): void;
