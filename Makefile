@@ -166,10 +166,9 @@ test: _ensure-hooks
 # hours, where `make test` takes minutes. `make test` carries the harness's own
 # unit tests instead, which run on fixtures.
 #
-# All three modes, because each catches a different class and only the first is
-# in CI (see the importer-differential job in .github/workflows/ci.yml for the
-# measurements behind that split). This target is the gate before landing a
-# change to either importer:
+# All three modes, because each catches a different class. CI runs the same
+# three as a matrix (see the importer-differential job in
+# .github/workflows/ci.yml for the timings); this target runs them locally:
 #
 #   * the single pass is the strongest check of parse and transform, and has by
 #     far the most rows to lose;
