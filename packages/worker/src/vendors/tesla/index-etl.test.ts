@@ -151,3 +151,14 @@ describe('opaque detail fields', () => {
     expect(records.get('array')?.availabilityProfile).toBeNull();
   });
 });
+
+describe('quoted numbers in the index', () => {
+  test('a quoted latitude decodes as kotlinx decodes it, rather than failing the whole parse', () => {
+    const dto = decodeTeslaIndex({
+      data: { data: [{ latitude: '45.1', longitude: '-122.5', location_url_slug: 'quoted', title: 'Quoted' }] },
+    });
+    const [row] = dto.rows;
+    expect(row?.latitude).toBe(45.1);
+    expect(row?.longitude).toBe(-122.5);
+  });
+});
