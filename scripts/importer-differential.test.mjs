@@ -24,6 +24,7 @@ import {
   assertCurrentBuild,
   assertTargetsPinned,
   auditRowPreservation,
+  cacheRefusal,
   COLLISION_PINS,
   collisionsFrom,
   copiedTableCounts,
@@ -37,13 +38,16 @@ import {
   report,
   runDifferential,
   seedRefusal,
+  selectTargets,
   SEED_DUMP_FLAGS,
   staleBuilds,
   targetFloorProblems,
 } from './importer-differential.mjs';
 import { withPostgis } from './schema-reference.mjs';
+import { loadPoiRegistry } from '@roadtrip/worker';
 
 const WORKER_ENTRY = 'packages/worker/dist/cli/import.js';
+const PRODUCTION_REGISTRY = 'backend/src/main/resources/poi-registry.yaml';
 const STALE_SKEW_MS = 60_000;
 const UNREADABLE_MODE = 0o000;
 const READABLE_MODE = 0o755;
@@ -319,6 +323,82 @@ test('every pin states a reason and a non-negative integer count', () => {
     assert.ok(typeof pin.reason === 'string' && pin.reason.trim() !== '', `${name}: pin has no reason`);
   }
   assert.equal(COLLISION_PINS['Campflare Campsites'].count, 40);
+});
+
+test('the collision pins name exactly the enabled registry targets', () => {
+  const enabled = selectTargets(loadPoiRegistry(PRODUCTION_REGISTRY)).map((target) => target.name);
+  assert.ok(enabled.length > 0, 'the production registry resolved no enabled targets');
+  const pinned = Object.keys(COLLISION_PINS);
+  const unpinned = enabled.filter((name) => !pinned.includes(name));
+  const stale = pinned.filter((name) => !enabled.includes(name));
+  assert.deepEqual(unpinned, [], 'enabled targets with no collision pin');
+  assert.deepEqual(stale, [], 'collision pins for targets the registry does not enable');
+});
+
+const PROVENANCE = Object.freeze({
+  trees: { 'backend/src/main/kotlin/ca/floo/roadtrip/service/etl': 'tree-a', 'packages/db/src/schema': 'tree-b' },
+  files: { 'backend/src/main/resources/poi-registry.yaml': 'blob-a', 'build.gradle.kts': 'blob-b' },
+  dirty: '',
+  targets: ['Planet Fitness', 'Tesla Superchargers'],
+  sources: [],
+  passes: 1,
+  proveUpdateKeys: false,
+});
+
+const provenance = (overrides = {}) => ({ ...structuredClone(PROVENANCE), ...overrides });
+
+test('a cached Kotlin dump is reused only when its provenance matches this run exactly', () => {
+  assert.equal(cacheRefusal(provenance(), provenance()), undefined, 'an identical provenance must be reusable');
+
+  const cases = [
+    ['this run has uncommitted changes', provenance({ dirty: ' M build.gradle.kts' }), provenance(), /uncommitted changes/],
+    ['the dump came from a dirty tree', provenance(), provenance({ dirty: ' M build.gradle.kts' }), /dirty tree/],
+    [
+      'a watched tree moved',
+      provenance(),
+      provenance({ trees: { ...PROVENANCE.trees, 'packages/db/src/schema': 'tree-z' } }),
+      /packages\/db\/src\/schema is tree-b, the dump was taken at tree-z/,
+    ],
+    [
+      'the dump lacks a tree this run watches',
+      provenance({ trees: { ...PROVENANCE.trees, 'backend/src/main/kotlin/ca/floo/roadtrip/tools': 'tree-c' } }),
+      provenance(),
+      /tools is tree-c, the dump was taken at undefined/,
+    ],
+    ['the dump records no trees at all', provenance(), provenance({ trees: undefined }), /the dump was taken at undefined/],
+    [
+      'a watched file changed',
+      provenance(),
+      provenance({ files: { ...PROVENANCE.files, 'build.gradle.kts': 'blob-z' } }),
+      /build\.gradle\.kts is blob-b, the dump was taken at blob-z/,
+    ],
+    ['the dump records no files at all', provenance(), provenance({ files: undefined }), /the dump was taken at undefined/],
+    ['the dump covers fewer targets', provenance(), provenance({ targets: ['Planet Fitness'] }), /covers targets/],
+    [
+      'the dump covers more targets',
+      provenance(),
+      provenance({ targets: [...PROVENANCE.targets, 'Parks Canada'] }),
+      /covers targets/,
+    ],
+    ['the dump covers other sources', provenance(), provenance({ sources: ['tesla-index'] }), /covers sources/],
+    ['the dump ran a different pass count', provenance({ passes: 2 }), provenance(), /--passes 1, this run is 2/],
+    ['the dump records no pass count', provenance(), provenance({ passes: undefined }), /--passes undefined/],
+    [
+      'the dump was taken without --prove-update-keys',
+      provenance({ proveUpdateKeys: true }),
+      provenance(),
+      /--prove-update-keys false, this run is true/,
+    ],
+    [
+      'the dump was taken with --prove-update-keys',
+      provenance(),
+      provenance({ proveUpdateKeys: true }),
+      /--prove-update-keys true, this run is false/,
+    ],
+  ];
+  for (const [name, wanted, found, refusal] of cases) {
+    assert.match(cacheRefusal(wanted, found) ?? 'reused', refusal, name);
+  }
 });
 
 test('the pass plan performs exactly the pass count it records', () => {

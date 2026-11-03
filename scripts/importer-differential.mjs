@@ -922,7 +922,7 @@ export async function provenanceFor({ targets, sources, passes, proveUpdateKeys 
 // registry and the capture tree. An uncommitted change under any of those
 // paths refuses the cache outright: there is no hash for work that is not
 // committed.
-function cacheRefusal(wanted, found) {
+export function cacheRefusal(wanted, found) {
   if (wanted.dirty !== '') {
     return `uncommitted changes under ${PROVENANCE_TREES.join(', ')} or ${PROVENANCE_FILES.join(', ')}`;
   }
