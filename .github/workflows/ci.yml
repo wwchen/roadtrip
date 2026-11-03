@@ -470,8 +470,16 @@ jobs:
   importer-differential:
     needs: changes
     if: needs.changes.outputs.importer_differential == 'true'
+    name: importer-differential (${{ matrix.mode.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        mode:
+          - { name: single pass, args: '' }
+          - { name: passes 2, args: '--passes 2' }
+          - { name: prove update keys, args: '--prove-update-keys' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
@@ -493,7 +501,7 @@ jobs:
         run: npm run build
 
       - name: Diff the TypeScript importer against the Kotlin one over every capture
-        run: node scripts/importer-differential.mjs
+        run: node scripts/importer-differential.mjs ${{ matrix.mode.args }}
 
   # Mirrored locally by `make test`. One job for both suites: the domain suite
   # runs in well under a second, so a job of its own would spend more on
