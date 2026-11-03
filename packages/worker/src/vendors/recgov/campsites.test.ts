@@ -484,6 +484,11 @@ describe('the source payload', () => {
     );
   });
 
+  test('keeps the raw campsite\'s key order when a top-level key is integer-like', () => {
+    const campsite = oneCampsite('"site":"A","7":true');
+    expect(campsite.sourcePayload).toBe('{"site":"A","7":true,"_parent_facility_id":"232447"}');
+  });
+
   test('keeps every vendor spelling of a number', () => {
     const campsite = oneCampsite('"a":1.10,"b":25.0,"c":100000000000000000000,"d":1e2,"quantities":{"x":1}');
     expect(campsite.sourcePayload).toContain('"a":1.10,"b":25.0,"c":100000000000000000000,"d":1e2');
