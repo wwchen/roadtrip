@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { carrierFromVendorName } from '@roadtrip/domain';
-import { isKotlinBlank, kotlinEqualsIgnoreCase, kotlinStringToBooleanStrictOrNull, kotlinTrim, nonBlank } from './kotlin-text.js';
+import { collapseAsciiWhitespace, isKotlinBlank, kotlinEqualsIgnoreCase, kotlinStringToBooleanStrictOrNull, kotlinTrim, nonBlank } from './kotlin-text.js';
 
 const NBSP = '\u00a0';
 const FIGURE_SPACE = '\u2007';
@@ -28,6 +28,17 @@ const KOTLIN_WHITESPACE: [string, string][] = [
   ['paragraph separator', PARAGRAPH_SEPARATOR],
   ['ideographic space', IDEOGRAPHIC_SPACE],
 ];
+
+describe("collapseAsciiWhitespace, Kotlin's \\s+ run replaced by one space", () => {
+  test('every character of Java\'s default \\s collapses, U+000B included', () => {
+    expect(collapseAsciiWhitespace('a \t\n\v\f\rb')).toBe('a b');
+    expect(collapseAsciiWhitespace('  a  ')).toBe(' a ');
+  });
+
+  test('a non-ASCII space is not in Java\'s default \\s, so it survives', () => {
+    expect(collapseAsciiWhitespace('a\u00a0\u2003b')).toBe('a\u00a0\u2003b');
+  });
+});
 
 describe('kotlinTrim', () => {
   test.each(KOTLIN_WHITESPACE)('strips a %s from the front and from the back, but not from the middle', (_name, space) => {

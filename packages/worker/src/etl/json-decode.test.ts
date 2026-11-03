@@ -22,6 +22,9 @@ const INT_MIN = -2_147_483_648;
 const SAFE_LONG_MAX = Number.MAX_SAFE_INTEGER;
 const WIDE_INTEGER = '12345678901234567890';
 const NEGATIVE_WIDE_INTEGER = '-12345678901234567890';
+const WIDE_INTEGER_AS_DOUBLE = 1.2345678901234567e19;
+const KOTLIN_LONG_MAX = '9223372036854775807';
+const FIRST_UNSAFE_LONG = '9007199254740993';
 const BEYOND_DOUBLE = '1e400';
 
 function wide(literal: string): unknown {
@@ -121,8 +124,14 @@ describe('scalar strictness', () => {
     expect(() => requiredLong({ k: wide(WIDE_INTEGER) }, 'k')).toThrow('k: expected long, got integer beyond 2^53');
   });
 
+  test('Long is narrowed to the double-safe range, so a value Kotlin Long accepts is refused, never rounded', () => {
+    for (const kotlinLong of [FIRST_UNSAFE_LONG, KOTLIN_LONG_MAX, `-${KOTLIN_LONG_MAX}`]) {
+      expect(() => requiredLong({ k: wide(kotlinLong) }, 'k')).toThrow('k: expected long, got integer beyond 2^53');
+    }
+  });
+
   test('Double accepts a wide integer literal as the nearest double, as Kotlin parses it', () => {
-    expect(requiredDouble({ k: wide(WIDE_INTEGER) }, 'k')).toBe(Number(WIDE_INTEGER));
+    expect(requiredDouble({ k: wide(WIDE_INTEGER) }, 'k')).toBe(WIDE_INTEGER_AS_DOUBLE);
     expect(nullableDouble({ k: -0.5 }, 'k')).toBe(-0.5);
   });
 

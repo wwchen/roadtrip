@@ -1,4 +1,4 @@
-import { isWideNumber } from './envelope.js';
+import { isRecord, isWideNumber } from './envelope.js';
 import { kotlinIntFromText, kotlinLongFromText } from './kotlin-number.js';
 
 export type JsonObject = Readonly<Record<string, unknown>>;
@@ -34,7 +34,7 @@ function present(source: JsonObject, key: string): unknown {
 }
 
 export function isJsonObject(value: unknown): value is JsonObject {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) && !isWideNumber(value);
+  return isRecord(value);
 }
 
 function decodeObject(key: string, value: unknown): JsonObject {

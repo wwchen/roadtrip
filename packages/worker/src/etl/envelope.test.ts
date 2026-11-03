@@ -131,6 +131,16 @@ describe('parseEnvelope wire format', () => {
     expect(() => parseEnvelope(file)).toThrow(new RegExp(`${side}\\.headers`));
   });
 
+  test.each(['request', 'response'])('a %s header map that is an integer beyond 2^53 is rejected, not read as a carrier', (side) => {
+    const file = fileHolding(
+      BASE_ENVELOPE.replace(
+        side === 'request' ? '"headers": {"accept": "*/*"}' : '"headers": {}',
+        `"headers": ${HUGE_INTEGER}`,
+      ),
+    );
+    expect(() => parseEnvelope(file)).toThrow(new RegExp(`${side}\\.headers must be an object`));
+  });
+
   test('absent headers on request and response default to empty maps', () => {
     const envelope = parseEnvelope(
       envelopeWith((e) => {
