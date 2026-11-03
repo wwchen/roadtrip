@@ -3,7 +3,8 @@ import type { CampgroundUpsertCandidate } from '../model/campground-candidate.js
 import type { CampsiteUpsertCandidate } from '../model/campsite-candidate.js';
 import type { PlanetFitnessLocationUpsertCandidate } from '../model/planet-fitness-candidate.js';
 import type { TeslaSuperchargerUpsertCandidate } from '../model/tesla-candidate.js';
-import { MAX_CATALOG_UPSERT_BATCH_SIZE, type FlushCounts } from '../repo/bulk.js';
+import type { FlushCounts } from '../model/flush-counts.js';
+import { MAX_CATALOG_UPSERT_BATCH_SIZE } from '../repo/bulk.js';
 import { campgroundNaturalKey, upsertCampgroundBatch } from '../repo/campground-repo.js';
 import { campsiteNaturalKey, upsertCampsiteBatch } from '../repo/campsite-repo.js';
 import { upsertPlanetFitnessLocationBatch } from '../repo/planet-fitness-repo.js';
