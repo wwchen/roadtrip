@@ -1,4 +1,4 @@
-.PHONY: help run test api-types data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend reclaim reclaim-report
+.PHONY: help run test importer-diff api-types data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend reclaim reclaim-report
 
 PORT ?= 8765
 RUN_ENV ?= $(or $(env),dev)
@@ -36,6 +36,7 @@ help:
 	@echo "  make recgov-refresh   Force-refresh the companion Recreation.gov session"
 	@echo "  make recgov-atc       Run one Rec.gov add-to-cart attempt (PAYLOAD=/path/to/atc.json)"
 	@echo "  make test             Run everything CI runs: backend + lint + frontend + companion + scripts + secrets/dashboards checks"
+	@echo "  make importer-diff    Diff the TypeScript importer against the Kotlin one over data/raw, all three modes (hours)"
 	@echo "  make api-types        Regenerate frontend/src/api/generated/api-types.ts from the Kotlin DTOs"
 	@echo "  make data-fetch       Fetch upstream data on the host (TARGET=<data_source slug> for one)."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / campsite_data)."
@@ -127,15 +128,25 @@ test: _ensure-hooks
 	# tsconfig type-checks them (and scripts/schema-reference.d.mts with them).
 	npm run typecheck --workspace @roadtrip/domain
 	npm run typecheck --workspace @roadtrip/db
+	npm run typecheck --workspace @roadtrip/worker
 	# The packages' own suites. They resolve each other through dist, so they
 	# follow the build above; the db suite boots PostGIS containers.
 	npm run test --workspace @roadtrip/domain
 	npm run test --workspace @roadtrip/db
+	npm run test --workspace @roadtrip/worker
+	# The importer differential's own harness, and the Kotlin oracle's
+	# comparison machinery. Both run on fixtures the tests write and need
+	# neither data/raw nor a JVM, so they belong here while
+	# `make importer-diff` and `node scripts/etl-oracle.mjs check` do not.
+	# They are here because defects have been found in this proof machinery
+	# itself, where a wrong comparison reads as a clean diff.
+	node --test scripts/importer-differential.test.mjs
+	node --test scripts/etl-oracle.test.mjs
+	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
+	node --test scripts/check-package-boundaries.test.mjs && node scripts/check-package-boundaries.mjs
 	npm run typecheck --workspace @roadtrip/web
 	npm run test --workspace @roadtrip/web
 	npm run build --workspace @roadtrip/web
-	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
-	node --test scripts/check-package-boundaries.test.mjs && node scripts/check-package-boundaries.mjs
 	node --test scripts/check-server-only-imports.test.mjs && node scripts/check-server-only-imports.mjs
 	node scripts/check-color-tokens.mjs
 	node scripts/check-css-blocks.mjs
@@ -148,6 +159,42 @@ test: _ensure-hooks
 	python3 secrets/manage.py generate --check
 	python3 secrets/manage.py check
 	python3 scripts/validate_grafana_dashboards.py
+
+# The full importer differential: both importers over data/raw into two
+# databases, then a row-by-row diff. Deliberately NOT part of `make test` —
+# it reads data/raw (138 MiB packed, absent from a sparse worktree) and takes
+# hours, where `make test` takes minutes. `make test` carries the harness's own
+# unit tests instead, which run on fixtures.
+#
+# All three modes, because each catches a different class and only the first is
+# in CI (see the importer-differential job in .github/workflows/ci.yml for the
+# measurements behind that split). This target is the gate before landing a
+# change to either importer:
+#
+#   * the single pass is the strongest check of parse and transform, and has by
+#     far the most rows to lose;
+#   * `--passes 2` reaches the conflict path, which an INSERT into an empty
+#     database cannot. It is not the only mode that does: passPlan forces
+#     `--prove-update-keys` to two passes as well, so whether that mode
+#     strictly subsumes this one is open and unmeasured -- do not drop this
+#     line on the assumption that it does;
+#   * `--prove-update-keys` blanks every compared column between the passes, so
+#     a column missing from one importer's ON CONFLICT update set stays blank on
+#     that side alone. With identical captures nothing else can see that.
+#
+# Each line is its own recipe line, so make stops on the first non-zero exit
+# and no mode's result is read through another's. IMPORTER_DIFF_ARGS passes
+# `--target`/`--source`/`--reference-dump` straight through for a narrower run.
+# `--reference-dump` is accepted by the first two modes only: the third refuses
+# it outright, since a restored Kotlin side re-writes nothing and so cannot
+# satisfy the blanking step. Passing it here therefore runs modes 1 and 2 to
+# completion and then fails in seconds on mode 3. Use the modes individually
+# when restoring a dump.
+IMPORTER_DIFF_ARGS ?=
+importer-diff:
+	node scripts/importer-differential.mjs $(IMPORTER_DIFF_ARGS)
+	node scripts/importer-differential.mjs --passes 2 $(IMPORTER_DIFF_ARGS)
+	node scripts/importer-differential.mjs --prove-update-keys $(IMPORTER_DIFF_ARGS)
 
 # Regenerate the committed TypeScript API contract after changing a DTO or adding
 # a route. `make test` and CI fail when it is stale.

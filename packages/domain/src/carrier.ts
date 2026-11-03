@@ -29,3 +29,17 @@ export interface CarrierSignal {
   average: number;
   count?: number;
 }
+
+const VENDOR_CARRIERS: ReadonlyMap<string, Carrier> = new Map([
+  ['verizon', Carrier.VERIZON],
+  ['at&t', Carrier.ATT],
+  ['t-mobile', Carrier.TMOBILE],
+  ['sprint', Carrier.SPRINT],
+  ['us cellular', Carrier.US_CELLULAR],
+]);
+
+const KOTLIN_WHITESPACE_EDGE = /^[\p{Z}\t\n\v\f\r\x1C-\x1F]+|[\p{Z}\t\n\v\f\r\x1C-\x1F]+$/gu;
+
+export function carrierFromVendorName(name: string): Carrier | null {
+  return VENDOR_CARRIERS.get(name.replace(KOTLIN_WHITESPACE_EDGE, '').toLowerCase()) ?? null;
+}

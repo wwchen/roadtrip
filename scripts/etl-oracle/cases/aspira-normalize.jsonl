@@ -1,0 +1,93 @@
+{"call": "aspira-normalize", "args": ["Two Jack Lakeside Campground"]}
+{"call": "aspira-normalize", "args": ["Banff National Park of Canada"]}
+{"call": "aspira-normalize", "args": ["Banff National Park"]}
+{"call": "aspira-normalize", "args": ["Pacific Rim National Park Reserve"]}
+{"call": "aspira-normalize", "args": ["Gwaii Haanas National Park Reserve"]}
+{"call": "aspira-normalize", "args": ["Gwaii Haanas National Marine Conservation Area Reserve"]}
+{"call": "aspira-normalize", "args": ["Saguenay-St. Lawrence National Marine Conservation Area"]}
+{"call": "aspira-normalize", "args": ["Fathom Five National Marine Park"]}
+{"call": "aspira-normalize", "args": ["Fort Langley National Historic Site"]}
+{"call": "aspira-normalize", "args": ["Elk Island National Park of Canada"]}
+{"call": "aspira-normalize", "args": ["Alice Lake Provincial Park"]}
+{"call": "aspira-normalize", "args": ["Deception Pass State Park"]}
+{"call": "aspira-normalize", "args": ["Mount Spokane State Recreation Area"]}
+{"call": "aspira-normalize", "args": ["Capitol State Forest"]}
+{"call": "aspira-normalize", "args": ["Riverside State Campground"]}
+{"call": "aspira-normalize", "args": ["Lake Easton Recreation Area"]}
+{"call": "aspira-normalize", "args": ["Writing-on-Stone Park Reserve"]}
+{"call": "aspira-normalize", "args": ["Trailer Court Village"]}
+{"call": "aspira-normalize", "args": ["Sunshine Cabins"]}
+{"call": "aspira-normalize", "args": ["Sunshine Cabin"]}
+{"call": "aspira-normalize", "args": ["Visitor Centre"]}
+{"call": "aspira-normalize", "args": ["Visitor Center"]}
+{"call": "aspira-normalize", "args": ["park"]}
+{"call": "aspira-normalize", "args": ["reserve"]}
+{"call": "aspira-normalize", "args": ["campground"]}
+{"call": "aspira-normalize", "args": ["campsite"]}
+{"call": "aspira-normalize", "args": ["village"]}
+{"call": "aspira-normalize", "args": ["Parkland"]}
+{"call": "aspira-normalize", "args": ["Centreville"]}
+{"call": "aspira-normalize", "args": ["Centerline"]}
+{"call": "aspira-normalize", "args": ["Reserved Grove"]}
+{"call": "aspira-normalize", "args": ["Campgrounds"]}
+{"call": "aspira-normalize", "args": ["Cabinet Mountains"]}
+{"call": "aspira-normalize", "args": ["  Alice   Lake  "]}
+{"call": "aspira-normalize", "args": ["Alice's Lake"]}
+{"call": "aspira-normalize", "args": ["Alice & Bob"]}
+{"call": "aspira-normalize", "args": ["Alice  &  Bob"]}
+{"call": "aspira-normalize", "args": ["Site 42"]}
+{"call": "aspira-normalize", "args": ["42"]}
+{"call": "aspira-normalize", "args": [""]}
+{"call": "aspira-normalize", "args": [" "]}
+{"call": "aspira-normalize", "args": ["\t"]}
+{"call": "aspira-normalize", "args": ["\n"]}
+{"call": "aspira-normalize", "args": ["\u00a0"]}
+{"call": "aspira-normalize", "args": ["Alice Lake and"]}
+{"call": "aspira-normalize", "args": ["Alice Lake or"]}
+{"call": "aspira-normalize", "args": ["Alice and Bob"]}
+{"call": "aspira-normalize", "args": ["Alice or Bob"]}
+{"call": "aspira-normalize", "args": ["Alice Lake and Campground"]}
+{"call": "aspira-normalize", "args": ["Alice Lake and "]}
+{"call": "aspira-normalize", "args": ["and"]}
+{"call": "aspira-normalize", "args": ["or"]}
+{"call": "aspira-normalize", "args": ["and or"]}
+{"call": "aspira-normalize", "args": ["Sandbank"]}
+{"call": "aspira-normalize", "args": ["Oracle"]}
+{"call": "aspira-normalize", "args": ["Band Camp"]}
+{"call": "aspira-normalize", "args": ["Forest"]}
+{"call": "aspira-normalize", "args": ["For\u00eat Montmorency"]}
+{"call": "aspira-normalize", "args": ["\u00cele-aux-Basques"]}
+{"call": "aspira-normalize", "args": ["Kejimkujik"]}
+{"call": "aspira-normalize", "args": ["\u03a3-\u03a3"]}
+{"call": "aspira-normalize", "args": ["\u03a3\u039f\u03a3"]}
+{"call": "aspira-normalize", "args": ["ALICE LAKE"]}
+{"call": "aspira-normalize", "args": ["AlIcE lAkE"]}
+{"call": "aspira-normalize", "args": ["\u0130stanbul"]}
+{"call": "aspira-normalize", "args": ["\u0131stanbul"]}
+{"call": "aspira-normalize", "args": ["stra\u00dfe"]}
+{"call": "aspira-normalize", "args": ["Two  Jack   Lakeside"]}
+{"call": "aspira-normalize", "args": ["Two-Jack-Lakeside"]}
+{"call": "aspira-normalize", "args": ["Two/Jack/Lakeside"]}
+{"call": "aspira-normalize", "args": ["Two.Jack.Lakeside"]}
+{"call": "aspira-normalize", "args": ["-"]}
+{"call": "aspira-normalize", "args": ["---"]}
+{"call": "aspira-normalize", "args": ["Lake"]}
+{"call": "aspira-normalize", "args": ["Lakeside"]}
+{"call": "aspira-normalize", "args": ["lake"]}
+{"call": "aspira-normalize", "args": ["LAKE"]}
+{"call": "aspira-normalize", "args": ["A"]}
+{"call": "aspira-normalize", "args": ["a1"]}
+{"call": "aspira-normalize", "args": ["1a"]}
+{"call": "aspira-normalize", "args": ["Mt. Seymour Provincial Park"]}
+{"call": "aspira-normalize", "args": ["Bow Valley Provincial Park Campground"]}
+{"call": "aspira-normalize", "args": ["Golden Ears Park"]}
+{"call": "aspira-normalize", "args": ["Porteau Cove Provincial Park"]}
+{"call": "aspira-normalize", "args": ["E.C. Manning Provincial Park"]}
+{"call": "aspira-normalize", "args": ["Cathedral Provincial Park and Protected Area"]}
+{"call": "aspira-normalize", "args": ["National Park Reserve of Canada"]}
+{"call": "aspira-normalize", "args": ["State Park Campground"]}
+{"call": "aspira-normalize", "args": ["Provincial Park Recreation Area"]}
+{"call": "aspira-normalize", "args": ["Village Centre Park"]}
+{"call": "aspira-normalize", "args": ["Cabins and Campsite"]}
+{"call": "aspira-normalize", "args": ["Trailer Court"]}
+{"call": "aspira-normalize", "args": ["campground campsite park"]}

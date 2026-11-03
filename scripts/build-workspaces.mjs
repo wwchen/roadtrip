@@ -62,9 +62,31 @@ function buildOrder(packages) {
   return order;
 }
 
+// The transitive workspace closure of `target`, so a caller that only needs
+// one package's dist does not pay for — or get refused by — a workspace it
+// never loads. The differential harness builds `@roadtrip/worker` this way:
+// `npm run build` with no argument still builds everything, and the ordering
+// stays here rather than being re-derived at the call site.
+function closureOf(packages, target) {
+  if (!packages.has(target)) {
+    throw new Error(`Unknown workspace '${target}'; known: ${[...packages.keys()].sort().join(', ')}`);
+  }
+  const needed = new Set();
+  const visit = (name) => {
+    if (needed.has(name)) return;
+    needed.add(name);
+    for (const dependency of packages.get(name).dependencies) visit(dependency);
+  };
+  visit(target);
+  return needed;
+}
+
 async function main() {
+  const target = process.argv[2];
   const packages = dependencyGraph(await workspaceDirs());
+  const wanted = target === undefined ? undefined : closureOf(packages, target);
   for (const name of buildOrder(packages)) {
+    if (wanted !== undefined && !wanted.has(name)) continue;
     if (!packages.get(name).pkg.scripts?.[BUILD_SCRIPT]) continue;
     const { status } = spawnSync('npm', ['run', BUILD_SCRIPT, '--workspace', name], {
       cwd: REPO_ROOT,

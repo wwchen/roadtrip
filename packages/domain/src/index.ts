@@ -3,3 +3,4 @@ export * from './campground.js';
 export * from './campsite.js';
 export * from './carrier.js';
 export * from './catalog.js';
+export * from './provider.js';

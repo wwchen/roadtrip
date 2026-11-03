@@ -34,6 +34,20 @@ PACKAGE_TYPECHECKS = (
 )
 FLYWAY_MIGRATIONS = "backend/src/main/resources/db/migration"
 
+KOTLIN_PACKAGE_ROOT = "backend/src/main/kotlin/ca/floo/roadtrip"
+# The two trees the differential's Kotlin side is built from. Whatever these
+# import is part of what that importer writes, so the path filter has to watch
+# it or the gate silently does not run.
+IMPORTER_KOTLIN_SOURCES = ("service/etl", "repo")
+IMPORTER_DIFFERENTIAL = "scripts/importer-differential.mjs"
+PROVENANCE_TREES_BLOCK = re.compile(r"const PROVENANCE_TREES = \[(.*?)\];", re.S)
+JS_CONST_LIST = "const {} = \\[(.*?)\\];"
+JS_QUOTED = re.compile(r"'([^']+)'")
+JS_BARE = re.compile(r"^[A-Z][A-Z0-9_]*$", re.M)
+KOTLIN_IMPORT = re.compile(
+    r"^import ca\.floo\.roadtrip\.([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)?)", re.M
+)
+
 
 def companion_key_inputs() -> list[str]:
     declared = re.search(
@@ -41,6 +55,59 @@ def companion_key_inputs() -> list[str]:
     )
     assert declared, "COMPANION_IMAGE_INPUTS not found"
     return declared.group(1).split()
+
+
+def tracked_paths() -> set[str]:
+    out = subprocess.run(
+        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout
+    return set(out.splitlines())
+
+
+def js_path_list(name: str) -> list[str]:
+    """The string entries of a `const <name> = [...]` list in the differential.
+
+    A bare identifier entry is resolved through its own `const <IDENT> = '...'`,
+    so PROVENANCE_FILES' REGISTRY_RELATIVE_PATH is checked like any other path.
+    """
+    source = (ROOT / IMPORTER_DIFFERENTIAL).read_text()
+    block = re.search(JS_CONST_LIST.format(name), source, re.S)
+    assert block is not None, f"{name} not found in {IMPORTER_DIFFERENTIAL}"
+    paths = []
+    for entry in block.group(1).split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        quoted = JS_QUOTED.search(entry)
+        if quoted is not None:
+            paths.append(quoted.group(1))
+            continue
+        if JS_BARE.match(entry):
+            resolved = re.search(rf"const {entry} = '([^']+)'", source)
+            assert resolved is not None, f"{name} names {entry}, which resolves to no path"
+            paths.append(resolved.group(1))
+    return paths
+
+
+def path_exists(path: str, tracked: set[str]) -> bool:
+    if path in tracked:
+        return True
+    prefix = f"{path}/"
+    return any(candidate.startswith(prefix) for candidate in tracked)
+
+
+def importer_kotlin_trees() -> set[str]:
+    trees: set[str] = set()
+    for source in IMPORTER_KOTLIN_SOURCES:
+        for path in (ROOT / KOTLIN_PACKAGE_ROOT / source).rglob("*.kt"):
+            for dotted in KOTLIN_IMPORT.findall(path.read_text()):
+                head, _, tail = dotted.partition(".")
+                nested = f"{head}/{tail}"
+                if tail and (ROOT / KOTLIN_PACKAGE_ROOT / nested).is_dir():
+                    trees.add(nested)
+                else:
+                    trees.add(head)
+    return {t for t in trees if (ROOT / KOTLIN_PACKAGE_ROOT / t).is_dir()}
 
 
 def make_recipe(target: str) -> list[str]:
@@ -172,6 +239,79 @@ class DeploymentContractTest(unittest.TestCase):
             any(pattern.startswith(SCHEMA_REFERENCE_TEST) for pattern in watched),
             f"{SCHEMA_REFERENCE_TEST} does not run the schema equivalence gate",
         )
+
+    def test_the_importer_differential_gate_watches_every_tree_it_imports(self) -> None:
+        jobs = workflow("ci.yml")["jobs"]
+        gate = jobs["importer-differential"]
+        watched = path_filters()["importer_differential"]
+        prefixes = tuple(p.removesuffix("/**").removesuffix("/*") for p in watched)
+
+        trees = importer_kotlin_trees()
+        self.assertIn("model/domain", trees, "the import scan found nothing; the regex or the paths moved")
+        for tree in sorted(trees):
+            path = f"{KOTLIN_PACKAGE_ROOT}/{tree}"
+            self.assertTrue(
+                any(path == prefix or path.startswith(f"{prefix}/") for prefix in prefixes),
+                f"{path} is imported by {' and '.join(IMPORTER_KOTLIN_SOURCES)} "
+                "but no importer_differential filter entry covers it, so an edit "
+                "there changes what the Kotlin importer writes without running the gate",
+            )
+
+        self.assertIn("importer_differential", jobs["changes"]["outputs"])
+        self.assertIn("importer_differential", gate["if"])
+        self.assertIn("node scripts/importer-differential.mjs", job_commands(gate))
+        self.assertIn("importer-differential", jobs["ci-passed"]["needs"])
+
+    def test_every_pinned_path_exists(self) -> None:
+        tracked = tracked_paths()
+        self.assertIn(IMPORTER_DIFFERENTIAL, tracked, "git ls-files returned nothing usable")
+
+        for name in ("PROVENANCE_TREES", "PROVENANCE_FILES"):
+            paths = js_path_list(name)
+            self.assertGreater(len(paths), 1, f"{name} parsed to {len(paths)} path(s)")
+            for path in paths:
+                self.assertTrue(
+                    path_exists(path, tracked),
+                    f"{name} pins {path}, which is not in this branch. provenanceFor() hashes "
+                    "every entry before any container starts, so one bad path fails every "
+                    "differential run, the CI job and make importer-diff included",
+                )
+
+        watched = path_filters()["importer_differential"]
+        for pattern in watched:
+            if pattern.endswith("/**"):
+                self.assertTrue(
+                    path_exists(pattern[: -len("/**")], tracked),
+                    f"the importer_differential filter watches {pattern}, which matches no tracked path",
+                )
+            elif "*" in pattern:
+                self.assertTrue(
+                    any(PurePosixPath(c).match(pattern) for c in tracked),
+                    f"the importer_differential filter watches {pattern}, which matches no tracked file",
+                )
+            else:
+                self.assertIn(
+                    pattern,
+                    tracked,
+                    f"the importer_differential filter watches {pattern}, which is not a tracked file",
+                )
+
+    def test_the_cached_dump_provenance_covers_every_tree_it_imports(self) -> None:
+        block = PROVENANCE_TREES_BLOCK.search((ROOT / IMPORTER_DIFFERENTIAL).read_text())
+        self.assertIsNotNone(block, f"PROVENANCE_TREES not found in {IMPORTER_DIFFERENTIAL}")
+        pinned = re.findall(r"'([^']+)'", block.group(1))
+        self.assertIn(f"{KOTLIN_PACKAGE_ROOT}/service/etl", pinned, "the parse found no Kotlin trees")
+
+        trees = importer_kotlin_trees()
+        self.assertIn("model/domain", trees, "the import scan found nothing; the regex or the paths moved")
+        for tree in sorted(trees):
+            path = f"{KOTLIN_PACKAGE_ROOT}/{tree}"
+            self.assertTrue(
+                any(path == entry or path.startswith(f"{entry}/") for entry in pinned),
+                f"{path} is imported by {' and '.join(IMPORTER_KOTLIN_SOURCES)} but no "
+                "PROVENANCE_TREES entry covers it, so --reference-dump would restore a dump "
+                "taken before an edit there as if it were still valid",
+            )
 
     def test_make_test_runs_the_gate_after_the_build_it_consumes(self) -> None:
         recipe = make_recipe("test")

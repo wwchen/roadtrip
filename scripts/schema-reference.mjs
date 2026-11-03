@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
@@ -21,10 +23,14 @@ const DB_USER = 'reference';
 const DB_PASSWORD = 'reference';
 const DB_PORT = 5432;
 
-const READY_ATTEMPTS = 120;
+const READY_DEADLINE_MS = 3 * 60 * 1000;
 const READY_INTERVAL_MS = 1000;
 const MIN_REFERENCE_TABLES = 20;
 const MAX_OUTPUT_BYTES = 256 * 1024 * 1024;
+const DOCKER_TIMEOUT_ENV = 'ROADTRIP_DOCKER_TIMEOUT_MS';
+const DEFAULT_DOCKER_TIMEOUT_MS = 30 * 60 * 1000;
+const READY_PROBE_TIMEOUT_MS = 5 * 1000;
+const CONTROL_TIMEOUT_MS = 2 * 60 * 1000;
 
 const BOOKKEEPING = [
   /\bflyway_schema_history/,
@@ -132,30 +138,147 @@ export function assertPlausibleSchema(sql) {
   }
 }
 
-async function docker(...args) {
+export function dockerTimeoutMs(env = process.env) {
+  const raw = env[DOCKER_TIMEOUT_ENV];
+  if (raw === undefined || raw === '') return DEFAULT_DOCKER_TIMEOUT_MS;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${DOCKER_TIMEOUT_ENV} must be a positive integer of milliseconds, got ${JSON.stringify(raw)}`);
+  }
+  return value;
+}
+
+const timedOut = (what, timeoutMs) => new Error(`${what} timed out after ${timeoutMs} ms; is the Docker daemon responding?`);
+
+export async function dockerWithin(timeoutMs, args) {
   try {
-    const { stdout } = await run('docker', args, { maxBuffer: MAX_OUTPUT_BYTES });
+    const { stdout } = await run('docker', args, { maxBuffer: MAX_OUTPUT_BYTES, timeout: timeoutMs, killSignal: 'SIGKILL' });
     return stdout;
   } catch (error) {
     if (error.code === 'ENOENT') throw new Error('docker is not installed or not on PATH');
+    if (error.killed) throw timedOut(`docker ${args.slice(0, 2).join(' ')}`, timeoutMs);
     throw new Error(`docker ${args.slice(0, 2).join(' ')} failed: ${error.stderr || error.message}`);
   }
 }
 
+async function docker(...args) {
+  return dockerWithin(dockerTimeoutMs(), args);
+}
+
+async function dockerControl(...args) {
+  return dockerWithin(CONTROL_TIMEOUT_MS, args);
+}
+
+// `docker exec` with a program's exit status, stderr and its two data
+// directions exposed. `docker()` above cannot stand in for it: execFile has no
+// stdin option, and it buffers stdout into a string. Used for the work that has
+// to happen *inside* the container — a binary COPY piped between two of its
+// databases, pg_dump, psql -f — rather than over TCP.
+//
+// `inputFile` and `outputFile` stream, and they are not a convenience:
+// a pg_dump of the catalog at full scale is far past V8's maximum string
+// length, so a dump that is collected into a string throws
+// `Invalid string length` rather than producing a file. `input` and the
+// returned stdout string stay for the small cases (a psql query, one COPY's
+// progress line); anything whose size follows the row count uses the file form.
+async function dockerExec(container, argv, { input, inputFile, outputFile, timeoutMs = dockerTimeoutMs() } = {}) {
+  const stdin = input !== undefined || inputFile !== undefined;
+  const child = spawn('docker', ['exec', ...(stdin ? ['-i'] : []), container, ...argv], {
+    stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+  });
+  let expired = false;
+  const timer = setTimeout(() => {
+    expired = true;
+    child.kill('SIGKILL');
+  }, timeoutMs);
+  try {
+    return await collectExec(child, argv, { input, inputFile, outputFile }, () => expired, timeoutMs);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function collectExec(child, argv, { input, inputFile, outputFile }, expired, timeoutMs) {
+
+  let stdout = '';
+  let stderr = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
+
+  // `pipeline` rather than `.pipe()`, and awaited alongside the exit rather
+  // than after it. A dump that stops early has to fail the run: if the sink's
+  // error were swallowed, or observed only once the child had closed, a
+  // truncated dump would resolve successfully and become the reference side of
+  // a differential — a false green with extra steps. A sink error that nothing
+  // is awaiting is worse still: it rejects unhandled, takes the process down
+  // before withPostgis's `finally`, and leaves the container running.
+  const pumps = [];
+  if (outputFile === undefined) {
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+  } else {
+    pumps.push(pipeline(child.stdout, createWriteStream(outputFile)));
+  }
+  if (inputFile !== undefined) {
+    pumps.push(pipeline(createReadStream(inputFile), child.stdin));
+  } else if (input !== undefined) {
+    child.stdin.on('error', () => {});
+    child.stdin.end(input);
+  }
+
+  const exited = new Promise((resolve, reject) => {
+    child.on('error', (error) =>
+      reject(error.code === 'ENOENT' ? new Error('docker is not installed or not on PATH') : error),
+    );
+    child.on('close', resolve);
+  });
+
+  let code;
+  try {
+    [code] = await Promise.all([exited, ...pumps]);
+  } catch (error) {
+    // The child's own diagnosis outranks the pipe's. A command fed from a file
+    // that dies early — `psql -f -` under ON_ERROR_STOP on a bad restore, which
+    // is the shape of every cached-dump run — closes its stdin, so the pump
+    // fails with EPIPE while the real story is on the child's stderr. Wait for
+    // the exit that is already on its way and report both.
+    child.kill('SIGKILL');
+    const reaped = await exited.catch(() => undefined);
+    if (expired()) throw timedOut(`docker exec ${argv[0]}`, timeoutMs);
+    const detail = [
+      reaped === undefined ? undefined : `exited ${reaped}`,
+      stderr.trim() || undefined,
+      error.message,
+    ].filter((part) => part !== undefined);
+    throw new Error(`docker exec ${argv[0]} failed: ${detail.join(': ')}`, { cause: error });
+  }
+  if (expired()) throw timedOut(`docker exec ${argv[0]}`, timeoutMs);
+  if (code !== 0) {
+    throw new Error(`docker exec ${argv[0]} exited ${code}: ${stderr.trim() || stdout.trim()}`);
+  }
+  return stdout;
+}
+
 async function waitForPostgres(container) {
-  for (let attempt = 0; attempt < READY_ATTEMPTS; attempt += 1) {
+  const deadline = Date.now() + READY_DEADLINE_MS;
+  while (Date.now() < deadline) {
+    const probeMs = Math.max(1, Math.min(READY_PROBE_TIMEOUT_MS, deadline - Date.now()));
     try {
-      await docker('exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', DB_USER, '-d', MAINTENANCE_DB);
+      await dockerWithin(probeMs, ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', DB_USER, '-d', MAINTENANCE_DB]);
       return;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, READY_INTERVAL_MS));
     }
   }
-  throw new Error(`Postgres in ${container} was not ready after ${READY_ATTEMPTS} attempts`);
+  throw new Error(`Postgres in ${container} was not ready after ${READY_DEADLINE_MS} ms`);
 }
 
 async function hostPort(container) {
-  const mapping = (await docker('port', container, `${DB_PORT}/tcp`)).split('\n')[0].trim();
+  const mapping = (await dockerControl('port', container, `${DB_PORT}/tcp`)).split('\n')[0].trim();
   return mapping.slice(mapping.lastIndexOf(':') + 1);
 }
 
@@ -179,8 +302,14 @@ export async function withPostgis(use) {
     await waitForPostgres(container);
     const port = await hostPort(container);
     return await use({
+      containerName() {
+        return container;
+      },
+      async exec(argv, options) {
+        return dockerExec(container, argv, options);
+      },
       async createDatabase(name) {
-        await docker(
+        await dockerControl(
           'exec',
           container,
           'psql',
@@ -233,7 +362,7 @@ export async function withPostgis(use) {
       },
     });
   } finally {
-    await docker('rm', '-f', container).catch(() => {});
+    await dockerControl('rm', '-f', '-v', container).catch(() => {});
   }
 }
 
