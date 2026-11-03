@@ -364,6 +364,25 @@ class DeploymentContractTest(unittest.TestCase):
                 "restore a dump taken before an edit there as if it were still valid",
             )
 
+    def test_make_importer_diff_caches_only_the_modes_that_can_restore_a_dump(self) -> None:
+        def dry_run(*variables: str) -> list[str]:
+            out = subprocess.run(
+                ["make", "-n", "importer-diff", *variables], cwd=ROOT, capture_output=True, text=True, check=True
+            ).stdout
+            return [line for line in out.splitlines() if "importer-differential.mjs" in line]
+
+        uncached = dry_run()
+        self.assertEqual(len(uncached), 3, uncached)
+        self.assertFalse(any("--reference-dump" in line for line in uncached), uncached)
+
+        cached = dry_run("IMPORTER_DIFF_CACHE=cache")
+        dumps = [re.search(r"--reference-dump (\S+)", line) for line in cached]
+        self.assertIsNotNone(dumps[0], cached[0])
+        self.assertIsNotNone(dumps[1], cached[1])
+        self.assertNotEqual(dumps[0].group(1), dumps[1].group(1), "two pass counts cannot share one dump")
+        self.assertIn("--prove-update-keys", cached[2])
+        self.assertIsNone(dumps[2], "--prove-update-keys refuses --reference-dump, so the gate could never pass")
+
     def test_make_test_runs_the_gate_after_the_build_it_consumes(self) -> None:
         recipe = make_recipe("test")
 

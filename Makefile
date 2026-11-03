@@ -184,16 +184,18 @@ test: _ensure-hooks
 #
 # Each line is its own recipe line, so make stops on the first non-zero exit
 # and no mode's result is read through another's. IMPORTER_DIFF_ARGS passes
-# `--target`/`--source`/`--reference-dump` straight through for a narrower run.
-# `--reference-dump` is accepted by the first two modes only: the third refuses
-# it outright, since a restored Kotlin side re-writes nothing and so cannot
-# satisfy the blanking step. Passing it here therefore runs modes 1 and 2 to
-# completion and then fails in seconds on mode 3. Use the modes individually
-# when restoring a dump.
+# `--target`/`--source` straight through for a narrower run.
+# IMPORTER_DIFF_CACHE names a directory for cached Kotlin dumps, one per mode
+# because a dump's provenance records its pass count. Only the first two modes
+# take one: a restored Kotlin side re-writes nothing, so it cannot satisfy
+# `--prove-update-keys`' blanking step and that mode always runs both importers.
 IMPORTER_DIFF_ARGS ?=
+IMPORTER_DIFF_CACHE ?=
+importer_diff_cache = $(if $(IMPORTER_DIFF_CACHE),--reference-dump $(IMPORTER_DIFF_CACHE)/$(1).sql)
 importer-diff:
-	node scripts/importer-differential.mjs $(IMPORTER_DIFF_ARGS)
-	node scripts/importer-differential.mjs --passes 2 $(IMPORTER_DIFF_ARGS)
+	$(if $(IMPORTER_DIFF_CACHE),mkdir -p $(IMPORTER_DIFF_CACHE))
+	node scripts/importer-differential.mjs $(call importer_diff_cache,single-pass) $(IMPORTER_DIFF_ARGS)
+	node scripts/importer-differential.mjs --passes 2 $(call importer_diff_cache,passes-2) $(IMPORTER_DIFF_ARGS)
 	node scripts/importer-differential.mjs --prove-update-keys $(IMPORTER_DIFF_ARGS)
 
 # Regenerate the committed TypeScript API contract after changing a DTO or adding
