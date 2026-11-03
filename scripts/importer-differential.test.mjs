@@ -6,11 +6,14 @@ import path from 'node:path';
 import test from 'node:test';
 import { createDb, migrateDb } from '@roadtrip/db';
 import {
+  alreadyBlankColumns,
+  alreadyBlankSql,
   BASE_TABLES_SQL,
   blankSql,
   columnsOf,
   COPIED_TABLES,
   COVERAGE_EXEMPT_TABLES,
+  coverageExemptionProblems,
   DIFFED_TABLES,
   fingerprintSql,
   KOTLIN_SCHEMA,
@@ -19,9 +22,11 @@ import {
   sideSelectSql,
   textDiffSql,
   TYPESCRIPT_SCHEMA,
+  untouchedTableChanges,
 } from './importer-diff-columns.mjs';
 import {
   assertCurrentBuild,
+  assertTablesUntouched,
   assertTargetsPinned,
   auditRowPreservation,
   cacheRefusal,
@@ -43,6 +48,7 @@ import {
   SEED_DUMP_FLAGS,
   staleBuilds,
   targetFloorProblems,
+  untouchedTables,
 } from './importer-differential.mjs';
 import { withPostgis } from './schema-reference.mjs';
 import { loadPoiRegistry } from '@roadtrip/worker';
@@ -55,6 +61,7 @@ const READABLE_MODE = 0o755;
 const FIXTURE_DB = 'roadtrip_differential_fixture';
 const FIXTURE_PREPARE = false;
 const CONTAINER_TEST_TIMEOUT_MS = 900_000;
+const UNTOUCHED_PROBE_SRID = 990_001;
 
 const PROVIDER = 'test';
 const REF = 'cg-1';
@@ -212,7 +219,41 @@ test('every diffed table names every one of its columns as compared or ignored',
         `${spec.table} narrows its side select with neither a joins list nor a coverage exemption`,
       );
     }
+    assert.deepEqual(coverageExemptionProblems(spec), [], `${spec.table}: its coverage exemption does not stand`);
   }
+});
+
+test('a coverage exemption must name a check that covers the table, and cannot sit beside a joins list', () => {
+  const runs = DIFFED_TABLES.find((spec) => spec.table === 'import_runs');
+  const pois = DIFFED_TABLES.find((spec) => spec.table === 'pois');
+  const exempt = (table, exemption, run) => {
+    const saved = COVERAGE_EXEMPT_TABLES[table];
+    COVERAGE_EXEMPT_TABLES[table] = exemption;
+    try {
+      return run();
+    } finally {
+      if (saved === undefined) delete COVERAGE_EXEMPT_TABLES[table];
+      else COVERAGE_EXEMPT_TABLES[table] = saved;
+    }
+  };
+  assert.deepEqual(coverageExemptionProblems(runs), []);
+  assert.deepEqual(coverageExemptionProblems(pois), []);
+  assert.deepEqual(
+    exempt('import_runs', { standIn: 'row preservation', reason: 'r' }, () => coverageExemptionProblems(runs)),
+    ["import_runs names 'row preservation', which does not cover it"],
+  );
+  assert.deepEqual(
+    exempt('import_runs', { standIn: 'trust me', reason: 'r' }, () => coverageExemptionProblems(runs)),
+    ["import_runs names 'trust me', which is no check"],
+  );
+  assert.deepEqual(
+    exempt('import_runs', { standIn: 'run count', reason: ' ' }, () => coverageExemptionProblems(runs)),
+    ['import_runs is exempt with no reason'],
+  );
+  assert.deepEqual(
+    exempt('pois', { standIn: 'row preservation', reason: 'r' }, () => coverageExemptionProblems(pois)),
+    ['pois has a joins list, so it needs no exemption', "pois names 'row preservation', which does not cover it"],
+  );
 });
 
 test('a campsite side select that reads fewer rows than the table holds is refused', async () => {
@@ -346,6 +387,26 @@ const PROVENANCE = Object.freeze({
 });
 
 const provenance = (overrides = {}) => ({ ...structuredClone(PROVENANCE), ...overrides });
+
+test('a table named as not imported is held to its state before the import', () => {
+  const state = (rows, fingerprint) => ({ rows, fingerprint });
+  const before = Object.fromEntries(Object.keys(NOT_IMPORTED_TABLES).map((table) => [table, state(0, '')]));
+  assert.deepEqual(untouchedTableChanges(before, { ...before }), []);
+  assert.deepEqual(untouchedTableChanges(before, { ...before, api_cache: state(1, 'a') }), [
+    'api_cache went from 0 to 1 row(s)',
+  ]);
+  assert.deepEqual(
+    untouchedTableChanges({ ...before, app_user: state(2, 'a') }, { ...before, app_user: state(2, 'b') }),
+    ['app_user kept 2 row(s) but their contents changed'],
+  );
+  const { ingest_runs: _omitted, ...missing } = before;
+  assert.deepEqual(untouchedTableChanges(before, missing), ['ingest_runs was not read on both occasions']);
+});
+
+test('the columns the update-key proof cannot reach are exactly those with no non-blank row', () => {
+  assert.deepEqual(alreadyBlankColumns({ name: 3, deleted_at: 0, notes: 0, geom: 1 }), ['deleted_at', 'notes']);
+  assert.deepEqual(alreadyBlankColumns({ name: 3 }), []);
+});
 
 test('a cached Kotlin dump is reused only when its provenance matches this run exactly', () => {
   assert.equal(cacheRefusal(provenance(), provenance()), undefined, 'an identical provenance must be reusable');
@@ -846,6 +907,31 @@ test(
           );
         });
 
+        await t.test('a write to a table named as not imported is refused, insert or update', async () => {
+          const before = await untouchedTables(db);
+          await assertTablesUntouched('TypeScript', db, before);
+          await db.$client.unsafe(
+            `INSERT INTO ${TYPESCRIPT_SCHEMA}.spatial_ref_sys (srid, auth_name) VALUES (${UNTOUCHED_PROBE_SRID}, 'probe')`,
+          );
+          try {
+            await assert.rejects(
+              assertTablesUntouched('TypeScript', db, before),
+              /the TypeScript importer wrote to .*spatial_ref_sys went from \d+ to \d+ row/,
+            );
+            const inserted = await untouchedTables(db);
+            await db.$client.unsafe(
+              `UPDATE ${TYPESCRIPT_SCHEMA}.spatial_ref_sys SET auth_name = 'moved' WHERE srid = ${UNTOUCHED_PROBE_SRID}`,
+            );
+            await assert.rejects(
+              assertTablesUntouched('TypeScript', db, inserted),
+              /spatial_ref_sys kept \d+ row\(s\) but their contents changed/,
+            );
+          } finally {
+            await db.$client.unsafe(`DELETE FROM ${TYPESCRIPT_SCHEMA}.spatial_ref_sys WHERE srid = ${UNTOUCHED_PROBE_SRID}`);
+          }
+          await assertTablesUntouched('TypeScript', db, before);
+        });
+
         await t.test('a poi with no link row is refused rather than silently undiffed', async () => {
           await reseed(db);
           await db.$client.unsafe(
@@ -886,6 +972,18 @@ test(
              VALUES ('${PROVIDER}', '${REF}', 'Soft-deleted twin', now())`,
           );
           await assert.rejects(diffDatabases(db), /campgrounds.*appears 2 times/s);
+        });
+
+        await t.test('a column already blank in every row is named as one the mode cannot prove', async () => {
+          await reseed(db);
+          const campgrounds = DIFFED_TABLES.find((spec) => spec.table === 'campgrounds');
+          const [before] = await db.$client.unsafe(alreadyBlankSql(campgrounds, TYPESCRIPT_SCHEMA));
+          const unproved = alreadyBlankColumns(before);
+          assert.ok(unproved.includes('deleted_at'), `deleted_at is null in the fixture, got ${unproved}`);
+          assert.ok(!unproved.includes('name'), 'name carries a value, so blanking it is observable');
+          for (const statement of blankSql(campgrounds, TYPESCRIPT_SCHEMA)) await db.$client.unsafe(statement);
+          const [after] = await db.$client.unsafe(alreadyBlankSql(campgrounds, TYPESCRIPT_SCHEMA));
+          assert.deepEqual(alreadyBlankColumns(after), Object.keys(after).sort(), 'blanking left a column unblanked');
         });
 
         await t.test('blanking leaves every row changed and every CHECK satisfied', async () => {

@@ -42,10 +42,11 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, promisify } from 'node:util';
 import { createDb, migrateDb } from '@roadtrip/db';
 import {
+  alreadyBlankColumns,
+  alreadyBlankSql,
   blankSql,
   COPIED_TABLES,
   coverageSql,
-  COVERAGE_EXEMPT_TABLES,
   diffSql,
   DIFFED_TABLES,
   fingerprintSql,
@@ -57,6 +58,8 @@ import {
   SIDES,
   SUBSTANTIVE_TABLES,
   TYPESCRIPT_SCHEMA,
+  untouchedTableChanges,
+  untouchedTablesSql,
 } from './importer-diff-columns.mjs';
 import { COLLISION_PINS } from './importer-collision-pins.mjs';
 import { withPostgis } from './schema-reference.mjs';
@@ -701,7 +704,7 @@ export async function auditRowPreservation(db, spec, schema) {
 
 async function auditCoverage(db, spec, schema) {
   await auditRowPreservation(db, spec, schema);
-  if (Object.hasOwn(COVERAGE_EXEMPT_TABLES, spec.table) || spec.joins === undefined) return;
+  if (spec.joins === undefined) return;
   const [{ uncovered }] = await db.$client.unsafe(coverageSql(spec.table, schema));
   if (uncovered === 0) return;
   throw new Error(
@@ -866,6 +869,20 @@ async function assertEveryTargetSaw(db, selected) {
   );
 }
 
+export async function untouchedTables(db) {
+  const rows = await db.$client.unsafe(untouchedTablesSql(TYPESCRIPT_SCHEMA));
+  return Object.fromEntries(rows.map((row) => [row.name, { rows: row.rows, fingerprint: row.fingerprint }]));
+}
+
+export async function assertTablesUntouched(side, db, before) {
+  const changes = untouchedTableChanges(before, await untouchedTables(db));
+  if (changes.length === 0) return;
+  throw new Error(
+    `the ${side} importer wrote to table(s) named as written by neither importer: ${changes.join('; ')}. ` +
+      'Either the table belongs in the diff or the importer is writing where it should not.',
+  );
+}
+
 // --- --prove-update-keys ----------------------------------------------------
 
 // Blanks every compared, non-key column on both sides between pass 1 and
@@ -875,12 +892,20 @@ async function assertEveryTargetSaw(db, selected) {
 // dropped update key leaves pass 1's correct value in place.
 async function blankBothSides(databases) {
   for (const spec of DIFFED_TABLES) {
-    for (const db of databases) {
+    for (const [side, db] of Object.entries(databases)) {
       // Each side is its own database, so both are blanked in `public`; the
       // reference schema does not exist yet at this point in the run.
       const schema = TYPESCRIPT_SCHEMA;
       const [before] = await db.$client.unsafe(fingerprintSql(spec, schema));
       if (before.rows === 0) continue;
+      const [nonBlank] = await db.$client.unsafe(alreadyBlankSql(spec, schema));
+      const unproved = alreadyBlankColumns(nonBlank);
+      if (unproved.length > 0) {
+        console.log(
+          `--prove-update-keys cannot prove ${spec.table}.{${unproved.join(', ')}} on the ${side} side: ` +
+            'already blank in every row, so a missing update key there would change nothing',
+        );
+      }
       for (const statement of blankSql(spec, schema)) await db.$client.unsafe(statement);
       const [after] = await db.$client.unsafe(fingerprintSql(spec, schema));
       if (after.fingerprint === before.fingerprint) {
@@ -1163,6 +1188,10 @@ export async function runDifferential({
     const kotlinDb = createDb(postgres.connectionString(KOTLIN_DB), { prepare: DRIZZLE_PREPARE });
     try {
       await migrateDb(typescriptDb);
+      const untouchedBefore = {
+        kotlin: await untouchedTables(kotlinDb),
+        typescript: await untouchedTables(typescriptDb),
+      };
 
       const cached = referenceDump === undefined ? undefined : await readProvenance(referenceDump);
       const refusal = cached === undefined ? 'no provenance sidecar beside the dump' : cacheRefusal(wanted, cached);
@@ -1174,7 +1203,7 @@ export async function runDifferential({
       let completed = 0;
       const collisions = [];
       for (const [segment, segmentPasses] of segments.entries()) {
-        if (segment > 0) await blankBothSides([kotlinDb, typescriptDb]);
+        if (segment > 0) await blankBothSides({ Kotlin: kotlinDb, TypeScript: typescriptDb });
         if (restoring) {
           if (segment === 0) await restoreDatabase(postgres, user, KOTLIN_DB, referenceDump);
         } else {
@@ -1209,6 +1238,8 @@ export async function runDifferential({
         }
         completed += segmentPasses;
       }
+      await assertTablesUntouched('Kotlin', kotlinDb, untouchedBefore.kotlin);
+      await assertTablesUntouched('TypeScript', typescriptDb, untouchedBefore.typescript);
 
       if (referenceDump !== undefined && !restoring) {
         await dumpDatabase(postgres, user, KOTLIN_DB, REFERENCE_DUMP_FLAGS, referenceDump);
