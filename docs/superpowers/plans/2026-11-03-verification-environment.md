@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Opening a PR yields a Vercel preview URL serving `apps/web` from a Neon branch restored from a versioned, deterministic seed.
+**Goal:** First on a BC-only seed, then on the full catalog: opening a PR yields a Vercel preview URL serving `apps/web` from a Neon branch restored from a versioned, deterministic seed.
 
 **Architecture:** A pinned target list drives the step-4 differential with `--emit-seed`, so the seed is the TypeScript importer's output *proven equal to Kotlin's*. The dump is published as a versioned GitHub release asset and restored into a long-lived Neon branch `seed`. A GitHub Actions workflow branches `pr-<n>` from `seed` when a PR opens, deploys the preview with that branch's URL, and deletes the branch when the PR closes.
 
@@ -14,12 +14,12 @@
 
 Measured 2026-11-03: project `square-sky-33743589` is on Neon's free plan, **1 GiB logical size per branch and 10 branches**. `main` holds 11,281 campgrounds and 299,857 campsites. `campsites` is 512 MB total, and 266 MB of its 418 MB of row data is `source_payload` (`pg_column_size`, so after TOAST compression). `campgrounds` is 64 MB, of which 34 MB of 57 MB is `source_payload`. Scaled to the full step-4 catalog (17,198 campgrounds, 457,023 campsites), that is about 900 MB with payloads: under 1 GiB, but with no room for a PR to write. **Without the raw payloads it is about 450 MB.** `apps/web` reads neither `source_payload` nor `detail_payload`.
 
-- **D1. Seed scope.** *(a, recommended)* The full catalog with `campgrounds.source_payload`, `campsites.source_payload` and `tesla_superchargers.detail_payload` set to `'{}'` (their default, which satisfies their `jsonb_typeof = 'object'` CHECKs), held to ≤ `SEED_MAX_LOGICAL_BYTES` = 600 MiB. Every row and every column the app reads is real. A later step that needs payloads (the worker, step 9) loads them from `data/raw`, which is the spec's fixture source anyway. *(b)* A pinned subset of targets, if the trimmed full catalog measures over the cap. *(c)* Neon Launch plan with payloads kept.
+- **D1. Seed scope.** *(a, recommended)* **A walking skeleton first.** Tasks 1–4 build the whole pipeline on a BC-only seed: the targets `BC Provincial Parks` (campgrounds) and `BC Aspira Resources` (campsites, whose parent rows are the first target's). It is small enough that every task iterates in seconds and none of the size questions arise. Task 6 then grows the seed to the full catalog with `campgrounds.source_payload`, `campsites.source_payload` and `tesla_superchargers.detail_payload` set to `'{}'` (their default, which satisfies their `jsonb_typeof = 'object'` CHECKs), held to ≤ `SEED_MAX_LOGICAL_BYTES` = 600 MiB. `apps/web` reads neither payload column. A later step that needs payloads (the worker, step 9) loads them from `data/raw`. *(b)* Full catalog from the start. *(c)* Neon Launch plan with payloads kept.
 - **D2. Where the seed version lives.** *(a, recommended)* GitHub release asset `seed-v<N>` (custom-format dump plus `manifest.json`) on this repo. *(b)* The Neon branch itself as the artifact (`seed-v<N>`): no download, but it spends the 10-branch budget and is not reproducible off Neon.
 - **D3. How the preview gets its database.** *(a, recommended)* The workflow runs `vercel deploy --env DATABASE_URL=…` after creating the branch, and Vercel's own git-triggered preview builds are turned off for non-`master` branches. No race between branch creation and build. *(b)* Vercel's Neon marketplace integration: less code, but it branches from the default branch, not `seed`, and its lifecycle is not ours to test.
 - **D4. Branch budget.** With 10 branches, `main` and `seed` leave **8 concurrent PR branches**. Recommended: the workflow fails with a named error when creation would exceed it, never deletes another PR's branch.
 
-The tasks below assume D1a, D2a, D3a, D4 as written. If the trimmed catalog measures over the cap in Task 1 Step 1, fall back to D1b: `seed/targets.json` lists a subset instead of every enabled target, and nothing else changes.
+The tasks below assume D1a, D2a, D3a, D4 as written. If the trimmed catalog measures over the cap in Task 6, `seed/targets.json` stays a subset and nothing else changes.
 
 ## Global Constraints
 
@@ -50,11 +50,11 @@ The tasks below assume D1a, D2a, D3a, D4 as written. If the trimmed catalog meas
 - Consumes: `runDifferential({ targets, emitSeed })` from `scripts/importer-differential.mjs`; the seed and its `.provenance.json` sidecar it writes.
 - Produces: `buildSeed({ outDir, version }) -> Promise<SeedManifest>` where `SeedManifest = { version: number, dump: string, sha256: string, bytes: number, logicalBytes: number, counts: Record<string, number>, provenance: object }`, written as `<outDir>/manifest.json` beside `<outDir>/seed-v<version>.dump`.
 
-- [ ] **Step 1: Measure.** Run `node scripts/importer-differential.mjs --emit-seed <tmp>` over every enabled target, restore it, apply the trim (Step 4), `VACUUM FULL`, and record `pg_database_size`. If it is over 600 MiB, choose a subset for `seed/targets.json` that keeps each adapter family and each sink table (D1b). Record the measurements in the commit message.
-- [ ] **Step 2: Write the failing tests** in `scripts/build-seed.test.mjs`: `seed targets name only enabled registry targets`; `seed targets cover every diffed table` (via `expectedTables`); `the trim names exactly the raw payload columns and blanks them to their default` (against `TRIMMED_PAYLOAD_COLUMNS = { campgrounds: ['source_payload'], campsites: ['source_payload'], tesla_superchargers: ['detail_payload'] }`, checked against the Drizzle schema so a renamed column fails); `a manifest over SEED_MAX_LOGICAL_BYTES is refused` (pure, on a fabricated manifest); `manifest sha256 matches the dump bytes`.
+- [ ] **Step 1: Pin the BC targets.** `seed/targets.json` is `["BC Provincial Parks", "BC Aspira Resources"]`. Measured 2026-11-03: `--emit-seed` over these two runs in 2 minutes with 0 differences and both collision pins exact, writing 143 campgrounds, 143 pois and 10,636 campsites (14 skipped by the repo on both sides), a 41.5 MB plain dump.
+- [ ] **Step 2: Write the failing tests** in `scripts/build-seed.test.mjs`: `seed targets name only enabled registry targets`; `a campsite target is pinned with its parent campground target`; `a manifest over SEED_MAX_LOGICAL_BYTES is refused` (pure, on a fabricated manifest); `manifest sha256 matches the dump bytes`.
 - [ ] **Step 3: Run** `node --test scripts/build-seed.test.mjs`. Expected: FAIL, module not found.
-- [ ] **Step 4: Implement `buildSeed`.** It calls `runDifferential` with the pinned targets and `emitSeed`, refuses on any difference (the differential already refuses to emit), so the rows are proven before they are trimmed. It then restores into a throwaway database, sets each `TRIMMED_PAYLOAD_COLUMNS` entry to `'{}'`, runs `VACUUM FULL`, measures `logicalBytes` with `pg_database_size`, and dumps in custom format. The manifest records `trimmed: TRIMMED_PAYLOAD_COLUMNS`, so a consumer can tell a trimmed payload from an empty one. Add `make seed VERSION=<n>`.
-- [ ] **Step 5: Run** the tests. Expected: PASS. Then `make seed VERSION=1` once locally. Expected: manifest written, `logicalBytes` ≤ 600 MiB.
+- [ ] **Step 4: Implement `buildSeed`.** It calls `runDifferential` with the pinned targets and `emitSeed`, and refuses on any difference (the differential already refuses to emit), so every seeded row is proven against Kotlin. It restores the dump into a throwaway database, measures `logicalBytes` with `pg_database_size`, and dumps in custom format. Add `make seed VERSION=<n>`.
+- [ ] **Step 5: Run** the tests. Expected: PASS. Then `make seed VERSION=1` once locally. Expected: manifest written, `logicalBytes` ≤ `SEED_MAX_LOGICAL_BYTES`.
 - [ ] **Step 6: Commit** `seed/targets.json` and the scripts. The dump is not committed.
 
 ### Task 2: Publish a seed version and restore it into Neon branch `seed`
@@ -117,4 +117,23 @@ The tasks below assume D1a, D2a, D3a, D4 as written. If the trimmed catalog meas
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement** the check and generate `seed/captures.json` from Task 1's provenance.
 - [ ] **Step 4: Run.** Expected: PASS. Then `make test`.
+- [ ] **Step 5: Commit.**
+
+### Task 6: Grow the seed to the full catalog, payloads trimmed
+
+Only after Task 4's gate is green on the BC seed.
+
+**Files:**
+- Modify: `seed/targets.json` (every enabled target), `scripts/build-seed.mjs`, `scripts/build-seed.test.mjs`
+
+**Interfaces:**
+- Consumes: `buildSeed` from Task 1.
+- Produces: `TRIMMED_PAYLOAD_COLUMNS = { campgrounds: ['source_payload'], campsites: ['source_payload'], tesla_superchargers: ['detail_payload'] }`; `SeedManifest.trimmed`, so a consumer can tell a trimmed payload from an empty one.
+
+Measured on Neon `main` (11,281 campgrounds, 299,857 campsites): `source_payload` is 266 MB of campsites' 418 MB of row data and 34 MB of campgrounds' 57 MB. Scaled to the full catalog that is about 900 MB with payloads and about 450 MB without.
+
+- [ ] **Step 1: Failing test:** `the trim names exactly the raw payload columns and blanks them to their default`, checked against the Drizzle schema so a renamed column fails.
+- [ ] **Step 2: Run.** Expected: FAIL.
+- [ ] **Step 3: Implement.** After restoring into the throwaway database, `buildSeed` sets each trimmed column to `'{}'` and runs `VACUUM FULL` before measuring and dumping. Pin every enabled target. If `logicalBytes` exceeds 600 MiB, keep a subset that still covers every adapter family and sink table.
+- [ ] **Step 4: Run** the tests, then `make seed VERSION=2` and publish it with Task 2's workflow. Expected: the gate from Task 4 is green on a fresh PR against `seed-v2`.
 - [ ] **Step 5: Commit.**
