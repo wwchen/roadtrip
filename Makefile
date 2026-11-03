@@ -1,4 +1,4 @@
-.PHONY: help run test importer-diff api-types data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend reclaim reclaim-report
+.PHONY: help run test importer-diff seed api-types data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend reclaim reclaim-report
 
 PORT ?= 8765
 RUN_ENV ?= $(or $(env),dev)
@@ -36,6 +36,7 @@ help:
 	@echo "  make recgov-refresh   Force-refresh the companion Recreation.gov session"
 	@echo "  make recgov-atc       Run one Rec.gov add-to-cart attempt (PAYLOAD=/path/to/atc.json)"
 	@echo "  make test             Run everything CI runs: backend + lint + frontend + companion + scripts + secrets/dashboards checks"
+	@echo "  make seed VERSION=n  Build a versioned seed from the targets in seed/targets.json into build/seed"
 	@echo "  make importer-diff    Diff the TypeScript importer against the Kotlin one over data/raw, all three modes (hours)"
 	@echo "  make api-types        Regenerate frontend/src/api/generated/api-types.ts from the Kotlin DTOs"
 	@echo "  make data-fetch       Fetch upstream data on the host (TARGET=<data_source slug> for one)."
@@ -141,6 +142,7 @@ test: _ensure-hooks
 	# They are here because defects have been found in this proof machinery
 	# itself, where a wrong comparison reads as a clean diff.
 	node --test scripts/importer-differential.test.mjs
+	node --test scripts/build-seed.test.mjs
 	node --test scripts/etl-oracle.test.mjs
 	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
 	node --test scripts/check-package-boundaries.test.mjs && node scripts/check-package-boundaries.mjs
@@ -195,6 +197,13 @@ importer-diff:
 	node scripts/importer-differential.mjs $(IMPORTER_DIFF_ARGS)
 	node scripts/importer-differential.mjs --passes 2 $(IMPORTER_DIFF_ARGS)
 	node scripts/importer-differential.mjs --prove-update-keys $(IMPORTER_DIFF_ARGS)
+
+# A versioned seed for the verification environment: the targets pinned in
+# seed/targets.json, emitted only on a clean differential, written to
+# build/seed/ as a custom-format dump and manifest.json.
+seed:
+	@[ -n "$(VERSION)" ] || { echo "VERSION is required, e.g. make seed VERSION=1" >&2; exit 2; }
+	node scripts/build-seed.mjs --version $(VERSION)
 
 # Regenerate the committed TypeScript API contract after changing a DTO or adding
 # a route. `make test` and CI fail when it is stale.

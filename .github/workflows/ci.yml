@@ -135,6 +135,8 @@ jobs:
               # harness edit should be checked in minutes.
               - 'scripts/importer-*.mjs'
               - 'scripts/etl-oracle.test.mjs'
+              - 'scripts/build-seed*.mjs'
+              - 'seed/**'
               - 'scripts/etl-oracle/**'
               - 'package.json'
               - 'package-lock.json'
@@ -548,6 +550,9 @@ jobs:
       # a clean diff rather than as a failure.
       - name: Check the importer differential's own harness
         run: node --test scripts/importer-differential.test.mjs
+
+      - name: Check the seed builder and the targets pinned in seed/targets.json
+        run: node --test scripts/build-seed.test.mjs
 
       - name: Check the Kotlin oracle's comparison machinery
         run: node --test scripts/etl-oracle.test.mjs
