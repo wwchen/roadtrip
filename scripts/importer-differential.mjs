@@ -75,7 +75,7 @@ const WORKER_ENTRY = 'packages/worker/dist/cli/import.js';
 const WORKER_PACKAGE = '@roadtrip/worker';
 const BUILD_WORKSPACES_SCRIPT = 'scripts/build-workspaces.mjs';
 const WORKER_BUILD_COMMAND = `node ${BUILD_WORKSPACES_SCRIPT} ${WORKER_PACKAGE}`;
-const REGISTRY_RELATIVE_PATH = 'backend/src/main/resources/poi-registry.yaml';
+export const REGISTRY_RELATIVE_PATH = 'backend/src/main/resources/poi-registry.yaml';
 const DEFAULT_RAW_RELATIVE_PATH = 'data/raw';
 
 const GRADLE_WRAPPER = './gradlew';

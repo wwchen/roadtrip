@@ -35,6 +35,7 @@ import {
   passPlan,
   positiveInteger,
   PROVENANCE_SUFFIX,
+  REGISTRY_RELATIVE_PATH,
   report,
   runDifferential,
   seedRefusal,
@@ -47,7 +48,6 @@ import { withPostgis } from './schema-reference.mjs';
 import { loadPoiRegistry } from '@roadtrip/worker';
 
 const WORKER_ENTRY = 'packages/worker/dist/cli/import.js';
-const PRODUCTION_REGISTRY = 'backend/src/main/resources/poi-registry.yaml';
 const STALE_SKEW_MS = 60_000;
 const UNREADABLE_MODE = 0o000;
 const READABLE_MODE = 0o755;
@@ -326,7 +326,7 @@ test('every pin states a reason and a non-negative integer count', () => {
 });
 
 test('the collision pins name exactly the enabled registry targets', () => {
-  const enabled = selectTargets(loadPoiRegistry(PRODUCTION_REGISTRY)).map((target) => target.name);
+  const enabled = selectTargets(loadPoiRegistry(REGISTRY_RELATIVE_PATH)).map((target) => target.name);
   assert.ok(enabled.length > 0, 'the production registry resolved no enabled targets');
   const pinned = Object.keys(COLLISION_PINS);
   const unpinned = enabled.filter((name) => !pinned.includes(name));
