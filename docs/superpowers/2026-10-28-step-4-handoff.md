@@ -179,9 +179,11 @@ describe CI.
 
 ## Ephemeral artifacts
 
-The session's full record lives in `.superpowers/sdd/2026-10-28-typescript-importer-differential/`,
-which is **git-ignored** — a `git clean -fdx` erases it and leaves the code
-untouched:
+The session's full record was written to `.superpowers/sdd/2026-10-28-typescript-importer-differential/`
+in the worktree that ran step 4, which is **git-ignored** — a `git clean -fdx`
+erases it and leaves the code untouched. All 84 files were copied on 2026-11-03
+to `~/code/wwchen/roadtrip-archive/sdd/2026-10-28-typescript-importer-differential/`,
+outside the repository and every worktree, and that copy is the one to read:
 
 | file | lines | holds |
 | --- | --- | --- |
@@ -193,5 +195,4 @@ untouched:
 
 This document is the durable extract. The reviews hold more detail per finding
 than is reproduced here — file:line, failure scenario, and a CONFIRMED or
-PLAUSIBLE verdict on each — so copy them somewhere durable before cleaning the
-worktree if that detail is wanted.
+PLAUSIBLE verdict on each — and live only in that archive copy.
