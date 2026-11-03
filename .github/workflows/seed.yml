@@ -1,0 +1,76 @@
+name: Seed
+
+# Builds seed v<N> from the targets pinned in seed/targets.json, restores it into
+# the Neon branch `seed` (deleted and recreated from `main`), and only then
+# publishes it as the release `seed-v<N>`. A version that already has a release
+# is refused by `gh release create`, so a published seed is never replaced.
+#
+# Needs the repository secrets NEON_API_KEY and NEON_PROJECT_ID.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Seed version, a positive integer with no release yet
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: seed
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-read-only: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
+
+      - name: Refuse a version that is already published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "seed-v$VERSION" >/dev/null 2>&1; then
+            echo "seed-v$VERSION is already published; pick a new version" >&2
+            exit 1
+          fi
+
+      - name: Build the seed from a clean differential
+        run: make seed VERSION="$VERSION"
+
+      - name: Restore it into the Neon branch seed
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+        run: node scripts/restore-seed.mjs --manifest build/seed/manifest.json
+
+      - name: Publish seed-v<N>
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "seed-v$VERSION" \
+            "build/seed/seed-v$VERSION.dump" build/seed/manifest.json \
+            --target "$GITHUB_SHA" \
+            --title "Seed v$VERSION" \
+            --notes "Built from $(jq -r '.targets | join(", ")' build/seed/manifest.json) at $GITHUB_SHA; restored into the Neon branch seed. Open PR branches keep the previous seed until the PR is closed and reopened."
