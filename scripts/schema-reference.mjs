@@ -27,6 +27,9 @@ const READY_ATTEMPTS = 120;
 const READY_INTERVAL_MS = 1000;
 const MIN_REFERENCE_TABLES = 20;
 const MAX_OUTPUT_BYTES = 256 * 1024 * 1024;
+const DOCKER_TIMEOUT_ENV = 'ROADTRIP_DOCKER_TIMEOUT_MS';
+const DEFAULT_DOCKER_TIMEOUT_MS = 30 * 60 * 1000;
+const READY_PROBE_TIMEOUT_MS = 10 * 1000;
 
 const BOOKKEEPING = [
   /\bflyway_schema_history/,
@@ -134,14 +137,31 @@ export function assertPlausibleSchema(sql) {
   }
 }
 
-async function docker(...args) {
+export function dockerTimeoutMs(env = process.env) {
+  const raw = env[DOCKER_TIMEOUT_ENV];
+  if (raw === undefined || raw === '') return DEFAULT_DOCKER_TIMEOUT_MS;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${DOCKER_TIMEOUT_ENV} must be a positive integer of milliseconds, got ${JSON.stringify(raw)}`);
+  }
+  return value;
+}
+
+const timedOut = (what, timeoutMs) => new Error(`${what} timed out after ${timeoutMs} ms; is the Docker daemon responding?`);
+
+async function dockerWithin(timeoutMs, args) {
   try {
-    const { stdout } = await run('docker', args, { maxBuffer: MAX_OUTPUT_BYTES });
+    const { stdout } = await run('docker', args, { maxBuffer: MAX_OUTPUT_BYTES, timeout: timeoutMs, killSignal: 'SIGKILL' });
     return stdout;
   } catch (error) {
     if (error.code === 'ENOENT') throw new Error('docker is not installed or not on PATH');
+    if (error.killed) throw timedOut(`docker ${args.slice(0, 2).join(' ')}`, timeoutMs);
     throw new Error(`docker ${args.slice(0, 2).join(' ')} failed: ${error.stderr || error.message}`);
   }
+}
+
+async function docker(...args) {
+  return dockerWithin(dockerTimeoutMs(), args);
 }
 
 // `docker exec` with a program's exit status, stderr and its two data
@@ -156,11 +176,24 @@ async function docker(...args) {
 // `Invalid string length` rather than producing a file. `input` and the
 // returned stdout string stay for the small cases (a psql query, one COPY's
 // progress line); anything whose size follows the row count uses the file form.
-async function dockerExec(container, argv, { input, inputFile, outputFile } = {}) {
+async function dockerExec(container, argv, { input, inputFile, outputFile, timeoutMs = dockerTimeoutMs() } = {}) {
   const stdin = input !== undefined || inputFile !== undefined;
   const child = spawn('docker', ['exec', ...(stdin ? ['-i'] : []), container, ...argv], {
     stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   });
+  let expired = false;
+  const timer = setTimeout(() => {
+    expired = true;
+    child.kill('SIGKILL');
+  }, timeoutMs);
+  try {
+    return await collectExec(child, argv, { input, inputFile, outputFile }, () => expired, timeoutMs);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function collectExec(child, argv, { input, inputFile, outputFile }, expired, timeoutMs) {
 
   let stdout = '';
   let stderr = '';
@@ -210,6 +243,7 @@ async function dockerExec(container, argv, { input, inputFile, outputFile } = {}
     // the exit that is already on its way and report both.
     child.kill('SIGKILL');
     const reaped = await exited.catch(() => undefined);
+    if (expired()) throw timedOut(`docker exec ${argv[0]}`, timeoutMs);
     const detail = [
       reaped === undefined ? undefined : `exited ${reaped}`,
       stderr.trim() || undefined,
@@ -217,6 +251,7 @@ async function dockerExec(container, argv, { input, inputFile, outputFile } = {}
     ].filter((part) => part !== undefined);
     throw new Error(`docker exec ${argv[0]} failed: ${detail.join(': ')}`, { cause: error });
   }
+  if (expired()) throw timedOut(`docker exec ${argv[0]}`, timeoutMs);
   if (code !== 0) {
     throw new Error(`docker exec ${argv[0]} exited ${code}: ${stderr.trim() || stdout.trim()}`);
   }
@@ -226,7 +261,7 @@ async function dockerExec(container, argv, { input, inputFile, outputFile } = {}
 async function waitForPostgres(container) {
   for (let attempt = 0; attempt < READY_ATTEMPTS; attempt += 1) {
     try {
-      await docker('exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', DB_USER, '-d', MAINTENANCE_DB);
+      await dockerWithin(READY_PROBE_TIMEOUT_MS, ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', DB_USER, '-d', MAINTENANCE_DB]);
       return;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, READY_INTERVAL_MS));

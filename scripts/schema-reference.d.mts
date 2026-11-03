@@ -2,6 +2,7 @@ export interface ExecOptions {
   input?: string;
   inputFile?: string;
   outputFile?: string;
+  timeoutMs?: number;
 }
 
 export interface PostgisSession {
@@ -13,6 +14,7 @@ export interface PostgisSession {
   dump(name: string): Promise<string>;
 }
 
+export function dockerTimeoutMs(env?: Record<string, string | undefined>): number;
 export function normalize(sql: string): string;
 export function assertPlausibleSchema(sql: string): void;
 export function withPostgis<T>(use: (postgres: PostgisSession) => Promise<T>): Promise<T>;

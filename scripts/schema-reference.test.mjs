@@ -3,13 +3,16 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { assertPlausibleSchema, normalize, withPostgis, writeReference } from './schema-reference.mjs';
+import { assertPlausibleSchema, dockerTimeoutMs, normalize, withPostgis, writeReference } from './schema-reference.mjs';
 
 const SHELL = 'bash';
 const SHELL_FLAG = '-lc';
 const STREAM_BODY = 'first\nsecond\n';
 const LARGE_INPUT_BYTES = 5 * 1024 * 1024;
 const CHILD_DIAGNOSIS = 'relation "campsites" does not exist';
+const STUCK_SECONDS = 600;
+const SHORT_TIMEOUT_MS = 1500;
+const TIMEOUT_SLACK_MS = 15_000;
 
 const PREAMBLE = `--
 -- PostgreSQL database dump
@@ -94,6 +97,15 @@ test('normalization still distinguishes column types, nullability and defaults',
   assert.notEqual(normalize(base), normalize(base.replace('name text', "name text DEFAULT 'x'::text")));
 });
 
+test('the docker timeout defaults, reads its env override, and refuses nonsense', () => {
+  assert.equal(dockerTimeoutMs({}), 30 * 60 * 1000);
+  assert.equal(dockerTimeoutMs({ ROADTRIP_DOCKER_TIMEOUT_MS: '' }), 30 * 60 * 1000);
+  assert.equal(dockerTimeoutMs({ ROADTRIP_DOCKER_TIMEOUT_MS: '2500' }), 2500);
+  for (const bad of ['0', '-1', '1.5', 'soon']) {
+    assert.throws(() => dockerTimeoutMs({ ROADTRIP_DOCKER_TIMEOUT_MS: bad }), /positive integer/, bad);
+  }
+});
+
 test('an empty or near-empty schema is not accepted as a reference', () => {
   assert.throws(() => assertPlausibleSchema(normalize('')), /CREATE TABLE/);
   assert.throws(() => assertPlausibleSchema(normalize(RAW)), /CREATE TABLE/);
@@ -143,6 +155,22 @@ test('one container serves several databases and refuses to dump an unmigrated o
       await assert.rejects(
         postgres.exec(['cat'], { inputFile: path.join(dir, 'missing-input') }),
         /ENOENT|failed/,
+      );
+    });
+
+    await context.test('an exec that never returns fails at its timeout instead of hanging', async () => {
+      const started = Date.now();
+      await assert.rejects(
+        postgres.exec(['sleep', String(STUCK_SECONDS)], { timeoutMs: SHORT_TIMEOUT_MS }),
+        new RegExp(`timed out after ${SHORT_TIMEOUT_MS} ms`),
+      );
+      assert.ok(Date.now() - started < SHORT_TIMEOUT_MS + TIMEOUT_SLACK_MS, 'the timeout did not fire promptly');
+    });
+
+    await context.test('a streaming exec that never returns fails at its timeout too', async () => {
+      await assert.rejects(
+        postgres.exec(['sleep', String(STUCK_SECONDS)], { timeoutMs: SHORT_TIMEOUT_MS, outputFile: path.join(dir, 'stuck') }),
+        /timed out/,
       );
     });
 
