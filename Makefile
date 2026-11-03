@@ -144,6 +144,7 @@ test: _ensure-hooks
 	node --test scripts/importer-differential.test.mjs
 	node --test scripts/build-seed.test.mjs
 	node --test scripts/restore-seed.test.mjs
+	node --test scripts/preview-branch.test.mjs
 	node --test scripts/etl-oracle.test.mjs
 	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
 	node --test scripts/check-package-boundaries.test.mjs && node scripts/check-package-boundaries.mjs

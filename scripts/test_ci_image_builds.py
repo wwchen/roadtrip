@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import re
 import subprocess
 import tempfile
@@ -312,6 +313,45 @@ class DeploymentContractTest(unittest.TestCase):
                 "PROVENANCE_TREES entry covers it, so --reference-dump would restore a dump "
                 "taken before an edit there as if it were still valid",
             )
+
+    def test_preview_workflow_serialises_per_pr_without_cancelling(self) -> None:
+        preview = workflow("preview.yml")
+        self.assertIn("github.event.pull_request.number", preview["concurrency"]["group"])
+        self.assertIs(preview["concurrency"]["cancel-in-progress"], False, "a close must never cancel the create it follows")
+        self.assertEqual(
+            set(workflow_triggers(preview)["pull_request"]["types"]), {"opened", "reopened", "synchronize", "closed"}
+        )
+
+    def test_preview_workflow_skips_forks_on_every_job(self) -> None:
+        jobs = workflow("preview.yml")["jobs"]
+        self.assertEqual(set(jobs), {"deploy", "remove"})
+        for name, job in jobs.items():
+            self.assertIn(
+                "github.event.pull_request.head.repo.full_name == github.repository",
+                job["if"],
+                f"{name} runs for forks, which have no secrets",
+            )
+        self.assertIn("closed", jobs["remove"]["if"])
+        self.assertIn("!= 'closed'", jobs["deploy"]["if"])
+
+    def test_vercel_builds_git_previews_for_master_only(self) -> None:
+        config = json.loads((ROOT / "apps" / "web" / "vercel.json").read_text())
+        self.assertEqual(
+            config["git"]["deploymentEnabled"],
+            {"**": False, "master": True},
+            "a git-triggered preview would build before its Neon branch exists",
+        )
+
+    def test_preview_jobs_need_no_install(self) -> None:
+        source = (ROOT / "scripts" / "preview-branch.mjs").read_text()
+        local = re.findall(r"from '(\./[^']+)'", source)
+        self.assertEqual(sorted(local), ["./neon.mjs", "./seed-branches.mjs"])
+        for module in local:
+            self.assertNotRegex(
+                (ROOT / "scripts" / module).read_text(), r"from '(?!node:|\./)", f"{module} imports a package"
+            )
+        for job in workflow("preview.yml")["jobs"].values():
+            self.assertNotIn("npm ci", job_commands(job))
 
     def test_make_test_runs_the_gate_after_the_build_it_consumes(self) -> None:
         recipe = make_recipe("test")

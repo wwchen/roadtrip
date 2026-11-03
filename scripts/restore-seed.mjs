@@ -19,14 +19,11 @@ import { sha256Of } from './build-seed.mjs';
 import { cacheRefusal, provenanceFor } from './importer-differential.mjs';
 import { createNeonClient } from './neon.mjs';
 import { dockerTimeoutMs } from './schema-reference.mjs';
+import { SEED_BRANCH, SEED_DATABASE, SEED_OWNER_ROLE, SEED_PARENT_BRANCH } from './seed-branches.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const SEED_GRANTS_RELATIVE_PATH = 'seed/grants.sql';
-export const SEED_BRANCH = 'seed';
-export const SEED_PARENT_BRANCH = 'main';
-export const SEED_DATABASE = 'roadtrip';
-export const SEED_OWNER_ROLE = 'roadtrip';
 
 const CLIENT_IMAGE = 'postgis/postgis:16-3.4';
 const CLIENT_URL_ENV = 'SEED_DATABASE_URL';

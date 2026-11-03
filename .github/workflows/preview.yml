@@ -1,0 +1,80 @@
+name: Preview
+
+# Every pull request gets a Neon branch `pr-<n>`, a child of the seeded branch
+# `seed`, and a Vercel preview deployed with that branch's read-only
+# DATABASE_URL. The branch is deleted when the pull request closes.
+#
+# Vercel's own git-triggered previews are off for every branch except master
+# (apps/web/vercel.json), so a preview never builds before its database
+# exists. Runs for one pull request queue rather than cancel, so a close always
+# runs after the create it follows. Pull requests from forks have no secrets
+# and are skipped.
+#
+# Needs the repository secrets NEON_API_KEY, NEON_PROJECT_ID, VERCEL_TOKEN,
+# VERCEL_ORG_ID and VERCEL_PROJECT_ID.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+    branches: [master]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  PR: ${{ github.event.pull_request.number }}
+  NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+  NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+
+jobs:
+  deploy:
+    if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Create or reuse the Neon branch and deploy the preview on it
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          database_url="$(node scripts/preview-branch.mjs ensure --pr "$PR")"
+          echo "::add-mask::$database_url"
+          preview_url="$(npx --yes vercel@64.7.0 deploy \
+            --token "$VERCEL_TOKEN" \
+            --env DATABASE_URL="$database_url" \
+            --meta githubDeployment=1 \
+            --meta githubCommitRef="$HEAD_REF" \
+            --meta githubCommitSha="$HEAD_SHA")"
+          echo "PREVIEW_URL=$preview_url" >> "$GITHUB_ENV"
+
+      - name: Comment the preview URL on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body="Preview on Neon branch \`pr-$PR\` (seeded from \`seed\`): $PREVIEW_URL"
+          gh pr comment "$PR" --edit-last --body "$body" 2>/dev/null || gh pr comment "$PR" --body "$body"
+
+  remove:
+    if: github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Delete the Neon branch
+        run: node scripts/preview-branch.mjs remove --pr "$PR"

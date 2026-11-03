@@ -138,6 +138,8 @@ jobs:
               - 'scripts/build-seed*.mjs'
               - 'scripts/restore-seed*.mjs'
               - 'scripts/neon.mjs'
+              - 'scripts/seed-branches.mjs'
+              - 'scripts/preview-branch*.mjs'
               - 'seed/**'
               - 'scripts/etl-oracle/**'
               - 'package.json'
@@ -558,6 +560,9 @@ jobs:
 
       - name: Check the seed restore and the Neon branch client
         run: node --test scripts/restore-seed.test.mjs
+
+      - name: Check the per-pull-request Neon branch lifecycle and its budget
+        run: node --test scripts/preview-branch.test.mjs
 
       - name: Check the Kotlin oracle's comparison machinery
         run: node --test scripts/etl-oracle.test.mjs
