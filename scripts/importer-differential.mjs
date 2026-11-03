@@ -134,6 +134,11 @@ const PROVENANCE_FILES = [
   'build.gradle.kts',
   'settings.gradle.kts',
   'gradle.properties',
+  'backend/src/main/kotlin/ca/floo/roadtrip/service/availability/AvailabilityTriggerKinds.kt',
+  'backend/src/main/kotlin/ca/floo/roadtrip/service/booking/RecentAtcFires.kt',
+  'backend/src/main/kotlin/ca/floo/roadtrip/service/scheduler/RecGovKeepaliveJob.kt',
+  'backend/src/main/kotlin/ca/floo/roadtrip/service/settings/CompanionSessionPort.kt',
+  'backend/src/main/kotlin/ca/floo/roadtrip/service/settings/RecGovProfileSessionPort.kt',
 ];
 const PROVENANCE_INDENT = 2;
 

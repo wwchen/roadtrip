@@ -35,18 +35,25 @@ PACKAGE_TYPECHECKS = (
 FLYWAY_MIGRATIONS = "backend/src/main/resources/db/migration"
 
 KOTLIN_PACKAGE_ROOT = "backend/src/main/kotlin/ca/floo/roadtrip"
-# The two trees the differential's Kotlin side is built from. Whatever these
-# import is part of what that importer writes, so the path filter has to watch
-# it or the gate silently does not run.
-IMPORTER_KOTLIN_SOURCES = ("service/etl", "repo")
+# The importer's entry point and the two trees it is built from. Every file
+# these reach, transitively and through same-package use, is part of what that
+# importer writes, so the path filter has to watch it or the gate silently does
+# not run.
+IMPORTER_KOTLIN_SOURCES = ("tools", "service/etl", "repo")
 IMPORTER_DIFFERENTIAL = "scripts/importer-differential.mjs"
 PROVENANCE_TREES_BLOCK = re.compile(r"const PROVENANCE_TREES = \[(.*?)\];", re.S)
 JS_CONST_LIST = "const {} = \\[(.*?)\\];"
 JS_QUOTED = re.compile(r"'([^']+)'")
 JS_BARE = re.compile(r"^[A-Z][A-Z0-9_]*$", re.M)
-KOTLIN_IMPORT = re.compile(
-    r"^import ca\.floo\.roadtrip\.([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)?)", re.M
+KOTLIN_REFERENCE = re.compile(r"\bca\.floo\.roadtrip((?:\.[A-Za-z0-9_]+)+)")
+KOTLIN_BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+KOTLIN_PACKAGE_DECLARATION = re.compile(r"^package .*$", re.M)
+KOTLIN_TOP_LEVEL_DECLARATION = re.compile(
+    r"^(?:[a-z]+\s+)*(?:class|object|interface|fun|val|var|typealias)\s+"
+    r"(?:<[^>]*>\s*)?(?:[A-Za-z_][\w<>?, ]*\.)?([A-Za-z_]\w*)",
+    re.M,
 )
+KOTLIN_IDENTIFIER = re.compile(r"\b[A-Za-z_]\w*\b")
 
 
 def companion_key_inputs() -> list[str]:
@@ -96,18 +103,63 @@ def path_exists(path: str, tracked: set[str]) -> bool:
     return any(candidate.startswith(prefix) for candidate in tracked)
 
 
-def importer_kotlin_trees() -> set[str]:
-    trees: set[str] = set()
-    for source in IMPORTER_KOTLIN_SOURCES:
-        for path in (ROOT / KOTLIN_PACKAGE_ROOT / source).rglob("*.kt"):
-            for dotted in KOTLIN_IMPORT.findall(path.read_text()):
-                head, _, tail = dotted.partition(".")
-                nested = f"{head}/{tail}"
-                if tail and (ROOT / KOTLIN_PACKAGE_ROOT / nested).is_dir():
-                    trees.add(nested)
-                else:
-                    trees.add(head)
-    return {t for t in trees if (ROOT / KOTLIN_PACKAGE_ROOT / t).is_dir()}
+class KotlinSources:
+    def __init__(self, package_root: Path) -> None:
+        self.root = package_root
+        self.code: dict[Path, str] = {}
+        self.declared: dict[str, dict[str, set[Path]]] = {}
+        for path in package_root.rglob("*.kt"):
+            code = KOTLIN_PACKAGE_DECLARATION.sub("", KOTLIN_BLOCK_COMMENT.sub("", path.read_text()))
+            self.code[path] = code
+            names = self.declared.setdefault(self.package_of(path), {})
+            for name in KOTLIN_TOP_LEVEL_DECLARATION.findall(code):
+                names.setdefault(name, set()).add(path)
+
+    def package_of(self, path: Path) -> str:
+        return path.parent.relative_to(self.root).as_posix()
+
+    def files_in(self, package: str) -> set[Path]:
+        return {path for path in self.code if self.package_of(path) == package}
+
+    def referenced_by(self, path: Path) -> set[Path]:
+        code = self.code[path]
+        own = self.declared.get(self.package_of(path), {})
+        used = set(KOTLIN_IDENTIFIER.findall(code))
+        files = {declaring for name in used & own.keys() for declaring in own[name]}
+        for dotted in KOTLIN_REFERENCE.findall(code):
+            segments = dotted.strip(".").split(".")
+            depth = len(segments)
+            while depth and not (self.root / "/".join(segments[:depth])).is_dir():
+                depth -= 1
+            if not depth:
+                continue
+            package = "/".join(segments[:depth])
+            name = segments[depth] if depth < len(segments) else None
+            declaring = self.declared.get(package, {}).get(name)
+            files |= declaring if declaring else self.files_in(package)
+        return files - {path}
+
+
+def kotlin_file_closure(seeds: tuple[str, ...], sources: KotlinSources) -> set[Path]:
+    reached = {path for seed in seeds for path in (sources.root / seed).rglob("*.kt")}
+    frontier = list(reached)
+    while frontier:
+        for path in sources.referenced_by(frontier.pop()):
+            if path not in reached:
+                reached.add(path)
+                frontier.append(path)
+    return reached
+
+
+def importer_kotlin_files() -> list[str]:
+    sources = KotlinSources(ROOT / KOTLIN_PACKAGE_ROOT)
+    return sorted(
+        path.relative_to(ROOT).as_posix() for path in kotlin_file_closure(IMPORTER_KOTLIN_SOURCES, sources)
+    )
+
+
+def covered(path: str, entries) -> bool:
+    return any(path == entry or path.startswith(f"{entry}/") for entry in entries)
 
 
 def make_recipe(target: str) -> list[str]:
@@ -246,13 +298,12 @@ class DeploymentContractTest(unittest.TestCase):
         watched = path_filters()["importer_differential"]
         prefixes = tuple(p.removesuffix("/**").removesuffix("/*") for p in watched)
 
-        trees = importer_kotlin_trees()
-        self.assertIn("model/domain", trees, "the import scan found nothing; the regex or the paths moved")
-        for tree in sorted(trees):
-            path = f"{KOTLIN_PACKAGE_ROOT}/{tree}"
+        files = importer_kotlin_files()
+        self.assertIn(f"{KOTLIN_PACKAGE_ROOT}/config/AppConfig.kt", files, "the closure lost a known two-hop file")
+        for path in files:
             self.assertTrue(
-                any(path == prefix or path.startswith(f"{prefix}/") for prefix in prefixes),
-                f"{path} is imported by {' and '.join(IMPORTER_KOTLIN_SOURCES)} "
+                covered(path, prefixes),
+                f"{path} is reached from {', '.join(IMPORTER_KOTLIN_SOURCES)} "
                 "but no importer_differential filter entry covers it, so an edit "
                 "there changes what the Kotlin importer writes without running the gate",
             )
@@ -302,15 +353,15 @@ class DeploymentContractTest(unittest.TestCase):
         pinned = re.findall(r"'([^']+)'", block.group(1))
         self.assertIn(f"{KOTLIN_PACKAGE_ROOT}/service/etl", pinned, "the parse found no Kotlin trees")
 
-        trees = importer_kotlin_trees()
-        self.assertIn("model/domain", trees, "the import scan found nothing; the regex or the paths moved")
-        for tree in sorted(trees):
-            path = f"{KOTLIN_PACKAGE_ROOT}/{tree}"
+        pinned = [*pinned, *js_path_list("PROVENANCE_FILES")]
+        files = importer_kotlin_files()
+        self.assertIn(f"{KOTLIN_PACKAGE_ROOT}/config/AppConfig.kt", files, "the closure lost a known two-hop file")
+        for path in files:
             self.assertTrue(
-                any(path == entry or path.startswith(f"{entry}/") for entry in pinned),
-                f"{path} is imported by {' and '.join(IMPORTER_KOTLIN_SOURCES)} but no "
-                "PROVENANCE_TREES entry covers it, so --reference-dump would restore a dump "
-                "taken before an edit there as if it were still valid",
+                covered(path, pinned),
+                f"{path} is reached from {', '.join(IMPORTER_KOTLIN_SOURCES)} but no "
+                "PROVENANCE_TREES or PROVENANCE_FILES entry covers it, so --reference-dump would "
+                "restore a dump taken before an edit there as if it were still valid",
             )
 
     def test_make_test_runs_the_gate_after_the_build_it_consumes(self) -> None:
