@@ -71,25 +71,24 @@ Nothing here is known to make the importer wrong. These are unguarded
 invariants, coverage limits and one design call. Each names where it lives and
 what it costs.
 
-### Worth doing first
+### Done on 2026-11-03
 
-1. **Unbounded `docker exec` in `withPostgis`** (`scripts/schema-reference.mjs`).
-   No exec has a timeout, so a daemon that dies mid-run hangs the harness
-   indefinitely rather than failing. This converted one stalled test into a
-   three-hour `make test` during this session. In CI it would burn a job's whole
-   budget.
-2. **`COLLISION_PINS` correspondence is unchecked** (A/L9,
-   `scripts/importer-collision-pins.mjs`). Eighteen pins match eighteen enabled
-   rows, but nothing asserts it. A missing pin is caught only inside a real run,
-   twenty minutes in; a stale pin for a target that no longer exists is never
-   caught. Loading the registry in a unit test and comparing key sets is cheap
-   and moves both to `make test`.
-3. **`cacheRefusal` has no test** (A/L4,
-   `scripts/importer-differential.mjs`). It is the sole authority for reusing a
-   cached Kotlin side — a 30-minute artifact. Review A traced every branch and
-   found it fails closed throughout, so no false reuse is reachable today, but
-   one inverted comparison would restore a stale side as valid silently. It is
-   pure and takes two plain objects; a table of refusal cases is a dozen lines.
+1. ~~**Unbounded `docker exec` in `withPostgis`**~~. Every docker call in
+   `scripts/schema-reference.mjs` is now bounded, and a test fails if any of the
+   bounds is removed. The bounds:
+   - 30 min for the data execs, `run` and Flyway, overridable with
+     `ROADTRIP_DOCKER_TIMEOUT_MS`.
+   - 2 min for `port`, `CREATE DATABASE` and teardown.
+   - 3 min in total for the readiness wait, with each probe capped at 5 s.
+
+   Measured on a full-set single pass on emulated arm64, which ran clean under
+   these bounds:
+   - The longest single call was 219.6 s: the 1.1 GB seed restore.
+   - The longest control call was 0.5 s.
+2. ~~**`COLLISION_PINS` correspondence is unchecked**~~. A unit test now
+   requires the pinned names to be exactly the enabled registry targets.
+3. ~~**`cacheRefusal` has no test**~~. It now has a table of refusal cases,
+   and every branch was checked against a mutant.
 
 ### Coverage limits
 
@@ -138,7 +137,8 @@ what it costs.
     (A/L7): passing `--reference-dump` through `IMPORTER_DIFF_ARGS` runs modes 1
     and 2 to completion and then fails in seconds on mode 3, which refuses the
     flag by design. Documented in the Makefile; not fixed.
-15. **`containerName()` is dead** (A/L8).
+15. ~~**`containerName()` is dead**~~ (A/L8). It now has a caller: the test
+    that bounds a buffered docker call.
 16. **Two mild self-computing asserts** (B/9, `json-decode.test.ts`).
 
 ## Carried decisions — do not re-litigate without new evidence
