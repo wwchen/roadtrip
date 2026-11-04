@@ -72,3 +72,17 @@ test('a set but empty provider list is refused rather than read as none enabled'
   vi.stubEnv('ENABLED_DATA_PROVIDERS', ' , ');
   expect(() => config.enabledDataProviders).toThrow(ConfigError);
 });
+
+test('buildInfo reports the configured build', () => {
+  vi.stubEnv('BUILD_ENV', 'preview');
+  vi.stubEnv('BUILD_SHA', 'abc123');
+  vi.stubEnv('BUILD_BRANCH', 'claude/x');
+  expect(config.buildInfo).toEqual({ env: 'preview', sha: 'abc123', branch: 'claude/x' });
+});
+
+test('buildInfo defaults env to local and the commit to empty', () => {
+  vi.stubEnv('BUILD_ENV', '');
+  vi.stubEnv('BUILD_SHA', undefined);
+  vi.stubEnv('BUILD_BRANCH', undefined);
+  expect(config.buildInfo).toEqual({ env: 'local', sha: '', branch: '' });
+});

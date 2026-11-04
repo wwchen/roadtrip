@@ -1,13 +1,19 @@
+import type { BuildInfoDto } from './contract';
+
 const DATABASE_URL_VARIABLE = 'DATABASE_URL';
 const DATABASE_PREPARE_VARIABLE = 'DATABASE_PREPARE';
 const ENABLED_DATA_PROVIDERS_VARIABLE = 'ENABLED_DATA_PROVIDERS';
 const SEARCH_RESULT_LIMIT_VARIABLE = 'SEARCH_RESULT_LIMIT';
 const HEALTH_DATABASE_TOKEN_VARIABLE = 'HEALTH_DATABASE_TOKEN';
+const BUILD_ENV_VARIABLE = 'BUILD_ENV';
+const BUILD_SHA_VARIABLE = 'BUILD_SHA';
+const BUILD_BRANCH_VARIABLE = 'BUILD_BRANCH';
 
 const DEFAULT_DATABASE_PREPARE = true;
 const DEFAULT_ENABLED_DATA_PROVIDERS: readonly string[] = ['campflare', 'bcparks-strapi', 'aspira'];
 const DEFAULT_SEARCH_RESULT_LIMIT = 200;
 const MAX_SEARCH_RESULT_LIMIT = 1000;
+const DEFAULT_BUILD_ENV = 'local';
 
 const PROVIDER_SEPARATOR = ',';
 const TRUE_LITERAL = 'true';
@@ -49,6 +55,11 @@ function listFrom(variable: string, fallback: readonly string[]): readonly strin
   return entries;
 }
 
+function textFrom(variable: string, fallback: string): string {
+  const raw = process.env[variable]?.trim();
+  return raw === undefined || raw.length === 0 ? fallback : raw;
+}
+
 function secretFrom(variable: string): string | undefined {
   const raw = process.env[variable];
   if (raw === undefined || raw.trim().length === 0) return undefined;
@@ -56,6 +67,13 @@ function secretFrom(variable: string): string | undefined {
 }
 
 export const config = {
+  get buildInfo(): BuildInfoDto {
+    return {
+      env: textFrom(BUILD_ENV_VARIABLE, DEFAULT_BUILD_ENV),
+      sha: textFrom(BUILD_SHA_VARIABLE, ''),
+      branch: textFrom(BUILD_BRANCH_VARIABLE, ''),
+    };
+  },
   get databaseUrl(): string {
     const raw = process.env[DATABASE_URL_VARIABLE];
     if (raw === undefined || raw.trim().length === 0) {

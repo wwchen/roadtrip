@@ -1,8 +1,11 @@
 import { expect, test } from 'vitest';
 
 const ROUTE_MODULES: Record<string, () => Promise<{ dynamic?: string }>> = {
+  '/api/build-info': () => import('./api/build-info/route'),
   '/api/campgrounds/search': () => import('./api/campgrounds/search/route'),
   '/api/health': () => import('./api/health/route'),
+  '/api/me': () => import('./api/me/route'),
+  '/api/watches': () => import('./api/watches/route'),
   '/campgrounds/[poiId]': () => import('./campgrounds/[poiId]/page'),
   '/search': () => import('./search/page'),
 };
