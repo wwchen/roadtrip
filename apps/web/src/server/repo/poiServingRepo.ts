@@ -1,10 +1,12 @@
 import { CAMPGROUND_POI_TYPE, GEOMETRY_SRID, type Db } from '@roadtrip/db';
 import { sql, type SQL } from 'drizzle-orm';
 import type { Bbox } from '../poiRequest';
+import { causeChain, isTopologyFault } from './faults';
 
 const SAMPLE_GRID_DIM = 10;
 const MIN_PER_CATEGORY_ALLOCATION = 50;
 const LIST_SEPARATOR = sql`, `;
+const TOPOLOGY_FAULT_EMPTY_RESULT = 'GEOS topology fault in a corridor query, returning empty:';
 
 export interface PoiRow {
   id: bigint;
@@ -115,4 +117,66 @@ export async function fetchPois(db: Db, query: ViewportQuery): Promise<PoiResult
   const rawTotal = [...present.values()].reduce((a, b) => a + b, 0);
   const rows = await fetchSampled(db, query, allocateBudget(present, query.limit));
   return { rows, truncated: rows.length < rawTotal };
+}
+
+export async function fetchPoisWithinPolygon(
+  db: Db,
+  polygonGeoJson: string,
+  categories: readonly string[],
+  providers: readonly string[],
+): Promise<PoiRow[]> {
+  if (categories.length === 0) return [];
+  let rows: { id: string; category: string; subcategory: string | null; agency: string | null; lng: number; lat: number }[];
+  try {
+    rows = await db.execute(sql`
+      WITH corridor AS (
+        SELECT ST_SetSRID(ST_GeomFromGeoJSON(${polygonGeoJson}), ${GEOMETRY_SRID}) AS poly
+      ),
+      candidates AS (
+        SELECT id, category, subcategory, agency,
+               ST_X(ST_Centroid(geom)) AS lng, ST_Y(ST_Centroid(geom)) AS lat,
+               source,
+               COALESCE(booking_provider || ':' || booking_provider_ref, source || ':' || source_id) AS poi_key
+        FROM (
+          SELECT p.id, p.geom, p.poi_type AS category, cg.kind AS subcategory, cg.management->>'agency' AS agency,
+                 COALESCE(cg.data_provider, p.poi_type) AS source,
+                 COALESCE(cg.data_provider_ref, ts.location_slug, pf.location_id, p.id::text) AS source_id,
+                 cg.booking_provider, cg.booking_provider_ref
+          FROM pois p
+          LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
+          LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL
+          LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
+          LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL
+          LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
+          LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL
+          WHERE p.deleted_at IS NULL
+            ${campgroundProviderFilter(providers)}
+        ) catalog, corridor
+        WHERE category IN (${list(categories)})
+          AND ST_Within(ST_Centroid(geom), corridor.poly)
+      ),
+      ranked AS (
+        SELECT *,
+               ROW_NUMBER() OVER (PARTITION BY poi_key ORDER BY id ASC) AS rn,
+               FIRST_VALUE(source) OVER (PARTITION BY poi_key ORDER BY id ASC) AS first_source
+        FROM candidates
+      )
+      SELECT id, category, subcategory, agency, lng, lat
+      FROM ranked
+      WHERE rn = 1 OR source = first_source
+      ORDER BY id ASC
+    `);
+  } catch (error) {
+    if (!isTopologyFault(error)) throw error;
+    console.warn(TOPOLOGY_FAULT_EMPTY_RESULT, causeChain(error));
+    return [];
+  }
+  return rows.map((row) => ({
+    id: BigInt(row.id),
+    category: row.category,
+    subcategory: row.subcategory,
+    agency: row.agency,
+    lng: Number(row.lng),
+    lat: Number(row.lat),
+  }));
 }

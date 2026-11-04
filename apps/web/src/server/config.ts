@@ -6,6 +6,7 @@ const ENABLED_DATA_PROVIDERS_VARIABLE = 'ENABLED_DATA_PROVIDERS';
 const SEARCH_RESULT_LIMIT_VARIABLE = 'SEARCH_RESULT_LIMIT';
 const CAMPGROUND_SEARCH_MAX_RESULTS_VARIABLE = 'CAMPGROUND_SEARCH_MAX_RESULTS';
 const HEALTH_DATABASE_TOKEN_VARIABLE = 'HEALTH_DATABASE_TOKEN';
+const MAPBOX_TOKEN_VARIABLE = 'MAPBOX_TOKEN';
 const BUILD_ENV_VARIABLE = 'BUILD_ENV';
 const BUILD_SHA_VARIABLE = 'BUILD_SHA';
 const BUILD_BRANCH_VARIABLE = 'BUILD_BRANCH';
@@ -89,6 +90,9 @@ export const config = {
   },
   get enabledDataProviders(): readonly string[] {
     return listFrom(ENABLED_DATA_PROVIDERS_VARIABLE, DEFAULT_ENABLED_DATA_PROVIDERS);
+  },
+  get mapboxToken(): string | undefined {
+    return secretFrom(MAPBOX_TOKEN_VARIABLE);
   },
   get healthDatabaseToken(): string | undefined {
     return secretFrom(HEALTH_DATABASE_TOKEN_VARIABLE);

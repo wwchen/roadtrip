@@ -31,6 +31,8 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 | `DATABASE_PREPARE` | plain | `true` |
 | `ENABLED_DATA_PROVIDERS` | plain | `campflare,bcparks-strapi,aspira`; set but empty is a `ConfigError`, never "none enabled" |
 | `HEALTH_DATABASE_TOKEN` | sensitive | the bearer secret for the database mode of `/api/health` (below) |
+| `MAPBOX_TOKEN` | sensitive | Mapbox token for `/api/geocode`, `/api/route` and `/api/pois/on-route`; unset, those answer 503 and the rest of the map works |
+| `CAMPGROUND_SEARCH_MAX_RESULTS` | plain, optional | cap on `POST /api/campgrounds/search` ids, default 5000 |
 
 Deployment protection (checked 2026-10-29): Vercel Authentication is on with
 `all_except_custom_domains`. The production alias `roadtrip-web-nu.vercel.app` answers without a
