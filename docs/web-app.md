@@ -132,10 +132,10 @@ client sends. The app connects as a dedicated role, `roadtrip_web`:
 CREATE ROLE roadtrip_web LOGIN PASSWORD '...' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 ALTER ROLE roadtrip_web SET default_transaction_read_only = on;
 GRANT USAGE ON SCHEMA public TO roadtrip_web;
-GRANT SELECT ON pois, campgrounds, poi_campgrounds, campsites TO roadtrip_web;
+GRANT SELECT ON pois, campgrounds, poi_campgrounds, campsites, tesla_superchargers, poi_tesla_superchargers, planet_fitness_locations, poi_planet_fitness_locations TO roadtrip_web;
 ```
 
-Those four tables are everything the app reads (`campsites` through `campground_site_summary`).
+Those eight tables are everything the app reads (`campsites` through `campground_site_summary`). The list lives in `apps/web/src/server/repo/webReadGrants.ts`; `webReadGrants.test.ts` runs every query the app makes as a role holding only those grants, and fails if this `GRANT` line drifts from it.
 Checked 2026-10-29 as `roadtrip_web` through the **pooled** endpoint and through the direct one:
 `SHOW default_transaction_read_only` is `on`; `INSERT`, `UPDATE`, `DELETE` and `CREATE TABLE` fail
 with `cannot execute ... in a read-only transaction`; with the transaction forced to
