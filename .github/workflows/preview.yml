@@ -36,23 +36,29 @@ jobs:
     if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version: '26'
+
+      - name: Build the preview on the runner
+        run: |
+          npx --yes vercel@64.7.0 pull --yes --environment=preview --token "$VERCEL_TOKEN"
+          npx --yes vercel@64.7.0 build --token "$VERCEL_TOKEN"
 
       - name: Create or reuse the Neon branch and deploy the preview on it
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           database_url="$(node scripts/preview-branch.mjs ensure --pr "$PR")"
           echo "::add-mask::$database_url"
-          preview_url="$(npx --yes vercel@64.7.0 deploy \
+          preview_url="$(npx --yes vercel@64.7.0 deploy --prebuilt \
             --token "$VERCEL_TOKEN" \
             --env DATABASE_URL="$database_url" \
             --meta githubDeployment=1 \

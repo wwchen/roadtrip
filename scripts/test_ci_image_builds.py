@@ -350,8 +350,16 @@ class DeploymentContractTest(unittest.TestCase):
             self.assertNotRegex(
                 (ROOT / "scripts" / module).read_text(), r"from '(?!node:|\./)", f"{module} imports a package"
             )
-        for job in workflow("preview.yml")["jobs"].values():
-            self.assertNotIn("npm ci", job_commands(job))
+        self.assertNotIn("npm ci", job_commands(workflow("preview.yml")["jobs"]["remove"]))
+
+    def test_preview_deploys_a_runner_build(self) -> None:
+        commands = job_commands(workflow("preview.yml")["jobs"]["deploy"])
+        self.assertIn(" deploy --prebuilt", commands)
+        build = commands.index(" build --token")
+        deploy = commands.index(" deploy --prebuilt")
+        self.assertLess(
+            build, deploy, "a remote build of a pull request branch is cancelled by the master-only git rule"
+        )
 
     def test_make_test_runs_the_gate_after_the_build_it_consumes(self) -> None:
         recipe = make_recipe("test")
