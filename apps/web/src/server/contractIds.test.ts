@@ -15,3 +15,7 @@ test('apiError answers the status with an error code body', async () => {
   expect(response.status).toBe(404);
   expect(await response.json()).toEqual({ error: 'not_found' });
 });
+
+test('apiError carries a detail when given one', async () => {
+  expect(await apiError(400, 'bad_request', 'bbox lat out of range').json()).toEqual({ error: 'bad_request', detail: 'bbox lat out of range' });
+});

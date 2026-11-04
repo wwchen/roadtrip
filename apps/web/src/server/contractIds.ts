@@ -7,7 +7,7 @@ export function toContractId(id: bigint): number {
   return Number(id);
 }
 
-export function apiError(status: number, code: string): Response {
-  const body: ApiErrorSchema = { error: code };
+export function apiError(status: number, code: string, detail?: string): Response {
+  const body: ApiErrorSchema = detail === undefined ? { error: code } : { error: code, detail };
   return Response.json(body, { status });
 }
