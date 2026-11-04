@@ -5,14 +5,11 @@ import path from 'node:path';
 import test from 'node:test';
 import { provenanceFor } from './importer-differential.mjs';
 import { sha256Of } from './build-seed.mjs';
-import { createNeonClient, NEON_API_BASE } from './neon.mjs';
 import { dockerRunners, restoreSeed, SEED_GRANTS_RELATIVE_PATH } from './restore-seed.mjs';
 import { withPostgis } from './schema-reference.mjs';
 
 const ABC_SHA256 = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
 const TARGETS = ['BC Aspira Resources', 'BC Provincial Parks'];
-const PROJECT = 'proj-1';
-const KEY = 'key-1';
 const DATABASE_URL = 'postgres://owner:secret@db.test/roadtrip';
 
 async function dumpHolding(text) {
@@ -86,77 +83,6 @@ test('a restore drops the schemas the role owns, loads the dump, then reapplies 
   assert.match(runners.calls[2].sql, /GRANT SELECT ON pois, campgrounds, poi_campgrounds, campsites TO roadtrip_web/);
   assert.ok(runners.calls.every((call) => call.url === DATABASE_URL));
   assert.ok(SEED_GRANTS_RELATIVE_PATH.endsWith('.sql'));
-});
-
-function stubFetch(routes) {
-  const requests = [];
-  const fetch = async (url, init = {}) => {
-    const method = init.method ?? 'GET';
-    requests.push({ method, url, body: init.body === undefined ? undefined : JSON.parse(init.body), headers: init.headers });
-    const route = routes[`${method} ${url}`];
-    if (route === undefined) return new Response('not found', { status: 404 });
-    return new Response(JSON.stringify(route), { status: 200 });
-  };
-  return { fetch, requests };
-}
-
-const branchesUrl = `${NEON_API_BASE}/projects/${PROJECT}/branches`;
-const BRANCHES = { branches: [{ id: 'br-main', name: 'main' }, { id: 'br-seed', name: 'seed' }] };
-
-test('createBranch sends the parent branch id, not its name, and authenticates with the key', async () => {
-  const { fetch, requests } = stubFetch({
-    [`GET ${branchesUrl}`]: BRANCHES,
-    [`POST ${branchesUrl}`]: { branch: { id: 'br-new', name: 'pr-7' } },
-  });
-  const neon = createNeonClient({ apiKey: KEY, projectId: PROJECT, fetch });
-  assert.deepEqual(await neon.createBranch('pr-7', 'seed'), { id: 'br-new', name: 'pr-7' });
-  const post = requests.find((request) => request.method === 'POST');
-  assert.deepEqual(post.body, { branch: { name: 'pr-7', parent_id: 'br-seed' }, endpoints: [{ type: 'read_write' }] });
-  assert.equal(post.headers.Authorization, `Bearer ${KEY}`);
-});
-
-test('createBranch from a parent that does not exist is refused without a POST', async () => {
-  const { fetch, requests } = stubFetch({ [`GET ${branchesUrl}`]: BRANCHES });
-  const neon = createNeonClient({ apiKey: KEY, projectId: PROJECT, fetch });
-  await assert.rejects(neon.createBranch('pr-7', 'nope'), /no Neon branch named 'nope'/);
-  assert.equal(requests.filter((request) => request.method === 'POST').length, 0);
-});
-
-test('deleting a branch that is already gone succeeds and sends no DELETE', async () => {
-  const { fetch, requests } = stubFetch({ [`GET ${branchesUrl}`]: BRANCHES });
-  const neon = createNeonClient({ apiKey: KEY, projectId: PROJECT, fetch });
-  assert.equal(await neon.deleteBranch('pr-404'), false);
-  assert.equal(requests.filter((request) => request.method === 'DELETE').length, 0);
-});
-
-test('deleting a branch that exists deletes it by id', async () => {
-  const { fetch, requests } = stubFetch({
-    [`GET ${branchesUrl}`]: BRANCHES,
-    [`DELETE ${branchesUrl}/br-seed`]: { branch: { id: 'br-seed' } },
-  });
-  const neon = createNeonClient({ apiKey: KEY, projectId: PROJECT, fetch });
-  assert.equal(await neon.deleteBranch('seed'), true);
-  assert.ok(requests.some((request) => request.method === 'DELETE' && request.url.endsWith('/br-seed')));
-});
-
-test('a failed Neon call throws with its status, never with the key', async () => {
-  const { fetch } = stubFetch({});
-  const neon = createNeonClient({ apiKey: KEY, projectId: PROJECT, fetch });
-  await assert.rejects(neon.listBranches(), (error) => {
-    assert.match(error.message, /GET .*\/branches failed with 404/);
-    assert.ok(!error.message.includes(KEY));
-    return true;
-  });
-});
-
-test('connectionUri asks for the named branch, database and role, pooled or direct', async () => {
-  const uriUrl = `${NEON_API_BASE}/projects/${PROJECT}/connection_uri?branch_id=br-seed&database_name=roadtrip&role_name=roadtrip&pooled=false`;
-  const { fetch } = stubFetch({ [`GET ${branchesUrl}`]: BRANCHES, [`GET ${uriUrl}`]: { uri: DATABASE_URL } });
-  const neon = createNeonClient({ apiKey: KEY, projectId: PROJECT, fetch });
-  assert.equal(
-    await neon.connectionUri({ branchName: 'seed', database: 'roadtrip', role: 'roadtrip', pooled: false }),
-    DATABASE_URL,
-  );
 });
 
 const CONTAINER_TEST_TIMEOUT_MS = 600_000;

@@ -137,8 +137,6 @@ jobs:
               - 'scripts/etl-oracle.test.mjs'
               - 'scripts/build-seed*.mjs'
               - 'scripts/restore-seed*.mjs'
-              - 'scripts/neon.mjs'
-              - 'scripts/seed-branches.mjs'
               - 'seed/**'
               - 'scripts/etl-oracle/**'
               - 'package.json'
@@ -557,7 +555,7 @@ jobs:
       - name: Check the seed builder and the targets pinned in seed/targets.json
         run: node --test scripts/build-seed.test.mjs
 
-      - name: Check the seed restore and the Neon branch client
+      - name: Check the seed restore
         run: node --test scripts/restore-seed.test.mjs
 
       - name: Check the Kotlin oracle's comparison machinery

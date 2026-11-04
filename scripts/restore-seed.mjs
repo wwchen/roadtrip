@@ -2,11 +2,9 @@
 // Restores a seed built by build-seed.mjs: verifies its checksum and that it
 // was built from this checkout's importer, migrations and captures, drops
 // every schema the restoring role owns, loads the custom-format dump, and reapplies the read-only grants
-// the app's role needs. With NEON_API_KEY and NEON_PROJECT_ID it first resets
-// the Neon branch `seed` from `main`.
+// the app's role needs.
 //
 // Usage:
-//   node scripts/restore-seed.mjs --manifest build/seed/manifest.json
 //   node scripts/restore-seed.mjs --manifest <m> --database-url <url> [--docker-network <net>]
 
 import { spawn } from 'node:child_process';
@@ -17,9 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { sha256Of } from './build-seed.mjs';
 import { cacheRefusal, provenanceFor } from './importer-differential.mjs';
-import { createNeonClient } from './neon.mjs';
 import { dockerTimeoutMs } from './schema-reference.mjs';
-import { SEED_BRANCH, SEED_DATABASE, SEED_OWNER_ROLE, SEED_PARENT_BRANCH } from './seed-branches.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -111,12 +107,6 @@ export async function restoreSeed({ manifest, dumpPath, databaseUrl, runSql, run
   await runSql(databaseUrl, grants);
 }
 
-export async function resetNeonSeedBranch(neon) {
-  await neon.deleteBranch(SEED_BRANCH);
-  await neon.createBranch(SEED_BRANCH, SEED_PARENT_BRANCH);
-  return neon.connectionUri({ branchName: SEED_BRANCH, database: SEED_DATABASE, role: SEED_OWNER_ROLE, pooled: false });
-}
-
 async function main() {
   const { values } = parseArgs({
     options: {
@@ -126,20 +116,15 @@ async function main() {
     },
     strict: true,
   });
-  if (values.manifest === undefined) {
-    console.error('--manifest is required');
+  if (values.manifest === undefined || values['database-url'] === undefined) {
+    console.error('--manifest and --database-url are required');
     process.exitCode = 2;
     return;
   }
   const manifestPath = path.resolve(values.manifest);
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   const dumpPath = path.join(path.dirname(manifestPath), manifest.dump);
-  const databaseUrl =
-    values['database-url'] ??
-    (await resetNeonSeedBranch(
-      createNeonClient({ apiKey: process.env.NEON_API_KEY, projectId: process.env.NEON_PROJECT_ID }),
-    ));
-  await restoreSeed({ manifest, dumpPath, databaseUrl, ...dockerRunners(values['docker-network']) });
+  await restoreSeed({ manifest, dumpPath, databaseUrl: values['database-url'], ...dockerRunners(values['docker-network']) });
   console.log(`restored seed v${manifest.version} (${manifest.dump})`);
 }
 
