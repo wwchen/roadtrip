@@ -5,40 +5,50 @@ on:
     types: [vercel.deployment.success]
 
 permissions:
-  contents: read
   statuses: write
 
 env:
   STATUS_CONTEXT: Preview check
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
   GH_TOKEN: ${{ github.token }}
+  PROBE_NAME: Mahood Lake
+  PROBE_BBOX: -120.2,52.1,-120.0,52.3
 
 jobs:
   preview:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '22'
-
       - name: Read the deployment from Vercel's event
         id: target
-        run: node scripts/check-preview.mjs target --event "$GITHUB_EVENT_PATH" >> "$GITHUB_OUTPUT"
+        run: |
+          event=$GITHUB_EVENT_PATH
+          jq -e '.client_payload | .environment and .url and .git.sha' "$event" >/dev/null \
+            || { echo "unexpected Vercel event; client_payload has: $(jq -c '.client_payload | keys? // .' "$event")"; exit 1; }
+          if [ "$(jq -r .client_payload.environment "$event")" != preview ]; then echo skip=true >> "$GITHUB_OUTPUT"; exit 0; fi
+          url=$(jq -r .client_payload.url "$event")
+          case "$url" in https://*) ;; *) url="https://$url" ;; esac
+          { echo skip=false; echo "url=$url"; echo "sha=$(jq -r .client_payload.git.sha "$event")"; } >> "$GITHUB_OUTPUT"
 
       - name: Mark the deployed commit pending
         if: steps.target.outputs.skip == 'false'
         env:
           SHA: ${{ steps.target.outputs.sha }}
-        run: gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=pending -f context="$STATUS_CONTEXT" -f target_url="$RUN_URL" -f description="Searching the preview for the probe campground"
+        run: gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=pending -f context="$STATUS_CONTEXT" -f target_url="$RUN_URL" -f description="Searching the preview for $PROBE_NAME"
 
       - name: Search for the probe campground and open its page through the app
         if: steps.target.outputs.skip == 'false'
         env:
           PREVIEW_URL: ${{ steps.target.outputs.url }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-        run: node scripts/check-preview.mjs check
+          BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          [ -n "$BYPASS" ] || { echo "VERCEL_AUTOMATION_BYPASS_SECRET is not set"; exit 1; }
+          fetch() { curl -fsS --retry 2 --retry-delay 5 --max-time 30 -H "x-vercel-protection-bypass: $BYPASS" "$PREVIEW_URL$1"; }
+          poi=$(fetch "/api/campgrounds/search?bbox=$PROBE_BBOX" | jq -er --arg name "$PROBE_NAME" 'first(.campgrounds[] | select(.name == $name) | .poiId)') \
+            || { echo "search over $PROBE_BBOX did not return $PROBE_NAME"; exit 1; }
+          fetch "/campgrounds/$poi" | grep -F "$PROBE_NAME" >/dev/null \
+            || { echo "/campgrounds/$poi does not show $PROBE_NAME"; exit 1; }
+          echo "preview serves $PROBE_NAME (poi $poi) through search and its page"
 
       - name: Report the result on the deployed commit
         if: always() && steps.target.outputs.skip == 'false'
@@ -46,5 +56,5 @@ jobs:
           SHA: ${{ steps.target.outputs.sha }}
           OUTCOME: ${{ job.status }}
         run: |
-          if [ "$OUTCOME" = success ]; then state=success; description="The preview serves the probe campground"; else state=failure; description="The preview did not serve the probe campground"; fi
+          if [ "$OUTCOME" = success ]; then state=success; description="The preview serves $PROBE_NAME"; else state=failure; description="The preview did not serve $PROBE_NAME"; fi
           gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state="$state" -f context="$STATUS_CONTEXT" -f target_url="$RUN_URL" -f description="$description"

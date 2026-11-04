@@ -136,8 +136,6 @@ jobs:
               - 'scripts/importer-*.mjs'
               - 'scripts/etl-oracle.test.mjs'
               - 'scripts/etl-oracle/**'
-              - 'scripts/check-preview*.mjs'
-              - '.github/workflows/preview-check.yml'
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.base.json'
@@ -553,9 +551,6 @@ jobs:
 
       - name: Check the Kotlin oracle's comparison machinery
         run: node --test scripts/etl-oracle.test.mjs
-
-      - name: Check the preview check
-        run: node --test scripts/check-preview.test.mjs
 
   web-tests:
     needs: changes

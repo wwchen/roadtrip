@@ -321,7 +321,9 @@ class DeploymentContractTest(unittest.TestCase):
         report = next(step for step in steps if step.get("name", "").startswith("Report"))
         self.assertTrue(report["if"].startswith("always()"), "a failed check must still mark the commit failed")
         self.assertIn("statuses/$SHA", report["run"])
-        self.assertNotIn("npm ci", job_commands(check["jobs"]["preview"]))
+        commands = job_commands(check["jobs"]["preview"])
+        self.assertNotIn("npm ci", commands)
+        self.assertNotRegex(commands, r"curl[^\n]*(-L\b|--location)", "a protection redirect must fail, not be followed")
 
     def test_make_test_runs_the_gate_after_the_build_it_consumes(self) -> None:
         recipe = make_recipe("test")
