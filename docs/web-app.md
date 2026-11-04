@@ -23,6 +23,13 @@ repository root. The root build is the command `make test` and CI run; it builds
 before `next build`, and it also builds `frontend`'s Vite bundle, which Vercel never serves. That
 cost is deliberate.
 
+The root `.vercelignore` is an allowlist: everything is ignored except the root manifests,
+`tsconfig.base.json`, the scripts the build and type-check load, `apps/web`, `packages/db` and
+`packages/domain`. A CLI deploy from the repository root (the per-PR previews in
+`.github/workflows/preview.yml`) would otherwise upload all of `data/` and `secrets/`, past
+Vercel's 15,000-file limit. A new import from `apps/web` into another part of the repository
+has to be added there, or the preview build fails to resolve it.
+
 Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 
 | Name | Type | Value |
