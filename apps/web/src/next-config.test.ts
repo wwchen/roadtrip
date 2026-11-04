@@ -12,3 +12,8 @@ test('outputFileTracingRoot is the repository root that holds the hoisted node_m
   expect(existsSync(ROOT_MANIFEST)).toBe(true);
   expect(existsSync(path.join(REPO_ROOT, 'node_modules', 'next'))).toBe(true);
 });
+
+test('/ is rewritten to /index.html before the app routes', async () => {
+  const rewrites = await config.rewrites?.();
+  expect(rewrites).toMatchObject({ beforeFiles: [{ source: '/', destination: '/index.html' }] });
+});

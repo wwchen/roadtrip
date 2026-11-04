@@ -188,6 +188,8 @@ jobs:
               - '.github/workflows/ci.yml'
             web:
               - 'apps/**'
+              - 'frontend/**'
+              - 'data/us-states.geojson'
               - 'packages/**'
               - 'package.json'
               - 'package-lock.json'
