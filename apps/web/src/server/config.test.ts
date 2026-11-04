@@ -26,7 +26,9 @@ test('the optional settings fall back to their defaults', () => {
   vi.stubEnv('DATABASE_PREPARE', undefined);
   vi.stubEnv('ENABLED_DATA_PROVIDERS', undefined);
   vi.stubEnv('SEARCH_RESULT_LIMIT', undefined);
+  vi.stubEnv('DATABASE_REQUIRE_READ_ONLY', undefined);
   expect(config.databasePrepare).toBe(true);
+  expect(config.databaseRequireReadOnly).toBe(true);
   expect(config.enabledDataProviders).toEqual(DEFAULT_PROVIDERS);
   expect(config.searchResultLimit).toBe(DEFAULT_LIMIT);
 });
@@ -35,7 +37,9 @@ test('the optional settings read their variables', () => {
   vi.stubEnv('DATABASE_PREPARE', 'false');
   vi.stubEnv('ENABLED_DATA_PROVIDERS', ' campflare , aspira ,');
   vi.stubEnv('SEARCH_RESULT_LIMIT', String(CUSTOM_LIMIT));
+  vi.stubEnv('DATABASE_REQUIRE_READ_ONLY', 'false');
   expect(config.databasePrepare).toBe(false);
+  expect(config.databaseRequireReadOnly).toBe(false);
   expect(config.enabledDataProviders).toEqual(['campflare', 'aspira']);
   expect(config.searchResultLimit).toBe(CUSTOM_LIMIT);
 });
@@ -43,6 +47,8 @@ test('the optional settings read their variables', () => {
 test('an unparseable optional setting throws a named error', () => {
   vi.stubEnv('DATABASE_PREPARE', 'maybe');
   expect(() => config.databasePrepare).toThrow(ConfigError);
+  vi.stubEnv('DATABASE_REQUIRE_READ_ONLY', 'no');
+  expect(() => config.databaseRequireReadOnly).toThrow(ConfigError);
   vi.stubEnv('SEARCH_RESULT_LIMIT', '0');
   expect(() => config.searchResultLimit).toThrow(ConfigError);
 });

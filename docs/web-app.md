@@ -38,6 +38,7 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 |---|---|---|
 | `DATABASE_URL` | sensitive | the Neon **pooled** endpoint as the `roadtrip_web` role, plus `connect_timeout=10&idle_timeout=20` |
 | `DATABASE_PREPARE` | plain | `true` |
+| `DATABASE_REQUIRE_READ_ONLY` | plain, optional | default `true`; set `false` for **Preview only**, whose branch-scoped `DATABASE_URL` from the Neon integration logs in as the branch owner, which is not read-only |
 | `ENABLED_DATA_PROVIDERS` | plain | `campflare,bcparks-strapi,aspira`; set but empty is a `ConfigError`, never "none enabled" |
 | `HEALTH_DATABASE_TOKEN` | sensitive | the bearer secret for the database mode of `/api/health` (below) |
 | `MAPBOX_TOKEN` | sensitive | Mapbox token for `/api/geocode`, `/api/route` and `/api/pois/on-route`; unset, those answer 503 and the rest of the map works |
@@ -124,6 +125,11 @@ login-time snapshot, so it cannot see a later `ALTER ROLE` (and under the pooler
 the first pooled backend reports — see "Server-side timeouts on Neon"), and a session that holds
 the grants could still `SET transaction_read_only = off`. The grants, not this check, are the
 backstop.
+
+Previews skip the check. The Neon integration gives each preview a `DATABASE_URL` for its own
+branch as the owner role, which is not read-only, so every database route answered 500. Preview
+sets `DATABASE_REQUIRE_READ_ONLY=false`; a stray write there lands on that preview's disposable
+copy of `main`. Production leaves it unset and keeps the check.
 
 What does work on Neon is a **role-level setting**, applied by the server at login whatever the
 client sends. The app connects as a dedicated role, `roadtrip_web`:

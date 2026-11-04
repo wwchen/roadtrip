@@ -37,6 +37,7 @@ let verified: Promise<Db> | undefined;
 export function serverDb(): Promise<Db> {
   handle ??= openServerDb(config.databaseUrl, config.databasePrepare);
   const opened = handle;
+  if (!config.databaseRequireReadOnly) return Promise.resolve(opened);
   verified ??= assertReadOnly(opened).catch((error: unknown) => {
     verified = undefined;
     throw error;
