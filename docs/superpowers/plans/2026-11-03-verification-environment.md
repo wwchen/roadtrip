@@ -23,9 +23,9 @@ Measured before it was dropped, so a later attempt starts from numbers rather th
 
 `--emit-seed` in `scripts/importer-differential.mjs` (on master since #832) is unaffected, so a seed can be built again if a later step needs one.
 
-## Open
+## Decided 2026-11-04
 
-- **O1. Which role previews connect as.** The app was built to connect as `roadtrip_web` (SELECT-only, `default_transaction_read_only = on`). The integration's `DATABASE_URL` uses the role it was configured with. Check it in the integration's settings; if it is the owner role, a preview can write to its branch, which is harmless to `main` but means a preview no longer proves the read-only path production uses.
-- **O2. Branch budget and cleanup.** Free plan: 10 branches. `main` and `vercel-dev` leave 8 for previews, one per previewed git branch. Confirm the integration's "delete obsolete branches" option is on, so a merged or deleted git branch frees its Neon branch.
-- **O3. A preview gate check** (the old Task 4), if wanted: after the preview deploys, fetch a known campground's page and one bbox API call through the protection bypass header and require 200 and the expected name. Without a fixed seed the probe has to be a row that is stable in `main`.
-- **O4. Pinned captures** (the old Task 5): `RawCaptureStore` pointed at a pinned fixture subset for steps 6 and 9. It depended on `seed/targets.json`, which no longer exists, so it moves to whichever of those steps first needs it and pins from that step's own target list.
+- **D1. Role.** Previews connect as the integration's default role, the branch owner, not `roadtrip_web`. A preview can write to its own branch, which cannot reach `main`. The cost: a preview no longer exercises the read-only, SELECT-only path production uses, so a missing grant on `roadtrip_web` is caught in production, not in a preview.
+- **D2. Cleanup.** The integration is connected through GitHub and deletes a preview's Neon branch when its git branch goes. Free plan: 10 branches; `main` and `vercel-dev` leave 8 for previews.
+- **D3. Preview check: yes.** When Vercel reports a preview deployment ready, a workflow searches a small bbox around a fixed campground through `/api/campgrounds/search`, opens that campground's page, and requires both to answer 200 with its name. It reads through the protection-bypass header, so it needs Vercel's Protection Bypass for Automation enabled and its secret stored as the repository secret `VERCEL_AUTOMATION_BYPASS_SECRET`. The probe is Mahood Lake (`bcparks-strapi`, -120.0902, 52.1979), the only campground of that name in `main`; it is a name and a place, not a database id, because ids are not stable across reloads of `main`.
+- **D4. Pinned captures** move to whichever of steps 6 and 9 first needs them, pinned from that step's own target list.
