@@ -8,6 +8,8 @@ const LINE_STRING = 'LineString';
 const DEFAULT_PLACE_TYPE = 'place';
 const BBOX_LENGTH = 4;
 const MIN_ROUTE_COORDINATES = 2;
+export const DIRECTIONS_TIMEOUT_MS = 15_000;
+export const GEOCODE_TIMEOUT_MS = 8_000;
 
 export type LngLat = readonly [number, number];
 
@@ -42,10 +44,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const num = (value: unknown, fallback = 0) => (typeof value === 'number' && Number.isFinite(value) ? value : fallback);
 
-async function getJson(fetch: typeof globalThis.fetch, url: URL, fail: (message: string) => Error): Promise<unknown> {
+async function getJson(fetch: typeof globalThis.fetch, url: URL, timeoutMs: number, fail: (message: string) => Error): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
     throw fail(`network error: ${(error as Error).message}`);
   }
@@ -101,14 +103,24 @@ function parseGeocode(root: unknown): GeocodeResultDto[] {
   });
 }
 
-export function createMapboxClient({ token, fetch = globalThis.fetch, baseUrl = MAPBOX_API_BASE }: { token: string; fetch?: typeof globalThis.fetch; baseUrl?: string }) {
+export function createMapboxClient({
+  token,
+  fetch = globalThis.fetch,
+  baseUrl = MAPBOX_API_BASE,
+  timeoutMs,
+}: {
+  token: string;
+  fetch?: typeof globalThis.fetch;
+  baseUrl?: string;
+  timeoutMs?: number;
+}) {
   return {
     async directions(coords: readonly LngLat[]): Promise<Directions> {
       const url = new URL(`${DRIVING_PATH}${coords.map(([lng, lat]) => `${lng},${lat}`).join(';')}`, baseUrl);
       url.searchParams.set('geometries', 'geojson');
       url.searchParams.set('overview', 'full');
       url.searchParams.set('access_token', token);
-      return parseDirections(await getJson(fetch, url, (message) => new RoutingUnavailableError(message)));
+      return parseDirections(await getJson(fetch, url, timeoutMs ?? DIRECTIONS_TIMEOUT_MS, (message) => new RoutingUnavailableError(message)));
     },
     async geocode(query: string, options: GeocodeOptions): Promise<GeocodeResultDto[]> {
       const url = new URL(`${PLACES_PATH}${encodeURIComponent(query)}.json`, baseUrl);
@@ -116,7 +128,7 @@ export function createMapboxClient({ token, fetch = globalThis.fetch, baseUrl = 
       url.searchParams.set('autocomplete', String(options.autocomplete));
       url.searchParams.set('limit', String(options.limit));
       if (options.proximity !== undefined) url.searchParams.set('proximity', options.proximity);
-      return parseGeocode(await getJson(fetch, url, (message) => new GeocodeUnavailableError(message)));
+      return parseGeocode(await getJson(fetch, url, timeoutMs ?? GEOCODE_TIMEOUT_MS, (message) => new GeocodeUnavailableError(message)));
     },
   };
 }

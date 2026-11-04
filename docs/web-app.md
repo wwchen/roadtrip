@@ -1,8 +1,13 @@
 # Web app deployment (Vercel + Neon)
 
-`apps/web` is the read-only Next.js app: `/campgrounds/[poiId]`, `/search`,
-`/api/campgrounds/search`, `/api/health`. It runs on Vercel against a Neon Postgres. The Kotlin
-stack on mini-ca is untouched and keeps serving production.
+`apps/web` is the read-only Next.js app. It serves the Vite frontend's map (`/`) and POI page
+(`/poi.html`, also `/poi`) as static files copied in at build time, the read endpoints those
+pages call (`/api/pois`, `/api/pois/{id}`, `/api/pois/search`, `/api/campgrounds/search`,
+`/api/campgrounds/details`, `/api/geocode`, `/api/route`, `/api/pois/on-route`, `/api/me`,
+`/api/build-info`, and `/api/watches`, which answers 401), its own `/campgrounds/[poiId]` and
+`/search` pages, and `/api/health`. It runs on Vercel against a Neon Postgres. Sign-in, watches,
+availability and the worker are not ported yet; the Kotlin stack on mini-ca is untouched and
+keeps serving production.
 
 Nothing in this file is a secret. The connection string itself lives only in Vercel and in the
 operator's own scratch file; this file records its shape and the settings measured against it.
@@ -20,8 +25,12 @@ operator's own scratch file; this file records its shape and the settings measur
 
 The commands run from the Root Directory, so each starts with `cd ../..` to execute at the
 repository root. The root build is the command `make test` and CI run; it builds `packages/*`
-before `next build`, and it also builds `frontend`'s Vite bundle, which Vercel never serves. That
-cost is deliberate.
+and `frontend`'s Vite bundle before `next build`. `apps/web`'s own build
+(`scripts/copy-frontend.mjs`) empties `apps/web/public`, copies the Vite build and
+`data/us-states.geojson` into it, and fails when the Vite build is missing; `/` is rewritten to
+`/index.html`. `next.config.ts` maps Vercel's `VERCEL_ENV`, `VERCEL_GIT_COMMIT_SHA` and
+`VERCEL_GIT_COMMIT_REF` to `BUILD_ENV`, `BUILD_SHA` and `BUILD_BRANCH`, inlined at build time for
+`/api/build-info`.
 
 Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 

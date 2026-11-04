@@ -7,9 +7,6 @@ const SEARCH_RESULT_LIMIT_VARIABLE = 'SEARCH_RESULT_LIMIT';
 const CAMPGROUND_SEARCH_MAX_RESULTS_VARIABLE = 'CAMPGROUND_SEARCH_MAX_RESULTS';
 const HEALTH_DATABASE_TOKEN_VARIABLE = 'HEALTH_DATABASE_TOKEN';
 const MAPBOX_TOKEN_VARIABLE = 'MAPBOX_TOKEN';
-const BUILD_ENV_VARIABLE = 'BUILD_ENV';
-const BUILD_SHA_VARIABLE = 'BUILD_SHA';
-const BUILD_BRANCH_VARIABLE = 'BUILD_BRANCH';
 
 const DEFAULT_DATABASE_PREPARE = true;
 const DEFAULT_ENABLED_DATA_PROVIDERS: readonly string[] = ['campflare', 'bcparks-strapi', 'aspira'];
@@ -59,8 +56,8 @@ function listFrom(variable: string, fallback: readonly string[]): readonly strin
   return entries;
 }
 
-function textFrom(variable: string, fallback: string): string {
-  const raw = process.env[variable]?.trim();
+function textOr(value: string | undefined, fallback: string): string {
+  const raw = value?.trim();
   return raw === undefined || raw.length === 0 ? fallback : raw;
 }
 
@@ -73,9 +70,9 @@ function secretFrom(variable: string): string | undefined {
 export const config = {
   get buildInfo(): BuildInfoDto {
     return {
-      env: textFrom(BUILD_ENV_VARIABLE, DEFAULT_BUILD_ENV),
-      sha: textFrom(BUILD_SHA_VARIABLE, ''),
-      branch: textFrom(BUILD_BRANCH_VARIABLE, ''),
+      env: textOr(process.env.BUILD_ENV, DEFAULT_BUILD_ENV),
+      sha: textOr(process.env.BUILD_SHA, ''),
+      branch: textOr(process.env.BUILD_BRANCH, ''),
     };
   },
   get databaseUrl(): string {

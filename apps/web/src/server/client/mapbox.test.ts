@@ -61,3 +61,13 @@ test('a geocode upstream failure is GeocodeUnavailableError', async () => {
   const { fetch } = stubFetch(401, 'no');
   await expect(createMapboxClient({ token: TOKEN, fetch }).geocode('x', { autocomplete: true, limit: 5 })).rejects.toBeInstanceOf(GeocodeUnavailableError);
 });
+
+test('a Mapbox call that stalls is abandoned at the timeout as unavailable', { timeout: 2000 }, async () => {
+  const stalled = ((_url: unknown, init?: RequestInit) =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+    })) as typeof globalThis.fetch;
+  const client = createMapboxClient({ token: TOKEN, fetch: stalled, timeoutMs: 20 });
+  await expect(client.directions([[0, 0], [1, 1]])).rejects.toBeInstanceOf(RoutingUnavailableError);
+  await expect(client.geocode('x', { autocomplete: true, limit: 5 })).rejects.toBeInstanceOf(GeocodeUnavailableError);
+});
