@@ -4,6 +4,7 @@ const DATABASE_URL_VARIABLE = 'DATABASE_URL';
 const DATABASE_PREPARE_VARIABLE = 'DATABASE_PREPARE';
 const ENABLED_DATA_PROVIDERS_VARIABLE = 'ENABLED_DATA_PROVIDERS';
 const SEARCH_RESULT_LIMIT_VARIABLE = 'SEARCH_RESULT_LIMIT';
+const CAMPGROUND_SEARCH_MAX_RESULTS_VARIABLE = 'CAMPGROUND_SEARCH_MAX_RESULTS';
 const HEALTH_DATABASE_TOKEN_VARIABLE = 'HEALTH_DATABASE_TOKEN';
 const BUILD_ENV_VARIABLE = 'BUILD_ENV';
 const BUILD_SHA_VARIABLE = 'BUILD_SHA';
@@ -13,6 +14,8 @@ const DEFAULT_DATABASE_PREPARE = true;
 const DEFAULT_ENABLED_DATA_PROVIDERS: readonly string[] = ['campflare', 'bcparks-strapi', 'aspira'];
 const DEFAULT_SEARCH_RESULT_LIMIT = 200;
 const MAX_SEARCH_RESULT_LIMIT = 1000;
+const DEFAULT_CAMPGROUND_SEARCH_MAX_RESULTS = 5000;
+const MAX_CAMPGROUND_SEARCH_MAX_RESULTS = 20000;
 const DEFAULT_BUILD_ENV = 'local';
 
 const PROVIDER_SEPARATOR = ',';
@@ -89,6 +92,13 @@ export const config = {
   },
   get healthDatabaseToken(): string | undefined {
     return secretFrom(HEALTH_DATABASE_TOKEN_VARIABLE);
+  },
+  get campgroundSearchMaxResults(): number {
+    return boundedIntegerFrom(
+      CAMPGROUND_SEARCH_MAX_RESULTS_VARIABLE,
+      DEFAULT_CAMPGROUND_SEARCH_MAX_RESULTS,
+      MAX_CAMPGROUND_SEARCH_MAX_RESULTS,
+    );
   },
   get searchResultLimit(): number {
     return boundedIntegerFrom(

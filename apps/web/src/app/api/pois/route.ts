@@ -1,5 +1,6 @@
 import { apiError } from '@/server/contractIds';
 import { parsePoisRequest } from '@/server/poiRequest';
+import { jsonBody } from '@/server/requestBody';
 import { viewportPois } from '@/server/service/poiService';
 
 export const dynamic = 'force-dynamic';
@@ -7,14 +8,6 @@ export const dynamic = 'force-dynamic';
 const STATUS_BAD_REQUEST = 400;
 const BAD_REQUEST = 'bad_request';
 const UNPARSEABLE_BODY = 'body is not JSON';
-
-async function jsonBody(request: Request): Promise<unknown> {
-  try {
-    return JSON.parse(await request.text());
-  } catch {
-    return undefined;
-  }
-}
 
 export async function POST(request: Request): Promise<Response> {
   const body = await jsonBody(request);

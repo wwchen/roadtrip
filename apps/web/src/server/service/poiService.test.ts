@@ -54,3 +54,8 @@ test('a missing subcategory and agency are omitted, not null', async () => {
   const { features } = await viewportPois(BBOX, 8, ['tesla_supercharger']);
   expect(features[0]?.properties).toEqual({ category: 'tesla_supercharger' });
 });
+
+test('a query under two characters is an empty result, not an error, and runs no query', async () => {
+  const { searchPois } = await import('./poiService');
+  expect(await searchPois('a', 10, [])).toEqual({ results: [] });
+});
