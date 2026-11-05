@@ -14,6 +14,7 @@ import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
+import java.io.File
 import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -49,6 +50,14 @@ class RoadtripRuntimeConfigTest {
                     "reservecalifornia-campgrounds",
                 ),
         )
+    }
+
+    @Test
+    fun `the shipped read path shows every campground provider and the shipped registry knows each one`() {
+        val providers = shippedAppConfig().readPathProviders
+
+        assertEquals(shippedReadPathProviders, providers.enabledDataProviders)
+        validateReadPathDataProviders(providers = providers, registry = PoiRegistry.load(File(SHIPPED_REGISTRY)))
     }
 
     @Test
@@ -291,3 +300,17 @@ class RoadtripRuntimeConfigTest {
             else -> emptyMap()
         }
 }
+
+private const val SHIPPED_REGISTRY = "src/main/resources/poi-registry.yaml"
+
+private val shippedReadPathProviders =
+    setOf(
+        "campflare",
+        "bcparks-strapi",
+        "aspira",
+        "recgov",
+        "reserveamerica",
+        "reservecalifornia",
+        "tesla_supercharger",
+        "planet_fitness_location",
+    )

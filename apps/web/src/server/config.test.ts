@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { ConfigError, config } from './config';
 
 const DATABASE_URL = 'postgres://reader@db.test/roadtrip';
-const DEFAULT_PROVIDERS = ['campflare', 'bcparks-strapi', 'aspira'];
+const DEFAULT_PROVIDERS = ['campflare', 'bcparks-strapi', 'aspira', 'recgov', 'reserveamerica', 'reservecalifornia'];
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 1000;
 const CUSTOM_LIMIT = 25;
