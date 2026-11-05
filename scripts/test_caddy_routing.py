@@ -13,6 +13,9 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 CADDYFILE = ROOT / "caddy" / "Caddyfile"
 HOST = "roadtrip.floo.ca"
+EGRESS_HOST = "egress.floo.ca"
+EGRESS_PATH = "/api/internal/availability/fetch"
+EGRESS_HIDDEN_GETS = ["/", "/api/me", EGRESS_PATH]
 CLIENT_IP = "203.0.113.7"
 READY_DEADLINE_SECONDS = 30
 READY_POLL_SECONDS = 0.5
@@ -88,8 +91,10 @@ class CaddyRoutingTest(unittest.TestCase):
         return container
 
     @classmethod
-    def fetch(cls, path: str, *headers: str) -> str | None:
-        args = ["exec", cls.proxy, "wget", "-qO-", "--header", f"Host: {HOST}"]
+    def fetch(cls, path: str, *headers: str, host: str = HOST, post: bool = False) -> str | None:
+        args = ["exec", cls.proxy, "wget", "-qO-", "--header", f"Host: {host}"]
+        if post:
+            args += ["--post-data", ""]
         for header in headers:
             args += ["--header", header]
         result = subprocess.run(
@@ -104,6 +109,13 @@ class CaddyRoutingTest(unittest.TestCase):
     def test_everything_else_stays_on_the_backend(self) -> None:
         for path in BACKEND_PATHS:
             self.assertTrue((self.fetch(path) or "").startswith("backend"), path)
+
+    def test_the_egress_host_proxies_only_the_fetch_path(self) -> None:
+        self.assertTrue((self.fetch(EGRESS_PATH, host=EGRESS_HOST, post=True) or "").startswith("backend"))
+
+    def test_the_egress_host_hides_everything_else(self) -> None:
+        for path in EGRESS_HIDDEN_GETS:
+            self.assertIsNone(self.fetch(path, host=EGRESS_HOST), path)
 
     def test_the_backend_still_sees_the_client_address(self) -> None:
         body = self.fetch("/api/me", f"X-Forwarded-For: {CLIENT_IP}") or ""

@@ -37,6 +37,19 @@ http://roadtrip.floo.ca {
 	}
 }
 
+http://egress.floo.ca {
+	@egress {
+		method POST
+		path /api/internal/availability/fetch
+	}
+	handle @egress {
+		reverse_proxy backend:8765
+	}
+	handle {
+		respond 404
+	}
+}
+
 # Per-sandbox vhosts (sb-<name>.<zone> → reverse_proxy sb-<name>-backend:8765),
 # each binding :80 via its host-specific site address.  Empty until the first
 # sandbox; Caddy tolerates a glob that matches nothing.
