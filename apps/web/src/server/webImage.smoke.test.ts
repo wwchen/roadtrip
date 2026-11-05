@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { sql } from 'drizzle-orm';
@@ -12,27 +11,31 @@ const IMAGE = process.env.WEB_IMAGE;
 const MIGRATION = path.resolve(import.meta.dirname, '../../../../backend/src/main/resources/db/migration/R__web_reader_grants.sql');
 const PASSWORD = 'smoke-web-reader';
 const SECRET_NAME = 'web_db_password';
-const CONTAINER_PORT = 3000;
-const DOCKER_HOST_ALIAS = 'host.docker.internal';
+const POSTGRES_IN_NAMESPACE = '127.0.0.1:5432';
+const WEB_IN_NAMESPACE = 'http://127.0.0.1:3000';
 const SMOKE_STARTUP_MS = 60_000;
 const SMOKE_POLL_MS = 500;
 const HTTP_OK = 200;
+const STATUS_SEPARATOR = ' ';
+const NOT_LISTENING = 0;
 
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      server.close(() => (typeof address === 'object' && address !== null ? resolve(address.port) : reject(new Error('no port'))));
-    });
-  });
+interface InContainerResponse {
+  status: number;
+  body: string;
 }
 
 describe.skipIf(IMAGE === undefined)('the web image', () => {
   let fixture: CatalogFixture;
   let containerId = '';
-  let base = '';
+
+  const request = (requestPath: string): InContainerResponse => {
+    const script = `fetch('${WEB_IN_NAMESPACE}${requestPath}').then(async (r) => console.log(r.status + '${STATUS_SEPARATOR}' + await r.text()), () => console.log('${NOT_LISTENING}${STATUS_SEPARATOR}'))`;
+    const out = execFileSync('docker', ['exec', containerId, 'node', '-e', script], { encoding: 'utf8' }).trim();
+    const split = out.indexOf(STATUS_SEPARATOR);
+    return { status: Number(out.slice(0, split)), body: out.slice(split + STATUS_SEPARATOR.length) };
+  };
+
+  const logs = () => execFileSync('docker', ['logs', containerId], { encoding: 'utf8' });
 
   beforeAll(async () => {
     fixture = await startCatalogFixture();
@@ -40,20 +43,13 @@ describe.skipIf(IMAGE === undefined)('the web image', () => {
     await fixture.writeDb.execute(sql.raw(`ALTER ROLE ${WEB_READ_ROLE} PASSWORD '${PASSWORD}'`));
     const secrets = mkdtempSync(path.join(tmpdir(), 'web-image-'));
     writeFileSync(path.join(secrets, SECRET_NAME), PASSWORD);
-    const database = new URL(fixture.url);
-    database.username = WEB_READ_ROLE;
-    database.password = '';
-    database.hostname = DOCKER_HOST_ALIAS;
-    const port = await freePort();
-    base = `http://127.0.0.1:${port}`;
     containerId = execFileSync(
       'docker',
       [
         'run', '-d',
-        `--add-host=${DOCKER_HOST_ALIAS}:host-gateway`,
-        '-p', `127.0.0.1:${port}:${CONTAINER_PORT}`,
+        `--network=container:${fixture.container}`,
         '-v', `${secrets}:/run/secrets:ro`,
-        '-e', `DATABASE_URL=${database.toString()}`,
+        '-e', `DATABASE_URL=postgres://${WEB_READ_ROLE}@${POSTGRES_IN_NAMESPACE}/${fixture.database}`,
         '-e', `DATABASE_PASSWORD_FILE=/run/secrets/${SECRET_NAME}`,
         '-e', `ENABLED_DATA_PROVIDERS=${ENABLED_PROVIDER}`,
         IMAGE!,
@@ -61,10 +57,8 @@ describe.skipIf(IMAGE === undefined)('the web image', () => {
       { encoding: 'utf8' },
     ).trim();
     const deadline = Date.now() + SMOKE_STARTUP_MS;
-    for (;;) {
-      const status = await fetch(`${base}/api/health`).then((response) => response.status, () => 0);
-      if (status === HTTP_OK) return;
-      if (Date.now() > deadline) throw new Error(`web image never became healthy:\n${execFileSync('docker', ['logs', containerId], { encoding: 'utf8' })}`);
+    while (request('/api/health').status !== HTTP_OK) {
+      if (Date.now() > deadline) throw new Error(`web image never became healthy:\n${logs()}`);
       await new Promise((resolve) => setTimeout(resolve, SMOKE_POLL_MS));
     }
   }, SMOKE_STARTUP_MS * 2);
@@ -74,16 +68,16 @@ describe.skipIf(IMAGE === undefined)('the web image', () => {
     await fixture?.stop();
   });
 
-  test('the image answers place search from the database', async () => {
-    const response = await fetch(`${base}/api/pois/search?q=Near`);
-    expect(response.status).toBe(HTTP_OK);
-    const body = (await response.json()) as { results: { name: string }[] };
+  test('the image answers place search from the database', () => {
+    const response = request('/api/pois/search?q=Near');
+    expect(response.status, logs()).toBe(HTTP_OK);
+    const body = JSON.parse(response.body) as { results: { name: string }[] };
     expect(body.results.map((hit) => hit.name)).toContain(NEAR_NAME);
   });
 
-  test('the image serves a campground detail', async () => {
-    const response = await fetch(`${base}/api/pois/${NEAR_POI_ID}`);
-    expect(response.status).toBe(HTTP_OK);
-    expect(await response.json()).toMatchObject({ type: 'Feature' });
+  test('the image serves a campground detail', () => {
+    const response = request(`/api/pois/${NEAR_POI_ID}`);
+    expect(response.status, logs()).toBe(HTTP_OK);
+    expect(JSON.parse(response.body)).toMatchObject({ type: 'Feature' });
   });
 });
