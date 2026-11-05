@@ -23,3 +23,7 @@ test('the extensionless page URLs the Kotlin site served still resolve', async (
   const beforeFiles = (rewrites as { beforeFiles: { source: string; destination: string }[] }).beforeFiles;
   expect(beforeFiles).toEqual(expect.arrayContaining([{ source: '/poi', destination: '/poi.html' }]));
 });
+
+test('the build emits a standalone server', () => {
+  expect(config.output).toBe('standalone');
+});

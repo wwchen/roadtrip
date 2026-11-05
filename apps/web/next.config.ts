@@ -7,6 +7,7 @@ const MAP_PAGE = '/index.html';
 const POI_PAGE = '/poi.html';
 
 const config: NextConfig = {
+  output: 'standalone',
   outputFileTracingRoot: WORKSPACE_ROOT,
   env: {
     BUILD_ENV: process.env.VERCEL_ENV ?? process.env.BUILD_ENV ?? '',
