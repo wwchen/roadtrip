@@ -286,6 +286,14 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertLess(backend_up, role_step)
         self.assertLess(role_step, everything_up)
 
+    def test_images_built_with_docker_build_publish_a_single_manifest(self) -> None:
+        jobs = workflow("ci.yml")["jobs"]
+        for job in ("companion-image", "data-image"):
+            commands = job_commands(jobs[job])
+            self.assertIn("docker build", commands, job)
+            self.assertIn("--provenance=false", commands, job)
+            self.assertIn("--sbom=false", commands, job)
+
     def test_companion_image_is_keyed_on_everything_its_build_reads(self) -> None:
         deploy_commands = job_commands(workflow("deploy.yml")["jobs"]["deploy"])
         self.assertIn(COMPANION_KEY_SCRIPT, deploy_commands)
