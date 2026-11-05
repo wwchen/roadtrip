@@ -153,7 +153,7 @@ def step_by_name(job: dict, name: str) -> dict:
 
 
 class DeploymentContractTest(unittest.TestCase):
-    def test_ci_publishes_the_three_immutable_images(self) -> None:
+    def test_ci_publishes_every_immutable_image(self) -> None:
         jobs = workflow("ci.yml")["jobs"]
         app = jobs["docker-build"]
         # The job may be skipped on a PR that cannot change the image (docs
@@ -161,6 +161,9 @@ class DeploymentContractTest(unittest.TestCase):
         # because deploy pulls exactly that tag.
         self.assertIn("github.event_name == 'push' ||", app.get("if", ""))
         self.assertIn('docker push "$IMAGE:${SHA}"', job_commands(app))
+        self.assertIn("--target web", job_commands(app))
+        self.assertIn('docker push "$WEB_IMAGE:${SHA}"', job_commands(app))
+        self.assertIn("needs.changes.outputs.web == 'true'", app.get("if", ""))
 
         data_commands = job_commands(jobs["data-image"])
         self.assertIn("git rev-parse HEAD:data", data_commands)
@@ -170,6 +173,16 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn(COMPANION_KEY_SCRIPT, companion_commands)
         self.assertNotIn("git rev-parse HEAD:companion", companion_commands)
         self.assertIn("docker push", companion_commands)
+
+    def test_web_tests_smoke_the_web_image(self) -> None:
+        commands = job_commands(workflow("ci.yml")["jobs"]["web-tests"])
+        self.assertIn("--target web", commands)
+        self.assertIn("WEB_IMAGE=roadtrip/web", commands)
+
+    def test_the_web_filter_watches_the_image_inputs(self) -> None:
+        web = path_filters()["web"]
+        self.assertIn("Dockerfile", web)
+        self.assertIn(".dockerignore", web)
 
     def test_companion_image_is_keyed_on_everything_its_build_reads(self) -> None:
         deploy_commands = job_commands(workflow("deploy.yml")["jobs"]["deploy"])
