@@ -9,6 +9,14 @@ pages call (`/api/pois`, `/api/pois/{id}`, `/api/pois/search`, `/api/campgrounds
 availability and the worker are not ported yet; the Kotlin stack on mini-ca is untouched and
 keeps serving production.
 
+A campground's detail carries Kotlin's booking buttons (`cta`) and booking site
+(`booking_system`), and its summary carries `booking_system`. Both are computed from the
+catalog row and the booking-site table in `@roadtrip/domain` (kept equal to
+`poi-registry.yaml`'s `booking_providers` by a test in `packages/worker`), with no vendor
+calls. An Aspira button is dated to the campground's first bookable night in its own time zone,
+looked up from its coordinates. `availability_supported` and the availability date fields stay
+off until availability is ported, so the drawer's availability grid does not mount.
+
 Nothing in this file is a secret. The connection string itself lives only in Vercel and in the
 operator's own scratch file; this file records its shape and the settings measured against it.
 

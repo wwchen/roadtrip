@@ -1,4 +1,5 @@
 import { CAMPGROUND_POI_TYPE, type Db } from '@roadtrip/db';
+import { bookingIdentities, shippedTenantRegistry } from '@roadtrip/domain';
 import { config } from '../config';
 import type { PoiCategoryDetailSchema, PoiDetailFeatureSchema, PoiDetailPropertiesSchema } from '../contract';
 import { toContractId } from '../contractIds';
@@ -12,6 +13,8 @@ import {
   type PlanetFitnessDetailRow,
   type TeslaDetailRow,
 } from '../repo/poiDetailRepo';
+import { bookingSystem, campgroundBookingRef, computeCtas } from './booking/campgroundCta';
+import { poiDateContext } from './booking/dateContext';
 import {
   alertDto,
   amenityDtos,
@@ -40,7 +43,21 @@ const emptyLists = () => ({ amenities: [], cell_coverage: [], activities: [], al
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-function campgroundProperties(row: CampgroundDetailRow): PoiDetailPropertiesSchema {
+function campgroundBooking(row: CampgroundDetailRow, now: Date) {
+  const tenants = shippedTenantRegistry();
+  const identities = bookingIdentities(row.bookingProvider, row.bookingProviderRef, row.bookingAliases);
+  const bookingRef = campgroundBookingRef(tenants, identities);
+  const cta = computeCtas(tenants, {
+    bookingRef,
+    reserveUrl: row.reservationUrl,
+    infoUrl: row.links[0]?.url ?? null,
+    dateContext: poiDateContext(row.location?.latitude, row.location?.longitude, now),
+    identities,
+  });
+  return { cta: cta.length === 0 ? null : cta, booking_system: bookingSystem(tenants, bookingRef) };
+}
+
+function campgroundProperties(row: CampgroundDetailRow, now: Date): PoiDetailPropertiesSchema {
   const parentName =
     row.parentName !== null && row.parentName.trim().toLowerCase() !== row.name.trim().toLowerCase() ? row.parentName : null;
   const detail: PoiCategoryDetailSchema = {
@@ -67,6 +84,7 @@ function campgroundProperties(row: CampgroundDetailRow): PoiDetailPropertiesSche
       email: row.contact?.email,
       elevation: row.location?.elevation,
       last_verified: nonBlank(row.metadata?.last_updated),
+      ...campgroundBooking(row, now),
     }),
     address: row.location ?? {},
     upstream: row.upstream,
@@ -155,10 +173,16 @@ function planetFitnessProperties(row: PlanetFitnessDetailRow): PoiDetailProperti
   };
 }
 
-async function propertiesFor(db: Db, category: string, id: bigint, providers: readonly string[]): Promise<PoiDetailPropertiesSchema | null> {
+async function propertiesFor(
+  db: Db,
+  category: string,
+  id: bigint,
+  providers: readonly string[],
+  now: Date,
+): Promise<PoiDetailPropertiesSchema | null> {
   if (category === CAMPGROUND_POI_TYPE) {
     const row = await findCampgroundDetail(db, id, providers);
-    return row === null ? null : campgroundProperties(row);
+    return row === null ? null : campgroundProperties(row, now);
   }
   if (category === TESLA_POI_TYPE) {
     const row = await findTeslaDetail(db, id);
@@ -171,10 +195,15 @@ async function propertiesFor(db: Db, category: string, id: bigint, providers: re
   return null;
 }
 
-export async function poiDetail(db: Db, id: bigint, providers: readonly string[]): Promise<PoiDetailFeatureSchema | null> {
+export async function poiDetail(
+  db: Db,
+  id: bigint,
+  providers: readonly string[],
+  now: Date = new Date(),
+): Promise<PoiDetailFeatureSchema | null> {
   const poi = await findPoiIndex(db, id);
   if (poi === null) return null;
-  const properties = await propertiesFor(db, poi.category, poi.id, providers);
+  const properties = await propertiesFor(db, poi.category, poi.id, providers, now);
   if (properties === null) return null;
   return { type: FEATURE, id: toContractId(poi.id), geometry: poi.geometry, properties };
 }

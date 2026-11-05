@@ -11,6 +11,7 @@ export type {
   MeResponseDto,
   OnRouteRequestDto,
   PoiCategoryDetailSchema,
+  PoiCtaSchema,
   PoiDetailFeatureSchema,
   PoiDetailPropertiesSchema,
   PoiFeatureCollectionSchema,

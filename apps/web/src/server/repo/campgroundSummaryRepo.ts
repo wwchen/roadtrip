@@ -1,5 +1,5 @@
-import { amenitiesShape, locationShape, managementShape, metadataShape, type Db } from '@roadtrip/db';
-import type { CampgroundAmenity, CampgroundMetadata } from '@roadtrip/domain';
+import { amenitiesShape, bookingAliasesShape, locationShape, managementShape, metadataShape, type Db } from '@roadtrip/db';
+import type { BookingAlias, CampgroundAmenity, CampgroundMetadata } from '@roadtrip/domain';
 import { sql } from 'drizzle-orm';
 import { createColumnDecoder } from './columnDecoder';
 
@@ -15,6 +15,9 @@ export interface CampgroundSummaryRow {
   lat: number;
   metadata: CampgroundMetadata | null;
   amenities: CampgroundAmenity[];
+  bookingProvider: string | null;
+  bookingProviderRef: string | null;
+  bookingAliases: BookingAlias[];
   siteCounts: Record<string, number>;
   siteTotal: number;
   maxPeople: number | null;
@@ -29,7 +32,8 @@ export async function findCampgroundSummaries(
   const rows = await db.execute<Record<string, unknown>>(sql`
     SELECT p.id AS poi_id, cg.id AS campground_id, cg.name,
            ST_X(ST_PointOnSurface(p.geom)) AS lng, ST_Y(ST_PointOnSurface(p.geom)) AS lat,
-           cg.location, cg.management, cg.metadata, cg.amenities,
+           cg.location, cg.management, cg.metadata, cg.amenities, cg.booking_provider, cg.booking_provider_ref,
+           cg.booking_aliases,
            s.site_total, s.site_counts, s.max_people
     FROM poi_campgrounds pc
     JOIN pois p ON p.id = pc.poi_id
@@ -56,6 +60,9 @@ export async function findCampgroundSummaries(
       lat: Number(row.lat),
       metadata: decoder.decode('metadata', metadataShape, row.metadata),
       amenities: decoder.decode('amenities', amenitiesShape, row.amenities) ?? [],
+      bookingProvider: row.booking_provider as string | null,
+      bookingProviderRef: row.booking_provider_ref as string | null,
+      bookingAliases: decoder.decode('booking_aliases', bookingAliasesShape, row.booking_aliases) ?? [],
       siteCounts: (row.site_counts as Record<string, number> | null) ?? {},
       siteTotal: (row.site_total as number | null) ?? 0,
       maxPeople: row.max_people as number | null,
