@@ -275,6 +275,8 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("backend/src/main/resources/db/migration/R__web_reader_grants.sql", filters["web"])
         self.assertIn("docs/web-app.md", filters["web"])
         self.assertIn("postgres-init/**", filters["scripts"])
+        self.assertIn("caddy/**", filters["scripts"])
+        self.assertIn("caddy/Caddyfile", filters["web"])
 
     def test_deploy_creates_the_web_reader_before_web_starts(self) -> None:
         deploy = (ROOT / "scripts" / "deploy.sh").read_text()

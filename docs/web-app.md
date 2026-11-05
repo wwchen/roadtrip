@@ -38,34 +38,34 @@ Design: `docs/superpowers/specs/2026-11-04-web-on-mini-ca-design.md`.
 - **Secrets:** `WEB_DB_PASSWORD` and `MAPBOX_TOKEN`, mounted as files and read through
   `DATABASE_PASSWORD_FILE` and `MAPBOX_TOKEN_FILE`.
 
-### The tunnel rule
+### Routing
 
-One public-hostname entry in Cloudflare Zero Trust, placed **above** the existing
-`roadtrip.floo.ca` entry, which keeps sending everything else to the backend:
+`caddy/Caddyfile`'s `http://roadtrip.floo.ca` block splits production traffic. Requests whose path
+matches `@web` go to `web:3000`; everything else goes to `backend:8765`, exactly as before. The
+pattern is `WEB_ROUTED_PATH` in `apps/web/src/server/webRouting.ts`, whose test checks that it
+matches every read route `apps/web` serves and none of Kotlin's (`/api/pois/{id}/campsites`,
+`/api/pois/availability/stays`, `/api/me`, the pages), and that the Caddyfile carries it verbatim.
+`scripts/test_caddy_routing.py` runs the real `caddy` image with stub upstreams and checks where
+each path lands.
 
-- **Hostname:** `roadtrip.floo.ca`
-- **Service:** `http://web:3000`
-- **Path:**
-
-```
-^/api/(pois(/(search|on-route|[0-9]+))?|campgrounds/(search|details)|geocode|route)$
-```
-
-`apps/web/src/server/tunnelRule.ts` holds the same string, and its test checks that it matches
-every read route `apps/web` serves and none of Kotlin's (`/api/pois/{id}/campsites`,
-`/api/pois/availability/stays`, `/api/me`, the pages). Change both together.
+Caddy's global `trusted_proxies static private_ranges` lets the client address that
+`cloudflared` puts in `X-Forwarded-For` through to Kotlin; without it Caddy replaces the header
+with its own peer and every caller shares one rate-limit key on the availability routes.
 
 ### Rollout and rollback
 
 1. Set the password once: `./secrets/manage.py set WEB_DB_PASSWORD common`, and commit the vault.
-2. Merge. The deploy creates the role, then starts `web`; no traffic reaches it yet.
+2. Merge. The deploy creates the role, starts `web`, and recreates Caddy with the new block.
+   Cloudflare still sends `roadtrip.floo.ca` straight to the backend, so no traffic reaches `web` yet.
 3. On mini-ca, from the release directory:
    `docker compose --profile web exec web node -e "fetch('http://127.0.0.1:3000/api/pois/search?q=Mahood').then(async (r) => console.log(r.status, await r.text()))"`
    must print `200` and Mahood Lake.
-4. Add the tunnel rule. Check `https://roadtrip.floo.ca/api/pois/search?q=Mahood`, that the map's
-   pins and drawer work, and that a signed-in session stays signed in.
+4. In Cloudflare Zero Trust, change the `roadtrip.floo.ca` public hostname's service from the
+   backend to `http://caddy:80`. Check `https://roadtrip.floo.ca/api/pois/search?q=Mahood`, that the
+   map's pins and drawer work, and that a signed-in session stays signed in.
 
-To roll back, delete the tunnel rule: every path returns to Kotlin at once.
+Note the hostname's current service before changing it. To roll back, set it back to that value:
+every path returns to Kotlin at once, with no deploy.
 
 ## Vercel
 

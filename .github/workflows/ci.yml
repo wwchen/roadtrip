@@ -97,6 +97,7 @@ jobs:
             scripts:
               - 'scripts/**'
               - 'postgres-init/**'
+              - 'caddy/**'
               - 'secrets/**'
               - 'grafana/**'
               - 'deploy/**'
@@ -198,6 +199,7 @@ jobs:
               - '.dockerignore'
               - 'backend/src/main/resources/db/migration/R__web_reader_grants.sql'
               - 'docs/web-app.md'
+              - 'caddy/Caddyfile'
               - 'frontend/**'
               - 'data/us-states.geojson'
               - 'packages/**'

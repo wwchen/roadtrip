@@ -12,8 +12,8 @@ Production traffic for the read API on `roadtrip.floo.ca` is served by `apps/web
 container on mini-ca against mini-ca's Postgres. Kotlin keeps serving everything else, unchanged.
 
 Success: `roadtrip.floo.ca/api/pois/search?q=Mahood` is answered by the `web` container, the map
-and drawer behave as they do today, signed-in users stay signed in, and deleting one Cloudflare
-tunnel rule returns every request to Kotlin.
+and drawer behave as they do today, signed-in users stay signed in, and pointing one Cloudflare
+public hostname back at the backend returns every request to Kotlin.
 
 ## Non-goals
 
@@ -30,22 +30,22 @@ tunnel rule returns every request to Kotlin.
 |---|---|---|
 | D1 | Next.js reads **mini-ca's Postgres**, not Neon | Both apps read the same rows, so the map cannot disagree with the parts Kotlin still serves, and nothing syncs. The Drizzle schema is proven equal to Flyway's. |
 | D2 | **Only the read API** moves | Kotlin keeps the pages and every signed-in route, so no user loses a feature, and one copy of the frontend build stays authoritative. |
-| D3 | The path split is a **Cloudflare tunnel rule** | Chosen by the owner over a Caddy site block. The rule lives in the Zero Trust dashboard, not the repo; this spec records its exact value so the repo still names it. |
+| D3 | The path split is a **Caddy site block** in `caddy/Caddyfile` | Chosen by the owner (2026-11-05, reversing an earlier choice of a Cloudflare tunnel rule). The routing lives in the repo, is reviewed and tested with the real `caddy` image, ships with the release, and reverts with git; Caddy already runs on mini-ca for sandboxes. The cost is one in-network hop for production traffic. |
 
 ## Architecture
 
 ```
-roadtrip.floo.ca ─ Cloudflare tunnel ─┬─ read-API paths ──▶ web:3000      (apps/web, Next.js) ─┐
-                                      └─ everything else ─▶ backend:8080  (Kotlin)            ─┴─▶ postgres:5432
+roadtrip.floo.ca ─ Cloudflare tunnel ─ caddy:80 ─┬─ read-API paths ──▶ web:3000      (apps/web, Next.js) ─┐
+                                                  └─ everything else ─▶ backend:8765  (Kotlin)            ─┴─▶ postgres:5432
 ```
 
-Both containers sit on the default Compose network that `cloudflared` already joins. Neither
-publishes a host port.
+All three sit on the default Compose network that `cloudflared` already joins. None publishes a
+host port.
 
 ### The routed paths
 
 Exactly the read endpoints `apps/web` serves, each with the same methods as Kotlin's route, so a
-path-only rule never sends a method Next.js lacks:
+path-only match never sends a method Next.js lacks:
 
 | Path | Methods (both apps) |
 |---|---|
@@ -58,11 +58,13 @@ path-only rule never sends a method Next.js lacks:
 | `/api/geocode` | GET |
 | `/api/route` | GET |
 
-The tunnel rule, one public hostname entry placed **above** the existing `roadtrip.floo.ca` entry:
-
-- Hostname: `roadtrip.floo.ca`
-- Path: `^/api/(pois(/(search|on-route|[0-9]+))?|campgrounds/(search|details)|geocode|route)$`
-- Service: `http://web:3000`
+The Caddy block, `http://roadtrip.floo.ca`, sends paths matching
+`^/api/(pois(/(search|on-route|[0-9]+))?|campgrounds/(search|details)|geocode|route)$` to
+`web:3000` and everything else to `backend:8765`. Caddy's global
+`trusted_proxies static private_ranges` keeps the client address `cloudflared` puts in
+`X-Forwarded-For`; without it Caddy would replace the header with its own peer, and Kotlin's
+availability rate limits would key every caller the same. The owner then points the
+`roadtrip.floo.ca` public hostname at `http://caddy:80` instead of the backend.
 
 The anchors keep `/api/pois/{id}/campsites`, `/api/pois/{id}/campsites/availability` and
 `/api/pois/availability/stays` on Kotlin. A non-numeric `/api/pois/{x}` also stays on Kotlin,
@@ -151,35 +153,38 @@ service whose image tag they never pull.
 
 ## Data flow
 
-A pin request: browser → Cloudflare → tunnel matches the rule → `web:3000` → `POST /api/pois` →
+A pin request: browser → Cloudflare → tunnel → `caddy:80` matches `@web` → `web:3000` → `POST /api/pois` →
 `serverDb()` (direct connection as `roadtrip_web`, prepared statements on, the read-only check on)
-→ `postgres:5432` → JSON back the same way. Any path the rule does not match follows the existing
-`roadtrip.floo.ca` entry to `backend:8080` exactly as today.
+→ `postgres:5432` → JSON back the same way. Any path `@web` does not match goes to `backend:8765`
+exactly as today.
 
 ## Rollout
 
-1. Merge. Deploy runs: the role step, then `web` starts. No traffic is routed to it.
+1. Merge. Deploy runs: the role step, then `web` starts, and Caddy is recreated with the new block.
+   No traffic is routed to it: Cloudflare still sends `roadtrip.floo.ca` to the backend.
 2. On mini-ca: `docker compose exec web node -e` fetch of `/api/pois/search?q=Mahood` and
    `/api/build-info`; both answer, and build info names the deployed SHA.
-3. The owner adds the tunnel rule.
+3. The owner points the `roadtrip.floo.ca` public hostname at `http://caddy:80`, noting its
+   current service first.
 4. Through `roadtrip.floo.ca`: `/api/pois/search?q=Mahood` answers; the map loads, pins and the
    drawer work, a signed-in session stays signed in, and `/api/pois/{id}/campsites` still reaches
    Kotlin.
 
-**Rollback:** delete the tunnel rule. Every path returns to Kotlin at once; the container can stay
-running.
+**Rollback:** point the hostname back at its previous service. Every path returns to Kotlin at
+once, with no deploy; the container can stay running.
 
 ## Error handling
 
-- `web` down or unhealthy: the routed paths answer 502 from Cloudflare until the rule is removed;
-  Kotlin's paths are unaffected. Compose restarts the container.
+- `web` down or unhealthy: the routed paths answer 502 from Caddy; Kotlin's paths are
+  unaffected. Compose restarts the container.
 - Wrong or missing password: `serverDb()` fails and the read routes answer 500. Liveness
   (`/api/health` without a token) stays 200, so the Compose health check does not catch it; rollout
   step 2's search request does, before any traffic is routed.
 - A role that is not read-only: the existing `DatabaseNotReadOnlyError` check refuses to serve.
   `DATABASE_REQUIRE_READ_ONLY` stays unset on mini-ca.
-- Client addresses: Kotlin's `callerFromForwardedFor` already skips private hops, and nothing on
-  Kotlin's path changes. Next.js's read routes are not rate-limited, the same as Kotlin's today.
+- Client addresses: Caddy trusts private-range peers, so `cloudflared`'s `X-Forwarded-For` reaches
+  Kotlin with Caddy's hop appended, and `callerFromForwardedFor` skips private hops. Next.js's read
+  routes are not rate-limited, the same as Kotlin's today.
 
 ## Testing
 
@@ -192,18 +197,24 @@ running.
   read-only check over a direct connection.
 - `scripts/test_ci_image_builds.py`: the new image is awaited by `deploy.yml` and published by CI,
   and every file `deploy.sh` reads is in the release manifest.
+- `scripts/test_caddy_routing.py`: runs the real `caddy` image with the Caddyfile and stub `web`
+  and `backend` upstreams; every routed path lands on `web`, every other on `backend`, and a
+  client `X-Forwarded-For` reaches the backend.
+- `webRouting.test.ts`: the pattern matches every read route and none of Kotlin's, and the
+  Caddyfile carries it verbatim.
 - Post-deploy, rollout steps 2 and 4.
 
 ## Owner actions
 
 - Set `WEB_DB_PASSWORD` with `secrets/manage.py` before the first deploy that includes `web`.
-- Add the tunnel rule (Path and Service above) after rollout step 2 passes.
+- Point the `roadtrip.floo.ca` public hostname at `http://caddy:80` after rollout step 2 passes.
 
 ## Risks
 
-- **Tunnel rule drift.** The rule lives only in the dashboard. If a route is added to `apps/web`
-  without updating the rule, it is simply served by Kotlin. If the rule is widened by hand past
-  what `apps/web` serves, those paths 404. The routed-path table above is the reference.
+- **Routing drift.** A route added to `apps/web` without widening `@web` is simply served by
+  Kotlin. `webRouting.test.ts` keeps the pattern and the Caddyfile identical.
+- **Caddy on the production path.** A Caddy outage now takes `roadtrip.floo.ca` down, not only the
+  sandboxes. Rollback is the same hostname change.
 - **Two consumers of one Postgres.** Next.js adds read load to the database Kotlin writes to. The
   role's `statement_timeout` (as on Neon, 10 s) bounds a pathological query.
 - **Frontend and API from different releases.** Both deploy from the same SHA in the same
