@@ -215,6 +215,14 @@ once, with no deploy; the container can stay running.
   Kotlin. `webRouting.test.ts` keeps the pattern and the Caddyfile identical.
 - **Caddy on the production path.** A Caddy outage now takes `roadtrip.floo.ca` down, not only the
   sandboxes. Rollback is the same hostname change.
+- **Rolling back past this change.** A release older than the `roadtrip.floo.ca` block ships a
+  Caddyfile without it; with the hostname on Caddy, that release refuses or blanks every request.
+  Point the hostname back first. `deploy.sh`'s automatic rollback only returns to the last release
+  that passed its health gate, which has the block.
+- **Sandboxes can reach production through Caddy.** `caddy` joins the `roadtrip-sandbox` network,
+  so sandbox containers can send `Host: roadtrip.floo.ca` to it, reach the production backend and
+  `web` without Cloudflare, and, as a private-range peer, set their own `X-Forwarded-For`.
+  Sandboxes run the owner's own PRs, so this is accepted rather than fenced off.
 - **Two consumers of one Postgres.** Next.js adds read load to the database Kotlin writes to. The
   role's `statement_timeout` (as on Neon, 10 s) bounds a pathological query.
 - **Frontend and API from different releases.** Both deploy from the same SHA in the same

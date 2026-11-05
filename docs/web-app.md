@@ -67,6 +67,12 @@ with its own peer and every caller shares one rate-limit key on the availability
 Note the hostname's current service before changing it. To roll back, set it back to that value:
 every path returns to Kotlin at once, with no deploy.
 
+Once the hostname points at Caddy, never deploy or roll back to a release older than the
+`roadtrip.floo.ca` block in `caddy/Caddyfile` without first pointing the hostname back. That
+release's Caddyfile has no such block, so Caddy refuses the connection, or, with a sandbox up,
+answers every request with an empty 200, and the whole site is down. `deploy.sh`'s own rollback
+is safe: it returns only to the last release that passed its health gate, which has the block.
+
 ## Vercel
 
 | Setting | Value |
