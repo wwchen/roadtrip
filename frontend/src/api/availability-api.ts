@@ -101,6 +101,24 @@ export function requestPoiCampsitesAvailability(
   );
 }
 
+const REFRESH_ACCEPTED = 202;
+
+export async function requestAvailabilityRefresh(
+  poiId: number | string,
+  { startDate, endDate }: { startDate: string; endDate: string },
+): Promise<boolean> {
+  const params = new URLSearchParams({ [START_DATE_PARAM]: startDate, [END_DATE_PARAM]: endDate });
+  try {
+    const response = await fetch(
+      `/api/pois/${encodeURIComponent(String(poiId))}/campsites/availability/refresh?${params.toString()}`,
+      { method: 'POST', credentials: CREDENTIALS },
+    );
+    return response.status === REFRESH_ACCEPTED;
+  } catch {
+    return false;
+  }
+}
+
 export interface StayCheckRequest {
   poiIds: readonly number[];
   /** `YYYY-MM-DD`, the first night. */

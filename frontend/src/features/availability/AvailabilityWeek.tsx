@@ -652,6 +652,8 @@ function WeekSurface({
   return <>{matrix}</>;
 }
 
+const REFRESH_FAILED_COPY = "Couldn't refresh";
+
 /**
  * "checked 4m ago · refresh".
  *
@@ -667,6 +669,7 @@ function Freshness({
   onRefresh: () => void;
 }) {
   const cache = week.data?.state === 'success' ? week.data.cache : null;
+  if (week.refreshFailed && !cache) return <span className="cg-stale">{REFRESH_FAILED_COPY}</span>;
   // A non-breaking space, so the row keeps its height and the grid does not jump
   // when the pill appears.
   if (!cache) return <>&nbsp;</>;
@@ -674,6 +677,7 @@ function Freshness({
   return (
     <span className={ageMin >= STALE_THRESHOLD_MIN ? 'cg-stale' : undefined}>
       checked {ageMin}m ago ·{' '}
+      {week.refreshFailed ? `${REFRESH_FAILED_COPY} · ` : null}
       <LinkButton className="cg-refresh" onClick={onRefresh}>
         refresh
       </LinkButton>
