@@ -646,7 +646,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Build companion image
-        run: docker build -f companion/Dockerfile -t roadtrip/recgov-companion .
+        run: docker build --provenance=false --sbom=false -f companion/Dockerfile -t roadtrip/recgov-companion .
 
       - name: Log in to GHCR
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
@@ -684,6 +684,8 @@ jobs:
           TREE_SHA="$(git rev-parse HEAD:data)"
           IMAGE="ghcr.io/${{ github.repository }}/data:${TREE_SHA}"
           docker build \
+            --provenance=false \
+            --sbom=false \
             --build-arg "ROADTRIP_DATA_SHA=${TREE_SHA}" \
             -t "$IMAGE" \
             data
