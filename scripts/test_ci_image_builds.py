@@ -435,6 +435,18 @@ class DeploymentContractTest(unittest.TestCase):
                 "restore a dump taken before an edit there as if it were still valid",
             )
 
+    def test_preview_check_reports_on_the_deployed_commit_whatever_happens(self) -> None:
+        check = workflow("preview-check.yml")
+        self.assertEqual(workflow_triggers(check), {"repository_dispatch": {"types": ["vercel.deployment.success"]}})
+        self.assertEqual(check["permissions"].get("statuses"), "write")
+        steps = check["jobs"]["preview"]["steps"]
+        report = next(step for step in steps if step.get("name", "").startswith("Report"))
+        self.assertTrue(report["if"].startswith("always()"), "a failed check must still mark the commit failed")
+        self.assertIn("statuses/$SHA", report["run"])
+        commands = job_commands(check["jobs"]["preview"])
+        self.assertNotIn("npm ci", commands)
+        self.assertNotRegex(commands, r"curl[^\n]*(-L\b|--location)", "a protection redirect must fail, not be followed")
+
     def test_make_importer_diff_caches_only_the_modes_that_can_restore_a_dump(self) -> None:
         def dry_run(*variables: str) -> list[str]:
             out = subprocess.run(

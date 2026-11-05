@@ -112,6 +112,23 @@ login; the per-deployment, branch and team-slug URLs redirect to Vercel login.
 The first deployment of a project with no production deployment is assigned the production
 target, whatever its branch. The first build here was of `claude/nextjs-parallel-read-app-19ceab`.
 
+## Previews
+
+Each preview deployment gets its own Neon branch, `preview/<git branch>`, from the Neon Postgres
+integration on the Vercel project. The integration branches from `main`, sets the branch's
+`DATABASE_URL` as a branch-scoped Preview variable, connects as its default (owner) role, and
+deletes the Neon branch when the git branch goes. So a preview reads a copy of the full catalog
+and can write to its own branch; it does not exercise `roadtrip_web`'s read-only path.
+
+`.github/workflows/preview-check.yml` runs on Vercel's `vercel.deployment.success` repository
+dispatch. For a preview, it searches a small bbox around Mahood Lake through
+`/api/campgrounds/search`, opens that campground's page, and requires both to answer 200 with the
+name, then posts the `Preview check` commit status on the deployed commit. It reaches the
+protected deployment with the `x-vercel-protection-bypass` header, which needs Protection Bypass
+for Automation enabled on the project and its secret stored as the repository secret
+`VERCEL_AUTOMATION_BYPASS_SECRET`. A repository dispatch runs the workflow as it is on the
+default branch.
+
 ## Health endpoint
 
 `/api/health` has two modes, because Neon autosuspends an idle compute and a public endpoint that
