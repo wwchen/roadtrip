@@ -123,7 +123,9 @@ gone — by renaming it aside, which has exactly one winner, so two waiters cann
 both take it. Every reclaim is gated on the lock directory's age
 (`ROADTRIP_SANDBOX_LOCK_OWNER_GRACE_SECONDS`, default **5**): age belongs to the
 directory, so unlike a PID read a moment earlier it cannot be stale and name a
-lock somebody has since acquired. Waiting is bounded by
+lock somebody has since acquired. Ages are compared in whole seconds, so a lock
+is reclaimed only when its age is strictly greater than the grace; at equal, a
+lock created a few milliseconds ago could read as a full second old. Waiting is bounded by
 `ROADTRIP_SANDBOX_LOCK_WAIT_SECONDS` (default **60**).
 
 This exists because a holder killed mid-flight used to leak the lock forever.

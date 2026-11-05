@@ -612,7 +612,7 @@ _sandbox_lock_acquire() {
             fi
             lock_age=0
         fi
-        if (( lock_age >= grace )); then
+        if (( lock_age > grace )); then
             if [[ "${owner_pid}" =~ ^[0-9]+$ ]]; then
                 if ! kill -0 "${owner_pid}" 2>/dev/null; then
                     echo "==> reclaiming sandbox slot lock abandoned by PID ${owner_pid}"

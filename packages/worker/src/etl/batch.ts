@@ -1,4 +1,4 @@
-import type { FlushCounts } from '../repo/bulk.js';
+import type { FlushCounts } from '../model/flush-counts.js';
 
 export interface TerminalSink<OUT> {
   readonly batchSize: number;

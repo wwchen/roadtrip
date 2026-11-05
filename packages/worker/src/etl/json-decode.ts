@@ -1,5 +1,6 @@
-import { isWideNumber } from './envelope.js';
-import { kotlinIntFromText, kotlinLongFromText } from './kotlin-number.js';
+import { isRecord, isWideNumber } from './envelope.js';
+import { booleanOrNull } from './kotlin-json.js';
+import { kotlinDoubleFromText, kotlinIntFromText, kotlinLongFromText } from './kotlin-number.js';
 
 export type JsonObject = Readonly<Record<string, unknown>>;
 
@@ -34,7 +35,7 @@ function present(source: JsonObject, key: string): unknown {
 }
 
 export function isJsonObject(value: unknown): value is JsonObject {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) && !isWideNumber(value);
+  return isRecord(value);
 }
 
 function decodeObject(key: string, value: unknown): JsonObject {
@@ -48,20 +49,29 @@ function decodeString(key: string, value: unknown): string {
 }
 
 function decodeBoolean(key: string, value: unknown): boolean {
-  if (typeof value !== 'boolean') mismatch(key, 'boolean', value);
-  return value;
+  if (typeof value === 'boolean') return value;
+  const decoded = typeof value === 'string' ? booleanOrNull(value) : null;
+  if (decoded === null) mismatch(key, 'boolean', value);
+  return decoded;
 }
 
 function decodeDouble(key: string, value: unknown): number {
-  const decoded = typeof value === 'number' ? value : isWideNumber(value) ? Number(value.rawJSON) : undefined;
+  const decoded =
+    typeof value === 'number'
+      ? value
+      : isWideNumber(value)
+        ? Number(value.rawJSON)
+        : typeof value === 'string'
+          ? (kotlinDoubleFromText(value) ?? undefined)
+          : undefined;
   if (decoded === undefined) mismatch(key, 'number', value);
   if (!Number.isFinite(decoded)) throw new Error(`${key}: ${String(decoded)} is not a finite double`);
   return decoded;
 }
 
 function decodeInt(key: string, value: unknown): number {
-  if (isWideNumber(value)) {
-    const decoded = kotlinIntFromText(value.rawJSON);
+  if (isWideNumber(value) || typeof value === 'string') {
+    const decoded = kotlinIntFromText(typeof value === 'string' ? value : value.rawJSON);
     if (decoded === null) mismatch(key, 'int', value);
     return decoded;
   }
@@ -73,8 +83,8 @@ function decodeInt(key: string, value: unknown): number {
 }
 
 function decodeLong(key: string, value: unknown): number {
-  if (isWideNumber(value)) {
-    const decoded = kotlinLongFromText(value.rawJSON);
+  if (isWideNumber(value) || typeof value === 'string') {
+    const decoded = kotlinLongFromText(typeof value === 'string' ? value : value.rawJSON);
     if (decoded === null || decoded < MIN_SAFE_LONG || decoded > MAX_SAFE_LONG) mismatch(key, 'long', value);
     return Number(decoded);
   }

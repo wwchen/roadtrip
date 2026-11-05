@@ -10,11 +10,6 @@ const PROVIDER_REF_KEY_SEPARATOR = '\u0000';
 const ABSENT_OBJECT = serializeOpaquePayload({});
 const ABSENT_ARRAY = serializeOpaquePayload([]);
 
-export interface FlushCounts {
-  upserted: number;
-  skipped: number;
-}
-
 export type Executor = Pick<Db, 'execute' | 'insert' | 'select' | 'update'>;
 
 export function requireCatalogBatchWithinLimit(label: string, size: number): void {

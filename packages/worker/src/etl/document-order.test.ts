@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { documentEntries, documentKeys, documentValues, recordDocumentOrder, stringifyInDocumentOrder } from './document-order.js';
+import { documentEntries, documentKeys, extendInDocumentOrder, documentValues, recordDocumentOrder, stringifyInDocumentOrder } from './document-order.js';
 import { parseEnvelope, parseKeepingDigits } from './envelope.js';
 
 const FIXTURES = decodeURIComponent(new URL('../vendors/reservecalifornia/fixtures/', import.meta.url).pathname);
@@ -146,5 +146,18 @@ describe('document order of integer-like keys', () => {
   test('the serializer carries a number beyond 2^53 with every digit', () => {
     const value = parsed('{"2":12345678901234567890,"1":0.1000000000000000055511151231257827}');
     expect(stringifyInDocumentOrder(value)).toBe('{"2":12345678901234567890,"1":0.1000000000000000055511151231257827}');
+  });
+});
+
+describe('extendInDocumentOrder, as kotlinx buildJsonObject over an existing object', () => {
+  test('appends new keys after the source document order, integer-like keys included', () => {
+    const raw = parseKeepingDigits('{"site":"A","7":true}') as Record<string, unknown>;
+    const extended = extendInDocumentOrder(raw, { _parent: 'p' });
+    expect(stringifyInDocumentOrder(extended)).toBe('{"site":"A","7":true,"_parent":"p"}');
+  });
+
+  test('a key the source already has keeps its position and takes the new value', () => {
+    const raw = parseKeepingDigits('{"b":1,"a":2}') as Record<string, unknown>;
+    expect(stringifyInDocumentOrder(extendInDocumentOrder(raw, { b: 3, c: 4 }))).toBe('{"b":3,"a":2,"c":4}');
   });
 });

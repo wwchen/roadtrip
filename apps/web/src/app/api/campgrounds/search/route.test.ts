@@ -2,6 +2,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { CampgroundSearchDto } from '@/server/dto';
 
 const searchCampgrounds = vi.fn();
+const searchCampgroundsByContract = vi.fn();
 
 class StubInvalidBoundaryError extends Error {}
 
@@ -10,7 +11,9 @@ vi.mock('@/server/service/campgroundService', () => ({
   InvalidBoundaryError: StubInvalidBoundaryError,
 }));
 
-const { GET } = await import('./route');
+vi.mock('@/server/service/campgroundSearchService', () => ({ searchCampgroundsByContract }));
+
+const { GET, POST } = await import('./route');
 
 const SEARCH_URL = 'http://localhost/api/campgrounds/search';
 const SERVER_TIMING_PATTERN = /^db;dur=\d+\.\d$/;
@@ -108,4 +111,34 @@ test('a boundary the service rejects is a 400', async () => {
 test('any other failure propagates rather than being reported as the caller fault', async () => {
   searchCampgrounds.mockRejectedValue(new Error('connection refused'));
   await expect(GET(new Request(`${SEARCH_URL}?bbox=0,0,1,1`))).rejects.toThrow('connection refused');
+});
+
+const SQUARE = { type: 'Polygon', coordinates: [[[-120, 39], [-119, 39], [-119, 40], [-120, 40], [-120, 39]]] };
+const postSearch = (body: unknown) => POST(new Request(SEARCH_URL, { method: 'POST', body: JSON.stringify(body) }));
+
+test('POST answers the contract shape from the service', async () => {
+  const contract = { campground_ids: [1], total_in_boundary: 1, total_matching: 1, truncated: false };
+  searchCampgroundsByContract.mockResolvedValue(contract);
+  const response = await postSearch({ boundary: SQUARE });
+  expect(response.status).toBe(STATUS_OK);
+  expect(await response.json()).toEqual(contract);
+  expect(searchCampgroundsByContract).toHaveBeenCalledWith({ boundaryGeoJson: JSON.stringify(SQUARE), filter: { amenities: [] } });
+});
+
+test('POST without a boundary is 400 bad_boundary', async () => {
+  const response = await postSearch({});
+  expect(response.status).toBe(STATUS_BAD_REQUEST);
+  expect(await response.json()).toMatchObject({ error: 'bad_boundary' });
+});
+
+test('POST with an unknown filter value is 400 bad_request', async () => {
+  const response = await postSearch({ boundary: SQUARE, filter: { site_type: 'palace' } });
+  expect(await response.json()).toMatchObject({ error: 'bad_request' });
+});
+
+test('POST with a boundary PostGIS cannot read is 400 bad_boundary', async () => {
+  searchCampgroundsByContract.mockRejectedValue(new StubInvalidBoundaryError('bad'));
+  const response = await postSearch({ boundary: SQUARE });
+  expect(response.status).toBe(STATUS_BAD_REQUEST);
+  expect(await response.json()).toMatchObject({ error: 'bad_boundary' });
 });

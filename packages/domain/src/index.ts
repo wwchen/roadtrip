@@ -4,3 +4,5 @@ export * from './campsite.js';
 export * from './carrier.js';
 export * from './catalog.js';
 export * from './provider.js';
+export * from './booking-tenants.js';
+export * from './booking-identities.js';

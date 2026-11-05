@@ -26,7 +26,9 @@ test('the optional settings fall back to their defaults', () => {
   vi.stubEnv('DATABASE_PREPARE', undefined);
   vi.stubEnv('ENABLED_DATA_PROVIDERS', undefined);
   vi.stubEnv('SEARCH_RESULT_LIMIT', undefined);
+  vi.stubEnv('DATABASE_REQUIRE_READ_ONLY', undefined);
   expect(config.databasePrepare).toBe(true);
+  expect(config.databaseRequireReadOnly).toBe(true);
   expect(config.enabledDataProviders).toEqual(DEFAULT_PROVIDERS);
   expect(config.searchResultLimit).toBe(DEFAULT_LIMIT);
 });
@@ -35,7 +37,9 @@ test('the optional settings read their variables', () => {
   vi.stubEnv('DATABASE_PREPARE', 'false');
   vi.stubEnv('ENABLED_DATA_PROVIDERS', ' campflare , aspira ,');
   vi.stubEnv('SEARCH_RESULT_LIMIT', String(CUSTOM_LIMIT));
+  vi.stubEnv('DATABASE_REQUIRE_READ_ONLY', 'false');
   expect(config.databasePrepare).toBe(false);
+  expect(config.databaseRequireReadOnly).toBe(false);
   expect(config.enabledDataProviders).toEqual(['campflare', 'aspira']);
   expect(config.searchResultLimit).toBe(CUSTOM_LIMIT);
 });
@@ -43,6 +47,8 @@ test('the optional settings read their variables', () => {
 test('an unparseable optional setting throws a named error', () => {
   vi.stubEnv('DATABASE_PREPARE', 'maybe');
   expect(() => config.databasePrepare).toThrow(ConfigError);
+  vi.stubEnv('DATABASE_REQUIRE_READ_ONLY', 'no');
+  expect(() => config.databaseRequireReadOnly).toThrow(ConfigError);
   vi.stubEnv('SEARCH_RESULT_LIMIT', '0');
   expect(() => config.searchResultLimit).toThrow(ConfigError);
 });
@@ -71,4 +77,18 @@ test('a set but empty provider list is refused rather than read as none enabled'
   expect(() => config.enabledDataProviders).toThrow(/ENABLED_DATA_PROVIDERS must list at least one/);
   vi.stubEnv('ENABLED_DATA_PROVIDERS', ' , ');
   expect(() => config.enabledDataProviders).toThrow(ConfigError);
+});
+
+test('buildInfo reports the configured build', () => {
+  vi.stubEnv('BUILD_ENV', 'preview');
+  vi.stubEnv('BUILD_SHA', 'abc123');
+  vi.stubEnv('BUILD_BRANCH', 'claude/x');
+  expect(config.buildInfo).toEqual({ env: 'preview', sha: 'abc123', branch: 'claude/x' });
+});
+
+test('buildInfo defaults env to local and the commit to empty', () => {
+  vi.stubEnv('BUILD_ENV', '');
+  vi.stubEnv('BUILD_SHA', undefined);
+  vi.stubEnv('BUILD_BRANCH', undefined);
+  expect(config.buildInfo).toEqual({ env: 'local', sha: '', branch: '' });
 });

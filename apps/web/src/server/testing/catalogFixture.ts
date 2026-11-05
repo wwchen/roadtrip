@@ -180,6 +180,7 @@ async function seedCatalog(db: Db): Promise<void> {
 }
 
 export interface CatalogFixture {
+  url: string;
   writeDb: Db;
   readDb: Db;
   stop(): Promise<void>;
@@ -218,6 +219,7 @@ export async function startCatalogFixture(): Promise<CatalogFixture> {
   }
 
   return {
+    url,
     writeDb,
     readDb,
     async stop() {

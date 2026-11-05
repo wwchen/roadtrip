@@ -10,6 +10,7 @@ import { CampsiteKind, type DataProviderRef } from '@roadtrip/domain';
 import { getTableColumns, sql } from 'drizzle-orm';
 import type { PgInsertValue } from 'drizzle-orm/pg-core';
 import type { CampsiteUpsertCandidate } from '../model/campsite-candidate.js';
+import type { FlushCounts } from '../model/flush-counts.js';
 import {
   BULK_CHUNK_SIZE,
   chunked,
@@ -20,7 +21,6 @@ import {
   providerRefKey,
   requireCatalogBatchWithinLimit,
   type Executor,
-  type FlushCounts,
 } from './bulk.js';
 
 const DEFAULT_CAMPSITE_KIND = CampsiteKind.OTHER;

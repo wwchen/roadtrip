@@ -7,11 +7,13 @@ for two days on 2026-08-18. These tests drive the real functions out of
 deploy.sh so that regression cannot return unnoticed.
 """
 
+import math
 import os
 import re
 import subprocess
 import tempfile
 import textwrap
+import time
 import unittest
 from pathlib import Path
 
@@ -22,6 +24,9 @@ DEPLOY = ROOT / "scripts" / "deploy.sh"
 GRACE_SECONDS = 1
 WAIT_SECONDS = 3
 CONCURRENT_ACQUIRERS = 5
+FRESH_FRACTION_CEILING = 0.3
+FRESH_FRACTION_POLL_SECONDS = 0.01
+FRESH_LOCK_OFFSET_SECONDS = 0.05
 
 
 def _extract(name: str, source: str) -> str:
@@ -147,6 +152,20 @@ class SandboxSlotLockTest(unittest.TestCase):
             ROADTRIP_SANDBOX_LOCK_OWNER_GRACE_SECONDS="30",
             ROADTRIP_SANDBOX_LOCK_WAIT_SECONDS="1",
         )
+
+        self.assertEqual(1, result.returncode)
+        self.assertNotIn("reclaiming", result.stdout)
+        self.assertTrue(self.lock.exists())
+
+    def test_a_lock_younger_than_the_grace_window_survives_a_second_boundary(self) -> None:
+        """Whole-second mtimes must not make a fresh lock look a second older."""
+        self.lock.mkdir(parents=True)
+        while time.time() % 1 > FRESH_FRACTION_CEILING:
+            time.sleep(FRESH_FRACTION_POLL_SECONDS)
+        just_before_this_second = math.floor(time.time()) - FRESH_LOCK_OFFSET_SECONDS
+        os.utime(self.lock, (just_before_this_second, just_before_this_second))
+
+        result = self.acquire(ROADTRIP_SANDBOX_LOCK_WAIT_SECONDS="0")
 
         self.assertEqual(1, result.returncode)
         self.assertNotIn("reclaiming", result.stdout)
