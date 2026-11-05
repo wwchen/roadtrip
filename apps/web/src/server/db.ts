@@ -31,6 +31,22 @@ export async function assertReadOnly(db: Db): Promise<Db> {
   return db;
 }
 
+export class AvailabilityRefreshDisabledError extends Error {
+  constructor() {
+    super('availability refresh is not configured');
+    this.name = 'AvailabilityRefreshDisabledError';
+  }
+}
+
+let writer: Db | undefined;
+
+export function writerDb(): Promise<Db> {
+  const refresh = config.availabilityRefresh;
+  if (refresh === null) return Promise.reject(new AvailabilityRefreshDisabledError());
+  writer ??= createDb(refresh.writerDatabaseUrl, { prepare: config.databasePrepare });
+  return Promise.resolve(writer);
+}
+
 let handle: Db | undefined;
 let verified: Promise<Db> | undefined;
 
