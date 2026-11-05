@@ -74,23 +74,22 @@ which answers it `bad_id` as Next.js would.
 
 - `apps/web/next.config.ts` gains `output: 'standalone'`. `outputFileTracingRoot` is already the
   workspace root, so workspace packages and `@photostructure/tz-lookup`'s data are traced.
-- `apps/web/Dockerfile`, multi-stage:
-  - **Build:** `node:22` with the repo's workspace; `npm ci`, the workspace build
-    (`scripts/build-workspaces.mjs`), then `npm run build --workspace @roadtrip/web`, which already
-    runs `copy-frontend.mjs` before `next build`.
-  - **Runtime:** `node:22-slim`, non-root user, the standalone output plus `.next/static` and
+- Two new targets in the root `Dockerfile`, which already builds every image from one context:
+  - **`web-build`:** `node:22-alpine`; `npm ci`, then the root `npm run build`, which builds the
+    workspace packages, the Vite frontend and `@roadtrip/web` (whose build runs
+    `copy-frontend.mjs` before `next build`).
+  - **`web`:** `node:22-alpine`, the `node` user, the standalone output plus `.next/static` and
     `public/`, `CMD ["node", "apps/web/server.js"]`, `PORT=3000`, `HOSTNAME=0.0.0.0`.
   - Build args `BUILD_ENV`, `BUILD_SHA`, `BUILD_BRANCH`, which `next.config.ts` already inlines for
     `/api/build-info`.
-- `.dockerignore` entries so the build context excludes `backend/`, `node_modules/` and build
-  output.
+- `.dockerignore` gains `apps/*/node_modules`, `apps/web/.next` and `apps/web/public`.
 
 ### 2. CI and deploy
 
-- `ci.yml`: a `web-image` job, modelled on the backend image job. It builds the image and, on push
-  and same-repo PRs, pushes `ghcr.io/wwchen/roadtrip/web:<sha>`. Its path filter is the `web`
-  filter plus `apps/web/Dockerfile`.
-- The same job runs the **image smoke test** (Testing, below) before pushing.
+- `ci.yml`: the `docker-build` job, which already runs on every push because deploy pulls its
+  tag, also builds `--target web` and pushes `ghcr.io/wwchen/roadtrip/web:<sha>`; its PR
+  condition gains the `web` filter. The `web-tests` job builds the same target and runs the
+  **image smoke test** (Testing, below).
 - `deploy.yml`: `ghcr.io/<repo>/web:${DEPLOY_SHA}` joins the "Await the release images" list.
 - `scripts/deploy.sh`: exports `ROADTRIP_WEB_IMAGE="ghcr.io/wwchen/roadtrip/web:${app_sha}"` next
   to `ROADTRIP_BACKEND_IMAGE`, and runs the web-reader role step (component 4) after Postgres is
@@ -101,7 +100,9 @@ which answers it `bad_id` as Next.js would.
 
 ### 3. The `web` service
 
-In `docker-compose.yml`, profile `pois` (the backend's), so it starts wherever the backend does:
+In `docker-compose.yml`, its own profile `web`, which only production's compose invocation in
+`deploy.sh` enables. Sandboxes reuse the same compose file under `pois`, and must not start a
+service whose image tag they never pull.
 
 - `image: ${ROADTRIP_WEB_IMAGE:-roadtrip/web}`, `restart: unless-stopped`, the shared
   `*log-rotation`, `hostname: web`, `mem_limit: 512m`.
@@ -110,7 +111,8 @@ In `docker-compose.yml`, profile `pois` (the backend's), so it starts wherever t
   `DATABASE_PASSWORD_FILE=/run/secrets/web_db_password`,
   `MAPBOX_TOKEN_FILE=/run/secrets/mapbox_token`, `ENABLED_DATA_PROVIDERS` matching the backend's.
 - `healthcheck`: a `node -e` fetch of `http://127.0.0.1:3000/api/health` (the image has no curl).
-- `depends_on: postgres: condition: service_healthy`.
+- `depends_on: backend: condition: service_healthy`. Kotlin's Flyway applies the role's grants at
+  boot, so a healthy backend means the grants exist.
 - Logs reach Loki without change: Alloy's `discovery.docker` picks up every container.
 
 ### 4. The database role
@@ -125,7 +127,8 @@ In `docker-compose.yml`, profile `pois` (the backend's), so it starts wherever t
 - The same SQL in `packages/db/migrations/`, as `grafana_reader`'s role is mirrored there, so the
   schema-equivalence gate stays green.
 - `postgres-init/20-web-reader.sh`: creates the role, or resets its password, from
-  `WEB_DB_PASSWORD_FILE`, on a fresh cluster.
+  `WEB_DB_PASSWORD_FILE`, on a fresh cluster. With no password mounted (local, sandboxes) it says
+  so and exits 0: only production runs `web`.
 - `deploy.sh` runs that same script through `docker compose exec postgres` on every deploy, so the
   existing production cluster (whose data directory is not empty, so init scripts never run) gets
   the role and its current password. The script is idempotent.
@@ -180,7 +183,7 @@ running.
 
 - `config.test.ts`: `_FILE` reading, value-and-file conflict, unreadable file. Red first.
 - `webReadGrants.test.ts`: the migration's grants equal `WEB_READ_TABLES`.
-- Image smoke test, in the `web-image` CI job: start PostGIS, apply the schema and a seed row,
+- Image smoke test, in the `web-tests` CI job: start PostGIS, apply the schema and a seed row,
   create `roadtrip_web` with the migration plus the init script, run the built image against it
   with `DATABASE_PASSWORD_FILE`, and require `/api/health` 200 and `/api/pois/search?q=<seed>` to
   return the seed. This exercises the standalone build, the traced dependencies, `_FILE` and the
