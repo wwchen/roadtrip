@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { sql } from 'drizzle-orm';
@@ -18,6 +18,8 @@ const SMOKE_POLL_MS = 500;
 const HTTP_OK = 200;
 const STATUS_SEPARATOR = ' ';
 const NOT_LISTENING = 0;
+const SECRETS_DIR_MODE = 0o755;
+const COMPOSE_SECRET_MODE = 0o444;
 
 interface InContainerResponse {
   status: number;
@@ -42,7 +44,8 @@ describe.skipIf(IMAGE === undefined)('the web image', () => {
     await fixture.writeDb.execute(sql.raw(readFileSync(MIGRATION, 'utf8')));
     await fixture.writeDb.execute(sql.raw(`ALTER ROLE ${WEB_READ_ROLE} PASSWORD '${PASSWORD}'`));
     const secrets = mkdtempSync(path.join(tmpdir(), 'web-image-'));
-    writeFileSync(path.join(secrets, SECRET_NAME), PASSWORD);
+    chmodSync(secrets, SECRETS_DIR_MODE);
+    writeFileSync(path.join(secrets, SECRET_NAME), PASSWORD, { mode: COMPOSE_SECRET_MODE });
     containerId = execFileSync(
       'docker',
       [
