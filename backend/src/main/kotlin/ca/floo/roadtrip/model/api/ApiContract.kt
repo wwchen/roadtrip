@@ -359,6 +359,18 @@ object ApiContract {
                 conditional = true,
             ),
             ApiEndpoint(
+                ApiMethod.POST,
+                "/api/pois/{id}/campsites/availability/refresh",
+                success = ApiBody(HTTP_ACCEPTED),
+                errors =
+                    listOf(
+                        HTTP_BAD_REQUEST,
+                        HTTP_NOT_FOUND,
+                        HTTP_NOT_IMPLEMENTED,
+                    ).map { ApiBody(it, AvailabilityErrorDto::class) },
+                conditional = true,
+            ),
+            ApiEndpoint(
                 ApiMethod.GET,
                 "/api/pois/{id}/campsites",
                 success = ApiBody(HTTP_OK, PoiCampsitesResponseSchema::class),

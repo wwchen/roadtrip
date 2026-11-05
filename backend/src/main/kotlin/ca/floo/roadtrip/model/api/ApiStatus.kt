@@ -16,6 +16,7 @@ package ca.floo.roadtrip.model.api
  * keeps them clear of everything else under `model/api/`.
  */
 const val HTTP_OK = 200
+const val HTTP_ACCEPTED = 202
 const val HTTP_CREATED = 201
 const val HTTP_NO_CONTENT = 204
 const val HTTP_BAD_REQUEST = 400
