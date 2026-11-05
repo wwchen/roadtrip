@@ -10,6 +10,7 @@ deploy.sh so that regression cannot return unnoticed.
 import math
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -32,6 +33,14 @@ SECOND_ACQUIRER_HEAD_START_SECONDS = 0.3
 HOLD_SECONDS = 3
 RACE_WAIT_SECONDS = 15
 GATE_STALE_SECONDS = 10
+RACY_MKDIR_WINDOW_SECONDS = 0.2
+RACY_MKDIR = """#!/usr/bin/env bash
+for target in "$@"; do :; done
+if [[ "$1" == "-p" ]]; then exec "$REAL_MKDIR" "$@"; fi
+if [[ -e "$target" ]]; then echo "mkdir: cannot create directory '$target': File exists" >&2; exit 1; fi
+sleep "$RACY_MKDIR_WINDOW"
+exec "$REAL_MKDIR" -p "$target"
+"""
 
 
 def _extract(name: str, source: str) -> str:
@@ -179,7 +188,7 @@ class SandboxSlotLockTest(unittest.TestCase):
 
     def test_a_live_gate_is_waited_on_not_cleared(self) -> None:
         gate = self.state / ".slot-lock.gate"
-        gate.mkdir(parents=True)
+        gate.write_text("1\n")
 
         result = self.acquire(ROADTRIP_SANDBOX_LOCK_WAIT_SECONDS="1")
 
@@ -190,7 +199,7 @@ class SandboxSlotLockTest(unittest.TestCase):
 
     def test_a_gate_left_by_a_killed_acquirer_is_cleared(self) -> None:
         gate = self.state / ".slot-lock.gate"
-        gate.mkdir(parents=True)
+        gate.write_text("1\n")
         old = int(gate.stat().st_mtime) - (GATE_STALE_SECONDS + 60)
         os.utime(gate, (old, old))
 
@@ -251,6 +260,55 @@ class SandboxSlotLockTest(unittest.TestCase):
                 self.assertLessEqual(depth, 1, "two acquirers held the slot lock at once")
             elif token == "EXIT":
                 depth -= 1
+
+    def test_acquirers_never_overlap_when_mkdir_is_not_atomic(self) -> None:
+        """uutils mkdir (Ubuntu 26.04) can report success to two racers for one path."""
+        bin_dir = self.state / "bin"
+        bin_dir.mkdir()
+        racy = bin_dir / "mkdir"
+        racy.write_text(RACY_MKDIR)
+        racy.chmod(0o755)
+        trace = self.state / "trace"
+        trace.write_text("")
+        worker = self.state / "worker.sh"
+        worker.write_text(
+            textwrap.dedent(
+                """\
+                set -euo pipefail
+                source "$LIB"
+                _sandbox_lock_acquire >/dev/null
+                echo "ENTER $$" >> "$TRACE"
+                sleep 0.05
+                echo "EXIT $$" >> "$TRACE"
+                _sandbox_lock_release
+                """
+            )
+        )
+        env = self.env(
+            TRACE=str(trace),
+            PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            REAL_MKDIR=shutil.which("mkdir") or "/bin/mkdir",
+            RACY_MKDIR_WINDOW=str(RACY_MKDIR_WINDOW_SECONDS),
+            ROADTRIP_SANDBOX_LOCK_WAIT_SECONDS=str(CONCURRENT_ACQUIRERS * 5),
+        )
+
+        running = [
+            subprocess.Popen(["/bin/bash", str(worker)], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            for _ in range(CONCURRENT_ACQUIRERS)
+        ]
+        failures = [process.stderr.read().decode() for process in running if process.wait() != 0]
+        self.assertEqual([], failures)
+
+        depth = 0
+        entries = 0
+        for token in trace.read_text().split():
+            if token == "ENTER":
+                depth += 1
+                entries += 1
+                self.assertLessEqual(depth, 1, "two acquirers held the slot lock at once")
+            elif token == "EXIT":
+                depth -= 1
+        self.assertEqual(CONCURRENT_ACQUIRERS, entries)
 
     def test_concurrent_acquirers_never_overlap(self) -> None:
         """Reclaim must not hand the same lock to two callers at once."""

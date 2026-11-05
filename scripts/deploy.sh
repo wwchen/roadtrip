@@ -589,11 +589,11 @@ _sandbox_lock_gate_enter() {
     local gate_poll="$4"
     local gate_mtime
 
-    until mkdir "${gate}" 2>/dev/null; do
+    until ( set -o noclobber; printf '%s\n' "$$" > "${gate}" ) 2>/dev/null; do
         gate_mtime="$(_lock_mtime_epoch "${gate}")"
         if [[ "${gate_mtime}" =~ ^[0-9]+$ ]] && (( $(date +%s) - gate_mtime > gate_stale )); then
             echo "==> clearing a sandbox slot lock gate abandoned for over ${gate_stale}s"
-            rmdir "${gate}" 2>/dev/null || true
+            rm -f "${gate}"
             continue
         fi
         if (( $(date +%s) > deadline )); then
@@ -628,7 +628,7 @@ _sandbox_lock_acquire() {
         if mkdir "${lock}" 2>/dev/null; then
             # Before the trap: a failed write leaves a lock the grace path recovers.
             printf '%s\n' "$$" > "${lock}/pid"
-            rmdir "${gate}"
+            rm "${gate}"
             break
         fi
 
@@ -661,7 +661,7 @@ _sandbox_lock_acquire() {
                 _sandbox_lock_steal "${lock}"
             fi
         fi
-        rmdir "${gate}"
+        rm "${gate}"
 
         # Every path advances `waited`, so max_wait stays a real bound.
         if (( waited >= max_wait )); then

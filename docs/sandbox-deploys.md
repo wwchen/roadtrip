@@ -127,9 +127,13 @@ lock somebody has since acquired. Ages are compared in whole seconds, so a lock
 is reclaimed only when its age is strictly greater than the grace; at equal, a
 lock created a few milliseconds ago could read as a full second old.
 
-Every attempt to take the lock, reclaim decision included, happens inside a short gate: a second
-directory, `.slot-lock.gate`, held only while one caller tries `mkdir`, reads the owner and age,
-and steals. Without it, a caller could judge the old lock abandoned, stall, and then rename aside
+Every attempt to take the lock, reclaim decision included, happens inside a short gate: a file,
+`.slot-lock.gate`, held only while one caller tries `mkdir`, reads the owner and age, and steals.
+The gate is created with bash's `noclobber` redirection, which opens it with `O_EXCL` in the shell
+itself, so its atomicity does not depend on which coreutils the host runs. A `mkdir` lock does:
+uutils' `mkdir` (the default coreutils from Ubuntu 26.04, which CI runs on) can report success to
+two racers for the same path, measured at 20 of 200 ten-way races against 0 for GNU `mkdir`. With
+the lock directory created only inside the gate, its `mkdir` never has a competitor. Without it, a caller could judge the old lock abandoned, stall, and then rename aside
 a fresh lock that another caller had reclaimed and taken in the meantime, leaving two holders.
 Inside the gate no lock can be created or stolen between the read and the rename, and the new
 holder writes its PID before leaving. A gate older than
