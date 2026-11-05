@@ -20,6 +20,53 @@ off until availability is ported, so the drawer's availability grid does not mou
 Nothing in this file is a secret. The connection string itself lives only in Vercel and in the
 operator's own scratch file; this file records its shape and the settings measured against it.
 
+## Production on mini-ca
+
+Vercel builds PR previews; production for `roadtrip.floo.ca` runs `apps/web` as the `web`
+container on mini-ca, beside the Kotlin `backend`. `web` serves only the read API. Kotlin keeps
+the pages, sign-in, `/api/me`, watches, settings, availability, campsites, build info and health.
+Design: `docs/superpowers/specs/2026-11-04-web-on-mini-ca-design.md`.
+
+- **Image:** `ghcr.io/wwchen/roadtrip/web:<sha>`, the root `Dockerfile`'s `web` target, published
+  by CI's `docker-build` job on every push and smoke-tested against PostGIS by `web-tests`.
+- **Service:** `web` in `docker-compose.yml`, profile `web`, which only `deploy.sh`'s production
+  invocation enables. It starts after a healthy `backend`, because Flyway applies its grants.
+- **Database:** mini-ca's Postgres as `roadtrip_web`: read-only by default, `statement_timeout`
+  10 s, `SELECT` on the tables in `WEB_READ_TABLES`. `R__web_reader_grants.sql` (mirrored as
+  `packages/db/migrations/0002_web_reader.sql`) owns the grants; `postgres-init/20-web-reader.sh`
+  sets the password, on a fresh cluster and on every deploy.
+- **Secrets:** `WEB_DB_PASSWORD` and `MAPBOX_TOKEN`, mounted as files and read through
+  `DATABASE_PASSWORD_FILE` and `MAPBOX_TOKEN_FILE`.
+
+### The tunnel rule
+
+One public-hostname entry in Cloudflare Zero Trust, placed **above** the existing
+`roadtrip.floo.ca` entry, which keeps sending everything else to the backend:
+
+- **Hostname:** `roadtrip.floo.ca`
+- **Service:** `http://web:3000`
+- **Path:**
+
+```
+^/api/(pois(/(search|on-route|[0-9]+))?|campgrounds/(search|details)|geocode|route)$
+```
+
+`apps/web/src/server/tunnelRule.ts` holds the same string, and its test checks that it matches
+every read route `apps/web` serves and none of Kotlin's (`/api/pois/{id}/campsites`,
+`/api/pois/availability/stays`, `/api/me`, the pages). Change both together.
+
+### Rollout and rollback
+
+1. Set the password once: `./secrets/manage.py set common WEB_DB_PASSWORD`, and commit the vault.
+2. Merge. The deploy creates the role, then starts `web`; no traffic reaches it yet.
+3. On mini-ca, from the release directory:
+   `docker compose exec web node -e "fetch('http://127.0.0.1:3000/api/pois/search?q=Mahood').then(async (r) => console.log(r.status, await r.text()))"`
+   must print `200` and Mahood Lake.
+4. Add the tunnel rule. Check `https://roadtrip.floo.ca/api/pois/search?q=Mahood`, that the map's
+   pins and drawer work, and that a signed-in session stays signed in.
+
+To roll back, delete the tunnel rule: every path returns to Kotlin at once.
+
 ## Vercel
 
 | Setting | Value |
