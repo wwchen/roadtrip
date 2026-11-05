@@ -205,7 +205,7 @@ def step_by_name(job: dict, name: str) -> dict:
 
 
 class DeploymentContractTest(unittest.TestCase):
-    def test_ci_publishes_the_three_immutable_images(self) -> None:
+    def test_ci_publishes_every_immutable_image(self) -> None:
         jobs = workflow("ci.yml")["jobs"]
         app = jobs["docker-build"]
         # The job may be skipped on a PR that cannot change the image (docs
@@ -213,6 +213,9 @@ class DeploymentContractTest(unittest.TestCase):
         # because deploy pulls exactly that tag.
         self.assertIn("github.event_name == 'push' ||", app.get("if", ""))
         self.assertIn('docker push "$IMAGE:${SHA}"', job_commands(app))
+        self.assertIn("--target web", job_commands(app))
+        self.assertIn('docker push "$WEB_IMAGE:${SHA}"', job_commands(app))
+        self.assertIn("needs.changes.outputs.web == 'true'", app.get("if", ""))
 
         data_commands = job_commands(jobs["data-image"])
         self.assertIn("git rev-parse HEAD:data", data_commands)
@@ -222,6 +225,66 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn(COMPANION_KEY_SCRIPT, companion_commands)
         self.assertNotIn("git rev-parse HEAD:companion", companion_commands)
         self.assertIn("docker push", companion_commands)
+
+    def test_web_tests_smoke_the_web_image(self) -> None:
+        commands = job_commands(workflow("ci.yml")["jobs"]["web-tests"])
+        self.assertIn("--target web", commands)
+        self.assertIn("WEB_IMAGE=roadtrip/web", commands)
+
+    def test_the_web_filter_watches_the_image_inputs(self) -> None:
+        web = path_filters()["web"]
+        self.assertIn("Dockerfile", web)
+        self.assertIn(".dockerignore", web)
+
+    def test_web_runs_only_in_production(self) -> None:
+        compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+        web = compose["services"]["web"]
+        self.assertEqual(["web"], web["profiles"])
+        self.assertEqual("service_healthy", web["depends_on"]["backend"]["condition"])
+        self.assertNotIn("ports", web)
+        deploy = (ROOT / "scripts" / "deploy.sh").read_text()
+        self.assertIn("compose+=(--profile web)", deploy)
+        sandbox = yaml.safe_load((ROOT / "docker-compose.sandbox.yml").read_text())
+        self.assertNotIn("web", sandbox.get("services", {}))
+
+    def test_a_rollback_to_a_release_without_web_skips_it(self) -> None:
+        deploy = (ROOT / "scripts" / "deploy.sh").read_text()
+        self.assertIn('docker manifest inspect "${ROADTRIP_WEB_IMAGE}"', deploy)
+        self.assertIn("_ROLLBACK_ACTIVE == 1", deploy[deploy.index("docker manifest inspect") - 200 : deploy.index("docker manifest inspect")])
+
+    def test_reclaim_prunes_every_image_production_pulls(self) -> None:
+        deploy = (ROOT / "scripts" / "deploy.sh").read_text()
+        reclaim = (ROOT / "scripts" / "reclaim.sh").read_text()
+        repositories = reclaim[reclaim.index('ROADTRIP_REPOSITORIES="') : reclaim.index('"', reclaim.index('ROADTRIP_REPOSITORIES="') + len('ROADTRIP_REPOSITORIES="'))].split()
+        for image in re.findall(r'export ROADTRIP_[A-Z]+_IMAGE="(ghcr\.io/[^:"]+):', deploy):
+            self.assertIn(image, repositories)
+        self.assertIn("roadtrip/web", repositories)
+
+    def test_the_web_image_is_labelled_for_reclaim(self) -> None:
+        dockerfile = (ROOT / "Dockerfile").read_text()
+        web_stage = dockerfile[dockerfile.index("AS web\n") :]
+        self.assertIn('ca.floo.roadtrip.managed="true"', web_stage)
+        self.assertIn('ca.floo.roadtrip.component="web"', web_stage)
+
+    def test_web_health_checks_its_database_path(self) -> None:
+        compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+        self.assertIn("/api/pois/search", " ".join(compose["services"]["web"]["healthcheck"]["test"]))
+
+    def test_the_drift_gates_run_on_the_files_they_guard(self) -> None:
+        filters = path_filters()
+        self.assertIn("backend/src/main/resources/db/migration/R__web_reader_grants.sql", filters["web"])
+        self.assertIn("docs/web-app.md", filters["web"])
+        self.assertIn("postgres-init/**", filters["scripts"])
+        self.assertIn("caddy/**", filters["scripts"])
+        self.assertIn("caddy/Caddyfile", filters["web"])
+
+    def test_deploy_creates_the_web_reader_before_web_starts(self) -> None:
+        deploy = (ROOT / "scripts" / "deploy.sh").read_text()
+        backend_up = deploy.index("up -d --force-recreate backend")
+        role_step = deploy.index("exec -T postgres bash /docker-entrypoint-initdb.d/20-web-reader.sh")
+        everything_up = deploy.index('"${compose[@]}" up -d\n')
+        self.assertLess(backend_up, role_step)
+        self.assertLess(role_step, everything_up)
 
     def test_companion_image_is_keyed_on_everything_its_build_reads(self) -> None:
         deploy_commands = job_commands(workflow("deploy.yml")["jobs"]["deploy"])
@@ -464,7 +527,9 @@ class DeploymentContractTest(unittest.TestCase):
         deploy = (ROOT / "scripts" / "deploy.sh").read_text()
         self.assertNotIn("docker build", deploy)
         self.assertNotIn("docker compose build", deploy)
-        self.assertIn("pull backend recgov-companion", deploy)
+        self.assertIn('pull "${pulled[@]}"', deploy)
+        self.assertIn("local -a pulled=(backend recgov-companion)", deploy)
+        self.assertIn("pulled+=(web)", deploy)
 
     def test_prod_and_sandbox_share_one_runtime_release(self) -> None:
         # Prod installs the release straight from its workflow. The sandbox path

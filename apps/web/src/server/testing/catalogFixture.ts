@@ -181,6 +181,9 @@ async function seedCatalog(db: Db): Promise<void> {
 
 export interface CatalogFixture {
   url: string;
+  database: string;
+  container: string;
+  exec(argv: readonly string[], input?: string): Promise<string>;
   writeDb: Db;
   readDb: Db;
   stop(): Promise<void>;
@@ -220,6 +223,9 @@ export async function startCatalogFixture(): Promise<CatalogFixture> {
 
   return {
     url,
+    database: CATALOG_DATABASE,
+    container: postgis.containerName(),
+    exec: (argv, input) => postgis.exec(argv, input === undefined ? {} : { input }),
     writeDb,
     readDb,
     async stop() {

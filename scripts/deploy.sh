@@ -306,6 +306,14 @@ _deploy_prod() {
     "${RECLAIM}" check-disk --label "prod deploy" --scope host --min-gb "${ROADTRIP_MIN_FREE_DISK_GB:-${MIN_FREE_DISK_GB}}" || exit 1
 
     export ROADTRIP_BACKEND_IMAGE="ghcr.io/wwchen/roadtrip/backend:${app_sha}"
+    export ROADTRIP_WEB_IMAGE="ghcr.io/wwchen/roadtrip/web:${app_sha}"
+    local -a pulled=(backend recgov-companion)
+    if (( _ROLLBACK_ACTIVE == 1 )) && ! docker manifest inspect "${ROADTRIP_WEB_IMAGE}" >/dev/null 2>&1; then
+        echo "==> ${ROADTRIP_WEB_IMAGE} does not exist; rolling back without web" >&2
+    else
+        compose+=(--profile web)
+        pulled+=(web)
+    fi
     export ROADTRIP_COMPANION_IMAGE="ghcr.io/wwchen/roadtrip/recgov-companion:${companion_sha}"
     export ROADTRIP_DATA_IMAGE="ghcr.io/wwchen/roadtrip/data:${data_sha}"
     export ROADTRIP_DATA_SHA="${data_sha}"
@@ -322,8 +330,9 @@ _deploy_prod() {
     fi
 
     _ensure_data_volume "${data_sha}"
-    "${secret_exec[@]}" "${compose[@]}" pull backend recgov-companion
+    "${secret_exec[@]}" "${compose[@]}" pull "${pulled[@]}"
     "${secret_exec[@]}" "${compose[@]}" up -d --force-recreate backend
+    "${secret_exec[@]}" "${compose[@]}" exec -T postgres bash /docker-entrypoint-initdb.d/20-web-reader.sh
     # No `restart` of the observability services here: compose resolves their
     # ./grafana bind mounts against the release directory, which is keyed by
     # SHA, so every release changes their config hash and the `up -d` above

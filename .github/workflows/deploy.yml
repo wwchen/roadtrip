@@ -95,6 +95,7 @@ jobs:
           wait-seconds: '10'
           images: |
             ghcr.io/${{ github.repository }}/backend:${{ env.DEPLOY_SHA }}
+            ghcr.io/${{ github.repository }}/web:${{ env.DEPLOY_SHA }}
             ghcr.io/${{ github.repository }}/recgov-companion:${{ env.DEPLOY_COMPANION_SHA }}
             ghcr.io/${{ github.repository }}/data:${{ env.DEPLOY_DATA_SHA }}
 

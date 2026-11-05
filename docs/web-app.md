@@ -20,6 +20,59 @@ off until availability is ported, so the drawer's availability grid does not mou
 Nothing in this file is a secret. The connection string itself lives only in Vercel and in the
 operator's own scratch file; this file records its shape and the settings measured against it.
 
+## Production on mini-ca
+
+Vercel builds PR previews; production for `roadtrip.floo.ca` runs `apps/web` as the `web`
+container on mini-ca, beside the Kotlin `backend`. `web` serves only the read API. Kotlin keeps
+the pages, sign-in, `/api/me`, watches, settings, availability, campsites, build info and health.
+Design: `docs/superpowers/specs/2026-11-04-web-on-mini-ca-design.md`.
+
+- **Image:** `ghcr.io/wwchen/roadtrip/web:<sha>`, the root `Dockerfile`'s `web` target, published
+  by CI's `docker-build` job on every push and smoke-tested against PostGIS by `web-tests`.
+- **Service:** `web` in `docker-compose.yml`, profile `web`, which only `deploy.sh`'s production
+  invocation enables. It starts after a healthy `backend`, because Flyway applies its grants.
+- **Database:** mini-ca's Postgres as `roadtrip_web`: read-only by default, `statement_timeout`
+  10 s, `SELECT` on the tables in `WEB_READ_TABLES`. `R__web_reader_grants.sql` (mirrored as
+  `packages/db/migrations/0002_web_reader.sql`) owns the grants; `postgres-init/20-web-reader.sh`
+  sets the password, on a fresh cluster and on every deploy.
+- **Secrets:** `WEB_DB_PASSWORD` and `MAPBOX_TOKEN`, mounted as files and read through
+  `DATABASE_PASSWORD_FILE` and `MAPBOX_TOKEN_FILE`.
+
+### Routing
+
+`caddy/Caddyfile`'s `http://roadtrip.floo.ca` block splits production traffic. Requests whose path
+matches `@web` go to `web:3000`; everything else goes to `backend:8765`, exactly as before. The
+pattern is `WEB_ROUTED_PATH` in `apps/web/src/server/webRouting.ts`, whose test checks that it
+matches every read route `apps/web` serves and none of Kotlin's (`/api/pois/{id}/campsites`,
+`/api/pois/availability/stays`, `/api/me`, the pages), and that the Caddyfile carries it verbatim.
+`scripts/test_caddy_routing.py` runs the real `caddy` image with stub upstreams and checks where
+each path lands.
+
+Caddy's global `trusted_proxies static private_ranges` lets the client address that
+`cloudflared` puts in `X-Forwarded-For` through to Kotlin; without it Caddy replaces the header
+with its own peer and every caller shares one rate-limit key on the availability routes.
+
+### Rollout and rollback
+
+1. Set the password once: `./secrets/manage.py set WEB_DB_PASSWORD common`, and commit the vault.
+2. Merge. The deploy creates the role, starts `web`, and recreates Caddy with the new block.
+   Cloudflare still sends `roadtrip.floo.ca` straight to the backend, so no traffic reaches `web` yet.
+3. On mini-ca, from the release directory:
+   `docker compose --profile web exec web node -e "fetch('http://127.0.0.1:3000/api/pois/search?q=Mahood').then(async (r) => console.log(r.status, await r.text()))"`
+   must print `200` and Mahood Lake.
+4. In Cloudflare Zero Trust, change the `roadtrip.floo.ca` public hostname's service from the
+   backend to `http://caddy:80`. Check `https://roadtrip.floo.ca/api/pois/search?q=Mahood`, that the
+   map's pins and drawer work, and that a signed-in session stays signed in.
+
+Note the hostname's current service before changing it. To roll back, set it back to that value:
+every path returns to Kotlin at once, with no deploy.
+
+Once the hostname points at Caddy, never deploy or roll back to a release older than the
+`roadtrip.floo.ca` block in `caddy/Caddyfile` without first pointing the hostname back. That
+release's Caddyfile has no such block, so Caddy refuses the connection, or, with a sandbox up,
+answers every request with an empty 200, and the whole site is down. `deploy.sh`'s own rollback
+is safe: it returns only to the last release that passed its health gate, which has the block.
+
 ## Vercel
 
 | Setting | Value |

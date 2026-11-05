@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { ConfigError, config } from './config';
 
@@ -91,4 +94,49 @@ test('buildInfo defaults env to local and the commit to empty', () => {
   vi.stubEnv('BUILD_SHA', undefined);
   vi.stubEnv('BUILD_BRANCH', undefined);
   expect(config.buildInfo).toEqual({ env: 'local', sha: '', branch: '' });
+});
+
+function secretFile(contents: string): string {
+  const file = path.join(mkdtempSync(path.join(tmpdir(), 'web-config-')), 'secret');
+  writeFileSync(file, contents);
+  return file;
+}
+
+test("DATABASE_PASSWORD_FILE puts the file's password on DATABASE_URL, URL-encoded", () => {
+  vi.stubEnv('DATABASE_URL', 'postgres://roadtrip_web@postgres:5432/roadtrip');
+  vi.stubEnv('DATABASE_PASSWORD_FILE', secretFile('p@ss:w/rd\n'));
+  expect(config.databaseUrl).toBe('postgres://roadtrip_web:p%40ss%3Aw%2Frd@postgres:5432/roadtrip');
+});
+
+test('MAPBOX_TOKEN_FILE supplies the Mapbox token', () => {
+  vi.stubEnv('MAPBOX_TOKEN', undefined);
+  vi.stubEnv('MAPBOX_TOKEN_FILE', secretFile('pk.test\n'));
+  expect(config.mapboxToken).toBe('pk.test');
+});
+
+test('a value and its _FILE together are a ConfigError', () => {
+  vi.stubEnv('MAPBOX_TOKEN', 'x');
+  vi.stubEnv('MAPBOX_TOKEN_FILE', secretFile('pk.test'));
+  expect(() => config.mapboxToken).toThrow(ConfigError);
+  expect(() => config.mapboxToken).toThrow(/MAPBOX_TOKEN_FILE/);
+  vi.stubEnv('DATABASE_URL', 'postgres://u:p@h/d');
+  vi.stubEnv('DATABASE_PASSWORD_FILE', secretFile('other'));
+  expect(() => config.databaseUrl).toThrow(/DATABASE_PASSWORD_FILE/);
+});
+
+test('an unreadable or empty _FILE is a ConfigError naming the variable', () => {
+  vi.stubEnv('DATABASE_URL', 'postgres://roadtrip_web@postgres:5432/roadtrip');
+  vi.stubEnv('DATABASE_PASSWORD_FILE', path.join(tmpdir(), 'web-config-missing', 'nope'));
+  expect(() => config.databaseUrl).toThrow(ConfigError);
+  expect(() => config.databaseUrl).toThrow(/DATABASE_PASSWORD_FILE/);
+  vi.stubEnv('DATABASE_PASSWORD_FILE', secretFile(''));
+  expect(() => config.databaseUrl).toThrow(/DATABASE_PASSWORD_FILE/);
+});
+
+test('a password with % survives the decode the Postgres driver applies', () => {
+  vi.stubEnv('DATABASE_URL', 'postgres://roadtrip_web@postgres:5432/roadtrip');
+  for (const password of ['ab%41cd', 'p%zz', 'a b?c#d']) {
+    vi.stubEnv('DATABASE_PASSWORD_FILE', secretFile(password));
+    expect(decodeURIComponent(new URL(config.databaseUrl).password)).toBe(password);
+  }
 });

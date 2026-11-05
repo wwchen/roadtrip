@@ -47,3 +47,42 @@ RUN npm run build --workspace roadtrip-frontend
 FROM backend-base AS backend
 
 COPY --from=frontend /src/frontend/dist /app/static/frontend/dist
+
+FROM node:22-alpine AS web-build
+
+WORKDIR /src
+
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY scripts/ scripts/
+COPY packages/domain/ packages/domain/
+COPY packages/db/ packages/db/
+COPY frontend/ frontend/
+COPY apps/web/ apps/web/
+COPY data/us-states.geojson data/us-states.geojson
+RUN npm ci --workspace @roadtrip/web --workspace roadtrip-frontend --no-audit --no-fund
+
+ARG BUILD_ENV=""
+ARG BUILD_SHA=""
+ARG BUILD_BRANCH=""
+ENV BUILD_ENV=${BUILD_ENV} BUILD_SHA=${BUILD_SHA} BUILD_BRANCH=${BUILD_BRANCH} NEXT_TELEMETRY_DISABLED=1
+RUN npm run build --workspace @roadtrip/domain \
+ && npm run build --workspace @roadtrip/db \
+ && npm run build --workspace roadtrip-frontend \
+ && npm run build --workspace @roadtrip/web
+
+FROM node:22-alpine AS web
+
+WORKDIR /app
+
+LABEL ca.floo.roadtrip.managed="true" \
+      ca.floo.roadtrip.component="web"
+
+ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1
+
+COPY --from=web-build --chown=node:node /src/apps/web/.next/standalone/ ./
+COPY --from=web-build --chown=node:node /src/apps/web/.next/static ./apps/web/.next/static
+COPY --from=web-build --chown=node:node /src/apps/web/public ./apps/web/public
+
+USER node
+EXPOSE 3000
+CMD ["node", "apps/web/server.js"]

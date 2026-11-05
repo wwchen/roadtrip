@@ -24,3 +24,7 @@ data/pricing-cache
 
 docs/superpowers/plans
 docs/superpowers/specs
+
+apps/*/node_modules
+apps/web/.next
+apps/web/public

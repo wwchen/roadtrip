@@ -22,6 +22,19 @@
 	# reload` run via `docker exec` in this same container talks to it; it is
 	# never exposed outside the container.
 	admin localhost:2019
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+http://roadtrip.floo.ca {
+	@web path_regexp ^/api/(pois(/(search|on-route|[0-9]+))?|campgrounds/(search|details)|geocode|route)$
+	handle @web {
+		reverse_proxy web:3000
+	}
+	handle {
+		reverse_proxy backend:8765
+	}
 }
 
 # Per-sandbox vhosts (sb-<name>.<zone> → reverse_proxy sb-<name>-backend:8765),

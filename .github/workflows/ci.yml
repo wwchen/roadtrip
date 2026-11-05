@@ -96,6 +96,8 @@ jobs:
               - '.github/workflows/ci.yml'
             scripts:
               - 'scripts/**'
+              - 'postgres-init/**'
+              - 'caddy/**'
               - 'secrets/**'
               - 'grafana/**'
               - 'deploy/**'
@@ -193,6 +195,11 @@ jobs:
               - '.github/workflows/ci.yml'
             web:
               - 'apps/**'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'backend/src/main/resources/db/migration/R__web_reader_grants.sql'
+              - 'docs/web-app.md'
+              - 'caddy/Caddyfile'
               - 'frontend/**'
               - 'data/us-states.geojson'
               - 'packages/**'
@@ -587,6 +594,27 @@ jobs:
       - name: Build @roadtrip/web
         run: npm run build --workspace @roadtrip/web
 
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Expose cache-service credentials to buildx
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              if (process.env[name]) core.exportVariable(name, process.env[name]);
+            }
+
+      - name: Build web image
+        run: |
+          docker buildx build -t roadtrip/web --target web --load \
+            --cache-from type=gha,scope=web-image \
+            --cache-to type=gha,scope=web-image,mode=max,ignore-error=true \
+            .
+
+      - name: Smoke-test web image
+        working-directory: apps/web
+        run: WEB_IMAGE=roadtrip/web npx vitest run src/server/webImage.smoke.test.ts
+
   companion-tests:
     needs: changes
     if: needs.changes.outputs.companion == 'true'
@@ -687,7 +715,8 @@ jobs:
     if: >-
       github.event_name == 'push' ||
       needs.changes.outputs.smoke == 'true' ||
-      needs.changes.outputs.scripts == 'true'
+      needs.changes.outputs.scripts == 'true' ||
+      needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -739,6 +768,27 @@ jobs:
           SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           docker tag roadtrip/backend "$IMAGE:${SHA}"
           docker push "$IMAGE:${SHA}"
+
+      - name: Build web image
+        env:
+          BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BUILD_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          docker buildx build -t roadtrip/web --target web --load \
+            --build-arg BUILD_ENV=prod \
+            --build-arg BUILD_SHA="$BUILD_SHA" \
+            --build-arg BUILD_BRANCH="$BUILD_BRANCH" \
+            --cache-from type=gha,scope=web-image \
+            --cache-to type=gha,scope=web-image,mode=max,ignore-error=true \
+            .
+
+      - name: Tag and push web image by SHA
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          WEB_IMAGE="ghcr.io/${{ github.repository }}/web"
+          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          docker tag roadtrip/web "$WEB_IMAGE:${SHA}"
+          docker push "$WEB_IMAGE:${SHA}"
 
   backend-tests:
     needs: changes
