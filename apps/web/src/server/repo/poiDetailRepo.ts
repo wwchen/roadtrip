@@ -1,6 +1,7 @@
 import {
   alertsShape,
   amenitiesShape,
+  bookingAliasesShape,
   cellServiceShape,
   contactShape,
   linksShape,
@@ -13,6 +14,7 @@ import {
   type Db,
 } from '@roadtrip/db';
 import type {
+  BookingAlias,
   CampgroundAlert,
   CampgroundAmenity,
   CampgroundContact,
@@ -47,6 +49,9 @@ export interface CampgroundDetailRow {
   mediumDescription: string | null;
   longDescription: string | null;
   reservationUrl: string | null;
+  bookingProvider: string | null;
+  bookingProviderRef: string | null;
+  bookingAliases: BookingAlias[];
   maxRvLength: number | null;
   maxTrailerLength: number | null;
   hasPullThroughSites: boolean | null;
@@ -114,7 +119,8 @@ export async function findPoiIndex(db: Db, id: bigint): Promise<PoiIndexRow | nu
 export async function findCampgroundDetail(db: Db, poiId: bigint, providers: readonly string[]): Promise<CampgroundDetailRow | null> {
   const rows = await db.execute<Record<string, unknown>>(sql`
     SELECT cg.data_provider, cg.data_provider_ref, cg.name, cg.parent_name, cg.kind, cg.status, cg.status_description,
-           cg.short_description, cg.medium_description, cg.long_description, cg.reservation_url, cg.max_rv_length,
+           cg.short_description, cg.medium_description, cg.long_description, cg.reservation_url, cg.booking_provider,
+           cg.booking_provider_ref, cg.booking_aliases, cg.max_rv_length,
            cg.max_trailer_length, cg.has_pull_through_sites, cg.big_rig_friendly, cg.location, cg.amenities, cg.links,
            cg.photos, cg.alerts, cg.cell_service, cg.metadata, cg.management, cg.contact, cg.default_campsite_schedule,
            cg.price, cg.connections, COALESCE(cg.source_payload, '{}'::jsonb) AS upstream
@@ -142,6 +148,9 @@ export async function findCampgroundDetail(db: Db, poiId: bigint, providers: rea
     mediumDescription: row.medium_description as string | null,
     longDescription: row.long_description as string | null,
     reservationUrl: row.reservation_url as string | null,
+    bookingProvider: row.booking_provider as string | null,
+    bookingProviderRef: row.booking_provider_ref as string | null,
+    bookingAliases: decoder.decode('booking_aliases', bookingAliasesShape, row.booking_aliases) ?? [],
     maxRvLength: row.max_rv_length as number | null,
     maxTrailerLength: row.max_trailer_length as number | null,
     hasPullThroughSites: row.has_pull_through_sites as boolean | null,

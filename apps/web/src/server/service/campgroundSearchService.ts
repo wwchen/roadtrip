@@ -1,4 +1,5 @@
 import type { Db } from '@roadtrip/db';
+import { bookingIdentities, shippedTenantRegistry } from '@roadtrip/domain';
 import type { CampgroundSearchQuery } from '../campgroundSearchRequest';
 import { config } from '../config';
 import type { CampgroundDetailsResponseDto, CampgroundSearchResponseDto, CampgroundSummaryDto } from '../contract';
@@ -6,6 +7,7 @@ import { toContractId } from '../contractIds';
 import { serverDb } from '../db';
 import { searchWithinBoundary } from '../repo/campgroundSearchRepo';
 import { findCampgroundSummaries, type CampgroundSummaryRow } from '../repo/campgroundSummaryRepo';
+import { bookingSystem, campgroundBookingRef } from './booking/campgroundCta';
 import { amenityDtos, ratingDto } from './campgroundContract';
 
 export async function searchCampgroundIds(
@@ -23,8 +25,14 @@ export async function searchCampgroundIds(
   };
 }
 
+function summaryBookingSystem(row: CampgroundSummaryRow): string | null {
+  const tenants = shippedTenantRegistry();
+  return bookingSystem(tenants, campgroundBookingRef(tenants, bookingIdentities(row.bookingProvider, row.bookingProviderRef, row.bookingAliases)));
+}
+
 function summaryDto(row: CampgroundSummaryRow): CampgroundSummaryDto {
   const rating = ratingDto(row.metadata?.rating);
+  const booking = summaryBookingSystem(row);
   return {
     id: toContractId(row.poiId),
     campground_id: toContractId(row.campgroundId),
@@ -35,6 +43,7 @@ function summaryDto(row: CampgroundSummaryRow): CampgroundSummaryDto {
     lat: row.lat,
     ...(rating === undefined ? {} : { rating }),
     availability_supported: false,
+    ...(booking === null ? {} : { booking_system: booking }),
     amenities: amenityDtos(row.amenities),
     site_counts: row.siteCounts,
     site_total: row.siteTotal,

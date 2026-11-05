@@ -19,8 +19,8 @@ let fixture: CatalogFixture;
 beforeAll(async () => {
   fixture = await startCatalogFixture();
   await fixture.writeDb.execute(sql`INSERT INTO pois (id, poi_type, geom) VALUES (${NO_SHOWERS_POI}, 'campground', ST_SetSRID(ST_MakePoint(-120.1, 39.02), 4326))`);
-  await fixture.writeDb.execute(sql`INSERT INTO campgrounds (id, data_provider, data_provider_ref, name, amenities)
-    VALUES (3402, 'campflare', 'ns-1', 'No Showers Camp', '[{"key":"showers","present":false}]')`);
+  await fixture.writeDb.execute(sql`INSERT INTO campgrounds (id, data_provider, data_provider_ref, name, amenities, booking_provider, booking_provider_ref)
+    VALUES (3402, 'campflare', 'ns-1', 'No Showers Camp', '[{"key":"showers","present":false}]', 'aspira', 'bc:1:2:null')`);
   await fixture.writeDb.execute(sql`INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (${NO_SHOWERS_POI}, 3402)`);
 });
 
@@ -72,5 +72,11 @@ test('details keep request order, omit unknown and disabled-provider ids, and ca
     max_people: 8,
   });
   expect(campgrounds[0]).toMatchObject({ site_counts: {}, site_total: 0 });
+  expect(campgrounds[1]).not.toHaveProperty('booking_system');
   expect(campgrounds[0]).not.toHaveProperty('max_people');
+});
+
+test('a summary names the booking site its campground books through, without claiming availability', async () => {
+  const { campgrounds } = await campgroundDetails(fixture.readDb, [NO_SHOWERS_POI], ENABLED_PROVIDERS);
+  expect(campgrounds[0]).toMatchObject({ booking_system: 'BC Parks', availability_supported: false });
 });

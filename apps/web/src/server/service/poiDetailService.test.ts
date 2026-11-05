@@ -4,9 +4,18 @@ import { ENABLED_PROVIDERS, UNKNOWN_POI_ID, UNSERVED_POI_ID, startCatalogFixture
 import { poiDetail } from './poiDetailService';
 
 const RICH_POI = 3101n;
+const ASPIRA_POI = 3102n;
+const ALIASED_POI = 3103n;
+const NOW = new Date('2026-06-17T20:00:00Z');
+const MAHOOD_DEEPLINK =
+  'https://camping.bcparks.ca/create-booking/results?transactionLocationId=-2147483429&mapId=-2147483235&searchTabGroupId=0' +
+  '&bookingCategoryId=0&startDate=2026-06-17&endDate=2026-06-18&nights=1&isReserving=true&equipmentId=-32768' +
+  '&subEquipmentId=-32768&peopleCapacityCategoryCounts=%5B%5B-32767%2Cnull%2C1%2Cnull%5D%5D' +
+  '&searchTime=2026-06-17T00%3A00%3A00.000&flexibleSearch=%5Bfalse%2Cfalse%2C%222026-06-17%22%2C1%5D&view=grid' +
+  '&resourceLocationId=-2147483486';
 const TESLA_POI = 3201n;
 const GYM_POI = 3301n;
-const D3_FIELDS = ['availability_provider', 'time_zone', 'earliest_date', 'latest_date', 'booking_ref', 'availability_supported', 'cta', 'booking_system'];
+const D3_FIELDS = ['availability_provider', 'time_zone', 'earliest_date', 'latest_date', 'booking_ref', 'availability_supported'];
 
 let fixture: CatalogFixture;
 
@@ -15,6 +24,8 @@ beforeAll(async () => {
   const db = fixture.writeDb;
   await db.execute(sql`INSERT INTO pois (id, poi_type, geom) VALUES
     (${RICH_POI}, 'campground', ST_SetSRID(ST_MakePoint(-120.09, 52.2), 4326)),
+    (${ASPIRA_POI}, 'campground', ST_SetSRID(ST_MakePoint(-120.09, 52.2), 4326)),
+    (${ALIASED_POI}, 'campground', ST_SetSRID(ST_MakePoint(-119.6, 37.7), 4326)),
     (${TESLA_POI}, 'tesla_supercharger', ST_SetSRID(ST_MakePoint(-121, 37), 4326)),
     (${GYM_POI}, 'planet_fitness_location', ST_SetSRID(ST_MakePoint(-122, 38), 4326))`);
   await db.execute(sql`INSERT INTO campgrounds (id, data_provider, data_provider_ref, name, parent_name, kind, status,
@@ -29,6 +40,17 @@ beforeAll(async () => {
       '{"agency":"BC Parks"}', '{"phone":"555-0101","email":"a@b.test"}', '{"check_in":"14:00"}', '{"minimum":10}',
       '{"vendor":"x"}', 40)`);
   await db.execute(sql`INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (${RICH_POI}, 3001)`);
+  await db.execute(sql`INSERT INTO campgrounds (id, data_provider, data_provider_ref, name, location, booking_provider,
+      booking_provider_ref, booking_aliases)
+    VALUES (3002, 'campflare', 'mahood-1', 'Mahood Lake', '{"latitude":52.1979,"longitude":-120.0902}', 'aspira',
+      'bc:-2147483429:-2147483235:-2147483486', '[{"provider":"campflare","ref":"mahood-lake"}]')`);
+  await db.execute(sql`INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (${ASPIRA_POI}, 3002)`);
+  await db.execute(sql`INSERT INTO campgrounds (id, data_provider, data_provider_ref, name, reservation_url, links,
+      booking_provider, booking_provider_ref, booking_aliases)
+    VALUES (3003, 'campflare', 'flowing-1', 'Flowing Well', 'https://www.recreation.gov/camping/campgrounds/232001',
+      '[{"url":"http://traveloregon.com"}]', 'campflare', 'flowing-well-campground-001',
+      '[{"provider":"recgov","ref":"232001"}]')`);
+  await db.execute(sql`INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (${ALIASED_POI}, 3003)`);
   await db.execute(sql`INSERT INTO tesla_superchargers (id, location_slug, location_guid, common_site_name, site_status,
       access_type, open_to_public, open_to_non_teslas, stall_count, max_power_kw, region, country, time_zone, info_url,
       address, amenities, pricebooks, index_payload, detail_payload)
@@ -46,7 +68,7 @@ afterAll(async () => {
   await fixture?.stop();
 });
 
-const detail = (id: bigint) => poiDetail(fixture.readDb, id, ENABLED_PROVIDERS);
+const detail = (id: bigint) => poiDetail(fixture.readDb, id, ENABLED_PROVIDERS, NOW);
 
 test("a campground's detail carries the Kotlin fields", async () => {
   const feature = await detail(RICH_POI);
@@ -92,7 +114,27 @@ test("a campground's detail carries the Kotlin fields", async () => {
     elevation: 400,
     last_verified: '2026-01-01',
     charger_amenities: [],
+    cta: [{ url: 'https://info.test/a', label: 'Visit info.test', kind: 'info' }],
   });
+});
+
+test('an Aspira campground gets its dated booking deeplink, its Campflare page and its booking system', async () => {
+  const detailOf = (await detail(ASPIRA_POI))?.properties.detail;
+  expect(detailOf?.cta).toEqual([
+    { url: MAHOOD_DEEPLINK, label: 'Reserve on BC Parks', kind: 'reserve' },
+    { url: 'https://campflare.com/campground/mahood-lake', label: 'View on Campflare', kind: 'info' },
+  ]);
+  expect(detailOf?.booking_system).toBe('BC Parks');
+  expect(detailOf).not.toHaveProperty('availability_supported');
+});
+
+test('a Campflare campground that rec.gov also sells reserves on rec.gov, then links its Campflare page', async () => {
+  const detailOf = (await detail(ALIASED_POI))?.properties.detail;
+  expect(detailOf?.cta).toEqual([
+    { url: 'https://www.recreation.gov/camping/campgrounds/232001', label: 'Reserve on Recreation.gov', kind: 'reserve' },
+    { url: 'https://campflare.com/campground/flowing-well-campground-001', label: 'View on Campflare', kind: 'info' },
+  ]);
+  expect(detailOf?.booking_system).toBe('Recreation.gov');
 });
 
 test("a campground's detail omits every D3 field", async () => {
