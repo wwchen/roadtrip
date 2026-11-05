@@ -39,14 +39,22 @@ export function availabilityError(status: number, error: string, extra: Record<s
   return Response.json(body, { status });
 }
 
-export function parseAvailabilityQuery(url: URL): AvailabilityQuery | Response {
+export function unknownSiteTypeDetail(value: string): string {
+  return `unknown site_type '${value}'; accepted values: ${SITE_TYPE_LIST}`;
+}
+
+export function parseSiteTypes(url: URL): CampsiteKind[] | { unknown: string } {
   const siteTypes: CampsiteKind[] = [];
   for (const raw of url.searchParams.getAll(SITE_TYPE_PARAM)) {
-    if (!(campsiteKinds as readonly string[]).includes(raw)) {
-      return availabilityError(STATUS_BAD_REQUEST, BAD_REQUEST, { detail: `unknown site_type '${raw}'; accepted values: ${SITE_TYPE_LIST}` });
-    }
+    if (!(campsiteKinds as readonly string[]).includes(raw)) return { unknown: raw };
     siteTypes.push(raw as CampsiteKind);
   }
+  return siteTypes;
+}
+
+export function parseAvailabilityQuery(url: URL): AvailabilityQuery | Response {
+  const siteTypes = parseSiteTypes(url);
+  if (!Array.isArray(siteTypes)) return availabilityError(STATUS_BAD_REQUEST, BAD_REQUEST, { detail: unknownSiteTypeDetail(siteTypes.unknown) });
   const startDate = url.searchParams.get(START_DATE_PARAM);
   const endDate = url.searchParams.get(END_DATE_PARAM);
   if (!validDate(startDate) || !validDate(endDate)) return availabilityError(STATUS_BAD_REQUEST, BAD_DATE_WINDOW);
