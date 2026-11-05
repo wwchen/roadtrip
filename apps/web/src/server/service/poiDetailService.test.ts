@@ -5,6 +5,7 @@ import { poiDetail } from './poiDetailService';
 
 const RICH_POI = 3101n;
 const ASPIRA_POI = 3102n;
+const ALIASED_POI = 3103n;
 const NOW = new Date('2026-06-17T20:00:00Z');
 const MAHOOD_DEEPLINK =
   'https://camping.bcparks.ca/create-booking/results?transactionLocationId=-2147483429&mapId=-2147483235&searchTabGroupId=0' +
@@ -24,6 +25,7 @@ beforeAll(async () => {
   await db.execute(sql`INSERT INTO pois (id, poi_type, geom) VALUES
     (${RICH_POI}, 'campground', ST_SetSRID(ST_MakePoint(-120.09, 52.2), 4326)),
     (${ASPIRA_POI}, 'campground', ST_SetSRID(ST_MakePoint(-120.09, 52.2), 4326)),
+    (${ALIASED_POI}, 'campground', ST_SetSRID(ST_MakePoint(-119.6, 37.7), 4326)),
     (${TESLA_POI}, 'tesla_supercharger', ST_SetSRID(ST_MakePoint(-121, 37), 4326)),
     (${GYM_POI}, 'planet_fitness_location', ST_SetSRID(ST_MakePoint(-122, 38), 4326))`);
   await db.execute(sql`INSERT INTO campgrounds (id, data_provider, data_provider_ref, name, parent_name, kind, status,
@@ -43,6 +45,12 @@ beforeAll(async () => {
     VALUES (3002, 'campflare', 'mahood-1', 'Mahood Lake', '{"latitude":52.1979,"longitude":-120.0902}', 'aspira',
       'bc:-2147483429:-2147483235:-2147483486', '[{"provider":"campflare","ref":"mahood-lake"}]')`);
   await db.execute(sql`INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (${ASPIRA_POI}, 3002)`);
+  await db.execute(sql`INSERT INTO campgrounds (id, data_provider, data_provider_ref, name, reservation_url, links,
+      booking_provider, booking_provider_ref, booking_aliases)
+    VALUES (3003, 'campflare', 'flowing-1', 'Flowing Well', 'https://www.recreation.gov/camping/campgrounds/232001',
+      '[{"url":"http://traveloregon.com"}]', 'campflare', 'flowing-well-campground-001',
+      '[{"provider":"recgov","ref":"232001"}]')`);
+  await db.execute(sql`INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (${ALIASED_POI}, 3003)`);
   await db.execute(sql`INSERT INTO tesla_superchargers (id, location_slug, location_guid, common_site_name, site_status,
       access_type, open_to_public, open_to_non_teslas, stall_count, max_power_kw, region, country, time_zone, info_url,
       address, amenities, pricebooks, index_payload, detail_payload)
@@ -118,6 +126,15 @@ test('an Aspira campground gets its dated booking deeplink, its Campflare page a
   ]);
   expect(detailOf?.booking_system).toBe('BC Parks');
   expect(detailOf).not.toHaveProperty('availability_supported');
+});
+
+test('a Campflare campground that rec.gov also sells reserves on rec.gov, then links its Campflare page', async () => {
+  const detailOf = (await detail(ALIASED_POI))?.properties.detail;
+  expect(detailOf?.cta).toEqual([
+    { url: 'https://www.recreation.gov/camping/campgrounds/232001', label: 'Reserve on Recreation.gov', kind: 'reserve' },
+    { url: 'https://campflare.com/campground/flowing-well-campground-001', label: 'View on Campflare', kind: 'info' },
+  ]);
+  expect(detailOf?.booking_system).toBe('Recreation.gov');
 });
 
 test("a campground's detail omits every D3 field", async () => {
