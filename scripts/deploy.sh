@@ -294,7 +294,7 @@ _deploy_prod() {
     local prev_data_sha=""
     local prev_companion_sha=""
     local prev_branch=""
-    local -a compose=(docker compose -f docker-compose.yml -f docker-compose.secrets.yml --profile tunnel --profile pois --profile recgov-companion)
+    local -a compose=(docker compose -f docker-compose.yml -f docker-compose.secrets.yml --profile tunnel --profile pois --profile web --profile recgov-companion)
     local -a secret_exec=(./secrets/manage.py exec prod --)
 
     _require_sha "app SHA" "${app_sha}"
@@ -306,6 +306,7 @@ _deploy_prod() {
     "${RECLAIM}" check-disk --label "prod deploy" --scope host --min-gb "${ROADTRIP_MIN_FREE_DISK_GB:-${MIN_FREE_DISK_GB}}" || exit 1
 
     export ROADTRIP_BACKEND_IMAGE="ghcr.io/wwchen/roadtrip/backend:${app_sha}"
+    export ROADTRIP_WEB_IMAGE="ghcr.io/wwchen/roadtrip/web:${app_sha}"
     export ROADTRIP_COMPANION_IMAGE="ghcr.io/wwchen/roadtrip/recgov-companion:${companion_sha}"
     export ROADTRIP_DATA_IMAGE="ghcr.io/wwchen/roadtrip/data:${data_sha}"
     export ROADTRIP_DATA_SHA="${data_sha}"
@@ -322,8 +323,9 @@ _deploy_prod() {
     fi
 
     _ensure_data_volume "${data_sha}"
-    "${secret_exec[@]}" "${compose[@]}" pull backend recgov-companion
+    "${secret_exec[@]}" "${compose[@]}" pull backend web recgov-companion
     "${secret_exec[@]}" "${compose[@]}" up -d --force-recreate backend
+    "${secret_exec[@]}" "${compose[@]}" exec -T postgres bash /docker-entrypoint-initdb.d/20-web-reader.sh
     # No `restart` of the observability services here: compose resolves their
     # ./grafana bind mounts against the release directory, which is keyed by
     # SHA, so every release changes their config hash and the `up -d` above

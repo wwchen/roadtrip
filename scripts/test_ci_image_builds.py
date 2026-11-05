@@ -184,6 +184,26 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("Dockerfile", web)
         self.assertIn(".dockerignore", web)
 
+    def test_web_runs_only_in_production(self) -> None:
+        compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+        web = compose["services"]["web"]
+        self.assertEqual(["web"], web["profiles"])
+        self.assertEqual("service_healthy", web["depends_on"]["backend"]["condition"])
+        self.assertNotIn("ports", web)
+        deploy = (ROOT / "scripts" / "deploy.sh").read_text()
+        production_compose = next(line for line in deploy.splitlines() if "local -a compose=(" in line)
+        self.assertIn("--profile web", production_compose)
+        sandbox = yaml.safe_load((ROOT / "docker-compose.sandbox.yml").read_text())
+        self.assertNotIn("web", sandbox.get("services", {}))
+
+    def test_deploy_creates_the_web_reader_before_web_starts(self) -> None:
+        deploy = (ROOT / "scripts" / "deploy.sh").read_text()
+        backend_up = deploy.index("up -d --force-recreate backend")
+        role_step = deploy.index("exec -T postgres bash /docker-entrypoint-initdb.d/20-web-reader.sh")
+        everything_up = deploy.index('"${compose[@]}" up -d\n')
+        self.assertLess(backend_up, role_step)
+        self.assertLess(role_step, everything_up)
+
     def test_companion_image_is_keyed_on_everything_its_build_reads(self) -> None:
         deploy_commands = job_commands(workflow("deploy.yml")["jobs"]["deploy"])
         self.assertIn(COMPANION_KEY_SCRIPT, deploy_commands)
@@ -407,7 +427,7 @@ class DeploymentContractTest(unittest.TestCase):
         deploy = (ROOT / "scripts" / "deploy.sh").read_text()
         self.assertNotIn("docker build", deploy)
         self.assertNotIn("docker compose build", deploy)
-        self.assertIn("pull backend recgov-companion", deploy)
+        self.assertIn("pull backend web recgov-companion", deploy)
 
     def test_prod_and_sandbox_share_one_runtime_release(self) -> None:
         # Prod installs the release straight from its workflow. The sandbox path
