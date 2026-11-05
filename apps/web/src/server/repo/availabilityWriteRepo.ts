@@ -14,7 +14,10 @@ interface CurrentRow extends Record<string, unknown> {
   campsite_id: string;
   target_date: string;
   status: AvailabilityStatus;
+  last_observed_at: Date | string;
 }
+
+const NULL_ELEMENT = 'NULL';
 
 const cellKey = (campsiteId: bigint | string, date: string) => `${campsiteId}|${date}`;
 
@@ -33,7 +36,7 @@ export async function recordObservations(db: Db, observations: readonly Observat
   if (latest.length === 0) return 0;
   return db.transaction(async (tx) => {
     const current = await tx.execute<CurrentRow>(sql`
-      SELECT DISTINCT ON (a.campsite_id, a.target_date) a.id, a.campsite_id, a.target_date::text AS target_date, a.status
+      SELECT DISTINCT ON (a.campsite_id, a.target_date) a.id, a.campsite_id, a.target_date::text AS target_date, a.status, a.last_observed_at
       FROM availability a
       JOIN unnest(${pgArrayLiteral(latest.map((o) => o.campsiteId))}::bigint[], ${pgArrayLiteral(latest.map((o) => o.date))}::date[])
         AS cell(campsite_id, target_date)
@@ -42,7 +45,10 @@ export async function recordObservations(db: Db, observations: readonly Observat
     `);
     const currentByCell = new Map(current.map((row) => [cellKey(row.campsite_id, row.target_date), row]));
     const unchanged = latest.filter((o) => currentByCell.get(cellKey(o.campsiteId, o.date))?.status === o.status);
-    const changed = latest.filter((o) => currentByCell.get(cellKey(o.campsiteId, o.date))?.status !== o.status);
+    const changed = latest.filter((o) => {
+      const current = currentByCell.get(cellKey(o.campsiteId, o.date));
+      return current === undefined || (current.status !== o.status && o.observedAt >= new Date(current.last_observed_at));
+    });
 
     if (unchanged.length > 0) {
       const ids = unchanged.map((o) => currentByCell.get(cellKey(o.campsiteId, o.date))!.id);
@@ -55,7 +61,7 @@ export async function recordObservations(db: Db, observations: readonly Observat
       `);
     }
     if (changed.length === 0) return 0;
-    const previous = changed.map((o) => currentByCell.get(cellKey(o.campsiteId, o.date))?.id ?? 'NULL');
+    const previous = changed.map((o) => currentByCell.get(cellKey(o.campsiteId, o.date))?.id ?? NULL_ELEMENT);
     const inserted = await tx.execute(sql`
       INSERT INTO availability (campsite_id, target_date, status, last_observed_at, previous_id)
       SELECT run.campsite_id, run.target_date, run.status::availability_status, run.observed_at, run.previous_id

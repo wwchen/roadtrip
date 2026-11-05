@@ -65,7 +65,7 @@ test('refresh unconfigured plans disabled and an unclaimed campground plans unsu
 test("runRefresh writes cells with mini-ca's observed_at", async () => {
   const plan = await stalePlan();
   const outcome = await runRefresh(plan, { db: fixture.writeDb, fetch: async () => answer(['site-0', 'site-1', 'site-2']) });
-  expect(outcome).toEqual({ written: 3, dropped: 0 });
+  expect(outcome).toEqual({ written: 3, dropped: 0, filled: 0 });
   const cells = await currentCells(fixture.readDb, siteIds, start, end);
   expect(cells.map((cell) => cell.lastObservedAt.toISOString())).toEqual([MINI_CA_OBSERVED, MINI_CA_OBSERVED, MINI_CA_OBSERVED]);
 });
@@ -73,8 +73,23 @@ test("runRefresh writes cells with mini-ca's observed_at", async () => {
 test('runRefresh drops and counts pairs Neon lacks', async () => {
   const plan = await stalePlan();
   const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
-  expect(await runRefresh(plan, { db: fixture.writeDb, fetch: async () => answer(['site-0', 'not-in-neon']) })).toEqual({ written: 1, dropped: 1 });
+  expect(await runRefresh(plan, { db: fixture.writeDb, fetch: async () => answer(['site-0', 'site-1', 'site-2', 'not-in-neon']) })).toEqual({
+    written: 3,
+    dropped: 1,
+    filled: 0,
+  });
   log.mockRestore();
+});
+
+test('campsites mini-ca did not answer are stored unknown, so the week becomes fresh', async () => {
+  const plan = await stalePlan();
+  const outcome = await runRefresh(plan, { db: fixture.writeDb, fetch: async () => answer(['site-0']) });
+  expect(outcome).toEqual({ written: 1, dropped: 0, filled: 2 });
+  const cells = await currentCells(fixture.readDb, siteIds, start, end);
+  expect(cells.map((cell) => cell.status).sort()).toEqual(['available', 'unknown', 'unknown']);
+  expect(cells.every((cell) => cell.lastObservedAt.toISOString() === MINI_CA_OBSERVED)).toBe(true);
+  const later = { ...SETTINGS, now: new Date(Date.parse(MINI_CA_OBSERVED) + 60_000) };
+  expect((await planRefresh(fixture.readDb, NEAR_POI_ID, start, end, later, true)).kind).toBe('fresh');
 });
 
 test.each([

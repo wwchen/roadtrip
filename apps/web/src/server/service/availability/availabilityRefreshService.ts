@@ -4,10 +4,11 @@ import type { AvailabilityEgressRequestDto } from '../../contract';
 import { campsiteIdsByProviderRef, currentCells, providerRefKey } from '../../repo/availabilityReadRepo';
 import { recordObservations, type Observation } from '../../repo/availabilityWriteRepo';
 import { targetWindow, weekTarget, type WeekSettings } from './availabilityMatrixService';
-import { isWindowFresh, weekCache } from './matrixFusion';
+import { datesOf, isWindowFresh, weekCache } from './matrixFusion';
 
 const REFRESH_LOG = 'availability refresh';
 const UNCLASSIFIED_FAILURE = 'unclassified';
+const UNANSWERED_STATUS = 'unknown';
 
 export type RefreshPlan =
   | { kind: 'fresh' }
@@ -17,7 +18,7 @@ export type RefreshPlan =
 
 export type FetchPlan = Extract<RefreshPlan, { kind: 'fetch' }>;
 
-export type RefreshOutcome = { written: number; dropped: number } | { failed: string };
+export type RefreshOutcome = { written: number; dropped: number; filled: number } | { failed: string };
 
 export interface RefreshDeps {
   db: Db;
@@ -70,10 +71,21 @@ export async function runRefresh(plan: FetchPlan, deps: RefreshDeps): Promise<Re
     }
     observations.push({ campsiteId, date: cell.date, status: cell.status, observedAt: new Date(cell.observed_at) });
   }
-  await recordObservations(deps.db, observations);
-  const outcome = { written: observations.length, dropped };
+  const filled = unansweredCells(observations, [...ids.values()], result.body.start_date, result.body.end_date, new Date());
+  await recordObservations(deps.db, [...observations, ...filled]);
+  const outcome = { written: observations.length, dropped, filled: filled.length };
   const line = JSON.stringify({ outcome: 'written', ...outcome, campground: plan.request.campground });
   if (dropped > 0) console.warn(REFRESH_LOG, line);
   else console.info(REFRESH_LOG, line);
   return outcome;
+}
+
+function unansweredCells(answered: readonly Observation[], campsiteIds: readonly bigint[], startDate: string, endDate: string, now: Date): Observation[] {
+  const seen = new Set(answered.map((observation) => `${observation.campsiteId}|${observation.date}`));
+  const observedAt = answered.length === 0 ? now : new Date(Math.min(...answered.map((observation) => observation.observedAt.getTime())));
+  return campsiteIds.flatMap((campsiteId) =>
+    datesOf(startDate, endDate)
+      .filter((date) => !seen.has(`${campsiteId}|${date}`))
+      .map((date) => ({ campsiteId, date, status: UNANSWERED_STATUS as Observation['status'], observedAt })),
+  );
 }

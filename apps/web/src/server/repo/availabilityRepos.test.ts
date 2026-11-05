@@ -84,6 +84,16 @@ test('an older observation never moves last_observed_at backwards', async () => 
   expect(new Date((await rows())[0]!.last_observed_at).toISOString()).toBe(LATER.toISOString());
 });
 
+test('an older changed observation never displaces a newer current row', async () => {
+  const site = siteIds[0]!;
+  await recordObservations(fixture.writeDb, [observe(site, DAY_ONE, 'available', LATER)]);
+  expect(await recordObservations(fixture.writeDb, [observe(site, DAY_ONE, 'reserved', EARLY)])).toBe(0);
+  expect(await recordObservations(fixture.writeDb, [observe(site, DAY_ONE, 'reserved', LATEST)])).toBe(1);
+  const [current] = await currentCells(fixture.writeDb, [site], DAY_ONE, DAY_TWO);
+  expect(current?.status).toBe('reserved');
+  expect(current?.lastObservedAt.toISOString()).toBe(LATEST.toISOString());
+});
+
 test('the latest observation per cell wins within one batch', async () => {
   const site = siteIds[0]!;
   await recordObservations(fixture.writeDb, [
