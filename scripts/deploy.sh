@@ -582,19 +582,56 @@ _sandbox_lock_steal() {
 # A holder killed mid-flight used to leak this lock permanently, blocking every
 # teardown and the sweep for two days on 2026-08-18. Record an owner so the next
 # caller can reclaim it.
+_sandbox_lock_gate_enter() {
+    local gate="$1"
+    local gate_stale="$2"
+    local deadline="$3"
+    local gate_poll="$4"
+    local gate_mtime
+
+    until mkdir "${gate}" 2>/dev/null; do
+        gate_mtime="$(_lock_mtime_epoch "${gate}")"
+        if [[ "${gate_mtime}" =~ ^[0-9]+$ ]] && (( $(date +%s) - gate_mtime > gate_stale )); then
+            echo "==> clearing a sandbox slot lock gate abandoned for over ${gate_stale}s"
+            rmdir "${gate}" 2>/dev/null || true
+            continue
+        fi
+        if (( $(date +%s) > deadline )); then
+            return 1
+        fi
+        sleep "${gate_poll}"
+    done
+}
+
 _sandbox_lock_acquire() {
     local lock="${SANDBOX_STATE_DIR}/.slot-lock"
+    local gate="${lock}.gate"
     local max_wait="${ROADTRIP_SANDBOX_LOCK_WAIT_SECONDS:-60}"
     local grace="${ROADTRIP_SANDBOX_LOCK_OWNER_GRACE_SECONDS:-5}"
+    local gate_stale="${ROADTRIP_SANDBOX_LOCK_GATE_STALE_SECONDS:-30}"
     local poll=1
+    local gate_poll=0.1
     local waited=0
+    local deadline
     local owner_pid
     local lock_age
     local lock_mtime
     local warned=0
 
     mkdir -p "${SANDBOX_STATE_DIR}"
-    until mkdir "${lock}" 2>/dev/null; do
+    deadline=$(( $(date +%s) + max_wait ))
+    while true; do
+        if ! _sandbox_lock_gate_enter "${gate}" "${gate_stale}" "${deadline}" "${gate_poll}"; then
+            echo "error: timed out waiting for sandbox slot lock: ${lock}" >&2
+            exit 1
+        fi
+        if mkdir "${lock}" 2>/dev/null; then
+            # Before the trap: a failed write leaves a lock the grace path recovers.
+            printf '%s\n' "$$" > "${lock}/pid"
+            rmdir "${gate}"
+            break
+        fi
+
         # Age gates every reclaim: it belongs to the directory, so unlike the
         # PID we just read it cannot be stale and name a lock someone else has
         # since taken. Costs up to `grace` before recovery.
@@ -624,6 +661,7 @@ _sandbox_lock_acquire() {
                 _sandbox_lock_steal "${lock}"
             fi
         fi
+        rmdir "${gate}"
 
         # Every path advances `waited`, so max_wait stays a real bound.
         if (( waited >= max_wait )); then
@@ -633,8 +671,6 @@ _sandbox_lock_acquire() {
         sleep "${poll}"
         waited=$(( waited + poll ))
     done
-    # Before the trap: a failed write leaves a lock the grace path recovers.
-    printf '%s\n' "$$" > "${lock}/pid"
     _sandbox_lock_dir="${lock}"
     trap _sandbox_lock_release EXIT
 }
