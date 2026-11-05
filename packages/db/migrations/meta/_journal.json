@@ -15,6 +15,13 @@
       "when": 1793136508202,
       "tag": "0001_raw_objects",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793847542031,
+      "tag": "0002_web_reader",
+      "breakpoints": true
     }
   ]
 }
