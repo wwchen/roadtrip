@@ -184,7 +184,7 @@ services:
 
   grafana:
     profiles: [pois]
-    image: grafana/grafana:13.1.0
+    image: grafana/grafana:13.3.0
     restart: unless-stopped
     logging: *log-rotation
     hostname: grafana
@@ -229,7 +229,7 @@ services:
   # container stdout here, Grafana queries it via the Loki datasource.
   loki:
     profiles: [pois]
-    image: grafana/loki:3.2.1
+    image: grafana/loki:3.7.9
     restart: unless-stopped
     logging: *log-rotation
     hostname: loki
@@ -247,7 +247,7 @@ services:
 
   tempo:
     profiles: [pois]
-    image: grafana/tempo:3.0.2
+    image: grafana/tempo:3.1.1
     restart: unless-stopped
     logging: *log-rotation
     hostname: tempo
@@ -261,7 +261,7 @@ services:
 
   prometheus:
     profiles: [pois]
-    image: prom/prometheus:v3.13.1
+    image: prom/prometheus:v3.15.1
     restart: unless-stopped
     logging: *log-rotation
     hostname: prometheus
@@ -289,7 +289,7 @@ services:
   # the backend Java agent. See grafana/alloy/config.alloy for the pipelines.
   alloy:
     profiles: [pois]
-    image: grafana/alloy:v1.18.0
+    image: grafana/alloy:v1.21.3
     restart: unless-stopped
     logging: *log-rotation
     hostname: alloy
@@ -310,7 +310,7 @@ services:
     # Public hostname routing is managed in Cloudflare Zero Trust; this
     # container only needs the tunnel token.
     profiles: [tunnel]
-    image: cloudflare/cloudflared:2026.10.5
+    image: cloudflare/cloudflared:2026.10.6
     restart: unless-stopped
     logging: *log-rotation
     # TUNNEL_TOKEN_FILE, not --token: a flag would put the token in the
