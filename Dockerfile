@@ -73,6 +73,10 @@ RUN npm run build --workspace @roadtrip/domain \
 FROM node:22-alpine AS web
 
 WORKDIR /app
+
+LABEL ca.floo.roadtrip.managed="true" \
+      ca.floo.roadtrip.component="web"
+
 ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0 NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=web-build --chown=node:node /src/apps/web/.next/standalone/ ./

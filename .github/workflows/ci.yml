@@ -96,6 +96,7 @@ jobs:
               - '.github/workflows/ci.yml'
             scripts:
               - 'scripts/**'
+              - 'postgres-init/**'
               - 'secrets/**'
               - 'grafana/**'
               - 'deploy/**'
@@ -190,6 +191,8 @@ jobs:
               - 'apps/**'
               - 'Dockerfile'
               - '.dockerignore'
+              - 'backend/src/main/resources/db/migration/R__web_reader_grants.sql'
+              - 'docs/web-app.md'
               - 'frontend/**'
               - 'data/us-states.geojson'
               - 'packages/**'

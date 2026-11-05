@@ -50,8 +50,10 @@ ROADTRIP_REPOSITORIES="
 ghcr.io/wwchen/roadtrip/backend
 ghcr.io/wwchen/roadtrip/recgov-companion
 ghcr.io/wwchen/roadtrip/data
+ghcr.io/wwchen/roadtrip/web
 roadtrip/backend
 roadtrip/recgov-companion
+roadtrip/web
 ghcr.io/wwchen/roadtrip/deploy
 "
 # The deploy image is rebuilt per release and never rolled back to.

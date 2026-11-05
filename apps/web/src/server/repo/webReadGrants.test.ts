@@ -18,6 +18,10 @@ const GYM_POI = 3601n;
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../../../..');
 const DOC = path.join(REPO_ROOT, 'docs/web-app.md');
 const FLYWAY_MIGRATION = path.join(REPO_ROOT, 'backend/src/main/resources/db/migration/R__web_reader_grants.sql');
+const INIT_SCRIPT = path.join(REPO_ROOT, 'postgres-init/20-web-reader.sh');
+const INIT_SCRIPT_PASSWORD = 'init-%script@secret';
+const CONTAINER_PASSWORD_FILE = '/tmp/web_db_password';
+const FIXTURE_SUPERUSER = 'reference';
 const DRIZZLE_MIGRATION = path.join(REPO_ROOT, 'packages/db/migrations/0002_web_reader.sql');
 const GRANTED_TABLES = /GRANT SELECT ON ([^;]+) TO roadtrip_web/;
 const SQL_COMMENT = /--[^\n]*/g;
@@ -90,4 +94,24 @@ test('the role is read-only with a 10s statement timeout', async () => {
   await expect(reader.execute(sql`INSERT INTO pois (id, poi_type, geom) VALUES (9999, 'campground', ST_SetSRID(ST_MakePoint(0, 0), 4326))`)).rejects.toMatchObject({
     cause: { message: expect.stringMatching(/read-only transaction/) },
   });
+});
+
+test('the init script sets the password without ever printing it', async () => {
+  await fixture.exec(['bash', '-c', `printf %s "$0" > ${CONTAINER_PASSWORD_FILE}`, INIT_SCRIPT_PASSWORD]);
+  const output = await fixture.exec(
+    ['env', `POSTGRES_USER=${FIXTURE_SUPERUSER}`, `POSTGRES_DB=${fixture.database}`, `WEB_DB_PASSWORD_FILE=${CONTAINER_PASSWORD_FILE}`, 'bash', '-s'],
+    readFileSync(INIT_SCRIPT, 'utf8'),
+  );
+  expect(output).not.toContain(INIT_SCRIPT_PASSWORD);
+  const url = new URL(fixture.url);
+  url.username = WEB_READ_ROLE;
+  url.password = encodeURIComponent(INIT_SCRIPT_PASSWORD);
+  const viaInitPassword = createDb(url.toString());
+  try {
+    const [row] = await viaInitPassword.execute<{ who: string }>(sql`SELECT current_user AS who`);
+    expect(row?.who).toBe(WEB_READ_ROLE);
+  } finally {
+    await viaInitPassword.$client.end();
+    await fixture.writeDb.execute(sql.raw(`ALTER ROLE ${WEB_READ_ROLE} PASSWORD '${PASSWORD}'`));
+  }
 });

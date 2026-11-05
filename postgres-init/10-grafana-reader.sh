@@ -26,6 +26,7 @@ GRAFANA_DB_PASSWORD="$(cat "$GRAFANA_DB_PASSWORD_FILE")"
 
 psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" \
      --set=ON_ERROR_STOP=1 \
+     --output=/dev/null \
      --variable=grafana_user="$GRAFANA_DB_USER" \
      --variable=grafana_password="$GRAFANA_DB_PASSWORD" <<'SQL'
 SELECT set_config('roadtrip.grafana_user', :'grafana_user', false);

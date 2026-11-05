@@ -132,3 +132,11 @@ test('an unreadable or empty _FILE is a ConfigError naming the variable', () => 
   vi.stubEnv('DATABASE_PASSWORD_FILE', secretFile(''));
   expect(() => config.databaseUrl).toThrow(/DATABASE_PASSWORD_FILE/);
 });
+
+test('a password with % survives the decode the Postgres driver applies', () => {
+  vi.stubEnv('DATABASE_URL', 'postgres://roadtrip_web@postgres:5432/roadtrip');
+  for (const password of ['ab%41cd', 'p%zz', 'a b?c#d']) {
+    vi.stubEnv('DATABASE_PASSWORD_FILE', secretFile(password));
+    expect(decodeURIComponent(new URL(config.databaseUrl).password)).toBe(password);
+  }
+});

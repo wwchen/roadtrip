@@ -191,10 +191,38 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertEqual("service_healthy", web["depends_on"]["backend"]["condition"])
         self.assertNotIn("ports", web)
         deploy = (ROOT / "scripts" / "deploy.sh").read_text()
-        production_compose = next(line for line in deploy.splitlines() if "local -a compose=(" in line)
-        self.assertIn("--profile web", production_compose)
+        self.assertIn("compose+=(--profile web)", deploy)
         sandbox = yaml.safe_load((ROOT / "docker-compose.sandbox.yml").read_text())
         self.assertNotIn("web", sandbox.get("services", {}))
+
+    def test_a_rollback_to_a_release_without_web_skips_it(self) -> None:
+        deploy = (ROOT / "scripts" / "deploy.sh").read_text()
+        self.assertIn('docker manifest inspect "${ROADTRIP_WEB_IMAGE}"', deploy)
+        self.assertIn("_ROLLBACK_ACTIVE == 1", deploy[deploy.index("docker manifest inspect") - 200 : deploy.index("docker manifest inspect")])
+
+    def test_reclaim_prunes_every_image_production_pulls(self) -> None:
+        deploy = (ROOT / "scripts" / "deploy.sh").read_text()
+        reclaim = (ROOT / "scripts" / "reclaim.sh").read_text()
+        repositories = reclaim[reclaim.index('ROADTRIP_REPOSITORIES="') : reclaim.index('"', reclaim.index('ROADTRIP_REPOSITORIES="') + len('ROADTRIP_REPOSITORIES="'))].split()
+        for image in re.findall(r'export ROADTRIP_[A-Z]+_IMAGE="(ghcr\.io/[^:"]+):', deploy):
+            self.assertIn(image, repositories)
+        self.assertIn("roadtrip/web", repositories)
+
+    def test_the_web_image_is_labelled_for_reclaim(self) -> None:
+        dockerfile = (ROOT / "Dockerfile").read_text()
+        web_stage = dockerfile[dockerfile.index("AS web\n") :]
+        self.assertIn('ca.floo.roadtrip.managed="true"', web_stage)
+        self.assertIn('ca.floo.roadtrip.component="web"', web_stage)
+
+    def test_web_health_checks_its_database_path(self) -> None:
+        compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+        self.assertIn("/api/pois/search", " ".join(compose["services"]["web"]["healthcheck"]["test"]))
+
+    def test_the_drift_gates_run_on_the_files_they_guard(self) -> None:
+        filters = path_filters()
+        self.assertIn("backend/src/main/resources/db/migration/R__web_reader_grants.sql", filters["web"])
+        self.assertIn("docs/web-app.md", filters["web"])
+        self.assertIn("postgres-init/**", filters["scripts"])
 
     def test_deploy_creates_the_web_reader_before_web_starts(self) -> None:
         deploy = (ROOT / "scripts" / "deploy.sh").read_text()
@@ -427,7 +455,9 @@ class DeploymentContractTest(unittest.TestCase):
         deploy = (ROOT / "scripts" / "deploy.sh").read_text()
         self.assertNotIn("docker build", deploy)
         self.assertNotIn("docker compose build", deploy)
-        self.assertIn("pull backend web recgov-companion", deploy)
+        self.assertIn('pull "${pulled[@]}"', deploy)
+        self.assertIn("local -a pulled=(backend recgov-companion)", deploy)
+        self.assertIn("pulled+=(web)", deploy)
 
     def test_prod_and_sandbox_share_one_runtime_release(self) -> None:
         # Prod installs the release straight from its workflow. The sandbox path

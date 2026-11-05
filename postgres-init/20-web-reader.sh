@@ -11,6 +11,7 @@ fi
 WEB_DB_PASSWORD="$(cat "$WEB_DB_PASSWORD_FILE")"
 psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" \
      --set=ON_ERROR_STOP=1 \
+     --output=/dev/null \
      --variable=web_user="$WEB_DB_USER" \
      --variable=web_password="$WEB_DB_PASSWORD" <<'SQL'
 SELECT set_config('roadtrip.web_user', :'web_user', false);

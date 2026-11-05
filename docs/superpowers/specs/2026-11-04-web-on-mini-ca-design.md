@@ -110,7 +110,9 @@ service whose image tag they never pull.
   `DATABASE_URL=postgres://roadtrip_web@postgres:5432/${POSTGRES_DB:-roadtrip}`,
   `DATABASE_PASSWORD_FILE=/run/secrets/web_db_password`,
   `MAPBOX_TOKEN_FILE=/run/secrets/mapbox_token`, `ENABLED_DATA_PROVIDERS` matching the backend's.
-- `healthcheck`: a `node -e` fetch of `http://127.0.0.1:3000/api/health` (the image has no curl).
+- `healthcheck`: a `node -e` fetch of `http://127.0.0.1:3000/api/pois/search?q=ok` (the image has
+  no curl). It reads the database as `roadtrip_web`, so a bad password or missing grant fails the
+  deploy's `--wait` and rolls it back, rather than shipping a read API that answers 500.
 - `depends_on: backend: condition: service_healthy`. Kotlin's Flyway applies the role's grants at
   boot, so a healthy backend means the grants exist.
 - Logs reach Loki without change: Alloy's `discovery.docker` picks up every container.

@@ -60,7 +60,7 @@ every read route `apps/web` serves and none of Kotlin's (`/api/pois/{id}/campsit
 1. Set the password once: `./secrets/manage.py set common WEB_DB_PASSWORD`, and commit the vault.
 2. Merge. The deploy creates the role, then starts `web`; no traffic reaches it yet.
 3. On mini-ca, from the release directory:
-   `docker compose exec web node -e "fetch('http://127.0.0.1:3000/api/pois/search?q=Mahood').then(async (r) => console.log(r.status, await r.text()))"`
+   `docker compose --profile web exec web node -e "fetch('http://127.0.0.1:3000/api/pois/search?q=Mahood').then(async (r) => console.log(r.status, await r.text()))"`
    must print `200` and Mahood Lake.
 4. Add the tunnel rule. Check `https://roadtrip.floo.ca/api/pois/search?q=Mahood`, that the map's
    pins and drawer work, and that a signed-in session stays signed in.

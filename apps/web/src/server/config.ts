@@ -87,7 +87,7 @@ function withPasswordFrom(rawUrl: string, password: string | undefined): string 
   if (url.password.length > 0) {
     throw new ConfigError(DATABASE_PASSWORD_FILE_VARIABLE, `is set but ${DATABASE_URL_VARIABLE} already carries a password`);
   }
-  url.password = password;
+  url.password = encodeURIComponent(password);
   return url.toString();
 }
 
