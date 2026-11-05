@@ -1,11 +1,14 @@
 import { CAMPGROUND_POI_TYPE, GEOMETRY_SRID, type Db } from '@roadtrip/db';
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
+import type { CampgroundSearchFilter } from '../campgroundSearchRequest';
 import { causeChain, isGeometryParseFault, isTopologyFault } from './faults';
 import { idString } from './ids';
 
 const TOPOLOGY_FAULT_EMPTY_RESULT = 'GEOS topology fault in a polygon query, returning empty:';
 const INVALID_BOUNDARY_MESSAGE = 'boundary is not valid GeoJSON geometry';
 const PROVIDER_SEPARATOR = sql`, `;
+const PREDICATE_SEPARATOR = sql` AND `;
+const NO_FILTER: CampgroundSearchFilter = { amenities: [] };
 
 export interface BoundarySearchResult {
   poiIds: string[];
@@ -43,11 +46,29 @@ const emptyResult = (): BoundarySearchResult => ({
   truncated: false,
 });
 
+function passesFilter(filter: CampgroundSearchFilter): SQL {
+  const predicates: SQL[] = [];
+  if (filter.siteType !== undefined) {
+    predicates.push(sql`(s.site_total IS NULL OR COALESCE((s.site_counts->>${filter.siteType})::int, 0) > 0)`);
+  }
+  if (filter.groupSize !== undefined) {
+    predicates.push(sql`(s.max_people IS NULL OR s.max_people >= ${filter.groupSize})`);
+  }
+  for (const key of filter.amenities) {
+    predicates.push(sql`NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements(cg.amenities) a
+      WHERE a->>'key' = ${key} AND COALESCE((a->>'present')::boolean, true) = false
+    )`);
+  }
+  return predicates.length === 0 ? sql`true` : sql.join(predicates, PREDICATE_SEPARATOR);
+}
+
 export async function searchWithinBoundary(
   db: Db,
   boundaryGeoJson: string,
   limit: number,
   providers: readonly string[],
+  filter: CampgroundSearchFilter = NO_FILTER,
 ): Promise<BoundarySearchResult> {
   if (providers.length === 0) return emptyResult();
   assertBoundaryIsJson(boundaryGeoJson);
@@ -69,7 +90,7 @@ export async function searchWithinBoundary(
                  ST_Centroid(p.geom)::geography,
                  ST_Centroid(boundary.poly)::geography
                ) AS dist,
-               true AS passes
+               (${passesFilter(filter)}) AS passes
         FROM pois p
         JOIN poi_campgrounds pc ON pc.poi_id = p.id
         JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL

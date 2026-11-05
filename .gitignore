@@ -37,3 +37,6 @@ data/etl-out/
 # only caddy/sandboxes/.gitkeep is tracked (keeps the bind-mount dir present).
 caddy/sandboxes/*.caddy
 .superpowers/
+
+# The Vite build and static data copied in by apps/web/scripts/copy-frontend.mjs.
+apps/web/public/

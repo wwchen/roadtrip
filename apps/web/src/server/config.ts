@@ -1,13 +1,22 @@
+import type { BuildInfoDto } from './contract';
+
 const DATABASE_URL_VARIABLE = 'DATABASE_URL';
 const DATABASE_PREPARE_VARIABLE = 'DATABASE_PREPARE';
+const DATABASE_REQUIRE_READ_ONLY_VARIABLE = 'DATABASE_REQUIRE_READ_ONLY';
 const ENABLED_DATA_PROVIDERS_VARIABLE = 'ENABLED_DATA_PROVIDERS';
 const SEARCH_RESULT_LIMIT_VARIABLE = 'SEARCH_RESULT_LIMIT';
+const CAMPGROUND_SEARCH_MAX_RESULTS_VARIABLE = 'CAMPGROUND_SEARCH_MAX_RESULTS';
 const HEALTH_DATABASE_TOKEN_VARIABLE = 'HEALTH_DATABASE_TOKEN';
+const MAPBOX_TOKEN_VARIABLE = 'MAPBOX_TOKEN';
 
 const DEFAULT_DATABASE_PREPARE = true;
+const DEFAULT_DATABASE_REQUIRE_READ_ONLY = true;
 const DEFAULT_ENABLED_DATA_PROVIDERS: readonly string[] = ['campflare', 'bcparks-strapi', 'aspira'];
 const DEFAULT_SEARCH_RESULT_LIMIT = 200;
 const MAX_SEARCH_RESULT_LIMIT = 1000;
+const DEFAULT_CAMPGROUND_SEARCH_MAX_RESULTS = 5000;
+const MAX_CAMPGROUND_SEARCH_MAX_RESULTS = 20000;
+const DEFAULT_BUILD_ENV = 'local';
 
 const PROVIDER_SEPARATOR = ',';
 const TRUE_LITERAL = 'true';
@@ -49,6 +58,11 @@ function listFrom(variable: string, fallback: readonly string[]): readonly strin
   return entries;
 }
 
+function textOr(value: string | undefined, fallback: string): string {
+  const raw = value?.trim();
+  return raw === undefined || raw.length === 0 ? fallback : raw;
+}
+
 function secretFrom(variable: string): string | undefined {
   const raw = process.env[variable];
   if (raw === undefined || raw.trim().length === 0) return undefined;
@@ -56,6 +70,13 @@ function secretFrom(variable: string): string | undefined {
 }
 
 export const config = {
+  get buildInfo(): BuildInfoDto {
+    return {
+      env: textOr(process.env.BUILD_ENV, DEFAULT_BUILD_ENV),
+      sha: textOr(process.env.BUILD_SHA, ''),
+      branch: textOr(process.env.BUILD_BRANCH, ''),
+    };
+  },
   get databaseUrl(): string {
     const raw = process.env[DATABASE_URL_VARIABLE];
     if (raw === undefined || raw.trim().length === 0) {
@@ -66,11 +87,24 @@ export const config = {
   get databasePrepare(): boolean {
     return booleanFrom(DATABASE_PREPARE_VARIABLE, DEFAULT_DATABASE_PREPARE);
   },
+  get databaseRequireReadOnly(): boolean {
+    return booleanFrom(DATABASE_REQUIRE_READ_ONLY_VARIABLE, DEFAULT_DATABASE_REQUIRE_READ_ONLY);
+  },
   get enabledDataProviders(): readonly string[] {
     return listFrom(ENABLED_DATA_PROVIDERS_VARIABLE, DEFAULT_ENABLED_DATA_PROVIDERS);
   },
+  get mapboxToken(): string | undefined {
+    return secretFrom(MAPBOX_TOKEN_VARIABLE);
+  },
   get healthDatabaseToken(): string | undefined {
     return secretFrom(HEALTH_DATABASE_TOKEN_VARIABLE);
+  },
+  get campgroundSearchMaxResults(): number {
+    return boundedIntegerFrom(
+      CAMPGROUND_SEARCH_MAX_RESULTS_VARIABLE,
+      DEFAULT_CAMPGROUND_SEARCH_MAX_RESULTS,
+      MAX_CAMPGROUND_SEARCH_MAX_RESULTS,
+    );
   },
   get searchResultLimit(): number {
     return boundedIntegerFrom(

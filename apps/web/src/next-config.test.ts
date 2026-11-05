@@ -12,3 +12,14 @@ test('outputFileTracingRoot is the repository root that holds the hoisted node_m
   expect(existsSync(ROOT_MANIFEST)).toBe(true);
   expect(existsSync(path.join(REPO_ROOT, 'node_modules', 'next'))).toBe(true);
 });
+
+test('/ is rewritten to /index.html before the app routes', async () => {
+  const rewrites = await config.rewrites?.();
+  expect(rewrites).toMatchObject({ beforeFiles: expect.arrayContaining([{ source: '/', destination: '/index.html' }]) });
+});
+
+test('the extensionless page URLs the Kotlin site served still resolve', async () => {
+  const rewrites = await config.rewrites?.();
+  const beforeFiles = (rewrites as { beforeFiles: { source: string; destination: string }[] }).beforeFiles;
+  expect(beforeFiles).toEqual(expect.arrayContaining([{ source: '/poi', destination: '/poi.html' }]));
+});

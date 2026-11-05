@@ -1,8 +1,13 @@
 # Web app deployment (Vercel + Neon)
 
-`apps/web` is the read-only Next.js app: `/campgrounds/[poiId]`, `/search`,
-`/api/campgrounds/search`, `/api/health`. It runs on Vercel against a Neon Postgres. The Kotlin
-stack on mini-ca is untouched and keeps serving production.
+`apps/web` is the read-only Next.js app. It serves the Vite frontend's map (`/`) and POI page
+(`/poi.html`, also `/poi`) as static files copied in at build time, the read endpoints those
+pages call (`/api/pois`, `/api/pois/{id}`, `/api/pois/search`, `/api/campgrounds/search`,
+`/api/campgrounds/details`, `/api/geocode`, `/api/route`, `/api/pois/on-route`, `/api/me`,
+`/api/build-info`, and `/api/watches`, which answers 401), its own `/campgrounds/[poiId]` and
+`/search` pages, and `/api/health`. It runs on Vercel against a Neon Postgres. Sign-in, watches,
+availability and the worker are not ported yet; the Kotlin stack on mini-ca is untouched and
+keeps serving production.
 
 Nothing in this file is a secret. The connection string itself lives only in Vercel and in the
 operator's own scratch file; this file records its shape and the settings measured against it.
@@ -20,8 +25,12 @@ operator's own scratch file; this file records its shape and the settings measur
 
 The commands run from the Root Directory, so each starts with `cd ../..` to execute at the
 repository root. The root build is the command `make test` and CI run; it builds `packages/*`
-before `next build`, and it also builds `frontend`'s Vite bundle, which Vercel never serves. That
-cost is deliberate.
+and `frontend`'s Vite bundle before `next build`. `apps/web`'s own build
+(`scripts/copy-frontend.mjs`) empties `apps/web/public`, copies the Vite build and
+`data/us-states.geojson` into it, and fails when the Vite build is missing; `/` is rewritten to
+`/index.html`. `next.config.ts` maps Vercel's `VERCEL_ENV`, `VERCEL_GIT_COMMIT_SHA` and
+`VERCEL_GIT_COMMIT_REF` to `BUILD_ENV`, `BUILD_SHA` and `BUILD_BRANCH`, inlined at build time for
+`/api/build-info`.
 
 Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 
@@ -29,8 +38,11 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 |---|---|---|
 | `DATABASE_URL` | sensitive | the Neon **pooled** endpoint as the `roadtrip_web` role, plus `connect_timeout=10&idle_timeout=20` |
 | `DATABASE_PREPARE` | plain | `true` |
+| `DATABASE_REQUIRE_READ_ONLY` | plain, optional | default `true`; set `false` for **Preview only**, whose branch-scoped `DATABASE_URL` from the Neon integration logs in as the branch owner, which is not read-only |
 | `ENABLED_DATA_PROVIDERS` | plain | `campflare,bcparks-strapi,aspira`; set but empty is a `ConfigError`, never "none enabled" |
 | `HEALTH_DATABASE_TOKEN` | sensitive | the bearer secret for the database mode of `/api/health` (below) |
+| `MAPBOX_TOKEN` | sensitive | Mapbox token for `/api/geocode`, `/api/route` and `/api/pois/on-route`; unset, those answer 503 and the rest of the map works |
+| `CAMPGROUND_SEARCH_MAX_RESULTS` | plain, optional | cap on `POST /api/campgrounds/search` ids, default 5000 |
 
 Deployment protection (checked 2026-10-29): Vercel Authentication is on with
 `all_except_custom_domains`. The production alias `roadtrip-web-nu.vercel.app` answers without a
@@ -114,6 +126,11 @@ the first pooled backend reports — see "Server-side timeouts on Neon"), and a 
 the grants could still `SET transaction_read_only = off`. The grants, not this check, are the
 backstop.
 
+Previews skip the check. The Neon integration gives each preview a `DATABASE_URL` for its own
+branch as the owner role, which is not read-only, so every database route answered 500. Preview
+sets `DATABASE_REQUIRE_READ_ONLY=false`; a stray write there lands on that preview's disposable
+copy of `main`. Production leaves it unset and keeps the check.
+
 What does work on Neon is a **role-level setting**, applied by the server at login whatever the
 client sends. The app connects as a dedicated role, `roadtrip_web`:
 
@@ -121,10 +138,10 @@ client sends. The app connects as a dedicated role, `roadtrip_web`:
 CREATE ROLE roadtrip_web LOGIN PASSWORD '...' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 ALTER ROLE roadtrip_web SET default_transaction_read_only = on;
 GRANT USAGE ON SCHEMA public TO roadtrip_web;
-GRANT SELECT ON pois, campgrounds, poi_campgrounds, campsites TO roadtrip_web;
+GRANT SELECT ON pois, campgrounds, poi_campgrounds, campsites, tesla_superchargers, poi_tesla_superchargers, planet_fitness_locations, poi_planet_fitness_locations TO roadtrip_web;
 ```
 
-Those four tables are everything the app reads (`campsites` through `campground_site_summary`).
+Those eight tables are everything the app reads (`campsites` through `campground_site_summary`). The list lives in `apps/web/src/server/repo/webReadGrants.ts`; `webReadGrants.test.ts` runs every query the app makes as a role holding only those grants, and fails if this `GRANT` line drifts from it.
 Checked 2026-10-29 as `roadtrip_web` through the **pooled** endpoint and through the direct one:
 `SHOW default_transaction_read_only` is `on`; `INSERT`, `UPDATE`, `DELETE` and `CREATE TABLE` fail
 with `cannot execute ... in a read-only transaction`; with the transaction forced to
