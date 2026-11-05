@@ -58,6 +58,17 @@ class CampgroundRepo(
                 id,
             )?.let(::fromRecord)
 
+    fun findByProviderRef(
+        dataProvider: String,
+        dataProviderRef: String,
+    ): Campground? =
+        ctx
+            .fetchOne(
+                "$baseSelect WHERE cg.data_provider = ? AND cg.data_provider_ref = ? AND cg.deleted_at IS NULL",
+                dataProvider,
+                dataProviderRef,
+            )?.let(::fromRecord)
+
     fun findByPoi(poiId: Long): Campground? =
         ctx
             .fetchOne(

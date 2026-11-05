@@ -12,6 +12,8 @@ ktor:
       - ca.floo.roadtrip.MainKt.module
 roadtrip:
   availability:
+    egress:
+      token: "${AVAILABILITY_EGRESS_TOKEN:}"
     force-pull-cooldown: 60s
     provider-cooldown: 5m
     poller:

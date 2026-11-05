@@ -8,6 +8,7 @@ data class AvailabilityConfig(
     val poller: AvailabilityPollerConfig,
     val stays: StayCheckConfig,
     val campsite: CampsiteAvailabilityConfig,
+    val egressToken: String? = null,
 ) {
     companion object {
         fun fromConfig(config: ConfigSection): AvailabilityConfig =
@@ -17,6 +18,7 @@ data class AvailabilityConfig(
                 poller = AvailabilityPollerConfig.fromConfig(config.section("poller")),
                 stays = StayCheckConfig.fromConfig(config.section("stays")),
                 campsite = CampsiteAvailabilityConfig.fromConfig(config.section("campsite")),
+                egressToken = config.section("egress").value("token"),
             )
     }
 }

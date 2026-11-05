@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.client.oidc.OidcClient
-import ca.floo.roadtrip.config.ApiCacheConfig
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -36,6 +35,7 @@ import ca.floo.roadtrip.route.auth.authRoutes
 import ca.floo.roadtrip.route.auth.roadtripAuthorization
 import ca.floo.roadtrip.route.common.apiContractDrift
 import ca.floo.roadtrip.route.common.undeclaredAccessRoutes
+import ca.floo.roadtrip.route.internal.availabilityEgressRoutes
 import ca.floo.roadtrip.route.static.staticSiteRoutes
 import ca.floo.roadtrip.service.api.RouteResponseMapper
 import ca.floo.roadtrip.service.auth.AuthController
@@ -50,6 +50,7 @@ import ca.floo.roadtrip.service.auth.UserProvisioningService
 import ca.floo.roadtrip.service.auth.WatchAccessResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDashboardController
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityEgressController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
@@ -146,23 +147,38 @@ internal fun Application.registerKoinRoutes() {
         availabilityWatchRoutes(
             availabilityWatchController(campsiteRepo, watchRepo, userRepo, watchService, watchCapabilities),
         )
+        val availabilityService =
+            CampsiteAvailabilityService(
+                availabilityProviders = availabilityProviders,
+                dateResolver = dateResolver,
+                failoverFetcher = failoverFetcher,
+                bookingHorizons = bookingHorizons,
+                availabilityRepo = availabilityRepo,
+                snapshotFreshnessTtl = configuredSnapshotFreshnessTtl(config.cache),
+            )
         val campsiteController =
             campsiteAvailabilityController(
                 poiRepo = poiRepo,
                 campsitesRepo = campsiteRepo,
                 campgroundRepo = campgroundRepo,
-                availabilityRepo = availabilityRepo,
                 pollerRepo = pollerRepo,
                 refResolver = refResolver,
                 availabilityProviders = availabilityProviders,
                 dateResolver = dateResolver,
-                bookingHorizons = bookingHorizons,
-                failoverFetcher = failoverFetcher,
+                availabilityService = availabilityService,
                 watchCapabilities = watchCapabilities,
-                cacheConfig = config.cache,
                 identities = bookingIdentities,
             )
         campsiteRoutes(campsiteController, config.availability.campsite)
+        availabilityEgressRoutes(
+            AvailabilityEgressController(
+                campgroundRepo = campgroundRepo,
+                campsitesRepo = campsiteRepo,
+                availabilityService = availabilityService,
+                dateResolver = dateResolver,
+            ),
+            config.availability.egressToken,
+        )
         stayCheckRoutes(
             StayCheckController(campsiteController, config.availability.stays),
             config.availability.stays,
@@ -240,15 +256,12 @@ private fun campsiteAvailabilityController(
     poiRepo: PoiRepo,
     campsitesRepo: CampsiteRepo,
     campgroundRepo: CampgroundRepo,
-    availabilityRepo: AvailabilityRepo,
     pollerRepo: AvailabilityPollerRepo,
     refResolver: RefResolver,
     availabilityProviders: List<AvailabilityProvider>,
     dateResolver: AvailabilityDateResolver,
-    bookingHorizons: BookingHorizonResolver,
-    failoverFetcher: FailoverAvailabilityFetcher,
+    availabilityService: CampsiteAvailabilityService,
     watchCapabilities: WatchCapabilityService,
-    cacheConfig: ApiCacheConfig,
     identities: BookingIdentityResolver,
 ): CampsiteAvailabilityController {
     val targets =
@@ -271,15 +284,7 @@ private fun campsiteAvailabilityController(
                 targets = targets,
                 identities = identities,
             ),
-        availabilityService =
-            CampsiteAvailabilityService(
-                availabilityProviders = availabilityProviders,
-                dateResolver = dateResolver,
-                failoverFetcher = failoverFetcher,
-                bookingHorizons = bookingHorizons,
-                availabilityRepo = availabilityRepo,
-                snapshotFreshnessTtl = configuredSnapshotFreshnessTtl(cacheConfig),
-            ),
+        availabilityService = availabilityService,
         dateResolver = dateResolver,
         watchCapabilityService = watchCapabilities,
     )
