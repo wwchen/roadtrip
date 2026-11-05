@@ -168,6 +168,20 @@ export function documentValues(object: Readonly<Record<string, unknown>>): unkno
   return documentKeys(object).map((key) => object[key]);
 }
 
+export function extendInDocumentOrder(
+  object: Readonly<Record<string, unknown>>,
+  additions: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const keys = [...documentKeys(object)];
+  const extended: Record<string, unknown> = { ...object };
+  for (const [key, value] of documentEntries(additions)) {
+    if (!Object.hasOwn(extended, key)) keys.push(key);
+    extended[key] = value;
+  }
+  documentOrders.set(extended, keys);
+  return extended;
+}
+
 function serializeValue(value: unknown): string {
   // JSON.stringify throws on a bigint, so a caller carrying one had to pass a
   // replacer, which this cannot take. A bigint is a JSON number literal and

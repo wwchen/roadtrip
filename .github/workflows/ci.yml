@@ -172,6 +172,11 @@ jobs:
               - 'backend/src/main/kotlin/ca/floo/roadtrip/config/**'
               - 'backend/src/main/kotlin/ca/floo/roadtrip/observability/**'
               - 'backend/src/main/kotlin/ca/floo/roadtrip/tools/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/service/availability/AvailabilityTriggerKinds.kt'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/service/booking/RecentAtcFires.kt'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/service/scheduler/RecGovKeepaliveJob.kt'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/service/settings/CompanionSessionPort.kt'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/service/settings/RecGovProfileSessionPort.kt'
               - 'backend/src/main/resources/poi-registry.yaml'
               - 'backend/src/main/resources/db/migration/**'
               - 'backend/build.gradle.kts'
@@ -419,42 +424,32 @@ jobs:
   # importer is faithful, and it is the reason a change under packages/worker can
   # be trusted at all.
   #
-  # ONE MODE, not three, and the measurements are the whole argument. The three
-  # modes see different classes of defect — the single pass checks parse and
-  # transform, `--passes 2` reaches a conflict-handling defect the single pass
-  # cannot (a first import into an empty database exercises the INSERT path
-  # alone), and `--prove-update-keys` blanks every compared column between the
-  # passes so a column missing from one importer's ON CONFLICT update set stays
-  # blank on that side alone. `--passes 2` is not the ONLY mode reaching the
-  # conflict path: passPlan forces --prove-update-keys to two passes as well,
-  # and whether it subsumes --passes 2 is open and unmeasured. See the Makefile
-  # and docs/superpowers/2026-10-28-step-4-rulings.md, which say the same. Measured over the full capture set on an Apple
-  # Silicon laptop, each read from the run's own exit code:
+  # ALL THREE MODES, one job each, because each sees a different class of
+  # defect: the single pass checks parse and transform, `--passes 2` reaches a
+  # conflict-handling defect a first import into an empty database cannot (it
+  # exercises the INSERT path alone), and `--prove-update-keys` blanks every
+  # compared column between the passes so a column missing from one importer's
+  # ON CONFLICT update set stays blank on that side alone. `--passes 2` is not
+  # the ONLY mode reaching the conflict path: passPlan forces
+  # --prove-update-keys to two passes as well, and whether it subsumes
+  # --passes 2 is open and unmeasured, so both stay.
   #
-  #   single pass                  1,981 s  (33 m 01 s)
-  #   --passes 2                   3,352 s  (55 m 52 s)
-  #   --prove-update-keys          3,704 s  (61 m 44 s)
+  # The rule was all three in CI if they land under 30 minutes on a runner.
+  # This job used to run only the single pass, because the first measurements
+  # were taken on an arm64 laptop running the amd64-only postgis image under
+  # emulation (1,981 s, 3,352 s and 3,704 s; 2 h 30 m together). Measured on
+  # ubuntu-latest, job wall time including setup, run 41688377263:
   #
-  # The rule was: all three in CI if the whole job lands under 30 minutes on a
-  # GitHub runner, which is slower than that laptop. The three together are
-  # 9,037 s — 2 h 30 m 37 s — so the fallback applies and is not close. The
-  # single pass keeps the full capture set here; the other two are the
-  # `make importer-diff` gate before landing.
+  #   single pass                  10 m 12 s
+  #   --passes 2                   11 m 01 s
+  #   --prove-update-keys          16 m 33 s
   #
-  # The fallback's middle option — dropping those two to one target per adapter
-  # FAMILY — does not pay either. A 13-family subset in `--passes 2` had already
-  # run 1,481 s (24 m 41 s) with its Kotlin side complete and only 8 of its 13
-  # TypeScript targets done when the run was lost to a full Docker disk, so it
-  # was past 24 minutes before the five campsite targets were reached. The
-  # reason it cannot be cheap is structural:
+  # As a matrix the gate costs the slowest mode, 16.5 minutes.
   #
-  # There are thirteen adapter families across the eighteen targets, and a
-  # campsite family cannot be selected without its parent campground target,
-  # because campsite adapters resolve parents through
-  # campgrounds.(data_provider, data_provider_ref). So any per-family subset is
-  # forced to contain Campflare Campsites (299,857 rows) and Rec.gov Campsites
-  # (105,452) — about 89% of the catalog's campsites. It drops five of eighteen
-  # targets and almost none of the cost.
+  # --prove-update-keys names the columns it cannot prove because they are
+  # already blank in every captured row (deleted_at everywhere, and for
+  # example campsites.driveway_length and pois.cadence_override_sec). That is a
+  # limit of the captures, not of the mode, and the log says so per side.
   #
   # Nothing is fetched: data/raw is already in every checkout, so the captures
   # cost this job nothing beyond the clone it would do anyway. Java is here for
@@ -464,16 +459,22 @@ jobs:
   # rows — "one side did not run" must never be reported as "one side has no
   # rows". The harness's own unit tests run in package-tests, in minutes.
   #
-  # timeout-minutes is 150 against a measured 33 minutes: a runner is slower
-  # than the laptop above, npm ci, the workspace build and the backend compile
-  # all land before the first row is read, and a job killed at its ceiling
-  # reports the same red as a real difference. Raise it rather than let that
-  # happen; if it is ever approached, the number above is the one to re-measure.
+  # timeout-minutes is 45 against a measured 16.5: a job killed at its ceiling
+  # reports the same red as a real difference, so it carries room for a slow
+  # runner. If it is ever approached, re-measure rather than raise it blindly.
   importer-differential:
     needs: changes
     if: needs.changes.outputs.importer_differential == 'true'
+    name: importer-differential (${{ matrix.mode.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        mode:
+          - { name: single pass, args: '' }
+          - { name: passes 2, args: '--passes 2' }
+          - { name: prove update keys, args: '--prove-update-keys' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
@@ -495,7 +496,7 @@ jobs:
         run: npm run build
 
       - name: Diff the TypeScript importer against the Kotlin one over every capture
-        run: node scripts/importer-differential.mjs
+        run: node scripts/importer-differential.mjs ${{ matrix.mode.args }}
 
   # Mirrored locally by `make test`. One job for both suites: the domain suite
   # runs in well under a second, so a job of its own would spend more on

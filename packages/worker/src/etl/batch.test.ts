@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { BatchAccumulator } from './batch.js';
-import type { FlushCounts } from '../repo/bulk.js';
+import type { FlushCounts } from '../model/flush-counts.js';
 
 const NONE: FlushCounts = { upserted: 0, skipped: 0 };
 

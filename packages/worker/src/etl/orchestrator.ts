@@ -97,7 +97,7 @@ export async function runTarget(target: ImportTarget, deps: OrchestratorDeps): P
   ) => {
     if (count <= ROW_ERROR_LOG_SAMPLE_LIMIT) {
       log.warn(
-        `${target.section} '${target.name}' terminal slug=${etl.etlSlug} ${stage} bad sourceId=${result.sourceId} errors=${JSON.stringify(result.errors)}`,
+        `${target.section} '${target.name}' terminal slug=${etl.etlSlug} ${stage} bad sourceId=${result.sourceId} errors=[${result.errors.join(', ')}]`,
       );
     }
   };

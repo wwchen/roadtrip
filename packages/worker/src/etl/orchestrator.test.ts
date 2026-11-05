@@ -444,7 +444,7 @@ describe('runTarget', () => {
     const transformWarnings = h.warnings.filter((line) => line.includes(' transform bad '));
     expect(parseWarnings).toHaveLength(WARN_SAMPLE_LIMIT);
     expect(transformWarnings).toHaveLength(WARN_SAMPLE_LIMIT);
-    expect(parseWarnings[0]).toContain('sourceId=p0');
+    expect(parseWarnings[0]).toContain('sourceId=p0 errors=[unparseable]');
   });
 
   test('a run with skips logs a skipped warning and a clean run does not', async () => {
