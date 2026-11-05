@@ -516,7 +516,29 @@ export const NOT_IMPORTED_TABLES = {
   vendor_rate_limit_bucket: "bucket4j's token-bucket store for the fetch governor, written by neither importer",
 };
 
-export const BASE_TABLES_SQL = `SELECT table_name AS name
+export function untouchedTablesSql(schema) {
+  return Object.keys(NOT_IMPORTED_TABLES)
+    .map(
+      (table) =>
+        `SELECT '${table}' AS name, count(*)::int AS rows,
+                coalesce(md5(string_agg(t::text, E'\\n' ORDER BY t::text)), '') AS fingerprint
+         FROM ${quote(schema, table)} t`,
+    )
+    .join(' UNION ALL ');
+}
+
+export function untouchedTableChanges(before, after) {
+  return Object.keys(NOT_IMPORTED_TABLES).flatMap((table) => {
+    const was = before[table];
+    const now = after[table];
+    if (was === undefined || now === undefined) return [`${table} was not read on both occasions`];
+    if (was.rows !== now.rows) return [`${table} went from ${was.rows} to ${now.rows} row(s)`];
+    if (was.fingerprint !== now.fingerprint) return [`${table} kept ${now.rows} row(s) but their contents changed`];
+    return [];
+  });
+}
+
+export const BASE_TABLES_SQL =`SELECT table_name AS name
   FROM information_schema.tables
   WHERE table_schema = '${TYPESCRIPT_SCHEMA}' AND table_type = 'BASE TABLE'
   ORDER BY table_name`;
@@ -527,24 +549,73 @@ export const BASE_TABLES_SQL = `SELECT table_name AS name
 // either a `joins` list (checked above) or a named exemption here. The
 // completeness test holds that invariant, so a future narrowed select cannot
 // quietly join the third group.
-export const COVERAGE_EXEMPT_TABLES = {
-  import_runs: 'append-only; the side select keeps the newest run per source and compares the rest as `runs`',
-  campsites:
-    'the side select LEFT JOINs campgrounds on its primary key only to derive campground_key, so it keeps every row; tableCounts checks that against the table count',
+export const ROW_PRESERVING_SELECT_TABLES = ['campsites'];
+
+const RUN_COUNT_COLUMN = 'runs';
+
+export const COVERAGE_STAND_INS = {
+  'row preservation': (diffed) => ROW_PRESERVING_SELECT_TABLES.includes(diffed.table),
+  'run count': (diffed) => Object.hasOwn(diffed.derived, RUN_COUNT_COLUMN),
 };
 
-export const ROW_PRESERVING_SELECT_TABLES = ['campsites'];
+export const COVERAGE_EXEMPT_TABLES = {
+  import_runs: {
+    standIn: 'run count',
+    reason: 'append-only; the side select keeps the newest run per source and compares the rest as `runs`',
+  },
+  campsites: {
+    standIn: 'row preservation',
+    reason:
+      'the side select LEFT JOINs campgrounds on its primary key only to derive campground_key, so it keeps every row; tableCounts checks that against the table count',
+  },
+};
+
+export function coverageExemptionProblems(diffed) {
+  const exemption = COVERAGE_EXEMPT_TABLES[diffed.table];
+  if (exemption === undefined) return [];
+  const problems = [];
+  if (diffed.joins !== undefined) problems.push(`${diffed.table} has a joins list, so it needs no exemption`);
+  if (typeof exemption.reason !== 'string' || exemption.reason.trim() === '') {
+    problems.push(`${diffed.table} is exempt with no reason`);
+  }
+  const holds = COVERAGE_STAND_INS[exemption.standIn];
+  if (holds === undefined) {
+    problems.push(`${diffed.table} names '${exemption.standIn}', which is no check`);
+  } else if (!holds(diffed)) {
+    problems.push(`${diffed.table} names '${exemption.standIn}', which does not cover it`);
+  }
+  return problems;
+}
 
 // Blanks every compared column that is not part of the key, so each importer's
 // pass 2 has to write it back from the captures. A column missing from one
 // implementation's ON CONFLICT update set stays blank on that side alone and
 // the diff names it. Generated from getTableConfig so it cannot drift from the
 // schema; identity, key and ignored columns are left alone.
-export function blankSql(diffed, schema) {
+function blankedColumns(diffed) {
   const key = new Set(diffed.key);
-  const assignments = diffed.columns
-    .filter((column) => !Object.hasOwn(diffed.ignored, column.name) && !key.has(column.name))
-    .map((column) => `${column.name} = ${blankValueFor(column, diffed.blankOverrides)}`);
+  return diffed.columns.filter((column) => !Object.hasOwn(diffed.ignored, column.name) && !key.has(column.name));
+}
+
+export function blankSql(diffed, schema) {
+  const assignments = blankedColumns(diffed).map(
+    (column) => `${column.name} = ${blankValueFor(column, diffed.blankOverrides)}`,
+  );
   if (assignments.length === 0) return [];
   return [`UPDATE ${quote(schema, diffed.table)} SET ${assignments.join(', ')}`];
+}
+
+export function alreadyBlankSql(diffed, schema) {
+  const counts = blankedColumns(diffed).map(
+    (column) =>
+      `count(*) FILTER (WHERE ${column.name} IS DISTINCT FROM ${blankValueFor(column, diffed.blankOverrides)})::int AS "${column.name}"`,
+  );
+  return `SELECT ${counts.join(', ')} FROM ${quote(schema, diffed.table)}`;
+}
+
+export function alreadyBlankColumns(nonBlankCounts) {
+  return Object.entries(nonBlankCounts)
+    .filter(([, count]) => count === 0)
+    .map(([column]) => column)
+    .sort();
 }

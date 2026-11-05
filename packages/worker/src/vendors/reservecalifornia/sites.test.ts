@@ -288,6 +288,14 @@ describe('transform', () => {
     expect(record.sourcePayload).toContain(`"unit_id":${BEYOND_SAFE}`);
   });
 
+  test('the payload keeps the unit\'s own key order, integer-like keys included, before the added keys', () => {
+    const record = onlyRecord([
+      placeCapture('1', { '5': null }),
+      singleUnitGrid('5', '"PlaceId":1', unitText('9001', '"Name":"x","7":true')),
+    ]);
+    expect(record.sourcePayload).toMatch(/^\{"UnitId":9001,"Name":"x","7":true,"unit_id":9001,"facility_id":5,/);
+  });
+
   test('units are emitted facility by facility, each grid in the order its units are written', () => {
     const records = recordsOf([
       placeCapture('1', { '5': null, '6': null }),

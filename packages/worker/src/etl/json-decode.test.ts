@@ -22,6 +22,9 @@ const INT_MIN = -2_147_483_648;
 const SAFE_LONG_MAX = Number.MAX_SAFE_INTEGER;
 const WIDE_INTEGER = '12345678901234567890';
 const NEGATIVE_WIDE_INTEGER = '-12345678901234567890';
+const WIDE_INTEGER_AS_DOUBLE = 1.2345678901234567e19;
+const KOTLIN_LONG_MAX = '9223372036854775807';
+const FIRST_UNSAFE_LONG = '9007199254740993';
 const BEYOND_DOUBLE = '1e400';
 
 function wide(literal: string): unknown {
@@ -67,10 +70,35 @@ describe('the three field shapes on a JSON null and on an absent key', () => {
 });
 
 describe('scalar strictness', () => {
-  test('a string field does not coerce numbers and a boolean field does not coerce strings', () => {
+  test('a string field does not coerce numbers, as kotlinx refuses an unquoted literal for String', () => {
     expect(() => nullableString({ k: 12 }, 'k')).toThrow('k: expected string, got number');
-    expect(() => nullableBoolean({ k: 'true' }, 'k')).toThrow('k: expected boolean, got string');
     expect(nullableBoolean({ k: false }, 'k')).toBe(false);
+  });
+
+  test('number and boolean fields read a quoted literal as kotlinx 1.11 tree decoding does', () => {
+    expect(nullableDouble({ k: '45.1' }, 'k')).toBe(45.1);
+    expect(nullableDouble({ k: ' 45.1' }, 'k')).toBe(45.1);
+    expect(nullableDouble({ k: '45.1f' }, 'k')).toBe(45.1);
+    expect(nullableDouble({ k: '0x1p3' }, 'k')).toBe(8);
+    expect(nullableInt({ k: '8' }, 'k')).toBe(8);
+    expect(nullableInt({ k: ' 8' }, 'k')).toBe(8);
+    expect(nullableInt({ k: '1e2' }, 'k')).toBe(100);
+    expect(requiredLong({ k: '123' }, 'k')).toBe(123);
+    expect(nullableBoolean({ k: 'true' }, 'k')).toBe(true);
+    expect(nullableBoolean({ k: 'TRUE' }, 'k')).toBe(true);
+    expect(nullableBoolean({ k: 'False' }, 'k')).toBe(false);
+  });
+
+  test('a quoted literal kotlinx refuses is refused here too', () => {
+    expect(() => nullableInt({ k: '8.0' }, 'k')).toThrow('k: expected int, got string');
+    expect(() => nullableInt({ k: '+8' }, 'k')).toThrow('k: expected int, got string');
+    expect(() => nullableInt({ k: '' }, 'k')).toThrow('k: expected int, got string');
+    expect(() => nullableDouble({ k: '' }, 'k')).toThrow('k: expected number, got string');
+    expect(() => nullableDouble({ k: 'NaN' }, 'k')).toThrow('k: NaN is not a finite double');
+    expect(() => nullableDouble({ k: '1e400' }, 'k')).toThrow('k: Infinity is not a finite double');
+    expect(() => nullableBoolean({ k: ' true' }, 'k')).toThrow('k: expected boolean, got string');
+    expect(() => nullableBoolean({ k: 'yes' }, 'k')).toThrow('k: expected boolean, got string');
+    expect(() => requiredLong({ k: FIRST_UNSAFE_LONG }, 'k')).toThrow('k: expected long, got string');
   });
 
   test('Int accepts the 32-bit range and nothing outside it', () => {
@@ -79,7 +107,7 @@ describe('scalar strictness', () => {
     expect(() => nullableInt({ k: INT_MAX + 1 }, 'k')).toThrow('not a 32-bit integer');
     expect(() => nullableInt({ k: INT_MIN - 1 }, 'k')).toThrow('not a 32-bit integer');
     expect(() => nullableInt({ k: 1.5 }, 'k')).toThrow('not a 32-bit integer');
-    expect(() => nullableInt({ k: '12' }, 'k')).toThrow('k: expected int, got string');
+    expect(nullableInt({ k: '12' }, 'k')).toBe(12);
   });
 
   test('Int rejects a wide integer by name rather than as "number"', () => {
@@ -121,14 +149,19 @@ describe('scalar strictness', () => {
     expect(() => requiredLong({ k: wide(WIDE_INTEGER) }, 'k')).toThrow('k: expected long, got integer beyond 2^53');
   });
 
+  test('Long is narrowed to the double-safe range, so a value Kotlin Long accepts is refused, never rounded', () => {
+    for (const kotlinLong of [FIRST_UNSAFE_LONG, KOTLIN_LONG_MAX, `-${KOTLIN_LONG_MAX}`]) {
+      expect(() => requiredLong({ k: wide(kotlinLong) }, 'k')).toThrow('k: expected long, got integer beyond 2^53');
+    }
+  });
+
   test('Double accepts a wide integer literal as the nearest double, as Kotlin parses it', () => {
-    expect(requiredDouble({ k: wide(WIDE_INTEGER) }, 'k')).toBe(Number(WIDE_INTEGER));
+    expect(requiredDouble({ k: wide(WIDE_INTEGER) }, 'k')).toBe(WIDE_INTEGER_AS_DOUBLE);
     expect(nullableDouble({ k: -0.5 }, 'k')).toBe(-0.5);
   });
 
-  test('Double rejects a literal beyond the double range, and a quoted number', () => {
+  test('Double rejects a literal beyond the double range', () => {
     expect(() => requiredDouble({ k: wide(BEYOND_DOUBLE) }, 'k')).toThrow('k: Infinity is not a finite double');
-    expect(() => nullableDouble({ k: '1.5' }, 'k')).toThrow('k: expected number, got string');
   });
 });
 

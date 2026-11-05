@@ -90,56 +90,44 @@ what it costs.
 3. ~~**`cacheRefusal` has no test**~~. It now has a table of refusal cases,
    and every branch was checked against a mutant.
 
-### Coverage limits
+### Done on 2026-11-03, second pass (PR #836)
 
-4. **`NOT_IMPORTED_TABLES` is never checked at runtime** (A/L9,
-   `scripts/importer-diff-columns.mjs`). Seventeen tables are named as written
-   by neither importer and only their existence is verified. Asserting they are
-   empty on both sides after a run is free today and would settle "a table
-   written by neither side" rather than taking it on trust.
-5. **`--prove-update-keys`' anti-vacuity check is per table** (A/L6), so a
-   column that is always blank is never actually blanked and the mode proves
-   nothing for it.
-6. **`COVERAGE_EXEMPT_TABLES` is satisfied by prose alone** (A/L1) and is
-   checked before `spec.joins === undefined`.
-7. **The Kotlin import scan is one hop deep** (A/L5,
-   `scripts/test_ci_image_builds.py`). It reads `service/etl` and `repo` and is
-   `^import`-anchored, so it cannot see a transitive dependency or a
-   fully-qualified reference with no import. `tools` and `config` are in the
-   watched lists by hand for that reason.
-8. **The vendor adapters had per-task reviews but no whole-diff pass.** A defect
-   confined to one adapter and introduced after its own review would not have
-   been caught by the final reviews, which covered the proof machinery and the
-   shared seams. The full-set differential is what stands behind them.
-
-### Faithfulness details
-
-9. **`decodeLong` narrows a Kotlin `Long` to ±2^53−1** (B/4, PLAUSIBLE). The
-   only call site is the Overpass `id`, unreachable at today's OSM ids.
-10. **`isRecord` lacks the `isWideNumber` guard its sibling `isJsonObject` has**
-    (B/5, `packages/worker/src/etl/envelope.ts`), so a header integer above 2^53
-    decodes where Kotlin rejects the envelope. Unreachable today.
-11. **`failureNotes` differs from Kotlin's fallback** (B/6): it falls back on an
-    empty rather than null message and substitutes a JS constructor name, so
-    `import_runs.notes` is not diffable for failures either way.
-12. **`engines.node` is `>=22.12.0`** (B/7) while the `JSON.rawJSON` carrier was
-    only ever verified on v22.23.4, with no feature detection. One command
-    settles whether the floor is real.
-
-### Design calls
-
-13. **`FlushCounts` layering** (B/8). Defined in `repo/bulk.ts` and imported
-    downward by `etl/batch.ts` and `etl/terminal-sinks.ts`, against AGENTS.md;
-    the Kotlin has it as a framework type (`TerminalEtlBinding.kt`). Moving it
-    naively inverts the dependency rather than removing it, so it needs a
-    decision about where the seam belongs, not a quick edit.
-14. **`make importer-diff` cannot exit 0 in its own cached-dump workflow**
-    (A/L7): passing `--reference-dump` through `IMPORTER_DIFF_ARGS` runs modes 1
-    and 2 to completion and then fails in seconds on mode 3, which refuses the
-    flag by design. Documented in the Makefile; not fixed.
-15. ~~**`containerName()` is dead**~~ (A/L8). It now has a caller: the test
-    that bounds a buffered docker call.
-16. **Two mild self-computing asserts** (B/9, `json-decode.test.ts`).
+4. ~~**`NOT_IMPORTED_TABLES` is never checked at runtime**~~. Each run
+   fingerprints the seventeen tables on both databases after migration and
+   refuses to diff if either importer changed one.
+5. ~~**`--prove-update-keys`' anti-vacuity check is per table**~~. Still a
+   coverage limit, but no longer tacit: the run names, per side, every column
+   already blank in every row, which the mode cannot prove.
+6. ~~**`COVERAGE_EXEMPT_TABLES` is satisfied by prose alone**~~. Each exemption
+   names its stand-in check, the completeness test requires that check to hold,
+   and a table with a joins list cannot be exempt.
+7. ~~**The Kotlin import scan is one hop deep**~~. It is now a transitive,
+   file-level closure from `tools`, `service/etl` and `repo`, following imports,
+   fully-qualified references and same-package use. It found a real two-hop path
+   the review had ruled out (`ConfigSection` → `AppConfig` → `BookingConfig` →
+   `RecGovKeepaliveJob.kt`); those five files are now watched and in provenance.
+8. ~~**No whole-diff pass over the vendor adapters**~~. Three independent
+   reviews covered all thirteen families. Two real divergences were found and
+   fixed: typed decoders rejected quoted numbers and booleans that kotlinx
+   1.11's tree decoder accepts (a quoted Tesla latitude failed the whole run;
+   a quoted stall count silently stripped a row's enrichment), and two
+   extended source payloads lost the vendor's key order. Neither is reachable
+   from today's captures, which is why the differential was green.
+9. ~~**`decodeLong` narrows to ±2^53−1**~~. Kept as a refusal, now pinned by a
+   test naming the Kotlin `Long` values it refuses.
+10. ~~**`isRecord` lacks the carrier guard**~~. Fixed; `isJsonObject` delegates
+    to it, so there is one predicate.
+11. ~~**`failureNotes` differs from Kotlin's fallback**~~. Left as is, because a
+    JVM simple name cannot be reproduced, so `import_runs.notes` for a failure is
+    undiffable either way. The row-error log now renders lists as SLF4J does.
+12. ~~**`engines.node` floor unverified**~~. Real: node 22.11 through 22.21 all
+    have `JSON.rawJSON`, `JSON.isRawJSON` and the reviver's `source`.
+13. ~~**`FlushCounts` layering**~~. Moved to `model/`, the layer both `etl` and
+    `repo` already depend on, so neither imports the other for it.
+14. ~~**`make importer-diff` cannot exit 0 with a cached dump**~~.
+    `IMPORTER_DIFF_CACHE` gives modes 1 and 2 a dump each and mode 3 none.
+16. ~~**Two mild self-computing asserts**~~. The double assertion uses the
+    literal; `collapseAsciiWhitespace` has direct tests, U+000B included.
 
 ## Carried decisions — do not re-litigate without new evidence
 
@@ -158,24 +146,17 @@ These were decided deliberately; the rulings document has the full reasoning.
 - **`db/generated` is deliberately outside the watched trees and provenance:**
   jOOQ generates it from the migrations, which are watched.
 
-## A measurement caveat that affects one of those decisions
+## The CI scoping decision, re-measured
 
-The CI scoping decision — one mode in CI, three in `make importer-diff` — was
-made against locally measured timings of 1,981 s, 3,352 s and 3,704 s, totalling
-2 h 30 m against a 30-minute bar.
+The decision to run one mode in CI and three in `make importer-diff` was made
+against timings of 1,981 s, 3,352 s and 3,704 s. Those were arm64 numbers under
+QEMU emulation, because `postgis/postgis:16-3.4` has no arm64 variant.
 
-Those are **arm64 numbers under QEMU emulation**, because
-`postgis/postgis:16-3.4` is a single-architecture amd64 tag with no arm64
-variant. CI is native amd64. The single pass took **10.9 minutes** there, about
-a third of the local figure, and `timeout-minutes: 150` was sized against the
-inflated number.
-
-Scaling the other two modes by the same ratio puts all three at roughly 50
-minutes, which is a different decision than the one that was made. That is an
-extrapolation from one data point and the modes do different work, so the honest
-way to settle it is to time `--passes 2` and `--prove-update-keys` on CI. Until
-someone does, treat the one-mode decision as resting on a number that does not
-describe CI.
+Measured on 2026-11-03 on `ubuntu-latest` (run 41688377263), job wall time
+including setup: single pass 10 m 12 s, `--passes 2` 11 m 01 s,
+`--prove-update-keys` 16 m 33 s, all `0 differences`. Run as a matrix, the
+gate costs 16.5 minutes, inside the original 30-minute rule, so CI now runs
+all three modes (PR #836) with `timeout-minutes: 45`.
 
 ## Ephemeral artifacts
 

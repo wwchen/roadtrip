@@ -1,6 +1,6 @@
 import { BookingProvider, DataProviderRef, type CampsiteAttribute } from '@roadtrip/domain';
 import { campsiteKindRecGov } from '../../etl/campsite-kinds.js';
-import { documentEntries } from '../../etl/document-order.js';
+import { documentEntries, extendInDocumentOrder } from '../../etl/document-order.js';
 import { serializeOpaquePayload, type Envelope } from '../../etl/envelope.js';
 import type { InputBundle } from '../../etl/input-bundle.js';
 import { fieldOf, isJsonObject, type JsonObject } from '../../etl/json-decode.js';
@@ -189,7 +189,7 @@ function campsiteRecord(
     maxRvLength: promoted.maxRvLength,
     attributes: promoted.attributes,
     minPeople: intOrNull(fieldOf(raw, FIELD.minPeople)),
-    sourcePayload: serializeOpaquePayload({ ...raw, [PARENT_FACILITY_KEY]: facilityId }),
+    sourcePayload: serializeOpaquePayload(extendInDocumentOrder(raw, { [PARENT_FACILITY_KEY]: facilityId })),
   };
 }
 

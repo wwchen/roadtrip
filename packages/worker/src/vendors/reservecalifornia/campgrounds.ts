@@ -5,7 +5,7 @@ import {
   type CampgroundAmenity,
   type CampgroundMetadata,
 } from '@roadtrip/domain';
-import { documentEntries, documentValues } from '../../etl/document-order.js';
+import { documentEntries, documentValues, extendInDocumentOrder } from '../../etl/document-order.js';
 import { serializeOpaquePayload, type Envelope, type OpaquePayloadJson } from '../../etl/envelope.js';
 import { stripTags } from '../../etl/html-text.js';
 import type { InputBundle } from '../../etl/input-bundle.js';
@@ -119,14 +119,15 @@ export function campsiteSourcePayload(
   placeId: bigint,
   facility: ReserveCaliforniaFacility | undefined,
 ): OpaquePayloadJson {
-  return serializeOpaquePayload({
-    ...unit.raw,
-    unit_id: unit.unitId,
-    facility_id: grid.facilityId,
-    [PARENT_PLACE_ID_KEY]: placeId,
-    ...(grid.facilityName === null ? {} : { facility_name: grid.facilityName }),
-    ...(facility === undefined ? {} : { facility: facility.raw }),
-  });
+  return serializeOpaquePayload(
+    extendInDocumentOrder(unit.raw, {
+      unit_id: unit.unitId,
+      facility_id: grid.facilityId,
+      [PARENT_PLACE_ID_KEY]: placeId,
+      ...(grid.facilityName === null ? {} : { facility_name: grid.facilityName }),
+      ...(facility === undefined ? {} : { facility: facility.raw }),
+    }),
+  );
 }
 
 function firstUnitTypeName(facility: JsonObject): string | null {

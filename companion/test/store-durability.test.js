@@ -28,6 +28,7 @@ import {
 const STORE_MODULE_URL = new URL('../src/store.js', import.meta.url).href
 const JAR_KEY = 'recgov_cookies:7'
 const OTHER_JAR_KEY = 'recgov_cookies:9'
+const CONTENDED_WRITER_LOCK_TIMEOUT_MS = 60_000
 
 let dir
 beforeEach(() => {
@@ -60,6 +61,7 @@ function writer (key, iterations, valueSize = 1) {
     env: {
       ...process.env,
       COMPANION_DIR: dir,
+      COMPANION_STORE_LOCK_TIMEOUT_MS: String(CONTENDED_WRITER_LOCK_TIMEOUT_MS),
       KEY: key,
       ITERATIONS: String(iterations),
       VALUE_SIZE: String(valueSize),
