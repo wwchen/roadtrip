@@ -124,6 +124,8 @@ test('an unconfigured egress is unavailable', async () => {
 
 test.each([
   [0, 'timeout'],
+  [302, 'egress_redirected'],
+  [200, 'egress_not_json'],
   [503, 'rate_limited'],
 ])('a mini-ca answer of %s %s is unavailable and logged', async (status, code) => {
   const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
