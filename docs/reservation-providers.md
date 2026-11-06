@@ -614,11 +614,12 @@ The booking horizon and widest window of every registered provider also live in
 
 ### The egress endpoint
 
-`POST /api/internal/availability/fetch` is how the Vercel refresh reaches vendors from mini-ca's
-residential IP. It names a campground by `(data_provider, data_provider_ref)` and a window, and
+`POST /api/internal/availability/fetch` is how Vercel reaches availability, which lives only in
+mini-ca's Postgres. It names a campground by `(data_provider, data_provider_ref)` and a window, and
 answers every cell with its campsite's `(data_provider, data_provider_ref)` and the time it was
-observed. It runs the same read-through `CampsiteAvailabilityService` as the matrix, so it is one
-more caller of the one rate limiter, not a second one. It is mounted only when
+observed. `mode: "stored"` reads mini-ca's current cells and never calls a vendor;
+`mode: "refresh"` (the default) runs the same read-through `CampsiteAvailabilityService` as the
+matrix, so it is one more caller of the one rate limiter, not a second one. It is mounted only when
 `AVAILABILITY_EGRESS_ENABLED` is `true` and carries no credential of its own: the Cloudflare Access
 policy on its hostname is the caller check; `docs/web-app.md` covers the rest of the path.
 

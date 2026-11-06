@@ -105,9 +105,8 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 | `MAPBOX_TOKEN` | sensitive | Mapbox token for `/api/geocode`, `/api/route` and `/api/pois/on-route`; unset, those answer 503 and the rest of the map works |
 | `CAMPGROUND_SEARCH_MAX_RESULTS` | plain, optional | cap on `POST /api/campgrounds/search` ids, default 5000 |
 | `ENABLED_AVAILABILITY_PROVIDERS` | plain, optional | default `aspira,campflare,reserveamerica,reservecalifornia`, Kotlin's read-path list; decides which provider serves a campground's matrix |
-| `AVAILABILITY_TTL_SECONDS` | plain, optional | default `7200`; a matrix cell older than this is stale |
-| `AVAILABILITY_EGRESS_URL` | plain, optional | `https://roadtrip-egress.floo.ca`; one of the three availability refresh settings below |
-| `DATABASE_WRITER_URL` | sensitive, optional | the Neon **pooled** endpoint as `roadtrip_availability_writer`; used only by the refresh |
+| `AVAILABILITY_TTL_SECONDS` | plain, optional | default `7200`; a matrix cell older than this counts as stale |
+| `AVAILABILITY_EGRESS_URL` | plain, optional | `https://roadtrip-egress.floo.ca`; with the two Access variables, how the matrix reaches mini-ca's availability |
 | `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`, `AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET` | sensitive, optional | the Cloudflare Access service token in front of `roadtrip-egress.floo.ca`, sent as `CF-Access-Client-Id` and `CF-Access-Client-Secret`; the only credential the egress call carries |
 
 Deployment protection (checked 2026-10-29): Vercel Authentication is on with
@@ -117,42 +116,37 @@ login; the per-deployment, branch and team-slug URLs redirect to Vercel login.
 The first deployment of a project with no production deployment is assigned the production
 target, whatever its branch. The first build here was of `claude/nextjs-parallel-read-app-19ceab`.
 
-## Availability refresh
+## Availability on Vercel
 
-The campsite matrix (`GET /api/pois/{id}/campsites/availability`) reads stored cells from Neon and
-never calls a vendor. When the week it answers is stale, the page sends one
-`POST /api/pois/{id}/campsites/availability/refresh`, which answers `202` at once and, after the
-response, asks mini-ca for fresh cells and writes them to Neon. The page polls the GET every 2
-seconds, at most 15 times, until the week is fresh.
+Neon holds the catalog (POIs, campgrounds, campsites). Availability lives only in mini-ca's
+Postgres, where Kotlin's read-through and pollers already keep it. Vercel stores no availability.
 
-The refresh is on only where `AVAILABILITY_EGRESS_URL`, `DATABASE_WRITER_URL` and both
-`AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/`_SECRET` are set; a partial set fails at configuration.
-Unset, the POST answers `501` and the matrix shows stored data. **Rollback is unsetting `AVAILABILITY_EGRESS_URL`.**
+- `GET /api/pois/{id}/campsites/availability` resolves the campground, its campsites and the
+  window from Neon, then asks mini-ca for the cells it has stored (`mode: "stored"`, 5-second
+  timeout). mini-ca reads its own Postgres and never calls a vendor on this path. If mini-ca is
+  unreachable the week renders unknown cells with no cache block.
+- When the week is stale, the page sends one `POST /api/pois/{id}/campsites/availability/refresh`.
+  It answers `202` at once and, after the response, asks mini-ca for `mode: "refresh"`: mini-ca's
+  read-through fetches from the vendor through its one rate limiter and stores the result in its
+  own Postgres. The page polls the GET every 2 seconds, at most 15 times, until the week is fresh.
+
+Both are on only where `AVAILABILITY_EGRESS_URL` and both `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/
+`_SECRET` are set; a partial set fails at configuration. Unset, the matrix shows unknown cells and
+the refresh POST answers `501`. **Rollback is unsetting `AVAILABILITY_EGRESS_URL`.**
 
 How the call reaches mini-ca:
 
-1. The Cloudflare tunnel public hostname `roadtrip-egress.floo.ca` points at `http://caddy:80`. A tunnel
-   hostname is reachable by anyone, so a Cloudflare Access application guards it: a Service Auth
-   policy admits only requests carrying the service token in
+1. The Cloudflare tunnel public hostname `roadtrip-egress.floo.ca` points at `http://caddy:80`. A
+   tunnel hostname is reachable by anyone, so a Cloudflare Access application guards it: a Service
+   Auth policy admits only requests carrying the service token in
    `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/`_SECRET`, and Cloudflare refuses the rest at its edge
    before anything reaches mini-ca.
-2. Caddy's `roadtrip-egress.floo.ca` block proxies only `POST /api/internal/availability/fetch` to the
-   backend and answers `404` to everything else.
+2. Caddy's `roadtrip-egress.floo.ca` block proxies only `POST /api/internal/availability/fetch` to
+   the backend and answers `404` to everything else; every other host answers `404` for
+   `/api/internal/*`.
 3. The backend mounts that route only when `AVAILABILITY_EGRESS_ENABLED` is `true`: on in
-   `docker-compose.yml` (production), off in sandboxes. It has no credential of its own; the
-   Access policy is the only caller check from outside, and Caddy refuses `/api/internal/*` on
-   every other host. It answers from its own stored snapshot when fresh and from the vendor
-   otherwise, through the one rate limiter.
-4. Each returned cell carries the time mini-ca observed it; Vercel stores that time, never its
-   own, so a cached answer is never passed off as new.
-
-The writer role, `roadtrip_availability_writer`, comes from `packages/db/migrations/0003_availability_egress.sql`
-(mirrored in Flyway's `R__web_writer_grants.sql`). It can read `campgrounds`, `campsites` and
-`availability`, and insert and update `availability`, nothing else. Set its password on Neon:
-
-```sql
-ALTER ROLE roadtrip_availability_writer PASSWORD '...';
-```
+   `docker-compose.yml` (production), off in sandboxes. It has no credential of its own. Cells are
+   named by `(data_provider, data_provider_ref)` and carry the time mini-ca observed them.
 
 Production needs one Vercel Firewall rule, set by the owner: rate-limit
 `POST /api/pois/*/campsites/availability/refresh` to 30 requests per minute per IP, the same
@@ -161,13 +155,12 @@ reach a vendor.
 
 To turn it on:
 
-1. Create the tunnel hostname `roadtrip-egress.floo.ca` → `http://caddy:80`. In Cloudflare Zero Trust,
-   create a service token and an Access application for `roadtrip-egress.floo.ca` whose policy is
+1. Create the tunnel hostname `roadtrip-egress.floo.ca` → `http://caddy:80`. In Cloudflare Zero
+   Trust, create a service token and an Access application for the hostname whose policy is
    **Service Auth** including that token.
 2. Deploy mini-ca; production's compose turns the egress route on.
-3. Set the writer role's password on Neon, then the four variables in Vercel (egress URL, writer
-   URL, the two Access ones), and add the Firewall rule.
-4. Open a stale Aspira campground's matrix on the deployment and watch it refresh.
+3. Set the three variables in Vercel Production and add the Firewall rule.
+4. Open a stale campground's matrix on the deployment and watch it refresh.
 
 ## Previews
 
@@ -273,10 +266,10 @@ client sends. The app connects as a dedicated role, `roadtrip_web`:
 CREATE ROLE roadtrip_web LOGIN PASSWORD '...' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 ALTER ROLE roadtrip_web SET default_transaction_read_only = on;
 GRANT USAGE ON SCHEMA public TO roadtrip_web;
-GRANT SELECT ON pois, campgrounds, poi_campgrounds, campsites, tesla_superchargers, poi_tesla_superchargers, planet_fitness_locations, poi_planet_fitness_locations, availability TO roadtrip_web;
+GRANT SELECT ON pois, campgrounds, poi_campgrounds, campsites, tesla_superchargers, poi_tesla_superchargers, planet_fitness_locations, poi_planet_fitness_locations TO roadtrip_web;
 ```
 
-Those nine tables are everything the app reads (`campsites` through `campground_site_summary`). The list lives in `apps/web/src/server/repo/webReadGrants.ts`; `webReadGrants.test.ts` runs every query the app makes as a role holding only those grants, and fails if this `GRANT` line drifts from it.
+Those eight tables are everything the app reads (`campsites` through `campground_site_summary`). The list lives in `apps/web/src/server/repo/webReadGrants.ts`; `webReadGrants.test.ts` runs every query the app makes as a role holding only those grants, and fails if this `GRANT` line drifts from it.
 Checked 2026-10-29 as `roadtrip_web` through the **pooled** endpoint and through the direct one:
 `SHOW default_transaction_read_only` is `on`; `INSERT`, `UPDATE`, `DELETE` and `CREATE TABLE` fail
 with `cannot execute ... in a read-only transaction`; with the transaction forced to

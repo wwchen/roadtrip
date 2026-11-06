@@ -10,7 +10,7 @@ import { findCampgroundSummaries } from './campgroundSummaryRepo';
 import { searchPoisByName } from './poiSearchRepo';
 import { fetchPois, fetchPoisWithinPolygon } from './poiServingRepo';
 import { bufferedCorridor } from './routeCorridorRepo';
-import { AVAILABILITY_WRITER_ROLE, WEB_READ_ROLE, WEB_READ_TABLES, webReadGrantSql } from './webReadGrants';
+import { WEB_READ_ROLE, WEB_READ_TABLES, webReadGrantSql } from './webReadGrants';
 
 const PASSWORD = 'web-reader-test';
 const TESLA_POI = 3501n;
@@ -23,12 +23,6 @@ const INIT_SCRIPT_PASSWORD = 'init-%script@secret';
 const CONTAINER_PASSWORD_FILE = '/tmp/web_db_password';
 const FIXTURE_SUPERUSER = 'reference';
 const DRIZZLE_MIGRATION = path.join(REPO_ROOT, 'packages/db/migrations/0002_web_reader.sql');
-const EGRESS_FLYWAY_MIGRATION = path.join(REPO_ROOT, 'backend/src/main/resources/db/migration/R__web_writer_grants.sql');
-const EGRESS_DRIZZLE_MIGRATION = path.join(REPO_ROOT, 'packages/db/migrations/0003_availability_egress.sql');
-const WRITER_PASSWORD = 'availability-writer-test';
-const INSUFFICIENT_PRIVILEGE = '42501';
-const WRITER_CAMPSITE = 6601n;
-const WRITER_DATE = '2026-12-01';
 const GRANTED_TABLES = /GRANT SELECT ON ([^;]+) TO roadtrip_web/;
 const SQL_COMMENT = /--[^\n]*/g;
 const WHITESPACE = /\s+/g;
@@ -40,7 +34,6 @@ const MILE = 1609.34;
 
 let fixture: CatalogFixture;
 let reader: Db;
-let writer: Db;
 
 beforeAll(async () => {
   fixture = await startCatalogFixture();
@@ -59,18 +52,10 @@ beforeAll(async () => {
   url.username = WEB_READ_ROLE;
   url.password = PASSWORD;
   reader = createDb(url.toString());
-  await db.execute(sql.raw(`ALTER ROLE ${AVAILABILITY_WRITER_ROLE} PASSWORD '${WRITER_PASSWORD}'`));
-  const writerUrl = new URL(fixture.url);
-  writerUrl.username = AVAILABILITY_WRITER_ROLE;
-  writerUrl.password = WRITER_PASSWORD;
-  writer = createDb(writerUrl.toString());
-  await db.execute(sql`INSERT INTO campsites (id, campground_id, name, kind, data_provider, data_provider_ref)
-    SELECT ${WRITER_CAMPSITE}, id, 'Writer Site', 'tent', data_provider, 'writer-site' FROM campgrounds LIMIT 1`);
 });
 
 afterAll(async () => {
   await reader?.$client.end();
-  await writer?.$client.end();
   await fixture?.stop();
 });
 
@@ -92,36 +77,9 @@ test('every read the app makes succeeds as a role holding only WEB_READ_TABLES',
   expect(WEB_READ_TABLES.length).toBeGreaterThan(0);
 });
 
-test('the Flyway migrations grant SELECT on exactly WEB_READ_TABLES', () => {
-  const granted = [FLYWAY_MIGRATION, EGRESS_FLYWAY_MIGRATION].flatMap(
-    (file) => GRANTED_TABLES.exec(migrationText(file))?.[1]?.split(',').map((table) => table.trim()) ?? [],
-  );
+test('the Flyway migration grants SELECT on exactly WEB_READ_TABLES', () => {
+  const granted = GRANTED_TABLES.exec(migrationText(FLYWAY_MIGRATION))?.[1]?.split(',').map((table) => table.trim()) ?? [];
   expect([...granted].sort()).toEqual([...WEB_READ_TABLES].sort());
-});
-
-test('the egress Drizzle mirror runs the same statements as its Flyway migration', () => {
-  expect(statementsOf(EGRESS_DRIZZLE_MIGRATION)).toBe(statementsOf(EGRESS_FLYWAY_MIGRATION));
-});
-
-test('roadtrip_web reads availability', async () => {
-  const [row] = await reader.execute<{ count: string }>(sql`SELECT count(*) AS count FROM availability`);
-  expect(row?.count).toBeDefined();
-});
-
-test('the writer inserts and updates availability', async () => {
-  await writer.execute(sql`INSERT INTO availability (campsite_id, target_date, status, last_observed_at)
-    VALUES (${WRITER_CAMPSITE}, ${WRITER_DATE}, 'available', now())`);
-  await writer.execute(sql`UPDATE availability SET last_observed_at = now() WHERE campsite_id = ${WRITER_CAMPSITE}`);
-  const [row] = await writer.execute<{ count: string }>(sql`SELECT count(*) AS count FROM availability WHERE campsite_id = ${WRITER_CAMPSITE}`);
-  expect(Number(row?.count)).toBe(1);
-});
-
-test.each([
-  ['delete availability', sql`DELETE FROM availability`],
-  ['alter availability', sql`ALTER TABLE availability ADD COLUMN x int`],
-  ['update the catalog', sql`UPDATE campsites SET name = name`],
-])('the writer cannot %s', async (_label, statement) => {
-  await expect(writer.execute(statement)).rejects.toMatchObject({ cause: { code: INSUFFICIENT_PRIVILEGE } });
 });
 
 test('the Drizzle mirror runs the same statements as the Flyway migration', () => {

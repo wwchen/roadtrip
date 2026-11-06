@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campgroundBatch
+import ca.floo.roadtrip.model.api.AvailabilityEgressMode
 import ca.floo.roadtrip.model.api.AvailabilityEgressRequestDto
 import ca.floo.roadtrip.model.api.AvailabilityEgressResponseDto
 import ca.floo.roadtrip.model.api.ProviderRefDto
@@ -80,7 +81,9 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
         ref: String = CAMPGROUND_REF,
         startDate: LocalDate = start,
         endDate: LocalDate = end,
+        mode: AvailabilityEgressMode = AvailabilityEgressMode.REFRESH,
     ) = AvailabilityEgressRequestDto(
+        mode = mode,
         campground = ProviderRefDto(dataProvider = DataProvider.RECGOV.id, dataProviderRef = ref),
         startDate = startDate.toString(),
         endDate = endDate.toString(),
@@ -104,6 +107,7 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
                     snapshotFreshnessTtl = { ttl },
                 ),
             dateResolver = dateResolver,
+            availabilityRepo = AvailabilityRepo(ctx),
         )
     }
 
@@ -212,5 +216,42 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
     fun `the route is absent unless enabled`() =
         egress(listOf(recgov()), enabled = false) {
             assertEquals(HttpStatusCode.NotFound, post(request()).status)
+        }
+
+    @Test
+    fun `stored mode answers from the store without a provider call, however stale`() {
+        egress(listOf(recgov())) { post(request()) }
+        val cold = recgov()
+        egress(listOf(cold), ttl = alwaysStale) {
+            val response = post(request(mode = AvailabilityEgressMode.STORED))
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = wire.decodeFromString(AvailabilityEgressResponseDto.serializer(), response.bodyAsText())
+            assertEquals(0, cold.calls.size)
+            assertEquals((WINDOW_DAYS * 2).toInt(), body.cells.size)
+            assertTrue(body.cells.all { Instant.parse(it.observedAt) == observedAt })
+        }
+    }
+
+    @Test
+    fun `stored mode with nothing stored returns no cells and calls nothing`() {
+        val cold = recgov()
+        egress(listOf(cold)) {
+            val body =
+                wire.decodeFromString(
+                    AvailabilityEgressResponseDto.serializer(),
+                    post(request(mode = AvailabilityEgressMode.STORED)).bodyAsText(),
+                )
+            assertEquals(emptyList(), body.cells)
+            assertEquals(0, cold.calls.size)
+        }
+    }
+
+    @Test
+    fun `stored mode with a reversed window is 400`() =
+        egress(listOf(recgov())) {
+            assertEquals(
+                HttpStatusCode.BadRequest,
+                post(request(startDate = end, endDate = start, mode = AvailabilityEgressMode.STORED)).status,
+            )
         }
 }

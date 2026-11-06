@@ -51,17 +51,3 @@ describe('serverDb', () => {
   });
 });
 
-describe('writerDb', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  test('writerDb refuses when refresh is not configured', async () => {
-    vi.stubEnv('AVAILABILITY_EGRESS_URL', undefined);
-    vi.stubEnv('AVAILABILITY_EGRESS_ACCESS_CLIENT_ID', undefined);
-    vi.stubEnv('AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET', undefined);
-    vi.stubEnv('DATABASE_WRITER_URL', undefined);
-    const { writerDb, AvailabilityRefreshDisabledError } = await import('./db');
-    await expect(writerDb()).rejects.toThrow(AvailabilityRefreshDisabledError);
-  });
-});

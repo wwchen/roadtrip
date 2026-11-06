@@ -12,7 +12,6 @@ const HEALTH_DATABASE_TOKEN_VARIABLE = 'HEALTH_DATABASE_TOKEN';
 const MAPBOX_TOKEN_VARIABLE = 'MAPBOX_TOKEN';
 const MAPBOX_TOKEN_FILE_VARIABLE = 'MAPBOX_TOKEN_FILE';
 const AVAILABILITY_EGRESS_URL_VARIABLE = 'AVAILABILITY_EGRESS_URL';
-const DATABASE_WRITER_URL_VARIABLE = 'DATABASE_WRITER_URL';
 const AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE = 'AVAILABILITY_EGRESS_ACCESS_CLIENT_ID';
 const AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE = 'AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET';
 const AVAILABILITY_TTL_SECONDS_VARIABLE = 'AVAILABILITY_TTL_SECONDS';
@@ -32,16 +31,16 @@ const DEFAULT_ENABLED_AVAILABILITY_PROVIDERS: readonly string[] = ['aspira', 'ca
 const LIST_JOINER = ', ';
 
 export const AVAILABILITY_EGRESS_TIMEOUT_MS = 25_000;
+export const AVAILABILITY_STORED_TIMEOUT_MS = 5_000;
 
 export interface EgressAccessCredentials {
   clientId: string;
   clientSecret: string;
 }
 
-export interface AvailabilityRefreshConfig {
+export interface AvailabilityEgressConfig {
   egressUrl: URL;
   egressAccess: EgressAccessCredentials;
-  writerDatabaseUrl: string;
 }
 
 const PROVIDER_SEPARATOR = ',';
@@ -120,16 +119,15 @@ function secretFrom(variable: string): string | undefined {
   return raw;
 }
 
-function availabilityRefreshFrom(): AvailabilityRefreshConfig | null {
+function availabilityEgressFrom(): AvailabilityEgressConfig | null {
   const values = {
     [AVAILABILITY_EGRESS_URL_VARIABLE]: secretFrom(AVAILABILITY_EGRESS_URL_VARIABLE),
-    [DATABASE_WRITER_URL_VARIABLE]: secretFrom(DATABASE_WRITER_URL_VARIABLE),
     [AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE]: secretFrom(AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE),
     [AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE]: secretFrom(AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE),
   };
   const missing = Object.entries(values).filter(([, value]) => value === undefined).map(([variable]) => variable);
   if (missing.length === Object.keys(values).length) return null;
-  if (missing.length > 0) throw new ConfigError(missing.join(LIST_JOINER), 'must be set with the other availability refresh settings');
+  if (missing.length > 0) throw new ConfigError(missing.join(LIST_JOINER), 'must be set with the other availability egress settings');
   let egressUrl: URL;
   try {
     egressUrl = new URL(values[AVAILABILITY_EGRESS_URL_VARIABLE] as string);
@@ -142,13 +140,12 @@ function availabilityRefreshFrom(): AvailabilityRefreshConfig | null {
       clientId: values[AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE] as string,
       clientSecret: values[AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE] as string,
     },
-    writerDatabaseUrl: values[DATABASE_WRITER_URL_VARIABLE] as string,
   };
 }
 
 export const config = {
-  get availabilityRefresh(): AvailabilityRefreshConfig | null {
-    return availabilityRefreshFrom();
+  get availabilityEgress(): AvailabilityEgressConfig | null {
+    return availabilityEgressFrom();
   },
   get availabilityTtlSeconds(): number {
     return boundedIntegerFrom(AVAILABILITY_TTL_SECONDS_VARIABLE, DEFAULT_AVAILABILITY_TTL_SECONDS, MAX_AVAILABILITY_TTL_SECONDS);

@@ -176,6 +176,7 @@ internal fun Application.registerKoinRoutes() {
                 campsitesRepo = campsiteRepo,
                 availabilityService = availabilityService,
                 dateResolver = dateResolver,
+                availabilityRepo = availabilityRepo,
             ),
             config.availability.egressEnabled,
         )

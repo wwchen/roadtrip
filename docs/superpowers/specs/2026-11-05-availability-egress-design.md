@@ -2,13 +2,19 @@
 
 **Status:** design approved in conversation 2026-11-05; this document awaits review.
 
-**Amended 2026-11-05 (owner's decision):** the egress endpoint carries no bearer token. A
-Cloudflare Access service token on `roadtrip-egress.floo.ca` is the only caller check; Vercel sends
-it as `CF-Access-Client-Id`/`CF-Access-Client-Secret` and needs both to enable refresh. Kotlin
-mounts `POST /api/internal/availability/fetch` when `AVAILABILITY_EGRESS_ENABLED` is `true` (on in
-production compose, off in sandboxes), and Caddy refuses `/api/internal/*` on every other host.
-Where the text below mentions `AVAILABILITY_EGRESS_TOKEN`, a bearer or a `401`, this amendment
-replaces it.
+**Amended 2026-11-05 (owner's decisions), replacing the text below where they differ:**
+
+- **Availability lives only in mini-ca's Postgres.** Neon keeps the catalog; Vercel stores no
+  availability. There is no writer role, no `DATABASE_WRITER_URL` and no migration.
+- **The matrix GET reads through mini-ca.** It asks the egress endpoint for `mode: "stored"`
+  (mini-ca's current cells, no vendor call, 5-second timeout) and fuses them with Neon's campsite
+  list. The refresh POST asks for `mode: "refresh"` in `after()` and writes nothing; the page polls
+  the GET as before.
+- **Cloudflare Access is the only caller check.** No bearer token. A service token on
+  `roadtrip-egress.floo.ca` is sent as `CF-Access-Client-Id`/`CF-Access-Client-Secret`; the egress
+  URL and both Access variables are needed, all or none. Kotlin mounts the route when
+  `AVAILABILITY_EGRESS_ENABLED` is `true` (on in production compose, off in sandboxes), and Caddy
+  refuses `/api/internal/*` on every other host.
 
 **Parent spec:** `docs/superpowers/specs/2026-10-27-kotlin-to-typescript-backend-design.md`
 (C1 residential egress, C3 one rate-limit authority, C4 swappable datastore).

@@ -11,7 +11,17 @@ data class ProviderRefDto(
 )
 
 @Serializable
+enum class AvailabilityEgressMode {
+    @SerialName("stored")
+    STORED,
+
+    @SerialName("refresh")
+    REFRESH,
+}
+
+@Serializable
 data class AvailabilityEgressRequestDto(
+    val mode: AvailabilityEgressMode = AvailabilityEgressMode.REFRESH,
     val campground: ProviderRefDto,
     @SerialName("start_date") val startDate: String,
     @SerialName("end_date") val endDate: String,

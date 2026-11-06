@@ -1,5 +1,4 @@
 import { after } from 'next/server';
-import { fetchEgress } from '@/server/client/availabilityEgress';
 import {
   BAD_POI_ID,
   STATUS_BAD_REQUEST,
@@ -9,9 +8,9 @@ import {
   parseAvailabilityPoiId,
   parseAvailabilityQuery,
 } from '@/server/availabilityRequest';
-import { AVAILABILITY_EGRESS_TIMEOUT_MS, config } from '@/server/config';
-import { serverDb, writerDb } from '@/server/db';
-import { AvailabilityTargetError, currentWeekSettings } from '@/server/service/availability/availabilityMatrixService';
+import { AVAILABILITY_EGRESS_TIMEOUT_MS } from '@/server/config';
+import { serverDb } from '@/server/db';
+import { AvailabilityTargetError, configuredEgress, currentWeekSettings } from '@/server/service/availability/availabilityMatrixService';
 import { planRefresh, runRefresh } from '@/server/service/availability/availabilityRefreshService';
 import { BadDateWindowError } from '@/server/service/availability/availabilityWindow';
 
@@ -27,15 +26,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (poiId === null) return availabilityError(STATUS_BAD_REQUEST, BAD_POI_ID);
   const query = parseAvailabilityQuery(new URL(request.url));
   if (query instanceof Response) return query;
-  const refresh = config.availabilityRefresh;
+  const egress = configuredEgress(AVAILABILITY_EGRESS_TIMEOUT_MS);
   try {
-    const plan = await planRefresh(await serverDb(), poiId, query.startDate, query.endDate, currentWeekSettings(), refresh !== null);
+    const plan = await planRefresh(await serverDb(), poiId, query.startDate, query.endDate, currentWeekSettings(), egress !== null);
     if (plan.kind === 'disabled') return availabilityError(STATUS_NOT_IMPLEMENTED, REFRESH_DISABLED);
     if (plan.kind === 'unsupported') return availabilityError(STATUS_NOT_IMPLEMENTED, UNKNOWN_CAMPGROUND);
-    if (plan.kind === 'fetch' && refresh !== null) {
-      const endpoint = { url: refresh.egressUrl, access: refresh.egressAccess };
+    if (plan.kind === 'fetch' && egress !== null) {
       after(async () => {
-        await runRefresh(plan, { db: await writerDb(), fetch: (body) => fetchEgress(endpoint, body, AVAILABILITY_EGRESS_TIMEOUT_MS) });
+        await runRefresh(plan, egress);
       });
     }
     return new Response(null, { status: STATUS_ACCEPTED });
