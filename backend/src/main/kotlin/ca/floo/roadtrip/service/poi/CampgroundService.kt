@@ -82,7 +82,7 @@ internal class CampgroundService(
                     description = description,
                     photoUrl = photoUrl,
                     bookingRef = bookingRef?.let(BookingRefDto::from),
-                    availabilitySupported = (bookingRef != null).takeIf { it },
+                    availabilitySupported = (servingProvider != null).takeIf { it },
                     cta = ctas,
                     bookingSystem = cta.bookingSystem(bookingRef),
                     // The source record, sent once — no longer also as `raw`.

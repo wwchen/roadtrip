@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.poi
 
 import ca.floo.roadtrip.config.CampgroundSearchConfig
+import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.RECGOV_DISPLAY_NAME
 import ca.floo.roadtrip.fixtures.shippedTenantRegistry
 import ca.floo.roadtrip.fixtures.testBookingHorizons
@@ -11,6 +12,7 @@ import ca.floo.roadtrip.model.api.campground.CampgroundSearchRequestDto
 import ca.floo.roadtrip.model.api.campground.GeoJsonBoundaryType
 import ca.floo.roadtrip.model.domain.CampgroundSearchError
 import ca.floo.roadtrip.model.domain.CampsiteKind
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampgroundSearchRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -18,6 +20,7 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.BookingIdentityResolver
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.poi.campground.CampgroundCta
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
@@ -37,15 +40,17 @@ private const val WORLD =
     """{"type":"Polygon","coordinates":[[[-180,-90],[180,-90],[180,90],[-180,90],[-180,-90]]]}"""
 
 class CampgroundSearchServiceTest : SharedDbTest() {
-    private fun service(config: CampgroundSearchConfig = CampgroundSearchConfig.default) =
-        CampgroundSearchService(
-            searchRepo = CampgroundSearchRepo(ctx, enabledDataProviders = setOf("recgov", "campflare")),
-            campgroundRepo = CampgroundRepo(ctx),
-            bookingHorizons = testBookingHorizons(ctx, emptyList()),
-            identities = BookingIdentityResolver(shippedTenantRegistry()),
-            cta = CampgroundCta(shippedTenantRegistry()),
-            config = config,
-        )
+    private fun service(
+        config: CampgroundSearchConfig = CampgroundSearchConfig.default,
+        availabilityProviders: List<AvailabilityProvider> = listOf(FakeAvailabilityProvider(id = BookingProvider.RECGOV)),
+    ) = CampgroundSearchService(
+        searchRepo = CampgroundSearchRepo(ctx, enabledDataProviders = setOf("recgov", "campflare")),
+        campgroundRepo = CampgroundRepo(ctx),
+        bookingHorizons = testBookingHorizons(ctx, availabilityProviders),
+        identities = BookingIdentityResolver(shippedTenantRegistry()),
+        cta = CampgroundCta(shippedTenantRegistry()),
+        config = config,
+    )
 
     private fun boundary(json: String) = Json.decodeFromString<BoundaryDto>(json)
 
@@ -144,6 +149,29 @@ class CampgroundSearchServiceTest : SharedDbTest() {
         val summary = service().details(CampgroundDetailsRequestDto(campgroundIds = listOf(poi.poiId))).campgrounds.single()
 
         assertTrue(summary.availabilitySupported)
+        assertEquals(RECGOV_DISPLAY_NAME, summary.bookingSystem)
+    }
+
+    @Test
+    fun `details claims no availability for a campground only rec_gov sells while rec_gov is disabled`() {
+        val poi =
+            ctx.seedCatalogPoi(
+                sourceId = "recgov-only",
+                name = "Sugar Loaf",
+                lon = -119.9,
+                lat = 39.0,
+                bookingProvider = "recgov",
+                bookingProviderRef = "232713",
+            )
+        val disabled = listOf(FakeAvailabilityProvider(id = BookingProvider.RECGOV, enabled = false))
+
+        val summary =
+            service(availabilityProviders = disabled)
+                .details(CampgroundDetailsRequestDto(campgroundIds = listOf(poi.poiId)))
+                .campgrounds
+                .single()
+
+        assertFalse(summary.availabilitySupported)
         assertEquals(RECGOV_DISPLAY_NAME, summary.bookingSystem)
     }
 
