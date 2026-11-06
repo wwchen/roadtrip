@@ -8,7 +8,7 @@ import { useEffect, useRef } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { requestAvailabilityRefresh, requestPoiCampsitesAvailability } from '@/api/availability-api';
 import type { AvailabilityCache, PoiCampsitesAvailabilityResponse } from '@/api/availability-api';
-import { addLocalDays, localYmd } from '@/lib/local-date';
+import { addLocalDays, localYmd, parseLocalYmd } from '@/lib/local-date';
 import { queryKeys } from '@/queries/keys';
 import { formatAvailabilityError } from './availability-errors';
 import {
@@ -23,6 +23,7 @@ export const WEEK_DAYS = 7;
 export const SKELETON_RENDER_DELAY_MS = 150;
 /** Cache age at which the freshness pill starts warning. */
 export const STALE_THRESHOLD_MIN = 10;
+export const START_BEFORE_EARLIEST = 'start_before_earliest';
 export const REFRESH_POLL_INTERVAL_MS = 2_000;
 export const REFRESH_POLL_LIMIT = 15;
 
@@ -74,6 +75,7 @@ export class AvailabilityRequestError extends Error {
     readonly httpStatus: number,
     /** The backend's `error` code, when it sent one — `null` for a bare HTTP failure. */
     readonly code: string | null = null,
+    readonly earliestDate: string | null = null,
   ) {
     super(message);
     this.name = 'AvailabilityRequestError';
@@ -116,6 +118,7 @@ export function useWeekAvailability(
           formatAvailabilityError(body, response.status),
           response.status,
           typeof body?.error === 'string' ? body.error : null,
+          typeof body?.earliest_date === 'string' ? body.earliest_date : null,
         );
       }
       const json = (await response.json()) as PoiCampsitesAvailabilityResponse;
@@ -147,4 +150,10 @@ export function useWeekAvailability(
 /** Cache age in whole minutes, floored at 1 — "checked 0m ago" reads as a bug. */
 export function cacheAgeMinutes(ageSeconds: number | null | undefined): number {
   return Math.max(1, Math.round((ageSeconds ?? 0) / 60));
+}
+
+export function refusedEarliestDate(error: unknown): Date | null {
+  if (!(error instanceof AvailabilityRequestError) || error.code !== START_BEFORE_EARLIEST || error.earliestDate === null) return null;
+  const parsed = parseLocalYmd(error.earliestDate);
+  return Number.isFinite(parsed.getTime()) ? parsed : null;
 }

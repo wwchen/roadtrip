@@ -19,12 +19,16 @@ import {
   type CampsiteKey,
   type StoredCell,
 } from '../../repo/availabilityReadRepo';
+import { addDays, poiDateContext } from '../booking/dateContext';
 import { fuseWeek, weekCache } from './matrixFusion';
 
 export const GATED_WATCH_CAPABILITIES: AvailabilityWatchCapabilitiesDto = { trigger_kinds: [], add_to_cart: { state: 'unsupported' } };
 const STORED_READ_LOG = 'availability stored read';
 const STATUS_BAD_REQUEST = 400;
+const STATUS_NOT_FOUND = 404;
 const STATUS_NOT_IMPLEMENTED = 501;
+const DEFAULT_WEEK_DAYS = 7;
+const CATALOG_DRIFT_LOG = 'availability catalog drift';
 
 export type AvailabilityTargetCode = 'not_found' | 'unknown_campground';
 
@@ -81,10 +85,23 @@ export function egressRequest(
   };
 }
 
-async function storedWeek(target: WeekTarget, startDate: string | null, endDate: string | null, fetchStored: EgressFetch | null): Promise<AvailabilityEgressResponseDto> {
+function unknownToMiniCa(target: WeekTarget, startDate: string | null, endDate: string | null, now: Date): AvailabilityEgressResponseDto {
+  console.warn(CATALOG_DRIFT_LOG, JSON.stringify({ campground: target.campground.dataProviderRef, provider: target.campground.dataProvider }));
+  const start = startDate ?? poiDateContext(target.campground.lat, target.campground.lng, now).earliestDate;
+  return { start_date: start, end_date: endDate ?? addDays(start, DEFAULT_WEEK_DAYS), campsites: [], cells: [] };
+}
+
+async function storedWeek(
+  target: WeekTarget,
+  startDate: string | null,
+  endDate: string | null,
+  fetchStored: EgressFetch | null,
+  now: Date,
+): Promise<AvailabilityEgressResponseDto> {
   if (fetchStored === null) throw new AvailabilityUnavailableError();
   const result = await fetchStored(egressRequest(target, startDate, endDate, 'stored'));
   if (result.kind === 'cells') return result.body;
+  if (result.status === STATUS_NOT_FOUND) return unknownToMiniCa(target, startDate, endDate, now);
   if (result.status === STATUS_BAD_REQUEST && result.body !== null) throw new AvailabilityWindowRefusedError(result.body);
   if (result.status === STATUS_NOT_IMPLEMENTED) throw new AvailabilityTargetError('unknown_campground');
   console.warn(STORED_READ_LOG, JSON.stringify({ status: result.status, code: result.code, campground: target.campground.dataProviderRef }));
@@ -108,7 +125,7 @@ export async function availabilityWeek(
   fetchStored: EgressFetch | null,
 ): Promise<PoiCampsitesAvailabilityResponseDto> {
   const target = await weekTarget(db, poiId, siteTypes);
-  const stored = await storedWeek(target, startDate, endDate, fetchStored);
+  const stored = await storedWeek(target, startDate, endDate, fetchStored, settings.now);
   const base = {
     poi_id: toContractId(poiId),
     start_date: stored.start_date,

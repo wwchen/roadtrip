@@ -12,6 +12,7 @@ const AVAILABILITY_ERROR_LABELS = new Map<string, string>([
   ['ip_throttled', 'Too many requests — slow down'],
   ['availability_unavailable', 'Availability is unavailable right now — try again shortly'],
   ['beyond_booking_horizon', 'That date is past what this provider lets you book'],
+  ['start_before_earliest', 'That date is before this campground takes bookings'],
 ]);
 
 /** What the week grid shows when the request could not be fulfilled. */

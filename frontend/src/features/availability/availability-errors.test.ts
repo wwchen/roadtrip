@@ -14,6 +14,7 @@ describe('formatting a provider fault', () => {
       ['availability_unavailable', 'Availability is unavailable right now — try again shortly'],
       // A stale shared link can ask past the horizon; the raw code is not an answer.
       ['beyond_booking_horizon', 'That date is past what this provider lets you book'],
+      ['start_before_earliest', 'That date is before this campground takes bookings'],
     ];
     for (const [code, expected] of cases) {
       expect(formatAvailabilityError({ error: code }, 503)).toBe(expected);

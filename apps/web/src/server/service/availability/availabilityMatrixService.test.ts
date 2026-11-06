@@ -124,12 +124,28 @@ test('an unconfigured egress is unavailable', async () => {
 
 test.each([
   [0, 'timeout'],
-  [404, 'not_found'],
   [503, 'rate_limited'],
 ])('a mini-ca answer of %s %s is unavailable and logged', async (status, code) => {
   const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
   await expect(week(failing(status, code))).rejects.toBeInstanceOf(AvailabilityUnavailableError);
   expect(log).toHaveBeenCalled();
+  log.mockRestore();
+});
+
+test('a campground mini-ca does not know is an empty week for the requested window, logged as drift', async () => {
+  const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const result = await week(failing(404, 'not_found'));
+  expect(result.state).toBe('empty');
+  expect(result.days).toEqual([]);
+  expect([result.start_date, result.end_date]).toEqual([start, end]);
+  expect(log).toHaveBeenCalled();
+  log.mockRestore();
+});
+
+test('with no dates requested, an unknown campground is an empty week from its earliest date', async () => {
+  const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const result = await availabilityWeek(fixture.readDb, NEAR_POI_ID, [], null, null, SETTINGS, failing(404, 'not_found'));
+  expect([result.start_date, result.end_date]).toEqual([start, addDays(start, 7)]);
   log.mockRestore();
 });
 
