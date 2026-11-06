@@ -89,6 +89,7 @@ services:
       # `AUTH_PROVIDER=auth0 make run env=prod` reaches the backend process.
       # Without this line the container always saw the compiled-in default.
       - AUTH_PROVIDER=${AUTH_PROVIDER:-clerk}
+      - AVAILABILITY_EGRESS_ENABLED=${AVAILABILITY_EGRESS_ENABLED:-true}
       # OpenTelemetry Java agent exports Ktor/JDBC/JVM telemetry to Alloy.
       # Logs still go through stdout -> Alloy -> Loki; trace/span ids are
       # injected into Logback MDC and emitted by logback.xml's JSON encoder.

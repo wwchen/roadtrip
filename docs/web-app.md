@@ -104,6 +104,10 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 | `HEALTH_DATABASE_TOKEN` | sensitive | the bearer secret for the database mode of `/api/health` (below) |
 | `MAPBOX_TOKEN` | sensitive | Mapbox token for `/api/geocode`, `/api/route` and `/api/pois/on-route`; unset, those answer 503 and the rest of the map works |
 | `CAMPGROUND_SEARCH_MAX_RESULTS` | plain, optional | cap on `POST /api/campgrounds/search` ids, default 5000 |
+| `ENABLED_AVAILABILITY_PROVIDERS` | plain, optional | default `aspira,campflare,reserveamerica,reservecalifornia`, Kotlin's read-path list; picks the provider whose booking links the campsite list shows (the matrix takes its window from mini-ca) |
+| `AVAILABILITY_TTL_SECONDS` | plain, optional | default `7200`; a matrix cell older than this counts as stale |
+| `AVAILABILITY_EGRESS_URL` | plain, optional | `https://roadtrip-egress.floo.ca`; with the two Access variables, how the matrix reaches mini-ca's availability |
+| `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`, `AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET` | sensitive, optional | the Cloudflare Access service token in front of `roadtrip-egress.floo.ca`, sent as `CF-Access-Client-Id` and `CF-Access-Client-Secret`; the only credential the egress call carries |
 
 Deployment protection (checked 2026-10-29): Vercel Authentication is on with
 `all_except_custom_domains`. The production alias `roadtrip-web-nu.vercel.app` answers without a
@@ -111,6 +115,56 @@ login; the per-deployment, branch and team-slug URLs redirect to Vercel login.
 
 The first deployment of a project with no production deployment is assigned the production
 target, whatever its branch. The first build here was of `claude/nextjs-parallel-read-app-19ceab`.
+
+## Availability on Vercel
+
+Neon holds the catalog (POIs, campgrounds, campsites). Availability lives only in mini-ca's
+Postgres, where Kotlin's read-through and pollers already keep it. Vercel stores no availability.
+
+- `GET /api/pois/{id}/campsites/availability` takes the campground and its campsites from Neon,
+  then asks mini-ca for what it has stored (`mode: "stored"`, 5-second timeout). mini-ca resolves
+  the window against its serving provider's horizon and widest window, answers the latest bookable
+  date, lists the campsites it knows, and reads its own Postgres; it never calls a vendor on this
+  path. Freshness counts only campsites mini-ca knows, so a campsite missing from its catalog shows
+  unknown without keeping the week stale. A window mini-ca refuses is passed through as its `400`.
+  If mini-ca is unreachable or the egress is not configured, the GET answers
+  `503 availability_unavailable`.
+- When the week is stale, the page sends one `POST /api/pois/{id}/campsites/availability/refresh`.
+  It answers `202` at once and, after the response, asks mini-ca for `mode: "refresh"`: mini-ca's
+  read-through fetches from the vendor through its one rate limiter and stores the result in its
+  own Postgres. The page polls the GET every 2 seconds, at most 15 times, until the week is fresh.
+
+Both are on only where `AVAILABILITY_EGRESS_URL` and both `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/
+`_SECRET` are set; a partial set fails at configuration. Unset, the matrix GET answers `503` and
+the refresh POST answers `501`. **Rollback is unsetting `AVAILABILITY_EGRESS_URL`.**
+
+How the call reaches mini-ca:
+
+1. The Cloudflare tunnel public hostname `roadtrip-egress.floo.ca` points at `http://caddy:80`. A
+   tunnel hostname is reachable by anyone, so a Cloudflare Access application guards it: a Service
+   Auth policy admits only requests carrying the service token in
+   `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/`_SECRET`, and Cloudflare refuses the rest at its edge
+   before anything reaches mini-ca.
+2. Caddy's `roadtrip-egress.floo.ca` block proxies only `POST /api/internal/availability/fetch` to
+   the backend and answers `404` to everything else; every other host answers `404` for
+   `/api/internal/*`.
+3. The backend mounts that route only when `AVAILABILITY_EGRESS_ENABLED` is `true`: on in
+   `docker-compose.yml` (production), off in sandboxes. It has no credential of its own. Cells are
+   named by `(data_provider, data_provider_ref)` and carry the time mini-ca observed them.
+
+Production needs one Vercel Firewall rule, set by the owner: rate-limit
+`POST /api/pois/*/campsites/availability/refresh` to 30 requests per minute per IP, the same
+ceiling Kotlin puts on its matrix read (`ip-rate-limit-per-minute`), because each refresh can
+reach a vendor.
+
+To turn it on:
+
+1. Create the tunnel hostname `roadtrip-egress.floo.ca` → `http://caddy:80`. In Cloudflare Zero
+   Trust, create a service token and an Access application for the hostname whose policy is
+   **Service Auth** including that token.
+2. Deploy mini-ca; production's compose turns the egress route on.
+3. Set the three variables in Vercel Production and add the Firewall rule.
+4. Open a stale campground's matrix on the deployment and watch it refresh.
 
 ## Previews
 

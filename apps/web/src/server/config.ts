@@ -11,6 +11,11 @@ const CAMPGROUND_SEARCH_MAX_RESULTS_VARIABLE = 'CAMPGROUND_SEARCH_MAX_RESULTS';
 const HEALTH_DATABASE_TOKEN_VARIABLE = 'HEALTH_DATABASE_TOKEN';
 const MAPBOX_TOKEN_VARIABLE = 'MAPBOX_TOKEN';
 const MAPBOX_TOKEN_FILE_VARIABLE = 'MAPBOX_TOKEN_FILE';
+const AVAILABILITY_EGRESS_URL_VARIABLE = 'AVAILABILITY_EGRESS_URL';
+const AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE = 'AVAILABILITY_EGRESS_ACCESS_CLIENT_ID';
+const AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE = 'AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET';
+const AVAILABILITY_TTL_SECONDS_VARIABLE = 'AVAILABILITY_TTL_SECONDS';
+const ENABLED_AVAILABILITY_PROVIDERS_VARIABLE = 'ENABLED_AVAILABILITY_PROVIDERS';
 
 const DEFAULT_DATABASE_PREPARE = true;
 const DEFAULT_DATABASE_REQUIRE_READ_ONLY = true;
@@ -20,6 +25,23 @@ const MAX_SEARCH_RESULT_LIMIT = 1000;
 const DEFAULT_CAMPGROUND_SEARCH_MAX_RESULTS = 5000;
 const MAX_CAMPGROUND_SEARCH_MAX_RESULTS = 20000;
 const DEFAULT_BUILD_ENV = 'local';
+const DEFAULT_AVAILABILITY_TTL_SECONDS = 7200;
+const MAX_AVAILABILITY_TTL_SECONDS = 604_800;
+const DEFAULT_ENABLED_AVAILABILITY_PROVIDERS: readonly string[] = ['aspira', 'campflare', 'reserveamerica', 'reservecalifornia'];
+const LIST_JOINER = ', ';
+
+export const AVAILABILITY_EGRESS_TIMEOUT_MS = 25_000;
+export const AVAILABILITY_STORED_TIMEOUT_MS = 5_000;
+
+export interface EgressAccessCredentials {
+  clientId: string;
+  clientSecret: string;
+}
+
+export interface AvailabilityEgressConfig {
+  egressUrl: URL;
+  egressAccess: EgressAccessCredentials;
+}
 
 const PROVIDER_SEPARATOR = ',';
 const TRUE_LITERAL = 'true';
@@ -97,7 +119,40 @@ function secretFrom(variable: string): string | undefined {
   return raw;
 }
 
+function availabilityEgressFrom(): AvailabilityEgressConfig | null {
+  const values = {
+    [AVAILABILITY_EGRESS_URL_VARIABLE]: secretFrom(AVAILABILITY_EGRESS_URL_VARIABLE),
+    [AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE]: secretFrom(AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE),
+    [AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE]: secretFrom(AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE),
+  };
+  const missing = Object.entries(values).filter(([, value]) => value === undefined).map(([variable]) => variable);
+  if (missing.length === Object.keys(values).length) return null;
+  if (missing.length > 0) throw new ConfigError(missing.join(LIST_JOINER), 'must be set with the other availability egress settings');
+  let egressUrl: URL;
+  try {
+    egressUrl = new URL(values[AVAILABILITY_EGRESS_URL_VARIABLE] as string);
+  } catch {
+    throw new ConfigError(AVAILABILITY_EGRESS_URL_VARIABLE, 'must be an absolute URL');
+  }
+  return {
+    egressUrl,
+    egressAccess: {
+      clientId: values[AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE] as string,
+      clientSecret: values[AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE] as string,
+    },
+  };
+}
+
 export const config = {
+  get availabilityEgress(): AvailabilityEgressConfig | null {
+    return availabilityEgressFrom();
+  },
+  get availabilityTtlSeconds(): number {
+    return boundedIntegerFrom(AVAILABILITY_TTL_SECONDS_VARIABLE, DEFAULT_AVAILABILITY_TTL_SECONDS, MAX_AVAILABILITY_TTL_SECONDS);
+  },
+  get enabledAvailabilityProviders(): readonly string[] {
+    return listFrom(ENABLED_AVAILABILITY_PROVIDERS_VARIABLE, DEFAULT_ENABLED_AVAILABILITY_PROVIDERS);
+  },
   get buildInfo(): BuildInfoDto {
     return {
       env: textOr(process.env.BUILD_ENV, DEFAULT_BUILD_ENV),

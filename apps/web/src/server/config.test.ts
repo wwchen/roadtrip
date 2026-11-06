@@ -140,3 +140,75 @@ test('a password with % survives the decode the Postgres driver applies', () => 
     expect(decodeURIComponent(new URL(config.databaseUrl).password)).toBe(password);
   }
 });
+
+const EGRESS_URL = 'https://egress.floo.test';
+const ACCESS_ID = 'access-id.access';
+const ACCESS_SECRET = 'access-secret';
+const REFRESH_VARIABLES = {
+  AVAILABILITY_EGRESS_URL: EGRESS_URL,
+  AVAILABILITY_EGRESS_ACCESS_CLIENT_ID: ACCESS_ID,
+  AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET: ACCESS_SECRET,
+} as const;
+const ALL_REFRESH = Object.keys(REFRESH_VARIABLES) as (keyof typeof REFRESH_VARIABLES)[];
+const DEFAULT_TTL_SECONDS = 7200;
+const CUSTOM_TTL_SECONDS = 900;
+
+function stubRefresh(only: readonly (keyof typeof REFRESH_VARIABLES)[]) {
+  for (const [variable, value] of Object.entries(REFRESH_VARIABLES)) {
+    vi.stubEnv(variable, (only as readonly string[]).includes(variable) ? value : undefined);
+  }
+}
+
+test('egress is null when none of the three is set', () => {
+  stubRefresh([]);
+  expect(config.availabilityEgress).toBeNull();
+});
+
+test('egress is configured, with its Access credentials, when all three are set', () => {
+  stubRefresh(ALL_REFRESH);
+  const refresh = config.availabilityEgress;
+  expect(refresh?.egressUrl.toString()).toBe(`${EGRESS_URL}/`);
+  expect(refresh?.egressAccess).toEqual({ clientId: ACCESS_ID, clientSecret: ACCESS_SECRET });
+});
+
+test.each([
+  [['AVAILABILITY_EGRESS_URL'] as const, /AVAILABILITY_EGRESS_ACCESS_CLIENT_ID, AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET/],
+  [['AVAILABILITY_EGRESS_URL', 'AVAILABILITY_EGRESS_ACCESS_CLIENT_ID'] as const, /AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET/],
+  [['AVAILABILITY_EGRESS_ACCESS_CLIENT_ID', 'AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET'] as const, /AVAILABILITY_EGRESS_URL must/],
+])('a partial egress configuration %j is a ConfigError naming the missing ones', (set, missing) => {
+  stubRefresh(set);
+  expect(() => config.availabilityEgress).toThrow(ConfigError);
+  expect(() => config.availabilityEgress).toThrow(missing);
+});
+
+test('neither a bearer token nor a writer URL is part of the egress configuration', () => {
+  stubRefresh(ALL_REFRESH);
+  vi.stubEnv('AVAILABILITY_EGRESS_TOKEN', undefined);
+  vi.stubEnv('DATABASE_WRITER_URL', undefined);
+  expect(config.availabilityEgress).not.toBeNull();
+});
+
+test('an egress URL that does not parse is a ConfigError', () => {
+  stubRefresh(ALL_REFRESH);
+  vi.stubEnv('AVAILABILITY_EGRESS_URL', 'not a url');
+  expect(() => config.availabilityEgress).toThrow(/AVAILABILITY_EGRESS_URL/);
+});
+
+test('the availability TTL defaults to two hours and reads AVAILABILITY_TTL_SECONDS', () => {
+  vi.stubEnv('AVAILABILITY_TTL_SECONDS', undefined);
+  expect(config.availabilityTtlSeconds).toBe(DEFAULT_TTL_SECONDS);
+  vi.stubEnv('AVAILABILITY_TTL_SECONDS', String(CUSTOM_TTL_SECONDS));
+  expect(config.availabilityTtlSeconds).toBe(CUSTOM_TTL_SECONDS);
+});
+
+test.each(['0', '-5', 'soon'])('a non-positive or unparseable TTL %j is a ConfigError', (raw) => {
+  vi.stubEnv('AVAILABILITY_TTL_SECONDS', raw);
+  expect(() => config.availabilityTtlSeconds).toThrow(ConfigError);
+});
+
+test('the enabled availability providers default to Kotlin read-path list and read their variable', () => {
+  vi.stubEnv('ENABLED_AVAILABILITY_PROVIDERS', undefined);
+  expect(config.enabledAvailabilityProviders).toEqual(['aspira', 'campflare', 'reserveamerica', 'reservecalifornia']);
+  vi.stubEnv('ENABLED_AVAILABILITY_PROVIDERS', 'campflare');
+  expect(config.enabledAvailabilityProviders).toEqual(['campflare']);
+});

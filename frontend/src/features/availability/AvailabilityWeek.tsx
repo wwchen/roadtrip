@@ -1,5 +1,5 @@
 // The availability grid, mounted inside the campground drawer.
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, EmptyState, Icon, LinkButton, useToast } from '@ui';
 import type { PoiFeature } from '@/lib/poi';
 import { availableCount } from '@/lib/day-fields';
@@ -30,6 +30,7 @@ import {
   STALE_THRESHOLD_MIN,
   WEEK_DAYS,
   cacheAgeMinutes,
+  refusedEarliestDate,
   useWeekAvailability,
 } from './useWeekAvailability';
 import { WatchAuthError, usePoiWatches, useWatchMutations, watchForDate } from './useWatches';
@@ -96,7 +97,9 @@ function AvailabilityWeekView({
   // The first date this provider will quote. Everything paginates forward from here,
   // and "Earliest" returns to it — which is not the same as "today" for a campground
   // that only opens a booking window months out.
-  const earliestDate = useMemo(() => featureEarliestDate(feature), [feature]);
+  const featureEarliest = useMemo(() => featureEarliestDate(feature), [feature]);
+  const [refusedEarliest, setRefusedEarliest] = useState<Date | null>(null);
+  const earliestDate = refusedEarliest !== null && refusedEarliest > featureEarliest ? refusedEarliest : featureEarliest;
   const featureLatest = useMemo(() => featureLatestDate(feature), [feature]);
   const openSettings = useSettingsStore((state) => state.openSettings);
   const { state, actions } = useAvailabilityController(earliestDate);
@@ -115,6 +118,13 @@ function AvailabilityWeekView({
 
   const { toast } = useToast();
   const week = useWeekAvailability(poiId, weekStart);
+  const { changeWeek } = actions;
+  useEffect(() => {
+    const corrected = refusedEarliestDate(week.error);
+    if (corrected === null) return;
+    setRefusedEarliest(corrected);
+    changeWeek(corrected);
+  }, [week.error, changeWeek]);
   const catalog = useCampsites(poiId);
   const watches = usePoiWatches(poiId);
   const mutations = useWatchMutations(poiId);
@@ -652,6 +662,8 @@ function WeekSurface({
   return <>{matrix}</>;
 }
 
+const REFRESH_FAILED_COPY = "Couldn't refresh";
+
 /**
  * "checked 4m ago · refresh".
  *
@@ -667,6 +679,7 @@ function Freshness({
   onRefresh: () => void;
 }) {
   const cache = week.data?.state === 'success' ? week.data.cache : null;
+  if (week.refreshFailed && !cache) return <span className="cg-stale">{REFRESH_FAILED_COPY}</span>;
   // A non-breaking space, so the row keeps its height and the grid does not jump
   // when the pill appears.
   if (!cache) return <>&nbsp;</>;
@@ -674,6 +687,7 @@ function Freshness({
   return (
     <span className={ageMin >= STALE_THRESHOLD_MIN ? 'cg-stale' : undefined}>
       checked {ageMin}m ago ·{' '}
+      {week.refreshFailed ? `${REFRESH_FAILED_COPY} · ` : null}
       <LinkButton className="cg-refresh" onClick={onRefresh}>
         refresh
       </LinkButton>

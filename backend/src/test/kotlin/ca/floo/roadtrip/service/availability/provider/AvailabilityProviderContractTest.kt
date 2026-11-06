@@ -21,6 +21,12 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
@@ -28,7 +34,47 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import ca.floo.roadtrip.client.recgov.Campsite as RecGovCampsite
 
+private const val SHARED_CAPABILITY_TABLE = "../packages/domain/src/availability-providers.json"
+private const val SERVICE_MODULE = "src/main/kotlin/ca/floo/roadtrip/di/ServiceModule.kt"
+private const val PROVIDER_LIST_MARKER = "named(\"availabilityProviders\")"
+private const val PROVIDER_LIST_END = "\n        }\n"
+private val providerConstruction = Regex("""\b(\w+AvailabilityProvider)\(""")
+
 class AvailabilityProviderContractTest {
+    @Test
+    fun `every registered provider's capabilities match the shared table`() {
+        val providers: List<AvailabilityProvider> =
+            listOf(
+                RecGovAvailabilityProvider(availabilityClient = stubRecgovClient(), enabled = true),
+                CampflareAvailabilityProvider(availabilityClient = { _, _, _ -> error("unused") }, enabled = true, configured = true),
+                ReserveCaliforniaAvailabilityProvider(availabilityClient = stubReserveCaliforniaClient(), enabled = true),
+                AspiraAvailabilityProvider(
+                    tenants = shippedTenantRegistry().tenantsOf(BookingProvider.ASPIRA),
+                    availabilityClient = stubAspiraClient(),
+                    enabled = true,
+                ),
+                ReserveAmericaAvailabilityProvider(
+                    tenants = shippedTenantRegistry().tenantsOf(BookingProvider.RESERVEAMERICA),
+                    availabilityClient = stubReserveAmericaClient(),
+                    enabled = true,
+                ),
+            )
+        val byClass = providers.associateBy { it::class.simpleName }
+        val providerList = File(SERVICE_MODULE).readText().substringAfter(PROVIDER_LIST_MARKER).substringBefore(PROVIDER_LIST_END)
+        val registered = providerConstruction.findAll(providerList).map { byClass.getValue(it.groupValues[1]) }.toList()
+        val table =
+            Json.parseToJsonElement(File(SHARED_CAPABILITY_TABLE).readText()).jsonArray.map { row ->
+                val fields = row.jsonObject
+                Triple(
+                    fields.getValue("id").jsonPrimitive.content,
+                    fields.getValue("bookingHorizonDays").jsonPrimitive.int,
+                    fields.getValue("maxPollWindowDays").jsonPrimitive.int,
+                )
+            }
+
+        assertEquals(table, registered.map { Triple(it.id.id, it.capabilities.bookingHorizonDays, it.capabilities.maxPollWindowDays) })
+    }
+
     @Test
     fun `all reservation vendor adapters implement availability provider contract`() {
         val providers: List<AvailabilityProvider> =

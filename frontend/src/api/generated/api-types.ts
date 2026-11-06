@@ -91,6 +91,30 @@ export interface AvailabilityDayDto {
   cells: Record<string, AvailabilityCellDto>;
 }
 
+export interface AvailabilityEgressCellDto {
+  campsite: ProviderRefDto;
+  date: string;
+  status: AvailabilityStatus;
+  observed_at: string;
+}
+
+export type AvailabilityEgressMode = 'stored' | 'refresh';
+
+export interface AvailabilityEgressRequestDto {
+  mode?: AvailabilityEgressMode;
+  campground: ProviderRefDto;
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface AvailabilityEgressResponseDto {
+  start_date: string;
+  end_date: string;
+  latest_date?: string;
+  campsites: ProviderRefDto[];
+  cells: AvailabilityEgressCellDto[];
+}
+
 export interface AvailabilityErrorDto {
   state: string;
   error: string;
@@ -644,6 +668,11 @@ export interface ProfileDto {
   theme: string;
 }
 
+export interface ProviderRefDto {
+  data_provider: string;
+  data_provider_ref: string;
+}
+
 export interface RatingDto {
   average: number;
   count: number;
@@ -852,6 +881,7 @@ export const API_ENDPOINTS = [
   { method: 'GET', path: '/api/geocode', request: null, requestRequired: true, success: { status: 200, type: 'GeocodeResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 503, type: 'ApiErrorSchema' }] },
   { method: 'GET', path: '/api/health', request: null, requestRequired: true, success: { status: 200, type: 'HealthResponseDto' }, errors: [] },
   { method: 'GET', path: '/api/health/ready', request: null, requestRequired: true, success: { status: 200, type: 'ReadinessResponseDto' }, errors: [{ status: 503, type: 'ReadinessResponseDto' }] },
+  { method: 'POST', path: '/api/internal/availability/fetch', request: 'AvailabilityEgressRequestDto', requestRequired: true, success: { status: 200, type: 'AvailabilityEgressResponseDto' }, errors: [{ status: 400, type: 'AvailabilityErrorDto' }, { status: 404, type: 'AvailabilityErrorDto' }, { status: 501, type: 'AvailabilityErrorDto' }, { status: 503, type: 'AvailabilityErrorDto' }] },
   { method: 'GET', path: '/api/me', request: null, requestRequired: true, success: { status: 200, type: 'MeResponseDto' }, errors: [] },
   { method: 'POST', path: '/api/pois', request: 'PoisRequestSchema', requestRequired: true, success: { status: 200, type: 'PoiFeatureCollectionSchema' }, errors: [{ status: 400, type: 'ApiErrorSchema' }] },
   { method: 'POST', path: '/api/pois/availability/stays', request: 'StayCheckRequestDto', requestRequired: true, success: { status: 200, type: null, events: { answer: 'StayAnswerDto', done: 'StayCheckDoneDto' } }, errors: [{ status: 400, type: 'AvailabilityErrorDto' }, { status: 503, type: 'AvailabilityErrorDto' }] },
@@ -860,6 +890,7 @@ export const API_ENDPOINTS = [
   { method: 'GET', path: '/api/pois/{id}', request: null, requestRequired: true, success: { status: 200, type: 'PoiDetailFeatureSchema' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 404, type: 'ApiErrorSchema' }] },
   { method: 'GET', path: '/api/pois/{id}/campsites', request: null, requestRequired: true, success: { status: 200, type: 'PoiCampsitesResponseSchema' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 404, type: 'ApiErrorSchema' }] },
   { method: 'GET', path: '/api/pois/{id}/campsites/availability', request: null, requestRequired: true, success: { status: 200, type: 'PoiCampsitesAvailabilityResponseDto' }, errors: [{ status: 400, type: 'AvailabilityErrorDto' }, { status: 404, type: 'AvailabilityErrorDto' }, { status: 500, type: 'AvailabilityErrorDto' }, { status: 501, type: 'AvailabilityErrorDto' }, { status: 503, type: 'AvailabilityErrorDto' }] },
+  { method: 'POST', path: '/api/pois/{id}/campsites/availability/refresh', request: null, requestRequired: true, success: { status: 202, type: null }, errors: [{ status: 400, type: 'AvailabilityErrorDto' }, { status: 404, type: 'AvailabilityErrorDto' }, { status: 501, type: 'AvailabilityErrorDto' }] },
   { method: 'GET', path: '/api/route', request: null, requestRequired: true, success: { status: 200, type: 'RouteFeatureCollectionDto' }, errors: [{ status: 400, type: 'RouteErrorDto' }, { status: 503, type: 'RouteErrorDto' }] },
   { method: 'GET', path: '/api/settings', request: null, requestRequired: true, success: { status: 200, type: 'SettingsResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 409, type: 'ApiErrorSchema' }, { status: 502, type: 'ApiErrorSchema' }, { status: 503, type: 'ApiErrorSchema' }] },
   { method: 'PUT', path: '/api/settings/notifications', request: 'UpdateNotificationsRequest', requestRequired: false, success: { status: 200, type: 'SettingsResponseDto' }, errors: [{ status: 400, type: 'ApiErrorSchema' }, { status: 409, type: 'ApiErrorSchema' }, { status: 502, type: 'ApiErrorSchema' }, { status: 503, type: 'ApiErrorSchema' }] },

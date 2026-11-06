@@ -4,10 +4,11 @@
 // *backend* caches these upstream calls and reports the age of what it served, which
 // is what the freshness pill shows. A second, invisible client-side TTL on top would
 // make that number a lie.
+import { useEffect, useRef } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { requestPoiCampsitesAvailability } from '@/api/availability-api';
-import type { PoiCampsitesAvailabilityResponse } from '@/api/availability-api';
-import { addLocalDays, localYmd } from '@/lib/local-date';
+import { requestAvailabilityRefresh, requestPoiCampsitesAvailability } from '@/api/availability-api';
+import type { AvailabilityCache, PoiCampsitesAvailabilityResponse } from '@/api/availability-api';
+import { addLocalDays, localYmd, parseLocalYmd } from '@/lib/local-date';
 import { queryKeys } from '@/queries/keys';
 import { formatAvailabilityError } from './availability-errors';
 import {
@@ -22,6 +23,26 @@ export const WEEK_DAYS = 7;
 export const SKELETON_RENDER_DELAY_MS = 150;
 /** Cache age at which the freshness pill starts warning. */
 export const STALE_THRESHOLD_MIN = 10;
+export const START_BEFORE_EARLIEST = 'start_before_earliest';
+export const REFRESH_POLL_INTERVAL_MS = 2_000;
+export const REFRESH_POLL_LIMIT = 15;
+
+export interface RefreshPolling {
+  pollIntervalMs: number;
+  pollLimit: number;
+}
+
+const DEFAULT_REFRESH_POLLING: RefreshPolling = { pollIntervalMs: REFRESH_POLL_INTERVAL_MS, pollLimit: REFRESH_POLL_LIMIT };
+
+export function isStale(cache: AvailabilityCache | null | undefined): boolean {
+  return cache == null || cache.age_seconds > cache.ttl_seconds;
+}
+
+interface RefreshState {
+  key: string;
+  accepted: boolean;
+  polls: number;
+}
 
 /**
  * The response, plus its capability block read into the shape the gates use.
@@ -54,6 +75,7 @@ export class AvailabilityRequestError extends Error {
     readonly httpStatus: number,
     /** The backend's `error` code, when it sent one — `null` for a bare HTTP failure. */
     readonly code: string | null = null,
+    readonly earliestDate: string | null = null,
   ) {
     super(message);
     this.name = 'AvailabilityRequestError';
@@ -72,13 +94,23 @@ export class AvailabilityRequestError extends Error {
 export function useWeekAvailability(
   poiId: string | number | null | undefined,
   weekStart: Date,
-): UseQueryResult<WeekAvailability, Error> {
+  polling: RefreshPolling = DEFAULT_REFRESH_POLLING,
+): UseQueryResult<WeekAvailability, Error> & { refreshFailed: boolean } {
   const { startDate, endDate } = weekWindow(weekStart);
-  return useQuery({
+  const refreshKey = `${poiId ?? ''}|${startDate}|${endDate}`;
+  const refresh = useRef<RefreshState>({ key: '', accepted: false, polls: 0 });
+  const refreshAccepted = refresh.current.key === refreshKey && refresh.current.accepted;
+  const query = useQuery<WeekAvailability, Error>({
     queryKey: queryKeys.availability.forPoi(poiId ?? '', startDate, endDate),
     enabled: poiId != null,
     retry: false,
+    refetchInterval: (current) => {
+      const state = refresh.current;
+      if (state.key !== refreshKey || !state.accepted || state.polls >= polling.pollLimit) return false;
+      return isStale(current.state.data?.cache) ? polling.pollIntervalMs : false;
+    },
     queryFn: async ({ signal }): Promise<WeekAvailability> => {
+      if (refresh.current.key === refreshKey && refresh.current.accepted) refresh.current.polls += 1;
       const response = await requestPoiCampsitesAvailability(poiId!, { startDate, endDate, signal });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
@@ -86,6 +118,7 @@ export function useWeekAvailability(
           formatAvailabilityError(body, response.status),
           response.status,
           typeof body?.error === 'string' ? body.error : null,
+          typeof body?.earliest_date === 'string' ? body.earliest_date : null,
         );
       }
       const json = (await response.json()) as PoiCampsitesAvailabilityResponse;
@@ -98,9 +131,29 @@ export function useWeekAvailability(
       };
     },
   });
+  const data = query.data;
+  const { refetch } = query;
+  useEffect(() => {
+    if (poiId == null || data === undefined || data.state === 'empty' || !isStale(data.cache)) return;
+    if (refresh.current.key === refreshKey) return;
+    refresh.current = { key: refreshKey, accepted: false, polls: 0 };
+    void requestAvailabilityRefresh(poiId, { startDate, endDate }).then((accepted) => {
+      if (refresh.current.key !== refreshKey || !accepted) return;
+      refresh.current.accepted = true;
+      void refetch();
+    });
+  }, [poiId, data, refreshKey, startDate, endDate, refetch]);
+  const refreshFailed = refreshAccepted && refresh.current.polls >= polling.pollLimit && isStale(data?.cache);
+  return Object.assign(query, { refreshFailed });
 }
 
 /** Cache age in whole minutes, floored at 1 — "checked 0m ago" reads as a bug. */
 export function cacheAgeMinutes(ageSeconds: number | null | undefined): number {
   return Math.max(1, Math.round((ageSeconds ?? 0) / 60));
+}
+
+export function refusedEarliestDate(error: unknown): Date | null {
+  if (!(error instanceof AvailabilityRequestError) || error.code !== START_BEFORE_EARLIEST || error.earliestDate === null) return null;
+  const parsed = parseLocalYmd(error.earliestDate);
+  return Number.isFinite(parsed.getTime()) ? parsed : null;
 }

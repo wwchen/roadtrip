@@ -1,0 +1,7 @@
+[
+  { "id": "recgov", "bookingHorizonDays": 180, "maxPollWindowDays": 90 },
+  { "id": "campflare", "bookingHorizonDays": 365, "maxPollWindowDays": 60 },
+  { "id": "reservecalifornia", "bookingHorizonDays": 183, "maxPollWindowDays": 30 },
+  { "id": "aspira", "bookingHorizonDays": 365, "maxPollWindowDays": 30 },
+  { "id": "reserveamerica", "bookingHorizonDays": 270, "maxPollWindowDays": 30 }
+]

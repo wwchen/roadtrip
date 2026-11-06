@@ -233,6 +233,18 @@ describe('the week grid', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  test('a week starting before the campground\'s earliest date re-anchors to it', async () => {
+    const dayBefore = '2026-08-09';
+    stubs.availability = (url: string) =>
+      url.includes(`start_date=${dayBefore}`)
+        ? json({ state: 'error', error: 'start_before_earliest', earliest_date: EARLIEST, time_zone: 'America/Los_Angeles' }, 400)
+        : json(availabilityBody([stream(1, ['available', 'reserved', 'reserved', 'closed', 'available', 'reserved', 'unknown'])]));
+    await mount({ earliest_date: dayBefore });
+    await waitFor(() => expect(requests.some((url) => url.includes(`start_date=${EARLIEST}`))).toBe(true));
+    await waitFor(() => expect(cell('Site 1', WEEK[0]!)).toBeInTheDocument());
+    expect(screen.queryByText(/start_before_earliest/)).not.toBeInTheDocument();
+  });
+
   test('renders a column per day and a row per site', async () => {
     stubs.campsites = () => json(catalogBody([catalogRow(1), catalogRow(2)], {}));
     stubs.availability = () =>

@@ -1,0 +1,47 @@
+import type { EgressAccessCredentials } from '../config';
+import type { AvailabilityEgressRequestDto, AvailabilityEgressResponseDto, AvailabilityErrorDto } from '../contract';
+
+export const EGRESS_PATH = '/api/internal/availability/fetch';
+export const EGRESS_TIMEOUT_CODE = 'timeout';
+export const EGRESS_UNREACHABLE_CODE = 'unreachable';
+const NO_STATUS = 0;
+const TIMEOUT_ERROR = 'TimeoutError';
+const ACCESS_CLIENT_ID_HEADER = 'cf-access-client-id';
+const ACCESS_CLIENT_SECRET_HEADER = 'cf-access-client-secret';
+
+export interface EgressEndpoint {
+  url: URL;
+  access: EgressAccessCredentials;
+}
+
+function headersFor(endpoint: EgressEndpoint): Record<string, string> {
+  return {
+    'content-type': 'application/json',
+    [ACCESS_CLIENT_ID_HEADER]: endpoint.access.clientId,
+    [ACCESS_CLIENT_SECRET_HEADER]: endpoint.access.clientSecret,
+  };
+}
+
+export type EgressResult =
+  | { kind: 'cells'; body: AvailabilityEgressResponseDto }
+  | { kind: 'error'; status: number; code: string | null; body: AvailabilityErrorDto | null };
+
+export async function fetchEgress(endpoint: EgressEndpoint, request: AvailabilityEgressRequestDto, timeoutMs: number): Promise<EgressResult> {
+  let response: Response;
+  try {
+    response = await fetch(new URL(EGRESS_PATH, endpoint.url), {
+      method: 'POST',
+      headers: headersFor(endpoint),
+      body: JSON.stringify(request),
+      signal: AbortSignal.timeout(timeoutMs),
+      cache: 'no-store',
+    });
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === TIMEOUT_ERROR;
+    return { kind: 'error', status: NO_STATUS, code: timedOut ? EGRESS_TIMEOUT_CODE : EGRESS_UNREACHABLE_CODE, body: null };
+  }
+  if (response.ok) return { kind: 'cells', body: (await response.json()) as AvailabilityEgressResponseDto };
+  const body = (await response.json().catch(() => null)) as AvailabilityErrorDto | null;
+  const code = typeof body?.error === 'string' ? body.error : null;
+  return { kind: 'error', status: response.status, code, body: code === null ? null : body };
+}

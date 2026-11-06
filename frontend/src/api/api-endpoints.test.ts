@@ -67,6 +67,7 @@ const CALLED_TODAY = [
   '/api/pois/{id}',
   '/api/pois/{id}/campsites',
   '/api/pois/{id}/campsites/availability',
+  '/api/pois/{id}/campsites/availability/refresh',
   '/api/route',
   '/api/settings',
   '/api/settings/notifications',
