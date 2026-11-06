@@ -16,6 +16,12 @@ HOST = "roadtrip.floo.ca"
 EGRESS_HOST = "egress.floo.ca"
 EGRESS_PATH = "/api/internal/availability/fetch"
 EGRESS_HIDDEN_GETS = ["/", "/api/me", EGRESS_PATH]
+SANDBOX_NAME = "routing"
+SANDBOX_HOST = f"sb-{SANDBOX_NAME}.floo.ca"
+SANDBOX_BACKEND_PORT = "8765"
+DEPLOY_SCRIPT = ROOT / "scripts" / "deploy.sh"
+SNIPPET_START = 'cat > "${CADDY_SNIPPET}" <<CADDY\n'
+SNIPPET_END = "\nCADDY\n"
 CLIENT_IP = "203.0.113.7"
 READY_DEADLINE_SECONDS = 30
 READY_POLL_SECONDS = 0.5
@@ -48,6 +54,17 @@ BACKEND_PATHS = [
 ]
 
 
+def sandbox_snippet() -> str:
+    script = DEPLOY_SCRIPT.read_text()
+    template = script.split(SNIPPET_START, 1)[1].split(SNIPPET_END, 1)[0]
+    return (
+        template.replace("${SANDBOX_FQDN}", SANDBOX_HOST)
+        .replace("${SANDBOX_NAME}", SANDBOX_NAME)
+        .replace("${SANDBOX_BACKEND_PORT}", SANDBOX_BACKEND_PORT)
+        + "\n"
+    )
+
+
 def caddy_image() -> str:
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
     return compose["services"]["caddy"]["image"]
@@ -67,12 +84,14 @@ class CaddyRoutingTest(unittest.TestCase):
         (stubs / "web.Caddyfile").write_text(WEB_STUB)
         (stubs / "backend.Caddyfile").write_text(BACKEND_STUB)
         (stubs / "sandboxes").mkdir()
+        (stubs / "sandboxes" / f"sb-{SANDBOX_NAME}.caddy").write_text(sandbox_snippet())
         image = caddy_image()
         network = f"caddy-routing-{uuid.uuid4().hex[:12]}"
         docker("network", "create", network)
         cls.addClassCleanup(subprocess.run, ["docker", "network", "rm", network], capture_output=True, check=False)
-        for alias, stub in (("web", "web.Caddyfile"), ("backend", "backend.Caddyfile")):
-            cls.start(image, "--network", network, "--network-alias", alias, "-v", f"{stubs / stub}:/etc/caddy/Caddyfile:ro")
+        for aliases, stub in ((["web"], "web.Caddyfile"), (["backend", f"sb-{SANDBOX_NAME}-backend"], "backend.Caddyfile")):
+            alias_options = [option for alias in aliases for option in ("--network-alias", alias)]
+            cls.start(image, "--network", network, *alias_options, "-v", f"{stubs / stub}:/etc/caddy/Caddyfile:ro")
         cls.proxy = cls.start(
             image, "--network", network,
             "-v", f"{CADDYFILE}:/etc/caddy/Caddyfile:ro",
@@ -116,6 +135,14 @@ class CaddyRoutingTest(unittest.TestCase):
     def test_the_egress_host_hides_everything_else(self) -> None:
         for path in EGRESS_HIDDEN_GETS:
             self.assertIsNone(self.fetch(path, host=EGRESS_HOST), path)
+
+    def test_internal_paths_are_refused_off_the_egress_host(self) -> None:
+        for host in (HOST, SANDBOX_HOST):
+            for post in (False, True):
+                self.assertIsNone(self.fetch(EGRESS_PATH, host=host, post=post), f"{host} post={post}")
+
+    def test_the_sandbox_host_still_reaches_its_backend(self) -> None:
+        self.assertTrue((self.fetch("/api/me", host=SANDBOX_HOST) or "").startswith("backend"))
 
     def test_the_backend_still_sees_the_client_address(self) -> None:
         body = self.fetch("/api/me", f"X-Forwarded-For: {CLIENT_IP}") or ""

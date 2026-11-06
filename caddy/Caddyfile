@@ -28,6 +28,10 @@
 }
 
 http://roadtrip.floo.ca {
+	@internal path /api/internal/*
+	handle @internal {
+		respond 404
+	}
 	@web path_regexp ^/api/(pois(/(search|on-route|[0-9]+))?|campgrounds/(search|details)|geocode|route)$
 	handle @web {
 		reverse_proxy web:3000

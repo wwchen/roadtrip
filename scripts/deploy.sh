@@ -1077,6 +1077,8 @@ case "${ROUTING}" in
         mkdir -p "${SANDBOX_CADDY_DIR}"
         cat > "${CADDY_SNIPPET}" <<CADDY
 http://${SANDBOX_FQDN} {
+    @internal path /api/internal/*
+    respond @internal 404
     reverse_proxy sb-${SANDBOX_NAME}-backend:${SANDBOX_BACKEND_PORT}
 }
 CADDY
