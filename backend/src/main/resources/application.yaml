@@ -154,8 +154,9 @@ roadtrip:
       - campflare
       - bcparks-strapi
       - aspira
-#      - reserveamerica
-#      - reservecalifornia
+      - recgov
+      - reserveamerica
+      - reservecalifornia
       - tesla_supercharger
       - planet_fitness_location
     enabled-availability-providers:

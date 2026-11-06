@@ -100,7 +100,7 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 | `DATABASE_URL` | sensitive | the Neon **pooled** endpoint as the `roadtrip_web` role, plus `connect_timeout=10&idle_timeout=20` |
 | `DATABASE_PREPARE` | plain | `true` |
 | `DATABASE_REQUIRE_READ_ONLY` | plain, optional | default `true`; set `false` for **Preview only**, whose branch-scoped `DATABASE_URL` from the Neon integration logs in as the branch owner, which is not read-only |
-| `ENABLED_DATA_PROVIDERS` | plain | `campflare,bcparks-strapi,aspira`; set but empty is a `ConfigError`, never "none enabled" |
+| `ENABLED_DATA_PROVIDERS` | plain, optional | default `campflare,bcparks-strapi,aspira,recgov,reserveamerica,reservecalifornia`, the same campground providers as Kotlin's `read-path.enabled-data-providers`; set but empty is a `ConfigError`, never "none enabled" |
 | `HEALTH_DATABASE_TOKEN` | sensitive | the bearer secret for the database mode of `/api/health` (below) |
 | `MAPBOX_TOKEN` | sensitive | Mapbox token for `/api/geocode`, `/api/route` and `/api/pois/on-route`; unset, those answer 503 and the rest of the map works |
 | `CAMPGROUND_SEARCH_MAX_RESULTS` | plain, optional | cap on `POST /api/campgrounds/search` ids, default 5000 |
