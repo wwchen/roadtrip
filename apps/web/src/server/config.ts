@@ -19,7 +19,7 @@ const ENABLED_AVAILABILITY_PROVIDERS_VARIABLE = 'ENABLED_AVAILABILITY_PROVIDERS'
 
 const DEFAULT_DATABASE_PREPARE = true;
 const DEFAULT_DATABASE_REQUIRE_READ_ONLY = true;
-const DEFAULT_ENABLED_DATA_PROVIDERS: readonly string[] = ['campflare', 'bcparks-strapi', 'aspira', 'recgov', 'reserveamerica', 'reservecalifornia'];
+const DEFAULT_ENABLED_DATA_PROVIDERS: readonly string[] = ['campflare', 'bcparks-strapi', 'aspira', 'reserveamerica', 'reservecalifornia'];
 const DEFAULT_SEARCH_RESULT_LIMIT = 200;
 const MAX_SEARCH_RESULT_LIMIT = 1000;
 const DEFAULT_CAMPGROUND_SEARCH_MAX_RESULTS = 5000;
