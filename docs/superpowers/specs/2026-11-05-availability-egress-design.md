@@ -148,9 +148,9 @@ TypeScript types are generated into `api-types.ts` and Vercel imports them.
 
 ### Network (mini-ca)
 
-- A new Cloudflare tunnel public hostname, `egress.floo.ca`, points at `caddy:80`. The owner
+- A new Cloudflare tunnel public hostname, `roadtrip-egress.floo.ca`, points at `caddy:80`. The owner
   creates it.
-- `caddy/Caddyfile` gets a site block for `http://egress.floo.ca` that proxies only
+- `caddy/Caddyfile` gets a site block for `http://roadtrip-egress.floo.ca` that proxies only
   `POST /internal/availability/fetch` to `backend:8765` and answers `404` to everything else.
 - The companion keeps no public route (C2).
 
@@ -222,7 +222,7 @@ A refresh failure never changes the GET's answer.
   - Per-cell freshness matches Kotlin's on the same fixture.
 - **Route tests** for the two ported GETs, checked for parity against Kotlin's responses on the
   same data, and for the POST's statuses.
-- **Caddy routing test** (`scripts/test_caddy_routing.py`): `egress.floo.ca` proxies only the
+- **Caddy routing test** (`scripts/test_caddy_routing.py`): `roadtrip-egress.floo.ca` proxies only the
   egress path, and existing hosts are unchanged.
 - **Frontend:** the matrix POSTs once, polls the GET, and stops at the cap.
 - No test calls a real vendor. The egress is faked on the Vercel side, and the provider is faked

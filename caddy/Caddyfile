@@ -41,7 +41,7 @@ http://roadtrip.floo.ca {
 	}
 }
 
-http://egress.floo.ca {
+http://roadtrip-egress.floo.ca {
 	@egress {
 		method POST
 		path /api/internal/availability/fetch

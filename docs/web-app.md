@@ -106,10 +106,10 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 | `CAMPGROUND_SEARCH_MAX_RESULTS` | plain, optional | cap on `POST /api/campgrounds/search` ids, default 5000 |
 | `ENABLED_AVAILABILITY_PROVIDERS` | plain, optional | default `aspira,campflare,reserveamerica,reservecalifornia`, Kotlin's read-path list; decides which provider serves a campground's matrix |
 | `AVAILABILITY_TTL_SECONDS` | plain, optional | default `7200`; a matrix cell older than this is stale |
-| `AVAILABILITY_EGRESS_URL` | plain, optional | `https://egress.floo.ca`; one of the three availability refresh settings below |
+| `AVAILABILITY_EGRESS_URL` | plain, optional | `https://roadtrip-egress.floo.ca`; one of the three availability refresh settings below |
 | `AVAILABILITY_EGRESS_TOKEN` | sensitive, optional | the bearer mini-ca's backend expects; the same value as its `AVAILABILITY_EGRESS_TOKEN` secret |
 | `DATABASE_WRITER_URL` | sensitive, optional | the Neon **pooled** endpoint as `roadtrip_availability_writer`; used only by the refresh |
-| `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`, `AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET` | sensitive, optional | the Cloudflare Access service token in front of `egress.floo.ca`, sent as `CF-Access-Client-Id` and `CF-Access-Client-Secret`; set both or neither |
+| `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`, `AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET` | sensitive, optional | the Cloudflare Access service token in front of `roadtrip-egress.floo.ca`, sent as `CF-Access-Client-Id` and `CF-Access-Client-Secret`; set both or neither |
 
 Deployment protection (checked 2026-10-29): Vercel Authentication is on with
 `all_except_custom_domains`. The production alias `roadtrip-web-nu.vercel.app` answers without a
@@ -132,12 +132,12 @@ the matrix shows stored data. **Rollback is unsetting `AVAILABILITY_EGRESS_URL`.
 
 How the call reaches mini-ca:
 
-1. The Cloudflare tunnel public hostname `egress.floo.ca` points at `http://caddy:80`. A tunnel
+1. The Cloudflare tunnel public hostname `roadtrip-egress.floo.ca` points at `http://caddy:80`. A tunnel
    hostname is reachable by anyone, so a Cloudflare Access application guards it: a Service Auth
    policy admits only requests carrying the service token in
    `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/`_SECRET`, and Cloudflare refuses the rest at its edge
    before anything reaches mini-ca.
-2. Caddy's `egress.floo.ca` block proxies only `POST /api/internal/availability/fetch` to the
+2. Caddy's `roadtrip-egress.floo.ca` block proxies only `POST /api/internal/availability/fetch` to the
    backend and answers `404` to everything else.
 3. The backend mounts that route only when its `AVAILABILITY_EGRESS_TOKEN` secret is set, and
    refuses a request without the matching bearer. It answers from its own stored snapshot when
@@ -160,8 +160,8 @@ reach a vendor.
 
 To turn it on:
 
-1. Create the tunnel hostname `egress.floo.ca` → `http://caddy:80`. In Cloudflare Zero Trust,
-   create a service token and an Access application for `egress.floo.ca` whose policy is
+1. Create the tunnel hostname `roadtrip-egress.floo.ca` → `http://caddy:80`. In Cloudflare Zero Trust,
+   create a service token and an Access application for `roadtrip-egress.floo.ca` whose policy is
    **Service Auth** including that token.
 2. `./secrets/manage.py set AVAILABILITY_EGRESS_TOKEN prod`, then deploy mini-ca.
 3. Set the writer role's password on Neon, then the three variables in Vercel plus the two Access

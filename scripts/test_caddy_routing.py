@@ -13,7 +13,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 CADDYFILE = ROOT / "caddy" / "Caddyfile"
 HOST = "roadtrip.floo.ca"
-EGRESS_HOST = "egress.floo.ca"
+EGRESS_HOST = "roadtrip-egress.floo.ca"
 EGRESS_PATH = "/api/internal/availability/fetch"
 EGRESS_HIDDEN_GETS = ["/", "/api/me", EGRESS_PATH]
 SANDBOX_NAME = "routing"
