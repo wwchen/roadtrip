@@ -6,6 +6,7 @@ import { poiDetail } from './poiDetailService';
 const RICH_POI = 3101n;
 const ASPIRA_POI = 3102n;
 const ALIASED_POI = 3103n;
+const RECGOV_ONLY_POI = 3104n;
 const NOW = new Date('2026-06-17T20:00:00Z');
 const MAHOOD_DEEPLINK =
   'https://camping.bcparks.ca/create-booking/results?transactionLocationId=-2147483429&mapId=-2147483235&searchTabGroupId=0' +
@@ -25,6 +26,7 @@ beforeAll(async () => {
     (${RICH_POI}, 'campground', ST_SetSRID(ST_MakePoint(-120.09, 52.2), 4326)),
     (${ASPIRA_POI}, 'campground', ST_SetSRID(ST_MakePoint(-120.09, 52.2), 4326)),
     (${ALIASED_POI}, 'campground', ST_SetSRID(ST_MakePoint(-119.6, 37.7), 4326)),
+    (${RECGOV_ONLY_POI}, 'campground', ST_SetSRID(ST_MakePoint(-92.27, 35.55), 4326)),
     (${TESLA_POI}, 'tesla_supercharger', ST_SetSRID(ST_MakePoint(-121, 37), 4326)),
     (${GYM_POI}, 'planet_fitness_location', ST_SetSRID(ST_MakePoint(-122, 38), 4326))`);
   await db.execute(sql`INSERT INTO campgrounds (id, data_provider, data_provider_ref, name, parent_name, kind, status,
@@ -50,6 +52,10 @@ beforeAll(async () => {
       '[{"url":"http://traveloregon.com"}]', 'campflare', 'flowing-well-campground-001',
       '[{"provider":"recgov","ref":"232001"}]')`);
   await db.execute(sql`INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (${ALIASED_POI}, 3003)`);
+  await db.execute(sql`INSERT INTO campgrounds (id, data_provider, data_provider_ref, name, reservation_url, booking_provider,
+      booking_provider_ref)
+    VALUES (3004, 'campflare', 'sugar-1', 'Sugar Loaf', 'https://www.recreation.gov/camping/campgrounds/232713', 'recgov', '232713')`);
+  await db.execute(sql`INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (${RECGOV_ONLY_POI}, 3004)`);
   await db.execute(sql`INSERT INTO tesla_superchargers (id, location_slug, location_guid, common_site_name, site_status,
       access_type, open_to_public, open_to_non_teslas, stall_count, max_power_kw, region, country, time_zone, info_url,
       address, amenities, pricebooks, index_payload, detail_payload)
@@ -151,6 +157,13 @@ test('a Campflare campground that rec.gov also sells reserves on rec.gov, then l
     { url: 'https://campflare.com/campground/flowing-well-campground-001', label: 'View on Campflare', kind: 'info' },
   ]);
   expect(detailOf?.booking_system).toBe('Recreation.gov');
+});
+
+test('a campground only rec.gov sells, with rec.gov not enabled, reserves on rec.gov but is not availability-supported', async () => {
+  const detailOf = (await detail(RECGOV_ONLY_POI))?.properties.detail ?? {};
+  expect(detailOf).toMatchObject({ booking_system: 'Recreation.gov' });
+  expect(detailOf).not.toHaveProperty('availability_supported');
+  expect(detailOf).not.toHaveProperty('latest_date');
 });
 
 test('a campground with no booking ref is not availability-supported but still states its zone and earliest date', async () => {

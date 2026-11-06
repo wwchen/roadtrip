@@ -1,6 +1,8 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { CAMPGROUND_POI_TYPE, POI_TYPES } from '@roadtrip/db';
 import { afterEach, expect, test, vi } from 'vitest';
 import { ConfigError, config } from './config';
 
@@ -9,6 +11,27 @@ const DEFAULT_PROVIDERS = ['campflare', 'bcparks-strapi', 'aspira', 'recgov', 'r
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 1000;
 const CUSTOM_LIMIT = 25;
+const KOTLIN_APPLICATION_YAML = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..', '..', '..', '..', 'backend', 'src', 'main', 'resources', 'application.yaml',
+);
+const KOTLIN_AVAILABILITY_LIST_KEY = 'enabled-availability-providers:';
+const KOTLIN_DATA_LIST_KEY = 'enabled-data-providers:';
+const NON_CAMPGROUND_POI_TYPES: readonly string[] = POI_TYPES.filter((type) => type !== CAMPGROUND_POI_TYPE);
+
+function kotlinYamlList(key: string): string[] {
+  const lines = readFileSync(KOTLIN_APPLICATION_YAML, 'utf8').split('\n');
+  const start = lines.findIndex((line) => line.trim() === key);
+  if (start === -1) throw new Error(`${key} is missing from application.yaml`);
+  const entries: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#')) continue;
+    if (!trimmed.startsWith('- ')) break;
+    entries.push(trimmed.slice(2).trim());
+  }
+  return entries;
+}
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -211,4 +234,15 @@ test('the enabled availability providers default to Kotlin read-path list and re
   expect(config.enabledAvailabilityProviders).toEqual(['aspira', 'campflare', 'reserveamerica', 'reservecalifornia']);
   vi.stubEnv('ENABLED_AVAILABILITY_PROVIDERS', 'campflare');
   expect(config.enabledAvailabilityProviders).toEqual(['campflare']);
+});
+
+test("the default enabled availability providers are Kotlin's application.yaml list", () => {
+  vi.stubEnv('ENABLED_AVAILABILITY_PROVIDERS', undefined);
+  expect(config.enabledAvailabilityProviders).toEqual(kotlinYamlList(KOTLIN_AVAILABILITY_LIST_KEY));
+});
+
+test("the default enabled data providers are Kotlin's application.yaml campground providers", () => {
+  vi.stubEnv('ENABLED_DATA_PROVIDERS', undefined);
+  const kotlinCampgroundProviders = kotlinYamlList(KOTLIN_DATA_LIST_KEY).filter((provider) => !NON_CAMPGROUND_POI_TYPES.includes(provider));
+  expect(config.enabledDataProviders).toEqual(kotlinCampgroundProviders);
 });

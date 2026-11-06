@@ -1,5 +1,5 @@
 import type { Db } from '@roadtrip/db';
-import { bookingIdentities, shippedTenantRegistry } from '@roadtrip/domain';
+import { bookingIdentities, servingAvailabilityProvider, shippedTenantRegistry } from '@roadtrip/domain';
 import type { CampgroundSearchQuery } from '../campgroundSearchRequest';
 import { config } from '../config';
 import type { CampgroundDetailsResponseDto, CampgroundSearchResponseDto, CampgroundSummaryDto } from '../contract';
@@ -27,8 +27,10 @@ export async function searchCampgroundIds(
 
 function summaryBooking(row: CampgroundSummaryRow): { system: string | null; supported: boolean } {
   const tenants = shippedTenantRegistry();
-  const bookingRef = campgroundBookingRef(tenants, bookingIdentities(row.bookingProvider, row.bookingProviderRef, row.bookingAliases));
-  return { system: bookingSystem(tenants, bookingRef), supported: bookingRef !== null };
+  const identities = bookingIdentities(row.bookingProvider, row.bookingProviderRef, row.bookingAliases);
+  const bookingRef = campgroundBookingRef(tenants, identities);
+  const serving = servingAvailabilityProvider(identities, config.enabledAvailabilityProviders, tenants);
+  return { system: bookingSystem(tenants, bookingRef), supported: serving !== null };
 }
 
 function summaryDto(row: CampgroundSummaryRow): CampgroundSummaryDto {

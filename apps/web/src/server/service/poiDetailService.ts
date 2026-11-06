@@ -59,7 +59,7 @@ function campgroundBooking(row: CampgroundDetailRow, now: Date) {
   return {
     cta: cta.length === 0 ? null : cta,
     booking_system: bookingSystem(tenants, bookingRef),
-    availability_supported: bookingRef === null ? null : true,
+    availability_supported: serving === null ? null : true,
     availability_provider: serving?.id ?? row.bookingProvider,
     time_zone: dateContext.timeZone,
     earliest_date: dateContext.earliestDate,

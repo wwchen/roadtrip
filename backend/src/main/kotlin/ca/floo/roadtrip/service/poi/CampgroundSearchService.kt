@@ -91,7 +91,8 @@ internal class CampgroundSearchService(
     /** The same decision `CampgroundService` makes for `availability_supported` and `booking_system`. */
     private fun summaryOf(row: CampgroundSummaryRow): CampgroundSummaryDto {
         val campground = row.campground
-        val bookingRef = identities.forCampground(campground, bookingHorizons.servingProvider(campground))
+        val servingProvider = bookingHorizons.servingProvider(campground)
+        val bookingRef = identities.forCampground(campground, servingProvider)
         return CampgroundSummaryDto(
             id = row.poiId,
             campgroundId = campground.id,
@@ -101,7 +102,7 @@ internal class CampgroundSearchService(
             lng = row.lng,
             lat = row.lat,
             rating = campground.metadata?.rating?.let(RatingDto::from),
-            availabilitySupported = bookingRef != null,
+            availabilitySupported = servingProvider != null,
             bookingSystem = cta.bookingSystem(bookingRef),
             amenities = AmenityDto.fromAll(campground.amenities),
             siteCounts = row.summary?.siteCounts ?: emptyMap(),
