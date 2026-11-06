@@ -23,6 +23,21 @@ test('sends the Access credentials and the JSON body to the egress path, with no
   expect(JSON.parse(init.body)).toEqual(REQUEST);
 });
 
+test('redirects are not followed: an Access login redirect is an error, not a page', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 302, headers: { location: 'https://team.cloudflareaccess.com/cdn-cgi/access/login/x' } }));
+  vi.stubGlobal('fetch', fetch);
+  expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({ kind: 'error', status: 302, code: 'egress_redirected', body: null });
+  expect(fetch.mock.calls[0]![1].redirect).toBe('manual');
+});
+
+test.each([
+  ['an HTML page', new Response('<!DOCTYPE html><title>Access</title>', { status: 200, headers: { 'content-type': 'text/html' } })],
+  ['malformed JSON', new Response('{"start_date":', { status: 200, headers: { 'content-type': 'application/json' } })],
+])('a success answer carrying %s is an error, not a crash', async (_label, response) => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
+  expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({ kind: 'error', status: 200, code: 'egress_not_json', body: null });
+});
+
 test('a 503 body becomes an error with its code', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ state: 'error', error: 'rate_limited' }, { status: 503 })));
   expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({
