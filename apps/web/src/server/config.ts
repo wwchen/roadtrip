@@ -12,7 +12,6 @@ const HEALTH_DATABASE_TOKEN_VARIABLE = 'HEALTH_DATABASE_TOKEN';
 const MAPBOX_TOKEN_VARIABLE = 'MAPBOX_TOKEN';
 const MAPBOX_TOKEN_FILE_VARIABLE = 'MAPBOX_TOKEN_FILE';
 const AVAILABILITY_EGRESS_URL_VARIABLE = 'AVAILABILITY_EGRESS_URL';
-const AVAILABILITY_EGRESS_TOKEN_VARIABLE = 'AVAILABILITY_EGRESS_TOKEN';
 const DATABASE_WRITER_URL_VARIABLE = 'DATABASE_WRITER_URL';
 const AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE = 'AVAILABILITY_EGRESS_ACCESS_CLIENT_ID';
 const AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE = 'AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET';
@@ -41,8 +40,7 @@ export interface EgressAccessCredentials {
 
 export interface AvailabilityRefreshConfig {
   egressUrl: URL;
-  egressToken: string;
-  egressAccess: EgressAccessCredentials | null;
+  egressAccess: EgressAccessCredentials;
   writerDatabaseUrl: string;
 }
 
@@ -122,35 +120,28 @@ function secretFrom(variable: string): string | undefined {
   return raw;
 }
 
-function egressAccessFrom(): EgressAccessCredentials | null {
-  const clientId = secretFrom(AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE);
-  const clientSecret = secretFrom(AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE);
-  if (clientId === undefined && clientSecret === undefined) return null;
-  if (clientId === undefined) throw new ConfigError(AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE, `must be set with ${AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE}`);
-  if (clientSecret === undefined) throw new ConfigError(AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE, `must be set with ${AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE}`);
-  return { clientId, clientSecret };
-}
-
 function availabilityRefreshFrom(): AvailabilityRefreshConfig | null {
   const values = {
     [AVAILABILITY_EGRESS_URL_VARIABLE]: secretFrom(AVAILABILITY_EGRESS_URL_VARIABLE),
-    [AVAILABILITY_EGRESS_TOKEN_VARIABLE]: secretFrom(AVAILABILITY_EGRESS_TOKEN_VARIABLE),
     [DATABASE_WRITER_URL_VARIABLE]: secretFrom(DATABASE_WRITER_URL_VARIABLE),
+    [AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE]: secretFrom(AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE),
+    [AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE]: secretFrom(AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE),
   };
   const missing = Object.entries(values).filter(([, value]) => value === undefined).map(([variable]) => variable);
   if (missing.length === Object.keys(values).length) return null;
   if (missing.length > 0) throw new ConfigError(missing.join(LIST_JOINER), 'must be set with the other availability refresh settings');
-  const rawUrl = values[AVAILABILITY_EGRESS_URL_VARIABLE] as string;
   let egressUrl: URL;
   try {
-    egressUrl = new URL(rawUrl);
+    egressUrl = new URL(values[AVAILABILITY_EGRESS_URL_VARIABLE] as string);
   } catch {
     throw new ConfigError(AVAILABILITY_EGRESS_URL_VARIABLE, 'must be an absolute URL');
   }
   return {
     egressUrl,
-    egressToken: values[AVAILABILITY_EGRESS_TOKEN_VARIABLE] as string,
-    egressAccess: egressAccessFrom(),
+    egressAccess: {
+      clientId: values[AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE] as string,
+      clientSecret: values[AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE] as string,
+    },
     writerDatabaseUrl: values[DATABASE_WRITER_URL_VARIABLE] as string,
   };
 }

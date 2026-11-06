@@ -2,13 +2,15 @@ package ca.floo.roadtrip.config
 
 import java.time.Duration
 
+private const val EGRESS_ENABLED_DEFAULT = "false"
+
 data class AvailabilityConfig(
     val forcePullCooldown: Duration,
     val providerCooldown: Duration,
     val poller: AvailabilityPollerConfig,
     val stays: StayCheckConfig,
     val campsite: CampsiteAvailabilityConfig,
-    val egressToken: String? = null,
+    val egressEnabled: Boolean = false,
 ) {
     companion object {
         fun fromConfig(config: ConfigSection): AvailabilityConfig =
@@ -18,7 +20,7 @@ data class AvailabilityConfig(
                 poller = AvailabilityPollerConfig.fromConfig(config.section("poller")),
                 stays = StayCheckConfig.fromConfig(config.section("stays")),
                 campsite = CampsiteAvailabilityConfig.fromConfig(config.section("campsite")),
-                egressToken = config.section("egress").value("token"),
+                egressEnabled = config.section("egress").valueOrDefault("enabled", EGRESS_ENABLED_DEFAULT).toBooleanStrict(),
             )
     }
 }

@@ -35,7 +35,8 @@ test('fresh is 202 without scheduling a refresh', async () => {
 
 test('stale is 202 and schedules runRefresh through after', async () => {
   vi.stubEnv('AVAILABILITY_EGRESS_URL', 'https://egress.floo.test');
-  vi.stubEnv('AVAILABILITY_EGRESS_TOKEN', 'egress-token');
+  vi.stubEnv('AVAILABILITY_EGRESS_ACCESS_CLIENT_ID', 'id.access');
+  vi.stubEnv('AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET', 'secret');
   vi.stubEnv('DATABASE_WRITER_URL', 'postgres://writer@db.test/roadtrip');
   planRefresh.mockResolvedValue(FETCH);
   expect((await post('7', '?start_date=2026-12-01&end_date=2026-12-08')).status).toBe(202);

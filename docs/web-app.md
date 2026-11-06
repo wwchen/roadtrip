@@ -107,9 +107,8 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 | `ENABLED_AVAILABILITY_PROVIDERS` | plain, optional | default `aspira,campflare,reserveamerica,reservecalifornia`, Kotlin's read-path list; decides which provider serves a campground's matrix |
 | `AVAILABILITY_TTL_SECONDS` | plain, optional | default `7200`; a matrix cell older than this is stale |
 | `AVAILABILITY_EGRESS_URL` | plain, optional | `https://roadtrip-egress.floo.ca`; one of the three availability refresh settings below |
-| `AVAILABILITY_EGRESS_TOKEN` | sensitive, optional | the bearer mini-ca's backend expects; the same value as its `AVAILABILITY_EGRESS_TOKEN` secret |
 | `DATABASE_WRITER_URL` | sensitive, optional | the Neon **pooled** endpoint as `roadtrip_availability_writer`; used only by the refresh |
-| `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`, `AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET` | sensitive, optional | the Cloudflare Access service token in front of `roadtrip-egress.floo.ca`, sent as `CF-Access-Client-Id` and `CF-Access-Client-Secret`; set both or neither |
+| `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`, `AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET` | sensitive, optional | the Cloudflare Access service token in front of `roadtrip-egress.floo.ca`, sent as `CF-Access-Client-Id` and `CF-Access-Client-Secret`; the only credential the egress call carries |
 
 Deployment protection (checked 2026-10-29): Vercel Authentication is on with
 `all_except_custom_domains`. The production alias `roadtrip-web-nu.vercel.app` answers without a
@@ -126,9 +125,9 @@ never calls a vendor. When the week it answers is stale, the page sends one
 response, asks mini-ca for fresh cells and writes them to Neon. The page polls the GET every 2
 seconds, at most 15 times, until the week is fresh.
 
-The refresh is on only where `AVAILABILITY_EGRESS_URL`, `AVAILABILITY_EGRESS_TOKEN` and
-`DATABASE_WRITER_URL` are all set; a partial set fails at boot. Unset, the POST answers `501` and
-the matrix shows stored data. **Rollback is unsetting `AVAILABILITY_EGRESS_URL`.**
+The refresh is on only where `AVAILABILITY_EGRESS_URL`, `DATABASE_WRITER_URL` and both
+`AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/`_SECRET` are set; a partial set fails at configuration.
+Unset, the POST answers `501` and the matrix shows stored data. **Rollback is unsetting `AVAILABILITY_EGRESS_URL`.**
 
 How the call reaches mini-ca:
 
@@ -139,9 +138,11 @@ How the call reaches mini-ca:
    before anything reaches mini-ca.
 2. Caddy's `roadtrip-egress.floo.ca` block proxies only `POST /api/internal/availability/fetch` to the
    backend and answers `404` to everything else.
-3. The backend mounts that route only when its `AVAILABILITY_EGRESS_TOKEN` secret is set, and
-   refuses a request without the matching bearer. It answers from its own stored snapshot when
-   fresh and from the vendor otherwise, through the one rate limiter.
+3. The backend mounts that route only when `AVAILABILITY_EGRESS_ENABLED` is `true`: on in
+   `docker-compose.yml` (production), off in sandboxes. It has no credential of its own; the
+   Access policy is the only caller check from outside, and Caddy refuses `/api/internal/*` on
+   every other host. It answers from its own stored snapshot when fresh and from the vendor
+   otherwise, through the one rate limiter.
 4. Each returned cell carries the time mini-ca observed it; Vercel stores that time, never its
    own, so a cached answer is never passed off as new.
 
@@ -163,9 +164,9 @@ To turn it on:
 1. Create the tunnel hostname `roadtrip-egress.floo.ca` → `http://caddy:80`. In Cloudflare Zero Trust,
    create a service token and an Access application for `roadtrip-egress.floo.ca` whose policy is
    **Service Auth** including that token.
-2. `./secrets/manage.py set AVAILABILITY_EGRESS_TOKEN prod`, then deploy mini-ca.
-3. Set the writer role's password on Neon, then the three variables in Vercel plus the two Access
-   ones, and add the Firewall rule.
+2. Deploy mini-ca; production's compose turns the egress route on.
+3. Set the writer role's password on Neon, then the four variables in Vercel (egress URL, writer
+   URL, the two Access ones), and add the Firewall rule.
 4. Open a stale Aspira campground's matrix on the deployment and watch it refresh.
 
 ## Previews

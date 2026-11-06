@@ -177,7 +177,7 @@ internal fun Application.registerKoinRoutes() {
                 availabilityService = availabilityService,
                 dateResolver = dateResolver,
             ),
-            config.availability.egressToken,
+            config.availability.egressEnabled,
         )
         stayCheckRoutes(
             StayCheckController(campsiteController, config.availability.stays),

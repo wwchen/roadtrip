@@ -33,6 +33,7 @@ class SecretRegistryDriftTest {
             "POSTGRES_URL",
             "POSTGRES_USER",
             "AUTH_PROVIDER",
+            "AVAILABILITY_EGRESS_ENABLED",
             "ROADTRIP_AUTH_REALM",
             "ROADTRIP_AUTH_EMBEDDED_DOMAIN",
             "ROADTRIP_EMAIL_FROM",

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { EGRESS_PATH, fetchEgress } from './availabilityEgress';
 
-const ENDPOINT = { url: new URL('https://egress.floo.test'), token: 'egress-token' };
+const ENDPOINT = { url: new URL('https://egress.floo.test'), access: { clientId: 'id.access', clientSecret: 'secret' } };
 const REQUEST = { campground: { data_provider: 'aspira', data_provider_ref: 'bc:1:2' }, start_date: '2026-12-01', end_date: '2026-12-08' };
 const BODY = { start_date: '2026-12-01', end_date: '2026-12-08', cells: [] };
 const TIMEOUT_MS = 50;
@@ -10,32 +10,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test('sends the bearer and the JSON body to the egress path', async () => {
+test('sends the Access credentials and the JSON body to the egress path, with no bearer', async () => {
   const fetch = vi.fn().mockResolvedValue(Response.json(BODY));
   vi.stubGlobal('fetch', fetch);
   expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({ kind: 'cells', body: BODY });
   const [url, init] = fetch.mock.calls[0]!;
   expect(String(url)).toBe(`https://egress.floo.test${EGRESS_PATH}`);
   expect(init.method).toBe('POST');
-  expect(init.headers.authorization).toBe('Bearer egress-token');
-  expect(JSON.parse(init.body)).toEqual(REQUEST);
-});
-
-test('Cloudflare Access credentials ride along when configured', async () => {
-  const fetch = vi.fn().mockResolvedValue(Response.json(BODY));
-  vi.stubGlobal('fetch', fetch);
-  await fetchEgress({ ...ENDPOINT, access: { clientId: 'id.access', clientSecret: 'secret' } }, REQUEST, TIMEOUT_MS);
-  const [, init] = fetch.mock.calls[0]!;
   expect(init.headers['cf-access-client-id']).toBe('id.access');
   expect(init.headers['cf-access-client-secret']).toBe('secret');
-  expect(init.headers.authorization).toBe('Bearer egress-token');
-});
-
-test('no Access headers are sent without Access credentials', async () => {
-  const fetch = vi.fn().mockResolvedValue(Response.json(BODY));
-  vi.stubGlobal('fetch', fetch);
-  await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS);
-  expect(fetch.mock.calls[0]![1].headers).not.toHaveProperty('cf-access-client-id');
+  expect(init.headers).not.toHaveProperty('authorization');
+  expect(JSON.parse(init.body)).toEqual(REQUEST);
 });
 
 test('a 503 body becomes an error with its code', async () => {

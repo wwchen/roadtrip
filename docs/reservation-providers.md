@@ -619,8 +619,8 @@ residential IP. It names a campground by `(data_provider, data_provider_ref)` an
 answers every cell with its campsite's `(data_provider, data_provider_ref)` and the time it was
 observed. It runs the same read-through `CampsiteAvailabilityService` as the matrix, so it is one
 more caller of the one rate limiter, not a second one. It is mounted only when
-`AVAILABILITY_EGRESS_TOKEN` is set and needs that bearer; `docs/web-app.md` covers the rest of the
-path.
+`AVAILABILITY_EGRESS_ENABLED` is `true` and carries no credential of its own: the Cloudflare Access
+policy on its hostname is the caller check; `docs/web-app.md` covers the rest of the path.
 
 ## Supported monitoring actions
 

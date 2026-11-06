@@ -11,17 +11,15 @@ const ACCESS_CLIENT_SECRET_HEADER = 'cf-access-client-secret';
 
 export interface EgressEndpoint {
   url: URL;
-  token: string;
-  access?: EgressAccessCredentials | null;
+  access: EgressAccessCredentials;
 }
 
 function headersFor(endpoint: EgressEndpoint): Record<string, string> {
-  const headers: Record<string, string> = { authorization: `Bearer ${endpoint.token}`, 'content-type': 'application/json' };
-  if (endpoint.access) {
-    headers[ACCESS_CLIENT_ID_HEADER] = endpoint.access.clientId;
-    headers[ACCESS_CLIENT_SECRET_HEADER] = endpoint.access.clientSecret;
-  }
-  return headers;
+  return {
+    'content-type': 'application/json',
+    [ACCESS_CLIENT_ID_HEADER]: endpoint.access.clientId,
+    [ACCESS_CLIENT_SECRET_HEADER]: endpoint.access.clientSecret,
+  };
 }
 
 export type EgressResult = { kind: 'cells'; body: AvailabilityEgressResponseDto } | { kind: 'error'; status: number; code: string | null };

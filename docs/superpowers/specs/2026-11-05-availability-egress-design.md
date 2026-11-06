@@ -2,6 +2,14 @@
 
 **Status:** design approved in conversation 2026-11-05; this document awaits review.
 
+**Amended 2026-11-05 (owner's decision):** the egress endpoint carries no bearer token. A
+Cloudflare Access service token on `roadtrip-egress.floo.ca` is the only caller check; Vercel sends
+it as `CF-Access-Client-Id`/`CF-Access-Client-Secret` and needs both to enable refresh. Kotlin
+mounts `POST /api/internal/availability/fetch` when `AVAILABILITY_EGRESS_ENABLED` is `true` (on in
+production compose, off in sandboxes), and Caddy refuses `/api/internal/*` on every other host.
+Where the text below mentions `AVAILABILITY_EGRESS_TOKEN`, a bearer or a `401`, this amendment
+replaces it.
+
 **Parent spec:** `docs/superpowers/specs/2026-10-27-kotlin-to-typescript-backend-design.md`
 (C1 residential egress, C3 one rate-limit authority, C4 swappable datastore).
 

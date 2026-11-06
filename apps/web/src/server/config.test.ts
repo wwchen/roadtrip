@@ -142,13 +142,16 @@ test('a password with % survives the decode the Postgres driver applies', () => 
 });
 
 const EGRESS_URL = 'https://egress.floo.test';
-const EGRESS_TOKEN = 'egress-token';
 const WRITER_URL = 'postgres://roadtrip_availability_writer@db.test/roadtrip';
+const ACCESS_ID = 'access-id.access';
+const ACCESS_SECRET = 'access-secret';
 const REFRESH_VARIABLES = {
   AVAILABILITY_EGRESS_URL: EGRESS_URL,
-  AVAILABILITY_EGRESS_TOKEN: EGRESS_TOKEN,
   DATABASE_WRITER_URL: WRITER_URL,
+  AVAILABILITY_EGRESS_ACCESS_CLIENT_ID: ACCESS_ID,
+  AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET: ACCESS_SECRET,
 } as const;
+const ALL_REFRESH = Object.keys(REFRESH_VARIABLES) as (keyof typeof REFRESH_VARIABLES)[];
 const DEFAULT_TTL_SECONDS = 7200;
 const CUSTOM_TTL_SECONDS = 900;
 
@@ -158,31 +161,37 @@ function stubRefresh(only: readonly (keyof typeof REFRESH_VARIABLES)[]) {
   }
 }
 
-test('refresh is null when none of the three is set', () => {
+test('refresh is null when none of the four is set', () => {
   stubRefresh([]);
   expect(config.availabilityRefresh).toBeNull();
 });
 
-test('refresh is configured when all three are set', () => {
-  stubRefresh(['AVAILABILITY_EGRESS_URL', 'AVAILABILITY_EGRESS_TOKEN', 'DATABASE_WRITER_URL']);
+test('refresh is configured, with its Access credentials, when all four are set', () => {
+  stubRefresh(ALL_REFRESH);
   const refresh = config.availabilityRefresh;
   expect(refresh?.egressUrl.toString()).toBe(`${EGRESS_URL}/`);
-  expect(refresh?.egressToken).toBe(EGRESS_TOKEN);
   expect(refresh?.writerDatabaseUrl).toBe(WRITER_URL);
+  expect(refresh?.egressAccess).toEqual({ clientId: ACCESS_ID, clientSecret: ACCESS_SECRET });
 });
 
 test.each([
-  [['AVAILABILITY_EGRESS_URL'] as const, /AVAILABILITY_EGRESS_TOKEN, DATABASE_WRITER_URL/],
-  [['AVAILABILITY_EGRESS_URL', 'AVAILABILITY_EGRESS_TOKEN'] as const, /DATABASE_WRITER_URL/],
-  [['DATABASE_WRITER_URL'] as const, /AVAILABILITY_EGRESS_URL, AVAILABILITY_EGRESS_TOKEN/],
+  [['AVAILABILITY_EGRESS_URL', 'DATABASE_WRITER_URL'] as const, /AVAILABILITY_EGRESS_ACCESS_CLIENT_ID, AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET/],
+  [['AVAILABILITY_EGRESS_URL', 'DATABASE_WRITER_URL', 'AVAILABILITY_EGRESS_ACCESS_CLIENT_ID'] as const, /AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET/],
+  [['AVAILABILITY_EGRESS_ACCESS_CLIENT_ID', 'AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET'] as const, /AVAILABILITY_EGRESS_URL, DATABASE_WRITER_URL/],
 ])('a partial refresh configuration %j is a ConfigError naming the missing ones', (set, missing) => {
   stubRefresh(set);
   expect(() => config.availabilityRefresh).toThrow(ConfigError);
   expect(() => config.availabilityRefresh).toThrow(missing);
 });
 
+test('a bearer token is no longer part of the refresh configuration', () => {
+  stubRefresh(ALL_REFRESH);
+  vi.stubEnv('AVAILABILITY_EGRESS_TOKEN', undefined);
+  expect(config.availabilityRefresh).not.toBeNull();
+});
+
 test('an egress URL that does not parse is a ConfigError', () => {
-  stubRefresh(['AVAILABILITY_EGRESS_URL', 'AVAILABILITY_EGRESS_TOKEN', 'DATABASE_WRITER_URL']);
+  stubRefresh(ALL_REFRESH);
   vi.stubEnv('AVAILABILITY_EGRESS_URL', 'not a url');
   expect(() => config.availabilityRefresh).toThrow(/AVAILABILITY_EGRESS_URL/);
 });
@@ -204,27 +213,4 @@ test('the enabled availability providers default to Kotlin read-path list and re
   expect(config.enabledAvailabilityProviders).toEqual(['aspira', 'campflare', 'reserveamerica', 'reservecalifornia']);
   vi.stubEnv('ENABLED_AVAILABILITY_PROVIDERS', 'campflare');
   expect(config.enabledAvailabilityProviders).toEqual(['campflare']);
-});
-
-const ACCESS_ID = 'access-id.access';
-const ACCESS_SECRET = 'access-secret';
-
-test('Cloudflare Access credentials are absent unless both are set', () => {
-  stubRefresh(['AVAILABILITY_EGRESS_URL', 'AVAILABILITY_EGRESS_TOKEN', 'DATABASE_WRITER_URL']);
-  vi.stubEnv('AVAILABILITY_EGRESS_ACCESS_CLIENT_ID', undefined);
-  vi.stubEnv('AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET', undefined);
-  expect(config.availabilityRefresh?.egressAccess).toBeNull();
-  vi.stubEnv('AVAILABILITY_EGRESS_ACCESS_CLIENT_ID', ACCESS_ID);
-  vi.stubEnv('AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET', ACCESS_SECRET);
-  expect(config.availabilityRefresh?.egressAccess).toEqual({ clientId: ACCESS_ID, clientSecret: ACCESS_SECRET });
-});
-
-test.each([
-  ['AVAILABILITY_EGRESS_ACCESS_CLIENT_ID', 'AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET'],
-  ['AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET', 'AVAILABILITY_EGRESS_ACCESS_CLIENT_ID'],
-])('only %s set is a ConfigError naming %s', (set, missing) => {
-  stubRefresh(['AVAILABILITY_EGRESS_URL', 'AVAILABILITY_EGRESS_TOKEN', 'DATABASE_WRITER_URL']);
-  vi.stubEnv(set, 'value');
-  vi.stubEnv(missing, undefined);
-  expect(() => config.availabilityRefresh).toThrow(new RegExp(missing));
 });

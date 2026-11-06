@@ -13,7 +13,7 @@ ktor:
 roadtrip:
   availability:
     egress:
-      token: "${AVAILABILITY_EGRESS_TOKEN:}"
+      enabled: "${AVAILABILITY_EGRESS_ENABLED:false}"
     force-pull-cooldown: 60s
     provider-cooldown: 5m
     poller:

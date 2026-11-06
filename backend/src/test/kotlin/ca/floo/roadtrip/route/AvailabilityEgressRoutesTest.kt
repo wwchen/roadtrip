@@ -24,8 +24,6 @@ import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import io.ktor.client.request.HttpRequestBuilder
-import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -48,7 +46,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 private const val EGRESS_PATH = "/api/internal/availability/fetch"
-private const val EGRESS_TOKEN = "egress-test-token"
 private const val CAMPGROUND_REF = "egress-cg"
 private const val CAMPSITE_REF = "egress-site-1"
 private const val SECOND_CAMPSITE_REF = "egress-site-2"
@@ -119,23 +116,19 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
     private fun egress(
         providers: List<AvailabilityProvider>,
         ttl: Duration = alwaysStale,
-        token: String? = EGRESS_TOKEN,
+        enabled: Boolean = true,
         block: suspend ApplicationTestBuilder.() -> Unit,
     ) = testApplication {
         application {
             routeTestApplication {
-                availabilityEgressRoutes(controller(providers, ttl), token)
+                availabilityEgressRoutes(controller(providers, ttl), enabled)
             }
         }
         block()
     }
 
-    private suspend fun ApplicationTestBuilder.post(
-        body: AvailabilityEgressRequestDto,
-        auth: HttpRequestBuilder.() -> Unit = { bearerAuth(EGRESS_TOKEN) },
-    ): HttpResponse =
+    private suspend fun ApplicationTestBuilder.post(body: AvailabilityEgressRequestDto): HttpResponse =
         client.post(EGRESS_PATH) {
-            auth()
             contentType(ContentType.Application.Json)
             setBody(wire.encodeToString(AvailabilityEgressRequestDto.serializer(), body))
         }
@@ -148,15 +141,9 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
             .jsonPrimitive.content
 
     @Test
-    fun `no bearer is 401`() =
+    fun `no credentials are needed once the route is enabled`() =
         egress(listOf(recgov())) {
-            assertEquals(HttpStatusCode.Unauthorized, post(request()) {}.status)
-        }
-
-    @Test
-    fun `a wrong bearer is 401`() =
-        egress(listOf(recgov())) {
-            assertEquals(HttpStatusCode.Unauthorized, post(request()) { bearerAuth("not-the-token") }.status)
+            assertEquals(HttpStatusCode.OK, post(request()).status)
         }
 
     @Test
@@ -222,8 +209,8 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `the route is absent when the token is unset`() =
-        egress(listOf(recgov()), token = null) {
+    fun `the route is absent unless enabled`() =
+        egress(listOf(recgov()), enabled = false) {
             assertEquals(HttpStatusCode.NotFound, post(request()).status)
         }
 }
