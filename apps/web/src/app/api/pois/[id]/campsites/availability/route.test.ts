@@ -1,12 +1,13 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { BadDateWindowError } from '@/server/service/availability/availabilityWindow';
 
 const getAvailabilityWeek = vi.fn();
 vi.mock('@/server/service/availability/availabilityMatrixService', async (original) => ({
   ...(await original<typeof import('@/server/service/availability/availabilityMatrixService')>()),
   getAvailabilityWeek,
 }));
-const { AvailabilityTargetError } = await import('@/server/service/availability/availabilityMatrixService');
+const { AvailabilityTargetError, AvailabilityUnavailableError, AvailabilityWindowRefusedError } = await import(
+  '@/server/service/availability/availabilityMatrixService'
+);
 const { GET } = await import('./route');
 
 const get = (id: string, query = '') =>
@@ -41,8 +42,15 @@ test('site_type and dates reach the service', async () => {
   expect(getAvailabilityWeek).toHaveBeenCalledWith(7n, ['rv', 'tent'], '2026-12-01', '2026-12-08');
 });
 
-test('a window the provider refuses is 400 with its code and detail', async () => {
-  getAvailabilityWeek.mockRejectedValue(new BadDateWindowError('window_too_long', { max_days: 30 }));
+test('an unavailable mini-ca is 503 availability_unavailable', async () => {
+  getAvailabilityWeek.mockRejectedValue(new AvailabilityUnavailableError());
+  const response = await get('7');
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ state: 'error', error: 'availability_unavailable' });
+});
+
+test('a window mini-ca refuses is 400 with its code and detail', async () => {
+  getAvailabilityWeek.mockRejectedValue(new AvailabilityWindowRefusedError({ state: 'error', error: 'window_too_long', max_days: 30 }));
   const response = await get('7');
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({ state: 'error', error: 'window_too_long', max_days: 30 });

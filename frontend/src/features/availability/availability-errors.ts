@@ -10,6 +10,7 @@ const AVAILABILITY_ERROR_LABELS = new Map<string, string>([
   ['unsupported', 'Provider not supported'],
   ['provider_misconfigured', 'Provider misconfigured — we are on it'],
   ['ip_throttled', 'Too many requests — slow down'],
+  ['availability_unavailable', 'Availability is unavailable right now — try again shortly'],
   ['beyond_booking_horizon', 'That date is past what this provider lets you book'],
 ]);
 

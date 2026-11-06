@@ -23,8 +23,8 @@ enum class AvailabilityEgressMode {
 data class AvailabilityEgressRequestDto(
     val mode: AvailabilityEgressMode = AvailabilityEgressMode.REFRESH,
     val campground: ProviderRefDto,
-    @SerialName("start_date") val startDate: String,
-    @SerialName("end_date") val endDate: String,
+    @SerialName("start_date") val startDate: String? = null,
+    @SerialName("end_date") val endDate: String? = null,
 )
 
 @Serializable
@@ -39,5 +39,7 @@ data class AvailabilityEgressCellDto(
 data class AvailabilityEgressResponseDto(
     @SerialName("start_date") val startDate: String,
     @SerialName("end_date") val endDate: String,
+    @SerialName("latest_date") val latestDate: String? = null,
+    val campsites: List<ProviderRefDto> = emptyList(),
     val cells: List<AvailabilityEgressCellDto>,
 )

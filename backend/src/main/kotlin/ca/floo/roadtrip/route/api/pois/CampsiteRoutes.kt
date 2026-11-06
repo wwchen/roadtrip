@@ -220,7 +220,7 @@ private suspend fun ApplicationCall.respondServiceAvailabilityError(e: Availabil
     respondEncodedJson(body, status)
 }
 
-private fun availabilityErrorDto(e: AvailabilityServiceError.BadDateWindow): AvailabilityErrorDto =
+internal fun availabilityErrorDto(e: AvailabilityServiceError.BadDateWindow): AvailabilityErrorDto =
     when (e) {
         is AvailabilityServiceError.BadDateWindow.StartBeforeEarliest ->
             availabilityErrorDto(

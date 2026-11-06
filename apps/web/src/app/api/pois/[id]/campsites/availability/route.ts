@@ -6,10 +6,17 @@ import {
   parseAvailabilityPoiId,
   parseAvailabilityQuery,
 } from '@/server/availabilityRequest';
-import { AvailabilityTargetError, getAvailabilityWeek } from '@/server/service/availability/availabilityMatrixService';
-import { BadDateWindowError } from '@/server/service/availability/availabilityWindow';
+import {
+  AvailabilityTargetError,
+  AvailabilityUnavailableError,
+  AvailabilityWindowRefusedError,
+  getAvailabilityWeek,
+} from '@/server/service/availability/availabilityMatrixService';
 
 export const dynamic = 'force-dynamic';
+
+const STATUS_SERVICE_UNAVAILABLE = 503;
+const AVAILABILITY_UNAVAILABLE = 'availability_unavailable';
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
   const poiId = parseAvailabilityPoiId((await context.params).id);
@@ -19,7 +26,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   try {
     return Response.json(await getAvailabilityWeek(poiId, query.siteTypes, query.startDate, query.endDate));
   } catch (error) {
-    if (error instanceof BadDateWindowError) return availabilityError(STATUS_BAD_REQUEST, error.code, error.extra);
+    if (error instanceof AvailabilityWindowRefusedError) return Response.json(error.body, { status: STATUS_BAD_REQUEST });
+    if (error instanceof AvailabilityUnavailableError) return availabilityError(STATUS_SERVICE_UNAVAILABLE, AVAILABILITY_UNAVAILABLE);
     if (error instanceof AvailabilityTargetError) return availabilityError(STATUS_NOT_FOUND, error.code);
     throw error;
   }

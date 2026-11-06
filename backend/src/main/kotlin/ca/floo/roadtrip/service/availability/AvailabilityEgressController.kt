@@ -5,6 +5,8 @@ import ca.floo.roadtrip.model.api.AvailabilityEgressMode
 import ca.floo.roadtrip.model.api.AvailabilityEgressRequestDto
 import ca.floo.roadtrip.model.api.AvailabilityEgressResponseDto
 import ca.floo.roadtrip.model.api.ProviderRefDto
+import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -12,8 +14,6 @@ import ca.floo.roadtrip.repo.CampsiteRepo
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
-
-private const val STORED_WINDOW_MAX_DAYS = 366
 
 internal class AvailabilityEgressController(
     private val campgroundRepo: CampgroundRepo,
@@ -26,28 +26,34 @@ internal class AvailabilityEgressController(
         val campground =
             campgroundRepo.findByProviderRef(request.campground.dataProvider, request.campground.dataProviderRef)
                 ?: throw AvailabilityServiceError.NotFound
-        val startDate = parseDate(request.startDate)
-        val endDate = parseDate(request.endDate)
-        if (availabilityService.bookingHorizonDaysFor(campground) == null) throw AvailabilityServiceError.UnknownCampground
+        val startDate = request.startDate?.let(::parseDate)
+        val endDate = request.endDate?.let(::parseDate)
+        val context = dateResolver.context(campground.location?.latitude, campground.location?.longitude)
+        val (window, latestDate) = availabilityService.resolveTargetWindow(campground, startDate, endDate, context)
         val campsites = campsitesRepo.findByCampground(campground.id)
-        if (campsites.isEmpty()) return AvailabilityEgressResponseDto(request.startDate, request.endDate, emptyList())
-        if (request.mode == AvailabilityEgressMode.STORED) return stored(campsites, startDate, endDate)
-
-        val result =
-            availabilityService.fetchAvailability(
-                campground = campground,
-                campsites = campsites,
-                campgroundCampsites = campsites,
-                startDate = startDate,
-                endDate = endDate,
-                dateContext = dateResolver.context(campground.location?.latitude, campground.location?.longitude),
-            )
         val refById = campsites.associate { it.id to ProviderRefDto(it.dataProvider, it.dataProviderRefValue) }
+        val observations =
+            when {
+                campsites.isEmpty() -> emptyList()
+                request.mode == AvailabilityEgressMode.STORED -> stored(campsites, window)
+                else ->
+                    availabilityService
+                        .fetchAvailability(
+                            campground = campground,
+                            campsites = campsites,
+                            campgroundCampsites = campsites,
+                            startDate = window.startDate,
+                            endDate = window.endDate,
+                            dateContext = context,
+                        ).batch.observations
+            }
         return AvailabilityEgressResponseDto(
-            startDate = result.startDate.toString(),
-            endDate = result.endDate.toString(),
+            startDate = window.startDate.toString(),
+            endDate = window.endDate.toString(),
+            latestDate = latestDate?.toString(),
+            campsites = refById.values.toList(),
             cells =
-                result.batch.observations.mapNotNull { observation ->
+                observations.mapNotNull { observation ->
                     observation.campsiteId?.let(refById::get)?.let { campsite ->
                         AvailabilityEgressCellDto(
                             campsite = campsite,
@@ -62,29 +68,17 @@ internal class AvailabilityEgressController(
 
     private fun stored(
         campsites: List<Campsite>,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityEgressResponseDto {
-        val days = ChronoUnit.DAYS.between(startDate, endDate)
-        if (days < 1) throw AvailabilityServiceError.BadDateWindow.EndBeforeStart
-        if (days > STORED_WINDOW_MAX_DAYS) throw AvailabilityServiceError.BadDateWindow.WindowTooLong(STORED_WINDOW_MAX_DAYS)
-        val refById = campsites.associate { it.id to ProviderRefDto(it.dataProvider, it.dataProviderRefValue) }
-        val dates = (0 until days).map { startDate.plusDays(it) }
-        return AvailabilityEgressResponseDto(
-            startDate = startDate.toString(),
-            endDate = endDate.toString(),
-            cells =
-                availabilityRepo.readCurrent(campsites.map { it.id }, dates).mapNotNull { cell ->
-                    refById[cell.campsiteId]?.let { campsite ->
-                        AvailabilityEgressCellDto(
-                            campsite = campsite,
-                            date = cell.targetDate.toString(),
-                            status = cell.status,
-                            observedAt = cell.observedAt.toInstant().toString(),
-                        )
-                    }
-                },
-        )
+        window: ResolvedDateWindow,
+    ): List<CampsiteDayObservation> {
+        val dates = (0 until ChronoUnit.DAYS.between(window.startDate, window.endDate)).map { window.startDate.plusDays(it) }
+        return availabilityRepo.readCurrent(campsites.map { it.id }, dates).map { cell ->
+            CampsiteDayObservation(
+                campsiteId = cell.campsiteId,
+                date = cell.targetDate,
+                observedAt = cell.observedAt.toInstant(),
+                status = cell.status,
+            )
+        }
     }
 
     private fun parseDate(raw: String): LocalDate =

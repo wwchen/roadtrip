@@ -16,6 +16,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
+import ca.floo.roadtrip.route.api.pois.availabilityErrorDto as badWindowErrorDto
 
 const val AVAILABILITY_EGRESS_PATH = "/api/internal/availability/fetch"
 
@@ -36,7 +37,8 @@ internal fun Route.availabilityEgressRoutes(
         try {
             call.respondEncodedJson(controller.fetch(request))
         } catch (e: AvailabilityServiceError) {
-            call.respondEncodedJson(availabilityErrorDto(e.error), e.egressStatus())
+            val body = if (e is AvailabilityServiceError.BadDateWindow) badWindowErrorDto(e) else availabilityErrorDto(e.error)
+            call.respondEncodedJson(body, e.egressStatus())
         } catch (e: AvailabilityProviderError) {
             val (status, error) = mapProviderError(e)
             call.respondEncodedJson(error, status)

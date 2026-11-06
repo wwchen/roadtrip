@@ -5,11 +5,19 @@ import type { AvailabilityEgressRequestDto } from '../../contract';
 import { campsitesOf, type CampsiteKey } from '../../repo/availabilityReadRepo';
 import { ENABLED_PROVIDER, NEAR_CAMPGROUND_ID, NEAR_POI_ID, UNKNOWN_POI_ID, startCatalogFixture, type CatalogFixture } from '../../testing/catalogFixture';
 import { addDays, poiDateContext } from '../booking/dateContext';
-import { AvailabilityTargetError, availabilityWeek, type EgressFetch, type WeekSettings } from './availabilityMatrixService';
+import {
+  AvailabilityTargetError,
+  AvailabilityUnavailableError,
+  AvailabilityWindowRefusedError,
+  availabilityWeek,
+  type EgressFetch,
+  type WeekSettings,
+} from './availabilityMatrixService';
 
 const NOW = new Date('2026-11-05T12:00:00Z');
 const TTL = 7200;
-const SETTINGS: WeekSettings = { ttlSeconds: TTL, enabledAvailabilityProviders: ['campflare'], now: NOW };
+const SETTINGS: WeekSettings = { ttlSeconds: TTL, now: NOW };
+const LATEST = '2027-11-05';
 const STALE = new Date(NOW.getTime() - 3 * 3_600_000);
 
 let fixture: CatalogFixture;
@@ -38,27 +46,37 @@ beforeEach(async () => {
 });
 
 const refOf = (index: number) => `site-${index}`;
-function storedAnswer(status: 'available' | 'closed', at: (index: number, date: string) => Date = () => NOW): EgressFetch {
-  return async (request: AvailabilityEgressRequestDto): Promise<EgressResult> => ({
-    kind: 'cells',
-    body: {
-      start_date: request.start_date,
-      end_date: request.end_date,
-      cells: sites.flatMap((_, index) =>
-        [request.start_date, addDays(request.start_date, 1)].map((date) => ({
-          campsite: { data_provider: ENABLED_PROVIDER, data_provider_ref: refOf(index) },
-          date,
-          status,
-          observed_at: at(index, date).toISOString(),
-        })),
-      ),
-    },
-  });
+function storedAnswer(
+  status: 'available' | 'closed',
+  at: (index: number, date: string) => Date = () => NOW,
+  known: (index: number) => boolean = () => true,
+): EgressFetch {
+  return async (_request: AvailabilityEgressRequestDto): Promise<EgressResult> => {
+    const known$ = sites.map((_, index) => index).filter(known);
+    return {
+      kind: 'cells',
+      body: {
+        start_date: start,
+        end_date: end,
+        latest_date: LATEST,
+        campsites: known$.map((index) => ({ data_provider: ENABLED_PROVIDER, data_provider_ref: refOf(index) })),
+        cells: known$.flatMap((index) =>
+          [start, addDays(start, 1)].map((date) => ({
+            campsite: { data_provider: ENABLED_PROVIDER, data_provider_ref: refOf(index) },
+            date,
+            status,
+            observed_at: at(index, date).toISOString(),
+          })),
+        ),
+      },
+    };
+  };
 }
-const week = (fetch: EgressFetch | null, siteTypes: ('rv' | 'cabin')[] = [], settings = SETTINGS) =>
-  availabilityWeek(fixture.readDb, NEAR_POI_ID, siteTypes, start, end, settings, fetch);
+const failing = (status: number, code: string | null, body: object | null = null): EgressFetch => async () => ({ kind: 'error', status, code, body } as EgressResult);
+const week = (fetch: EgressFetch | null, siteTypes: ('rv' | 'cabin')[] = []) =>
+  availabilityWeek(fixture.readDb, NEAR_POI_ID, siteTypes, start, end, SETTINGS, fetch);
 
-test('the matrix asks mini-ca for stored cells of its campground and window', async () => {
+test('the matrix asks mini-ca for stored cells of its campground and the requested window', async () => {
   const fetch = vi.fn(storedAnswer('available'));
   await week(fetch);
   expect(fetch).toHaveBeenCalledWith({
@@ -67,6 +85,8 @@ test('the matrix asks mini-ca for stored cells of its campground and window', as
     start_date: start,
     end_date: end,
   });
+  await availabilityWeek(fixture.readDb, NEAR_POI_ID, [], null, null, SETTINGS, fetch);
+  expect(fetch).toHaveBeenLastCalledWith({ mode: 'stored', campground: expect.anything() });
 });
 
 test('a fully fresh week reports cache hit with the stalest cell age and the serving horizon', async () => {
@@ -75,7 +95,8 @@ test('a fully fresh week reports cache hit with the stalest cell age and the ser
   expect(result.cache).toEqual({ hit: true, age_seconds: 0, ttl_seconds: TTL });
   expect(result.days).toHaveLength(2);
   expect(result.days[0]!.status).toBe('available');
-  expect(result.latest_date).toBe(addDays(start, 365));
+  expect(result.latest_date).toBe(LATEST);
+  expect(result.start_date).toBe(start);
   expect(result.watch_capabilities).toEqual({ trigger_kinds: [], add_to_cart: { state: 'unsupported' } });
 });
 
@@ -84,15 +105,41 @@ test('one stale cell makes the week stale and age_seconds is that cell age', asy
   expect(result.cache?.age_seconds).toBe(3 * 3600);
 });
 
+test('a campsite mini-ca does not know shows unknown and does not keep the week stale', async () => {
+  const result = await week(storedAnswer('available', () => NOW, (index) => index !== 2));
+  expect(result.cache).toEqual({ hit: true, age_seconds: 0, ttl_seconds: TTL });
+  const lastSite = String(sites[2]!.id);
+  expect(result.days[0]!.cells[lastSite]?.status).toBe('unknown');
+});
+
+test('when mini-ca knows none of the campsites the week is empty', async () => {
+  const result = await week(storedAnswer('available', () => NOW, () => false));
+  expect(result.state).toBe('empty');
+  expect(result.days).toEqual([]);
+});
+
+test('an unconfigured egress is unavailable', async () => {
+  await expect(week(null)).rejects.toBeInstanceOf(AvailabilityUnavailableError);
+});
+
 test.each([
-  ['unconfigured', null],
-  ['failing', async (): Promise<EgressResult> => ({ kind: 'error', status: 0, code: 'timeout' })],
-] as const)('an %s mini-ca leaves unknown cells and no cache', async (_label, fetch) => {
+  [0, 'timeout'],
+  [404, 'not_found'],
+  [503, 'rate_limited'],
+])('a mini-ca answer of %s %s is unavailable and logged', async (status, code) => {
   const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
-  const result = await week(fetch);
-  expect(result.cache).toBeUndefined();
-  expect(result.days.every((day) => day.status === 'unknown')).toBe(true);
+  await expect(week(failing(status, code))).rejects.toBeInstanceOf(AvailabilityUnavailableError);
+  expect(log).toHaveBeenCalled();
   log.mockRestore();
+});
+
+test('a window mini-ca refuses passes its error through', async () => {
+  const body = { state: 'error', error: 'window_too_long', max_days: 30 };
+  await expect(week(failing(400, 'window_too_long', body))).rejects.toMatchObject(new AvailabilityWindowRefusedError(body));
+});
+
+test('a campground mini-ca will not serve is unknown_campground', async () => {
+  await expect(week(failing(501, 'unknown_campground'))).rejects.toMatchObject(new AvailabilityTargetError('unknown_campground'));
 });
 
 test('all campsites closed is closed_for_season with no days', async () => {
@@ -106,12 +153,10 @@ test('site_type filters campsites and no matching campsite is empty', async () =
   expect(Object.keys(rv.days[0]!.cells)).toHaveLength(1);
   const cabins = await week(storedAnswer('available'), ['cabin']);
   expect(cabins.state).toBe('empty');
+  expect(cabins.latest_date).toBe(LATEST);
 });
 
-test('an unclaimed campground is unknown_campground and an unknown POI is not_found', async () => {
-  await expect(week(storedAnswer('available'), [], { ...SETTINGS, enabledAvailabilityProviders: [] })).rejects.toMatchObject(
-    new AvailabilityTargetError('unknown_campground'),
-  );
+test('an unknown POI is not_found', async () => {
   await expect(availabilityWeek(fixture.readDb, UNKNOWN_POI_ID, [], start, end, SETTINGS, null)).rejects.toMatchObject(
     new AvailabilityTargetError('not_found'),
   );

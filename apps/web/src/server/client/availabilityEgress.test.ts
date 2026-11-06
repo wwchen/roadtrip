@@ -25,7 +25,12 @@ test('sends the Access credentials and the JSON body to the egress path, with no
 
 test('a 503 body becomes an error with its code', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ state: 'error', error: 'rate_limited' }, { status: 503 })));
-  expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({ kind: 'error', status: 503, code: 'rate_limited' });
+  expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({
+    kind: 'error',
+    status: 503,
+    code: 'rate_limited',
+    body: { state: 'error', error: 'rate_limited' },
+  });
 });
 
 test('an answer past the timeout becomes an error with code timeout', async () => {
@@ -33,10 +38,10 @@ test('an answer past the timeout becomes an error with code timeout', async () =
     'fetch',
     vi.fn((_url: URL, init: RequestInit) => new Promise((_resolve, reject) => init.signal!.addEventListener('abort', () => reject(init.signal!.reason)))),
   );
-  expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({ kind: 'error', status: 0, code: 'timeout' });
+  expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({ kind: 'error', status: 0, code: 'timeout', body: null });
 });
 
 test('an unreachable host becomes an error with code unreachable', async () => {
   vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
-  expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({ kind: 'error', status: 0, code: 'unreachable' });
+  expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({ kind: 'error', status: 0, code: 'unreachable', body: null });
 });

@@ -617,7 +617,9 @@ The booking horizon and widest window of every registered provider also live in
 `POST /api/internal/availability/fetch` is how Vercel reaches availability, which lives only in
 mini-ca's Postgres. It names a campground by `(data_provider, data_provider_ref)` and a window, and
 answers every cell with its campsite's `(data_provider, data_provider_ref)` and the time it was
-observed. `mode: "stored"` reads mini-ca's current cells and never calls a vendor;
+observed, plus the window it resolved against the serving provider, the latest bookable date, and
+every campsite it knows for that campground. `mode: "stored"` reads mini-ca's current cells and
+never calls a vendor;
 `mode: "refresh"` (the default) runs the same read-through `CampsiteAvailabilityService` as the
 matrix, so it is one more caller of the one rate limiter, not a second one. It is mounted only when
 `AVAILABILITY_EGRESS_ENABLED` is `true` and carries no credential of its own: the Cloudflare Access

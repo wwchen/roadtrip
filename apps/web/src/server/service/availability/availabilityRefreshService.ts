@@ -1,17 +1,13 @@
 import type { Db } from '@roadtrip/db';
 import type { AvailabilityEgressRequestDto } from '../../contract';
-import { egressRequest, targetWindow, weekTarget, type EgressFetch, type WeekSettings } from './availabilityMatrixService';
+import { egressRequest, weekTarget, type EgressFetch } from './availabilityMatrixService';
 
 const REFRESH_LOG = 'availability refresh';
 const UNCLASSIFIED_FAILURE = 'unclassified';
 const REFRESHED = 'refreshed';
 const FAILED = 'failed';
 
-export type RefreshPlan =
-  | { kind: 'nothing' }
-  | { kind: 'disabled' }
-  | { kind: 'unsupported' }
-  | { kind: 'fetch'; request: AvailabilityEgressRequestDto };
+export type RefreshPlan = { kind: 'nothing' } | { kind: 'disabled' } | { kind: 'fetch'; request: AvailabilityEgressRequestDto };
 
 export type FetchPlan = Extract<RefreshPlan, { kind: 'fetch' }>;
 
@@ -22,15 +18,12 @@ export async function planRefresh(
   poiId: bigint,
   startDate: string | null,
   endDate: string | null,
-  settings: WeekSettings,
   refreshEnabled: boolean,
 ): Promise<RefreshPlan> {
   if (!refreshEnabled) return { kind: 'disabled' };
-  const target = await weekTarget(db, poiId, [], settings);
-  if (target.provider === null) return { kind: 'unsupported' };
-  const window = targetWindow(target, startDate, endDate);
+  const target = await weekTarget(db, poiId, []);
   if (target.campsites.length === 0) return { kind: 'nothing' };
-  return { kind: 'fetch', request: egressRequest(target, window, 'refresh') };
+  return { kind: 'fetch', request: egressRequest(target, startDate, endDate, 'refresh') };
 }
 
 export async function runRefresh(plan: FetchPlan, fetch: EgressFetch): Promise<RefreshOutcome> {

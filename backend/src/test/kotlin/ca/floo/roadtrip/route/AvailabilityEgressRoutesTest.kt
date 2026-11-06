@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route
 
+import ca.floo.roadtrip.fixtures.FAKE_PROVIDER_MAX_POLL_WINDOW_DAYS
 import ca.floo.roadtrip.fixtures.FakeAvailabilityProvider
 import ca.floo.roadtrip.fixtures.campgroundBatch
 import ca.floo.roadtrip.model.api.AvailabilityEgressMode
@@ -43,6 +44,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -52,6 +54,7 @@ private const val CAMPSITE_REF = "egress-site-1"
 private const val SECOND_CAMPSITE_REF = "egress-site-2"
 private const val WINDOW_LEAD_DAYS = 2L
 private const val WINDOW_DAYS = 3L
+private const val DEFAULT_WEEK_DAYS = 7L
 private val observedAt: Instant = Instant.parse("2026-07-30T12:00:00Z")
 private val alwaysFresh: Duration = Duration.ofDays(3650)
 private val alwaysStale: Duration = Duration.ZERO
@@ -79,14 +82,14 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
 
     private fun request(
         ref: String = CAMPGROUND_REF,
-        startDate: LocalDate = start,
-        endDate: LocalDate = end,
+        startDate: LocalDate? = start,
+        endDate: LocalDate? = end,
         mode: AvailabilityEgressMode = AvailabilityEgressMode.REFRESH,
     ) = AvailabilityEgressRequestDto(
         mode = mode,
         campground = ProviderRefDto(dataProvider = DataProvider.RECGOV.id, dataProviderRef = ref),
-        startDate = startDate.toString(),
-        endDate = endDate.toString(),
+        startDate = startDate?.toString(),
+        endDate = endDate?.toString(),
     )
 
     private fun controller(
@@ -253,5 +256,42 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
                 HttpStatusCode.BadRequest,
                 post(request(startDate = end, endDate = start, mode = AvailabilityEgressMode.STORED)).status,
             )
+        }
+
+    private fun storedBody(response: String) = wire.decodeFromString(AvailabilityEgressResponseDto.serializer(), response)
+
+    @Test
+    fun `stored mode lists the campground's campsites even with no cells, and its latest date`() =
+        egress(listOf(recgov())) {
+            val body = storedBody(post(request(mode = AvailabilityEgressMode.STORED)).bodyAsText())
+            assertEquals(setOf(CAMPSITE_REF, SECOND_CAMPSITE_REF), body.campsites.map { it.dataProviderRef }.toSet())
+            assertTrue(body.latestDate != null)
+            assertEquals(emptyList(), body.cells)
+        }
+
+    @Test
+    fun `stored mode resolves a missing window to the default week from the earliest date`() =
+        egress(listOf(recgov())) {
+            val body = storedBody(post(request(startDate = null, endDate = null, mode = AvailabilityEgressMode.STORED)).bodyAsText())
+            assertEquals(DEFAULT_WEEK_DAYS, ChronoUnit.DAYS.between(LocalDate.parse(body.startDate), LocalDate.parse(body.endDate)))
+        }
+
+    @Test
+    fun `stored mode refuses a window wider than the provider allows, naming the limit`() =
+        egress(listOf(recgov())) {
+            val response =
+                post(request(endDate = start.plusDays(FAKE_PROVIDER_MAX_POLL_WINDOW_DAYS + 1L), mode = AvailabilityEgressMode.STORED))
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            val error = wire.parseToJsonElement(response.bodyAsText()).jsonObject
+            assertEquals("window_too_long", error.getValue("error").jsonPrimitive.content)
+            assertEquals(FAKE_PROVIDER_MAX_POLL_WINDOW_DAYS.toString(), error.getValue("max_days").jsonPrimitive.content)
+        }
+
+    @Test
+    fun `stored mode refuses a start before the earliest date, naming it`() =
+        egress(listOf(recgov())) {
+            val response = post(request(startDate = start.minusDays(WINDOW_LEAD_DAYS + 1), mode = AvailabilityEgressMode.STORED))
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertTrue(wire.parseToJsonElement(response.bodyAsText()).jsonObject.containsKey("earliest_date"))
         }
 }

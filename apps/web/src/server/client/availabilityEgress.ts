@@ -1,5 +1,5 @@
 import type { EgressAccessCredentials } from '../config';
-import type { AvailabilityEgressRequestDto, AvailabilityEgressResponseDto } from '../contract';
+import type { AvailabilityEgressRequestDto, AvailabilityEgressResponseDto, AvailabilityErrorDto } from '../contract';
 
 export const EGRESS_PATH = '/api/internal/availability/fetch';
 export const EGRESS_TIMEOUT_CODE = 'timeout';
@@ -22,7 +22,9 @@ function headersFor(endpoint: EgressEndpoint): Record<string, string> {
   };
 }
 
-export type EgressResult = { kind: 'cells'; body: AvailabilityEgressResponseDto } | { kind: 'error'; status: number; code: string | null };
+export type EgressResult =
+  | { kind: 'cells'; body: AvailabilityEgressResponseDto }
+  | { kind: 'error'; status: number; code: string | null; body: AvailabilityErrorDto | null };
 
 export async function fetchEgress(endpoint: EgressEndpoint, request: AvailabilityEgressRequestDto, timeoutMs: number): Promise<EgressResult> {
   let response: Response;
@@ -36,9 +38,10 @@ export async function fetchEgress(endpoint: EgressEndpoint, request: Availabilit
     });
   } catch (error) {
     const timedOut = error instanceof Error && error.name === TIMEOUT_ERROR;
-    return { kind: 'error', status: NO_STATUS, code: timedOut ? EGRESS_TIMEOUT_CODE : EGRESS_UNREACHABLE_CODE };
+    return { kind: 'error', status: NO_STATUS, code: timedOut ? EGRESS_TIMEOUT_CODE : EGRESS_UNREACHABLE_CODE, body: null };
   }
   if (response.ok) return { kind: 'cells', body: (await response.json()) as AvailabilityEgressResponseDto };
-  const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
-  return { kind: 'error', status: response.status, code: typeof body?.error === 'string' ? body.error : null };
+  const body = (await response.json().catch(() => null)) as AvailabilityErrorDto | null;
+  const code = typeof body?.error === 'string' ? body.error : null;
+  return { kind: 'error', status: response.status, code, body: code === null ? null : body };
 }

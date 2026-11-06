@@ -8,7 +8,9 @@
   availability. There is no writer role, no `DATABASE_WRITER_URL` and no migration.
 - **The matrix GET reads through mini-ca.** It asks the egress endpoint for `mode: "stored"`
   (mini-ca's current cells, no vendor call, 5-second timeout) and fuses them with Neon's campsite
-  list. The refresh POST asks for `mode: "refresh"` in `after()` and writes nothing; the page polls
+  list. mini-ca resolves the window and latest date against its own serving provider, and lists the
+  campsites it knows; freshness counts only those. An unreachable or unconfigured mini-ca is
+  `503 availability_unavailable`. The refresh POST asks for `mode: "refresh"` in `after()` and writes nothing; the page polls
   the GET as before.
 - **Cloudflare Access is the only caller check.** No bearer token. A service token on
   `roadtrip-egress.floo.ca` is sent as `CF-Access-Client-Id`/`CF-Access-Client-Secret`; the egress
