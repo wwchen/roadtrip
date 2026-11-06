@@ -14,6 +14,8 @@ const MAPBOX_TOKEN_FILE_VARIABLE = 'MAPBOX_TOKEN_FILE';
 const AVAILABILITY_EGRESS_URL_VARIABLE = 'AVAILABILITY_EGRESS_URL';
 const AVAILABILITY_EGRESS_TOKEN_VARIABLE = 'AVAILABILITY_EGRESS_TOKEN';
 const DATABASE_WRITER_URL_VARIABLE = 'DATABASE_WRITER_URL';
+const AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE = 'AVAILABILITY_EGRESS_ACCESS_CLIENT_ID';
+const AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE = 'AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET';
 const AVAILABILITY_TTL_SECONDS_VARIABLE = 'AVAILABILITY_TTL_SECONDS';
 const ENABLED_AVAILABILITY_PROVIDERS_VARIABLE = 'ENABLED_AVAILABILITY_PROVIDERS';
 
@@ -32,9 +34,15 @@ const LIST_JOINER = ', ';
 
 export const AVAILABILITY_EGRESS_TIMEOUT_MS = 25_000;
 
+export interface EgressAccessCredentials {
+  clientId: string;
+  clientSecret: string;
+}
+
 export interface AvailabilityRefreshConfig {
   egressUrl: URL;
   egressToken: string;
+  egressAccess: EgressAccessCredentials | null;
   writerDatabaseUrl: string;
 }
 
@@ -114,6 +122,15 @@ function secretFrom(variable: string): string | undefined {
   return raw;
 }
 
+function egressAccessFrom(): EgressAccessCredentials | null {
+  const clientId = secretFrom(AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE);
+  const clientSecret = secretFrom(AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE);
+  if (clientId === undefined && clientSecret === undefined) return null;
+  if (clientId === undefined) throw new ConfigError(AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE, `must be set with ${AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE}`);
+  if (clientSecret === undefined) throw new ConfigError(AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE, `must be set with ${AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE}`);
+  return { clientId, clientSecret };
+}
+
 function availabilityRefreshFrom(): AvailabilityRefreshConfig | null {
   const values = {
     [AVAILABILITY_EGRESS_URL_VARIABLE]: secretFrom(AVAILABILITY_EGRESS_URL_VARIABLE),
@@ -133,6 +150,7 @@ function availabilityRefreshFrom(): AvailabilityRefreshConfig | null {
   return {
     egressUrl,
     egressToken: values[AVAILABILITY_EGRESS_TOKEN_VARIABLE] as string,
+    egressAccess: egressAccessFrom(),
     writerDatabaseUrl: values[DATABASE_WRITER_URL_VARIABLE] as string,
   };
 }

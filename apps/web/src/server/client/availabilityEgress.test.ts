@@ -21,6 +21,23 @@ test('sends the bearer and the JSON body to the egress path', async () => {
   expect(JSON.parse(init.body)).toEqual(REQUEST);
 });
 
+test('Cloudflare Access credentials ride along when configured', async () => {
+  const fetch = vi.fn().mockResolvedValue(Response.json(BODY));
+  vi.stubGlobal('fetch', fetch);
+  await fetchEgress({ ...ENDPOINT, access: { clientId: 'id.access', clientSecret: 'secret' } }, REQUEST, TIMEOUT_MS);
+  const [, init] = fetch.mock.calls[0]!;
+  expect(init.headers['cf-access-client-id']).toBe('id.access');
+  expect(init.headers['cf-access-client-secret']).toBe('secret');
+  expect(init.headers.authorization).toBe('Bearer egress-token');
+});
+
+test('no Access headers are sent without Access credentials', async () => {
+  const fetch = vi.fn().mockResolvedValue(Response.json(BODY));
+  vi.stubGlobal('fetch', fetch);
+  await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS);
+  expect(fetch.mock.calls[0]![1].headers).not.toHaveProperty('cf-access-client-id');
+});
+
 test('a 503 body becomes an error with its code', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ state: 'error', error: 'rate_limited' }, { status: 503 })));
   expect(await fetchEgress(ENDPOINT, REQUEST, TIMEOUT_MS)).toEqual({ kind: 'error', status: 503, code: 'rate_limited' });

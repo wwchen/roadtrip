@@ -1,3 +1,4 @@
+import type { EgressAccessCredentials } from '../config';
 import type { AvailabilityEgressRequestDto, AvailabilityEgressResponseDto } from '../contract';
 
 export const EGRESS_PATH = '/api/internal/availability/fetch';
@@ -5,10 +6,22 @@ export const EGRESS_TIMEOUT_CODE = 'timeout';
 export const EGRESS_UNREACHABLE_CODE = 'unreachable';
 const NO_STATUS = 0;
 const TIMEOUT_ERROR = 'TimeoutError';
+const ACCESS_CLIENT_ID_HEADER = 'cf-access-client-id';
+const ACCESS_CLIENT_SECRET_HEADER = 'cf-access-client-secret';
 
 export interface EgressEndpoint {
   url: URL;
   token: string;
+  access?: EgressAccessCredentials | null;
+}
+
+function headersFor(endpoint: EgressEndpoint): Record<string, string> {
+  const headers: Record<string, string> = { authorization: `Bearer ${endpoint.token}`, 'content-type': 'application/json' };
+  if (endpoint.access) {
+    headers[ACCESS_CLIENT_ID_HEADER] = endpoint.access.clientId;
+    headers[ACCESS_CLIENT_SECRET_HEADER] = endpoint.access.clientSecret;
+  }
+  return headers;
 }
 
 export type EgressResult = { kind: 'cells'; body: AvailabilityEgressResponseDto } | { kind: 'error'; status: number; code: string | null };
@@ -18,7 +31,7 @@ export async function fetchEgress(endpoint: EgressEndpoint, request: Availabilit
   try {
     response = await fetch(new URL(EGRESS_PATH, endpoint.url), {
       method: 'POST',
-      headers: { authorization: `Bearer ${endpoint.token}`, 'content-type': 'application/json' },
+      headers: headersFor(endpoint),
       body: JSON.stringify(request),
       signal: AbortSignal.timeout(timeoutMs),
       cache: 'no-store',

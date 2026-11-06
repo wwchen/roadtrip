@@ -33,7 +33,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (plan.kind === 'disabled') return availabilityError(STATUS_NOT_IMPLEMENTED, REFRESH_DISABLED);
     if (plan.kind === 'unsupported') return availabilityError(STATUS_NOT_IMPLEMENTED, UNKNOWN_CAMPGROUND);
     if (plan.kind === 'fetch' && refresh !== null) {
-      const endpoint = { url: refresh.egressUrl, token: refresh.egressToken };
+      const endpoint = { url: refresh.egressUrl, token: refresh.egressToken, access: refresh.egressAccess };
       after(async () => {
         await runRefresh(plan, { db: await writerDb(), fetch: (body) => fetchEgress(endpoint, body, AVAILABILITY_EGRESS_TIMEOUT_MS) });
       });

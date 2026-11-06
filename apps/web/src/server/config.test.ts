@@ -205,3 +205,26 @@ test('the enabled availability providers default to Kotlin read-path list and re
   vi.stubEnv('ENABLED_AVAILABILITY_PROVIDERS', 'campflare');
   expect(config.enabledAvailabilityProviders).toEqual(['campflare']);
 });
+
+const ACCESS_ID = 'access-id.access';
+const ACCESS_SECRET = 'access-secret';
+
+test('Cloudflare Access credentials are absent unless both are set', () => {
+  stubRefresh(['AVAILABILITY_EGRESS_URL', 'AVAILABILITY_EGRESS_TOKEN', 'DATABASE_WRITER_URL']);
+  vi.stubEnv('AVAILABILITY_EGRESS_ACCESS_CLIENT_ID', undefined);
+  vi.stubEnv('AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET', undefined);
+  expect(config.availabilityRefresh?.egressAccess).toBeNull();
+  vi.stubEnv('AVAILABILITY_EGRESS_ACCESS_CLIENT_ID', ACCESS_ID);
+  vi.stubEnv('AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET', ACCESS_SECRET);
+  expect(config.availabilityRefresh?.egressAccess).toEqual({ clientId: ACCESS_ID, clientSecret: ACCESS_SECRET });
+});
+
+test.each([
+  ['AVAILABILITY_EGRESS_ACCESS_CLIENT_ID', 'AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET'],
+  ['AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET', 'AVAILABILITY_EGRESS_ACCESS_CLIENT_ID'],
+])('only %s set is a ConfigError naming %s', (set, missing) => {
+  stubRefresh(['AVAILABILITY_EGRESS_URL', 'AVAILABILITY_EGRESS_TOKEN', 'DATABASE_WRITER_URL']);
+  vi.stubEnv(set, 'value');
+  vi.stubEnv(missing, undefined);
+  expect(() => config.availabilityRefresh).toThrow(new RegExp(missing));
+});
