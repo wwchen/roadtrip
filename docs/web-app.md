@@ -5,17 +5,18 @@
 pages call (`/api/pois`, `/api/pois/{id}`, `/api/pois/search`, `/api/campgrounds/search`,
 `/api/campgrounds/details`, `/api/geocode`, `/api/route`, `/api/pois/on-route`, `/api/me`,
 `/api/build-info`, and `/api/watches`, which answers 401), its own `/campgrounds/[poiId]` and
-`/search` pages, and `/api/health`. It runs on Vercel against a Neon Postgres. Sign-in, watches,
-availability and the worker are not ported yet; the Kotlin stack on mini-ca is untouched and
-keeps serving production.
+`/search` pages, and `/api/health`. It runs on Vercel against a Neon Postgres. Availability is
+read from mini-ca (see "Availability on Vercel"). Sign-in, watches and the worker are not ported
+yet; the Kotlin stack on mini-ca is untouched and keeps serving production.
 
 A campground's detail carries Kotlin's booking buttons (`cta`) and booking site
 (`booking_system`), and its summary carries `booking_system`. Both are computed from the
 catalog row and the booking-site table in `@roadtrip/domain` (kept equal to
 `poi-registry.yaml`'s `booking_providers` by a test in `packages/worker`), with no vendor
 calls. An Aspira button is dated to the campground's first bookable night in its own time zone,
-looked up from its coordinates. `availability_supported` and the availability date fields stay
-off until availability is ported, so the drawer's availability grid does not mount.
+looked up from its coordinates. `availability_supported` is set only when an enabled
+availability provider serves the campground, the same rule Kotlin uses. A campground only rec.gov
+sells keeps its rec.gov button but shows no grid while rec.gov availability is off.
 
 Nothing in this file is a secret. The connection string itself lives only in Vercel and in the
 operator's own scratch file; this file records its shape and the settings measured against it.
@@ -104,7 +105,7 @@ Environment variables, Preview and Production, none prefixed `NEXT_PUBLIC_`:
 | `HEALTH_DATABASE_TOKEN` | sensitive | the bearer secret for the database mode of `/api/health` (below) |
 | `MAPBOX_TOKEN` | sensitive | Mapbox token for `/api/geocode`, `/api/route` and `/api/pois/on-route`; unset, those answer 503 and the rest of the map works |
 | `CAMPGROUND_SEARCH_MAX_RESULTS` | plain, optional | cap on `POST /api/campgrounds/search` ids, default 5000 |
-| `ENABLED_AVAILABILITY_PROVIDERS` | plain, optional | default `aspira,campflare,reserveamerica,reservecalifornia`, Kotlin's read-path list; picks the provider whose booking links the campsite list shows (the matrix takes its window from mini-ca) |
+| `ENABLED_AVAILABILITY_PROVIDERS` | plain, optional | default `aspira,campflare,reserveamerica,reservecalifornia`, Kotlin's read-path list, which a test in `config.test.ts` keeps equal to `application.yaml`; decides `availability_supported` and picks the provider whose booking links the campsite list shows (the matrix takes its window from mini-ca). Change it only together with mini-ca's list |
 | `AVAILABILITY_TTL_SECONDS` | plain, optional | default `7200`; a matrix cell older than this counts as stale |
 | `AVAILABILITY_EGRESS_URL` | plain, optional | `https://roadtrip-egress.floo.ca`; with the two Access variables, how the matrix reaches mini-ca's availability |
 | `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`, `AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET` | sensitive, optional | the Cloudflare Access service token in front of `roadtrip-egress.floo.ca`, sent as `CF-Access-Client-Id` and `CF-Access-Client-Secret`; the only credential the egress call carries |

@@ -62,10 +62,17 @@ service/availability/provider/
 `booking_provider` + `booking_provider_ref` (the colon-delimited
 `BookingProviderRef.serialize()` form) is the row's *primary* booking identity.
 The availability API emits it as `scope_ref`. The POI detail's
-`booking_ref: {provider, ref}` — and with it `booking_system`, the CTAs, and
-`availability_supported` — is instead the identity `BookingIdentityResolver`
-picks (see "Booking provider seam"), which falls back to the *serving*
-provider's ref and then to the primary. Nothing on the serving
+`booking_ref: {provider, ref}` — and with it `booking_system` and the CTAs —
+is instead the identity `BookingIdentityResolver` picks (see "Booking provider
+seam"), which falls back to the *serving* provider's ref and then to the
+primary. `availability_supported` is narrower: it is set only when an enabled
+availability provider serves the campground (`BookingHorizonResolver.servingProvider`
+in Kotlin, `servingAvailabilityProvider` in `@roadtrip/domain`), the lookup the
+grid, the stay check, watches and the egress all go through. A campground only
+rec.gov sells keeps its rec.gov button while rec.gov availability is off, and
+shows no grid. The web app's default `ENABLED_AVAILABILITY_PROVIDERS` must equal
+`application.yaml`'s `enabled-availability-providers`; a test in
+`apps/web/src/server/config.test.ts` holds them equal. Nothing on the serving
 path reads `source_payload`; a key an ETL writes there is provenance, not
 behaviour.
 
