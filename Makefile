@@ -1,4 +1,4 @@
-.PHONY: help run test api-types data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend reclaim reclaim-report
+.PHONY: help run test importer-diff api-types data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend reclaim reclaim-report
 
 PORT ?= 8765
 RUN_ENV ?= $(or $(env),dev)
@@ -36,6 +36,7 @@ help:
 	@echo "  make recgov-refresh   Force-refresh the companion Recreation.gov session"
 	@echo "  make recgov-atc       Run one Rec.gov add-to-cart attempt (PAYLOAD=/path/to/atc.json)"
 	@echo "  make test             Run everything CI runs: backend + lint + frontend + companion + scripts + secrets/dashboards checks"
+	@echo "  make importer-diff    Diff the TypeScript importer against the Kotlin one over data/raw, all three modes (hours)"
 	@echo "  make api-types        Regenerate frontend/src/api/generated/api-types.ts from the Kotlin DTOs"
 	@echo "  make data-fetch       Fetch upstream data on the host (TARGET=<data_source slug> for one)."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / campsite_data)."
@@ -80,7 +81,7 @@ recgov-atc: _ensure-hooks
 # existing packages; npm ci recreates the companion tree from the lockfile.
 install: install-hooks
 	brew install tilt docker openjdk node sops age ruff
-	cd companion && npm ci && npx playwright install chromium
+	npm ci --workspace campsite-companion && cd companion && npx playwright install chromium
 
 # Everything CI runs (see .github/workflows/ci.yml), locally and in one shot:
 # backend tests, detekt-rule tests, ktlint + detekt, frontend gates, companion
@@ -90,7 +91,8 @@ install: install-hooks
 # across the backend checks that CI runs in separate jobs.
 #
 # This target is the local mirror of ci.yml's gradle-lint, backend-tests,
-# frontend-tests, companion-tests and lint jobs — change one, change the other.
+# frontend-tests, schema-equivalence, companion-tests and lint jobs — change
+# one, change the other.
 # The single deliberate divergence: gradle-lint runs `ktlintCheck` with
 # `-x :backend:generateJooq`, since linting alone has no reason to spin up the
 # codegen Testcontainer. Here ktlintCheck shares an invocation with
@@ -100,20 +102,100 @@ install: install-hooks
 # checkApiTypes and contractLedgerCheck both run over the backend's own classpath,
 # so they need the same compile (and therefore the same Docker) :backend:test
 # already needs. ci.yml runs them in backend-tests, never in gradle-lint.
+#
+# The schema-equivalence.test.mjs and schema-reference.test.mjs lines mirror
+# ci.yml's schema-equivalence job, which this target also stands in for. That
+# job is filtered on both sides of the
+# comparison (packages/** and the Flyway migration directory), because the drift
+# it catches is a migration landing with no matching Drizzle change.
 test: _ensure-hooks
 	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :backend:checkApiTypes :backend:contractLedgerCheck :detekt-rules:test
 	# npm run build includes the TypeScript check before bundling.
-	cd frontend && npm ci && npm run lint && npm run test && npm run build && npm run build-storybook
+	npm ci
+	# Rebuild every workspace that has a build script so no consumer below
+	# resolves a stale packages/*/dist.
+	npm run build
+	# Prove the Drizzle migrations still reproduce the Flyway schema, and that
+	# the gate still fails when they do not. Needs packages/db/dist, so it has
+	# to follow the build above. `node scripts/schema-equivalence.mjs` is the
+	# same comparison on its own, for reading a diff by hand.
+	node --test scripts/schema-equivalence.test.mjs
+	# normalize is what the comparison trusts. Without these tests an edit that
+	# over-normalizes (collapsing NOT NULL, a default or a type) leaves the line
+	# above green on both the clean comparison and the injected-column proof.
+	node --test scripts/schema-reference.test.mjs
+	# The test files are excluded from each package's build, so only this
+	# tsconfig type-checks them (and scripts/schema-reference.d.mts with them).
+	npm run typecheck --workspace @roadtrip/domain
+	npm run typecheck --workspace @roadtrip/db
+	npm run typecheck --workspace @roadtrip/worker
+	# The packages' own suites. They resolve each other through dist, so they
+	# follow the build above; the db suite boots PostGIS containers.
+	npm run test --workspace @roadtrip/domain
+	npm run test --workspace @roadtrip/db
+	npm run test --workspace @roadtrip/worker
+	# The importer differential's own harness, and the Kotlin oracle's
+	# comparison machinery. Both run on fixtures the tests write and need
+	# neither data/raw nor a JVM, so they belong here while
+	# `make importer-diff` and `node scripts/etl-oracle.mjs check` do not.
+	# They are here because defects have been found in this proof machinery
+	# itself, where a wrong comparison reads as a clean diff.
+	node --test scripts/importer-differential.test.mjs
+	node --test scripts/etl-oracle.test.mjs
+	npm run lint --workspace roadtrip-frontend && npm run test --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend && npm run build-storybook --workspace roadtrip-frontend
+	node --test scripts/check-package-boundaries.test.mjs && node scripts/check-package-boundaries.mjs
+	npm run typecheck --workspace @roadtrip/web
+	npm run test --workspace @roadtrip/web
+	npm run build --workspace @roadtrip/web
+	node --test scripts/check-server-only-imports.test.mjs && node scripts/check-server-only-imports.mjs
 	node scripts/check-color-tokens.mjs
 	node scripts/check-css-blocks.mjs
 	node scripts/check-token-usage.mjs
 	node scripts/check-worktree-sparse-paths.mjs
-	cd companion && npm ci --ignore-scripts && npm test
+	node --test scripts/check-single-lockfile.test.mjs
+	npm run test --workspace campsite-companion
 	ruff check --isolated --target-version py39 --select E4,E7,E9,F,B,UP secrets/ scripts/
 	python3 -m unittest discover -s scripts -p 'test_*.py'
 	python3 secrets/manage.py generate --check
 	python3 secrets/manage.py check
 	python3 scripts/validate_grafana_dashboards.py
+
+# The full importer differential: both importers over data/raw into two
+# databases, then a row-by-row diff. Deliberately NOT part of `make test` —
+# it reads data/raw (138 MiB packed, absent from a sparse worktree) and takes
+# hours, where `make test` takes minutes. `make test` carries the harness's own
+# unit tests instead, which run on fixtures.
+#
+# All three modes, because each catches a different class. CI runs the same
+# three as a matrix (see the importer-differential job in
+# .github/workflows/ci.yml for the timings); this target runs them locally:
+#
+#   * the single pass is the strongest check of parse and transform, and has by
+#     far the most rows to lose;
+#   * `--passes 2` reaches the conflict path, which an INSERT into an empty
+#     database cannot. It is not the only mode that does: passPlan forces
+#     `--prove-update-keys` to two passes as well, so whether that mode
+#     strictly subsumes this one is open and unmeasured -- do not drop this
+#     line on the assumption that it does;
+#   * `--prove-update-keys` blanks every compared column between the passes, so
+#     a column missing from one importer's ON CONFLICT update set stays blank on
+#     that side alone. With identical captures nothing else can see that.
+#
+# Each line is its own recipe line, so make stops on the first non-zero exit
+# and no mode's result is read through another's. IMPORTER_DIFF_ARGS passes
+# `--target`/`--source` straight through for a narrower run.
+# IMPORTER_DIFF_CACHE names a directory for cached Kotlin dumps, one per mode
+# because a dump's provenance records its pass count. Only the first two modes
+# take one: a restored Kotlin side re-writes nothing, so it cannot satisfy
+# `--prove-update-keys`' blanking step and that mode always runs both importers.
+IMPORTER_DIFF_ARGS ?=
+IMPORTER_DIFF_CACHE ?=
+importer_diff_cache = $(if $(IMPORTER_DIFF_CACHE),--reference-dump $(IMPORTER_DIFF_CACHE)/$(1).sql)
+importer-diff:
+	$(if $(IMPORTER_DIFF_CACHE),mkdir -p $(IMPORTER_DIFF_CACHE))
+	node scripts/importer-differential.mjs $(call importer_diff_cache,single-pass) $(IMPORTER_DIFF_ARGS)
+	node scripts/importer-differential.mjs --passes 2 $(call importer_diff_cache,passes-2) $(IMPORTER_DIFF_ARGS)
+	node scripts/importer-differential.mjs --prove-update-keys $(IMPORTER_DIFF_ARGS)
 
 # Regenerate the committed TypeScript API contract after changing a DTO or adding
 # a route. `make test` and CI fail when it is stale.
@@ -173,7 +255,7 @@ _ensure-hooks:
 	  { git config core.hooksPath .githooks 2>/dev/null && echo "git hooks installed (.githooks/)"; } || true
 
 frontend:
-	cd frontend && npm ci && npm run build
+	npm ci --workspace roadtrip-frontend && npm run build --workspace roadtrip-frontend
 
 # Snapshot Grafana dashboards from the running container into
 # grafana/dashboards/*.json, then apply shared dashboard navigation links.

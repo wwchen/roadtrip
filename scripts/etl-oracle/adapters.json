@@ -1,0 +1,118 @@
+{
+  "adapters": {
+    "aspira-campgrounds": {
+      "module": "vendors/aspira/campgrounds",
+      "export": "AspiraCampgroundsEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 20,
+      "minimumTransformed": 12
+    },
+    "aspira-campsites": {
+      "module": "vendors/aspira/campsites",
+      "export": "AspiraCampsitesEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 167,
+      "minimumTransformed": 154
+    },
+    "bcparks-campgrounds": {
+      "module": "vendors/bcparks/campgrounds",
+      "export": "BcParksCampgroundsEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 13,
+      "minimumTransformed": 7
+    },
+    "recgov-campgrounds": {
+      "module": "vendors/recgov/campgrounds",
+      "export": "RecGovCampgroundsEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 240,
+      "minimumTransformed": 230
+    },
+    "recgov-campsites": {
+      "module": "vendors/recgov/campsites",
+      "export": "RecGovCampsitesEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 150,
+      "minimumTransformed": 145
+    },
+    "reserveamerica-campgrounds": {
+      "module": "vendors/reserveamerica/campgrounds",
+      "export": "ReserveAmericaCampgroundsEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 138,
+      "minimumTransformed": 88
+    },
+    "reserveamerica-campsites": {
+      "module": "vendors/reserveamerica/sites",
+      "export": "ReserveAmericaSitesEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 42,
+      "minimumTransformed": 36
+    },
+    "reservecalifornia-campgrounds": {
+      "module": "vendors/reservecalifornia/campgrounds",
+      "export": "ReserveCaliforniaCampgroundsEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 85,
+      "minimumTransformed": 66
+    },
+    "reservecalifornia-campsites": {
+      "module": "vendors/reservecalifornia/sites",
+      "export": "ReserveCaliforniaSitesEtl",
+      "opaqueFields": [
+        "sourcePayload"
+      ],
+      "minimumCases": 78,
+      "minimumTransformed": 67
+    }
+  },
+  "calls": {
+    "recgov-raw-path": {
+      "module": "vendors/recgov/campgrounds",
+      "export": "stringAtRawPath",
+      "kotlinClass": "ca.floo.roadtrip.service.etl.vendors.recgov.RecGovCampgroundsEtlKt",
+      "kotlinMethod": "stringAtRawPath",
+      "argTypes": [
+        "json",
+        "string"
+      ],
+      "minimumCases": 70
+    },
+    "aspira-normalize": {
+      "module": "vendors/aspira/normalize",
+      "export": "normalize",
+      "kotlinClass": "ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampgroundsEtlKt",
+      "kotlinMethod": "normalize",
+      "argTypes": [
+        "string"
+      ],
+      "minimumCases": 84
+    },
+    "aspira-csv-split": {
+      "module": "vendors/aspira/us-campgrounds-csv",
+      "export": "csvSplit",
+      "kotlinClass": "ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampgroundsEtlKt",
+      "kotlinMethod": "csvSplit",
+      "argTypes": [
+        "string"
+      ],
+      "minimumCases": 33
+    }
+  }
+}

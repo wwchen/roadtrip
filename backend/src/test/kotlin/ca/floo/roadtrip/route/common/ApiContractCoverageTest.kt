@@ -43,7 +43,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The endpoint count the plan fixed for this phase; a row added or dropped is a deliberate change. Includes the two campground routes and the stay check. */
-private const val CONTRACT_ROW_COUNT = 48
+private const val CONTRACT_ROW_COUNT = 50
 
 /** The first and last status any HTTP response can carry, and the last 2xx. */
 private const val MIN_HTTP_STATUS = 200

@@ -49,6 +49,7 @@ services:
       # thing a schema migration can't carry: the password.
       - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
       - GRAFANA_DB_PASSWORD_FILE=/run/secrets/grafana_db_password
+      - WEB_DB_PASSWORD_FILE=/run/secrets/web_db_password
     volumes:
       - ${POSTGRES_DATA:-$HOME/.roadtrip-map/postgres}:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
@@ -88,6 +89,7 @@ services:
       # `AUTH_PROVIDER=auth0 make run env=prod` reaches the backend process.
       # Without this line the container always saw the compiled-in default.
       - AUTH_PROVIDER=${AUTH_PROVIDER:-clerk}
+      - AVAILABILITY_EGRESS_ENABLED=${AVAILABILITY_EGRESS_ENABLED:-true}
       # OpenTelemetry Java agent exports Ktor/JDBC/JVM telemetry to Alloy.
       # Logs still go through stdout -> Alloy -> Loki; trace/span ids are
       # injected into Logback MDC and emitted by logback.xml's JSON encoder.
@@ -121,6 +123,27 @@ services:
         condition: service_healthy
       alloy:
         condition: service_started
+
+  web:
+    profiles: [web]
+    image: ${ROADTRIP_WEB_IMAGE:-roadtrip/web}
+    restart: unless-stopped
+    logging: *log-rotation
+    hostname: web
+    mem_limit: 512m
+    environment:
+      - DATABASE_URL=postgres://roadtrip_web@postgres:5432/${POSTGRES_DB:-roadtrip}
+      - DATABASE_PASSWORD_FILE=/run/secrets/web_db_password
+      - MAPBOX_TOKEN_FILE=/run/secrets/mapbox_token
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/pois/search?q=ok').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    depends_on:
+      backend:
+        condition: service_healthy
 
   recgov-companion:
     profiles: [recgov-companion]
@@ -287,7 +310,7 @@ services:
     # Public hostname routing is managed in Cloudflare Zero Trust; this
     # container only needs the tunnel token.
     profiles: [tunnel]
-    image: cloudflare/cloudflared:2026.7.3
+    image: cloudflare/cloudflared:2026.10.5
     restart: unless-stopped
     logging: *log-rotation
     # TUNNEL_TOKEN_FILE, not --token: a flag would put the token in the

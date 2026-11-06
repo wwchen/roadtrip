@@ -192,7 +192,9 @@ class ImmutableApplicationImageTest(unittest.TestCase):
         self.assertIn("roadtrip-data:/app/static/data:ro", sandbox_volumes)
         self.assertIn("./data:/app/static/data", local_volumes)
         self.assertNotIn("build", base["services"]["recgov-companion"])
-        self.assertEqual("./companion", local["services"]["recgov-companion"]["build"]["context"])
+        companion_build = local["services"]["recgov-companion"]["build"]
+        self.assertEqual(".", companion_build["context"])
+        self.assertEqual("companion/Dockerfile", companion_build["dockerfile"])
 
 
 if __name__ == "__main__":

@@ -130,6 +130,25 @@ internal class CampsiteAvailabilityService(
         return repo.earliestBookableDates(closed, window.startDate, freshAtOrAfter)
     }
 
+    fun resolveTargetWindow(
+        campground: Campground,
+        startDate: LocalDate?,
+        endDate: LocalDate?,
+        dateContext: PoiDateContext,
+    ): Pair<ResolvedDateWindow, LocalDate?> {
+        val caps = providerFor(campground).capabilities
+        val window =
+            dateResolver.resolveWindow(
+                startDate = startDate,
+                endDate = endDate,
+                context = dateContext,
+                bookingHorizonDays = caps.bookingHorizonDays,
+                maxDays = caps.maxPollWindowDays,
+                defaultDays = DEFAULT_AVAILABILITY_DAYS,
+            )
+        return window to bookingHorizons.latestDate(campground, dateContext)
+    }
+
     private fun providerFor(campground: Campground): AvailabilityProvider =
         bookingHorizons.servingProvider(campground) ?: throw AvailabilityServiceError.UnknownCampground
 

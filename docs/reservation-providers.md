@@ -607,6 +607,24 @@ drawer can hide affordances the provider doesn't support.
 every vendor. A request past `latest_date` is a `beyond_booking_horizon`
 `bad_date_window` error, not a silently clamped window.
 
+The booking horizon and widest window of every registered provider also live in
+`packages/domain/src/availability-providers.json`, in registration order, for the Vercel matrix.
+`AvailabilityProviderContractTest` fails when the Kotlin providers' capabilities or their order in
+`ServiceModule` drift from that table.
+
+### The egress endpoint
+
+`POST /api/internal/availability/fetch` is how Vercel reaches availability, which lives only in
+mini-ca's Postgres. It names a campground by `(data_provider, data_provider_ref)` and a window, and
+answers every cell with its campsite's `(data_provider, data_provider_ref)` and the time it was
+observed, plus the window it resolved against the serving provider, the latest bookable date, and
+every campsite it knows for that campground. `mode: "stored"` reads mini-ca's current cells and
+never calls a vendor;
+`mode: "refresh"` (the default) runs the same read-through `CampsiteAvailabilityService` as the
+matrix, so it is one more caller of the one rate limiter, not a second one. It is mounted only when
+`AVAILABILITY_EGRESS_ENABLED` is `true` and carries no credential of its own: the Cloudflare Access
+policy on its hostname is the caller check; `docs/web-app.md` covers the rest of the path.
+
 ## Supported monitoring actions
 
 | Action | Required interface | Notes |

@@ -26,6 +26,10 @@ jobs:
       data_image: ${{ steps.filter.outputs.data_image }}
       scripts: ${{ steps.filter.outputs.scripts }}
       gradle_lint: ${{ steps.filter.outputs.gradle_lint }}
+      schema_equivalence: ${{ steps.filter.outputs.schema_equivalence }}
+      package_tests: ${{ steps.filter.outputs.package_tests }}
+      importer_differential: ${{ steps.filter.outputs.importer_differential }}
+      web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -54,26 +58,46 @@ jobs:
               - 'build.gradle.kts'
               - 'settings.gradle.kts'
               - 'frontend/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
+              - 'scripts/build-workspaces.mjs'
               - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
+              - 'scripts/build-workspaces.mjs'
               - 'scripts/check-color-tokens.mjs'
               - 'scripts/check-feature-boundaries.mjs'
               - 'scripts/check-feature-boundaries.test.mjs'
+              - 'scripts/module-specifiers.mjs'
+              - 'scripts/check-package-boundaries.mjs'
+              - 'scripts/check-package-boundaries.test.mjs'
               - 'scripts/check-css-blocks.mjs'
               - 'scripts/check-token-usage.mjs'
               - '.github/workflows/ci.yml'
             companion:
               - 'companion/**'
+              - 'package.json'
+              - 'package-lock.json'
               - '.github/workflows/ci.yml'
             companion_image:
               - 'companion/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'scripts/companion-image-key.sh'
               - '.github/workflows/ci.yml'
             data_image:
               - 'data/**'
               - '.github/workflows/ci.yml'
             scripts:
               - 'scripts/**'
+              - 'postgres-init/**'
+              - 'caddy/**'
               - 'secrets/**'
               - 'grafana/**'
               - 'deploy/**'
@@ -82,6 +106,111 @@ jobs:
               - 'docker-compose*.yml'
               - '.github/actions/**'
               - '.github/workflows/**'
+            # Both sides of the comparison, because the drift being caught is a
+            # Flyway migration landing with no matching Drizzle change — a filter
+            # watching only packages/ would skip the gate on exactly that push.
+            # packages/** rather than packages/db/**: campsiteKinds from
+            # @roadtrip/domain is baked into the campsites_kind_wire_check
+            # constraint, so a domain edit alone can move the emitted schema.
+            schema_equivalence:
+              - 'packages/**'
+              - 'backend/src/main/resources/db/migration/**'
+              - 'scripts/schema-equivalence.mjs'
+              - 'scripts/schema-equivalence.test.mjs'
+              - 'scripts/schema-reference.mjs'
+              - 'scripts/schema-reference.test.mjs'
+              - 'scripts/build-workspaces.mjs'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
+              - '.github/workflows/ci.yml'
+            package_tests:
+              - 'packages/**'
+              - 'backend/src/main/resources/poi-registry.yaml'
+              - 'scripts/schema-reference.mjs'
+              - 'scripts/schema-reference.d.mts'
+              - 'scripts/build-workspaces.mjs'
+              # The importer differential's own harness and the Kotlin oracle's
+              # comparison machinery. Their unit tests run on fixtures and need
+              # neither data/raw nor a JVM, so they belong in this cheap job
+              # rather than behind the hours-long importer-differential one — a
+              # harness edit should be checked in minutes.
+              - 'scripts/importer-*.mjs'
+              - 'scripts/etl-oracle.test.mjs'
+              - 'scripts/etl-oracle/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
+              - '.github/workflows/ci.yml'
+            # Everything either importer's stored rows are a function of: the
+            # TypeScript packages, the Kotlin ETL/repo/domain/tools trees and the
+            # shared model/support trees they import, the registry that decides
+            # what runs, the Flyway migrations that build the schema it is
+            # compared in, the captures both sides read, the dependency pins both
+            # sides compile against, and the harness itself.
+            # `scripts/importer-*.mjs` rather than `importer-differential*`:
+            # importer-diff-columns.mjs holds the column lists the comparison is
+            # made of and importer-collision-pins.mjs holds the counts it refuses
+            # on, and neither matches the narrower glob. The shared trees are
+            # watched because service/etl and repo import them: an edit there
+            # changes what one importer writes while leaving this job unrun.
+            # client/ is a single import and the load-bearing one -- it is
+            # ReserveAmericaCatalogParser, which the TypeScript side
+            # reimplements in catalog-parser.ts. db/generated is absent
+            # deliberately: jOOQ generates it from the migrations, watched
+            # above. test_ci_image_builds.py derives this list from the imports
+            # rather than trusting it, so a new import of an unwatched tree
+            # fails there.
+            importer_differential:
+              - 'packages/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/service/etl/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/repo/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/model/domain/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/model/metadata/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/model/availability/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/support/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/client/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/db/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/config/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/observability/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/tools/**'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/service/availability/AvailabilityTriggerKinds.kt'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/service/booking/RecentAtcFires.kt'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/service/scheduler/RecGovKeepaliveJob.kt'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/service/settings/CompanionSessionPort.kt'
+              - 'backend/src/main/kotlin/ca/floo/roadtrip/service/settings/RecGovProfileSessionPort.kt'
+              - 'backend/src/main/resources/poi-registry.yaml'
+              - 'backend/src/main/resources/db/migration/**'
+              - 'backend/build.gradle.kts'
+              - 'build.gradle.kts'
+              - 'settings.gradle.kts'
+              - 'gradle.properties'
+              - 'data/raw/**'
+              - 'scripts/importer-*.mjs'
+              - 'scripts/schema-reference.mjs'
+              - 'scripts/build-workspaces.mjs'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
+              - '.github/workflows/ci.yml'
+            web:
+              - 'apps/**'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'backend/src/main/resources/db/migration/R__web_reader_grants.sql'
+              - 'docs/web-app.md'
+              - 'caddy/Caddyfile'
+              - 'frontend/**'
+              - 'data/us-states.geojson'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.base.json'
+              - 'scripts/build-workspaces.mjs'
+              - 'scripts/module-specifiers.mjs'
+              - 'scripts/check-server-only-imports.mjs'
+              - 'scripts/check-server-only-imports.test.mjs'
+              - '.github/workflows/ci.yml'
             gradle_lint:
               - 'backend/**'
               - 'detekt-rules/**'
@@ -144,6 +273,22 @@ jobs:
       - name: Validate Claude worktree sparsePaths
         run: node scripts/check-worktree-sparse-paths.mjs
 
+  lockfile-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check every install resolves from the root lockfile
+        run: node --test scripts/check-single-lockfile.test.mjs
+
+  image-key-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check the companion image tag covers everything its build reads
+        run: python3 -m unittest scripts.test_ci_image_builds -v
+
   lint:
     needs: changes
     if: needs.changes.outputs.scripts == 'true'
@@ -205,10 +350,12 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - name: Install frontend dependencies
-        working-directory: frontend
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
         run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
 
       - name: Check frontend architecture
         working-directory: frontend
@@ -226,6 +373,11 @@ jobs:
         working-directory: frontend
         run: npm run build-storybook
 
+      - name: Check package boundaries
+        run: |
+          node --test scripts/check-package-boundaries.test.mjs
+          node scripts/check-package-boundaries.mjs
+
       - name: Check color tokens
         run: node scripts/check-color-tokens.mjs
 
@@ -234,6 +386,234 @@ jobs:
 
       - name: Check design token usage
         run: node scripts/check-token-usage.mjs
+
+  # Mirrored locally by `make test`. packages/db no longer builds on install, so
+  # the gate needs `npm run build` ahead of it — the same prelude frontend-tests
+  # runs, which is why this is its own job rather than a step there: that job has
+  # no business booting Postgres, and backend-tests has Docker but no npm install.
+  # The amd64-only PostGIS image runs natively on these runners, so the emulation
+  # cost paid locally does not apply here.
+  schema-equivalence:
+    needs: changes
+    if: needs.changes.outputs.schema_equivalence == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
+
+      # The test file, not the bare script: its container subtest makes the same
+      # clean comparison the script does and then injects a column to prove the
+      # gate can still fail, at the same single PostGIS boot. The pooler subtest
+      # skips when its sidecar cannot be established, so a fixture cannot fail
+      # this job.
+      - name: Check the Drizzle migrations still reproduce the Flyway schema
+        run: node --test scripts/schema-equivalence.test.mjs
+
+      # normalize is what the comparison above trusts. These tests are the ones
+      # that fail when an edit to it stops distinguishing types, nullability or
+      # defaults — the one change the injected-column proof cannot see.
+      - name: Check the schema normalizer still distinguishes what the gate compares
+        run: node --test scripts/schema-reference.test.mjs
+
+  # The TypeScript importer against the Kotlin one: both run over every capture
+  # in data/raw into two databases in one PostGIS container, then every row of
+  # every diffed table is compared. This is the gate that the port of the ETL
+  # importer is faithful, and it is the reason a change under packages/worker can
+  # be trusted at all.
+  #
+  # ALL THREE MODES, one job each, because each sees a different class of
+  # defect: the single pass checks parse and transform, `--passes 2` reaches a
+  # conflict-handling defect a first import into an empty database cannot (it
+  # exercises the INSERT path alone), and `--prove-update-keys` blanks every
+  # compared column between the passes so a column missing from one importer's
+  # ON CONFLICT update set stays blank on that side alone. `--passes 2` is not
+  # the ONLY mode reaching the conflict path: passPlan forces
+  # --prove-update-keys to two passes as well, and whether it subsumes
+  # --passes 2 is open and unmeasured, so both stay.
+  #
+  # The rule was all three in CI if they land under 30 minutes on a runner.
+  # This job used to run only the single pass, because the first measurements
+  # were taken on an arm64 laptop running the amd64-only postgis image under
+  # emulation (1,981 s, 3,352 s and 3,704 s; 2 h 30 m together). Measured on
+  # ubuntu-latest, job wall time including setup, run 41688377263:
+  #
+  #   single pass                  10 m 12 s
+  #   --passes 2                   11 m 01 s
+  #   --prove-update-keys          16 m 33 s
+  #
+  # As a matrix the gate costs the slowest mode, 16.5 minutes.
+  #
+  # --prove-update-keys names the columns it cannot prove because they are
+  # already blank in every captured row (deleted_at everywhere, and for
+  # example campsites.driveway_length and pois.cadence_override_sec). That is a
+  # limit of the captures, not of the mode, and the log says so per side.
+  #
+  # Nothing is fetched: data/raw is already in every checkout, so the captures
+  # cost this job nothing beyond the clone it would do anyway. Java is here for
+  # the Kotlin side (./gradlew :backend:importCatalog) and Node for the
+  # TypeScript side; the harness refuses to run at all if either importer exits
+  # non-zero, if a selected target has no capture, or if either side wrote no
+  # rows — "one side did not run" must never be reported as "one side has no
+  # rows". The harness's own unit tests run in package-tests, in minutes.
+  #
+  # timeout-minutes is 45 against a measured 16.5: a job killed at its ceiling
+  # reports the same red as a real difference, so it carries room for a slow
+  # runner. If it is ever approached, re-measure rather than raise it blindly.
+  importer-differential:
+    needs: changes
+    if: needs.changes.outputs.importer_differential == 'true'
+    name: importer-differential (${{ matrix.mode.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        mode:
+          - { name: single pass, args: '' }
+          - { name: passes 2, args: '--passes 2' }
+          - { name: prove update keys, args: '--prove-update-keys' }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
+
+      - name: Diff the TypeScript importer against the Kotlin one over every capture
+        run: node scripts/importer-differential.mjs ${{ matrix.mode.args }}
+
+  # Mirrored locally by `make test`. One job for both suites: the domain suite
+  # runs in well under a second, so a job of its own would spend more on
+  # checkout, npm ci and build than it ever saved. The db suite boots PostGIS
+  # containers, which is why this sits apart from frontend-tests.
+  package-tests:
+    needs: changes
+    if: needs.changes.outputs.package_tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
+
+      - name: Run @roadtrip/domain tests
+        run: npm run test --workspace @roadtrip/domain
+
+      - name: Run @roadtrip/db tests
+        run: npm run test --workspace @roadtrip/db
+
+      - name: Run @roadtrip/worker tests
+        run: npm run test --workspace @roadtrip/worker
+
+      # tsconfig.json leaves the test files out of the build and vitest strips
+      # types without checking them, so these are the only steps that type-check
+      # the tests (and scripts/schema-reference.d.mts).
+      - name: Type-check @roadtrip/domain including tests
+        run: npm run typecheck --workspace @roadtrip/domain
+
+      - name: Type-check @roadtrip/db including tests
+        run: npm run typecheck --workspace @roadtrip/db
+
+      - name: Type-check @roadtrip/worker including tests
+        run: npm run typecheck --workspace @roadtrip/worker
+
+      # The two gates that certify the other gates. The differential's harness
+      # test boots one PostGIS container and makes the same comparison the real
+      # run does over synthetic rows, then injects a difference in every one of
+      # the six diffed tables -- import_runs included, in both its scalar
+      # columns and the derived run count -- to prove the comparison can still
+      # fail; the oracle test covers the Kotlin-comparison machinery. Both are here because defects have been
+      # found in this proof machinery itself, where a wrong comparison reads as
+      # a clean diff rather than as a failure.
+      - name: Check the importer differential's own harness
+        run: node --test scripts/importer-differential.test.mjs
+
+      - name: Check the Kotlin oracle's comparison machinery
+        run: node --test scripts/etl-oracle.test.mjs
+
+  web-tests:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build
+
+      - name: Type-check @roadtrip/web
+        run: npm run typecheck --workspace @roadtrip/web
+
+      - name: Run @roadtrip/web tests
+        run: npm run test --workspace @roadtrip/web
+
+      - name: Check client boundary
+        run: |
+          node --test scripts/check-server-only-imports.test.mjs
+          node scripts/check-server-only-imports.mjs
+
+      - name: Build @roadtrip/web
+        run: npm run build --workspace @roadtrip/web
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Expose cache-service credentials to buildx
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              if (process.env[name]) core.exportVariable(name, process.env[name]);
+            }
+
+      - name: Build web image
+        run: |
+          docker buildx build -t roadtrip/web --target web --load \
+            --cache-from type=gha,scope=web-image \
+            --cache-to type=gha,scope=web-image,mode=max,ignore-error=true \
+            .
+
+      - name: Smoke-test web image
+        working-directory: apps/web
+        run: WEB_IMAGE=roadtrip/web npx vitest run src/server/webImage.smoke.test.ts
 
   companion-tests:
     needs: changes
@@ -246,10 +626,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: companion/package-lock.json
+          cache-dependency-path: package-lock.json
       - name: Install companion dependencies
-        working-directory: companion
-        run: npm ci --ignore-scripts
+        run: npm ci --workspace campsite-companion --ignore-scripts
       - name: Run companion tests
         working-directory: companion
         run: npm test
@@ -267,7 +646,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Build companion image
-        run: docker build -t roadtrip/recgov-companion ./companion
+        run: docker build --provenance=false --sbom=false -f companion/Dockerfile -t roadtrip/recgov-companion .
 
       - name: Log in to GHCR
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
@@ -277,11 +656,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag and push companion image by tree SHA
+      - name: Tag and push companion image by input hash
         if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          TREE_SHA="$(git rev-parse HEAD:companion)"
-          IMAGE="ghcr.io/${{ github.repository }}/recgov-companion:${TREE_SHA}"
+          INPUT_HASH="$(scripts/companion-image-key.sh)"
+          IMAGE="ghcr.io/${{ github.repository }}/recgov-companion:${INPUT_HASH}"
           docker tag roadtrip/recgov-companion "$IMAGE"
           docker push "$IMAGE"
 
@@ -305,6 +684,8 @@ jobs:
           TREE_SHA="$(git rev-parse HEAD:data)"
           IMAGE="ghcr.io/${{ github.repository }}/data:${TREE_SHA}"
           docker build \
+            --provenance=false \
+            --sbom=false \
             --build-arg "ROADTRIP_DATA_SHA=${TREE_SHA}" \
             -t "$IMAGE" \
             data
@@ -336,7 +717,8 @@ jobs:
     if: >-
       github.event_name == 'push' ||
       needs.changes.outputs.smoke == 'true' ||
-      needs.changes.outputs.scripts == 'true'
+      needs.changes.outputs.scripts == 'true' ||
+      needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -388,6 +770,27 @@ jobs:
           SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           docker tag roadtrip/backend "$IMAGE:${SHA}"
           docker push "$IMAGE:${SHA}"
+
+      - name: Build web image
+        env:
+          BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BUILD_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          docker buildx build -t roadtrip/web --target web --load \
+            --build-arg BUILD_ENV=prod \
+            --build-arg BUILD_SHA="$BUILD_SHA" \
+            --build-arg BUILD_BRANCH="$BUILD_BRANCH" \
+            --cache-from type=gha,scope=web-image \
+            --cache-to type=gha,scope=web-image,mode=max,ignore-error=true \
+            .
+
+      - name: Tag and push web image by SHA
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          WEB_IMAGE="ghcr.io/${{ github.repository }}/web"
+          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          docker tag roadtrip/web "$WEB_IMAGE:${SHA}"
+          docker push "$WEB_IMAGE:${SHA}"
 
   backend-tests:
     needs: changes
@@ -468,16 +871,15 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Build backend fat-jar
         run: ./gradlew :backend:buildFatJar
 
       - name: Build frontend
-        working-directory: frontend
         run: |
-          npm ci
-          npm run build
+          npm ci --workspace roadtrip-frontend
+          npm run build --workspace roadtrip-frontend
 
       - name: Start backend
         run: |
@@ -564,9 +966,15 @@ jobs:
       - changes
       - migration-guard
       - worktree-guard
+      - lockfile-guard
+      - image-key-guard
       - lint
       - gradle-lint
       - frontend-tests
+      - schema-equivalence
+      - importer-differential
+      - package-tests
+      - web-tests
       - companion-tests
       - companion-image
       - data-image

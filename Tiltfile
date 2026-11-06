@@ -105,29 +105,37 @@ local_resource(
 # and no container restart, just a browser refresh.
 #
 # Split in two so a source edit does not re-resolve dependencies: `npm ci` is
-# keyed on the lockfile, the build on the sources. `npm run build` is
-# `tsc --noEmit && vite build`, so a type error fails this resource and shows up
-# in the Tilt UI instead of silently serving a stale bundle.
+# keyed on the lockfile, the build on the sources. `frontend-dist` builds
+# @roadtrip/domain first (the frontend resolves it through packages/domain/dist),
+# then the frontend's own `npm run build`, which is `tsc --noEmit && vite build`,
+# so a type error in either fails this resource and shows up in the Tilt UI
+# instead of silently serving a stale bundle.
 local_resource(
     'frontend-deps',
-    cmd='cd frontend && npm ci',
+    cmd='npm ci --workspace roadtrip-frontend',
     deps=[
+        'package.json',
+        'package-lock.json',
         'frontend/package.json',
-        'frontend/package-lock.json',
     ],
     labels=['build'],
 )
 
 local_resource(
     'frontend-dist',
-    cmd='cd frontend && npm run build',
+    cmd='npm run build --workspace @roadtrip/domain && npm run build --workspace roadtrip-frontend',
     resource_deps=['frontend-deps'],
     deps=[
         # package.json/lock are here as well as on frontend-deps: resource_deps
         # only orders, it does not re-trigger, so without these a dependency bump
         # would reinstall and leave the bundle stale.
+        'package.json',
+        'package-lock.json',
         'frontend/package.json',
-        'frontend/package-lock.json',
+        'packages/domain/package.json',
+        'packages/domain/tsconfig.json',
+        'packages/domain/src',
+        'tsconfig.base.json',
         'frontend/src',
         'frontend/index.html',
         'frontend/availability.html',
@@ -179,13 +187,14 @@ docker_build(
 
 docker_build(
     'roadtrip/recgov-companion',
-    'companion',
+    '.',
     dockerfile='companion/Dockerfile',
     only=[
-        'Dockerfile',
         'package.json',
         'package-lock.json',
-        'src',
+        'companion/Dockerfile',
+        'companion/package.json',
+        'companion/src',
     ],
 )
 

@@ -67,7 +67,7 @@ Plenty of work needs no vault at all, though:
   build problem rather than a missing proxy target:
 
   ```sh
-  cd frontend && npm ci && npm run dev
+  npm ci --workspace roadtrip-frontend && npm run dev --workspace roadtrip-frontend
   ```
 
 - **Frontend unit tests and guardrails.** Vitest for the app, plus three

@@ -94,6 +94,19 @@ tasks.register<JavaExec>("checkApiTypes") {
     args(generatedApiTypesFile.absolutePath, "--check")
 }
 
+// The Kotlin side of the importer differential. Runs the production ETL
+// orchestrator over a raw capture tree into whatever database --jdbc-url names,
+// so scripts/importer-differential.mjs can diff its rows against the
+// TypeScript importer's. Like generateApiTypes it runs over `main`'s runtime
+// classpath, so it inherits main's compile — which means generateJooq, which
+// means Docker. Never wired into `check`: it needs data/raw and a database.
+tasks.register<JavaExec>("importCatalog") {
+    group = "application"
+    description = "Run the catalog importer into a database (see scripts/importer-differential.mjs)."
+    mainClass.set("ca.floo.roadtrip.tools.CatalogImportCliKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
 // The contract exercise ledger. ContractBodyCheck appends one line per checked
 // response; contractLedgerCheck reads the file back and fails when a row with a
 // success body was never produced. A JavaExec rather than a second Test task, so

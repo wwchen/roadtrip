@@ -306,6 +306,14 @@ _deploy_prod() {
     "${RECLAIM}" check-disk --label "prod deploy" --scope host --min-gb "${ROADTRIP_MIN_FREE_DISK_GB:-${MIN_FREE_DISK_GB}}" || exit 1
 
     export ROADTRIP_BACKEND_IMAGE="ghcr.io/wwchen/roadtrip/backend:${app_sha}"
+    export ROADTRIP_WEB_IMAGE="ghcr.io/wwchen/roadtrip/web:${app_sha}"
+    local -a pulled=(backend recgov-companion)
+    if (( _ROLLBACK_ACTIVE == 1 )) && ! docker manifest inspect "${ROADTRIP_WEB_IMAGE}" >/dev/null 2>&1; then
+        echo "==> ${ROADTRIP_WEB_IMAGE} does not exist; rolling back without web" >&2
+    else
+        compose+=(--profile web)
+        pulled+=(web)
+    fi
     export ROADTRIP_COMPANION_IMAGE="ghcr.io/wwchen/roadtrip/recgov-companion:${companion_sha}"
     export ROADTRIP_DATA_IMAGE="ghcr.io/wwchen/roadtrip/data:${data_sha}"
     export ROADTRIP_DATA_SHA="${data_sha}"
@@ -322,8 +330,9 @@ _deploy_prod() {
     fi
 
     _ensure_data_volume "${data_sha}"
-    "${secret_exec[@]}" "${compose[@]}" pull backend recgov-companion
+    "${secret_exec[@]}" "${compose[@]}" pull "${pulled[@]}"
     "${secret_exec[@]}" "${compose[@]}" up -d --force-recreate backend
+    "${secret_exec[@]}" "${compose[@]}" exec -T postgres bash /docker-entrypoint-initdb.d/20-web-reader.sh
     # No `restart` of the observability services here: compose resolves their
     # ./grafana bind mounts against the release directory, which is keyed by
     # SHA, so every release changes their config hash and the `up -d` above
@@ -582,19 +591,56 @@ _sandbox_lock_steal() {
 # A holder killed mid-flight used to leak this lock permanently, blocking every
 # teardown and the sweep for two days on 2026-08-18. Record an owner so the next
 # caller can reclaim it.
+_sandbox_lock_gate_enter() {
+    local gate="$1"
+    local gate_stale="$2"
+    local deadline="$3"
+    local gate_poll="$4"
+    local gate_mtime
+
+    until ( set -o noclobber; printf '%s\n' "$$" > "${gate}" ) 2>/dev/null; do
+        gate_mtime="$(_lock_mtime_epoch "${gate}")"
+        if [[ "${gate_mtime}" =~ ^[0-9]+$ ]] && (( $(date +%s) - gate_mtime > gate_stale )); then
+            echo "==> clearing a sandbox slot lock gate abandoned for over ${gate_stale}s"
+            rm -f "${gate}"
+            continue
+        fi
+        if (( $(date +%s) > deadline )); then
+            return 1
+        fi
+        sleep "${gate_poll}"
+    done
+}
+
 _sandbox_lock_acquire() {
     local lock="${SANDBOX_STATE_DIR}/.slot-lock"
+    local gate="${lock}.gate"
     local max_wait="${ROADTRIP_SANDBOX_LOCK_WAIT_SECONDS:-60}"
     local grace="${ROADTRIP_SANDBOX_LOCK_OWNER_GRACE_SECONDS:-5}"
+    local gate_stale="${ROADTRIP_SANDBOX_LOCK_GATE_STALE_SECONDS:-30}"
     local poll=1
+    local gate_poll=0.1
     local waited=0
+    local deadline
     local owner_pid
     local lock_age
     local lock_mtime
     local warned=0
 
     mkdir -p "${SANDBOX_STATE_DIR}"
-    until mkdir "${lock}" 2>/dev/null; do
+    deadline=$(( $(date +%s) + max_wait ))
+    while true; do
+        if ! _sandbox_lock_gate_enter "${gate}" "${gate_stale}" "${deadline}" "${gate_poll}"; then
+            echo "error: timed out waiting for sandbox slot lock: ${lock}" >&2
+            exit 1
+        fi
+        if mkdir "${lock}" 2>/dev/null; then
+            # Before the trap: a failed write leaves a lock the grace path recovers.
+            printf '%s\n' "$$" > "${lock}/pid"
+            rm "${gate}"
+            break
+        fi
+
         # Age gates every reclaim: it belongs to the directory, so unlike the
         # PID we just read it cannot be stale and name a lock someone else has
         # since taken. Costs up to `grace` before recovery.
@@ -612,7 +658,7 @@ _sandbox_lock_acquire() {
             fi
             lock_age=0
         fi
-        if (( lock_age >= grace )); then
+        if (( lock_age > grace )); then
             if [[ "${owner_pid}" =~ ^[0-9]+$ ]]; then
                 if ! kill -0 "${owner_pid}" 2>/dev/null; then
                     echo "==> reclaiming sandbox slot lock abandoned by PID ${owner_pid}"
@@ -624,6 +670,7 @@ _sandbox_lock_acquire() {
                 _sandbox_lock_steal "${lock}"
             fi
         fi
+        rm "${gate}"
 
         # Every path advances `waited`, so max_wait stays a real bound.
         if (( waited >= max_wait )); then
@@ -633,8 +680,6 @@ _sandbox_lock_acquire() {
         sleep "${poll}"
         waited=$(( waited + poll ))
     done
-    # Before the trap: a failed write leaves a lock the grace path recovers.
-    printf '%s\n' "$$" > "${lock}/pid"
     _sandbox_lock_dir="${lock}"
     trap _sandbox_lock_release EXIT
 }
@@ -1032,6 +1077,8 @@ case "${ROUTING}" in
         mkdir -p "${SANDBOX_CADDY_DIR}"
         cat > "${CADDY_SNIPPET}" <<CADDY
 http://${SANDBOX_FQDN} {
+    @internal path /api/internal/*
+    respond @internal 404
     reverse_proxy sb-${SANDBOX_NAME}-backend:${SANDBOX_BACKEND_PORT}
 }
 CADDY

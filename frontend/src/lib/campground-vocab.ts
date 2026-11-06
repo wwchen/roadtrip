@@ -1,6 +1,4 @@
-// The kinds and amenities the filter exposes, with the backend's own labels.
-// Mirrors `CampsiteKind.label` and `AmenityKey.label` in the Kotlin enums; a card's
-// own amenity chips still render the `label` the detail response carries.
+import { amenityLabel as domainAmenityLabel, campsiteKindLabel } from '@roadtrip/domain';
 import type { AmenityKey, CampsiteKind } from '@/api/generated/api-types';
 
 export interface KindOption {
@@ -14,16 +12,16 @@ export interface AmenityOption {
 }
 
 export const FILTER_SITE_TYPES: readonly KindOption[] = [
-  { value: 'tent', label: 'Tent' },
-  { value: 'rv', label: 'RV' },
-  { value: 'cabin', label: 'Cabin' },
+  { value: 'tent', label: campsiteKindLabel('tent') },
+  { value: 'rv', label: campsiteKindLabel('rv') },
+  { value: 'cabin', label: campsiteKindLabel('cabin') },
 ];
 
 export const FILTER_AMENITIES: readonly AmenityOption[] = [
-  { key: 'toilets', label: 'Toilets' },
-  { key: 'showers', label: 'Showers' },
-  { key: 'water', label: 'Water' },
-  { key: 'pets_allowed', label: 'Pets allowed' },
+  { key: 'toilets', label: domainAmenityLabel('toilets') },
+  { key: 'showers', label: domainAmenityLabel('showers') },
+  { key: 'water', label: domainAmenityLabel('water') },
+  { key: 'pets_allowed', label: domainAmenityLabel('pets_allowed') },
 ];
 
 export function kindLabel(kind: CampsiteKind): string {

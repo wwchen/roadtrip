@@ -3,7 +3,7 @@
 # decides which build it looks for. A mismatch fails at launchPersistentContext
 # with a missing-executable error, which surfaces as recgov_auth_check_exception
 # on every /login and /verify.
-FROM mcr.microsoft.com/playwright:v1.62.1-noble
+FROM mcr.microsoft.com/playwright:v1.64.0-noble
 
 WORKDIR /app
 
@@ -11,9 +11,11 @@ LABEL ca.floo.roadtrip.managed="true" \
       ca.floo.roadtrip.component="recgov-companion"
 
 COPY package.json package-lock.json ./
-RUN npm ci
+COPY companion/package.json companion/
+RUN npm ci --workspace campsite-companion
 
-COPY src ./src
+WORKDIR /app/companion
+COPY companion/src ./src
 
 ENV NODE_ENV=production
 ENV HEADLESS=true

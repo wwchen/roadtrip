@@ -35,7 +35,7 @@ class RegistryParseTest(unittest.TestCase):
         registry = manage.load_registry()
         self.assertGreater(len(registry), 5)
         self.assertIn("MAPBOX_TOKEN", registry)
-        self.assertEqual(["backend"], registry["MAPBOX_TOKEN"].consumers)
+        self.assertEqual(["backend", "web"], registry["MAPBOX_TOKEN"].consumers)
         self.assertEqual(["prod"], registry["MAPBOX_TOKEN"].required_in)
 
     def test_inline_lists_and_empty_lists(self):
@@ -91,6 +91,15 @@ class RegistryParseTest(unittest.TestCase):
             "  required_in: []\n"
         )
         self.assertEqual(["backend", "recgov-companion"], parsed["A_KEY"].services())
+
+    def test_the_web_container_is_a_compose_service(self):
+        parsed = manage.parse_registry(
+            "A_KEY:\n"
+            "  description: thing\n"
+            "  consumers: [postgres, web]\n"
+            "  required_in: []\n"
+        )
+        self.assertEqual(["postgres", "web"], parsed["A_KEY"].services())
 
 
 class GeneratorTest(unittest.TestCase):

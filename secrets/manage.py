@@ -51,7 +51,7 @@ ENVIRONMENTS = ("local", "prod")
 # Consumers that are Compose services and receive a mounted file. `host-tools`
 # runs outside containers, so those get environment injection from `exec`
 # instead — there is nowhere to mount a file.
-SERVICE_CONSUMERS = ("postgres", "backend", "grafana", "cloudflared", "companion")
+SERVICE_CONSUMERS = ("postgres", "backend", "web", "grafana", "cloudflared", "companion")
 
 # Consumer name -> Compose service name, where the two differ. The registry
 # names the role; Compose names the container.
