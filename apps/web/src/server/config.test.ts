@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CAMPGROUND_POI_TYPE, POI_TYPES } from '@roadtrip/db';
 import { afterEach, expect, test, vi } from 'vitest';
 import { ConfigError, config } from './config';
 
@@ -15,6 +16,8 @@ const KOTLIN_APPLICATION_YAML = path.resolve(
   '..', '..', '..', '..', 'backend', 'src', 'main', 'resources', 'application.yaml',
 );
 const KOTLIN_AVAILABILITY_LIST_KEY = 'enabled-availability-providers:';
+const KOTLIN_DATA_LIST_KEY = 'enabled-data-providers:';
+const NON_CAMPGROUND_POI_TYPES: readonly string[] = POI_TYPES.filter((type) => type !== CAMPGROUND_POI_TYPE);
 
 function kotlinYamlList(key: string): string[] {
   const lines = readFileSync(KOTLIN_APPLICATION_YAML, 'utf8').split('\n');
@@ -236,4 +239,10 @@ test('the enabled availability providers default to Kotlin read-path list and re
 test("the default enabled availability providers are Kotlin's application.yaml list", () => {
   vi.stubEnv('ENABLED_AVAILABILITY_PROVIDERS', undefined);
   expect(config.enabledAvailabilityProviders).toEqual(kotlinYamlList(KOTLIN_AVAILABILITY_LIST_KEY));
+});
+
+test("the default enabled data providers are Kotlin's application.yaml campground providers", () => {
+  vi.stubEnv('ENABLED_DATA_PROVIDERS', undefined);
+  const kotlinCampgroundProviders = kotlinYamlList(KOTLIN_DATA_LIST_KEY).filter((provider) => !NON_CAMPGROUND_POI_TYPES.includes(provider));
+  expect(config.enabledDataProviders).toEqual(kotlinCampgroundProviders);
 });
