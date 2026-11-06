@@ -15,7 +15,6 @@ const MAHOOD_DEEPLINK =
   '&resourceLocationId=-2147483486';
 const TESLA_POI = 3201n;
 const GYM_POI = 3301n;
-const D3_FIELDS = ['availability_provider', 'time_zone', 'earliest_date', 'latest_date', 'booking_ref', 'availability_supported'];
 
 let fixture: CatalogFixture;
 
@@ -86,6 +85,8 @@ test("a campground's detail carries the Kotlin fields", async () => {
   });
   expect(properties?.detail).toEqual({
     sources: ['campflare'],
+    time_zone: expect.any(String),
+    earliest_date: expect.any(String),
     reserve_url: 'https://www.Example.org:443/book?x',
     booking_site: 'example.org',
     phone: '555-0101',
@@ -125,7 +126,22 @@ test('an Aspira campground gets its dated booking deeplink, its Campflare page a
     { url: 'https://campflare.com/campground/mahood-lake', label: 'View on Campflare', kind: 'info' },
   ]);
   expect(detailOf?.booking_system).toBe('BC Parks');
-  expect(detailOf).not.toHaveProperty('availability_supported');
+});
+
+test('an Aspira campground with a Campflare alias is served by campflare, registered first, with its zone and dates', async () => {
+  const detailOf = (await detail(ASPIRA_POI))?.properties.detail;
+  expect(detailOf).toMatchObject({
+    availability_supported: true,
+    availability_provider: 'campflare',
+    time_zone: 'America/Vancouver',
+    earliest_date: '2026-06-17',
+    latest_date: '2027-06-17',
+  });
+});
+
+test('a Campflare campground rec.gov also sells is served by campflare while rec.gov is not enabled', async () => {
+  const detailOf = (await detail(ALIASED_POI))?.properties.detail;
+  expect(detailOf).toMatchObject({ availability_supported: true, availability_provider: 'campflare', latest_date: '2027-06-17' });
 });
 
 test('a Campflare campground that rec.gov also sells reserves on rec.gov, then links its Campflare page', async () => {
@@ -137,9 +153,13 @@ test('a Campflare campground that rec.gov also sells reserves on rec.gov, then l
   expect(detailOf?.booking_system).toBe('Recreation.gov');
 });
 
-test("a campground's detail omits every D3 field", async () => {
-  const keys = Object.keys((await detail(RICH_POI))?.properties.detail ?? {});
-  for (const field of D3_FIELDS) expect(keys).not.toContain(field);
+test('a campground with no booking ref is not availability-supported but still states its zone and earliest date', async () => {
+  const detailOf = (await detail(RICH_POI))?.properties.detail ?? {};
+  expect(detailOf).not.toHaveProperty('availability_supported');
+  expect(detailOf).not.toHaveProperty('availability_provider');
+  expect(detailOf).not.toHaveProperty('latest_date');
+  expect(detailOf).toHaveProperty('time_zone');
+  expect(detailOf).toHaveProperty('earliest_date');
 });
 
 test("a Tesla supercharger's detail", async () => {
