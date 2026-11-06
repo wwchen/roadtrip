@@ -76,7 +76,7 @@ test('details keep request order, omit unknown and disabled-provider ids, and ca
   expect(campgrounds[0]).not.toHaveProperty('max_people');
 });
 
-test('a summary names the booking site its campground books through, without claiming availability', async () => {
+test('a summary names the booking site its campground books through and claims availability for it', async () => {
   const { campgrounds } = await campgroundDetails(fixture.readDb, [NO_SHOWERS_POI], ENABLED_PROVIDERS);
-  expect(campgrounds[0]).toMatchObject({ booking_system: 'BC Parks', availability_supported: false });
+  expect(campgrounds[0]).toMatchObject({ booking_system: 'BC Parks', availability_supported: true });
 });

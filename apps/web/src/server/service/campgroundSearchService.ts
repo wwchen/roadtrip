@@ -25,14 +25,15 @@ export async function searchCampgroundIds(
   };
 }
 
-function summaryBookingSystem(row: CampgroundSummaryRow): string | null {
+function summaryBooking(row: CampgroundSummaryRow): { system: string | null; supported: boolean } {
   const tenants = shippedTenantRegistry();
-  return bookingSystem(tenants, campgroundBookingRef(tenants, bookingIdentities(row.bookingProvider, row.bookingProviderRef, row.bookingAliases)));
+  const bookingRef = campgroundBookingRef(tenants, bookingIdentities(row.bookingProvider, row.bookingProviderRef, row.bookingAliases));
+  return { system: bookingSystem(tenants, bookingRef), supported: bookingRef !== null };
 }
 
 function summaryDto(row: CampgroundSummaryRow): CampgroundSummaryDto {
   const rating = ratingDto(row.metadata?.rating);
-  const booking = summaryBookingSystem(row);
+  const booking = summaryBooking(row);
   return {
     id: toContractId(row.poiId),
     campground_id: toContractId(row.campgroundId),
@@ -42,8 +43,8 @@ function summaryDto(row: CampgroundSummaryRow): CampgroundSummaryDto {
     lng: row.lng,
     lat: row.lat,
     ...(rating === undefined ? {} : { rating }),
-    availability_supported: false,
-    ...(booking === null ? {} : { booking_system: booking }),
+    availability_supported: booking.supported,
+    ...(booking.system === null ? {} : { booking_system: booking.system }),
     amenities: amenityDtos(row.amenities),
     site_counts: row.siteCounts,
     site_total: row.siteTotal,
