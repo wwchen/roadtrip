@@ -56,34 +56,21 @@ const EXTENSIONS = ['.css', '.ts', '.tsx'];
  * have rendered as the fallback forever.
  */
 const COMPONENT_LOCAL = new Set([
-  // Declared in availability.css and re-set by the Site column's drag-resize.
-  '--rt-site-column-width',
-  // Declared in availability.css; WatchPopover positions against the same number.
+  // Declared in watch-editor.css, which sizes the editor against them.
   '--rt-watch-editor-width',
-  // Declared in cell-book-popover.css; CellBookPopover positions against it, for
-  // the same reason the watch editor does.
-  '--rt-cell-book-pop-width',
   '--rt-watch-editor-mobile-margin',
-  // Set from React inline styles in SiteMatrix.tsx (lines ~352 and ~370), never
-  // declared in CSS, and read with a fallback for the pre-measurement first paint.
-  '--rt-site-dates-width',
-  '--rt-site-matrix-viewport-width',
   // Layout plumbing, not design tokens: geometry one fixed surface has to hand to
   // another because CSS cannot read a sibling's box. See docs/frontend-components.md.
   // Declared 0 in shell.css, set by sandbox.css while the banner is up, and read by
-  // map.css, legend.css, topbar.css, drawer.css and the body padding.
+  // map.css, legend.css, topbar.css and the body padding.
   '--rt-chrome-top',
   // Declared in sandbox.css; pins the banner's height and the room it claims.
   '--rt-sandbox-banner-h',
-  // Published from JS by features/trip/useTopbarClearance.ts, read by drawer.css.
+  // Published from JS by features/trip/useTopbarClearance.ts.
   '--rt-topbar-bottom',
-  // Declared and consumed entirely inside drawer.css.
-  '--rt-drawer-clearance',
-  '--rt-drawer-clearance-gap',
   // The POI page's own rhythm: declared in domain/poi/poi-page.css, which is the
-  // one stylesheet for both the drawer panel and the routed page. drawer.css reads
-  // the gutter so its loading and error states line up with the page that replaces
-  // them. Geometry the page owns, not colour or a scale step.
+  // one stylesheet for both the place sheet and the routed page. Geometry the page
+  // owns, not colour or a scale step.
   '--rt-poi-gutter',
   '--rt-poi-block-gap',
   '--rt-poi-hero-height',
@@ -101,6 +88,66 @@ const COMPONENT_LOCAL = new Set([
   '--rt-acct-clearance',
   // Published from JS by features/account/useAcctClearance.ts, read by topbar.css.
   '--rt-acct-left',
+  // The bottom sheet's own geometry and motion: declared in ui/sheet.css, which is the one
+  // stylesheet for the sheet. Detent ratios are read back by Sheet.tsx with getComputedStyle,
+  // and the drag height is set inline by it while a drag is in progress.
+  '--rt-sheet-peek',
+  '--rt-sheet-half',
+  '--rt-sheet-full',
+  '--rt-sheet-height',
+  '--rt-sheet-drag-height',
+  '--rt-sheet-handle-width',
+  '--rt-sheet-handle-height',
+  '--rt-sheet-handle-focus-offset',
+  '--rt-sheet-grabber-height',
+  '--rt-sheet-close-size',
+  '--rt-sheet-close-icon',
+  '--rt-sheet-motion',
+  '--rt-sheet-top-clearance',
+  '--rt-sheet-top-gap',
+  // The sheet's width cap and gutter, declared at :root in ui/sheet.css because
+  // features/place/place-sheet.css reads them for the loading and error chrome that stands in
+  // for the sheet while it has nothing to show, and that chrome sits outside .rt-sheet.
+  '--rt-sheet-max-width',
+  '--rt-sheet-gutter',
+  // The place sheet's own rhythm: declared in features/place/place-sheet.css.
+  '--rt-place-sheet-stay-gap',
+  '--rt-place-sheet-subtitle-size',
+  '--rt-place-sheet-header-gap',
+  '--rt-place-sheet-alert-gap',
+  '--rt-place-sheet-name-size',
+  // The site-by-date grid's own column geometry: declared in domain/place/site-matrix.css,
+  // the one stylesheet for the grid at the sheet's Full detent. The date count is set
+  // from a React inline style because only the component knows how many nights are in
+  // view, and every column width is derived from it in CSS.
+  '--rt-site-matrix-date-col',
+  '--rt-site-matrix-max-height',
+  '--rt-site-matrix-row-height',
+  '--rt-site-matrix-head-height',
+  '--rt-site-column-min',
+  '--rt-site-date-count',
+  // The nights strip's cell geometry: declared in domain/place/nights-strip.css.
+  '--rt-nights-gap',
+  '--rt-nights-cell-min',
+  '--rt-nights-cell-max',
+  '--rt-nights-cell-pad',
+  '--rt-nights-cell-line-gap',
+  // The verdict header's own rhythm: declared in domain/place/place-verdict.css.
+  '--rt-place-verdict-gap',
+  '--rt-place-verdict-head-gap',
+  '--rt-place-verdict-reasons-gap',
+  '--rt-place-verdict-name-size',
+  '--rt-place-verdict-detail-size',
+  // The alert offer's one line: declared in domain/place/alert-row.css.
+  '--rt-alert-offer-gap',
+  // The open cell's add-to-cart panel: domain/place/site-cart.css, except the width,
+  // which SiteCartPopover.tsx sets because it also measures against it.
+  '--rt-site-cart-width',
+  '--rt-site-cart-z',
+  '--rt-site-cart-gap',
+  '--rt-site-cart-pad',
+  '--rt-site-cart-row-height',
+  '--rt-site-cart-icon',
 ]);
 
 const defined = new Set(

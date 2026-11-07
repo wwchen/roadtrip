@@ -310,9 +310,12 @@
      account button and, above the map, the search/nav panel — a sheet
      anchored there had no shared geometry with either, so its own close
      button could land right on top of the nav panel whenever that panel grew
-     tall. Anchoring to the viewport's bottom instead (the same shape
-     `.rt-drawer` uses on mobile) needs no coordination with anything above
-     the map, because nothing else on this page lives there. */
+     tall. The viewport's bottom edge is not empty either: the Place sheet
+     lives there too (`ui/sheet.css`), so the two are ordered on the stacking
+     scale rather than by geometry — this stays at `--rt-z-sheet`, below
+     `--rt-z-place-sheet`, which is the depth the drawer the sheet replaced
+     carried. An open Place sheet therefore covers this corner, its toggle
+     included, exactly as the drawer did. */
   .rt-legend {
     position: fixed;
     top: auto;

@@ -1,0 +1,59 @@
+.rt-place-sheet {
+  --rt-place-sheet-stay-gap: 6px;
+  --rt-place-sheet-alert-gap: 4px;
+  --rt-place-sheet-header-gap: 8px;
+  --rt-place-sheet-subtitle-size: 12px;
+  --rt-place-sheet-name-size: 16px;
+}
+
+.rt-place-sheet .rt-sheet-header {
+  margin-bottom: var(--rt-place-sheet-header-gap);
+}
+
+.rt-place-sheet__compact {
+  display: flex;
+  flex-direction: column;
+}
+
+.rt-place-sheet__subtitle {
+  margin: 0;
+  color: var(--rt-muted);
+  font-family: var(--rt-sans);
+  font-size: var(--rt-place-sheet-subtitle-size);
+}
+
+.rt-place-sheet__name {
+  margin: 0;
+  font-family: var(--rt-sans);
+  font-size: var(--rt-place-sheet-name-size);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
+.rt-place-sheet__stay {
+  display: flex;
+  flex-direction: column;
+  gap: var(--rt-place-sheet-stay-gap);
+}
+
+.rt-place-sheet__stay > .rt-alert-offer {
+  margin-top: var(--rt-place-sheet-alert-gap);
+}
+
+.rt-place-sheet .rt-poi {
+  --rt-poi-gutter: 0;
+}
+
+.rt-place-chrome {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  /* The sheet's own depth: this is what the map shows while the sheet has nothing
+     to show, so it has to clear the same overlays. */
+  z-index: var(--rt-z-place-sheet);
+  width: 100%;
+  max-width: var(--rt-sheet-max-width);
+  box-sizing: border-box;
+  padding: var(--rt-sheet-gutter);
+}

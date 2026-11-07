@@ -1,7 +1,6 @@
 // The rec.gov test-login flow as a pure state machine.
 //
-// Lives beside BookingPanel and is unit-tested directly — the `matrix-rows.ts`
-// pattern. The panel owns the requests and the DOM; this module owns which of
+// Lives beside BookingPanel and is unit-tested directly. The panel owns the requests and the DOM; this module owns which of
 // the five states the flow is in, so the rules that actually matter (a late
 // answer cannot resurrect a cancelled step, a challenge id survives the submit)
 // are testable without rendering anything.

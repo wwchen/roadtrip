@@ -2,12 +2,20 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import type { FlatPoiFeature } from '@/lib/poi';
 import { COPIED_STATE_MS } from '@/lib/share-links';
-import { SharePoiButton } from './fields';
+import { useTripStore } from '@/stores/tripStore';
+import { DirectionsButton, SharePoiButton } from './fields';
 import { ChargerPoiPage } from './types/charger';
 
 const ORIGIN = window.location.origin;
 const COPY_LABEL = 'Copy link to this place';
 const COPIED_LABEL = 'Link copied';
+const DIRECTIONS_LABEL = 'Directions';
+const ADD_STOP_LABEL = 'Add stop';
+const PLACE_NAME = 'Sutherlin, OR';
+const PLACE_LNG = -119.5;
+const PLACE_LAT = 37.8;
+const CHARGER_KIND = 'SC';
+const ORIGIN_ROW = 0;
 
 let writeText: ReturnType<typeof vi.fn>;
 let execCommand: ReturnType<typeof vi.fn>;
@@ -17,6 +25,7 @@ const setClipboard = (clipboard: unknown) =>
   Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true });
 
 beforeEach(() => {
+  useTripStore.getState().reset();
   window.history.replaceState(null, '', '/');
   writeText = vi.fn(async () => {});
   execCommand = vi.fn(() => true);
@@ -89,6 +98,48 @@ describe('SharePoiButton', () => {
     render(<SharePoiButton id={null} />);
 
     expect(screen.queryByLabelText(COPY_LABEL)).toBeNull();
+  });
+});
+
+const renderDirections = (onAdded = vi.fn(), coordinates: [number, number] = [PLACE_LNG, PLACE_LAT]) => {
+  render(
+    <DirectionsButton
+      name={PLACE_NAME}
+      lng={coordinates[0]}
+      lat={coordinates[1]}
+      kind={CHARGER_KIND}
+      onAdded={onAdded}
+    />,
+  );
+  return onAdded;
+};
+
+describe('DirectionsButton', () => {
+  test('makes the place the trip’s destination, asks for the origin, and reports it added', async () => {
+    const onAdded = renderDirections();
+
+    await press(DIRECTIONS_LABEL);
+
+    const trip = useTripStore.getState();
+    expect(trip.stops).toEqual([null, { name: PLACE_NAME, lng: PLACE_LNG, lat: PLACE_LAT, kind: CHARGER_KIND }]);
+    expect(trip.mode).toBe('directions');
+    expect(trip.focusRow).toBe(ORIGIN_ROW);
+    expect(onAdded).toHaveBeenCalledTimes(1);
+  });
+
+  test('says Add stop once a trip is being built', () => {
+    useTripStore.getState().setMode('directions');
+
+    renderDirections();
+
+    expect(screen.getByLabelText(ADD_STOP_LABEL)).toBeInTheDocument();
+    expect(screen.queryByLabelText(DIRECTIONS_LABEL)).toBeNull();
+  });
+
+  test('is absent when the place has no usable coordinates', () => {
+    renderDirections(vi.fn(), [Number.NaN, PLACE_LAT]);
+
+    expect(screen.queryByLabelText(DIRECTIONS_LABEL)).toBeNull();
   });
 });
 

@@ -1,15 +1,15 @@
-// The drawer's deep link: `?poi=<id>`.
+// The place sheet's deep link: `?poi=<id>`.
 //
-// `replaceState`, never `pushState`: opening a drawer is not a navigation, and a
+// `replaceState`, never `pushState`: opening a place is not a navigation, and a
 // history entry per pin click would turn Back into "close the last twelve
-// drawers". The smoke suite loads `/?poi=…` directly, so this parameter is a
+// places". The smoke suite loads `/?poi=…` directly, so this parameter is a
 // contract, not a convenience.
 const POI_PARAM = 'poi';
 
 /**
  * Point the visible URL at a POI, leaving every other parameter alone.
  *
- * An active `?route=` in particular has to survive — the drawer is opened from
+ * An active `?route=` in particular has to survive — the sheet is opened from
  * inside a trip as often as from browsing.
  */
 export function showPoiInUrl(id: string | number | null | undefined): void {
@@ -36,7 +36,7 @@ export function poiFromUrl(search: string = window.location.search): string | nu
  * Swap the visible path+query, if it actually differs.
  *
  * The no-op check is not an optimisation: `replaceState` with an identical URL
- * still churns history state, and this runs on every drawer open.
+ * still churns history state, and this runs on every place open.
  */
 function replaceVisibleUrl(next: URL): void {
   if (next.origin !== window.location.origin) return;

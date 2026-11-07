@@ -72,6 +72,20 @@ export function normalizeWatchCapabilities(
   };
 }
 
+export type CartReach = 'ready' | 'gated' | 'unsupported';
+
+export function cartReach(state: AddToCartState): CartReach {
+  switch (state) {
+    case 'ready':
+      return 'ready';
+    case 'signed_out':
+    case 'no_credentials':
+      return 'gated';
+    case 'unsupported':
+      return 'unsupported';
+  }
+}
+
 /**
  * Whether this campground can notify at all.
  *

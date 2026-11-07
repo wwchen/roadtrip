@@ -1,39 +1,46 @@
-// Direct add-to-cart, from the availability grid.
-//
-// A deliberately slow call: a real browser drives the vendor behind it, so tens
-// of seconds is a normal success. No local timeout — aborting would leave a hold
-// that may well have succeeded with nothing watching it.
-
 import type {
   AddToCartRequestDto,
   AddToCartResponseDto,
   ApiErrorSchema,
 } from './generated/api-types';
-import { jsonPostOk, type RequestOptions } from './http';
+import { jsonPostOk } from './http';
 
 const ADD_TO_CART_URL = '/api/booking/add-to-cart';
 
-/**
- * `campsite_id` is numeric on the wire. The backend's DTO is a Long, and the
- * grid carries ids as strings — `Number()` at the call site, as `useWatches` does.
- */
+const SECONDS_IN_MS = 1_000;
+
+const COMPANION_RUN_BUDGET_MS = 180 * SECONDS_IN_MS;
+
+const PREFLIGHT_SHARE_OF_RUN = 3;
+
+const PREFLIGHT_STEPS = 2;
+
+const SERVER_WORST_CASE_MS =
+  COMPANION_RUN_BUDGET_MS + PREFLIGHT_STEPS * (COMPANION_RUN_BUDGET_MS / PREFLIGHT_SHARE_OF_RUN);
+
+const DEADLINE_HEADROOM_MS = 30 * SECONDS_IN_MS;
+
+export const CART_HOLD_DEADLINE_MS = SERVER_WORST_CASE_MS + DEADLINE_HEADROOM_MS;
+
+export const HOLD_UNANSWERED = 'hold_unanswered';
+
+export class CartHoldUnanswered extends Error {
+  readonly code = HOLD_UNANSWERED;
+
+  constructor() {
+    super(`add-to-cart: no answer within ${CART_HOLD_DEADLINE_MS}ms`);
+    this.name = 'CartHoldUnanswered';
+  }
+}
+
 export type AddToCartFields = AddToCartRequestDto;
 
 export type AddToCartResponse = AddToCartResponseDto;
 
-/** The add-to-cart route's error envelope, as `HttpError` carries it. */
 export type AddToCartFailure = ApiErrorSchema;
 
-/** The envelope's `error` when the rejection carried none. */
 const UNKNOWN_ERROR = '';
 
-/**
- * Reads a rejected `addToCart` without every caller casting `unknown`.
- *
- * `HttpError` carries the envelope's `error` as `code` and its
- * `provider_display` camel-cased; a raw rejection may still carry the wire
- * spellings, so both are accepted.
- */
 export function addToCartFailure(err: unknown): AddToCartFailure {
   const carried = err as
     | {
@@ -46,22 +53,22 @@ export function addToCartFailure(err: unknown): AddToCartFailure {
     | null
     | undefined;
   return {
-    // A `DOMException` carries a *numeric* legacy `code` (`AbortError` is 20),
-    // which `settings-errors.ts` would render as "Something went wrong (20)".
     error: typeof carried?.code === 'string' ? carried.code : (carried?.error ?? UNKNOWN_ERROR),
     provider: carried?.provider,
     provider_display: carried?.providerDisplay ?? carried?.provider_display,
   };
 }
 
-/**
- * Holds one campsite-night range in the caller's own cart at the booking vendor.
- * Throws `HttpError` with `code` set to the backend's own reason, which is what
- * `settings-errors.ts` maps to copy.
- */
-export function addToCart(
-  fields: AddToCartFields,
-  options: RequestOptions = {},
-): Promise<AddToCartResponse> {
-  return jsonPostOk<AddToCartResponse>(ADD_TO_CART_URL, fields, options);
+export async function addToCart(fields: AddToCartFields): Promise<AddToCartResponse> {
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), CART_HOLD_DEADLINE_MS);
+  try {
+    return await jsonPostOk<AddToCartResponse>(ADD_TO_CART_URL, fields, {
+      signal: deadline.signal,
+    });
+  } catch (err) {
+    throw deadline.signal.aborted ? new CartHoldUnanswered() : err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
