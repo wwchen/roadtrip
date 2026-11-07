@@ -86,11 +86,13 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
         startDate: LocalDate? = start,
         endDate: LocalDate? = end,
         mode: AvailabilityEgressMode = AvailabilityEgressMode.REFRESH,
+        freshAtOrAfter: String? = null,
     ) = AvailabilityEgressRequestDto(
         mode = mode,
         campground = ProviderRefDto(dataProvider = DataProvider.RECGOV.id, dataProviderRef = ref),
         startDate = startDate?.toString(),
         endDate = endDate?.toString(),
+        freshAtOrAfter = freshAtOrAfter,
     )
 
     private fun controller(
@@ -222,6 +224,40 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
             assertEquals((WINDOW_DAYS * 2).toInt(), body.cells.size)
         }
     }
+
+    @Test
+    fun `refresh with a cutoff the stored cells meet answers from the store`() {
+        egress(listOf(recgov())) { post(request()) }
+        val cold = recgov()
+        egress(listOf(cold), ttl = alwaysStale) {
+            val response = post(request(freshAtOrAfter = observedAt.minus(Duration.ofDays(1)).toString()))
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = wire.decodeFromString(AvailabilityEgressResponseDto.serializer(), response.bodyAsText())
+            assertEquals(0, cold.calls.size)
+            assertTrue(body.fromCache)
+        }
+    }
+
+    @Test
+    fun `refresh with a cutoff newer than the stored cells fetches`() {
+        egress(listOf(recgov())) { post(request()) }
+        val again = recgov()
+        egress(listOf(again), ttl = alwaysFresh) {
+            val response = post(request(freshAtOrAfter = observedAt.plusSeconds(1).toString()))
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = wire.decodeFromString(AvailabilityEgressResponseDto.serializer(), response.bodyAsText())
+            assertEquals(1, again.calls.size)
+            assertEquals(false, body.fromCache)
+        }
+    }
+
+    @Test
+    fun `a malformed cutoff is 400 bad_date_window`() =
+        egress(listOf(recgov())) {
+            val response = post(request(freshAtOrAfter = "yesterday"))
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertEquals("bad_date_window", errorOf(response.bodyAsText()))
+        }
 
     @Test
     fun `a provider failure is 503 with its code`() =

@@ -59,6 +59,7 @@ function storedAnswer(
         start_date: start,
         end_date: end,
         latest_date: LATEST,
+        from_cache: true,
         campsites: known$.map((index) => ({ data_provider: ENABLED_PROVIDER, data_provider_ref: refOf(index) })),
         cells: known$.flatMap((index) =>
           [start, addDays(start, 1)].map((date) => ({

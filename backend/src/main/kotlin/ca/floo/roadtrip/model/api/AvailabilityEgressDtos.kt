@@ -25,6 +25,7 @@ data class AvailabilityEgressRequestDto(
     val campground: ProviderRefDto,
     @SerialName("start_date") val startDate: String? = null,
     @SerialName("end_date") val endDate: String? = null,
+    @SerialName("fresh_at_or_after") val freshAtOrAfter: String? = null,
 )
 
 @Serializable
@@ -42,4 +43,5 @@ data class AvailabilityEgressResponseDto(
     @SerialName("latest_date") val latestDate: String? = null,
     val campsites: List<ProviderRefDto> = emptyList(),
     val cells: List<AvailabilityEgressCellDto>,
+    @SerialName("from_cache") val fromCache: Boolean = false,
 )

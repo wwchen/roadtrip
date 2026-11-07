@@ -7,7 +7,7 @@ import { AvailabilityWindowRefusedError, type EgressFetch } from './availability
 import { planRefresh, runRefresh } from './availabilityRefreshService';
 
 const NOW = new Date('2026-11-05T12:00:00Z');
-const windowOk: EgressFetch = async () => ({ kind: 'cells', body: { start_date: '', end_date: '', campsites: [], cells: [] } });
+const windowOk: EgressFetch = async () => ({ kind: 'cells', body: { start_date: '', end_date: '', campsites: [], cells: [], from_cache: false } });
 
 let fixture: CatalogFixture;
 let start: string;
@@ -76,7 +76,7 @@ test('a window check that fails for another reason still plans the refresh', asy
 test('runRefresh asks mini-ca and writes nothing anywhere', async () => {
   const plan = await fetchPlan();
   const info = vi.spyOn(console, 'info').mockImplementation(() => {});
-  const fetch = vi.fn(async (): Promise<EgressResult> => ({ kind: 'cells', body: { start_date: start, end_date: end, campsites: [], cells: [] } }));
+  const fetch = vi.fn(async (): Promise<EgressResult> => ({ kind: 'cells', body: { start_date: start, end_date: end, campsites: [], cells: [], from_cache: false } }));
   expect(await runRefresh(plan, fetch)).toEqual({ cells: 0 });
   expect(fetch).toHaveBeenCalledWith(plan.request);
   info.mockRestore();

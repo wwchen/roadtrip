@@ -16,6 +16,7 @@ interface CampsiteRefRow extends Record<string, unknown> {
   id: string;
   data_provider: string;
   data_provider_ref: string;
+  max_people: number | string | null;
 }
 
 const KEY_SEPARATOR = '\u0000';
@@ -68,15 +69,20 @@ export async function findAvailabilityCampground(db: Db, poiId: bigint): Promise
 export interface CampsiteKey {
   id: bigint;
   key: string;
+  maxPeople: number | null;
 }
 
 export async function campsitesOf(db: Db, campgroundId: bigint, kinds: readonly CampsiteKind[]): Promise<CampsiteKey[]> {
   const kindFilter = kinds.length === 0 ? sql`true` : sql`kind = ANY(${pgArrayLiteral(kinds)}::text[])`;
   const rows = await db.execute<CampsiteRefRow>(sql`
-    SELECT id, data_provider, data_provider_ref
+    SELECT id, data_provider, data_provider_ref, max_people
     FROM campsites
     WHERE campground_id = ${campgroundId} AND deleted_at IS NULL AND ${kindFilter}
     ORDER BY id
   `);
-  return rows.map((row) => ({ id: BigInt(row.id), key: providerRefKey(row.data_provider, row.data_provider_ref) }));
+  return rows.map((row) => ({
+    id: BigInt(row.id),
+    key: providerRefKey(row.data_provider, row.data_provider_ref),
+    maxPeople: row.max_people === null ? null : Number(row.max_people),
+  }));
 }

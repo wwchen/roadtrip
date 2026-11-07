@@ -87,7 +87,7 @@ export function egressRequest(
 
 function emptyWeek(target: WeekTarget, startDate: string | null, endDate: string | null, now: Date): AvailabilityEgressResponseDto {
   const start = startDate ?? poiDateContext(target.campground.lat, target.campground.lng, now).earliestDate;
-  return { start_date: start, end_date: endDate ?? addDays(start, DEFAULT_WEEK_DAYS), campsites: [], cells: [] };
+  return { start_date: start, end_date: endDate ?? addDays(start, DEFAULT_WEEK_DAYS), campsites: [], cells: [], from_cache: false };
 }
 
 function unknownToMiniCa(target: WeekTarget, startDate: string | null, endDate: string | null, now: Date): AvailabilityEgressResponseDto {

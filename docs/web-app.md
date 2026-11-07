@@ -136,6 +136,18 @@ Postgres, where Kotlin's read-through and pollers already keep it. Vercel stores
   Then it answers `202` and, after the response, asks mini-ca for `mode: "refresh"`: mini-ca's
   read-through fetches from the vendor through its one rate limiter and stores the result in its
   own Postgres. The page polls the GET every 2 seconds, at most 15 times, until the week is fresh.
+- `POST /api/pois/availability/stays` is the map's stay check, streamed as `text/event-stream`
+  in the same contract Kotlin serves. It validates as Kotlin does (1 to 50 POIs, both dates, a
+  group size of at least 1; `max_age_seconds` clamped to 60 s to 2 h). For each POI, at most 3 at
+  a time, it reads the campground and campsites from Neon and asks mini-ca for `mode: "refresh"`
+  with `fresh_at_or_after` set to now minus the max age: mini-ca answers from its store when every
+  cell is that fresh and fetches otherwise, through the same read-through as the refresh. Vercel
+  then judges the stay over the campsites mini-ca knows that fit the group (`staySummary.ts`,
+  ported from Kotlin's `StaySummary.kt`) and classifies egress failures as Kotlin's
+  `StayFailureClassifier` does. A POI gets 45 s and the stream 120 s; the rest answer
+  `timed_out` and `done` says `deadline_reached`. A keep-alive comment goes out every 15 s.
+  Unconfigured egress answers every POI `failed`, `provider_misconfigured`. Per-IP limiting is a
+  Vercel Firewall rule on the path (Kotlin's ceiling is 150 POIs a minute).
 
 Both are on only where `AVAILABILITY_EGRESS_URL` and both `AVAILABILITY_EGRESS_ACCESS_CLIENT_ID`/
 `_SECRET` are set; a partial set fails at configuration. Unset, the matrix GET answers `503` and
