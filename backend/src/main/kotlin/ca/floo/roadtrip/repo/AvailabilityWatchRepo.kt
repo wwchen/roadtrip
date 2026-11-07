@@ -4,6 +4,8 @@ import ca.floo.roadtrip.db.generated.tables.AvailabilityRun.Companion.AVAILABILI
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatch.Companion.AVAILABILITY_WATCH
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchPoller.Companion.AVAILABILITY_WATCH_POLLER
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchTarget.Companion.AVAILABILITY_WATCH_TARGET
+import ca.floo.roadtrip.db.generated.tables.Campsites.Companion.CAMPSITES
+import ca.floo.roadtrip.db.generated.tables.PoiCampgrounds.Companion.POI_CAMPGROUNDS
 import ca.floo.roadtrip.model.availability.WatchDoneReason
 import ca.floo.roadtrip.model.availability.WatchStatus
 import kotlinx.serialization.json.Json
@@ -16,6 +18,7 @@ import org.jooq.SelectField
 import org.jooq.impl.DSL
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 private const val DEFAULT_LIST_LIMIT = 100
 private const val MAX_LIST_LIMIT = 500
@@ -354,6 +357,33 @@ open class AvailabilityWatchRepo(
         if (rows == 0) return null
         if (input.targets != null) targetsRepo.replaceForWatch(id, input.targets)
         return findById(id)
+    }
+
+    fun liveWatchesCovering(campsiteIds: Collection<Long>): List<Watch> {
+        if (campsiteIds.isEmpty()) return emptyList()
+        val poisOfCampsites =
+            DSL
+                .select(POI_CAMPGROUNDS.POI_ID)
+                .from(POI_CAMPGROUNDS)
+                .join(CAMPSITES)
+                .on(CAMPSITES.CAMPGROUND_ID.eq(POI_CAMPGROUNDS.CAMPGROUND_ID))
+                .where(CAMPSITES.ID.`in`(campsiteIds))
+        return baseSelect()
+            .where(AVAILABILITY_WATCH.STATUS.eq(WatchStatus.ACTIVE.wireValue))
+            .and(AVAILABILITY_WATCH.END_DATE.ge(LocalDate.now(ZoneOffset.UTC)))
+            .and(
+                DSL.exists(
+                    DSL
+                        .selectOne()
+                        .from(AVAILABILITY_WATCH_TARGET)
+                        .where(AVAILABILITY_WATCH_TARGET.WATCH_ID.eq(AVAILABILITY_WATCH.ID))
+                        .and(
+                            AVAILABILITY_WATCH_TARGET.CAMPSITE_ID
+                                .`in`(campsiteIds)
+                                .or(AVAILABILITY_WATCH_TARGET.POI_ID.`in`(poisOfCampsites)),
+                        ),
+                ),
+            ).fetch { fromRecord(it) }
     }
 
     fun delete(id: Long): Boolean = ctx.deleteFrom(AVAILABILITY_WATCH).where(AVAILABILITY_WATCH.ID.eq(id)).execute() > 0

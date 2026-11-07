@@ -244,6 +244,7 @@ class CampsiteAvailabilityControllerSliceTest : SharedDbTest() {
                         failoverFetcher = CannedBatchFetcher(),
                         bookingHorizons = BookingHorizonResolver(providers, dateResolver),
                         availabilityRepo = null,
+                        transitionSink = CellTransitionSink.none,
                     ),
                 dateResolver = dateResolver,
                 watchCapabilityService =

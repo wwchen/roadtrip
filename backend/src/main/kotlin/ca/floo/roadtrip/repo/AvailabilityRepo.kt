@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.Availability.Companion.AVAILABILITY
+import ca.floo.roadtrip.db.generated.tables.Campsites.Companion.CAMPSITES
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CellTransition
 import org.jooq.DSLContext
@@ -19,6 +20,8 @@ import ca.floo.roadtrip.db.generated.enums.AvailabilityStatus as DbAvailabilityS
  * status is unchanged and insert a new row (linked by `previous_id`) on a change;
  * reads take the row with the greatest `last_observed_at` per cell as current.
  */
+private const val AVAILABILITY_WRITE_LOCK_PREFIX = "availability-write:"
+
 class AvailabilityRepo(
     private val ctx: DSLContext,
 ) {
@@ -62,6 +65,7 @@ class AvailabilityRepo(
         val latest = latestPerCell(observations)
         return ctx.transactionResult { config ->
             val txn = DSL.using(config)
+            lockCampgroundsOf(txn, latest.keys.map { it.first })
             val current = currentStatusRuns(txn, latest.values)
             val unchanged = latest.values.filter { current[it.cell()]?.status == it.status }
             val changed = latest.values.filter { current[it.cell()]?.status != it.status }
@@ -76,6 +80,22 @@ class AvailabilityRepo(
     )
 
     private fun Observation.cell(): Pair<Long, LocalDate> = campsiteId to targetDate
+
+    private fun lockCampgroundsOf(
+        txn: DSLContext,
+        campsiteIds: Collection<Long>,
+    ) {
+        val campgroundIds =
+            txn
+                .selectDistinct(CAMPSITES.CAMPGROUND_ID)
+                .from(CAMPSITES)
+                .where(CAMPSITES.ID.`in`(campsiteIds.toSet()))
+                .orderBy(CAMPSITES.CAMPGROUND_ID)
+                .fetch(CAMPSITES.CAMPGROUND_ID)
+        for (campgroundId in campgroundIds) {
+            txn.execute("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", "$AVAILABILITY_WRITE_LOCK_PREFIX$campgroundId")
+        }
+    }
 
     private fun latestPerCell(observations: List<Observation>): Map<Pair<Long, LocalDate>, Observation> {
         val latest = LinkedHashMap<Pair<Long, LocalDate>, Observation>(observations.size)

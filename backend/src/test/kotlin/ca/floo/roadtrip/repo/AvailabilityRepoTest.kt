@@ -8,10 +8,17 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import java.util.concurrent.CyclicBarrier
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+
+private const val RACE_NIGHTS = 40L
+private const val RACE_WRITERS = 2
+private const val RACE_TIMEOUT_SECONDS = 60L
 
 class AvailabilityRepoTest : SharedDbTest() {
     private val date = LocalDate.parse("2026-07-04")
@@ -412,5 +419,39 @@ class AvailabilityRepoTest : SharedDbTest() {
         assertEquals(2, runs.size)
         val current = runs.first { it.toStatus == AvailabilityStatus.AVAILABLE }
         assertEquals(AvailabilityStatus.RESERVED, current.fromStatus)
+    }
+
+    @Test
+    fun `two writers recording the same new opening at once emit one transition and one row`() {
+        val campsiteId = seedCampsite("race")
+        val repo = AvailabilityRepo(ctx)
+        val observedAt = Instant.parse("2026-06-18T10:00:00Z")
+        val pool = Executors.newFixedThreadPool(RACE_WRITERS)
+        try {
+            var transitions = 0
+            for (offset in 0 until RACE_NIGHTS) {
+                val night = date.plusDays(offset)
+                val barrier = CyclicBarrier(RACE_WRITERS)
+                val writes =
+                    (0 until RACE_WRITERS).map {
+                        pool.submit<Int> {
+                            barrier.await()
+                            repo
+                                .recordObservations(
+                                    runId = null,
+                                    listOf(AvailabilityRepo.Observation(campsiteId, night, AvailabilityStatus.AVAILABLE, observedAt)),
+                                ).size
+                        }
+                    }
+                transitions += writes.sumOf { it.get(RACE_TIMEOUT_SECONDS, TimeUnit.SECONDS) }
+            }
+            assertEquals(RACE_NIGHTS.toInt(), transitions)
+            assertEquals(
+                RACE_NIGHTS.toInt(),
+                ctx.fetchCount(ctx.selectFrom(ca.floo.roadtrip.db.generated.tables.Availability.AVAILABILITY)),
+            )
+        } finally {
+            pool.shutdownNow()
+        }
     }
 }
