@@ -8,9 +8,9 @@ import {
   parseAvailabilityPoiId,
   parseAvailabilityQuery,
 } from '@/server/availabilityRequest';
-import { AVAILABILITY_EGRESS_TIMEOUT_MS } from '@/server/config';
+import { AVAILABILITY_EGRESS_TIMEOUT_MS, AVAILABILITY_STORED_TIMEOUT_MS } from '@/server/config';
 import { serverDb } from '@/server/db';
-import { AvailabilityTargetError, configuredEgress } from '@/server/service/availability/availabilityMatrixService';
+import { AvailabilityTargetError, AvailabilityWindowRefusedError, configuredEgress } from '@/server/service/availability/availabilityMatrixService';
 import { planRefresh, runRefresh } from '@/server/service/availability/availabilityRefreshService';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +26,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (query instanceof Response) return query;
   const egress = configuredEgress(AVAILABILITY_EGRESS_TIMEOUT_MS);
   try {
-    const plan = await planRefresh(await serverDb(), poiId, query.startDate, query.endDate, egress !== null);
+    const plan = await planRefresh(await serverDb(), poiId, query.startDate, query.endDate, configuredEgress(AVAILABILITY_STORED_TIMEOUT_MS));
     if (plan.kind === 'disabled') return availabilityError(STATUS_NOT_IMPLEMENTED, REFRESH_DISABLED);
     if (plan.kind === 'fetch' && egress !== null) {
       after(async () => {
@@ -35,6 +35,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
     return new Response(null, { status: STATUS_ACCEPTED });
   } catch (error) {
+    if (error instanceof AvailabilityWindowRefusedError) return Response.json(error.body, { status: STATUS_BAD_REQUEST });
     if (error instanceof AvailabilityTargetError) return availabilityError(STATUS_NOT_FOUND, error.code);
     throw error;
   }

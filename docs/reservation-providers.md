@@ -627,8 +627,9 @@ answers every cell with its campsite's `(data_provider, data_provider_ref)` and 
 observed, plus the window it resolved against the serving provider, the latest bookable date, and
 every campsite it knows for that campground. `mode: "stored"` reads mini-ca's current cells and
 never calls a vendor;
-`mode: "refresh"` (the default) runs the same read-through `CampsiteAvailabilityService` as the
-matrix, so it is one more caller of the one rate limiter, not a second one. It is mounted only when
+`mode: "refresh"` runs the same read-through `CampsiteAvailabilityService` as the
+matrix, so it is one more caller of the one rate limiter, not a second one. `mode` is required: a
+request without it is `400`, so a forgotten field can never reach a vendor. It is mounted only when
 `AVAILABILITY_EGRESS_ENABLED` is `true` and carries no credential of its own: the Cloudflare Access
 policy on its hostname is the caller check; `docs/web-app.md` covers the rest of the path.
 

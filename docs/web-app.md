@@ -128,10 +128,12 @@ Postgres, where Kotlin's read-through and pollers already keep it. Vercel stores
   date, lists the campsites it knows, and reads its own Postgres; it never calls a vendor on this
   path. Freshness counts only campsites mini-ca knows, so a campsite missing from its catalog shows
   unknown without keeping the week stale. A window mini-ca refuses is passed through as its `400`.
-  If mini-ca is unreachable or the egress is not configured, the GET answers
-  `503 availability_unavailable`.
+  `closed_for_season` is judged over the campsites mini-ca knows. If mini-ca is unreachable or the
+  egress is not configured, the GET answers `503 availability_unavailable`, except that a
+  campground with no matching campsites answers an empty week without asking mini-ca.
 - When the week is stale, the page sends one `POST /api/pois/{id}/campsites/availability/refresh`.
-  It answers `202` at once and, after the response, asks mini-ca for `mode: "refresh"`: mini-ca's
+  It first checks the window with a stored read, so a window mini-ca refuses is the caller's `400`.
+  Then it answers `202` and, after the response, asks mini-ca for `mode: "refresh"`: mini-ca's
   read-through fetches from the vendor through its one rate limiter and stores the result in its
   own Postgres. The page polls the GET every 2 seconds, at most 15 times, until the week is fresh.
 

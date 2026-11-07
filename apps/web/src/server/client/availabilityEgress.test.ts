@@ -1,8 +1,9 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { EGRESS_PATH, fetchEgress } from './availabilityEgress';
+import type { AvailabilityEgressRequestDto } from '../contract';
 
 const ENDPOINT = { url: new URL('https://egress.floo.test'), access: { clientId: 'id.access', clientSecret: 'secret' } };
-const REQUEST = { campground: { data_provider: 'aspira', data_provider_ref: 'bc:1:2' }, start_date: '2026-12-01', end_date: '2026-12-08' };
+const REQUEST: AvailabilityEgressRequestDto = { mode: 'stored', campground: { data_provider: 'aspira', data_provider_ref: 'bc:1:2' }, start_date: '2026-12-01', end_date: '2026-12-08' };
 const BODY = { start_date: '2026-12-01', end_date: '2026-12-08', cells: [] };
 const TIMEOUT_MS = 50;
 

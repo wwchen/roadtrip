@@ -169,6 +169,20 @@ class AvailabilityEgressRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `a request without a mode is 400 and calls no provider`() {
+        val provider = recgov()
+        egress(listOf(provider)) {
+            val response =
+                client.post(EGRESS_PATH) {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"campground":{"data_provider":"${DataProvider.RECGOV.id}","data_provider_ref":"$CAMPGROUND_REF"}}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertEquals(0, provider.calls.size)
+        }
+    }
+
+    @Test
     fun `a campground no provider serves is 501`() =
         egress(listOf(FakeAvailabilityProvider(BookingProvider.ASPIRA))) {
             val response = post(request())
