@@ -6,7 +6,7 @@ const planRefresh = vi.fn();
 const runRefresh = vi.fn();
 vi.mock('@/server/service/availability/availabilityRefreshService', () => ({ planRefresh, runRefresh }));
 vi.mock('@/server/db', () => ({ serverDb: vi.fn().mockResolvedValue({}) }));
-const { AvailabilityTargetError } = await import('@/server/service/availability/availabilityMatrixService');
+const { AvailabilityTargetError, AvailabilityWindowRefusedError } = await import('@/server/service/availability/availabilityMatrixService');
 const { POST, maxDuration } = await import('./route');
 
 const post = (id: string, query = '') =>
@@ -39,7 +39,7 @@ test('stale is 202 and schedules runRefresh through after', async () => {
   planRefresh.mockResolvedValue(FETCH);
   expect((await post('7', '?start_date=2026-12-01&end_date=2026-12-08')).status).toBe(202);
   expect(planRefresh.mock.calls[0]!.slice(1, 4)).toEqual([7n, '2026-12-01', '2026-12-08']);
-  expect(planRefresh.mock.calls[0]![4]).toBe(true);
+  expect(planRefresh.mock.calls[0]![4]).toEqual(expect.any(Function));
   expect(after).toHaveBeenCalledTimes(1);
   await after.mock.calls[0]![0]();
   expect(runRefresh).toHaveBeenCalledWith(FETCH, expect.any(Function));
@@ -50,6 +50,15 @@ test('disabled is 501 refresh_disabled', async () => {
   const response = await post('7');
   expect(response.status).toBe(501);
   expect((await response.json()).error).toBe('refresh_disabled');
+});
+
+test('a window mini-ca refuses is 400 with its body', async () => {
+  const body = { state: 'error', error: 'window_too_long', max_days: 30 };
+  planRefresh.mockRejectedValue(new AvailabilityWindowRefusedError(body));
+  const response = await post('7', '?start_date=2026-12-01&end_date=2027-03-01');
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual(body);
+  expect(after).not.toHaveBeenCalled();
 });
 
 test('an unknown POI is 404', async () => {

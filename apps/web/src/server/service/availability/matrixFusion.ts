@@ -27,13 +27,21 @@ function statusIndex(cells: readonly StoredCell[]): Map<string, AvailabilityStat
   return new Map(cells.map((cell) => [`${cell.campsiteId}|${cell.date}`, cell.status]));
 }
 
-export function fuseWeek(campsiteIds: readonly bigint[], cells: readonly StoredCell[], startDate: string, endDate: string): FusedWeek {
+export function fuseWeek(
+  campsiteIds: readonly bigint[],
+  cells: readonly StoredCell[],
+  startDate: string,
+  endDate: string,
+  seasonCampsiteIds: readonly bigint[] = campsiteIds,
+): FusedWeek {
   const dates = datesOf(startDate, endDate);
   const byCell = statusIndex(cells);
   const statusOf = (campsiteId: bigint, date: string) => byCell.get(`${campsiteId}|${date}`) ?? 'unknown';
   const ordered = [...campsiteIds].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const closedForSeason =
-    ordered.length > 0 && dates.length > 0 && ordered.every((id) => dates.every((date) => statusOf(id, date) === 'closed'));
+    seasonCampsiteIds.length > 0 &&
+    dates.length > 0 &&
+    seasonCampsiteIds.every((id) => dates.every((date) => statusOf(id, date) === 'closed'));
   if (closedForSeason) return { state: 'closed_for_season', days: [] };
   return {
     state: 'success',

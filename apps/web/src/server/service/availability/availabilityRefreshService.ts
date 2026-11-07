@@ -1,11 +1,12 @@
 import type { Db } from '@roadtrip/db';
 import type { AvailabilityEgressRequestDto } from '../../contract';
-import { egressRequest, weekTarget, type EgressFetch } from './availabilityMatrixService';
+import { AvailabilityWindowRefusedError, egressRequest, weekTarget, type EgressFetch } from './availabilityMatrixService';
 
 const REFRESH_LOG = 'availability refresh';
 const UNCLASSIFIED_FAILURE = 'unclassified';
 const REFRESHED = 'refreshed';
 const FAILED = 'failed';
+const STATUS_BAD_REQUEST = 400;
 
 export type RefreshPlan = { kind: 'nothing' } | { kind: 'disabled' } | { kind: 'fetch'; request: AvailabilityEgressRequestDto };
 
@@ -18,11 +19,13 @@ export async function planRefresh(
   poiId: bigint,
   startDate: string | null,
   endDate: string | null,
-  refreshEnabled: boolean,
+  checkWindow: EgressFetch | null,
 ): Promise<RefreshPlan> {
-  if (!refreshEnabled) return { kind: 'disabled' };
+  if (checkWindow === null) return { kind: 'disabled' };
   const target = await weekTarget(db, poiId, []);
   if (target.campsites.length === 0) return { kind: 'nothing' };
+  const check = await checkWindow(egressRequest(target, startDate, endDate, 'stored'));
+  if (check.kind === 'error' && check.status === STATUS_BAD_REQUEST && check.body !== null) throw new AvailabilityWindowRefusedError(check.body);
   return { kind: 'fetch', request: egressRequest(target, startDate, endDate, 'refresh') };
 }
 

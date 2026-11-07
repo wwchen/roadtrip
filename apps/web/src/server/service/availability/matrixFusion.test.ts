@@ -43,6 +43,12 @@ test('every campsite closed every day is closed_for_season with no days', () => 
   expect(fuseWeek([A, B], cells, START, END)).toEqual({ state: 'closed_for_season', days: [] });
 });
 
+test('closed_for_season is judged over the season campsites only', () => {
+  const cells = [cell(A, START, 'closed'), cell(A, '2026-12-02', 'closed')];
+  expect(fuseWeek([A, B], cells, START, END).state).toBe('success');
+  expect(fuseWeek([A, B], cells, START, END, [A])).toEqual({ state: 'closed_for_season', days: [] });
+});
+
 test('a fully observed week reports cache hit with the stalest cell age', () => {
   const stale = new Date(NOW.getTime() - 3_600_000);
   const cells = [cell(A, START, 'available'), cell(A, '2026-12-02', 'available', stale)];
