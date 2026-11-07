@@ -32,6 +32,10 @@ const LIST_JOINER = ', ';
 
 export const AVAILABILITY_EGRESS_TIMEOUT_MS = 25_000;
 export const AVAILABILITY_STORED_TIMEOUT_MS = 5_000;
+export const STAY_CHECK_FAN_OUT = 3;
+export const STAY_CHECK_PER_POI_TIMEOUT_MS = 45_000;
+export const STAY_CHECK_STREAM_TIMEOUT_MS = 120_000;
+export const STAY_CHECK_HEARTBEAT_MS = 15_000;
 
 export interface EgressAccessCredentials {
   clientId: string;

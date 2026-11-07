@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
@@ -28,14 +29,15 @@ internal class AvailabilityEgressController(
                 ?: throw AvailabilityServiceError.NotFound
         val startDate = request.startDate?.let(::parseDate)
         val endDate = request.endDate?.let(::parseDate)
+        val freshAtOrAfter = request.freshAtOrAfter?.let(::parseInstant)
         val context = dateResolver.context(campground.location?.latitude, campground.location?.longitude)
         val (window, latestDate) = availabilityService.resolveTargetWindow(campground, startDate, endDate, context)
         val campsites = campsitesRepo.findByCampground(campground.id)
         val refById = campsites.associate { it.id to ProviderRefDto(it.dataProvider, it.dataProviderRefValue) }
-        val observations =
+        val (observations, fromCache) =
             when {
-                campsites.isEmpty() -> emptyList()
-                request.mode == AvailabilityEgressMode.STORED -> stored(campsites, window)
+                campsites.isEmpty() -> emptyList<CampsiteDayObservation>() to true
+                request.mode == AvailabilityEgressMode.STORED -> stored(campsites, window) to true
                 else ->
                     availabilityService
                         .fetchAvailability(
@@ -45,7 +47,9 @@ internal class AvailabilityEgressController(
                             startDate = window.startDate,
                             endDate = window.endDate,
                             dateContext = context,
-                        ).batch.observations
+                            freshAtOrAfter = freshAtOrAfter,
+                        ).batch
+                        .let { it.observations to it.cacheBlock.hit }
             }
         return AvailabilityEgressResponseDto(
             startDate = window.startDate.toString(),
@@ -63,6 +67,7 @@ internal class AvailabilityEgressController(
                         )
                     }
                 },
+            fromCache = fromCache,
         )
     }
 
@@ -80,6 +85,13 @@ internal class AvailabilityEgressController(
             )
         }
     }
+
+    private fun parseInstant(raw: String): Instant =
+        try {
+            Instant.parse(raw)
+        } catch (e: DateTimeParseException) {
+            throw AvailabilityServiceError.BadDateWindow.Invalid
+        }
 
     private fun parseDate(raw: String): LocalDate =
         try {
