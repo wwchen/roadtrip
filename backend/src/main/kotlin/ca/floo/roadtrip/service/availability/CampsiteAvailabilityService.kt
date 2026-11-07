@@ -38,9 +38,9 @@ internal class CampsiteAvailabilityService(
     private val availabilityRepo: AvailabilityRepo? = null,
     private val clock: Clock = Clock.systemUTC(),
     private val snapshotFreshnessTtl: (provider: AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
-    transitionSink: CellTransitionSink = CellTransitionSink.none,
+    transitionSink: CellTransitionSink,
 ) {
-    private val availabilityLoader = AvailabilityLoader(availabilityRepo, clock, transitionSink)
+    private val availabilityLoader = AvailabilityLoader(availabilityRepo, transitionSink, clock)
 
     suspend fun fetchAvailability(
         campground: Campground,

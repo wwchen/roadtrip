@@ -1,26 +1,25 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.CellTransition
-import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
+import java.time.Clock
+import java.time.Instant
 
 internal class WatchTransitionDispatch(
-    private val liveWatchesCovering: (Collection<Long>) -> List<AvailabilityWatchRepo.Watch>,
-    private val dispatch: suspend (List<AvailabilityWatchRepo.Watch>, List<CellTransition>) -> Unit,
+    private val dispatchCovering: suspend (List<CellTransition>, Instant) -> Unit,
     private val scope: CoroutineScope,
+    private val clock: Clock = Clock.systemUTC(),
 ) : CellTransitionSink {
     private val log = LoggerFactory.getLogger(javaClass)
 
     override fun accept(transitions: List<CellTransition>) {
-        val bookable = transitions.filter { it.status.isOnlineBookable }
-        if (bookable.isEmpty()) return
+        if (transitions.isEmpty()) return
+        val recordedAt = clock.instant()
         scope.launch {
-            runCatching {
-                val watches = liveWatchesCovering(bookable.map { it.campsiteId }.distinct())
-                if (watches.isNotEmpty()) dispatch(watches, bookable)
-            }.onFailure { log.warn("reader transition dispatch failed for {} cell(s)", bookable.size, it) }
+            runCatching { dispatchCovering(transitions, recordedAt) }
+                .onFailure { log.warn("reader transition dispatch failed for {} cell(s)", transitions.size, it) }
         }
     }
 }

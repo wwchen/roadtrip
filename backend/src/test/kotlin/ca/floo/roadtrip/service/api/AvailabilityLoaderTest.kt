@@ -33,7 +33,7 @@ private const val PROVIDER = "recgov"
 
 class AvailabilityLoaderTest : SharedDbTest() {
     private val repo by lazy { AvailabilityRepo(ctx) }
-    private val loader by lazy { AvailabilityLoader(repo, Clock.fixed(fixedNow, ZoneOffset.UTC)) }
+    private val loader by lazy { AvailabilityLoader(repo, CellTransitionSink.none, Clock.fixed(fixedNow, ZoneOffset.UTC)) }
 
     private var siteA = 0L
     private var siteB = 0L
@@ -321,7 +321,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
     fun `a fetch that changes a cell hands the change to the transition sink`() {
         seedStoredWindow(AvailabilityStatus.RESERVED, observedAt = fixedNow.minus(snapshotTtl).minusSeconds(60))
         val received = mutableListOf<CellTransition>()
-        val sinking = AvailabilityLoader(repo, Clock.fixed(fixedNow, ZoneOffset.UTC), CellTransitionSink { received += it })
+        val sinking = AvailabilityLoader(repo, CellTransitionSink { received += it }, Clock.fixed(fixedNow, ZoneOffset.UTC))
 
         runBlocking {
             sinking.loadOrFetch(request()) {
@@ -352,7 +352,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
     fun `a fetch that changes nothing hands the sink nothing`() {
         seedStoredWindow(AvailabilityStatus.RESERVED, observedAt = fixedNow.minus(snapshotTtl).minusSeconds(60))
         val received = mutableListOf<List<CellTransition>>()
-        val sinking = AvailabilityLoader(repo, Clock.fixed(fixedNow, ZoneOffset.UTC), CellTransitionSink { received += it })
+        val sinking = AvailabilityLoader(repo, CellTransitionSink { received += it }, Clock.fixed(fixedNow, ZoneOffset.UTC))
 
         runBlocking {
             sinking.loadOrFetch(request()) {

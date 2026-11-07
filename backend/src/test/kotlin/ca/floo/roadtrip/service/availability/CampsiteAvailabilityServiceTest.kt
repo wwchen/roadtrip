@@ -80,6 +80,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
             failoverFetcher = fetcher,
             bookingHorizons = BookingHorizonResolver(providers, dateResolver),
             availabilityRepo = availabilityRepo,
+            transitionSink = CellTransitionSink.none,
             clock = clock,
             snapshotFreshnessTtl = snapshotFreshnessTtl,
         )

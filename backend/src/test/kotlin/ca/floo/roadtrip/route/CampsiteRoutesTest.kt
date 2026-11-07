@@ -29,6 +29,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
+import ca.floo.roadtrip.service.availability.CellTransitionSink
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
@@ -138,6 +139,7 @@ class CampsiteRoutesTest : SharedDbTest() {
                     failoverFetcher = FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = Duration.ofMinutes(1))),
                     bookingHorizons = BookingHorizonResolver(providers, dateResolver),
                     availabilityRepo = AvailabilityRepo(ctx),
+                    transitionSink = CellTransitionSink.none,
                 ),
             dateResolver = dateResolver,
             watchCapabilityService =

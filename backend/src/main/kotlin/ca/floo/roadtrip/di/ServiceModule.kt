@@ -335,11 +335,8 @@ val serviceModule =
         }
 
         single<CellTransitionSink> {
-            val watchRepo = get<AvailabilityWatchRepo>()
-            val dispatcher = get<WatchAlertDispatcher>()
             WatchTransitionDispatch(
-                liveWatchesCovering = watchRepo::liveWatchesCovering,
-                dispatch = dispatcher::dispatch,
+                dispatchCovering = get<WatchAlertDispatcher>()::dispatchCovering,
                 scope = get<CoroutineScope>(),
             )
         }

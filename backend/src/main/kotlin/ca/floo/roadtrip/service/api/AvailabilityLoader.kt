@@ -22,8 +22,8 @@ import java.time.temporal.ChronoUnit
  */
 class AvailabilityLoader(
     private val availabilityRepo: AvailabilityRepo?,
+    private val transitionSink: CellTransitionSink,
     private val clock: Clock = Clock.systemUTC(),
-    private val transitionSink: CellTransitionSink = CellTransitionSink.none,
 ) {
     data class CampsiteTarget(
         val dbId: Long,
