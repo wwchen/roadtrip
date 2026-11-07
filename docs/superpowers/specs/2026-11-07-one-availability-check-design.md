@@ -1,7 +1,19 @@
 # One availability check: the grid, the stay check and the pollers share one fetch
 
-**Status:** draft written 2026-11-07 from the code as it stands at `06d74a00`; the decisions
-below are proposals and the open questions at the end are the owner's to settle.
+**Status:** draft written 2026-11-07 from the code as it stands at `06d74a00`; the owner settled
+its three open questions the same day (below). This document awaits review.
+
+**Amended 2026-11-07 (owner's decisions), replacing the text below where they differ:**
+
+- **Watches, settings, sign-in and add-to-cart stay unreachable on `roadtrip.floo.ca`** until
+  sign-in is ported to Vercel. No proxy and no separate Kotlin host.
+- **One vendor rate-limit bucket per provider, with a raised capacity.** Readers and pollers share
+  it; the capacity is configuration, not a second bucket.
+- **No grouped variant of the check.** A poll already makes one vendor call per campground:
+  `CatalogAvailabilityBatcher` groups by `(provider, campground, date context)`. Whether a provider
+  answers several campsites or campgrounds in one upstream call (Campflare's bulk endpoint, for
+  example) is that provider client's concern, behind `AvailabilityProvider`. The poll executor
+  calls the check once per campground in its poller.
 
 **Parent specs:** `docs/superpowers/specs/2026-11-05-availability-egress-design.md` (D2 one check
 primitive, D4 Vercel calls mini-ca, D5 the queue was left for later) and
@@ -48,7 +60,7 @@ mini-ca without charging `VendorRateLimiter`; the map's Check button works on
 This replaces spec 2 of the egress spec's three ("scheduled polls and watches on the same check,
 using Vercel Queues and Workflow"). The scheduled polls stay on mini-ca (D2 below), so no queue is
 needed. Watch management on Vercel needs sign-in, which is step 8 of the parent TypeScript spec;
-this spec leaves it gated (D5) and asks how `roadtrip.floo.ca` should reach it meanwhile (Q1).
+this spec leaves it gated and unreachable from `roadtrip.floo.ca` until then (D5).
 
 ## Non-goals
 
@@ -66,8 +78,8 @@ this spec leaves it gated (D5) and asks how `roadtrip.floo.ca` should reach it m
 | D1 | **One Kotlin primitive, `AvailabilityCheck`, owns every vendor fetch** on mini-ca: the grid read-through, the stay check, the egress refresh and the pollers | The egress spec's D2. Four callers of one function cannot drift on freshness, window, limiter or recording. |
 | D2 | **Scheduled polls stay in mini-ca's in-process `Scheduler`** | C1 puts vendor egress on mini-ca anyway, and egress D4 found mini-ca cannot pull a Vercel Queue without a ~12-hour development OIDC token. A queue would move work from mini-ca to mini-ca. |
 | D3 | **Recording returns transitions, and the primitive dispatches them**, whatever the caller | Fixes the lost alert (Problem 1). The poller already dispatches; the read-through starts to. |
-| D4 | **Every fetch charges `VendorRateLimiter`** | Makes C3 true. A starved request-path call answers from the store with `rate_limited` instead of calling the vendor (Q2 settles the capacity). |
-| D5 | **Watches stay on Kotlin and gated on Vercel** | Watch CRUD is `User` or magic-link access; Vercel has no sign-in until the auth step of the parent spec. |
+| D4 | **Every fetch charges `VendorRateLimiter`**, one bucket per provider shared by readers and pollers, capacity raised | Makes C3 true. Owner's choice over separate reader and poller buckets. A starved request-path call answers from the store with `rate_limited` instead of calling the vendor. |
+| D5 | **Watches stay on Kotlin and gated on Vercel**, unreachable from `roadtrip.floo.ca` until sign-in is ported | Owner's choice over proxying those routes to Kotlin. Watch CRUD is `User` or magic-link access; Vercel has no sign-in until the auth step of the parent spec. Existing watches keep polling and alerting on mini-ca. |
 | D6 | **The stay check moves to Vercel** as `POST /api/pois/availability/stays` in `apps/web`, same SSE contract, generated from the same DTOs | It is anonymous, so it needs no sign-in, and it is a fan-out of the check the egress endpoint already serves. |
 | D7 | **The egress `refresh` mode takes an optional `fresh_at_or_after`** | The stay check's `max_age_seconds` becomes that cutoff; without it, `refresh` keeps the provider TTL. One mode, one freshness rule. |
 | D8 | **Vercel computes the stay summary** from the egress cells and Neon's campsites | `StaySummary.staySummary()` and `fittingGroup` are small pure functions over cells and `max_people`, which Neon holds. Porting them keeps the egress contract a cell list. |
@@ -127,11 +139,12 @@ makes both paths dispatch.
 ### Pollers
 
 `AvailabilityPollExecutor.handle` keeps its claim, lease, run bookkeeping and back-off, and calls
-`AvailabilityCheck.check` with `Freshness.Cadence(cadenceSec)` and `CheckCaller.Poller`. The
-polling window (`resolvePollingWindow`) is passed as the requested window. Its separate
-`CatalogAvailabilityBatcher` path is deleted once the check covers multi-campground groups (the
-batcher groups pollers by `(provider, parent_ref)`; the check takes one campground, so the
-executor loops over the group's campgrounds or the check gains a grouped variant; see Q3).
+`AvailabilityCheck.check` once per campground in its poller, with `Freshness.Cadence(cadenceSec)`
+and `CheckCaller.Poller`. The polling window (`resolvePollingWindow`) is passed as the requested
+window. `CatalogAvailabilityBatcher` already fetches per `(provider, campground, date context)`,
+so moving the fetch into the check changes no vendor call count; its grouping and outcome
+mapping move into the executor's loop and the batcher goes. Upstream bulk fetching stays inside
+each provider client.
 
 ### Egress contract change
 
@@ -165,7 +178,7 @@ The frontend does not change: `streamStays` already posts to this path and parse
 | Setting | Where | Default |
 |---|---|---|
 | `STAY_CHECK_MAX_POIS`, `STAY_CHECK_FAN_OUT`, `STAY_CHECK_PER_POI_TIMEOUT_MS`, `STAY_CHECK_STREAM_TIMEOUT_MS` | Vercel, optional | 50, 3, 45000, 120000 (Kotlin's `StayCheckConfig`) |
-| `VendorRateLimitConfig` capacity and refill | mini-ca | 60 and 60 per minute today; Q2 |
+| `VendorRateLimitConfig` capacity and refill | mini-ca | 60 and 60 per minute today; raised in step 2, sized from the poll and reader call counts in `availability_fetch_call` and the egress logs before it ships |
 
 The stay check is on wherever the egress is configured, like the matrix; unset, it answers every
 POI `failed` with `provider_misconfigured`.
@@ -209,22 +222,16 @@ Each step is its own PR; steps 1–3 need no Vercel change.
 ## Known limits
 
 - Watches, settings, sign-in and add-to-cart remain unreachable from `roadtrip.floo.ca` while it
-  points at Vercel (Q1).
+  points at Vercel. Magic links in alert emails point at `roadtrip.floo.ca` and fail there too.
+- A busy map shares the vendor bucket with the pollers, so heavy reading can delay polls (and
+  their alerts) until the bucket refills.
 - The stay check waits on vendors (up to 45 s a POI), unlike the matrix's stale-now pattern; that
   is the existing contract.
 - Every Vercel stay check costs one tunnel call per POI.
 
-## Open questions
+## Settled questions
 
-- **Q1. How does `roadtrip.floo.ca` reach watches until sign-in is ported?** Options: (a) leave
-  them unreachable; (b) have Vercel proxy `/api/me`, `/api/watches*`, `/auth/*`,
-  `/api/settings/*` and `/api/booking/*` to Kotlin over a second Access-protected tunnel host,
-  forwarding the session cookie; (c) serve those paths from a `kotlin.roadtrip.floo.ca` host the
-  frontend calls directly. (b) keeps one origin and cookies; (c) needs CORS and a cookie domain
-  change.
-- **Q2. Limiter capacity once readers charge it.** 60 per minute was sized for pollers alone. Keep
-  one bucket and raise it, or give readers and pollers separate buckets per provider so a busy
-  map cannot starve alerts?
-- **Q3. Grouped fetches for pollers.** Keep the poller's per-`(provider, parent_ref)` grouped
-  fetch as a `checkGroup` variant of the primitive, or loop per campground and accept more vendor
-  calls for multi-campground parents?
+- **Q1. How does `roadtrip.floo.ca` reach watches before sign-in is ported?** It does not (D5).
+- **Q2. Limiter capacity once readers charge it.** One bucket per provider, raised (D4).
+- **Q3. Grouped fetches for pollers.** Not needed: polls already fetch per campground, and bulk
+  upstream calls are a provider client's concern (Pollers, above).
