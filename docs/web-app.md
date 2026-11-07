@@ -169,6 +169,31 @@ To turn it on:
 3. Set the three variables in Vercel Production and add the Firewall rule.
 4. Open a stale campground's matrix on the deployment and watch it refresh.
 
+## Kotlin routes Vercel forwards
+
+The availability dashboard and the API docs read mini-ca's own Postgres and routing tree, so
+Vercel forwards them to Kotlin instead of serving them: `apps/web/src/app/api/availability/[...path]`
+and `apps/web/src/app/api/docs/[[...path]]` call `forwardToKotlin`
+(`apps/web/src/server/client/kotlinPassthrough.ts`). It goes over the same Access-protected
+egress host as the availability fetch, with the same service token, and forwards only:
+
+- `GET` matching `KOTLIN_READ_PATH`: `/api/availability/pollers`, `…/pollers/summary`,
+  `…/pollers/{id}/runs`, `…/runs`, `…/changes`, `…/changes/summary`, and `/api/docs` with
+  everything under it (Swagger UI and `openapi.json`);
+- `POST` matching `KOTLIN_FORCE_PATH`: `/api/availability/pollers/{id}/force`, the "check now"
+  action, which keeps Kotlin's per-poller cooldown.
+
+Anything else under those prefixes is `404` without a call. The query string and the request's
+`accept` and `content-type` go up; the status and `content-type`, `cache-control` and
+`retry-after` come back. Unconfigured egress, an unreachable mini-ca, or a redirect off the list
+(an Access policy sending the token to a login page) is `503 kotlin_unavailable`; a relative
+redirect to another listed path passes through. The egress host's Caddy block admits the same
+two patterns, and `kotlinPassthrough.test.ts` fails if the Caddyfile and the module disagree.
+
+Sign-in, watches, settings, add-to-cart and Slack interactivity are not forwarded: they need a
+session cookie for Kotlin's domain, and stay unreachable on Vercel until sign-in is ported. The
+admin import stays behind its Cloudflare Zero Trust rule on mini-ca.
+
 ## Previews
 
 Each preview deployment gets its own Neon branch, `preview/<git branch>`, from the Neon Postgres
