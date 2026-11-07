@@ -241,6 +241,17 @@ implementation (e.g. Campflare's alert API) would:
   to `WatchAlertDispatcher`.
 - `onWatchDeactivated`: unsubscribe upstream.
 
+Readers detect openings too. When the read-through (the matrix, the stay
+check, the egress refresh) fetches and a cell's status changes,
+`AvailabilityLoader` passes the transitions to a `CellTransitionSink`;
+`WatchTransitionDispatch` looks up the live watches covering those
+campsites (`AvailabilityWatchRepo.liveWatchesCovering`) and hands them to
+`WatchAlertDispatcher` off the request path. Without it, an opening a reader
+saw first became the current status, the poller's next write saw no change,
+and no alert went out. `AvailabilityRepo.recordObservations` locks the
+written campsites' rows, in id order, before comparing status, so two
+writers recording the same change emit one transition between them.
+
 **Adding a new alert provider is one file** under
 `service/availability/alert/providers/<vendor>/` plus one registry entry.
 `AlertProviderRegistry.forWatch` v1 always returns the internal poller;

@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.availability.AvailabilityCell
+import ca.floo.roadtrip.service.availability.CellTransitionSink
 import ca.floo.roadtrip.service.availability.requiredCells
 import ca.floo.roadtrip.service.availability.unansweredCells
 import java.time.Clock
@@ -22,6 +23,7 @@ import java.time.temporal.ChronoUnit
 class AvailabilityLoader(
     private val availabilityRepo: AvailabilityRepo?,
     private val clock: Clock = Clock.systemUTC(),
+    private val transitionSink: CellTransitionSink = CellTransitionSink.none,
 ) {
     data class CampsiteTarget(
         val dbId: Long,
@@ -139,7 +141,8 @@ class AvailabilityLoader(
                     )
             }
         }
-        repo.recordObservations(request.runId, observations)
+        val transitions = repo.recordObservations(request.runId, observations)
+        if (transitions.isNotEmpty()) transitionSink.accept(transitions)
     }
 
     private fun batchFromLatest(

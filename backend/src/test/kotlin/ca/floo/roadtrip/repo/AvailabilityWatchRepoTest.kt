@@ -325,4 +325,31 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
 
         assertEquals(listOf(other.value, owner.value).sorted(), armed.sorted())
     }
+
+    @Test
+    fun `liveWatchesCovering finds active future watches on the campsite or its POI`() {
+        val owner = seedAppUser().value
+        val fixture = ctx.seedCatalogPoi(sourceId = "cover-poi", name = "Cover CG", lon = -119.56, lat = 37.74)
+        val site = ctx.seedCampsite(campgroundId = fixture.catalogId, vendorId = "cover-site")
+        val other = ctx.seedCampsite(campgroundId = fixture.catalogId, vendorId = "cover-other")
+        val elsewhere = insertPoi()
+        val repo = AvailabilityWatchRepo(ctx)
+        val future = LocalDate.now().plusDays(30)
+
+        fun watchOn(
+            target: AvailabilityWatchTargetRepo.TargetInput,
+            endDate: LocalDate = future,
+        ) = repo.create(createInput(listOf(target), owner).copy(startDate = endDate.minusDays(2), endDate = endDate)).id
+
+        val onSite = watchOn(AvailabilityWatchTargetRepo.TargetInput(poiId = null, campsiteId = site))
+        val onPoi = watchOn(AvailabilityWatchTargetRepo.TargetInput(poiId = fixture.poiId, campsiteId = null))
+        watchOn(AvailabilityWatchTargetRepo.TargetInput(poiId = null, campsiteId = other))
+        watchOn(AvailabilityWatchTargetRepo.TargetInput(poiId = elsewhere, campsiteId = null))
+        val paused = watchOn(AvailabilityWatchTargetRepo.TargetInput(poiId = null, campsiteId = site))
+        ctx.execute("UPDATE availability_watch SET status = ? WHERE id = ?", WatchStatus.PAUSED.wireValue, paused)
+        watchOn(AvailabilityWatchTargetRepo.TargetInput(poiId = null, campsiteId = site), endDate = LocalDate.now().minusDays(1))
+
+        assertEquals(setOf(onSite, onPoi), repo.liveWatchesCovering(listOf(site)).map { it.id }.toSet())
+        assertEquals(emptyList(), repo.liveWatchesCovering(emptyList()))
+    }
 }

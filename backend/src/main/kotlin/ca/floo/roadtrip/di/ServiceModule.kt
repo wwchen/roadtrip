@@ -40,6 +40,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.BookingHorizonResolver
 import ca.floo.roadtrip.service.availability.BookingIdentityResolver
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
+import ca.floo.roadtrip.service.availability.CellTransitionSink
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.DispatchingWatchLifecycleNotifications
@@ -51,6 +52,7 @@ import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchNotificationTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.WatchTransitionDispatch
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
@@ -329,6 +331,16 @@ val serviceModule =
                 appRootUrl = config.webApp?.rootUrl,
                 metrics = get<RoadtripMetrics>(),
                 campgroundCta = get<CampgroundCta>(),
+            )
+        }
+
+        single<CellTransitionSink> {
+            val watchRepo = get<AvailabilityWatchRepo>()
+            val dispatcher = get<WatchAlertDispatcher>()
+            WatchTransitionDispatch(
+                liveWatchesCovering = watchRepo::liveWatchesCovering,
+                dispatch = dispatcher::dispatch,
+                scope = get<CoroutineScope>(),
             )
         }
 

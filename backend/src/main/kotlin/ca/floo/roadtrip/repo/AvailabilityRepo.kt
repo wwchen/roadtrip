@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.Availability.Companion.AVAILABILITY
+import ca.floo.roadtrip.db.generated.tables.Campsites.Companion.CAMPSITES
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CellTransition
 import org.jooq.DSLContext
@@ -62,6 +63,7 @@ class AvailabilityRepo(
         val latest = latestPerCell(observations)
         return ctx.transactionResult { config ->
             val txn = DSL.using(config)
+            lockCampsites(txn, latest.keys.map { it.first })
             val current = currentStatusRuns(txn, latest.values)
             val unchanged = latest.values.filter { current[it.cell()]?.status == it.status }
             val changed = latest.values.filter { current[it.cell()]?.status != it.status }
@@ -76,6 +78,19 @@ class AvailabilityRepo(
     )
 
     private fun Observation.cell(): Pair<Long, LocalDate> = campsiteId to targetDate
+
+    private fun lockCampsites(
+        txn: DSLContext,
+        campsiteIds: Collection<Long>,
+    ) {
+        txn
+            .select(CAMPSITES.ID)
+            .from(CAMPSITES)
+            .where(CAMPSITES.ID.`in`(campsiteIds.toSortedSet()))
+            .orderBy(CAMPSITES.ID)
+            .forUpdate()
+            .fetch()
+    }
 
     private fun latestPerCell(observations: List<Observation>): Map<Pair<Long, LocalDate>, Observation> {
         val latest = LinkedHashMap<Pair<Long, LocalDate>, Observation>(observations.size)

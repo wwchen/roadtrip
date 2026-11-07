@@ -4,11 +4,13 @@ import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.availability.CellTransition
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
+import ca.floo.roadtrip.service.availability.CellTransitionSink
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -313,5 +315,51 @@ class AvailabilityLoaderTest : SharedDbTest() {
 
         assertFalse(result.cacheBlock.hit)
         assertEquals(listOf(siteA), result.observations.map { it.campsiteId })
+    }
+
+    @Test
+    fun `a fetch that changes a cell hands the change to the transition sink`() {
+        seedStoredWindow(AvailabilityStatus.RESERVED, observedAt = fixedNow.minus(snapshotTtl).minusSeconds(60))
+        val received = mutableListOf<CellTransition>()
+        val sinking = AvailabilityLoader(repo, Clock.fixed(fixedNow, ZoneOffset.UTC), CellTransitionSink { received += it })
+
+        runBlocking {
+            sinking.loadOrFetch(request()) {
+                batch(
+                    listOf(siteA, siteB).flatMap { site ->
+                        windowDates().map { date ->
+                            observation(
+                                site,
+                                date,
+                                if (site == siteA &&
+                                    date == windowStart
+                                ) {
+                                    AvailabilityStatus.AVAILABLE
+                                } else {
+                                    AvailabilityStatus.RESERVED
+                                },
+                            )
+                        }
+                    },
+                )
+            }
+        }
+
+        assertEquals(listOf(CellTransition(siteA, windowStart, AvailabilityStatus.AVAILABLE)), received)
+    }
+
+    @Test
+    fun `a fetch that changes nothing hands the sink nothing`() {
+        seedStoredWindow(AvailabilityStatus.RESERVED, observedAt = fixedNow.minus(snapshotTtl).minusSeconds(60))
+        val received = mutableListOf<List<CellTransition>>()
+        val sinking = AvailabilityLoader(repo, Clock.fixed(fixedNow, ZoneOffset.UTC), CellTransitionSink { received += it })
+
+        runBlocking {
+            sinking.loadOrFetch(request()) {
+                batch(listOf(siteA, siteB).flatMap { site -> windowDates().map { observation(site, it, AvailabilityStatus.RESERVED) } })
+            }
+        }
+
+        assertEquals(emptyList(), received)
     }
 }
