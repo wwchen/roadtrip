@@ -181,11 +181,12 @@ jobs:
             base="$(python3 scripts/prod_base_url.py)"
           fi
           health="${{ vars.DEPLOY_HEALTH_URL }}"
+          origin="http://${base#*://}"
           {
-            echo "DEPLOY_BASE=$base"
-            echo "DEPLOY_HEALTH=${health:-$base/api/health/ready}"
+            echo "DEPLOY_ORIGIN=$origin"
+            echo "DEPLOY_HEALTH=${health:-$origin/api/health/ready}"
           } >> "$GITHUB_ENV"
-          echo "resolved base: $base"
+          echo "resolved base: $base, probed on mini-ca as $origin"
 
       # Only the readiness probe gets the outer wait loop; everything after it
       # runs once, so each of those needs its own retry or a single transient
@@ -197,21 +198,21 @@ jobs:
           retries=3
           retry_delay=2
           probe() {
-            curl -fsS --retry "$retries" --retry-all-errors --retry-delay "$retry_delay" "$@"
+            scripts/origin-curl.sh -fsS --retry "$retries" --retry-all-errors --retry-delay "$retry_delay" "$@"
           }
 
           for _ in $(seq 1 "$gate_attempts"); do
-            if curl -fsS "$DEPLOY_HEALTH" >/dev/null; then
+            if scripts/origin-curl.sh -fsS "$DEPLOY_HEALTH" >/dev/null; then
               for path in /watches /availability; do
-                probe "$DEPLOY_BASE$path" >/dev/null
-                echo "health: $DEPLOY_BASE$path OK"
+                probe "$DEPLOY_ORIGIN$path" >/dev/null
+                echo "health: $DEPLOY_ORIGIN$path OK"
               done
-              if ! probe "$DEPLOY_BASE/" | grep -q 'id="root"'; then
+              if ! probe "$DEPLOY_ORIGIN/" | grep -q 'id="root"'; then
                 echo "health: / is not the React shell — frontend/dist missing or shadowed"
                 exit 1
               fi
               echo "health: / is the React shell OK"
-              probe "$DEPLOY_BASE/api/build-info" \
+              probe "$DEPLOY_ORIGIN/api/build-info" \
                 | python3 -c 'import json,os,sys; info=json.load(sys.stdin); expected={"env":"prod","sha":os.environ["DEPLOY_SHA"],"branch":os.environ["DEPLOY_BRANCH"]}; actual={key:info.get(key) for key in expected}; actual == expected or sys.exit(f"build-info mismatch: expected {expected}, got {actual}"); print("health: build-info prod SHA branch OK")'
               echo "health: $DEPLOY_HEALTH OK"
               exit 0
@@ -234,8 +235,9 @@ jobs:
           }
 
           http_code=""
+          authorize=""
           for attempt in $(seq 1 "$retries"); do
-            http_code="$(probe -o /dev/null -D headers.txt -w '%{http_code}' "$DEPLOY_BASE/auth/login")"
+            read -r http_code authorize < <(scripts/origin-curl.sh -s --retry "$retries" --retry-all-errors --retry-delay "$retry_delay" -o /dev/null -w '%{http_code} %{redirect_url}\n' "$DEPLOY_ORIGIN/auth/login") || true
             if [ "$http_code" = "302" ]; then
               break
             fi
@@ -245,10 +247,9 @@ jobs:
             fi
           done
           if [ "$http_code" != "302" ]; then
-            echo "auth: $DEPLOY_BASE/auth/login returned $http_code, expected 302 (sign-in disabled?)"
+            echo "auth: $DEPLOY_ORIGIN/auth/login returned $http_code, expected 302 (sign-in disabled?)"
             exit 1
           fi
-          authorize="$(tr -d '\r' < headers.txt | sed -n 's/^[Ll]ocation: //p' | head -1)"
           if [ -z "$authorize" ]; then
             echo "auth: /auth/login redirected with no Location header"
             exit 1
