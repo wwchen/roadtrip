@@ -197,12 +197,16 @@ jobs:
           gate_delay=2
           retries=3
           retry_delay=2
+          origin_curl() {
+            ssh -o BatchMode=yes mini@mini-ca \
+              "cd \"\$HOME/.roadtrip/current\" && docker compose --profile tunnel --profile pois exec -T caddy curl --connect-to ::127.0.0.1:80 $(printf '%q ' "$@")"
+          }
           probe() {
-            scripts/origin-curl.sh -fsS --retry "$retries" --retry-all-errors --retry-delay "$retry_delay" "$@"
+            origin_curl -fsS --retry "$retries" --retry-all-errors --retry-delay "$retry_delay" "$@"
           }
 
           for _ in $(seq 1 "$gate_attempts"); do
-            if scripts/origin-curl.sh -fsS "$DEPLOY_HEALTH" >/dev/null; then
+            if origin_curl -fsS "$DEPLOY_HEALTH" >/dev/null; then
               for path in /watches /availability; do
                 probe "$DEPLOY_ORIGIN$path" >/dev/null
                 echo "health: $DEPLOY_ORIGIN$path OK"
@@ -230,6 +234,10 @@ jobs:
         run: |
           retries=3
           retry_delay=2
+          origin_curl() {
+            ssh -o BatchMode=yes mini@mini-ca \
+              "cd \"\$HOME/.roadtrip/current\" && docker compose --profile tunnel --profile pois exec -T caddy curl --connect-to ::127.0.0.1:80 $(printf '%q ' "$@")"
+          }
           probe() {
             curl -s --retry "$retries" --retry-all-errors --retry-delay "$retry_delay" "$@"
           }
@@ -237,7 +245,7 @@ jobs:
           http_code=""
           authorize=""
           for attempt in $(seq 1 "$retries"); do
-            read -r http_code authorize < <(scripts/origin-curl.sh -s --retry "$retries" --retry-all-errors --retry-delay "$retry_delay" -o /dev/null -w '%{http_code} %{redirect_url}\n' "$DEPLOY_ORIGIN/auth/login") || true
+            read -r http_code authorize < <(origin_curl -s --retry "$retries" --retry-all-errors --retry-delay "$retry_delay" -o /dev/null -w '%{http_code} %{redirect_url}\n' "$DEPLOY_ORIGIN/auth/login") || true
             if [ "$http_code" = "302" ]; then
               break
             fi
