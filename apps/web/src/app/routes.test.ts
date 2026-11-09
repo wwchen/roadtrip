@@ -14,6 +14,8 @@ const ROUTE_MODULES: Record<string, () => Promise<{ dynamic?: string }>> = {
   '/api/pois/search': () => import('./api/pois/search/route'),
   '/api/route': () => import('./api/route/route'),
   '/api/watches': () => import('./api/watches/route'),
+  '/auth/login': () => import('./auth/login/route'),
+  '/auth/logout': () => import('./auth/logout/route'),
   '/campgrounds/[poiId]': () => import('./campgrounds/[poiId]/page'),
   '/search': () => import('./search/page'),
 };
