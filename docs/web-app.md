@@ -247,8 +247,8 @@ Vercel Production variables, all three or none (`ADMIN_EMAILS` is optional):
 
 Previews get none of them, so a preview's `/api/me` reports sign-in off and `/api/auth/*` is 404.
 
-Locally, Tilt runs `apps/web` as its `web` resource (`next dev` on http://localhost:3000, after
-`frontend-dist`), alongside the Kotlin app on :8765. It signs in against the Neon Auth of the
+Locally, Tilt runs `apps/web` as its `web` resource (`next dev` on http://localhost:3001, after
+`frontend-dist`; Grafana holds 3000), alongside the Kotlin app on :8765. It signs in against the Neon Auth of the
 `vercel-dev` Neon branch, whose users are separate from production's, and keeps app data in local
 Postgres:
 

@@ -6,7 +6,7 @@
 # available.
 
 PORT = '8765'
-WEB_PORT = '3000'
+WEB_PORT = '3001'
 LOCAL_POSTGRES = '127.0.0.1:5432'
 LOCAL_NEON_AUTH_BASE_URL = 'https://ep-raspy-forest-b5kh4ruu.neonauth.c-7.us-east-2.aws.neon.tech/roadtrip/auth'
 URL_ENCODED_SECRET = '$(python3 -c "import os, sys, urllib.parse; print(urllib.parse.quote(os.environ[sys.argv[1]], safe=\'\'))" %s)'
