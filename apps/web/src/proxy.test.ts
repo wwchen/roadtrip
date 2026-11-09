@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 const neonAuth = vi.fn();
-vi.mock('@/server/auth/neonAuth', () => ({ neonAuth }));
+vi.mock('@/server/auth/neonAuth', () => ({ neonAuth, NEON_AUTH_COOKIE_PREFIX: '__Secure-neon-auth.' }));
 const { config, proxy } = await import('./proxy');
 
 const VERIFIER_PARAM = 'neon_auth_session_verifier';

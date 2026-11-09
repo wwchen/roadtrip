@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { ERROR_LINK, ERROR_PARAM, ERROR_RETRY } from '@/server/auth/authActions';
 import { SIGN_IN_PATH } from '@/server/auth/authPaths';
-import { neonAuth } from '@/server/auth/neonAuth';
+import { NEON_AUTH_COOKIE_PREFIX, neonAuth } from '@/server/auth/neonAuth';
 import { safeReturnTo, withReturnTo } from '@/server/auth/returnTo';
 
 const VERIFIER_PARAM = 'neon_auth_session_verifier';
-const CHALLENGE_COOKIES = ['__Secure-neon-auth.session_challenge', '__Secure-neon-auth.session_challange'];
+const CHALLENGE_COOKIES = [`${NEON_AUTH_COOKIE_PREFIX}session_challenge`, `${NEON_AUTH_COOKIE_PREFIX}session_challange`];
 
 function signInUrl(request: NextRequest, error: string): string {
   const landing = new URL(request.nextUrl);

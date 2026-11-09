@@ -30,6 +30,7 @@ interface MagicLinkSignIn {
   magicLink(body: { email: string; callbackURL: string }): Promise<ApiOutcome>;
 }
 
+export const NEON_AUTH_COOKIE_PREFIX = '__Secure-neon-auth.';
 const GOOGLE_PROVIDER = 'google';
 const SAME_SITE_LAX = 'lax';
 const NETWORK_CODE_PREFIX = 'NETWORK_';
