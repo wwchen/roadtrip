@@ -16,6 +16,12 @@ const AVAILABILITY_EGRESS_ACCESS_CLIENT_ID_VARIABLE = 'AVAILABILITY_EGRESS_ACCES
 const AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET_VARIABLE = 'AVAILABILITY_EGRESS_ACCESS_CLIENT_SECRET';
 const AVAILABILITY_TTL_SECONDS_VARIABLE = 'AVAILABILITY_TTL_SECONDS';
 const ENABLED_AVAILABILITY_PROVIDERS_VARIABLE = 'ENABLED_AVAILABILITY_PROVIDERS';
+const NEON_AUTH_BASE_URL_VARIABLE = 'NEON_AUTH_BASE_URL';
+const NEON_AUTH_COOKIE_SECRET_VARIABLE = 'NEON_AUTH_COOKIE_SECRET';
+const APP_DATABASE_URL_VARIABLE = 'APP_DATABASE_URL';
+const ADMIN_EMAILS_VARIABLE = 'ADMIN_EMAILS';
+const MIN_COOKIE_SECRET_LENGTH = 32;
+const LIST_SEPARATOR = ',';
 
 const DEFAULT_DATABASE_PREPARE = true;
 const DEFAULT_DATABASE_REQUIRE_READ_ONLY = true;
@@ -51,6 +57,13 @@ const PROVIDER_SEPARATOR = ',';
 const TRUE_LITERAL = 'true';
 const FALSE_LITERAL = 'false';
 const TRAILING_NEWLINES = /[\r\n]+$/;
+
+export interface SignInConfig {
+  neonAuthBaseUrl: URL;
+  cookieSecret: string;
+  appDatabaseUrl: string;
+  adminEmails: ReadonlySet<string>;
+}
 
 export class ConfigError extends Error {
   constructor(variable: string, problem: string) {
@@ -147,7 +160,47 @@ function availabilityEgressFrom(): AvailabilityEgressConfig | null {
   };
 }
 
+function emailSetFrom(variable: string): ReadonlySet<string> {
+  const raw = process.env[variable] ?? '';
+  return new Set(
+    raw
+      .split(LIST_SEPARATOR)
+      .map((entry) => entry.trim().toLowerCase())
+      .filter((entry) => entry.length > 0),
+  );
+}
+
+function signInFrom(): SignInConfig | null {
+  const values = {
+    [NEON_AUTH_BASE_URL_VARIABLE]: secretFrom(NEON_AUTH_BASE_URL_VARIABLE),
+    [NEON_AUTH_COOKIE_SECRET_VARIABLE]: secretFrom(NEON_AUTH_COOKIE_SECRET_VARIABLE),
+    [APP_DATABASE_URL_VARIABLE]: secretFrom(APP_DATABASE_URL_VARIABLE),
+  };
+  const missing = Object.entries(values).filter(([, value]) => value === undefined).map(([variable]) => variable);
+  if (missing.length === Object.keys(values).length) return null;
+  if (missing.length > 0) throw new ConfigError(missing.join(LIST_JOINER), 'must be set with the other sign-in settings');
+  let neonAuthBaseUrl: URL;
+  try {
+    neonAuthBaseUrl = new URL(values[NEON_AUTH_BASE_URL_VARIABLE] as string);
+  } catch {
+    throw new ConfigError(NEON_AUTH_BASE_URL_VARIABLE, 'must be an absolute URL');
+  }
+  const cookieSecret = values[NEON_AUTH_COOKIE_SECRET_VARIABLE] as string;
+  if (cookieSecret.length < MIN_COOKIE_SECRET_LENGTH) {
+    throw new ConfigError(NEON_AUTH_COOKIE_SECRET_VARIABLE, `must be at least ${MIN_COOKIE_SECRET_LENGTH} characters`);
+  }
+  return {
+    neonAuthBaseUrl,
+    cookieSecret,
+    appDatabaseUrl: values[APP_DATABASE_URL_VARIABLE] as string,
+    adminEmails: emailSetFrom(ADMIN_EMAILS_VARIABLE),
+  };
+}
+
 export const config = {
+  get signIn(): SignInConfig | null {
+    return signInFrom();
+  },
   get availabilityEgress(): AvailabilityEgressConfig | null {
     return availabilityEgressFrom();
   },

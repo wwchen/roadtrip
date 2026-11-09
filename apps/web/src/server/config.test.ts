@@ -246,3 +246,57 @@ test("the default enabled data providers are Kotlin's application.yaml campgroun
   const kotlinCampgroundProviders = kotlinYamlList(KOTLIN_DATA_LIST_KEY).filter((provider) => !NON_CAMPGROUND_POI_TYPES.includes(provider));
   expect(config.enabledDataProviders).toEqual(kotlinCampgroundProviders);
 });
+
+const AUTH_URL = 'https://ep-test.neonauth.test/neondb/auth';
+const COOKIE_SECRET = 'c'.repeat(32);
+const APP_DATABASE_URL = 'postgres://roadtrip_web_writer@db.test/roadtrip';
+const SIGN_IN_VARIABLES = {
+  NEON_AUTH_BASE_URL: AUTH_URL,
+  NEON_AUTH_COOKIE_SECRET: COOKIE_SECRET,
+  APP_DATABASE_URL,
+} as const;
+const ALL_SIGN_IN = Object.keys(SIGN_IN_VARIABLES) as (keyof typeof SIGN_IN_VARIABLES)[];
+
+function stubSignIn(only: readonly (keyof typeof SIGN_IN_VARIABLES)[], adminEmails?: string) {
+  for (const [variable, value] of Object.entries(SIGN_IN_VARIABLES)) {
+    vi.stubEnv(variable, (only as readonly string[]).includes(variable) ? value : undefined);
+  }
+  vi.stubEnv('ADMIN_EMAILS', adminEmails);
+}
+
+test('sign-in is off when none of its variables are set', () => {
+  stubSignIn([]);
+  expect(config.signIn).toBeNull();
+});
+
+test('sign-in is on with all three variables', () => {
+  stubSignIn(ALL_SIGN_IN);
+  const signIn = config.signIn;
+  expect(signIn?.neonAuthBaseUrl.href).toBe(AUTH_URL);
+  expect(signIn?.cookieSecret).toBe(COOKIE_SECRET);
+  expect(signIn?.appDatabaseUrl).toBe(APP_DATABASE_URL);
+  expect(signIn?.adminEmails).toEqual(new Set());
+});
+
+test.each(ALL_SIGN_IN)('a partial sign-in configuration without %s is an error', (unset) => {
+  stubSignIn(ALL_SIGN_IN.filter((variable) => variable !== unset));
+  expect(() => config.signIn).toThrow(ConfigError);
+  expect(() => config.signIn).toThrow(new RegExp(unset));
+});
+
+test('ADMIN_EMAILS is trimmed and lower-cased', () => {
+  stubSignIn(ALL_SIGN_IN, ' Will@Example.com ,b@x.io');
+  expect(config.signIn?.adminEmails).toEqual(new Set(['will@example.com', 'b@x.io']));
+});
+
+test('a cookie secret shorter than 32 characters is an error', () => {
+  stubSignIn(ALL_SIGN_IN);
+  vi.stubEnv('NEON_AUTH_COOKIE_SECRET', 'c'.repeat(31));
+  expect(() => config.signIn).toThrow(/NEON_AUTH_COOKIE_SECRET/);
+});
+
+test('NEON_AUTH_BASE_URL must be absolute', () => {
+  stubSignIn(ALL_SIGN_IN);
+  vi.stubEnv('NEON_AUTH_BASE_URL', '/neondb/auth');
+  expect(() => config.signIn).toThrow(/NEON_AUTH_BASE_URL must be an absolute URL/);
+});
