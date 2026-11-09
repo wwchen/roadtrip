@@ -247,20 +247,28 @@ Vercel Production variables, all three or none (`ADMIN_EMAILS` is optional):
 
 Previews get none of them, so a preview's `/api/me` reports sign-in off and `/api/auth/*` is 404.
 
-Locally, sign-in uses the Neon Auth of the `vercel-dev` Neon branch (users there are separate
-from production's), while app data stays in local Postgres:
+Locally, Tilt runs `apps/web` as its `web` resource (`next dev` on http://localhost:3000, after
+`frontend-dist`), alongside the Kotlin app on :8765. It signs in against the Neon Auth of the
+`vercel-dev` Neon branch, whose users are separate from production's, and keeps app data in local
+Postgres:
 
-- The Tiltfile sets `NEON_AUTH_BASE_URL` to `vercel-dev`'s Auth URL (`LOCAL_NEON_AUTH_BASE_URL`;
-  export your own to override). The compose `web` service derives `NEON_AUTH_COOKIE_SECRET_FILE`,
-  `APP_DATABASE_URL` (`roadtrip_web_writer` on local Postgres) and `APP_DATABASE_PASSWORD_FILE`
-  from it with `${NEON_AUTH_BASE_URL:+…}`, so a host that does not set it, mini-ca production
-  included, keeps sign-in off. `ADMIN_EMAILS` passes through from the host.
-- The secrets are `NEON_AUTH_COOKIE_SECRET` and `WEB_WRITER_DB_PASSWORD` in the local vault.
+- `NEON_AUTH_BASE_URL` is `LOCAL_NEON_AUTH_BASE_URL` in the Tiltfile; export your own to override.
+  `NEON_AUTH_COOKIE_SECRET` and `ADMIN_EMAILS` come from Tilt's environment (the first from the
+  local vault).
+- The resource builds `DATABASE_URL` (`roadtrip_web`) and `APP_DATABASE_URL` (`roadtrip_web_writer`)
+  on `127.0.0.1:5432` at run time from `WEB_DB_PASSWORD` and `WEB_WRITER_DB_PASSWORD`,
+  URL-encoded, so no password appears in the Tiltfile or the Tilt UI. The compose `web` service,
+  which only production's `web` profile runs, has no sign-in settings.
 - `roadtrip_web_writer` comes from Flyway's `R__web_writer_grants.sql` (held equal to Drizzle's
-  `0003` by `webWriteGrants.test.ts`) and gets its password from `postgres-init/30-web-writer.sh`
-  on first init. A local database created before that needs the password once:
-  `./secrets/manage.py exec local -- docker compose -p roadtrip exec -T -e WEB_WRITER_DB_PASSWORD_FILE=/run/secrets/web_writer_db_password postgres /docker-entrypoint-initdb.d/30-web-writer.sh`
-  (after recreating `postgres` so the secret is mounted).
+  `0003` by `webWriteGrants.test.ts`). Both web roles get their passwords from `postgres-init/` on
+  first init only. A local database created before those scripts needs them once, with the stack
+  up:
+  `./secrets/manage.py exec local -- docker compose -p roadtrip exec -T -e WEB_DB_PASSWORD_FILE=/run/secrets/web_db_password postgres /docker-entrypoint-initdb.d/20-web-reader.sh`
+  and
+  `./secrets/manage.py exec local -- docker compose -p roadtrip exec -T -e WEB_WRITER_DB_PASSWORD_FILE=/run/secrets/web_writer_db_password postgres /docker-entrypoint-initdb.d/30-web-writer.sh`.
+  Until then the web resource answers 500 with `password authentication failed`.
+- `/auth/logout` expires the `__Secure-neon-auth` cookies itself when Neon Auth refuses the
+  sign-out (it does when the request has neither Origin nor Referer).
 - `vercel-dev` allows localhost origins by default. Reset it from `main` only after dropping its
   copied `neon_auth` schema, or Neon Auth cannot be re-provisioned there.
 
