@@ -46,7 +46,7 @@ export async function meFor(
         email: row.email,
         ...(row.displayName === null ? {} : { display_name: row.displayName }),
         email_verified: row.emailVerified,
-        roles: adminEmails.has(row.email.toLowerCase()) ? [ADMIN_ROLE] : [],
+        roles: row.emailVerified && adminEmails.has(row.email.toLowerCase()) ? [ADMIN_ROLE] : [],
         theme: row.theme,
       },
     };

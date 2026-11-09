@@ -80,3 +80,8 @@ test('an email taken by another account answers anonymous', async () => {
   const users = vi.fn(async () => Promise.reject(new EmailTakenError()));
   expect(await meFor(portWith(async () => sessionUser), users, ADMINS)).toEqual(ANONYMOUS);
 });
+
+test('an unverified address never gets admin', async () => {
+  const me = await meFor(portWith(async () => sessionUser), usersReturning({ emailVerified: false }), ADMINS);
+  expect(me.user?.roles).toEqual([]);
+});

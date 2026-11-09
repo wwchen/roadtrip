@@ -20,8 +20,15 @@ export interface AppUserRow {
 
 export class EmailTakenError extends Error {
   constructor() {
-    super('the email belongs to another account and this identity has not verified it');
+    super('the email belongs to an account this identity cannot join');
     this.name = 'EmailTakenError';
+  }
+}
+
+export class UnverifiedIdentityError extends Error {
+  constructor() {
+    super('an identity gets an account only once its email is verified');
+    this.name = 'UnverifiedIdentityError';
   }
 }
 
@@ -63,6 +70,7 @@ async function refreshed(db: Executor, user: AppUserRow, claims: IdentityClaims)
 }
 
 async function created(db: Db, claims: IdentityClaims): Promise<AppUserRow> {
+  if (!claims.emailVerified) throw new UnverifiedIdentityError();
   return db.transaction(async (tx) => {
     const [inserted] = await tx
       .insert(appUser)
@@ -74,7 +82,7 @@ async function created(db: Db, claims: IdentityClaims): Promise<AppUserRow> {
       const linked = await byIdentity(tx, claims.subject);
       if (linked !== undefined) return linked;
       const existing = await byEmail(tx, claims.email);
-      if (existing === undefined || !claims.emailVerified) throw new EmailTakenError();
+      if (existing === undefined || !existing.emailVerified) throw new EmailTakenError();
       owner = existing;
     }
     await tx

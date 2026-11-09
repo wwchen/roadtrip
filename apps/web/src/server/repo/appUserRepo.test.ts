@@ -1,7 +1,7 @@
 import { appUser, userIdentity } from '@roadtrip/db';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'vitest';
 import { startCatalogFixture, type CatalogFixture } from '../testing/catalogFixture';
-import { EmailTakenError, NEON_AUTH_PROVIDER, linkedAppUser, type IdentityClaims } from './appUserRepo';
+import { EmailTakenError, NEON_AUTH_PROVIDER, UnverifiedIdentityError, linkedAppUser, type IdentityClaims } from './appUserRepo';
 
 const CONCURRENT_FIRST_CALLS = 5;
 const DEFAULT_THEME = 'system';
@@ -43,8 +43,8 @@ test('a new identity creates one app_user and one user_identity', async () => {
 });
 
 test('the same identity again returns the same id and refreshes the profile', async () => {
-  const first = await linkedAppUser(fixture.writeDb, claims({ emailVerified: false, displayName: 'Old' }));
-  const second = await linkedAppUser(fixture.writeDb, claims({ emailVerified: true, displayName: 'New' }));
+  const first = await linkedAppUser(fixture.writeDb, claims({ displayName: 'Old' }));
+  const second = await linkedAppUser(fixture.writeDb, claims({ displayName: 'New' }));
   expect(second.id).toBe(first.id);
   expect(second).toMatchObject({ emailVerified: true, displayName: 'New' });
   expect(await counts()).toEqual({ users: 1, identities: 1 });
@@ -61,7 +61,7 @@ test('an unverified identity never joins an existing user by email', async () =>
   await linkedAppUser(fixture.writeDb, claims());
   await expect(
     linkedAppUser(fixture.writeDb, claims({ subject: 'subject-b', emailVerified: false })),
-  ).rejects.toBeInstanceOf(EmailTakenError);
+  ).rejects.toBeInstanceOf(UnverifiedIdentityError);
   expect(await counts()).toEqual({ users: 1, identities: 1 });
 });
 
@@ -71,4 +71,15 @@ test('concurrent first calls for one identity both answer the same user', async 
   );
   expect(new Set(users.map((user) => user.id)).size).toBe(1);
   expect(await counts()).toEqual({ users: 1, identities: 1 });
+});
+
+test('an unverified identity with no account gets none', async () => {
+  await expect(linkedAppUser(fixture.writeDb, claims({ emailVerified: false }))).rejects.toBeInstanceOf(UnverifiedIdentityError);
+  expect(await counts()).toEqual({ users: 0, identities: 0 });
+});
+
+test('a verified identity never joins an unverified account with its email', async () => {
+  await fixture.writeDb.insert(appUser).values({ email: 'will@example.com', emailVerified: false });
+  await expect(linkedAppUser(fixture.writeDb, claims({ subject: 'subject-b' }))).rejects.toBeInstanceOf(EmailTakenError);
+  expect(await counts()).toEqual({ users: 1, identities: 0 });
 });
