@@ -17,7 +17,7 @@ export interface FormState {
 
 export type ActionOutcome = { kind: 'redirect'; url: string } | { kind: 'message'; state: FormState };
 
-export type AuthAction = (port: AuthPort | null, form: FormData) => Promise<ActionOutcome>;
+export type AuthAction = (port: AuthPort | null, form: FormData, origin: string) => Promise<ActionOutcome>;
 
 export const EMAIL_FIELD = 'email';
 export const PASSWORD_FIELD = 'password';
@@ -46,6 +46,8 @@ const field = (form: FormData, name: string): string => {
 
 const returnToOf = (form: FormData): string => safeReturnTo(field(form, RETURN_TO_PARAM));
 
+const absolute = (origin: string, path: string): string => new URL(path, origin).toString();
+
 const isUnavailable = (code: string): boolean => code === AUTH_UNAVAILABLE;
 
 function codeOf(error: unknown): string {
@@ -58,11 +60,11 @@ function logged(code: string): string {
   return code;
 }
 
-function guarded(work: (port: AuthPort, form: FormData) => Promise<ActionOutcome>): AuthAction {
-  return async (port, form) => {
+function guarded(work: (port: AuthPort, form: FormData, origin: string) => Promise<ActionOutcome>): AuthAction {
+  return async (port, form, origin) => {
     if (port === null) return message(RETRY);
     try {
-      return await work(port, form);
+      return await work(port, form, origin);
     } catch (error) {
       logged(codeOf(error));
       return message(RETRY);
@@ -81,36 +83,43 @@ export const signInWithPasswordAction = guarded(async (port, form) => {
   return message(isUnavailable(code) ? RETRY : WRONG_PASSWORD);
 });
 
-export const signInWithGoogleAction = guarded(async (port, form) => {
+export const signInWithGoogleAction = guarded(async (port, form, origin) => {
   const returnTo = returnToOf(form);
   const errorCallback = `${withReturnTo(SIGN_IN_PATH, returnTo)}&${ERROR_PARAM}=${ERROR_RETRY}`;
-  const result = await port.signInWithGoogle(returnTo, errorCallback);
+  const result = await port.signInWithGoogle(absolute(origin, returnTo), absolute(origin, errorCallback));
   if (result.ok) return redirectTo(result.url);
   logged(result.code);
   return message(RETRY);
 });
 
-export const sendMagicLinkAction = guarded(async (port, form) => {
-  const code = failure(await port.sendMagicLink(field(form, EMAIL_FIELD), returnToOf(form)));
+export const sendMagicLinkAction = guarded(async (port, form, origin) => {
+  const code = failure(await port.sendMagicLink(field(form, EMAIL_FIELD), absolute(origin, returnToOf(form))));
   return message(code !== null && isUnavailable(code) ? RETRY : MAGIC_LINK_SENT);
 });
 
-export const signUpAction = guarded(async (port, form) => {
+export const signUpAction = guarded(async (port, form, origin) => {
   const code = failure(
-    await port.signUp(field(form, EMAIL_FIELD), field(form, PASSWORD_FIELD), field(form, NAME_FIELD), returnToOf(form)),
+    await port.signUp(
+      field(form, EMAIL_FIELD),
+      field(form, PASSWORD_FIELD),
+      field(form, NAME_FIELD),
+      absolute(origin, returnToOf(form)),
+    ),
   );
   if (code === null || code === USER_ALREADY_EXISTS) return message(VERIFY_EMAIL);
   if (code === PASSWORD_TOO_SHORT) return message(PASSWORD_TOO_SHORT_MESSAGE);
   return message(RETRY);
 });
 
-export const resendVerificationAction = guarded(async (port, form) => {
-  const code = failure(await port.resendVerification(field(form, EMAIL_FIELD), returnToOf(form)));
+export const resendVerificationAction = guarded(async (port, form, origin) => {
+  const code = failure(await port.resendVerification(field(form, EMAIL_FIELD), absolute(origin, returnToOf(form))));
   return message(code !== null && isUnavailable(code) ? RETRY : VERIFY_EMAIL);
 });
 
-export const requestPasswordResetAction = guarded(async (port, form) => {
-  const code = failure(await port.requestPasswordReset(field(form, EMAIL_FIELD), withReturnTo(RESET_PATH, returnToOf(form))));
+export const requestPasswordResetAction = guarded(async (port, form, origin) => {
+  const code = failure(
+    await port.requestPasswordReset(field(form, EMAIL_FIELD), absolute(origin, withReturnTo(RESET_PATH, returnToOf(form)))),
+  );
   return message(code !== null && isUnavailable(code) ? RETRY : RESET_LINK_SENT);
 });
 

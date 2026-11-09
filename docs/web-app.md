@@ -217,6 +217,10 @@ Auth (`apps/web/src/app/api/auth/[...path]`), and everything else reaches it thr
   `/auth/forgot`, `/auth/reset`. Their forms post to server actions. `/auth/login?return_to=…`
   redirects to the sign-in page and `/auth/logout` signs out, so the frontend's `auth-api.ts`
   is unchanged. `return_to` is kept only when it is a same-site path.
+- Google, magic-link and email-verification sign-ins finish on Neon Auth's host and come back with
+  `?neon_auth_session_verifier=…`. `apps/web/src/proxy.ts` runs Neon Auth's middleware on exactly
+  those requests; it exchanges the verifier for the session cookie and redirects to the same URL
+  without it. Callback URLs are absolute, built from the request's origin.
 - `GET /api/me` answers `auth_enabled: false` when sign-in is off, anonymous without a session
   or when Neon Auth cannot be reached, and otherwise the user. Each Neon Auth user is linked to
   one `app_user` through `user_identity` (`provider = 'neon-auth'`, `subject` = the Neon Auth

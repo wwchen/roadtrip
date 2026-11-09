@@ -1,5 +1,6 @@
 'use server';
 
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import {
   requestPasswordResetAction,
@@ -14,8 +15,20 @@ import {
 } from '@/server/auth/authActions';
 import { authPort } from '@/server/auth/neonAuth';
 
+const ORIGIN_HEADER = 'origin';
+const HOST_HEADER = 'host';
+const FORWARDED_PROTO_HEADER = 'x-forwarded-proto';
+const DEFAULT_PROTO = 'https';
+
+async function requestOrigin(): Promise<string> {
+  const incoming = await headers();
+  const origin = incoming.get(ORIGIN_HEADER);
+  if (origin !== null) return origin;
+  return `${incoming.get(FORWARDED_PROTO_HEADER) ?? DEFAULT_PROTO}://${incoming.get(HOST_HEADER)}`;
+}
+
 async function run(action: AuthAction, form: FormData): Promise<FormState> {
-  const outcome = await action(authPort(), form);
+  const outcome = await action(authPort(), form, await requestOrigin());
   if (outcome.kind === 'redirect') redirect(outcome.url);
   return outcome.state;
 }
