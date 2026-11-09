@@ -1,0 +1,31 @@
+@import '@lew-ds/lds/css';
+@import '../../../../../frontend/src/tokens/roadtrip-zion.css';
+@import '../../../../../frontend/src/tokens/roadtrip-zion-hues.css';
+@import '../../../../../frontend/src/tokens/tokens.css';
+@import '../../../../../frontend/src/tokens/roadtrip-zion-bridge.css';
+
+.auth-page {
+  display: grid;
+  justify-items: center;
+  min-height: 100vh;
+  padding: var(--space-7) var(--space-4);
+  background: var(--rt-surface);
+  color: var(--rt-text);
+}
+
+.auth-panel {
+  display: grid;
+  gap: var(--space-5);
+  width: min(100%, 24rem);
+}
+
+.auth-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
