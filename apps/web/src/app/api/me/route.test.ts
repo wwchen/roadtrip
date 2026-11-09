@@ -31,3 +31,10 @@ test('answers the signed-in user', async () => {
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ authenticated: true, user: { id: 7, email: 'a@example.com' } });
 });
+
+test('the route reaches the app user only through the service layer', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('./route.ts', import.meta.url), 'utf8');
+  expect(source).not.toMatch(/@\/server\/repo\//);
+  expect(source).not.toMatch(/@\/server\/appDb/);
+});

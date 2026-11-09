@@ -1,10 +1,14 @@
+import { appDb } from '@/server/appDb';
 import type { AuthPort } from '@/server/auth/authPort';
+import { authPort } from '@/server/auth/neonAuth';
+import { config } from '@/server/config';
 import type { MeResponseDto } from '@/server/contract';
-import type { AppUserRow, IdentityClaims } from '@/server/repo/appUserRepo';
+import { linkedAppUser, type AppUserRow, type IdentityClaims } from '@/server/repo/appUserRepo';
 
 const ADMIN_ROLE = 'admin';
 const ME_LOG = 'me:';
 const UNKNOWN_FAILURE = 'UNKNOWN';
+const NO_ADMINS: ReadonlySet<string> = new Set();
 
 const DISABLED: MeResponseDto = { authenticated: false, auth_enabled: false, auth_embedded: false };
 const ANONYMOUS: MeResponseDto = { authenticated: false, auth_enabled: true, auth_embedded: false };
@@ -50,4 +54,8 @@ export async function meFor(
     console.warn(ME_LOG, failureCodeOf(error));
     return ANONYMOUS;
   }
+}
+
+export function currentMe(): Promise<MeResponseDto> {
+  return meFor(authPort(), (claims) => linkedAppUser(appDb(), claims), config.signIn?.adminEmails ?? NO_ADMINS);
 }
