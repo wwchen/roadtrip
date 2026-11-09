@@ -5,6 +5,7 @@ import type { NextConfig } from 'next';
 const WORKSPACE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MAP_PAGE = '/index.html';
 const POI_PAGE = '/poi.html';
+const DASHBOARD_PAGE = '/availability.html';
 
 const config: NextConfig = {
   output: 'standalone',
@@ -17,6 +18,7 @@ const config: NextConfig = {
   rewrites: async () => ({ beforeFiles: [
       { source: '/', destination: MAP_PAGE },
       { source: '/poi', destination: POI_PAGE },
+      { source: '/availability', destination: DASHBOARD_PAGE },
     ], afterFiles: [], fallback: [] }),
 };
 
