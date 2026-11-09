@@ -13,6 +13,7 @@
     "test": "node --test scripts/copy-frontend.test.mjs && vitest run"
   },
   "dependencies": {
+    "@neon/auth": "0.8.2",
     "@photostructure/tz-lookup": "11.7.0",
     "@roadtrip/db": "0.1.0",
     "@roadtrip/domain": "0.1.0",

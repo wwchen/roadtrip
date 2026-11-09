@@ -8,6 +8,7 @@ const SERVER_ONLY_NOOP = 'empty.js';
 const SOURCE_ALIAS = '@';
 const SOURCE_DIRECTORY = path.resolve(import.meta.dirname, 'src');
 const NODE_TEST_SCRIPTS = 'scripts/**';
+const EXTENSIONLESS_NEXT_IMPORTERS = ['@neon/auth'];
 
 const serverOnlyNoop = path.join(
   path.dirname(createRequire(import.meta.url).resolve(SERVER_ONLY_PACKAGE)),
@@ -22,5 +23,6 @@ export default defineConfig({
     hookTimeout: CONTAINER_TIMEOUT_MS,
     fileParallelism: false,
     exclude: [...configDefaults.exclude, NODE_TEST_SCRIPTS],
+    server: { deps: { inline: EXTENSIONLESS_NEXT_IMPORTERS } },
   },
 });
