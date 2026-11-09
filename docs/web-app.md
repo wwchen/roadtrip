@@ -252,7 +252,8 @@ Locally, Tilt runs `apps/web` as its `web` resource (`next dev` on http://localh
 `vercel-dev` Neon branch, whose users are separate from production's, and keeps app data in local
 Postgres:
 
-- `NEON_AUTH_BASE_URL` is `LOCAL_NEON_AUTH_BASE_URL` in the Tiltfile; export your own to override.
+- `NEON_AUTH_BASE_URL` comes from `apps/web/.env.development`, which `next dev` loads and Vercel
+  never does. Put your own in `apps/web/.env.local` to override it.
   `NEON_AUTH_COOKIE_SECRET` and `ADMIN_EMAILS` come from Tilt's environment (the first from the
   local vault).
 - The resource builds `DATABASE_URL` (`roadtrip_web`) and `APP_DATABASE_URL` (`roadtrip_web_writer`)

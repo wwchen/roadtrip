@@ -257,10 +257,16 @@ class DeploymentContractTest(unittest.TestCase):
             self.assertNotIn(name, production_web)
         tilt = (ROOT / "Tiltfile").read_text()
         web = tilt[tilt.index("local_resource(\n    'web',") : tilt.index("docker_compose(")]
-        self.assertIn("serve_env={'NEON_AUTH_BASE_URL'", web)
+        self.assertNotIn("NEON_AUTH_BASE_URL", tilt)
+        self.assertNotIn("neonauth", tilt)
         self.assertIn("roadtrip_web_writer:", web)
         self.assertIn("resource_deps=['frontend-dist', 'postgres']", web)
         self.assertNotIn("npm ci --workspace", tilt)
+
+    def test_local_neon_auth_url_is_the_only_committed_dev_setting(self) -> None:
+        settings = (ROOT / "apps/web/.env.development").read_text().split()
+        self.assertEqual([line.split("=", 1)[0] for line in settings], ["NEON_AUTH_BASE_URL"])
+        self.assertIn(".neonauth.", settings[0])
 
     def test_web_runs_only_in_production(self) -> None:
         compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
