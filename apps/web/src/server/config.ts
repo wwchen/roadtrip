@@ -18,7 +18,9 @@ const AVAILABILITY_TTL_SECONDS_VARIABLE = 'AVAILABILITY_TTL_SECONDS';
 const ENABLED_AVAILABILITY_PROVIDERS_VARIABLE = 'ENABLED_AVAILABILITY_PROVIDERS';
 const NEON_AUTH_BASE_URL_VARIABLE = 'NEON_AUTH_BASE_URL';
 const NEON_AUTH_COOKIE_SECRET_VARIABLE = 'NEON_AUTH_COOKIE_SECRET';
+const NEON_AUTH_COOKIE_SECRET_FILE_VARIABLE = 'NEON_AUTH_COOKIE_SECRET_FILE';
 const APP_DATABASE_URL_VARIABLE = 'APP_DATABASE_URL';
+const APP_DATABASE_PASSWORD_FILE_VARIABLE = 'APP_DATABASE_PASSWORD_FILE';
 const ADMIN_EMAILS_VARIABLE = 'ADMIN_EMAILS';
 const MIN_COOKIE_SECRET_LENGTH = 32;
 const LIST_SEPARATOR = ',';
@@ -120,11 +122,16 @@ function fileSecretFrom(variable: string): string | undefined {
   return value;
 }
 
-function withPasswordFrom(rawUrl: string, password: string | undefined): string {
+function withPasswordFrom(
+  rawUrl: string,
+  password: string | undefined,
+  fileVariable: string = DATABASE_PASSWORD_FILE_VARIABLE,
+  urlVariable: string = DATABASE_URL_VARIABLE,
+): string {
   if (password === undefined) return rawUrl;
   const url = new URL(rawUrl);
   if (url.password.length > 0) {
-    throw new ConfigError(DATABASE_PASSWORD_FILE_VARIABLE, `is set but ${DATABASE_URL_VARIABLE} already carries a password`);
+    throw new ConfigError(fileVariable, `is set but ${urlVariable} already carries a password`);
   }
   url.password = encodeURIComponent(password);
   return url.toString();
@@ -134,6 +141,15 @@ function secretFrom(variable: string): string | undefined {
   const raw = process.env[variable];
   if (raw === undefined || raw.trim().length === 0) return undefined;
   return raw;
+}
+
+function secretOrFileFrom(variable: string, fileVariable: string): string | undefined {
+  const fromFile = fileSecretFrom(fileVariable);
+  const direct = secretFrom(variable);
+  if (fromFile !== undefined && direct !== undefined) {
+    throw new ConfigError(fileVariable, `and ${variable} are both set`);
+  }
+  return fromFile ?? direct;
 }
 
 function availabilityEgressFrom(): AvailabilityEgressConfig | null {
@@ -173,7 +189,7 @@ function emailSetFrom(variable: string): ReadonlySet<string> {
 function signInFrom(): SignInConfig | null {
   const values = {
     [NEON_AUTH_BASE_URL_VARIABLE]: secretFrom(NEON_AUTH_BASE_URL_VARIABLE),
-    [NEON_AUTH_COOKIE_SECRET_VARIABLE]: secretFrom(NEON_AUTH_COOKIE_SECRET_VARIABLE),
+    [NEON_AUTH_COOKIE_SECRET_VARIABLE]: secretOrFileFrom(NEON_AUTH_COOKIE_SECRET_VARIABLE, NEON_AUTH_COOKIE_SECRET_FILE_VARIABLE),
     [APP_DATABASE_URL_VARIABLE]: secretFrom(APP_DATABASE_URL_VARIABLE),
   };
   const missing = Object.entries(values).filter(([, value]) => value === undefined).map(([variable]) => variable);
@@ -192,7 +208,12 @@ function signInFrom(): SignInConfig | null {
   return {
     neonAuthBaseUrl,
     cookieSecret,
-    appDatabaseUrl: values[APP_DATABASE_URL_VARIABLE] as string,
+    appDatabaseUrl: withPasswordFrom(
+      values[APP_DATABASE_URL_VARIABLE] as string,
+      fileSecretFrom(APP_DATABASE_PASSWORD_FILE_VARIABLE),
+      APP_DATABASE_PASSWORD_FILE_VARIABLE,
+      APP_DATABASE_URL_VARIABLE,
+    ),
     adminEmails: emailSetFrom(ADMIN_EMAILS_VARIABLE),
   };
 }
@@ -234,12 +255,7 @@ export const config = {
     return listFrom(ENABLED_DATA_PROVIDERS_VARIABLE, DEFAULT_ENABLED_DATA_PROVIDERS);
   },
   get mapboxToken(): string | undefined {
-    const fromFile = fileSecretFrom(MAPBOX_TOKEN_FILE_VARIABLE);
-    const direct = secretFrom(MAPBOX_TOKEN_VARIABLE);
-    if (fromFile !== undefined && direct !== undefined) {
-      throw new ConfigError(MAPBOX_TOKEN_FILE_VARIABLE, `and ${MAPBOX_TOKEN_VARIABLE} are both set`);
-    }
-    return fromFile ?? direct;
+    return secretOrFileFrom(MAPBOX_TOKEN_VARIABLE, MAPBOX_TOKEN_FILE_VARIABLE);
   },
   get healthDatabaseToken(): string | undefined {
     return secretFrom(HEALTH_DATABASE_TOKEN_VARIABLE);

@@ -262,6 +262,8 @@ function stubSignIn(only: readonly (keyof typeof SIGN_IN_VARIABLES)[], adminEmai
     vi.stubEnv(variable, (only as readonly string[]).includes(variable) ? value : undefined);
   }
   vi.stubEnv('ADMIN_EMAILS', adminEmails);
+  vi.stubEnv('NEON_AUTH_COOKIE_SECRET_FILE', undefined);
+  vi.stubEnv('APP_DATABASE_PASSWORD_FILE', undefined);
 }
 
 test('sign-in is off when none of its variables are set', () => {
@@ -299,4 +301,30 @@ test('NEON_AUTH_BASE_URL must be absolute', () => {
   stubSignIn(ALL_SIGN_IN);
   vi.stubEnv('NEON_AUTH_BASE_URL', '/neondb/auth');
   expect(() => config.signIn).toThrow(/NEON_AUTH_BASE_URL must be an absolute URL/);
+});
+
+test('the cookie secret can come from a mounted file', () => {
+  stubSignIn(ALL_SIGN_IN);
+  vi.stubEnv('NEON_AUTH_COOKIE_SECRET', undefined);
+  vi.stubEnv('NEON_AUTH_COOKIE_SECRET_FILE', secretFile('f'.repeat(32)));
+  expect(config.signIn?.cookieSecret).toBe('f'.repeat(32));
+});
+
+test('the cookie secret cannot come from both the variable and a file', () => {
+  stubSignIn(ALL_SIGN_IN);
+  vi.stubEnv('NEON_AUTH_COOKIE_SECRET_FILE', secretFile('f'.repeat(32)));
+  expect(() => config.signIn).toThrow(/NEON_AUTH_COOKIE_SECRET_FILE and NEON_AUTH_COOKIE_SECRET are both set/);
+});
+
+test('the app database password can come from a mounted file', () => {
+  stubSignIn(ALL_SIGN_IN);
+  vi.stubEnv('APP_DATABASE_PASSWORD_FILE', secretFile('wr%ter:pw'));
+  expect(decodeURIComponent(new URL(config.signIn?.appDatabaseUrl ?? '').password)).toBe('wr%ter:pw');
+});
+
+test('an app database URL that already carries a password refuses a password file', () => {
+  stubSignIn(ALL_SIGN_IN);
+  vi.stubEnv('APP_DATABASE_URL', 'postgres://roadtrip_web_writer:inline@db.test/roadtrip');
+  vi.stubEnv('APP_DATABASE_PASSWORD_FILE', secretFile('other'));
+  expect(() => config.signIn).toThrow(/APP_DATABASE_PASSWORD_FILE is set but APP_DATABASE_URL already carries a password/);
 });
