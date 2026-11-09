@@ -221,6 +221,12 @@ Auth (`apps/web/src/app/api/auth/[...path]`), and everything else reaches it thr
   `?neon_auth_session_verifier=…`. `apps/web/src/proxy.ts` runs Neon Auth's middleware on exactly
   those requests; it exchanges the verifier for the session cookie and redirects to the same URL
   without it. Callback URLs are absolute, built from the request's origin.
+- The exchange needs the challenge cookie of the browser that asked for the link. A link opened
+  elsewhere (a phone's mail app) lands on `/auth/sign-in` with its return path and a notice to ask
+  for a new link from that browser; a failed exchange lands there with the retry message.
+- Neon's shared email provider supports only code-style verification. Link verification, which
+  these pages use, needs custom SMTP (Resend), so `require_email_verification` stays off until it is
+  set; until then a password sign-up is never verified and `/api/me` treats it as signed out.
 - `GET /api/me` answers `auth_enabled: false` when sign-in is off, anonymous without a session
   or when Neon Auth cannot be reached, and otherwise the user. Each Neon Auth user is linked to
   one `app_user` through `user_identity` (`provider = 'neon-auth'`, `subject` = the Neon Auth
