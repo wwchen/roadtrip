@@ -14,10 +14,13 @@ import {
   sendMagicLinkAction,
   signInWithGoogleAction,
   signInWithPasswordAction,
+  signInNotice,
   signUpAction,
 } from './authActions';
 import {
+  LINK_OTHER_BROWSER,
   MAGIC_LINK_SENT,
+  PASSWORD_CHANGED,
   PASSWORD_TOO_SHORT_MESSAGE,
   RESET_LINK_SENT,
   RETRY,
@@ -202,4 +205,14 @@ test('a resend that Neon Auth refuses shows the retry message', async () => {
     kind: 'message',
     state: { message: RETRY, canResendVerification: false },
   });
+});
+
+test.each([
+  ['link', undefined, LINK_OTHER_BROWSER],
+  ['retry', undefined, RETRY],
+  [undefined, 'done', PASSWORD_CHANGED],
+  [undefined, undefined, null],
+  ['something-else', undefined, null],
+])('the sign-in notice for error=%s reset=%s', (error, reset, expected) => {
+  expect(signInNotice(error, reset)).toBe(expected);
 });

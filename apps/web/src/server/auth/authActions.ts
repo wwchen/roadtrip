@@ -8,7 +8,16 @@ import {
   type AuthPort,
   type AuthResult,
 } from './authPort';
-import { MAGIC_LINK_SENT, PASSWORD_TOO_SHORT_MESSAGE, RESET_LINK_SENT, RETRY, VERIFY_EMAIL, WRONG_PASSWORD } from './authCopy';
+import {
+  LINK_OTHER_BROWSER,
+  MAGIC_LINK_SENT,
+  PASSWORD_CHANGED,
+  PASSWORD_TOO_SHORT_MESSAGE,
+  RESET_LINK_SENT,
+  RETRY,
+  VERIFY_EMAIL,
+  WRONG_PASSWORD,
+} from './authCopy';
 import { RESET_PATH, SIGN_IN_PATH } from './authPaths';
 import { RETURN_TO_PARAM, safeReturnTo, withReturnTo } from './returnTo';
 
@@ -27,6 +36,7 @@ export const NAME_FIELD = 'name';
 export const TOKEN_FIELD = 'token';
 export const ERROR_PARAM = 'error';
 export const ERROR_RETRY = 'retry';
+export const ERROR_LINK = 'link';
 export const RESET_PARAM = 'reset';
 export const RESET_DONE = 'done';
 
@@ -130,3 +140,10 @@ export const resetPasswordAction = guarded(async (port, form) => {
   if (code !== null) return message(RETRY);
   return redirectTo(`${withReturnTo(SIGN_IN_PATH, returnToOf(form))}&${RESET_PARAM}=${RESET_DONE}`);
 });
+
+export function signInNotice(error: string | undefined, reset: string | undefined): string | null {
+  if (error === ERROR_LINK) return LINK_OTHER_BROWSER;
+  if (error === ERROR_RETRY) return RETRY;
+  if (reset === RESET_DONE) return PASSWORD_CHANGED;
+  return null;
+}

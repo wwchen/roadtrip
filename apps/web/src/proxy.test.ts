@@ -22,13 +22,28 @@ test('with sign-in off the request passes through', async () => {
   expect(response.headers.get('x-middleware-next')).toBe('1');
 });
 
-test('with sign-in on the verifier goes to Neon Auth middleware, which sends unknown visitors to sign-in', async () => {
-  const exchanged = new Response(null, { status: 307, headers: { location: 'https://roadtrip.test/watches' } });
+const CHALLENGE_COOKIE = '__Secure-neon-auth.session_challenge=c-1';
+
+test('with sign-in on, a verifier with its challenge cookie goes to Neon Auth middleware, which keeps the return path on failure', async () => {
+  const exchanged = new Response(null, { status: 307, headers: { location: 'https://roadtrip.test/watches?x=1' } });
   const handle = vi.fn(async () => exchanged);
   const middleware = vi.fn(() => handle);
   neonAuth.mockReturnValue({ middleware });
-  const request = callback();
+  const request = new NextRequest(`https://roadtrip.test/watches?x=1&${VERIFIER_PARAM}=v-1`, {
+    headers: { cookie: CHALLENGE_COOKIE },
+  });
   expect(await proxy(request)).toBe(exchanged);
-  expect(middleware).toHaveBeenCalledWith({ loginUrl: '/auth/sign-in' });
+  expect(middleware).toHaveBeenCalledWith({ loginUrl: '/auth/sign-in?return_to=%2Fwatches%3Fx%3D1&error=retry' });
   expect(handle).toHaveBeenCalledWith(request);
+});
+
+test('a verifier opened without its challenge cookie lands on sign-in with the return path and a notice', async () => {
+  const middleware = vi.fn();
+  neonAuth.mockReturnValue({ middleware });
+  const response = await proxy(callback());
+  expect(middleware).not.toHaveBeenCalled();
+  expect([302, 307]).toContain(response.status);
+  expect(new URL(response.headers.get('location') ?? '').pathname + new URL(response.headers.get('location') ?? '').search).toBe(
+    '/auth/sign-in?return_to=%2Fwatches&error=link',
+  );
 });

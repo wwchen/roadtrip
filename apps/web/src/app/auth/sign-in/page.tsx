@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { PASSWORD_CHANGED, RETRY } from '@/server/auth/authCopy';
-import { ERROR_PARAM, ERROR_RETRY, RESET_DONE, RESET_PARAM } from '@/server/auth/authActions';
+import { ERROR_PARAM, RESET_PARAM, signInNotice } from '@/server/auth/authActions';
 import { FORGOT_PATH, SIGN_UP_PATH } from '@/server/auth/authPaths';
 import { RETURN_TO_PARAM, safeReturnTo, withReturnTo } from '@/server/auth/returnTo';
 import { resendVerification, sendMagicLink, signInWithGoogle, signInWithPassword } from '../actions';
@@ -12,12 +11,6 @@ export const dynamic = 'force-dynamic';
 const EMAIL: FieldSpec = { name: 'email', label: 'Email', type: 'email', autoComplete: 'email' };
 const PASSWORD: FieldSpec = { name: 'password', label: 'Password', type: 'password', autoComplete: 'current-password' };
 const NO_FIELDS: readonly FieldSpec[] = [];
-
-function noticeFor(params: Record<string, string | string[] | undefined>): string | null {
-  if (firstOf(params[ERROR_PARAM]) === ERROR_RETRY) return RETRY;
-  if (firstOf(params[RESET_PARAM]) === RESET_DONE) return PASSWORD_CHANGED;
-  return null;
-}
 
 export default async function SignInPage({ searchParams }: { searchParams: AuthSearchParams }) {
   const params = await searchParams;
@@ -31,7 +24,7 @@ export default async function SignInPage({ searchParams }: { searchParams: AuthS
         hidden={{ [RETURN_TO_PARAM]: returnTo }}
         submitLabel="Sign in"
         fields={[EMAIL, PASSWORD]}
-        message={noticeFor(params)}
+        message={signInNotice(firstOf(params[ERROR_PARAM]), firstOf(params[RESET_PARAM]))}
         resendAction={resendVerification}
         resendLabel="Send it again"
       />
