@@ -247,6 +247,23 @@ Vercel Production variables, all three or none (`ADMIN_EMAILS` is optional):
 
 Previews get none of them, so a preview's `/api/me` reports sign-in off and `/api/auth/*` is 404.
 
+Locally, sign-in uses the Neon Auth of the `vercel-dev` Neon branch (users there are separate
+from production's), while app data stays in local Postgres:
+
+- The Tiltfile sets `NEON_AUTH_BASE_URL` to `vercel-dev`'s Auth URL (`LOCAL_NEON_AUTH_BASE_URL`;
+  export your own to override). The compose `web` service derives `NEON_AUTH_COOKIE_SECRET_FILE`,
+  `APP_DATABASE_URL` (`roadtrip_web_writer` on local Postgres) and `APP_DATABASE_PASSWORD_FILE`
+  from it with `${NEON_AUTH_BASE_URL:+…}`, so a host that does not set it, mini-ca production
+  included, keeps sign-in off. `ADMIN_EMAILS` passes through from the host.
+- The secrets are `NEON_AUTH_COOKIE_SECRET` and `WEB_WRITER_DB_PASSWORD` in the local vault.
+- `roadtrip_web_writer` comes from Flyway's `R__web_writer_grants.sql` (held equal to Drizzle's
+  `0003` by `webWriteGrants.test.ts`) and gets its password from `postgres-init/30-web-writer.sh`
+  on first init. A local database created before that needs the password once:
+  `./secrets/manage.py exec local -- docker compose -p roadtrip exec -T -e WEB_WRITER_DB_PASSWORD_FILE=/run/secrets/web_writer_db_password postgres /docker-entrypoint-initdb.d/30-web-writer.sh`
+  (after recreating `postgres` so the secret is mounted).
+- `vercel-dev` allows localhost origins by default. Reset it from `main` only after dropping its
+  copied `neon_auth` schema, or Neon Auth cannot be re-provisioned there.
+
 One-time owner setup on Neon `main`: enable Neon Auth; add `https://roadtrip.floo.ca` as a
 trusted origin; turn on email and password with verification required, the magic-link plugin,
 and Google with the production OAuth client; set the email provider to Resend's SMTP; and set
