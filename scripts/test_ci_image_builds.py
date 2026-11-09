@@ -260,7 +260,11 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertNotIn("NEON_AUTH_BASE_URL", tilt)
         self.assertNotIn("neonauth", tilt)
         self.assertIn("roadtrip_web_writer:", web)
-        self.assertIn("resource_deps=['frontend-dist', 'postgres']", web)
+        self.assertIn("resource_deps=['frontend-dist', 'postgres', 'backend']", web)
+        self.assertIn("NPM_INSTALL_MARKER]", web)
+        self.assertIn("kill -0 $PPID", web)
+        self.assertIn("set -eu", web)
+        self.assertIn("is not set; add it to the local vault", tilt)
         self.assertNotIn("npm ci --workspace", tilt)
 
     def test_local_neon_auth_url_is_the_only_committed_dev_setting(self) -> None:

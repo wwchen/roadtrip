@@ -248,7 +248,7 @@ Vercel Production variables, all three or none (`ADMIN_EMAILS` is optional):
 Previews get none of them, so a preview's `/api/me` reports sign-in off and `/api/auth/*` is 404.
 
 Locally, Tilt runs `apps/web` as its `web` resource (`next dev` on http://localhost:3001, after
-`frontend-dist`; Grafana holds 3000), alongside the Kotlin app on :8765. It signs in against the Neon Auth of the
+`frontend-dist` and the backend's migrations; Grafana holds 3000), alongside the Kotlin app on :8765. It signs in against the Neon Auth of the
 `vercel-dev` Neon branch, whose users are separate from production's, and keeps app data in local
 Postgres:
 
@@ -268,6 +268,9 @@ Postgres:
   and
   `./secrets/manage.py exec local -- docker compose -p roadtrip exec -T -e WEB_WRITER_DB_PASSWORD_FILE=/run/secrets/web_writer_db_password postgres /docker-entrypoint-initdb.d/30-web-writer.sh`.
   Until then the web resource answers 500 with `password authentication failed`.
+- Without all three sign-in settings, `next dev` logs which are missing and runs with sign-in off.
+  The resource stops `next dev` when Tilt goes away, even if Tilt is killed, so a stale dev server
+  never holds `apps/web`, and restarts it after `npm ci`.
 - `/auth/logout` expires the `__Secure-neon-auth` cookies itself when Neon Auth refuses the
   sign-out (it does when the request has neither Origin nor Referer).
 - `vercel-dev` allows localhost origins by default. Reset it from `main` only after dropping its
