@@ -10,6 +10,10 @@ export type AuthResult = { ok: true } | { ok: false; code: string };
 export type RedirectResult = { ok: true; url: string } | { ok: false; code: string };
 
 export const EMAIL_NOT_VERIFIED = 'EMAIL_NOT_VERIFIED';
+export const USER_ALREADY_EXISTS = 'USER_ALREADY_EXISTS';
+export const PASSWORD_TOO_SHORT = 'PASSWORD_TOO_SHORT';
+export const AUTH_UNAVAILABLE = 'AUTH_UNAVAILABLE';
+export const UNKNOWN_FAILURE = 'UNKNOWN';
 
 export interface AuthPort {
   currentUser(): Promise<AuthUser | null>;

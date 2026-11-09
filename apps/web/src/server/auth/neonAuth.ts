@@ -1,13 +1,28 @@
 import 'server-only';
 import { createNeonAuth } from '@neon/auth/next/server';
 import { config } from '@/server/config';
-import type { AuthPort, AuthResult, AuthUser, RedirectResult } from './authPort';
+import {
+  AUTH_UNAVAILABLE,
+  EMAIL_NOT_VERIFIED,
+  PASSWORD_TOO_SHORT,
+  UNKNOWN_FAILURE,
+  USER_ALREADY_EXISTS,
+  type AuthPort,
+  type AuthResult,
+  type AuthUser,
+  type RedirectResult,
+} from './authPort';
 
 type NeonAuth = ReturnType<typeof createNeonAuth>;
 
+export interface SdkError {
+  code?: string;
+  status?: number;
+}
+
 interface ApiOutcome {
   data?: unknown;
-  error?: { code?: string } | null;
+  error?: SdkError | null;
 }
 
 interface MagicLinkSignIn {
@@ -18,7 +33,23 @@ const GOOGLE_PROVIDER = 'google';
 const SAME_SITE_LAX = 'lax';
 const NETWORK_CODE_PREFIX = 'NETWORK_';
 const MISSING_REDIRECT = 'MISSING_REDIRECT_URL';
-const UNKNOWN_FAILURE = 'UNKNOWN';
+const FIRST_SERVER_ERROR_STATUS = 500;
+const SDK_CODES: Readonly<Record<string, string>> = {
+  email_not_confirmed: EMAIL_NOT_VERIFIED,
+  user_already_exists: USER_ALREADY_EXISTS,
+  email_exists: USER_ALREADY_EXISTS,
+  weak_password: PASSWORD_TOO_SHORT,
+  internal_error: AUTH_UNAVAILABLE,
+  unexpected_failure: AUTH_UNAVAILABLE,
+};
+
+export function portCodeOf(error: SdkError): string {
+  const code = error.code;
+  if (code?.startsWith(NETWORK_CODE_PREFIX)) return AUTH_UNAVAILABLE;
+  if (error.status !== undefined && error.status >= FIRST_SERVER_ERROR_STATUS) return AUTH_UNAVAILABLE;
+  if (code === undefined) return UNKNOWN_FAILURE;
+  return SDK_CODES[code] ?? code;
+}
 
 let cached: NeonAuth | null | undefined;
 
@@ -36,7 +67,7 @@ export function neonAuth(): NeonAuth | null {
 }
 
 function resultOf(outcome: ApiOutcome): AuthResult {
-  if (outcome.error) return { ok: false, code: outcome.error.code ?? UNKNOWN_FAILURE };
+  if (outcome.error) return { ok: false, code: portCodeOf(outcome.error) };
   return { ok: true };
 }
 
@@ -53,7 +84,7 @@ function adapterOver(auth: NeonAuth): AuthPort {
       const { data, error } = (await auth.getSession()) as ApiOutcome & {
         data?: { user?: { id: string; email: string; name?: string | null; emailVerified?: boolean } | null } | null;
       };
-      if (error?.code?.startsWith(NETWORK_CODE_PREFIX)) throw new AuthUnreachableError(error.code);
+      if (error && portCodeOf(error) === AUTH_UNAVAILABLE) throw new AuthUnreachableError(error.code ?? UNKNOWN_FAILURE);
       const user = data?.user;
       if (!user) return null;
       return { id: user.id, email: user.email, name: user.name ?? null, emailVerified: user.emailVerified ?? false };

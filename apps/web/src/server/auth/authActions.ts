@@ -1,4 +1,12 @@
-import { EMAIL_NOT_VERIFIED, type AuthPort, type AuthResult } from './authPort';
+import {
+  AUTH_UNAVAILABLE,
+  EMAIL_NOT_VERIFIED,
+  PASSWORD_TOO_SHORT,
+  UNKNOWN_FAILURE,
+  USER_ALREADY_EXISTS,
+  type AuthPort,
+  type AuthResult,
+} from './authPort';
 import { MAGIC_LINK_SENT, PASSWORD_TOO_SHORT_MESSAGE, RESET_LINK_SENT, RETRY, VERIFY_EMAIL, WRONG_PASSWORD } from './authCopy';
 import { RETURN_TO_PARAM, safeReturnTo, withReturnTo } from './returnTo';
 
@@ -23,11 +31,6 @@ export const RESET_PARAM = 'reset';
 export const RESET_DONE = 'done';
 
 const AUTH_LOG = 'auth:';
-const UNKNOWN_FAILURE = 'UNKNOWN';
-const USER_ALREADY_EXISTS = 'USER_ALREADY_EXISTS';
-const PASSWORD_TOO_SHORT = 'PASSWORD_TOO_SHORT';
-const NETWORK_CODE_PREFIX = 'NETWORK_';
-const INTERNAL_ERROR = 'INTERNAL_ERROR';
 
 const message = (text: string, canResendVerification = false): ActionOutcome => ({
   kind: 'message',
@@ -43,7 +46,7 @@ const field = (form: FormData, name: string): string => {
 
 const returnToOf = (form: FormData): string => safeReturnTo(field(form, RETURN_TO_PARAM));
 
-const isUnavailable = (code: string): boolean => code.startsWith(NETWORK_CODE_PREFIX) || code === INTERNAL_ERROR;
+const isUnavailable = (code: string): boolean => code === AUTH_UNAVAILABLE;
 
 function codeOf(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;

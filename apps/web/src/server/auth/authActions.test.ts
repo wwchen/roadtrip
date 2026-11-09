@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { EMAIL_NOT_VERIFIED, type AuthPort } from './authPort';
+import { AUTH_UNAVAILABLE, EMAIL_NOT_VERIFIED, PASSWORD_TOO_SHORT, USER_ALREADY_EXISTS, type AuthPort } from './authPort';
 import {
   requestPasswordResetAction,
   resendVerificationAction,
@@ -117,13 +117,13 @@ test('sign-up asks the user to verify', async () => {
 });
 
 test('sign-up does not reveal an existing account', async () => {
-  const signUp = vi.fn(async () => ({ ok: false, code: 'USER_ALREADY_EXISTS' }) as const);
+  const signUp = vi.fn(async () => ({ ok: false, code: USER_ALREADY_EXISTS }) as const);
   const outcome = await signUpAction(port({ signUp }), form({ ...credentials, name: 'Will' }));
   expect(outcome).toEqual({ kind: 'message', state: { message: VERIFY_EMAIL, canResendVerification: false } });
 });
 
 test('sign-up with a short password says so', async () => {
-  const signUp = vi.fn(async () => ({ ok: false, code: 'PASSWORD_TOO_SHORT' }) as const);
+  const signUp = vi.fn(async () => ({ ok: false, code: PASSWORD_TOO_SHORT }) as const);
   const outcome = await signUpAction(port({ signUp }), form({ ...credentials, name: 'Will' }));
   expect(outcome).toEqual({ kind: 'message', state: { message: PASSWORD_TOO_SHORT_MESSAGE, canResendVerification: false } });
 });
@@ -155,4 +155,12 @@ test('sign-in disabled gives the retry message for every action', async () => {
       state: { message: RETRY, canResendVerification: false },
     });
   }
+});
+
+test('an unavailable Neon Auth on password sign-in shows the retry message, not the wrong-password one', async () => {
+  const signIn = port({ signInWithPassword: vi.fn(async () => ({ ok: false, code: AUTH_UNAVAILABLE }) as const) });
+  expect(await signInWithPasswordAction(signIn, form(credentials))).toEqual({
+    kind: 'message',
+    state: { message: RETRY, canResendVerification: false },
+  });
 });
