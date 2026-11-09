@@ -1,5 +1,5 @@
 import { appDb } from '@/server/appDb';
-import type { AuthPort } from '@/server/auth/authPort';
+import { UNKNOWN_FAILURE, type AuthPort } from '@/server/auth/authPort';
 import { authPort } from '@/server/auth/neonAuth';
 import { config } from '@/server/config';
 import type { MeResponseDto } from '@/server/contract';
@@ -7,7 +7,6 @@ import { linkedAppUser, type AppUserRow, type IdentityClaims } from '@/server/re
 
 const ADMIN_ROLE = 'admin';
 const ME_LOG = 'me:';
-const UNKNOWN_FAILURE = 'UNKNOWN';
 const NO_ADMINS: ReadonlySet<string> = new Set();
 
 const DISABLED: MeResponseDto = { authenticated: false, auth_enabled: false, auth_embedded: false };

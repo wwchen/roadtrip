@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { PASSWORD_CHANGED, RETRY } from '@/server/auth/authCopy';
 import { ERROR_PARAM, ERROR_RETRY, RESET_DONE, RESET_PARAM } from '@/server/auth/authActions';
+import { FORGOT_PATH, SIGN_UP_PATH } from '@/server/auth/authPaths';
 import { RETURN_TO_PARAM, safeReturnTo, withReturnTo } from '@/server/auth/returnTo';
 import { resendVerification, sendMagicLink, signInWithGoogle, signInWithPassword } from '../actions';
 import { AuthForm, type FieldSpec } from '../AuthForm';
@@ -36,8 +37,8 @@ export default async function SignInPage({ searchParams }: { searchParams: AuthS
       />
       <AuthForm action={sendMagicLink} hidden={{ [RETURN_TO_PARAM]: returnTo }} submitLabel="Email me a link" fields={[EMAIL]} variant="secondary" />
       <nav className="auth-links">
-        <Link href={withReturnTo('/auth/sign-up', returnTo)}>Create an account</Link>
-        <Link href={withReturnTo('/auth/forgot', returnTo)}>Forgot your password?</Link>
+        <Link href={withReturnTo(SIGN_UP_PATH, returnTo)}>Create an account</Link>
+        <Link href={withReturnTo(FORGOT_PATH, returnTo)}>Forgot your password?</Link>
       </nav>
     </section>
   );

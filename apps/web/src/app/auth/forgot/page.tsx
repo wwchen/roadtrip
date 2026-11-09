@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { SIGN_IN_PATH } from '@/server/auth/authPaths';
 import { RETURN_TO_PARAM, safeReturnTo, withReturnTo } from '@/server/auth/returnTo';
 import { requestPasswordReset } from '../actions';
 import { AuthForm, type FieldSpec } from '../AuthForm';
@@ -15,7 +16,7 @@ export default async function ForgotPage({ searchParams }: { searchParams: AuthS
       <h1>Reset your password</h1>
       <AuthForm action={requestPasswordReset} hidden={{ [RETURN_TO_PARAM]: returnTo }} submitLabel="Email me a reset link" fields={FIELDS} />
       <nav className="auth-links">
-        <Link href={withReturnTo('/auth/sign-in', returnTo)}>Back to sign in</Link>
+        <Link href={withReturnTo(SIGN_IN_PATH, returnTo)}>Back to sign in</Link>
       </nav>
     </section>
   );

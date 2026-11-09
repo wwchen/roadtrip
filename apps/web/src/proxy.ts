@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { SIGN_IN_PATH } from '@/server/auth/authPaths';
 import { neonAuth } from '@/server/auth/neonAuth';
-
-const SIGN_IN_PATH = '/auth/sign-in';
 
 export async function proxy(request: NextRequest): Promise<Response> {
   const auth = neonAuth();

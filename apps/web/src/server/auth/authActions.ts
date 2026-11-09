@@ -9,6 +9,7 @@ import {
   type AuthResult,
 } from './authPort';
 import { MAGIC_LINK_SENT, PASSWORD_TOO_SHORT_MESSAGE, RESET_LINK_SENT, RETRY, VERIFY_EMAIL, WRONG_PASSWORD } from './authCopy';
+import { RESET_PATH, SIGN_IN_PATH } from './authPaths';
 import { RETURN_TO_PARAM, safeReturnTo, withReturnTo } from './returnTo';
 
 export interface FormState {
@@ -24,8 +25,6 @@ export const EMAIL_FIELD = 'email';
 export const PASSWORD_FIELD = 'password';
 export const NAME_FIELD = 'name';
 export const TOKEN_FIELD = 'token';
-export const SIGN_IN_PATH = '/auth/sign-in';
-export const RESET_PATH = '/auth/reset';
 export const ERROR_PARAM = 'error';
 export const ERROR_RETRY = 'retry';
 export const RESET_PARAM = 'reset';
