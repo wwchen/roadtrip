@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { AUTH_UNAVAILABLE, EMAIL_NOT_VERIFIED, PASSWORD_TOO_SHORT, USER_ALREADY_EXISTS, USER_NOT_FOUND } from './authPort';
 import { portCodeOf } from './neonAuth';
 
@@ -21,4 +21,18 @@ test.each([
   [{ status: 401 }, 'UNKNOWN'],
 ])('the SDK error %j reaches the port as %s', (error, expected) => {
   expect(portCodeOf(error)).toBe(expected);
+});
+
+test('a partial sign-in setup logs the error and leaves sign-in off', async () => {
+  vi.resetModules();
+  vi.stubEnv('NEON_AUTH_BASE_URL', 'https://ep-test.neonauth.test/neondb/auth');
+  vi.stubEnv('NEON_AUTH_COOKIE_SECRET', undefined);
+  vi.stubEnv('APP_DATABASE_URL', undefined);
+  const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const { neonAuth } = await import('./neonAuth');
+  expect(neonAuth()).toBeNull();
+  expect(neonAuth()).toBeNull();
+  expect(logged).toHaveBeenCalledTimes(1);
+  vi.unstubAllEnvs();
+  logged.mockRestore();
 });

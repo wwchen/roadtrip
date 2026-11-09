@@ -1,6 +1,6 @@
 import 'server-only';
 import { createNeonAuth } from '@neon/auth/next/server';
-import { config } from '@/server/config';
+import { ConfigError, config, type SignInConfig } from '@/server/config';
 import {
   AUTH_UNAVAILABLE,
   EMAIL_NOT_VERIFIED,
@@ -31,6 +31,7 @@ interface MagicLinkSignIn {
 }
 
 export const NEON_AUTH_COOKIE_PREFIX = '__Secure-neon-auth.';
+const AUTH_CONFIG_LOG = 'auth: sign-in is off:';
 const GOOGLE_PROVIDER = 'google';
 const SAME_SITE_LAX = 'lax';
 const NETWORK_CODE_PREFIX = 'NETWORK_';
@@ -56,9 +57,19 @@ export function portCodeOf(error: SdkError): string {
 
 let cached: NeonAuth | null | undefined;
 
+function signInSettings(): SignInConfig | null {
+  try {
+    return config.signIn;
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    console.error(AUTH_CONFIG_LOG, error.message);
+    return null;
+  }
+}
+
 export function neonAuth(): NeonAuth | null {
   if (cached !== undefined) return cached;
-  const signIn = config.signIn;
+  const signIn = signInSettings();
   cached =
     signIn === null
       ? null
