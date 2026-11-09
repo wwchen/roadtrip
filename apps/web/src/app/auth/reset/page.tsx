@@ -18,7 +18,7 @@ export default async function ResetPage({ searchParams }: { searchParams: AuthSe
   return (
     <section className="auth-panel">
       <h1>Choose a new password</h1>
-      <AuthForm action={resetPassword} returnTo={returnTo} submitLabel="Save password" fields={FIELDS} hidden={{ [TOKEN_FIELD]: token }} />
+      <AuthForm action={resetPassword} submitLabel="Save password" fields={FIELDS} hidden={{ [RETURN_TO_PARAM]: returnTo, [TOKEN_FIELD]: token }} />
     </section>
   );
 }

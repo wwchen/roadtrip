@@ -13,7 +13,7 @@ export default async function ForgotPage({ searchParams }: { searchParams: AuthS
   return (
     <section className="auth-panel">
       <h1>Reset your password</h1>
-      <AuthForm action={requestPasswordReset} returnTo={returnTo} submitLabel="Email me a reset link" fields={FIELDS} />
+      <AuthForm action={requestPasswordReset} hidden={{ [RETURN_TO_PARAM]: returnTo }} submitLabel="Email me a reset link" fields={FIELDS} />
       <nav className="auth-links">
         <Link href={withReturnTo('/auth/sign-in', returnTo)}>Back to sign in</Link>
       </nav>

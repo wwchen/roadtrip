@@ -17,7 +17,7 @@ export default async function SignUpPage({ searchParams }: { searchParams: AuthS
   return (
     <section className="auth-panel">
       <h1>Create an account</h1>
-      <AuthForm action={signUp} returnTo={returnTo} submitLabel="Create account" fields={FIELDS} />
+      <AuthForm action={signUp} hidden={{ [RETURN_TO_PARAM]: returnTo }} submitLabel="Create account" fields={FIELDS} />
       <nav className="auth-links">
         <Link href={withReturnTo('/auth/sign-in', returnTo)}>I have an account</Link>
       </nav>

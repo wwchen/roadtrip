@@ -24,17 +24,17 @@ export default async function SignInPage({ searchParams }: { searchParams: AuthS
   return (
     <section className="auth-panel">
       <h1>Sign in</h1>
-      <AuthForm action={signInWithGoogle} returnTo={returnTo} submitLabel="Continue with Google" fields={NO_FIELDS} variant="secondary" />
+      <AuthForm action={signInWithGoogle} hidden={{ [RETURN_TO_PARAM]: returnTo }} submitLabel="Continue with Google" fields={NO_FIELDS} variant="secondary" />
       <AuthForm
         action={signInWithPassword}
-        returnTo={returnTo}
+        hidden={{ [RETURN_TO_PARAM]: returnTo }}
         submitLabel="Sign in"
         fields={[EMAIL, PASSWORD]}
         message={noticeFor(params)}
         resendAction={resendVerification}
         resendLabel="Send it again"
       />
-      <AuthForm action={sendMagicLink} returnTo={returnTo} submitLabel="Email me a link" fields={[EMAIL]} variant="secondary" />
+      <AuthForm action={sendMagicLink} hidden={{ [RETURN_TO_PARAM]: returnTo }} submitLabel="Email me a link" fields={[EMAIL]} variant="secondary" />
       <nav className="auth-links">
         <Link href={withReturnTo('/auth/sign-up', returnTo)}>Create an account</Link>
         <Link href={withReturnTo('/auth/forgot', returnTo)}>Forgot your password?</Link>

@@ -2,10 +2,12 @@
 
 import { Button, TextField } from '@lew-ds/lds-react';
 import { useActionState, useId } from 'react';
-import type { FormState } from '@/server/auth/authActions';
-import { RETURN_TO_PARAM } from '@/server/auth/returnTo';
+export interface AuthFormState {
+  message: string | null;
+  canResendVerification: boolean;
+}
 
-export type FormAction = (previous: FormState, form: FormData) => Promise<FormState>;
+export type FormAction = (previous: AuthFormState, form: FormData) => Promise<AuthFormState>;
 
 export interface FieldSpec {
   name: string;
@@ -16,25 +18,23 @@ export interface FieldSpec {
 
 export interface AuthFormProps {
   action: FormAction;
-  returnTo: string;
   submitLabel: string;
   fields: readonly FieldSpec[];
-  hidden?: Readonly<Record<string, string>>;
+  hidden: Readonly<Record<string, string>>;
   message?: string | null;
   resendAction?: FormAction;
   resendLabel?: string;
   variant?: 'primary' | 'secondary';
 }
 
-const EMPTY_STATE: FormState = { message: null, canResendVerification: false };
+const EMPTY_STATE: AuthFormState = { message: null, canResendVerification: false };
 const EMAIL_FIELD: FieldSpec = { name: 'email', label: 'Email', type: 'email', autoComplete: 'email' };
 
 export function AuthForm({
   action,
-  returnTo,
   submitLabel,
   fields,
-  hidden = {},
+  hidden,
   message = null,
   resendAction,
   resendLabel,
@@ -45,7 +45,6 @@ export function AuthForm({
   return (
     <>
       <form action={formAction} className="auth-form">
-        <input type="hidden" name={RETURN_TO_PARAM} value={returnTo} />
         {Object.entries(hidden).map(([name, value]) => (
           <input key={name} type="hidden" name={name} value={value} />
         ))}
@@ -70,7 +69,7 @@ export function AuthForm({
         )}
       </form>
       {state.canResendVerification && resendAction !== undefined && resendLabel !== undefined ? (
-        <AuthForm action={resendAction} returnTo={returnTo} submitLabel={resendLabel} fields={[EMAIL_FIELD]} variant="secondary" />
+        <AuthForm action={resendAction} hidden={hidden} submitLabel={resendLabel} fields={[EMAIL_FIELD]} variant="secondary" />
       ) : null}
     </>
   );
