@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, TextField } from '@lew-ds/lds-react';
-import { useActionState } from 'react';
+import { useActionState, useId } from 'react';
 import type { FormState } from '@/server/auth/authActions';
 import { RETURN_TO_PARAM } from '@/server/auth/returnTo';
 
@@ -41,6 +41,7 @@ export function AuthForm({
   variant = 'primary',
 }: AuthFormProps) {
   const [state, formAction, pending] = useActionState(action, { ...EMPTY_STATE, message });
+  const formId = useId();
   return (
     <>
       <form action={formAction} className="auth-form">
@@ -51,7 +52,7 @@ export function AuthForm({
         {fields.map((field) => (
           <TextField
             key={field.name}
-            id={`auth-${field.name}`}
+            id={`${formId}-${field.name}`}
             name={field.name}
             label={field.label}
             type={field.type}
