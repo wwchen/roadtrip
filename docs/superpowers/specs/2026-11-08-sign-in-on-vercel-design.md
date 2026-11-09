@@ -1,6 +1,13 @@
 # Sign-in on Vercel: Neon Auth behind apps/web
 
-**Status:** design agreed with the owner on 2026-11-08; this document awaits review.
+**Status:** design agreed with the owner on 2026-11-08 and approved the same day.
+
+**Amended 2026-11-08 while planning:** Neon already has `app_user`, `user_identity`, `user_role`,
+`user_settings` and `user_booking_credentials` from `packages/db/migrations/0000_init.sql`, all empty.
+The design reuses `app_user` and links each Neon Auth user through `user_identity` (provider
+`neon-auth`, subject = the Neon Auth user id) instead of creating a new `app_user` with an
+`auth_user_id` column. The migration adds only the writer role and its grants. Sections below are
+already updated.
 
 **Parent decision (owner, 2026-11-08):** sign-in moves to Next.js on Vercel. mini-ca and Kotlin end
 up serving only the stateless availability checks. Users, sessions, settings and watches leave
@@ -49,8 +56,9 @@ stay unavailable until sub-projects 2-4 ship, as they are today.
   pages and not Neon Auth's prebuilt UI components.
 - **D4 The frontend's auth contract does not change.** `/auth/login?return_to=…`, `/auth/logout` and
   `GET /api/me` keep their shapes, so no frontend component changes in this sub-project.
-- **D5 `app_user` gives every Neon Auth user the numeric id** the contract carries and later
-  sub-projects hang settings and watches off.
+- **D5 The existing `app_user` gives every Neon Auth user the numeric id** the contract carries;
+  `user_identity` links it to the Neon Auth user. Later sub-projects hang settings and watches off
+  `app_user.id`, as `user_settings` and `user_booking_credentials` already do.
 - **D6 Previews have no sign-in.** Without the Neon Auth variables, `/api/me` answers
   `auth_enabled: false`, as previews already lack the egress.
 
@@ -113,7 +121,7 @@ optional; unset means no admins.
 - Sign-in disabled: `{authenticated: false, auth_enabled: false, auth_embedded: false}` (today's
   answer).
 - No session: `{authenticated: false, auth_enabled: true, auth_embedded: false}`.
-- Session: upsert `app_user` on `auth_user_id`, then answer
+- Session: find or create the `app_user` linked to the Neon Auth user id, then answer
   `{authenticated: true, auth_enabled: true, auth_embedded: false, user: {id, email, display_name,
   email_verified, roles, theme}}`. `roles` is `["admin"]` when the email is in `ADMIN_EMAILS`
   (compared case-insensitively), otherwise `[]`. `provider_label`, `auth_client_id`, `auth_domain`
@@ -126,23 +134,25 @@ touch SQL.
 
 ### Data: `packages/db`
 
-Migration `0003_app_user.sql`, with the matching Drizzle schema:
+The tables exist already (`0000_init.sql`). On first sight of a Neon Auth user, `appUserRepo`:
 
-```sql
-CREATE TABLE app_user (
-  id bigserial PRIMARY KEY,
-  auth_user_id text NOT NULL UNIQUE REFERENCES neon_auth."user"(id) ON DELETE CASCADE,
-  theme text,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-```
+1. looks up `user_identity` with `provider = 'neon-auth'` and `subject` = the Neon Auth user id,
+   joined to `app_user`;
+2. if there is none, in one transaction, inserts `app_user (email, email_verified, display_name)`,
+   or reuses the row whose `lower(email)` matches when the Neon Auth email is verified, and inserts
+   the `user_identity` row. A concurrent first request that loses the race on either unique key
+   re-reads instead of failing;
+3. on later requests, refreshes `email_verified` and `display_name` from the session when they
+   changed.
 
-and a `roadtrip_web_writer` role (login, no superuser) granted `SELECT, INSERT, UPDATE` on
-`app_user`, `USAGE` on its sequence and `SELECT` on `neon_auth."user"`. `roadtrip_web` stays
-read-only and gains nothing. The writer role's password is set by the owner, as `roadtrip_web`'s is.
+`user_session` and `user_role` stay unused: Neon Auth holds sessions, and roles come from
+`ADMIN_EMAILS`.
 
-The migration references `neon_auth."user"`, so Neon Auth must be enabled on a branch before the
-migration runs there.
+Migration `0003_web_writer.sql` (a Drizzle custom migration) creates the `roadtrip_web_writer` role
+(login, no superuser, `statement_timeout` 10s), grants it `CONNECT`, `USAGE` on schema `public`,
+`SELECT, INSERT, UPDATE` on `app_user` and `user_identity`, and `USAGE` on their id sequences.
+`roadtrip_web` stays read-only and gains nothing. The writer role's password is set by the owner, as
+`roadtrip_web`'s is.
 
 ### Applying migrations
 
@@ -187,8 +197,8 @@ Unchanged in this sub-project. Its `/auth/*`, `/api/me` and session tables stay 
 - **Routes:** `/api/me` in all five states; `/auth/login` and `/auth/logout` redirects;
   `/api/auth/*` is 404 when sign-in is disabled.
 - **Config:** sign-in enabled only with all three variables; partial configuration is an error.
-- **Migrations (`packages/db`):** applied to a fresh database that has a stub `neon_auth."user"`
-  table, then applied again as a no-op; `roadtrip_web_writer` can upsert `app_user` and cannot write
+- **Migrations (`packages/db`):** applied to a fresh database, then applied again as a no-op;
+  `roadtrip_web_writer` can insert and update `app_user` and `user_identity` and cannot write
   catalog tables; `roadtrip_web` cannot write `app_user`.
 - **End to end, before shipping:** on a Neon development branch with Neon Auth enabled and a local
   `apps/web`: sign up, verify, sign out, sign in with password, sign in with a magic link, reset a
