@@ -21,7 +21,12 @@ test('/ is rewritten to /index.html before the app routes', async () => {
 test('the extensionless page URLs the Kotlin site served still resolve', async () => {
   const rewrites = await config.rewrites?.();
   const beforeFiles = (rewrites as { beforeFiles: { source: string; destination: string }[] }).beforeFiles;
-  expect(beforeFiles).toEqual(expect.arrayContaining([{ source: '/poi', destination: '/poi.html' }]));
+  expect(beforeFiles).toEqual(
+    expect.arrayContaining([
+      { source: '/poi', destination: '/poi.html' },
+      { source: '/availability', destination: '/availability.html' },
+    ]),
+  );
 });
 
 test('the build emits a standalone server', () => {
