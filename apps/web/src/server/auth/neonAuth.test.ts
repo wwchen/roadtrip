@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { AUTH_UNAVAILABLE, EMAIL_NOT_VERIFIED, PASSWORD_TOO_SHORT, USER_ALREADY_EXISTS } from './authPort';
+import { AUTH_UNAVAILABLE, EMAIL_NOT_VERIFIED, PASSWORD_TOO_SHORT, USER_ALREADY_EXISTS, USER_NOT_FOUND } from './authPort';
 import { portCodeOf } from './neonAuth';
 
 const STATUS_FORBIDDEN = 403;
@@ -16,6 +16,7 @@ test.each([
   [{ code: 'internal_error', status: 500 }, AUTH_UNAVAILABLE],
   [{ code: 'unexpected_failure', status: 400 }, AUTH_UNAVAILABLE],
   [{ code: 'over_request_rate_limit', status: STATUS_UNAVAILABLE }, AUTH_UNAVAILABLE],
+  [{ code: 'user_not_found', status: 404 }, USER_NOT_FOUND],
   [{ code: 'invalid_credentials', status: 401 }, 'invalid_credentials'],
   [{ status: 401 }, 'UNKNOWN'],
 ])('the SDK error %j reaches the port as %s', (error, expected) => {

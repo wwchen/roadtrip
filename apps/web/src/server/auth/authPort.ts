@@ -11,6 +11,7 @@ export type RedirectResult = { ok: true; url: string } | { ok: false; code: stri
 
 export const EMAIL_NOT_VERIFIED = 'EMAIL_NOT_VERIFIED';
 export const USER_ALREADY_EXISTS = 'USER_ALREADY_EXISTS';
+export const USER_NOT_FOUND = 'USER_NOT_FOUND';
 export const PASSWORD_TOO_SHORT = 'PASSWORD_TOO_SHORT';
 export const AUTH_UNAVAILABLE = 'AUTH_UNAVAILABLE';
 export const UNKNOWN_FAILURE = 'UNKNOWN';
@@ -24,5 +25,5 @@ export interface AuthPort {
   resendVerification(email: string, callbackUrl: string): Promise<AuthResult>;
   requestPasswordReset(email: string, redirectTo: string): Promise<AuthResult>;
   resetPassword(token: string, newPassword: string): Promise<AuthResult>;
-  signOut(): Promise<void>;
+  signOut(): Promise<AuthResult>;
 }

@@ -7,6 +7,7 @@ import {
   PASSWORD_TOO_SHORT,
   UNKNOWN_FAILURE,
   USER_ALREADY_EXISTS,
+  USER_NOT_FOUND,
   type AuthPort,
   type AuthResult,
   type AuthUser,
@@ -38,6 +39,7 @@ const SDK_CODES: Readonly<Record<string, string>> = {
   email_not_confirmed: EMAIL_NOT_VERIFIED,
   user_already_exists: USER_ALREADY_EXISTS,
   email_exists: USER_ALREADY_EXISTS,
+  user_not_found: USER_NOT_FOUND,
   weak_password: PASSWORD_TOO_SHORT,
   internal_error: AUTH_UNAVAILABLE,
   unexpected_failure: AUTH_UNAVAILABLE,
@@ -119,7 +121,7 @@ function adapterOver(auth: NeonAuth): AuthPort {
       return resultOf(await auth.resetPassword({ token, newPassword }));
     },
     async signOut() {
-      await auth.signOut();
+      return resultOf(await auth.signOut());
     },
   };
 }

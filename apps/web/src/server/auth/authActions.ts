@@ -4,6 +4,7 @@ import {
   PASSWORD_TOO_SHORT,
   UNKNOWN_FAILURE,
   USER_ALREADY_EXISTS,
+  USER_NOT_FOUND,
   type AuthPort,
   type AuthResult,
 } from './authPort';
@@ -72,6 +73,8 @@ function guarded(work: (port: AuthPort, form: FormData, origin: string) => Promi
   };
 }
 
+const sentOrUnknown = (code: string | null): boolean => code === null || code === USER_NOT_FOUND;
+
 function failure(result: AuthResult): string | null {
   return result.ok ? null : logged(result.code);
 }
@@ -94,7 +97,7 @@ export const signInWithGoogleAction = guarded(async (port, form, origin) => {
 
 export const sendMagicLinkAction = guarded(async (port, form, origin) => {
   const code = failure(await port.sendMagicLink(field(form, EMAIL_FIELD), absolute(origin, returnToOf(form))));
-  return message(code !== null && isUnavailable(code) ? RETRY : MAGIC_LINK_SENT);
+  return message(sentOrUnknown(code) ? MAGIC_LINK_SENT : RETRY);
 });
 
 export const signUpAction = guarded(async (port, form, origin) => {
@@ -113,14 +116,14 @@ export const signUpAction = guarded(async (port, form, origin) => {
 
 export const resendVerificationAction = guarded(async (port, form, origin) => {
   const code = failure(await port.resendVerification(field(form, EMAIL_FIELD), absolute(origin, returnToOf(form))));
-  return message(code !== null && isUnavailable(code) ? RETRY : VERIFY_EMAIL);
+  return message(sentOrUnknown(code) ? VERIFY_EMAIL : RETRY);
 });
 
 export const requestPasswordResetAction = guarded(async (port, form, origin) => {
   const code = failure(
     await port.requestPasswordReset(field(form, EMAIL_FIELD), absolute(origin, withReturnTo(RESET_PATH, returnToOf(form)))),
   );
-  return message(code !== null && isUnavailable(code) ? RETRY : RESET_LINK_SENT);
+  return message(sentOrUnknown(code) ? RESET_LINK_SENT : RETRY);
 });
 
 export const resetPasswordAction = guarded(async (port, form) => {

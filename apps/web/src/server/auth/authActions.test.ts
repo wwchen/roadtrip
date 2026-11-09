@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { AUTH_UNAVAILABLE, EMAIL_NOT_VERIFIED, PASSWORD_TOO_SHORT, USER_ALREADY_EXISTS, type AuthPort } from './authPort';
+import {
+  AUTH_UNAVAILABLE,
+  EMAIL_NOT_VERIFIED,
+  PASSWORD_TOO_SHORT,
+  USER_ALREADY_EXISTS,
+  USER_NOT_FOUND,
+  type AuthPort,
+} from './authPort';
 import {
   requestPasswordResetAction,
   resendVerificationAction,
@@ -87,7 +94,7 @@ test('resending verification answers the verify message', async () => {
 });
 
 test('a magic link answers the same whether or not the account exists', async () => {
-  for (const result of [OK, { ok: false, code: 'USER_NOT_FOUND' } as const]) {
+  for (const result of [OK, { ok: false, code: USER_NOT_FOUND } as const]) {
     const sendMagicLink = vi.fn(async () => result);
     expect(await sendMagicLinkAction(port({ sendMagicLink }), form({ email: 'a@x.io', return_to: '/watches' }), ORIGIN)).toEqual({
       kind: 'message',
@@ -98,7 +105,7 @@ test('a magic link answers the same whether or not the account exists', async ()
 });
 
 test('forgot answers the same whether or not the account exists', async () => {
-  for (const result of [OK, { ok: false, code: 'USER_NOT_FOUND' } as const]) {
+  for (const result of [OK, { ok: false, code: USER_NOT_FOUND } as const]) {
     const requestPasswordReset = vi.fn(async () => result);
     const outcome = await requestPasswordResetAction(port({ requestPasswordReset }), form({ email: 'a@x.io', return_to: '/watches' }), ORIGIN);
     expect(outcome).toEqual({ kind: 'message', state: { message: RESET_LINK_SENT, canResendVerification: false } });
@@ -164,6 +171,34 @@ test('sign-in disabled gives the retry message for every action', async () => {
 test('an unavailable Neon Auth on password sign-in shows the retry message, not the wrong-password one', async () => {
   const signIn = port({ signInWithPassword: vi.fn(async () => ({ ok: false, code: AUTH_UNAVAILABLE }) as const) });
   expect(await signInWithPasswordAction(signIn, form(credentials), ORIGIN)).toEqual({
+    kind: 'message',
+    state: { message: RETRY, canResendVerification: false },
+  });
+});
+
+test.each([
+  ['magic link', 'magic_link_not_supported'],
+  ['magic link', 'over_email_send_rate_limit'],
+])('a %s that Neon Auth refuses with %s shows the retry message, not a promise', async (_flow, code) => {
+  const sendMagicLink = vi.fn(async () => ({ ok: false, code }) as const);
+  expect(await sendMagicLinkAction(port({ sendMagicLink }), form({ email: 'a@x.io' }), ORIGIN)).toEqual({
+    kind: 'message',
+    state: { message: RETRY, canResendVerification: false },
+  });
+  expect(warn).toHaveBeenCalledWith('auth:', code);
+});
+
+test('a reset that Neon Auth refuses for a reason other than no such user shows the retry message', async () => {
+  const requestPasswordReset = vi.fn(async () => ({ ok: false, code: 'feature_not_supported' }) as const);
+  expect(await requestPasswordResetAction(port({ requestPasswordReset }), form({ email: 'a@x.io' }), ORIGIN)).toEqual({
+    kind: 'message',
+    state: { message: RETRY, canResendVerification: false },
+  });
+});
+
+test('a resend that Neon Auth refuses shows the retry message', async () => {
+  const resendVerification = vi.fn(async () => ({ ok: false, code: 'over_email_send_rate_limit' }) as const);
+  expect(await resendVerificationAction(port({ resendVerification }), form({ email: 'a@x.io' }), ORIGIN)).toEqual({
     kind: 'message',
     state: { message: RETRY, canResendVerification: false },
   });
