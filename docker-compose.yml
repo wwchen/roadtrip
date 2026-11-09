@@ -136,11 +136,6 @@ services:
       - DATABASE_URL=postgres://roadtrip_web@postgres:5432/${POSTGRES_DB:-roadtrip}
       - DATABASE_PASSWORD_FILE=/run/secrets/web_db_password
       - MAPBOX_TOKEN_FILE=/run/secrets/mapbox_token
-      - NEON_AUTH_BASE_URL=${NEON_AUTH_BASE_URL:-}
-      - NEON_AUTH_COOKIE_SECRET_FILE=${NEON_AUTH_BASE_URL:+/run/secrets/neon_auth_cookie_secret}
-      - APP_DATABASE_URL=${NEON_AUTH_BASE_URL:+postgres://roadtrip_web_writer@postgres:5432/${POSTGRES_DB:-roadtrip}}
-      - APP_DATABASE_PASSWORD_FILE=${NEON_AUTH_BASE_URL:+/run/secrets/web_writer_db_password}
-      - ADMIN_EMAILS=${ADMIN_EMAILS:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/pois/search?q=ok').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
       interval: 5s

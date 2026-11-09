@@ -6,6 +6,10 @@
 # available.
 
 PORT = '8765'
+WEB_PORT = '3000'
+LOCAL_POSTGRES = '127.0.0.1:5432'
+LOCAL_NEON_AUTH_BASE_URL = 'https://ep-raspy-forest-b5kh4ruu.neonauth.c-7.us-east-2.aws.neon.tech/roadtrip/auth'
+URL_ENCODED_SECRET = '$(python3 -c "import os, sys, urllib.parse; print(urllib.parse.quote(os.environ[sys.argv[1]], safe=\'\'))" %s)'
 COMPOSE_PROJECT = 'roadtrip'
 COMPOSE_FILES = ['docker-compose.yml', 'docker-compose.local.yml', 'docker-compose.secrets.yml']
 COMPOSE_PROFILES = ['pois', 'recgov-companion']
@@ -49,9 +53,6 @@ def _load_secrets():
 
 SECRET_NAMES = _load_secrets()
 print('secrets: loaded %d for the local environment' % len(SECRET_NAMES))
-
-LOCAL_NEON_AUTH_BASE_URL = 'https://ep-raspy-forest-b5kh4ruu.neonauth.c-7.us-east-2.aws.neon.tech/roadtrip/auth'
-os.putenv('NEON_AUTH_BASE_URL', os.getenv('NEON_AUTH_BASE_URL', LOCAL_NEON_AUTH_BASE_URL))
 
 # Point this clone's git at .githooks/ so the committed pre-commit (ktlint) and
 # pre-push (backend tests) hooks fire. core.hooksPath isn't tracked in the repo,
@@ -115,11 +116,14 @@ local_resource(
 # instead of silently serving a stale bundle.
 local_resource(
     'frontend-deps',
-    cmd='npm ci --workspace roadtrip-frontend',
+    cmd='npm ci',
     deps=[
         'package.json',
         'package-lock.json',
         'frontend/package.json',
+        'apps/web/package.json',
+        'packages/db/package.json',
+        'packages/domain/package.json',
     ],
     labels=['build'],
 )
@@ -152,6 +156,21 @@ local_resource(
         'frontend/node_modules',
     ],
     labels=['build'],
+)
+
+local_resource(
+    'web',
+    cmd='npm run build --workspace @roadtrip/db && node apps/web/scripts/copy-frontend.mjs',
+    serve_cmd=(
+        'DATABASE_URL="postgres://roadtrip_web:' + URL_ENCODED_SECRET % 'WEB_DB_PASSWORD' + '@' + LOCAL_POSTGRES + '/roadtrip" ' +
+        'APP_DATABASE_URL="postgres://roadtrip_web_writer:' + URL_ENCODED_SECRET % 'WEB_WRITER_DB_PASSWORD' + '@' + LOCAL_POSTGRES + '/roadtrip" ' +
+        'exec npm --prefix apps/web run dev -- --port ' + WEB_PORT
+    ),
+    serve_env={'NEON_AUTH_BASE_URL': os.getenv('NEON_AUTH_BASE_URL', LOCAL_NEON_AUTH_BASE_URL)},
+    resource_deps=['frontend-dist', 'postgres'],
+    deps=['frontend/dist', 'packages/db/src', 'packages/db/migrations'],
+    links=[link('http://localhost:' + WEB_PORT, 'apps/web (Vercel shape)')],
+    labels=['app'],
 )
 
 docker_compose(
