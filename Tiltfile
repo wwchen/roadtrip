@@ -50,6 +50,9 @@ def _load_secrets():
 SECRET_NAMES = _load_secrets()
 print('secrets: loaded %d for the local environment' % len(SECRET_NAMES))
 
+LOCAL_NEON_AUTH_BASE_URL = 'https://ep-raspy-forest-b5kh4ruu.neonauth.c-7.us-east-2.aws.neon.tech/roadtrip/auth'
+os.putenv('NEON_AUTH_BASE_URL', os.getenv('NEON_AUTH_BASE_URL', LOCAL_NEON_AUTH_BASE_URL))
+
 # Point this clone's git at .githooks/ so the committed pre-commit (ktlint) and
 # pre-push (backend tests) hooks fire. core.hooksPath isn't tracked in the repo,
 # so a fresh clone starts with them inactive; wiring it into the primary dev

@@ -250,6 +250,18 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("Dockerfile", web)
         self.assertIn(".dockerignore", web)
 
+    def test_web_sign_in_is_off_unless_the_host_names_a_neon_auth_url(self) -> None:
+        compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+        environment = dict(entry.split("=", 1) for entry in compose["services"]["web"]["environment"])
+        self.assertEqual("${NEON_AUTH_BASE_URL:-}", environment["NEON_AUTH_BASE_URL"])
+        for name in ("NEON_AUTH_COOKIE_SECRET_FILE", "APP_DATABASE_URL", "APP_DATABASE_PASSWORD_FILE"):
+            self.assertTrue(environment[name].startswith("${NEON_AUTH_BASE_URL:+"), name)
+        self.assertIn("roadtrip_web_writer@", environment["APP_DATABASE_URL"])
+        tilt = (ROOT / "Tiltfile").read_text()
+        self.assertIn("os.putenv('NEON_AUTH_BASE_URL'", tilt)
+        deploy = (ROOT / "scripts" / "deploy.sh").read_text()
+        self.assertNotIn("NEON_AUTH_BASE_URL", deploy)
+
     def test_web_runs_only_in_production(self) -> None:
         compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
         web = compose["services"]["web"]
