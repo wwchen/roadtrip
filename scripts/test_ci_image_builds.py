@@ -205,6 +205,20 @@ def step_by_name(job: dict, name: str) -> dict:
 
 
 class DeploymentContractTest(unittest.TestCase):
+    def test_neon_migrations_run_on_master_only(self) -> None:
+        jobs = workflow("ci.yml")["jobs"]
+        job = jobs["neon-migrate"]
+        condition = job.get("if", "")
+        self.assertIn("github.event_name == 'push'", condition)
+        self.assertIn("github.ref == 'refs/heads/master'", condition)
+        self.assertIn("needs.ci-passed.result == 'success'", condition)
+        self.assertIn("ci-passed", job["needs"])
+        migrate = step_by_name(job, "Apply Neon migrations")
+        self.assertIn("npm run migrate --workspace @roadtrip/db", migrate["run"])
+        self.assertIn('if [ -z "$DATABASE_URL" ]', migrate["run"])
+        self.assertIn("::warning::", migrate["run"])
+        self.assertEqual("${{ secrets.NEON_MIGRATE_URL }}", migrate["env"]["DATABASE_URL"])
+
     def test_ci_publishes_every_immutable_image(self) -> None:
         jobs = workflow("ci.yml")["jobs"]
         app = jobs["docker-build"]

@@ -202,9 +202,50 @@ Anything else under those prefixes is `404` without a call. The query string and
 redirect to another listed path passes through. The egress host's Caddy block admits the same
 two patterns, and `kotlinPassthrough.test.ts` fails if the Caddyfile and the module disagree.
 
-Sign-in, watches, settings, add-to-cart and Slack interactivity are not forwarded: they need a
-session cookie for Kotlin's domain, and stay unreachable on Vercel until sign-in is ported. The
-admin import stays behind its Cloudflare Zero Trust rule on mini-ca.
+Watches, settings, add-to-cart and Slack interactivity are not forwarded: they move to Vercel
+in their own sub-projects (see `docs/superpowers/specs/2026-11-08-sign-in-on-vercel-design.md`).
+The admin import stays behind its Cloudflare Zero Trust rule on mini-ca.
+
+## Sign-in on Vercel
+
+Vercel signs users in with Neon Auth (Managed Better Auth); Kotlin's `/auth/*` is not used.
+Users and sessions live in the `neon_auth` schema of Neon `main`. `/api/auth/*` proxies to Neon
+Auth (`apps/web/src/app/api/auth/[...path]`), and everything else reaches it through `AuthPort`
+(`apps/web/src/server/auth/`), whose only implementation adapts `@neon/auth`.
+
+- Pages: `/auth/sign-in` (Google, email and password, an emailed link), `/auth/sign-up`,
+  `/auth/forgot`, `/auth/reset`. Their forms post to server actions. `/auth/login?return_to=…`
+  redirects to the sign-in page and `/auth/logout` signs out, so the frontend's `auth-api.ts`
+  is unchanged. `return_to` is kept only when it is a same-site path.
+- `GET /api/me` answers `auth_enabled: false` when sign-in is off, anonymous without a session
+  or when Neon Auth cannot be reached, and otherwise the user. Each Neon Auth user is linked to
+  one `app_user` through `user_identity` (`provider = 'neon-auth'`, `subject` = the Neon Auth
+  user id); a verified email joins the account that already has it. Admin comes from
+  `ADMIN_EMAILS`.
+- `app_user` and `user_identity` are written by the `roadtrip_web_writer` role
+  (`packages/db/migrations/0003_web_writer.sql`), which can write only those two tables.
+  `roadtrip_web` stays read-only.
+
+Vercel Production variables, all three or none (`ADMIN_EMAILS` is optional):
+
+| Variable | Value |
+|---|---|
+| `NEON_AUTH_BASE_URL` | The Auth URL Neon shows for `main` |
+| `NEON_AUTH_COOKIE_SECRET` | At least 32 random characters (`openssl rand -base64 32`) |
+| `APP_DATABASE_URL` | `roadtrip_web_writer`'s connection string |
+| `ADMIN_EMAILS` | Comma-separated admin emails |
+
+Previews get none of them, so a preview's `/api/me` reports sign-in off and `/api/auth/*` is 404.
+
+One-time owner setup on Neon `main`: enable Neon Auth; add `https://roadtrip.floo.ca` as a
+trusted origin; turn on email and password with verification required, the magic-link plugin,
+and Google with the production OAuth client; set the email provider to Resend's SMTP; and set
+`roadtrip_web_writer`'s password.
+
+Migrations reach Neon through the `neon-migrate` job in `ci.yml`: on a master push, after
+`ci-passed`, it runs `npm run migrate --workspace @roadtrip/db` with the `NEON_MIGRATE_URL`
+repository secret (an owner connection string). Without the secret it skips with a warning, so
+it never blocks the mini-ca deploy; a failing migration fails CI.
 
 ## Previews
 
