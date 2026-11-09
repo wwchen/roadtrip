@@ -85,3 +85,17 @@ test('an unverified address never gets admin', async () => {
   const me = await meFor(portWith(async () => sessionUser), usersReturning({ emailVerified: false }), ADMINS);
   expect(me.user?.roles).toEqual([]);
 });
+
+test('a partial sign-in configuration answers sign-in off and logs it, rather than failing every page', async () => {
+  const { currentMe } = await import('./meService');
+  const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.stubEnv('NEON_AUTH_BASE_URL', 'https://ep-test.neonauth.test/neondb/auth');
+  vi.stubEnv('NEON_AUTH_COOKIE_SECRET', undefined);
+  vi.stubEnv('APP_DATABASE_URL', undefined);
+  try {
+    expect(await currentMe()).toEqual({ authenticated: false, auth_enabled: false, auth_embedded: false });
+    expect(error).toHaveBeenCalledWith('me:', expect.stringContaining('NEON_AUTH_COOKIE_SECRET'));
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

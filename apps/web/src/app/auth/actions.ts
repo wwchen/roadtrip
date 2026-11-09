@@ -13,6 +13,7 @@ import {
   type AuthAction,
   type FormState,
 } from '@/server/auth/authActions';
+import { RETRY } from '@/server/auth/authCopy';
 import { authPort } from '@/server/auth/neonAuth';
 
 const ORIGIN_HEADER = 'origin';
@@ -20,15 +21,19 @@ const HOST_HEADER = 'host';
 const FORWARDED_PROTO_HEADER = 'x-forwarded-proto';
 const DEFAULT_PROTO = 'https';
 
-async function requestOrigin(): Promise<string> {
+async function requestOrigin(): Promise<string | null> {
   const incoming = await headers();
   const origin = incoming.get(ORIGIN_HEADER);
   if (origin !== null) return origin;
-  return `${incoming.get(FORWARDED_PROTO_HEADER) ?? DEFAULT_PROTO}://${incoming.get(HOST_HEADER)}`;
+  const host = incoming.get(HOST_HEADER);
+  if (host === null) return null;
+  return `${incoming.get(FORWARDED_PROTO_HEADER) ?? DEFAULT_PROTO}://${host}`;
 }
 
 async function run(action: AuthAction, form: FormData): Promise<FormState> {
-  const outcome = await action(authPort(), form, await requestOrigin());
+  const origin = await requestOrigin();
+  if (origin === null) return { message: RETRY, canResendVerification: false };
+  const outcome = await action(authPort(), form, origin);
   if (outcome.kind === 'redirect') redirect(outcome.url);
   return outcome.state;
 }

@@ -1,7 +1,7 @@
 import { appDb } from '@/server/appDb';
 import { UNKNOWN_FAILURE, type AuthPort } from '@/server/auth/authPort';
 import { authPort } from '@/server/auth/neonAuth';
-import { config } from '@/server/config';
+import { ConfigError, config } from '@/server/config';
 import type { MeResponseDto } from '@/server/contract';
 import { linkedAppUser, type AppUserRow, type IdentityClaims } from '@/server/repo/appUserRepo';
 
@@ -55,6 +55,13 @@ export async function meFor(
   }
 }
 
-export function currentMe(): Promise<MeResponseDto> {
-  return meFor(authPort(), (claims) => linkedAppUser(appDb(), claims), config.signIn?.adminEmails ?? NO_ADMINS);
+export async function currentMe(): Promise<MeResponseDto> {
+  try {
+    const signIn = config.signIn;
+    return await meFor(authPort(), (claims) => linkedAppUser(appDb(), claims), signIn?.adminEmails ?? NO_ADMINS);
+  } catch (error) {
+    if (!(error instanceof ConfigError)) throw error;
+    console.error(ME_LOG, error.message);
+    return DISABLED;
+  }
 }
