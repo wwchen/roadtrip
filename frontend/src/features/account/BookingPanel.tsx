@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, ConfirmButton, SeededTextField } from '@ui';
+import { Button, ConfirmButton, TextField } from '@ui';
 import type {
   RecgovLoginResponse,
   RecgovStatus,
@@ -222,14 +222,14 @@ export function BookingPanel({
   return (
     <div className="rt-account-panel">
       <div className="rt-account-field">
-        <SeededTextField
+        <TextField
           id="settings-recgov-username"
           name="recgov_username"
           label={accountCopy.emailLabel}
           type="email"
-          seed={values.recgov_username}
+          value={values.recgov_username}
           onChange={(e) =>
-            onChange({ ...values, recgov_username: (e.target as HTMLInputElement).value })
+            onChange({ ...values, recgov_username: e.target.value })
           }
         />
       </div>
@@ -237,10 +237,10 @@ export function BookingPanel({
       <div className="rt-account-field">
         {/* Two plain stacked fields rather than the SecretField mask-and-Replace
             row: this is a password a person types, not a token they paste once.
-            Seeded empty and never with the stored value — the dots are a
+            It only ever holds what is typed — the dots are a
             placeholder, so nothing real is ever in the DOM. An untouched field
             submits null, meaning unchanged. */}
-        <SeededTextField
+        <TextField
           id="settings-recgov-password"
           name="recgov_password"
           label={accountCopy.passwordLabel}
@@ -248,9 +248,9 @@ export function BookingPanel({
           autoComplete="off"
           placeholder={configured ? SAVED_PASSWORD_PLACEHOLDER : undefined}
           help={PASSWORD_HELP}
-          seed=""
+          value={values.recgov_password ?? ''}
           onChange={(e) => {
-            const typed = (e.target as HTMLInputElement).value;
+            const typed = e.target.value;
             onChange({ ...values, recgov_password: typed === '' ? null : typed });
           }}
         />
@@ -321,10 +321,6 @@ export function BookingPanel({
 
 /**
  * The inline code step.
- *
- * Conditionally rendered, so the field is `SeededTextField` rather than a
- * `defaultValue` from the parent's snapshot: it seeds at its own mount, which
- * is the only way an appearing-and-disappearing field shows what it submits.
  */
 function MfaStep({
   busy,
@@ -338,14 +334,14 @@ function MfaStep({
   const [code, setCode] = useState('');
   return (
     <div className="rt-notif-field">
-      <SeededTextField
+      <TextField
         id="settings-recgov-mfa"
         name="recgov_mfa_code"
         label="Verification code"
         type="text"
         autoComplete="one-time-code"
-        seed={code}
-        onChange={(e) => setCode((e.target as HTMLInputElement).value)}
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
       />
       <Button size="sm" variant="primary" disabled={busy || code.trim() === ''} onClick={() => onSubmit(code.trim())}>
         Submit code

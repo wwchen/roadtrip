@@ -19,17 +19,11 @@ export { IconSprite } from '@lew-ds/lds-react/icon-sprite';
 // ---------------------------------------------------------------------------
 // Local additions.
 //
-// Components that exist to make an LDS constraint safe to use, rather than to
-// restyle anything. They belong here because the constraint they encode is LDS's,
-// so they disappear if upstream ever ships controlled inputs.
-//
-// `LinkButton` and `MonthCalendar` are the exceptions, and are here for the same
-// reason: LDS has no primitive for an action word inside a sentence — `Button` is
-// a control and `Link` is an `<a>` — nor any calendar, so each shape is drawn here
-// once instead of per feature.
+// Shapes LDS has no primitive for — a two-step confirm, a write-only secret, an
+// action word inside a sentence, a calendar — drawn here once instead of per
+// feature.
 // ---------------------------------------------------------------------------
 
-export { SeededTextField, type SeededTextFieldProps } from './SeededTextField';
 export { ConfirmButton, type ConfirmButtonProps } from './ConfirmButton';
 export { SecretField, type SecretFieldProps } from './SecretField';
 export { LinkButton, type LinkButtonProps } from './LinkButton';

@@ -104,28 +104,24 @@ export function RunsTab({ route }: RunsTabProps) {
             apply(cleared);
           }}
         >
-          {/* Keyed on the applied filters so Reset actually clears the rendered
-              controls: LDS inputs are uncontrolled, so a remount is the reseed. */}
           <Select
-            key={`status:${filters.status}`}
             id="runs-status"
             name="status"
             label="Status"
             options={STATUS_OPTIONS}
-            defaultValue={filters.status}
+            value={draft.status}
             onChange={(e) =>
-              setDraft((d) => ({ ...d, status: (e.target as HTMLSelectElement).value }))
+              setDraft((d) => ({ ...d, status: e.target.value }))
             }
           />
           <TextField
-            key={`poller:${filters.pollerId}`}
             id="runs-poller-id"
             name="poller_id"
             label="Poller ID"
             inputMode="numeric"
-            defaultValue={filters.pollerId}
+            value={draft.pollerId}
             onChange={(e) =>
-              setDraft((d) => ({ ...d, pollerId: (e.target as HTMLInputElement).value }))
+              setDraft((d) => ({ ...d, pollerId: e.target.value }))
             }
           />
           <div className="rt-dash-actions">
