@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 
 export * from '@lew-ds/lds-react';
+export { IconSprite } from '@lew-ds/lds-react/icon-sprite';
 
 // ---------------------------------------------------------------------------
 // Local additions.
@@ -35,15 +36,6 @@ export { LinkButton, type LinkButtonProps } from './LinkButton';
 export { MonthCalendar, type MonthCalendarProps } from './MonthCalendar';
 
 // ---------------------------------------------------------------------------
-// Behaviour corrections.
-//
-// An LDS component whose runtime drops something its props promise. The export
-// shadows the star export above, so every `@ui` import gets the corrected one.
-// ---------------------------------------------------------------------------
-
-export { TextField } from './TextField';
-
-// ---------------------------------------------------------------------------
 // Type corrections.
 //
 // Narrow gaps where `@lew-ds/lds-react`'s declarations are stricter than the
@@ -51,14 +43,8 @@ export { TextField } from './TextField';
 // star export above, so call sites need no casts and there is exactly one place
 // to delete when upstream tightens this up.
 // ---------------------------------------------------------------------------
-import type { ForwardRefExoticComponent, ReactNode, RefAttributes } from 'react';
-import {
-  Modal as LdsModal,
-  Table as LdsTable,
-  type ModalProps as LdsModalProps,
-  type Size,
-  type TableProps as LdsTableProps,
-} from '@lew-ds/lds-react';
+import type { ForwardRefExoticComponent, RefAttributes } from 'react';
+import { Modal as LdsModal, type ModalProps as LdsModalProps, type Size } from '@lew-ds/lds-react';
 
 /**
  * `Modal`, with `size` widened to include `xl`/`2xl`.
@@ -77,37 +63,4 @@ export interface ModalProps extends Omit<LdsModalProps, 'size'> {
 
 export const Modal = LdsModal as unknown as ForwardRefExoticComponent<
   ModalProps & RefAttributes<HTMLDivElement>
->;
-
-/**
- * `Table`, with column labels and cell values widened to React nodes.
- *
- * `@lew-ds/lds-react`'s own comments say "a column's `label` accepts a React node"
- * and "every cell value accepts a React node (e.g. a `<Tag>` for a status
- * column)", but both types are still `Slot` from `@lew-ds/lds/templates`
- * (`string | number | RawHtml | null | undefined | false`), inherited from the
- * framework-free package. The runtime flattens nodes through `toSlot`; only the
- * declaration lags.
- */
-export interface TableColumn {
-  key: string;
-  label?: ReactNode;
-}
-
-/**
- * The `Omit` here is safe only because `columns` and `rows` are the *only* named
- * props LDS's `TableProps` adds, and both are redeclared below. LDS's `HtmlProps`
- * has an `[attr: string]: unknown` index signature, and `Omit` over such a type
- * collapses it to that signature alone — so if upstream ever adds a callback (an
- * `onSort`, say), this would silently degrade it to `any` rather than fail to
- * compile. Widen by intersection, not `Omit`, if that day comes. See
- * `SeededTextField` for the same trap caught the hard way.
- */
-export interface TableProps extends Omit<LdsTableProps, 'columns' | 'rows'> {
-  columns?: TableColumn[];
-  rows?: Record<string, ReactNode>[];
-}
-
-export const Table = LdsTable as unknown as ForwardRefExoticComponent<
-  TableProps & RefAttributes<HTMLTableElement>
 >;

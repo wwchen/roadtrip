@@ -2,9 +2,6 @@ import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SeededTextField, Toggle } from '@ui';
 
-const checkedOf = (e: Event): boolean => (e.target as HTMLInputElement).checked;
-const valueOf = (e: Event): string => (e.target as HTMLInputElement).value;
-
 const meta = {
   title: 'Ui/SeededTextField',
   parameters: {
@@ -55,14 +52,14 @@ function RemountingField() {
         label="Notify Slack"
         aria-label="Notify Slack"
         checked={shown}
-        onChange={(e) => setShown(checkedOf(e))}
+        onChange={(e) => setShown(e.target.checked)}
       />
       {shown ? (
         <SeededTextField
           id="story-remount-field"
           label="Channel"
           seed={value}
-          onChange={(e) => setValue(valueOf(e))}
+          onChange={(e) => setValue(e.target.value)}
         />
       ) : null}
       <p className="rt-storybook-note">Mirrored value: {value || '(empty)'}</p>

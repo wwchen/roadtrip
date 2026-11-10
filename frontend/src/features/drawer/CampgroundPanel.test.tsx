@@ -107,7 +107,7 @@ describe('the campground page, at panel width', () => {
   test('renders the backend CTA rather than inventing a link', async () => {
     await openCampground();
 
-    const cta = screen.getByRole('button', { name: 'Reserve on Recreation.gov' });
+    const cta = screen.getByRole('link', { name: 'Reserve on Recreation.gov' });
     expect(cta).toHaveAttribute('href', 'https://www.recreation.gov/camping/campgrounds/1');
     expect(cta).toHaveAttribute('target', '_blank');
   });
@@ -115,8 +115,8 @@ describe('the campground page, at panel width', () => {
   test('a pin with no CTA falls back to a park-system search', async () => {
     await openCampground({ cta: undefined });
 
-    expect(screen.getByRole('button', { name: 'Search WA State Parks' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /recreation\.gov/ })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Search WA State Parks' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /recreation\.gov/ })).toBeNull();
   });
 
   test('a pin with availability support mounts the grid', async () => {

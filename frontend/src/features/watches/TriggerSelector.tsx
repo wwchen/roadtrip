@@ -8,9 +8,6 @@ export interface TriggerSelectorProps {
   disabled?: boolean;
 }
 
-const checkedOf = (e: Event): boolean => (e.target as HTMLInputElement).checked;
-const valueOf = (e: Event): string => (e.target as HTMLInputElement).value;
-
 /**
  * LDS controls are uncontrolled: seed toggles once and mirror changes into state.
  * The conditional channel field uses SeededTextField so remounting it reads the
@@ -35,7 +32,7 @@ export function TriggerSelector({ value, onChange, disabled }: TriggerSelectorPr
         help="Post when a matching site opens."
         defaultChecked={initial.slackNotify}
         disabled={disabled}
-        onChange={(e) => patch({ slackNotify: checkedOf(e) })}
+        onChange={(e) => patch({ slackNotify: e.target.checked })}
       />
       {value.slackNotify && (
         <SeededTextField
@@ -47,7 +44,7 @@ export function TriggerSelector({ value, onChange, disabled }: TriggerSelectorPr
           seed={value.slackChannel}
           disabled={disabled}
           help="Leave blank to use the channel saved in your account settings."
-          onChange={(e) => patch({ slackChannel: valueOf(e) })}
+          onChange={(e) => patch({ slackChannel: e.target.value })}
         />
       )}
 
@@ -59,7 +56,7 @@ export function TriggerSelector({ value, onChange, disabled }: TriggerSelectorPr
         help="Send to the email address saved in your account settings."
         defaultChecked={initial.emailNotify}
         disabled={disabled}
-        onChange={(e) => patch({ emailNotify: checkedOf(e) })}
+        onChange={(e) => patch({ emailNotify: e.target.checked })}
       />
       <Toggle
         id="watch-stop-when-triggered"
@@ -69,7 +66,7 @@ export function TriggerSelector({ value, onChange, disabled }: TriggerSelectorPr
         help="Mark done after a successful trigger."
         defaultChecked={initial.stopWhenTriggered}
         disabled={disabled}
-        onChange={(e) => patch({ stopWhenTriggered: checkedOf(e) })}
+        onChange={(e) => patch({ stopWhenTriggered: e.target.checked })}
       />
     </div>
   );

@@ -13,8 +13,8 @@
     "test": "node --test scripts/copy-frontend.test.mjs && vitest run"
   },
   "dependencies": {
-    "@lew-ds/lds": "1.1.1",
-    "@lew-ds/lds-react": "1.0.1",
+    "@lew-ds/lds": "1.2.0",
+    "@lew-ds/lds-react": "2.0.0",
     "@neon/auth": "0.8.2",
     "@photostructure/tz-lookup": "11.7.0",
     "@roadtrip/db": "0.1.0",

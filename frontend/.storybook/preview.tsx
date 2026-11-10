@@ -1,13 +1,7 @@
 import type { Preview } from '@storybook/react-vite';
-import { installIconSprite } from '@ui/icon-sprite';
+import { IconSprite } from '@ui';
 import '@ui/styles.css';
 import '../src/ui/storybook.css';
-
-// The catalog draws its glyphs the way a page does. Storybook has no `mountPage`,
-// so the one call that page entries get from the shared mount is made here
-// instead — without it the 54 masked symbols render broken in the catalog only,
-// which is the worst place for them to look fine or look wrong by accident.
-installIconSprite();
 
 const preview: Preview = {
   decorators: [
@@ -17,6 +11,7 @@ const preview: Preview = {
     // since the night block is scoped `.mode-dark.theme-roadtrip-zion`.
     (Story) => (
       <div className="theme-roadtrip-zion mode-dark rt-storybook-shell">
+        <IconSprite all />
         <Story />
       </div>
     ),

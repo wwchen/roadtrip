@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Button, EmptyState, Icon, Table, Tag } from '@ui';
+import { Button, EmptyState, Icon, Table, Tag, Tooltip } from '@ui';
 import type { Watch, WatchStatus } from '@/api/watches-api';
 import { formatWatchDate, relativeTime, watchFallbackName } from '@/lib/watch-format';
 import {
@@ -226,11 +226,12 @@ function TriggerCell({ watch }: { watch: Watch }) {
 
 function LastCheckedCell({ watch }: { watch: Watch }) {
   if (watch.last_run_status === 'failed') {
-    return (
-      <Tag hue="red" size="sm" title={watch.last_run_error ?? undefined}>
+    const tag = (
+      <Tag hue="red" size="sm">
         error
       </Tag>
     );
+    return watch.last_run_error ? <Tooltip label={watch.last_run_error}>{tag}</Tooltip> : tag;
   }
   const at = watch.last_run_at;
   if (!at) return <Blank />;
